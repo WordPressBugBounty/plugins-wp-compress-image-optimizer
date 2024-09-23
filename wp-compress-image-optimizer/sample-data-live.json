@@ -1,0 +1,57 @@
+{"success":true,"data": {
+  "05-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 700000,
+    "compressed": 125000
+  },
+  "06-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 1100000,
+    "compressed": 225000
+  },
+  "07-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 1400000,
+    "compressed": 325000
+  },
+  "08-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 1900000,
+    "compressed": 500000
+  },
+  "09-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 1400000,
+    "compressed": 325000
+  },
+  "10-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 1100000,
+    "compressed": 225000
+  },
+  "11-01-2022": {
+    "original_hits": 1000,
+    "compressed_hits": 1000,
+    "images": "100",
+    "sessions": "100",
+    "original": 700000,
+    "compressed": 125000
+  }}}

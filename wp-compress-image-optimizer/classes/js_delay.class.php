@@ -1,0 +1,163 @@
+<?php
+
+
+class wps_ic_js_delay
+{
+
+    public static $excludes;
+    public static $footerScripts;
+
+    public static $doNotDelay = ['n489d_vars', 'optimize.js'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse'];
+
+    public function __construct()
+    {
+        self::$excludes = new wps_ic_excludes();
+    }
+
+
+    public function printFooterScripts()
+    {
+        $html = '';
+
+        if (!empty(self::$footerScripts)) {
+            foreach (self::$footerScripts as $script) {
+                $html .= $script[0];
+            }
+        }
+
+        return $html . '</body>';
+    }
+
+    public function scriptsToFooter($tag)
+    {
+        $original_tag = $tag;
+        if (is_array($tag)) {
+            $tag = $tag[0];
+        }
+        if (is_array($tag)) {
+            $tag = $tag[0];
+        }
+        if (self::$excludes->strInArray($tag, self::$excludes->scriptsToFooterExcludes())) {
+            return $tag;
+        }
+        self::$footerScripts[] = $original_tag;
+        return '';
+    }
+
+
+    public function preload_scripts($html)
+    {
+        $pattern = '/<script[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si';
+
+        $preloadTags = [];
+        $matchesCount = 0;
+
+        $html = preg_replace_callback($pattern, function ($matches) use (&$preloadTags, &$matchesCount) {
+            $matchesCount++;
+
+            if ($matchesCount > 2) {
+                $fullTag = $matches[0];
+                $src = $matches[1];
+
+                if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false) {
+                    $preloadTags[] = '<link rel="none" href="' . htmlspecialchars($src) . '" as="script" class="wpc-preload-links">';
+                }
+
+                return $fullTag;
+            } else {
+                return $matches[0];
+            }
+        }, $html);
+
+        if (!empty($preloadTags)) {
+            $html = preg_replace('/<\/head>/i', implode("\n", $preloadTags) . '</head>', $html, 1);
+        }
+
+        return $html;
+    }
+
+
+    public function removeNoDelay($tag)
+    {
+        if (is_array($tag)) {
+            $tag = $tag[0];
+        }
+
+        $tagLower = strtolower($tag);
+
+        // It's excluded
+        if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
+            $tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
+        }
+
+        return $tag;
+    }
+
+
+    public function delay_script_replace($tag)
+    {
+
+        if (!empty($_GET['removeScripts'])) {
+            return '';
+        }
+
+        if (is_array($tag)) {
+            $tag = $tag[0];
+        }
+
+        $tagLower = strtolower($tag);
+
+        // Is the script excluded from DelayJS?
+        if (self::$excludes->excludedFromDelay($tag)) {
+            if (strpos($tagLower, 'defer') == false && strpos($tagLower, 'jquery') === false) {
+                $tag = str_replace('<script ', '<script data-wpc-att="excluded" ', $tag);
+            }
+
+            return $tag;
+        }
+
+
+        if ($this->checkKeyword($tagLower, self::$doNotDelay)) {
+            // Do not delay these!!!
+            return $tag;
+        } elseif ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
+
+            // Patches for scripts that need to run last?
+            if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
+                $tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script"', $tag, 1);
+            } else {
+                $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script"', $tag);
+            }
+
+            return $tag;
+        } else {
+
+            // Find & Replace with delay
+            if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
+                $tag = preg_replace('/<script/i', '<script type="wpc-delay-script"', $tag, 1);
+            } else {
+                $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-script"', $tag);
+            }
+
+            return $tag;
+        }
+
+    }
+
+
+    public function checkKeyword($tag, $keywordArray)
+    {
+        if (!empty($keywordArray)) {
+            foreach ($keywordArray as $needle) {
+                if (strpos($tag, $needle) !== false) {
+                    return true; // Match found
+                }
+            }
+        }
+
+        return false; // No match found
+    }
+
+
+}
