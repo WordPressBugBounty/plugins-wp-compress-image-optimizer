@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 5.6
 Tested up to: 6.6
-Stable tag: 6.21.05
+Stable tag: 6.21.09
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,21 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.21.09 =
+* Improved Connectivity Test
+
+= 6.21.08 =
+* Added Additional Default Excludes in JS Delay
+
+= 6.21.07 =
+* Excluded .php Files From CDN
+* Added Hooks for Easier Communication with Portal
+
+= 6.21.06 =
+* Excluded Woo_Ajax Calls From Optimizations
+* Added "slider" and "draggable" to LastDelayScripts
+* Changed data-src to data-wpc-src in Iframe Delay
 
 = 6.21.05 =
 * Patched iFrame Lazy Loading

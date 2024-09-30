@@ -7,8 +7,8 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'optimize.js'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse'];
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-'];
 
     public function __construct()
     {
@@ -123,11 +123,17 @@ class wps_ic_js_delay
             return $tag;
         } elseif ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
 
+
+            // If it's a jetblock element, DO NOT delay-last!!!
+//            if (strpos($tagLower, 'jet-block') !== false) {
+//                return $tag;
+//            }
+
             // Patches for scripts that need to run last?
             if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
-                $tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script"', $tag, 1);
+                $tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
             } else {
-                $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script"', $tag);
+                $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script" data-from-wpc="128"', $tag);
             }
 
             return $tag;

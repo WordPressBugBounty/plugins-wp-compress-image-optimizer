@@ -74,7 +74,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.05';
+        self::$version = '6.21.09';
         $wps_ic = $this;
 
         if ((!empty($_GET['wpc_visitor_mode']) && $_GET['wpc_visitor_mode'] == true)) {
@@ -2116,3 +2116,40 @@ add_action('activated_plugin', ['wps_ic_cache', 'purgeCDNUpdate'], 1);
 
 register_activation_hook(WPC_PLUGIN_FILE, [$wpsIc, 'activation']);
 register_deactivation_hook(WPC_PLUGIN_FILE, [$wpsIc, 'deactivation']);
+register_uninstall_hook(WPC_PLUGIN_FILE, 'uninstall');
+
+
+function uninstall() {
+  try {
+    $settings = get_option(WPS_IC_SETTINGS);
+    $options = get_option(WPS_IC_OPTIONS);
+    $connectivity = get_option('wpc-connectivity-status');
+    $url = get_home_url();
+
+    $data = [
+      'settings' => $settings,
+      'options' => $options,
+      'connectivity' => $connectivity,
+      'url' => $url
+    ];
+
+    $json_data = json_encode($data);
+
+    $url = 'https://frankfurt.zapwp.net/uninstall/uninstall.php'; // Replace with your actual URL
+
+    $args = [
+      'body'        => $json_data,
+      'timeout'     => '5',
+      'redirection' => '5',
+      'httpversion' => '1.0',
+      'blocking'    => true,
+      'headers'     => [
+        'Content-Type' => 'application/json',
+      ],
+    ];
+
+    $response = wp_remote_post($url, $args);
+  } catch (Exception $e) {
+      error_log($e->getMessage());
+  }
+}

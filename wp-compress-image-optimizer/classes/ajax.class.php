@@ -2524,11 +2524,11 @@ class wps_ic_ajax extends wps_ic
 */
 
     $locked = [];
-    $locked['cdn'] = isFeatureEnabled('cdn') == true ? false : true;
-    $locked['advanced_cache'] = isFeatureEnabled('cachingEnabled') == true ? false : true;
-    $locked['adaptive'] = isFeatureEnabled('adaptive') == true ? false : true;
-    $locked['critical_css'] = isFeatureEnabled('cdn') == true ? false : true;
-    $locked['delay_js'] = isFeatureEnabled('delay-js') == true ? false : true;
+    $locked['cdn'] = false;
+    $locked['advanced_cache'] = false;
+    $locked['adaptive'] = false;
+    $locked['critical_css'] = false;
+    $locked['delay_js'] = false;
 
     $response['locked'] = $locked;
 

@@ -105,6 +105,13 @@ class wps_cdn_rewrite {
 		self::$lazyLoadedImagesLimit = 1;
 
 		self::$settings = get_option(WPS_IC_SETTINGS);
+    self::$excludes = get_option('wpc-excludes');
+
+    if (empty(self::$excludes['cdn'])){
+      self::$excludes['cdn'] = [];
+    }
+    self::$excludes['cdn'][] = '.php'; //pagelayer .php requests fix
+    self::$excludes['cdn'][] = '/wp-fastest-cache/'; //icon in admin bugfix
 
 		self::$removeSrcset = self::$settings['remove-srcset'];
 
@@ -115,7 +122,6 @@ class wps_cdn_rewrite {
 		}
 
 		self::$excludes_class = new wps_ic_excludes();
-		self::$excludes       = get_option('wpc-excludes');
 		global $post;
 
 		if ($this->is_home_url()){
@@ -284,7 +290,8 @@ class wps_cdn_rewrite {
 
 		$formatted_url = $url;
 
-		if (strpos($formatted_url, '?brizy_media') === false){
+
+		if (strpos($formatted_url, '?brizy_media') === false && strpos($formatted_url, '.php') === false){
 			$formatted_url = explode('?', $formatted_url);
 			$formatted_url = $formatted_url[0];
 		}
@@ -479,12 +486,16 @@ class wps_cdn_rewrite {
 		$src = trim($src);
 
 		if (!empty($_GET['dbg_src_excludes'])){
-			return print_r([$tag, $src, self::isExcludedFrom('cdn', $src)]);
+			return print_r([$tag, $src, self::isExcludedFrom('cdn', $src), self::$excludes]);
 		}
 
 		if (self::isExcludedFrom('cdn', $src)){
 			return $tag;
 		}
+
+    if (self::isExcludedFrom('cdn', $tag)){
+      return $tag;
+    }
 
 		if ($this->defaultExcluded($src)){
 			return $tag;
@@ -772,7 +783,9 @@ class wps_cdn_rewrite {
 			return $src;
 		} elseif (strpos($src, '.js') !== false && empty(self::$js) || self::$js == '0'){
 			return $src;
-		}
+		} else if (strpos($src, '.php') !== false){
+      return $src;
+    }
 
 		if (self::isExcludedFrom('cdn', $src)){
 			return $src;
@@ -850,6 +863,10 @@ class wps_cdn_rewrite {
 
 
 	public function buffer_local_callback($html){
+
+    if (!self::dontRunif()){
+      return $html;
+    }
 
 		if ( ! empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true'){
 			$this->criticalCombine = true;
@@ -1142,7 +1159,11 @@ class wps_cdn_rewrite {
 			return false;
 		}
 
-    if (strpos($_SERVER['REQUEST_URI'], 'get_listings') !== false){
+    if (strpos($_SERVER['REQUEST_URI'], 'jm-ajax') !== false){
+      return false;
+    }
+
+    if (isset($_GET['woo_ajax']) || isset($_POST['woo_ajax']) || (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'woo_ajax') !== false))){
       return false;
     }
 
@@ -1560,14 +1581,6 @@ class wps_cdn_rewrite {
         add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
       }
     }
-
-		self::$excludes = get_option('wpc-excludes');
-
-		if (empty(self::$excludes['cdn'])){
-			self::$excludes['cdn'] = [];
-		}
-		self::$excludes['cdn'][] = '.php'; //pagelayer .php requests fix
-		self::$excludes['cdn'][] = '/wp-fastest-cache/'; //icon in admin bugfix
 
 		self::$excludes_class = new wps_ic_excludes();
 		self::$isAmp          = new wps_ic_amp();
@@ -3063,13 +3076,13 @@ class wps_cdn_rewrite {
 
       if (strpos($srcToLower, 'src=') === false) {
         if (strpos($srcToLower, 'type=') === false) {
-          $tag = str_replace('<script', '<script type="wpc-delay-last-script"', $srcToLower);
+          $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
         } else {
           $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
         }
       } else {
         if (strpos($srcToLower, 'type=') === false) {
-          $tag = str_replace('<script', '<script type="wpc-delay-last-script"', $srcToLower);
+          $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
         } else {
           $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
         }
