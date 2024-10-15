@@ -1,7 +1,7 @@
 jQuery(document).ready(function ($) {
 
 
-    function popupModes() {
+    function popupModes(data) {
         Swal.fire({
             title: '',
             position: 'center',
@@ -16,7 +16,13 @@ jQuery(document).ready(function ($) {
             },
             onOpen: function () {
                 var modes_popup = $('.swal2-container .ajax-settings-popup');
-                selectModesTrigger();
+
+                if (data.liveMode == '1') {
+                    $('.wpc-popup-options', modes_popup).show();
+                    $('.wpc-popup-options .form-check-input', modes_popup).attr('checked', 'checked');
+                }
+
+                selectModesTrigger(data);
                 hookCheckbox();
                 saveMode(modes_popup);
             },
@@ -62,16 +68,11 @@ jQuery(document).ready(function ($) {
             var parent = $(this).parent();
             var checkbox = $('input[type="checkbox"]', parent);
             $(checkbox).prop('checked', !$(checkbox).prop('checked'));
-            console.log($(checkbox).prop('checked'));
         });
 
         $('input[type="checkbox"]', '.swal2-content').on('change', function () {
             var checkbox = $(this);
             var beforeValue = $(checkbox).attr('checked');
-
-            console.log(checkbox);
-            console.log(beforeValue);
-
 
             if (beforeValue == 'checked') {
                 // It was already active, remove checked
@@ -102,7 +103,6 @@ jQuery(document).ready(function ($) {
             $(this).addClass('wpc-active');
 
             var checked = $('.form-check-input','.wpc-popup-option-checkbox').is(':checked');
-            console.log(checked);
 
             if (modeSelect == 'safe') {
                 // Safe mode - turn off CDN
@@ -182,12 +182,8 @@ jQuery(document).ready(function ($) {
                         if (response.success) {
                             // Connect
                             $('.wps-ic-connect-inner').addClass('padded');
-                            //$(success_message).show();
-                            //$(success_message_choice_text).show();
-
                             Swal.close();
-
-                            popupModes();
+                            popupModes(response.data);
 
                             /**
                              * Figure out what optimization mode is enabled

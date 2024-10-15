@@ -2190,16 +2190,14 @@ class wps_ic_ajax extends wps_ic
 
 
         if ($cdn == 'true') {
-            /*
-      $settings['live-cdn'] = '1';
-      $settings['serve'] = ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1', 'css' => '1', 'js' => '1', 'fonts' => '1'];
-      $settings['css'] = 1;
-      $settings['js'] = 1;
-      $settings['fonts'] = 0;
-      $settings['generate_adaptive'] = 1;
-      $settings['generate_webp'] = 1;
-      $settings['retina'] = 1;
-            */
+            $settings['live-cdn'] = '1';
+            $settings['serve'] = ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1', 'css' => '1', 'js' => '1', 'fonts' => '1'];
+            $settings['css'] = 1;
+            $settings['js'] = 1;
+            $settings['fonts'] = 0;
+            $settings['generate_adaptive'] = 1;
+            $settings['generate_webp'] = 1;
+            $settings['retina'] = 1;
         } else {
             $settings['live-cdn'] = '0';
             $settings['serve'] = ['jpg' => '0', 'png' => '0', 'gif' => '0', 'svg' => '0', 'css' => '0', 'js' => '0', 'fonts' => '0'];
