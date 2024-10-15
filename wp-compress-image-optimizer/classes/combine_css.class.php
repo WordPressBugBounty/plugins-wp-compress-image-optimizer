@@ -12,6 +12,18 @@ class wps_ic_combine_css
     public static $site_url;
     public $zone_name;
     public $cssPath;
+    public $filesize_cap;
+    public $combine_external;
+    public $hmwpReplace;
+    public $patterns;
+    public $allExcludes;
+    public $combine_inline_scripts;
+    public $settings;
+    public $firstFoundStyle;
+    public $combined_url_base;
+    public $combined_dir;
+    public $urlKey;
+    public $url_key_class;
 
     public function __construct()
     {
@@ -41,16 +53,8 @@ class wps_ic_combine_css
             $this->filesize_cap = '10000000000'; //in bytes
             $this->combine_inline_scripts = true;
             $this->combine_external = true;
-            // TODO: Denis this was causing issues with rev slider 6 because it removes the <style> tag which rev slider uses to transfer options,settings into javascript, which then is used to control the settings of rev slider 6. Maybe we leave it ON with deafult excludes as it will probably be requried for many other plugins,sliders,themes in future. Critical CSS is broken in case some CSS is missing.
             $this->allExcludes = ['media="print"', 'media=\'print\''];
-            #$this->allExcludes            = self::$excludes->combineCSSExcludes();
         }
-
-        /* This finds all links first, then styles... Messes up the ordering in the combined file
-        $this->patterns = ['/<link[^>]*rel=[\"|\']stylesheet[\"|\'][^>]*>/si', '/(?<!<noscript>)<style\b[^>]*\>(.*?)
-        //<\/style\>?/si', '/<link\b[^>](.*?)onload=[\"|\']this.rel=[\"|\']stylesheet[\"|\'][\"|\'](.*?)>/' // deferred stylesheets
-        ];
-        */
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';
 

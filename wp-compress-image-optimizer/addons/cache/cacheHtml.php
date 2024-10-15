@@ -10,6 +10,8 @@ class wps_cacheHtml
 
   private $host;
   private $cachePath;
+  private $options;
+  private $url_key_class;
 
   public function __construct()
   {
@@ -40,7 +42,7 @@ class wps_cacheHtml
       return true;
     }
 
-	  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+	  if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 		  return false;
 	  }
 

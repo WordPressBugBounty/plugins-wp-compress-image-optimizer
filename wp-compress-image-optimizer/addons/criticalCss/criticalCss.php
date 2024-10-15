@@ -12,6 +12,8 @@ class wps_criticalCss
   static $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
   public static $url;
   public $urlKey;
+  public $serverRequest;
+  public $url_key_class;
   private static $maxRetries = 5;
 
   public function __construct($url = '')

@@ -2,6 +2,8 @@
 
 class wps_ic_compatibility {
 
+    public $settings;
+
 	public function check( $settings ) {
 		$this->settings = $settings;
 		$current_theme  = wp_get_theme();

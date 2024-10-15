@@ -8,6 +8,7 @@ class wps_ic_url_key
 
   public $urlKey;
   public $url;
+  public $trp_active;
 
   public function __construct()
   {

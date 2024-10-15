@@ -12,6 +12,7 @@ class wps_advancedCache
 
   private $host;
   private $cachePath;
+  private $url_key_class;
 
   public function __construct()
   {
@@ -226,7 +227,7 @@ class wps_advancedCache
 		  }
 	  }
 
-	  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+	  if (!empty($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 		  return $buffer;
 	  }
 

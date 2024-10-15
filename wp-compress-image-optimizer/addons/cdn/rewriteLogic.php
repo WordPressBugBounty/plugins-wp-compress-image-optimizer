@@ -2471,11 +2471,11 @@ SCRIPT;
                             $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . $extension . ', ';
                         } else {
                             // Non-retina URL
-                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . $width_url . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . ', ';
+                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . ', ';
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . $width_url . '/u:' . self::reformatUrl($srcset_url) . ' ' . str_replace('w', '', $srcset_width) * 2 . $extension . ', ';
+                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . str_replace('w', '', $srcset_width) * 2 . $extension . ', ';
                             }
                         }
                     }

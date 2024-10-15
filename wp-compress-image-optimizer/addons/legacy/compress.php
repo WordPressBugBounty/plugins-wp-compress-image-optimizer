@@ -23,6 +23,7 @@ class wps_local_compress
 
   public $enabledLog;
   public $logFile;
+  public $logFilePath;
 
 
   public function __construct()

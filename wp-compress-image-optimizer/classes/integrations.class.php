@@ -12,10 +12,12 @@ spl_autoload_register( function ( $class_name ) {
 } );
 
 class wps_ic_integrations extends wps_ic {
-	protected $wps_settings;
-	protected $notices_class;
 	protected $plugin_checks = [];
 	protected $overrides;
+
+    protected $int_option;
+    protected $wps_settings;
+    protected $notices_class;
 
 	public function __construct() {
 		$this->int_option    = get_option( 'wps_ic_integrations' );

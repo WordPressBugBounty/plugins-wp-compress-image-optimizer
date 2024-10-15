@@ -41,6 +41,11 @@ class wps_ic
     public static $zone_name;
     public static $quality;
     public static $options;
+    public $upgrader;
+    public $cache;
+    public $cacheLogic;
+    public $remote_restore;
+    public $comms;
 
     public static $js_debug;
     public static $debug;
@@ -74,10 +79,10 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.09';
+        self::$version = '6.21.10';
         $wps_ic = $this;
 
-        if ((!empty($_GET['wpc_visitor_mode']) && $_GET['wpc_visitor_mode'] == true)) {
+        if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']) == true)) {
             //It has to be here, init() is too late
             new wps_ic_visitor_mode();
         }
@@ -86,8 +91,8 @@ class wps_ic
             die('Preloaded');
         }
 
-        $isPostConnectivityTest = isset($_POST['action']) && $_POST['action'] === 'connectivityTest';
-        $isGetConnectivityTest = isset($_GET['action']) && $_GET['action'] === 'connectivityTest';
+        $isPostConnectivityTest = isset($_POST['action']) && sanitize_text_field($_POST['action']) === 'connectivityTest';
+        $isGetConnectivityTest = isset($_GET['action']) && sanitize_text_field($_GET['action']) === 'connectivityTest';
         $headers = getallheaders();
         $isHeaderConnectivityTest = isset($headers['Action']) && $headers['Action'] === 'connectivityTest';
         if ($isPostConnectivityTest || $isGetConnectivityTest || $isHeaderConnectivityTest) {
@@ -909,7 +914,6 @@ class wps_ic
     {
         // Raise memory limit
         ini_set('memory_limit', '1024M');
-
         /**
          * Force Show WP Compress
          */
@@ -1011,13 +1015,13 @@ class wps_ic
          * TODO: Make Pretty
          */
 
-        if (!empty($_GET['wpc_optimization_done']) && $_GET['apikey'] == self::$options['api_key']) {
+        if (!empty($_GET['wpc_optimization_done']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
             //todo set it to done and scheck in js
             delete_transient('wpc-page-optimizations-status');
             die('Ended');
         }
 
-        if (!empty($_GET['wpc_start_test']) && $_GET['apikey'] == self::$options['api_key']) {
+        if (!empty($_GET['wpc_start_test']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
             $id = sanitize_text_field($_GET['id']);
             if (get_transient('wpc-page-optimizations-status') !== false) {
                 set_transient('wpc-page-optimizations-status', ['id' => $id, 'status' => 'test'], 60 * 2);
@@ -1027,7 +1031,7 @@ class wps_ic
             die('Test done?');
         }
 
-        if (!empty($_GET['wpc_start_test_lcp']) && $_GET['apikey'] == self::$options['api_key']) {
+        if (!empty($_GET['wpc_start_test_lcp']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
             $id = sanitize_text_field($_GET['id']);
             /*
             if (get_transient('wpc-page-optimizations-status') !== false) {
@@ -1134,7 +1138,7 @@ class wps_ic
             die('error');
         }
 
-        if (!empty($_GET['remote_generate_critical']) && $_GET['apikey'] == $this::$options['api_key']) {
+        if (!empty($_GET['remote_generate_critical']) && sanitize_text_field($_GET['apikey']) == $this::$options['api_key']) {
             //used by warmup
             add_action('wp', [$this, 'generate_critical_css']);
         }
@@ -1327,7 +1331,7 @@ class wps_ic
             return true;
         }
 
-        if ((!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
+        if ((!empty($_GET['page']) && sanitize_text_field($_GET['page']) == 'livecomposer_editor')) {
             return true;
         }
 
@@ -1443,11 +1447,11 @@ class wps_ic
             return false;
         }
 
-        if (!empty($_GET['page']) && $_GET['page'] == 'bwc') {
+        if (!empty($_GET['page']) && sanitize_text_field(['page']) == 'bwc') {
             return false;
         }
 
-        if ((!empty($_GET['action']) && $_GET['action'] == 'edit#op-builder') || !empty($_GET['op3editor'])) {
+        if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
             //optimizePress builder fix
             return true;
         }

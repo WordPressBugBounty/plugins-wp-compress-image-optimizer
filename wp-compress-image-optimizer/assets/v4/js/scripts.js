@@ -587,7 +587,6 @@ console.log('lol')
         var selectedTypesOnThisCall = selected;
         var selectedStatusesOnThisCall = selectedStatuses;
         fetchRunning = true;
-        console.log(1)
         $.ajax({
             url: ajaxurl,
             type: 'POST',

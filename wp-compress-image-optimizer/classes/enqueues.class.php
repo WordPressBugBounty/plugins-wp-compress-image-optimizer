@@ -23,6 +23,7 @@ class wps_ic_enqueues extends wps_ic
     public static $preloaderAPI;
     public static $slider_compatibility;
     private static $isAmp;
+    public $js_delay;
 
 
     public function __construct()
@@ -305,17 +306,12 @@ class wps_ic_enqueues extends wps_ic
         echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '"};';
         echo '</script>';
 
-//    if ($delayActive){
-        echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js" defer></script>';
-        #echo '<script type="text/javascript" src="https://cdn.zapwp.net/optimize.js" defer></script>';
-//    } else {
-//	    echo '<script type="text/javascript">document.addEventListener("DOMContentLoaded", function () {
-//    if (typeof integrationActive === "undefined"){
-//        document.dispatchEvent(new Event("WPCContentLoaded"))
-//    }
-//});
-//</script>';
-//    }
+        $debugOptimize = get_option('wps_optimizejs_debug');
+        if (empty($debugOptimize) || $debugOptimize == 'false') {
+            echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js" defer></script>';
+        } else {
+            echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js" defer></script>';
+        }
 
         if (!empty(self::$settings['lazy']) && self::$settings['lazy'] == '1') {
             echo '<style type="text/css">';

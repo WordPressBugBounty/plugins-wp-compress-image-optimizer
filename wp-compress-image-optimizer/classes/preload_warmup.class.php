@@ -319,8 +319,10 @@ class wps_ic_preload_warmup
     }
 
     public function getOptimizationsStatus($post_type = ['page', 'post'], $page = 1, $offset = 0, $limit = 10, $search
-    = '',                                  $id = 'false')
+    = '', $id = 'false')
     {
+
+        $runningOther = '0';
 
         if ($id != 'false') {
             //get a single page
@@ -1020,7 +1022,7 @@ class wps_ic_preload_warmup
 
         $page_links[$id] = ['url' => $url, 'test' => $test, 'home' => $is_home];
 
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.179 Safari/537.36', 'body' => ['action' => 'createQueue', 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.149 Safari/537.36', 'body' => ['action' => 'createQueue', 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
 
         if (is_wp_error($call)) {
             wp_send_json_error($call->get_error_message());
@@ -1040,7 +1042,7 @@ class wps_ic_preload_warmup
         }
     }
 
-    public function doTest($id, $retest = false)
+    public function doTest($id, $retest = false, $return = true)
     {
         if ($id == 'home') {
             $url = home_url();
@@ -1075,16 +1077,20 @@ class wps_ic_preload_warmup
                 $results = get_option('wpc-tests', []);
                 $results[$urlKey] = $decodedBody['data'];
                 update_option('wpc-tests', $results);
-                wp_send_json_success($decodedBody['data']);
+                if ($return) {
+                    wp_send_json_success($decodedBody['data']);
+                }
             }
         }
 
-        wp_send_json_error(array(self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']), $call);
+        if ($return) {
+            wp_send_json_error(array(self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']), $call);
+        }
     }
 
     public function doTestLCP($id, $retest = false)
     {
-        if ($id == 'home') {
+        if ($id == 'home' || empty($id)) {
             $url = home_url();
         } else {
             $url = get_permalink($id);
@@ -1107,11 +1113,9 @@ class wps_ic_preload_warmup
         $call = wp_remote_post(self::$apiUrl, ['timeout' => 100, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestLCP'], 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
 
         delete_transient('wpc_test_' . $id);
-
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
             $decodedBody = json_decode($body, true);
-
             if (!empty($decodedBody['success']) && $decodedBody['success'] == 'true') {
                 // Update the option with new results
                 $results = get_option('wpc-tests', []);
@@ -1123,29 +1127,49 @@ class wps_ic_preload_warmup
 
                     // Process desktop preloads
                     $preloads = get_option('wps_ic_preloads', []);
+                    unset($preloads['lcp']);
+
                     $desktopPreload = stripslashes($results[$urlKey]['preloads']['desktop']);
 
-                    $preloads = array_map('stripslashes', $preloads);
-                    if (!in_array($desktopPreload, $preloads)) {
-                        $preloads[] = $desktopPreload;
+                    #$preloads = array_map('stripslashes', $preloads);
+                    #if (!in_array($desktopPreload, $preloads)) {
+                    if (!empty($desktopPreload) && $desktopPreload !== 'none') {
+                        $preloads['lcp'] = $desktopPreload;
                     }
+                    #}
 
-                    $preloadsArray = array_map('trim', $preloads);
-                    update_option('wps_ic_preloads', $preloadsArray);
+                    #$preloadsArray = array_map('trim', $preloads);
+                    // Apply trim using a foreach loop to avoid losing the 'lcp' key
+                    foreach ($preloads as $key => $value) {
+                        if (empty($value)) unset($preloads[$key]);
+                        $preloads[$key] = trim($value); // Trimming values while keeping associative keys
+                    }
+                    update_option('wps_ic_preloads', $preloads);
 
                     // Process mobile preloads
                     $preloadsMobile = get_option('wps_ic_preloadsMobile', []);
+                    unset($preloadsMobile['lcp']);
+
                     $mobilePreload = stripslashes($results[$urlKey]['preloads']['mobile']);
 
                     $preloadsMobile = array_map('stripslashes', $preloadsMobile);
-                    if (!in_array($mobilePreload, $preloadsMobile)) {
-                        $preloadsMobile[] = $mobilePreload;
+                    #if (!in_array($mobilePreload, $preloadsMobile)) {
+                    if (!empty($mobilePreload) && $mobilePreload !== 'none') {
+                        #$preloadsMobile['lcp'] = preg_replace('/w:[0-9]{1,4}/', 'w:480', $mobilePreload);
+                        $preloadsMobile['lcp'] = $mobilePreload;
                     }
+                    #}
 
-                    $preloadsArray = array_map('trim', $preloadsMobile);
-                    update_option('wps_ic_preloadsMobile', $preloadsArray);
+                    #$preloadsArray = array_map('trim', $preloadsMobile);
+                    // Apply trim using a foreach loop to avoid losing the 'lcp' key
+                    foreach ($preloadsMobile as $key => $value) {
+                        if (empty($value)) unset($preloadsMobile[$key]);
+                        $preloadsMobile[$key] = trim($value); // Trimming values while keeping associative keys
+                    }
+                    update_option('wps_ic_preloadsMobile', $preloadsMobile);
 
                 }
+
                 update_option('wpc-tests', $results);
                 $this->localCacheWarmup($url);
 
@@ -1179,7 +1203,7 @@ class wps_ic_preload_warmup
         $args = array(
             'timeout' => 0.01,
             'headers' => array(
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.179 Safari/537.36',
+                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
             ),
         );
 
