@@ -85,7 +85,7 @@ class wps_ic_preload_warmup
 
     public function preloadPage($url)
     {
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.179 Safari/537.36', 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
     }
 
     public function getPagesForFiltering($post_type, $post_status, $page_number, $offset, $search = '')
@@ -941,7 +941,7 @@ class wps_ic_preload_warmup
 
     public function stopOptimizations()
     {
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.179 Safari/537.36', 'body' => ['action' => 'stopOptimization', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', 'body' => ['action' => 'stopOptimization', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
 
 
         if (is_wp_error($call)) {
@@ -1022,7 +1022,7 @@ class wps_ic_preload_warmup
 
         $page_links[$id] = ['url' => $url, 'test' => $test, 'home' => $is_home];
 
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.149 Safari/537.36', 'body' => ['action' => 'createQueue', 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', 'body' => ['action' => 'createQueue', 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 300]);
 
         if (is_wp_error($call)) {
             wp_send_json_error($call->get_error_message());
@@ -1383,7 +1383,7 @@ class wps_ic_preload_warmup
             update_option('wpc-connectivity-status', 'passed');
         }
 
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.179 Safari/537.36', 'body' => ['action' => 'getPagesJSON', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Compress-API Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36', 'body' => ['action' => 'getPagesJSON', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
 
 
         if (is_wp_error($call)) {

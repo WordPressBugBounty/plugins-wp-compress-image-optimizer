@@ -43,6 +43,41 @@ function registerEvents() {
     });
 }
 
+window.addEventListener('DOMContentLoaded', function () {
+    // Function to detect if the browser is Safari
+    function isSafari() {
+        return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    }
+
+    // Only run the code if Safari is detected
+    if (isSafari()) {
+        // Add your Safari-specific code here
+        var iframes = [].slice.call(document.querySelectorAll("iframe.wpc-iframe-delay"));
+
+        if (iframes.length > 0) {
+            iframes.forEach(function (element, index) {
+                var promise = new Promise(function (resolve, reject) {
+                    var iframeUrl = element.getAttribute('data-wpc-src');
+                    element.setAttribute('src', iframeUrl);
+                    element.removeAttribute('data-wpc-src');
+                    element.classList.remove("wpc-iframe-delay");
+
+                    element.addEventListener('load', function () {
+                        resolve();
+                    });
+
+                    element.addEventListener('error', function () {
+                        reject();
+                    });
+                });
+
+                // Assuming customPromiseFlag is an array where you want to store promises
+                customPromiseFlag.push(promise);
+            });
+        }
+    }
+});
+
 function preloadTimeout(event) {
 
     if (jsDebug) {

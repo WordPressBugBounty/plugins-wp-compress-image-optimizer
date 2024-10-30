@@ -612,9 +612,9 @@ class wpc_ic_delivery
         } else {
 
 	        // Verify if the downloaded file is an image
-	        $file_info = finfo_open(FILEINFO_MIME_TYPE);
-	        $mime_type = finfo_file($file_info, $imageDownload);
-	        finfo_close($file_info);
+	        #$file_info = finfo_open(FILEINFO_MIME_TYPE);
+	        $mime_type = mime_content_type($imageDownload);
+	        #finfo_close($file_info);
 
 	        if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
 		        $image_size = getimagesize($imageDownload);
@@ -683,9 +683,11 @@ class wpc_ic_delivery
         $imageWebpDownload = download_url($imageData['url_webp']);
 
 	      // Verify if the downloaded file is an image
-	      $file_info = finfo_open(FILEINFO_MIME_TYPE);
-	      $mime_type = finfo_file($file_info, $imageWebpDownload);
-	      finfo_close($file_info);
+//	      $file_info = finfo_open(FILEINFO_MIME_TYPE);
+//	      $mime_type = finfo_file($file_info, $imageWebpDownload);
+//	      finfo_close($file_info);
+
+          $mime_type = mime_content_type($imageWebpDownload);
 
 	      if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'])) {
 		      $image_size = getimagesize($imageWebpDownload);
@@ -806,9 +808,11 @@ class wpc_ic_delivery
 		  return false;
 	  } else {
 		  // Verify if the downloaded file is an image
-		  $file_info = finfo_open(FILEINFO_MIME_TYPE);
-		  $mime_type = finfo_file($file_info, $downloadImage);
-		  finfo_close($file_info);
+//		  $file_info = finfo_open(FILEINFO_MIME_TYPE);
+//		  $mime_type = finfo_file($file_info, $downloadImage);
+//		  finfo_close($file_info);
+
+          $mime_type = mime_content_type($downloadImage);
 
 		  if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
 			  $imageSize = getimagesize($downloadImage);

@@ -104,7 +104,7 @@ class wps_ic_enqueues extends wps_ic
             self::$zone_name = $custom_cname;
         }
 
-        if (!empty($_GET['trp-edit-translation']) || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['tatsu']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['PageSpeed']) || !empty($_GET['et_fb']) || !empty($_GET['tve']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php" || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false)) {
+        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['tatsu']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['PageSpeed']) || !empty($_GET['et_fb']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['tve']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php" || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false)) {
             // Do nothing
         } else {
             add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend'], 1);

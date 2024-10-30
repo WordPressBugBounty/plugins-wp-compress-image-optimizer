@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.11';
+        self::$version = '6.21.12';
         $wps_ic = $this;
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']) == true)) {
@@ -912,8 +912,12 @@ class wps_ic
      */
     public function init()
     {
-        // Raise memory limit
-        ini_set('memory_limit', '1024M');
+
+        if (!is_admin()) {
+            // Raise memory limit
+            ini_set('memory_limit', '1024M');
+        }
+
         /**
          * Force Show WP Compress
          */
@@ -1436,6 +1440,7 @@ class wps_ic
             'tatsu-header', //tatsu-header
             'tatsu-footer', //tatsu-footer
             'tve',//thrive
+            'is-editor-iframe',//thrive
             'pagelayer-live'
         ];
 
@@ -1449,6 +1454,11 @@ class wps_ic
 
         if (!empty($_GET['page']) && sanitize_text_field(['page']) == 'bwc') {
             return false;
+        }
+
+        if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
+            //brizyFrontend fix
+            return true;
         }
 
         if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {

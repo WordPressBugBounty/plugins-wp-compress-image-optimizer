@@ -2480,11 +2480,55 @@ SCRIPT;
                         }
                     }
                 }
+
+                $newSrcSet = $this->replace_with_480w($newSrcSet);
+
                 $newSrcSet = rtrim($newSrcSet);
                 $newSrcSet = rtrim($newSrcSet, ',');
             }
 
             return $newSrcSet;
+        }
+
+        return $srcset;
+    }
+
+
+    public function replace_with_480w($srcset) {
+        // Extract both w: values and srcset widths (for URLs) using regex
+        preg_match_all('/w:(\d+)/', $srcset, $w_matches); // Matches the "w:" pattern widths
+        preg_match_all('/(\S+)\s(\d+)w/', $srcset, $srcset_matches); // Matches srcset widths
+
+        $w_widths = array_map('intval', $w_matches[1]); // w: values
+        $srcset_widths = array_map('intval', $srcset_matches[2]); // srcset widths
+
+        // Combine all widths to search for the nearest to 480
+        $all_widths = array_merge($w_widths, $srcset_widths);
+
+        // Check if 480w already exists in the srcset
+        if (!in_array(480, $srcset_widths)) {
+            // Find the nearest width to 480 in the srcset
+            $nearest = null;
+            foreach ($srcset_widths as $width) {
+                if ($nearest === null || abs($width - 480) < abs($nearest - 480)) {
+                    $nearest = $width;
+                }
+            }
+            // Replace the nearest width in the srcset with 480w
+            $srcset = str_replace($nearest . 'w', '480w', $srcset);
+        }
+
+        // Now handle the "w:" part
+        if (!in_array(480, $w_widths)) {
+            // Find the nearest "w:" width to 480
+            $nearest_w = null;
+            foreach ($w_widths as $w_width) {
+                if ($nearest_w === null || abs($w_width - 480) < abs($nearest_w - 480)) {
+                    $nearest_w = $w_width;
+                }
+            }
+            // Replace the nearest "w:" width with "w:480"
+            $srcset = str_replace('w:' . $nearest_w, 'w:480', $srcset);
         }
 
         return $srcset;

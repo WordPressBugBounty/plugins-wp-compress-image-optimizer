@@ -2134,6 +2134,7 @@ class wps_ic_ajax extends wps_ic
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(array('msg' => 'performance-lab-compatibility'));
         }
+
         self::$accountStatus = parent::getAccountStatusMemory();
 
         $stats = get_post_meta($_POST['attachment_id'], 'ic_status', true);

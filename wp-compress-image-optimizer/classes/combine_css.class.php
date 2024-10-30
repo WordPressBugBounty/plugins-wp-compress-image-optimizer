@@ -1286,7 +1286,8 @@ class wps_ic_combine_css
         } else if (strpos($matched_url, './') === 0) {
             // Same folder
             $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = ltrim($matched_url, './');
+            $matched_url_trim = ltrim($matched_url, '.');
+            $matched_url_trim = ltrim($matched_url_trim, '.');
             $relativePath .= $matched_url_trim;
             $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
 
@@ -1300,7 +1301,7 @@ class wps_ic_combine_css
                 array_pop($directories); // Remove 1 last dir
             }
             $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = ltrim($matched_url, '../');
+            $matched_url_trim = substr($matched_url, 3);
             $relativePath .= $matched_url_trim;
 
             $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
@@ -1313,7 +1314,8 @@ class wps_ic_combine_css
                 $replace_url = $matched_url;
             } else {
                 // Missing http/s ?
-                $replace_url = ltrim($matched_url, '//');
+                $replace_url = ltrim($matched_url, '/');
+                $matched_url = ltrim($matched_url, '/');
                 $replace_url = $scheme . '://' . $replace_url;
             }
 

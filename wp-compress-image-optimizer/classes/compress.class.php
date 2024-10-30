@@ -434,9 +434,11 @@ class wps_ic_compress {
         // Copy backup file to dest
         $tempfile = download_url($original_image, 60);
         if ($tempfile) {
-	        $file_info = finfo_open( FILEINFO_MIME_TYPE );
-	        $mime_type = finfo_file( $file_info, $tempfile );
-	        finfo_close( $file_info );
+//	        $file_info = finfo_open( FILEINFO_MIME_TYPE );
+//	        $mime_type = finfo_file( $file_info, $tempfile );
+//	        finfo_close( $file_info );
+
+            $mime_type = mime_content_type($tempfile);
 
 	        if ( in_array( $mime_type, [ 'image/jpeg', 'image/png', 'image/gif' ] ) ) {
 		        $imageSize = getimagesize( $tempfile );
