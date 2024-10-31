@@ -536,7 +536,7 @@ class wps_rewriteLogic
 
         if (strpos($url, self::$zoneName) === false) {
             if (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false) {
-                $newUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($url);
+                $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
 
                 return $newUrl;
             }

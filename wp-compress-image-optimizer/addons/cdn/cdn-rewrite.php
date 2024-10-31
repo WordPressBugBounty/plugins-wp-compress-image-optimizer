@@ -3533,7 +3533,7 @@ class wps_cdn_rewrite
                     /**
                      * JS File
                      */
-                    $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                    $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
                 } else {
                     /**
                      * Something like an image?

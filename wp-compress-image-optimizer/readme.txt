@@ -222,6 +222,9 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 
 == Changelog ==
 
+= 6.21.13 =
+* Added Font SubSetting
+
 = 6.21.12 =
 * Fixed Brizy FrontEnd Editor Compatibility
 
