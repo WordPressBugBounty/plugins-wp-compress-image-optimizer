@@ -2123,8 +2123,7 @@ class wps_cdn_rewrite
                     add_filter('script_loader_tag', [$this, 'rewrite_script_tag'], 10, 3);
                 }
 
-                add_filter('script_loader_tag', [$this, 'deferJSAssets'], 10, 3);
-
+                #add_filter('script_loader_tag', [$this, 'deferJSAssets'], 10, 3);
             }
 
             add_action("wp_head", [$this, 'dnsPrefetch'], 0);
@@ -2585,21 +2584,25 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        //clear html comments (so combine doesn't pick them up)
-        $html = preg_replace("/<!--->/ms", '', $html);
-        $html = preg_replace_callback("/<!--(.*?)-->/ms", function ($matches) {
-            if (strpos($matches[1], 'sc_project') !== false) {
-                // statcounter puts some of their needed JS inside html comments
-                return $matches[0];
-            } else {
-                return '';
-            }
-        }, $html);
+        if (empty($_GET['wpc_disableCommentClear'])) {
+            //clear html comments (so combine doesn't pick them up)
+            $html = preg_replace("/<!--->/ms", '', $html);
+            $html = preg_replace_callback("/<!--(.*?)-->/ms", function ($matches) {
+                if (strpos($matches[1], 'sc_project') !== false) {
+                    // statcounter puts some of their needed JS inside html comments
+                    return $matches[0];
+                } else {
+                    return '';
+                }
+            }, $html);
+        }
 
         //Prep Site URL
         $this->getRegexp();
 
-        $html = self::$rewriteLogic->scriptContent($html);
+        if (empty($_GET['wpc_disableStrip'])) {
+            $html = self::$rewriteLogic->scriptContent($html);
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replace_iframe_tags') {
             return $html;
@@ -2740,6 +2743,10 @@ class wps_cdn_rewrite
         $addslashes = false;
         if (!empty($_POST['action'])) {
             $addslashes = true;
+        }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cdn_rewrite_url_2') {
+            return $html;
         }
 
         // Find all URLs on page that have not been replaced
@@ -3308,6 +3315,10 @@ class wps_cdn_rewrite
 
     public function replace_iframe_tags($iframe)
     {
+      if (strpos($iframe[0], 'gform') !== false){
+        return $iframe[0];
+      }
+
         preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $iframe[0], $iframeAtts);
 
         if (!empty($iframeAtts[1])) {
@@ -3372,10 +3383,6 @@ class wps_cdn_rewrite
             $width = 600;
         }
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'rewriteStart') {
-            return print_r([$url], true);
-        }
-
         $url = $url[0];
         if (strpos($url, 'cookie') !== false) {
             return $this->maybe_slash($url, $addslashes);
@@ -3390,7 +3397,6 @@ class wps_cdn_rewrite
         }
 
         $siteUrl = self::$home_url;
-
         $newUrl = str_replace($siteUrl, '', $url);
 
         // Check if site url is staging url? Anything after .com/something?
@@ -3455,10 +3461,6 @@ class wps_cdn_rewrite
                 return $this->maybe_slash($url, $addslashes);
             }
 
-            if (!empty($_GET['dbg']) && $_GET['dbg'] == 'rewrite_url') {
-                return print_r([$url], true);
-            }
-
             if (strpos($url, self::$zone_name) !== false) {
                 return $this->maybe_slash($url, $addslashes);
             }
@@ -3480,7 +3482,6 @@ class wps_cdn_rewrite
             }
 
             if (!empty($url)) {
-
                 // Todo: Quick fix for Password Protected Pages
                 if (strpos($url, 'login') !== false) {
                     return $this->maybe_slash($url, $addslashes);
@@ -3496,6 +3497,8 @@ class wps_cdn_rewrite
                      * CSS File
                      */
                     $newUrl = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($url);
+
+                    return $newUrl;
                 } elseif (strpos($url, '.js') !== false && self::$js == '1') {
                     $fileMinify = self::$js_minify;
                     if (self::isExcluded('js_minify', $url)) {
@@ -3514,6 +3517,8 @@ class wps_cdn_rewrite
                     } else {
                         $newUrl = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($url, false);
                     }
+
+                    return $newUrl;
                 } elseif (strpos($url, '.svg') !== false) {
                     if (!empty(self::$settings['serve']['svg'])) {
                         /**
@@ -3529,28 +3534,50 @@ class wps_cdn_rewrite
                     } else {
                         $newUrl = self::reformat_url($url, false);
                     }
+
+                    return $newUrl;
                 } elseif (self::$fonts == 1 && (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false)) {
                     /**
                      * JS File
                      */
-                    $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
-                } else {
-                    /**
-                     * Something like an image?
-                     */
+                    if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false) {
+                        $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                    } else {
+                        $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
+                    }
+                    return $newUrl;
+                }
 
-                    if (self::is_image($url) && !self::is_excluded($url, $url)) {
-                        $newUrl = self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width . '/u:' . self::reformat_url($url);
+                /*
+                 else {
+
+                    if (strpos($url, '.js') !== false || strpos($url, '.css') !== false) {
+                        return $url;
                     }
 
-                    $newUrl = $this->maybe_slash($newUrl, $addslashes);
-
-                    return self::reformat_url($newUrl);
+                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'ignore_rewrite_5_1') {
+                    return $url;
                 }
+
+                if (self::is_image($url) && !self::is_excluded($url, $url)) {
+                    $newUrl = self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width . '/u:' . self::reformat_url($url);
+                }
+
+                $newUrl = $this->maybe_slash($newUrl, $addslashes);
+
+                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'ignore_rewrite_5_2') {
+                    return print_r(array($url, $newUrl, self::reformat_url($newUrl)), true);
+                }
+
+                return self::reformat_url($newUrl);
+            }
+                 */
 
                 if (self::is_excluded($url, $url)) {
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
+
+                return $url;
 
                 if (!empty($_GET['dbg']) && $_GET['dbg'] == 'rewrite_url_to_file') {
                     $fp = fopen(WPS_IC_DIR . 'rewrite_url_file.txt', 'a+');

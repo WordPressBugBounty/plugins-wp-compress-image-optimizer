@@ -615,7 +615,7 @@ class wpc_gui_v4 extends wps_ic
     return $html;
   }
 
-  public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left')
+  public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false)
   {
     $html = '';
 
@@ -638,7 +638,6 @@ class wpc_gui_v4 extends wps_ic
     if (!empty($description)) {
       $html .= '<p>' . $description . '</p>';
     }
-
 
     $html .= '</div>';
 
@@ -699,6 +698,12 @@ class wpc_gui_v4 extends wps_ic
       $html .= '<input type="checkbox" data-for-div-id="' . $option . '" class="form-check-input checkbox mt-0 wpc-checkbox-select-all" value="1" id="select-all-' . $option . '" name="select-all-' . $optionName . '"/>';
       $html .= '<span class="wpc-switch-slider wpc-switch-round"></span>';
       $html .= '</label>';
+    }
+
+    if (!empty($additionalConfigure)) {
+        $html .= '<div class="form-check">';
+        $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="'.$additionalConfigure.'" data-popup-width="750">Configure</a>';
+        $html .= '</div>';
     }
 
 

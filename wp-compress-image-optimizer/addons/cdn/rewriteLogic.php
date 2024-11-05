@@ -868,6 +868,9 @@ class wps_rewriteLogic
     let wpcRunningCritical = false;
 
     function handleUserInteraction() {
+     if (typeof ngf298gh738qwbdh0s87v_vars === 'undefined') {
+        return;
+    }
         if (wpcRunningCritical) {
             return;
         }
@@ -1928,10 +1931,10 @@ SCRIPT;
         $image[0] = preg_replace('/\bfetchpriority="[^"]*"\s*/si', '', $image[0]);
         // Remove decoding attribute
         $image[0] = preg_replace('/\bdecoding="[^"]*"\s*/si', '', $image[0]);
-        $image[0] = preg_replace('/\bsizes="[^"]*"\s*/si', '', $image[0]);
 
         if (!empty(self::$settings['remove-srcset']) && self::$settings['remove-srcset'] == '1') {
             $image[0] = preg_replace('/\bsrcset="[^"]*"\s*/si', '', $image[0]);
+            $image[0] = preg_replace('/\bsizes="[^"]*"\s*/si', '', $image[0]);
         }
 
         // Original URL was

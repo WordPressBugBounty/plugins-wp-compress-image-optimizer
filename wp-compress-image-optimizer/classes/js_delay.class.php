@@ -8,7 +8,9 @@ class wps_ic_js_delay
     public static $footerScripts;
 
     public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js'];
+
+    public static $deferScripts = ['mediaelement', 'fitvid'];
 
     public function __construct()
     {
@@ -144,6 +146,16 @@ class wps_ic_js_delay
                 $tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
             } else {
                 $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script" data-from-wpc="128"', $tag);
+            }
+
+            return $tag;
+        } elseif ($this->checkKeyword($tagLower, self::$deferScripts)) {
+
+            // Required for usercentrics plugin
+            if (strpos($tagLower, 'loader.js') !== false || strpos($tagLower, 'uc-block') !== false) {
+                // Find & Replace with delay
+                $tag = preg_replace('/<script/i', '<script defer ', $tag, 1);
+                return $tag;
             }
 
             return $tag;

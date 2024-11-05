@@ -842,7 +842,7 @@ if (!$localEnabled) {
                                         $jsLocked = true;
                                       }
 
-                                      echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', ''); ?>
+                                      echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', '', '', false, '1', false, false, 'left', 'delay-js-configuration'); ?>
 
                                         <div class="wpc-spacer"></div>
 
@@ -1275,6 +1275,7 @@ include 'partials/popups/exclude-simple-caching.php';
 include 'partials/popups/exclude-advanced-caching.php';
 
 // JS Optimizations
+include 'partials/popups/js/delay-js-configuration.php';
 include 'partials/popups/js/exclude-js-minify.php';
 include 'partials/popups/js/exclude-js-combine.php';
 include 'partials/popups/js/exclude-scripts-to-footer.php';

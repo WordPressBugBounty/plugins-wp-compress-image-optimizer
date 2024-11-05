@@ -81,7 +81,8 @@ class wps_ic_excludes extends wps_ic
 		];
 
 		self::$defaultDelayJSExcludes = [
-        'gtranslate'
+        'gtranslate',
+        'gformRedirect()'
 		];
 
 		self::$defaultCombineJSExcludes = [

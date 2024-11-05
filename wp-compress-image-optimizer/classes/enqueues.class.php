@@ -306,11 +306,14 @@ class wps_ic_enqueues extends wps_ic
         echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '"};';
         echo '</script>';
 
+        $optimizeRemove = get_option('wps_optimizejs_remove');
         $debugOptimize = get_option('wps_optimizejs_debug');
-        if (empty($debugOptimize) || $debugOptimize == 'false') {
-            echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js" defer></script>';
-        } else {
-            echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js" defer></script>';
+        if (empty($optimizeRemove)) {
+            if (empty($debugOptimize) || $debugOptimize == 'false') {
+                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js" defer></script>';
+            } else {
+                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js" defer></script>';
+            }
         }
 
         if (!empty(self::$settings['lazy']) && self::$settings['lazy'] == '1') {
@@ -387,111 +390,114 @@ class wps_ic_enqueues extends wps_ic
             wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_admin_vars', ['ajaxurl' => admin_url('admin-ajax.php'),]);
         }
 
-        if ((!empty($options['lazy']) && $options['lazy'] == '1')) {
+        $optimizeRemove = get_option('wps_optimizejs_remove');
+        if (empty($optimizeRemove)) {
+            if ((!empty($options['lazy']) && $options['lazy'] == '1')) {
 
-            if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+                if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
 
-                if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
-                    wp_register_script($this::$slug . '-aio', '');
-                    wp_enqueue_script($this::$slug . '-aio');
-                    $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.local-lazy' . $retinaJS . WPS_IC_MIN . '.js');
-                    wp_add_inline_script($this::$slug . '-aio', $scriptContent);
-                } else {
-                    wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.local-lazy' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
-                }
-
-            } else {
-
-                if ((!empty($options['generate_adaptive']) && $options['generate_adaptive'] == '1')) {
                     if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
                         wp_register_script($this::$slug . '-aio', '');
                         wp_enqueue_script($this::$slug . '-aio');
-                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js');
+                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.local-lazy' . $retinaJS . WPS_IC_MIN . '.js');
                         wp_add_inline_script($this::$slug . '-aio', $scriptContent);
                     } else {
-                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.local-lazy' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
                     }
+
                 } else {
-                    if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
-                        wp_register_script($this::$slug . '-aio', '');
-                        wp_enqueue_script($this::$slug . '-aio');
-                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js');
-                        wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+
+                    if ((!empty($options['generate_adaptive']) && $options['generate_adaptive'] == '1')) {
+                        if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
+                            wp_register_script($this::$slug . '-aio', '');
+                            wp_enqueue_script($this::$slug . '-aio');
+                            $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js');
+                            wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+                        } else {
+                            wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        }
                     } else {
-                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
+                            wp_register_script($this::$slug . '-aio', '');
+                            wp_enqueue_script($this::$slug . '-aio');
+                            $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js');
+                            wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+                        } else {
+                            wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        }
                     }
                 }
-            }
 
-            if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
-                if (!empty($_GET['webp']) && $_GET['webp'] == 'true') {
-                    $webp = 'true';
-                } else {
-                    $webp = 'false';
+                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
+                    if (!empty($_GET['webp']) && $_GET['webp'] == 'true') {
+                        $webp = 'true';
+                    } else {
+                        $webp = 'false';
+                    }
+
+                    if (!empty($_GET['retina']) && $_GET['retina'] == 'true') {
+                        $retina = 'true';
+                    } else {
+                        $retina = 'false';
+                    }
                 }
 
-                if (!empty($_GET['retina']) && $_GET['retina'] == 'true') {
+                // Force retina
+                $force_retina = '0';
+                if (!empty($_GET['force_retina'])) {
                     $retina = 'true';
-                } else {
-                    $retina = 'false';
-                }
-            }
-
-            // Force retina
-            $force_retina = '0';
-            if (!empty($_GET['force_retina'])) {
-                $retina = 'true';
-                $force_retina = 'true';
-            }
-
-
-            wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'api_url' => 'https://' . self::$zone_name . '/', 'quality' => self::$quality, 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'background_sizing' => $background_sizing, 'lazy_enabled' => $lazy, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
-        } else {
-
-            if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
-
-                if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
-                    wp_register_script($this::$slug . '-aio', '');
-                    wp_enqueue_script($this::$slug . '-aio');
-                    $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js');
-                    wp_add_inline_script($this::$slug . '-aio', $scriptContent);
-                } else {
-                    // Live CDN Disabled
-                    wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                    $force_retina = 'true';
                 }
 
+
+                wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'api_url' => 'https://' . self::$zone_name . '/', 'quality' => self::$quality, 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'background_sizing' => $background_sizing, 'lazy_enabled' => $lazy, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
             } else {
 
-                if ((!empty($options['generate_adaptive']) && $options['generate_adaptive'] == '1')) {
+                if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+
                     if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
                         wp_register_script($this::$slug . '-aio', '');
                         wp_enqueue_script($this::$slug . '-aio');
-                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js');
+                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js');
                         wp_add_inline_script($this::$slug . '-aio', $scriptContent);
                     } else {
-                        // Live CDN Enabled
-                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        // Live CDN Disabled
+                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
                     }
+
                 } else {
-                    if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
-                        wp_register_script($this::$slug . '-aio', '');
-                        wp_enqueue_script($this::$slug . '-aio');
-                        $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js');
-                        wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+
+                    if ((!empty($options['generate_adaptive']) && $options['generate_adaptive'] == '1')) {
+                        if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
+                            wp_register_script($this::$slug . '-aio', '');
+                            wp_enqueue_script($this::$slug . '-aio');
+                            $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js');
+                            wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+                        } else {
+                            // Live CDN Enabled
+                            wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        }
                     } else {
-                        wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
+                            wp_register_script($this::$slug . '-aio', '');
+                            wp_enqueue_script($this::$slug . '-aio');
+                            $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js');
+                            wp_add_inline_script($this::$slug . '-aio', $scriptContent);
+                        } else {
+                            wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
+                        }
                     }
                 }
-            }
 
-            // Force retina
-            $force_retina = 'false';
-            if (!empty($_GET['force_retina'])) {
-                $retina = 'true';
-                $force_retina = 'true';
-            }
+                // Force retina
+                $force_retina = 'false';
+                if (!empty($_GET['force_retina'])) {
+                    $retina = 'true';
+                    $force_retina = 'true';
+                }
 
-            wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'lazy_enabled' => $lazy, 'background_sizing' => $background_sizing, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
+                wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'lazy_enabled' => $lazy, 'background_sizing' => $background_sizing, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
+            }
         }
 
         //Tracking script

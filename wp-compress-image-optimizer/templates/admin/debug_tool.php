@@ -109,6 +109,31 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </thead>
     <tbody>
     <tr>
+        <td>Remove OptimizeJS</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['optimizejs_remove'])) {
+                    if ($_GET['optimizejs_remove'] === 'true') {
+                        update_option('wps_optimizejs_remove', sanitize_text_field($_GET['optimizejs_remove']));
+                    } else {
+                        delete_option('wps_optimizejs_remove');
+                    }
+                }
+
+                $optimizejs_remove = get_option('wps_optimizejs_remove');
+
+                if (empty($optimizejs_remove) || $optimizejs_remove == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+                If you are having any sort of issues with optimize.js this will give you the debug version.
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>Enable OptimizeJS Debug</td>
         <td colspan="3">
             <p>

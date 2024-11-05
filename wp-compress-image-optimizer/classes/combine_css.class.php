@@ -76,23 +76,47 @@ class wps_ic_combine_css
         }
     }
 
+
     public function isMobile()
     {
         if (!empty($_GET['simulate_mobile'])) {
             return true;
         }
 
-        if (isset($_SERVER['HTTP_USER_AGENT'])) {
-            $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
+        $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
 
+        if (!empty($_GET['dbgMobile'])) {
+            $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
+            fwrite($fp, 'UA: ' . $userAgent . "\r\n");
+            fclose($fp);
+        }
+
+        // Desktop Detection
+        $desktopKeywords = array('windows nt', 'macintosh', 'linux', 'cros', 'x11');
+
+        foreach ($desktopKeywords as $keyword) {
+            if (strpos($userAgent, $keyword) !== false) {
+                if (!empty($_GET['dbgMobile'])) {
+                    $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
+                    fwrite($fp, 'Desktop Detected: ' . $keyword . "\r\n");
+                    fclose($fp);
+                }
+                return false; // Detected a desktop identifier, so it's not a mobile device
+            }
+        }
+
+        if (isset($_SERVER['HTTP_USER_AGENT'])) {
             // Define an array of mobile device keywords to check against
-            $mobileKeywords = array(
-                'android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'
-            );
+            $mobileKeywords = array('android', 'iphone', 'ipad', 'ipod', 'windows phone', 'blackberry', 'bb10', 'webos', 'symbian', 'playbook', 'kindle', 'silk', 'opera mini', 'opera mobi', 'palm');
 
             // Check if the user agent contains any of the mobile device keywords
             foreach ($mobileKeywords as $keyword) {
                 if (strpos($userAgent, $keyword) !== false) {
+                    if (!empty($_GET['dbgMobile'])) {
+                        $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
+                        fwrite($fp, 'Mobile Detected: ' . $keyword . "\r\n");
+                        fclose($fp);
+                    }
                     return true; // Found a match, so it's a mobile device
                 }
             }
@@ -1098,9 +1122,11 @@ class wps_ic_combine_css
         $content = str_replace(array('@font-face{', '@font-face {'), '@font-face{font-display: swap;', $content);
 
         // Find BG and replace with mobile BG
-        if ($this::$isMobile) {
-            $content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
-        }
+        #if ($this::$isMobile) {
+            #$content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
+        #}
+
+        $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', array($this, 'changeFontToCDN'), $content);
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
         $this->current_file .= $content . PHP_EOL;
@@ -1171,8 +1197,19 @@ class wps_ic_combine_css
         return $content;
     }
 
+
+    public function changeFontToCDN($html)
+    {
+        return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1].'");';
+    }
+
+
     public function changeBgImageToMobile($html)
     {
+        if (!$this->isMobile()) {
+            return $html[0];
+        }
+
         $bgEntire = $html[0];
         $bgUrl = $html[1];
 
@@ -1338,7 +1375,7 @@ class wps_ic_combine_css
             if ($this::$isMobile) {
                 $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
             } else {
-                $relativeUrl = 'url("https://' . $this->zone_name . '/mo:1/a:' . $relativeUrl . '")';
+                $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
             }
 
         } else {
