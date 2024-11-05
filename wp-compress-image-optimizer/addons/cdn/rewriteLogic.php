@@ -534,11 +534,13 @@ class wps_rewriteLogic
     {
         $url = $url[0];
 
-        if (strpos($url, self::$zoneName) === false) {
-            if (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false) {
-                $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
+        if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+            if (strpos($url, self::$zoneName) === false) {
+                if (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false) {
+                    $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
 
-                return $newUrl;
+                    return $newUrl;
+                }
             }
         }
 
@@ -629,6 +631,10 @@ class wps_rewriteLogic
                         $fileMinify = self::$cssMinify;
                         if (self::isExcluded('css_minify', $src_url)) {
                             $fileMinify = '0';
+                        }
+
+                        if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                            $fileMinify = '1';
                         }
 
                         $newSrc = 'https://' . self::$zoneName . '/m:' . $fileMinify . '/a:' . self::reformatUrl($src_url);
@@ -788,6 +794,11 @@ class wps_rewriteLogic
                 $newSrc = $src_url;
                 if (strpos($src_url, '.css') !== false) {
                     if (self::$css == "1") {
+
+                        if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                            self::$cssMinify = '1';
+                        }
+
                         $newSrc = 'https://' . self::$zoneName . '/m:' . self::$cssMinify . '/a:' . self::reformatUrl($src_url);
                     }
                 } elseif (strpos($src_url, '.js') !== false) {

@@ -34,6 +34,7 @@ class wps_ic_options
             'js_combine' => ['combine'],
             'js_minify' => ['combine'],
             'delay-js' => ['combine'],
+            'font-subsetting' => ['cdn','critical'],
         ];
 
 
@@ -79,6 +80,7 @@ class wps_ic_options
             'js_minify' => 0,
             'js_defer' => 0,
             'delay-js' => 0,
+            'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
             'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0],

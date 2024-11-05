@@ -1200,7 +1200,11 @@ class wps_ic_combine_css
 
     public function changeFontToCDN($html)
     {
-        return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1].'");';
+        if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
+            return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1] . '");';
+        } else {
+            return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
+        }
     }
 
 
@@ -1369,7 +1373,11 @@ class wps_ic_combine_css
         $relativeUrl = trim($relativeUrl);
 
         if ((strpos($matched_url, '.eot') !== false || strpos($matched_url, '.woff') !== false || strpos($matched_url, '.woff2') !== false || strpos($matched_url, '.ttf') !== false) && $this->settings['serve']['fonts'] == 1) {
-            $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
+            if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
+                $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
+            } else {
+                $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
+            }
         } else if ((strpos($matched_url, '.jpg') !== false && $this->settings['serve']['jpg'] == 1) || (strpos($matched_url, '.png') !== false && $this->settings['serve']['png'] == 1) || (strpos($matched_url, '.gif') !== false && $this->settings['serve']['gif'] == 1) || (strpos($matched_url, '.svg') !== false && $this->settings['serve']['svg'] == 1)) {
 
             if ($this::$isMobile) {

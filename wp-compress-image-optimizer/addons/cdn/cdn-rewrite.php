@@ -867,6 +867,10 @@ class wps_cdn_rewrite
                     $fileMinify = '0';
                 }
 
+                if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                    $fileMinify = '1';
+                }
+
                 if (!self::is_excluded_link($src)) {
                     if (self::$css_img_url == '1') {
                         $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src);
@@ -3493,6 +3497,11 @@ class wps_cdn_rewrite
                     if (self::isExcluded('css_minify', $url)) {
                         $fileMinify = '0';
                     }
+
+
+                    if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                        $fileMinify = '1';
+                    }
                     /**
                      * CSS File
                      */
@@ -3540,38 +3549,17 @@ class wps_cdn_rewrite
                     /**
                      * JS File
                      */
-                    if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false) {
-                        $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                    if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                        if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false) {
+                            $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                        } else {
+                            $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
+                        }
                     } else {
-                        $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
+                        $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
                     }
                     return $newUrl;
                 }
-
-                /*
-                 else {
-
-                    if (strpos($url, '.js') !== false || strpos($url, '.css') !== false) {
-                        return $url;
-                    }
-
-                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'ignore_rewrite_5_1') {
-                    return $url;
-                }
-
-                if (self::is_image($url) && !self::is_excluded($url, $url)) {
-                    $newUrl = self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width . '/u:' . self::reformat_url($url);
-                }
-
-                $newUrl = $this->maybe_slash($newUrl, $addslashes);
-
-                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'ignore_rewrite_5_2') {
-                    return print_r(array($url, $newUrl, self::reformat_url($newUrl)), true);
-                }
-
-                return self::reformat_url($newUrl);
-            }
-                 */
 
                 if (self::is_excluded($url, $url)) {
                     return $this->maybe_slash($originalUrl, $addslashes);
