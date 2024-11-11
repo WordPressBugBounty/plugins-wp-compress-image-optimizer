@@ -92,7 +92,7 @@ class wps_ic_stats {
         $call = wp_remote_get($url, [
           'timeout' => 30,
           'sslverify' => false,
-          'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0',
+          'user-agent' => WPS_IC_API_USERAGENT,
           'headers' => [
             'apikey' => self::$api_key,
           ]

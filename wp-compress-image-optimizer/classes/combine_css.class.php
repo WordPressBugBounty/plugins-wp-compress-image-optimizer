@@ -1201,10 +1201,12 @@ class wps_ic_combine_css
     public function changeFontToCDN($html)
     {
         if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
-            return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1] . '");';
-        } else {
-            return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
+            if (strpos($html[1], 'icon') === false && strpos($html[1], 'awesome') === false && strpos($html[1], 'lightgallery') === false && strpos($html[1], 'gallery') === false && strpos($html[1], 'side-cart-woocommerce') === false) {
+                return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1] . '");';
+            }
         }
+
+        return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
     }
 
 
@@ -1374,7 +1376,11 @@ class wps_ic_combine_css
 
         if ((strpos($matched_url, '.eot') !== false || strpos($matched_url, '.woff') !== false || strpos($matched_url, '.woff2') !== false || strpos($matched_url, '.ttf') !== false) && $this->settings['serve']['fonts'] == 1) {
             if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
-                $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
+                if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
+                    $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
+                } else {
+                    $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
+                }
             } else {
                 $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
             }

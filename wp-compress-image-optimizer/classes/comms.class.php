@@ -530,7 +530,6 @@ class wps_ic_comms extends wps_ic
 
         $settings['live-cdn'] = $cdnEnabled;
 
-        #update_option(WPS_IC_SETTINGS . '_tmp', $settings);
         update_option(WPS_IC_SETTINGS, $settings);
         wp_send_json_success($form);
     }

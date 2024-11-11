@@ -2538,40 +2538,6 @@ class wps_ic_ajax extends wps_ic
                 self::$settings, 'allow_live' => get_option('wps_ic_allow_live'));
         }
 
-        /*
-        if (get_transient('cdn' . 'Enabled') === false){
-          $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_account_status_v6&apikey=' . self::$options['api_key'] . '&range=month&hash=' . md5(mt_rand(999, 9999)), [
-            'timeout'    => 30,
-            'sslverify'  => false,
-            'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
-          ]);
-
-          if (wp_remote_retrieve_response_code($call) == 200){
-            $body = wp_remote_retrieve_body($call);
-            $body = json_decode($body);
-            $body = $body->data;
-
-            if (empty($body->packageConfiguration)){
-              // Show all options
-            } else{
-              // Block some options
-              $packageConfig = (array) $body->packageConfiguration;
-              if ( ! empty($packageConfig)){
-                foreach ($packageConfig as $key => $value){
-                  set_transient($key . 'Enabled', $value, 5 * 60); // 5 Minutes
-                }
-              }
-            }
-          }
-        }
-
-        $locked = [];
-        $locked['cdn'] = !$this->isFeatureEnabled('cdn');
-        $locked['caching'] = !$this->isFeatureEnabled('caching');
-        $locked['adaptive'] = !$this->isFeatureEnabled('adaptive');
-        $locked['css'] = !$this->isFeatureEnabled('css');
-        $locked['delay-js'] = !$this->isFeatureEnabled('delay-js');
-    */
 
         $locked = [];
         $locked['cdn'] = false;

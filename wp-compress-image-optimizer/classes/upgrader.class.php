@@ -42,7 +42,7 @@ class wps_ic_upgrader extends wps_ic
     $uri = WPS_IC_KEYSURL.'?action=upgrade_notify&apikey='.$apikey.'&site_type='.$site_type.'&domain='.$siteurl.'&zone_name='.$zone_name.'&hash='.md5(time()).'&time_hash='.time();
     
     // Verify API Key is our database and user has is confirmed getresponse
-    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     
     if (wp_remote_retrieve_response_code($get) == 200) {
       $body = wp_remote_retrieve_body($get);
@@ -226,7 +226,7 @@ class wps_ic_upgrader extends wps_ic
     $call = wp_remote_get($url, [
         'timeout'    => 10,
         'sslverify'  => 'false',
-        'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
+        'user-agent' => WPS_IC_API_USERAGENT
     ]);
   }
   

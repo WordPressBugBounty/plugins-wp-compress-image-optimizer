@@ -287,7 +287,7 @@ class wps_criticalCss
 //    }
 
     $args = ['v7' => 'true', 'pages' => json_encode($urlList), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-    $call = wp_remote_post(self::$API_URL_PING, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $call = wp_remote_post(self::$API_URL_PING, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     $code = wp_remote_retrieve_response_code($call);
 
     die();
@@ -339,17 +339,9 @@ class wps_criticalCss
     $args = ['v7' => 'true', 'url' => $url, 'pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)
 	  ['api_key']];
 
-    // Denis Edit
-    //$call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
-    //$code = wp_remote_retrieve_response_code($call); 
-    // Done Denis 
-    
     $requests = new wps_ic_requests();
     $call = $requests->POST(self::$API_URL, $args, ['timeout' => 300]);
     $code = $requests->getResponseCode($call);
-
-    #$call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
-    #$code = wp_remote_retrieve_response_code($call);
 
     if ($code == 200) {
       $body = $requests->getResponseBody($call);
@@ -561,7 +553,7 @@ class wps_criticalCss
 //		}
 
     $args = ['pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'background' => 'true'];
-    $call = wp_remote_post(self::$API_URL, ['timeout' => 2, 'blocking' => false, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $call = wp_remote_post(self::$API_URL, ['timeout' => 2, 'blocking' => false, 'body' => $args,'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     $body = wp_remote_retrieve_body($call);
 
   }
@@ -613,7 +605,7 @@ class wps_criticalCss
 
 
     $args = ['url' => $url];
-    $call = wp_remote_post(self::$API_ASSETS_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $call = wp_remote_post(self::$API_ASSETS_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
     $body = wp_remote_retrieve_body($call);
     if (!empty($body)) {
@@ -693,7 +685,7 @@ class wps_criticalCss
   {
     $args = ['pages' => urldecode(json_encode(['ajax' => $this->serverRequest]))];
 
-    $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args,'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
     $body = wp_remote_retrieve_body($call);
 

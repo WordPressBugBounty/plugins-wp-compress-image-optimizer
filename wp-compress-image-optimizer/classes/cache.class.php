@@ -47,7 +47,6 @@ class wps_ic_cache
     self::purgeHook('permalink_structure_changed');
     self::purgeHook('customize_save');
     self::purgeHook('update_option_theme_mods_' . get_option('stylesheet'));
-    self::purgeHook('wp_update_nav_menu', 1, 1,1,1);
   }
 
 
@@ -122,18 +121,27 @@ class wps_ic_cache
 
   public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
   {
+    if (!is_int($post_id) && $post_id !== 'all'){
+      $post_id = 'all';
+    }
     $cacheHtml = new wps_cacheHtml();
     $cacheHtml->removeCacheFiles($post_id);
   }
 
   public static function removeCombinedFiles($post_id = 'all', $post = '', $update = '')
   {
+    if (!is_int($post_id) && $post_id !== 'all'){
+      $post_id = 'all';
+    }
     $cacheHtml = new wps_cacheHtml();
     $cacheHtml->removeCombinedFiles($post_id);
   }
 
   public static function removeCriticalFiles($post_id = 'all', $post = '', $update = '')
   {
+    if (!is_int($post_id) && $post_id !== 'all'){
+      $post_id = 'all';
+    }
     $cacheHtml = new wps_cacheHtml();
     $cacheHtml->removeCriticalFiles($post_id);
   }

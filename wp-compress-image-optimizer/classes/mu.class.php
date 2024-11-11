@@ -172,7 +172,7 @@ class wps_ic_mu extends wps_ic
       $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
       // Verify API Key is our database and user has is confirmed getresponse
-      $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+      $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
       if (wp_remote_retrieve_response_code($get) == 200) {
         $body = wp_remote_retrieve_body($get);
@@ -212,7 +212,7 @@ class wps_ic_mu extends wps_ic
             $siteurl = network_site_url();
           }
 
-          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
           if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
@@ -259,9 +259,8 @@ class wps_ic_mu extends wps_ic
 
     $url = WPS_IC_KEYSURL . '?action=cdn_removecname&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-    $agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0';
-    $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => $agent]);
-    $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+    $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
     delete_option('ic_custom_cname');
 
@@ -347,10 +346,9 @@ class wps_ic_mu extends wps_ic
           wp_send_json_error('invalid-domain');
         } else {
           // Verify CNAME DNS
-          $agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0';
           $verify_cname_dns = 'https://frankfurt.zapwp.net/?dnsCheck=true&host=' . $cname . '&zoneName=' . $zone_name . '&random=' . microtime(true);
 
-          $call = wp_remote_get($verify_cname_dns, ['timeout' => 60, 'sslverify' => false, 'user-agent' => $agent]);
+          $call = wp_remote_get($verify_cname_dns, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
           if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
             $body = json_decode($body, true);
@@ -365,15 +363,15 @@ class wps_ic_mu extends wps_ic
 
                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => $agent]);
+                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
                 //v6 call:
                 $url = WPS_IC_KEYSURL . '?action=cdn_setcname_v6&apikey=' . $apikey . '&cname=' . $cname . '&zone_name=' . $zone_name . '&time=' . time() . '&no_cache=' . md5(mt_rand(999, 9999));
 
-                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => $agent]);
+                $call = wp_remote_get($url, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
                 sleep(5);
 
-                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=cdn_purge&domain=' . site_url() . '&apikey=' . $options['api_key'], ['timeout' => '10', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
                 // Wait for SSL?
@@ -658,7 +656,7 @@ class wps_ic_mu extends wps_ic
       $uri = WPS_IC_KEYSURL . '?action=connect_mu_single&token=' . $token . '&domain=' . $siteurl . '&hash=' . md5(time()) . '&time_hash=' . time();
 
       // Verify API Key is our database and user has is confirmed getresponse
-      $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+      $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
       if (wp_remote_retrieve_response_code($get) == 200) {
         $body = wp_remote_retrieve_body($get);
@@ -705,7 +703,7 @@ class wps_ic_mu extends wps_ic
             $siteurl = network_site_url();
           }
 
-          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
           if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
@@ -781,7 +779,7 @@ class wps_ic_mu extends wps_ic
     update_option(WPS_IC_OPTIONS, $options);
 
     // Verify API Key is our database and user has is confirmed getresponse
-    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
     wp_send_json_success(['html_status' => '<a href="#" class="wps-ic-mu-connect wpc-mu-individual-connect-bulk hvr-grow" data-site-id="' . $siteID . '"><i class="icon icon-link"></i> Connect</a>']);
 
@@ -843,7 +841,7 @@ class wps_ic_mu extends wps_ic
 
 
     // Verify API Key is our database and user has is confirmed getresponse
-    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+    $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
 
     $body_msg = '';
@@ -893,7 +891,7 @@ class wps_ic_mu extends wps_ic
             $siteurl = network_site_url();
           }
 
-          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+          $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
           if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);

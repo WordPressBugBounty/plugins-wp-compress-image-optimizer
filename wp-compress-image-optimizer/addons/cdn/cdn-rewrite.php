@@ -2515,8 +2515,10 @@ class wps_cdn_rewrite
         }
 
         // Is Woo commerce Cart
-        if (function_exists('is_woocommerce') && is_woocommerce() && is_cart()) {
-            return true;
+        if (class_exists('WooCommerce')) {
+            if (is_cart() || is_checkout()) {
+                return true;
+            }
         }
 
         return false;
@@ -3550,7 +3552,7 @@ class wps_cdn_rewrite
                      * JS File
                      */
                     if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
-                        if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false) {
+                        if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
                             $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
                         } else {
                             $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);

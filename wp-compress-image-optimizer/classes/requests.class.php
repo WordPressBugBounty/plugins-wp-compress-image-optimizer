@@ -54,7 +54,7 @@ class wps_ic_requests
 //    }
   }
 
-  public function GET($baseUrl, $params, $configParams = ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']) {
+  public function GET($baseUrl, $params, $configParams = ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]) {
 
     // Append parameters to the URL
     $url = add_query_arg($params, $baseUrl);

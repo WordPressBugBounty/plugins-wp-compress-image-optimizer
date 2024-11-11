@@ -36,7 +36,7 @@ class wpc_gui_v4 extends wps_ic
     if (empty($lastUpdate) || !$lastUpdate) {
       $settings = get_option(WPS_IC_OPTIONS);
       if (!empty($settings['api_key'])) {
-        $getStats = wp_remote_get(WPS_IC_KEYSURL . '?apikey=' . $settings['api_key'] . '&action=pullStats', ['timeout' => 10, 'sslverify' => 'false', 'user-agent' => 'Compress-API Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+        $getStats = wp_remote_get(WPS_IC_KEYSURL . '?apikey=' . $settings['api_key'] . '&action=pullStats', ['timeout' => 10, 'sslverify' => 'false', 'user-agent' => WPS_IC_API_USERAGENT]);
 
         // Set transient only if the response is 200 for stats update
         if (wp_remote_retrieve_response_code($getStats) == 200) {

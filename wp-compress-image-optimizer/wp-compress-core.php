@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.15';
+        self::$version = '6.21.16';
         $wps_ic = $this;
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']) == true)) {
@@ -347,7 +347,7 @@ class wps_ic
         $call = wp_remote_get($url, [
             'timeout' => 30,
             'sslverify' => false,
-            'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0',
+            'user-agent' => WPS_IC_API_USERAGENT,
             'headers' => [
                 'apikey' => $options['api_key'],
             ]
@@ -356,7 +356,6 @@ class wps_ic
         if (wp_remote_retrieve_response_code($call) == 200) {
             $json = $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);
-
 
             if (!empty($body) && $body !== 'no-site-found') {
                 // Vars
@@ -404,7 +403,8 @@ class wps_ic
                     // Account Status Transient
                     set_transient('wps_ic_account_status', $body->data, 5 * 60);
                     return $body->data;
-                } else {
+                }
+                else {
 
                     // If pro site,raise flag
                     if (!empty($proSite) && $proSite == '1') {
@@ -426,8 +426,6 @@ class wps_ic
                         update_option(WPS_IC_SETTINGS, $settings);
                     }
                 }
-
-
                 // Account configuration
                 if (empty($body->packageConfiguration)) {
                     // Show all options
@@ -487,7 +485,8 @@ class wps_ic
                                 }
                             }
                         }
-                        update_option(WPS_IC_SETTINGS, $settings);
+
+                        #update_option(WPS_IC_SETTINGS, $settings);
                     }
                 }
 
@@ -781,7 +780,7 @@ class wps_ic
         $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $apikey . '&site=' . urlencode($site);
 
         // Verify API Key is our database and user has is confirmed getresponse
-        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     }
 
 
@@ -793,7 +792,7 @@ class wps_ic
             $settings = get_option(WPS_IC_OPTIONS);
             if (!empty($settings['api_key'])) {
                 // Check Quota Status
-                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_account_status_v6&apikey=' . $settings['api_key'] . '&range=month&hash=' . md5(mt_rand(999, 9999)), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_account_status_v6&apikey=' . $settings['api_key'] . '&range=month&hash=' . md5(mt_rand(999, 9999)), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
                 // Set transient only if the response is 200 for stats update
                 if (wp_remote_retrieve_response_code($call) == 200) {
@@ -1270,13 +1269,13 @@ class wps_ic
     {
         return;
         // TODO: Bad API Url, that's critical CSS
-        $call = wp_remote_post(WPS_IC_CRITICAL_API_URL, ['method' => 'POST', 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0', 'body' => ['url' => site_url()]]);
+        $call = wp_remote_post(WPS_IC_CRITICAL_API_URL, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['url' => site_url()]]);
 
         if (wp_remote_retrieve_response_code($call) == 200) {
             // ALL OK, run preloader
             $url = WPS_IC_PRELOADER_API_URL;
 
-            $call = wp_remote_post($url, ['body' => ['single_url' => site_url()], 'timeout' => 30, 'sslverify' => 'false', 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+            $call = wp_remote_post($url, ['body' => ['single_url' => site_url()], 'timeout' => 30, 'sslverify' => 'false', 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 // TODO: Notice, we were unable to preload
@@ -2000,7 +1999,7 @@ class wps_ic
             $siteurl = network_site_url();
         }
 
-        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode($siteurl), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
@@ -2026,7 +2025,7 @@ class wps_ic
      */
     public function geoLocate()
     {
-        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);

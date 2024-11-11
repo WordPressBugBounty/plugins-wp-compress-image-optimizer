@@ -15,7 +15,7 @@ define('WPC_IC_CACHE_EXPIRE', 86400); // 24 hours
 
 // Local API
 define('WPS_IC_LOCAL_API', 'https://frankfurt.zapwp.net/local/v3/index.php');
-define('WPS_IC_API_USERAGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0');
+define('WPS_IC_API_USERAGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
 
 define('WPS_IC_APIURL', 'https://legacy-eu.wpcompress.com/');
 define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');

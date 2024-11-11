@@ -97,7 +97,7 @@ class wps_ic_local
       return $force_location;
     }
 
-    $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+    $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
     if (wp_remote_retrieve_response_code($call) == 200) {
       $body = wp_remote_retrieve_body($call);
       $body = json_decode($body);

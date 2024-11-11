@@ -394,10 +394,10 @@ class wps_ic_compress {
         'sslverify'   => false,
         'httpversion' => '1.0',
         'blocking'    => true, // TODO: Mozda true?
-        'headers'     => array('user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'),
+        'headers'     => array('user-agent' => WPS_IC_API_USERAGENT),
         'body'        => $request_params,
         'cookies'     => array(),
-        'user-agent'  => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
+        'user-agent'  => WPS_IC_API_USERAGENT
       );
 
       $call = wp_remote_post(WPS_IC_APIURL, $params);
@@ -698,7 +698,7 @@ class wps_ic_compress {
       'headers'     => array(),
       'body'        => $request_params,
       'cookies'     => array(),
-      'user-agent'  => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
+      'user-agent'  => WPS_IC_API_USERAGENT
     );
 
     $start = microtime(true);
@@ -821,10 +821,10 @@ class wps_ic_compress {
       'sslverify'   => false,
       'httpversion' => '1.0',
       'blocking'    => true, // TODO: Mozda true?
-      'headers'     => array('user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'),
+      'headers'     => array('user-agent' => WPS_IC_API_USERAGENT),
       'body'        => $request_params,
       'cookies'     => array(),
-      'user-agent'  => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
+      'user-agent'  => WPS_IC_API_USERAGENT
     );
 
     // Send call to API

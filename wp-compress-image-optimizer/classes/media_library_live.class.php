@@ -121,7 +121,7 @@ class wps_ic_media_library_live extends wps_ic
       return $allow_local;
     }
 
-    $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_credits&apikey=' . self::$options['api_key'] . '&v=2&hash=' . md5(mt_rand(999, 9999)), array('timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+    $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_credits&apikey=' . self::$options['api_key'] . '&v=2&hash=' . md5(mt_rand(999, 9999)), array('timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
 
     if (wp_remote_retrieve_response_code($call) == 200) {
       $body = wp_remote_retrieve_body($call);

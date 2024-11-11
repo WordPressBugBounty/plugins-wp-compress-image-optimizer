@@ -299,7 +299,7 @@ class wpc_ic_delivery
     $this->imagesToRequest = array();
     foreach ($this->images as $imageID => $image) {
       $args = ['apikey' => self::$siteApiKey, 'imageID' => $imageID, 'action' => 'getCompressed'];
-      $getCompressedImages = wp_remote_post(self::$apiURL, ['timeout' => 60, 'blocking' => true, 'body' => $args, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+      $getCompressedImages = wp_remote_post(self::$apiURL, ['timeout' => 60, 'blocking' => true, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
       if (wp_remote_retrieve_response_code($getCompressedImages) == 200) {
 
@@ -935,7 +935,7 @@ class wpc_ic_delivery
     $this->imagesToRequest = array();
     foreach ($this->images as $imageID => $image) {
       $args = ['apikey' => self::$siteApiKey, 'imageID' => $imageID, 'action' => 'getRestore'];
-      $getCompressedImages = wp_remote_post(self::$apiURL, ['timeout' => 30, 'blocking' => true, 'body' => $args, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0']);
+      $getCompressedImages = wp_remote_post(self::$apiURL, ['timeout' => 30, 'blocking' => true, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
       if (wp_remote_retrieve_response_code($getCompressedImages) == 200) {
 

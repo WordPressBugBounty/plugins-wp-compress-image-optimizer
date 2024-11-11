@@ -537,7 +537,12 @@ class wps_rewriteLogic
         if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
             if (strpos($url, self::$zoneName) === false) {
                 if (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false) {
-                    $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
+
+                    if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
+                        $newUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($url);
+                    } else {
+                        $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
+                    }
 
                     return $newUrl;
                 }
@@ -2091,7 +2096,10 @@ SCRIPT;
             // if image is logo, then force image url - no lazy loading
             if ($isLogo) {
                 // TODO: This is a fix for logo not being on CDN
-                $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth('logo') . '/u:' . self::reformatUrl($image_source);
+                $logoWidth = $this::getCurrentMaxWidth('logo');
+                #$logoWidth = 100;
+
+                $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $logoWidth . '/u:' . self::reformatUrl($image_source);
                 $original_img_tag['original_tags']['src'] = $original_img_tag['src'];
                 $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wps-ic-logo wpc-excluded-adaptive';
                 $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';

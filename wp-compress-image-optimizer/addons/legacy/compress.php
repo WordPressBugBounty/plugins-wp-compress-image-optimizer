@@ -183,7 +183,7 @@ class wps_local_compress
             return $force_location;
         }
 
-        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);
@@ -246,7 +246,7 @@ class wps_local_compress
         $tmp_location = $file_path . '_tmp';
         $file_location = $file_path;
         $original_filesize = filesize($file_path);
-        $response = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+        $response = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
 
         if (wp_remote_retrieve_response_code($response) == 200) {
             $body = wp_remote_retrieve_body($response);
@@ -572,7 +572,7 @@ class wps_local_compress
 
             // WebP File Path
             $webp_file_location = str_replace('.' . $extension, '.webp', $file_location);
-            $call = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'headers' => $headers, 'sslverify' => false, 'body' => $post_fields, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+            $call = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'headers' => $headers, 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
@@ -638,7 +638,7 @@ class wps_local_compress
                 'apikey' => self::$apiParams['apikey'],
                 'imageID' => $imageID
             ],
-            'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'
+            'user-agent' => WPS_IC_API_USERAGENT
         );
 
         $call = wp_remote_post(self::$apiURL, $params);
@@ -850,7 +850,7 @@ class wps_local_compress
         // Remote backup?
 
         //check api for original
-        $params = array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => ['getS3Backup' => true, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID], 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0');
+        $params = array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => ['getS3Backup' => true, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID], 'user-agent' => WPS_IC_API_USERAGENT);
 
         $call = wp_remote_post(self::$apiURL, $params);
 
@@ -1096,7 +1096,7 @@ class wps_local_compress
         );
 
         // Notify API to queue to queue the request
-        $notify = wp_remote_post(self::$apiURL . 'queueManager.php', array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+        $notify = wp_remote_post(self::$apiURL . 'queueManager.php', array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
 
         if (wp_remote_retrieve_response_code($notify) == 200) {
             // All good, let's wait for queue
@@ -1168,7 +1168,7 @@ class wps_local_compress
 
         $post_fields = array('action' => 'compressArray', 'imageID' => $imageID, 'siteUrl' => self::$siteUrl, 'maxWidth' => WPS_IC_MAXWIDTH, 'apikey' => self::$apiParams['apikey'], 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp'],);
 
-        $response = wp_remote_post(self::$apiURL, array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+        $response = wp_remote_post(self::$apiURL, array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
 
         if (wp_remote_retrieve_response_code($response) == 200) {
             set_transient('wps_ic_compress_' . $imageID, 'sent-to-api', 30);
@@ -1272,7 +1272,7 @@ class wps_local_compress
             $retinaAPIUrl = str_replace('r:0', 'r:1', $retinaAPIUrl);
             $retinaAPIUrl = str_replace('w:1', 'w:' . $image['width'], $retinaAPIUrl);
 
-            $call = wp_remote_get($retinaAPIUrl, array('timeout' => 60, 'sslverify' => false, 'user-agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:20.0) Gecko/20100101 Firefox/20.0'));
+            $call = wp_remote_get($retinaAPIUrl, array('timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
