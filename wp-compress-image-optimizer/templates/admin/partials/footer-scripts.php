@@ -1,6 +1,6 @@
 <script type="text/javascript">
     <?php
-    $labels = array();
+    $labels = [];
     $in_traffic_sum = '';
     $in_traffic = '';
     $out_traffic = '';
@@ -14,7 +14,7 @@
         return round($value, 2);
     }
 
-    $labels_dates = array();
+    $labels_dates = [];
     $limit = 10;
 
     // Calculate offset

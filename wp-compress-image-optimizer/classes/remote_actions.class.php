@@ -43,7 +43,7 @@ class wps_ic_remote_actions extends wps_ic {
           // Already Optimized
 
           // Generate thumbnails
-          $thumbnails = wp_remote_get(site_url('?secret_key=' . $wps_ic::$api_key . '&thumbnails=true&attachment_ID=' . $attachment_id), array('sslverify' => false, 'timeout' => 0.1, 'sslverify' => false));
+          $thumbnails = wp_remote_get(site_url('?secret_key=' . $wps_ic::$api_key . '&thumbnails=true&attachment_ID=' . $attachment_id), ['sslverify' => false, 'timeout' => 0.1, 'sslverify' => false]);
 
           // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');
@@ -56,7 +56,7 @@ class wps_ic_remote_actions extends wps_ic {
           delete_post_meta($attachment_id, 'wps_ic_restoring');
 
           /// Delete file from compressed table for stats
-          $wpdb->update($wpdb->prefix . 'ic_compressed', array('restored' => '1'), array('attachment_ID' => $attachment_id));
+          $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
           // Remove Queue
           $wps_ic->queue->remove_queue($attachment_id);
@@ -74,7 +74,7 @@ class wps_ic_remote_actions extends wps_ic {
             $original_image = WPS_IC_APIURL . '?find_restore=' . $original_image;
 
             // Fetch the URL
-            $call = wp_remote_get($original_image, array('timeout' => 25, 'sslverify' => false));
+            $call = wp_remote_get($original_image, ['timeout' => 25, 'sslverify' => false]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
               $body           = wp_remote_retrieve_body($call);
@@ -130,7 +130,7 @@ class wps_ic_remote_actions extends wps_ic {
           }
 
           /// Delete file from compressed table for stats
-          $wpdb->update($wpdb->prefix . 'ic_compressed', array('restored' => '1'), array('attachment_ID' => $attachment_id));
+          $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
           // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');
@@ -163,7 +163,7 @@ class wps_ic_remote_actions extends wps_ic {
           delete_post_meta($attachment_id, 'wps_ic_restoring');
 
           /// Delete file from compressed table for stats
-          $wpdb->update($wpdb->prefix . 'ic_compressed', array('restored' => '1'), array('attachment_ID' => $attachment_id));
+          $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
           // Remove Queue
           $wps_ic->queue->remove_queue($attachment_id);

@@ -185,7 +185,7 @@
                     <input type="hidden" name="wp-ic-setting[search-through]" value="<?php echo $settings['search-through']; ?>">
                     <ul>
 											<?php
-											$options = array('html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs');
+											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
 											foreach ($options as $key => $value) {
 												if ($key == $settings['search-through']) {
 													echo '<li class="current"><a href="#" class="wps-ic-search-through" data-value="' . $key . '">' . $value . '</a></li>';

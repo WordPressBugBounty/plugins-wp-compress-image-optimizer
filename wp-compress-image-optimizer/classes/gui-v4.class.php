@@ -12,7 +12,7 @@ class wpc_gui_v4 extends wps_ic
   public static $user_credits;
   public static $accountQuota;
 
-  public function __construct($options = array())
+  public function __construct($options = [])
   {
     self::$user_credits = parent::getAccountStatusMemory('true');
 
@@ -455,9 +455,7 @@ class wpc_gui_v4 extends wps_ic
    */
   public static function checkboxTabTitle_connected(array $args)
   {
-    $html = '';
-
-    $html .= '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
+    $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
     $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $args['icon'] . '" /></div>';
 
     $html .= '<div class="wpc-checkbox-description">
@@ -477,7 +475,7 @@ class wpc_gui_v4 extends wps_ic
 
     if (is_array($args['connected_to'])) {
       $option = $args['connected_to'];
-      $optionNameClean = 'options_' . $option[0] . '_' . $option[1] . '';
+      $optionNameClean = 'options_' . $option[0] . '_' . $option[1];
       $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
       if (isset(self::$options[$option[0]][$option[1]]) && self::$options[$option[0]][$option[1]] == '1') {
         // Active
@@ -520,10 +518,7 @@ class wpc_gui_v4 extends wps_ic
 
   public static function checkboxTabTitleCheckbox($title = 'Demo', $description = '', $icon = '', $notify = '', $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left')
   {
-    $html = '';
-
-
-    $html .= '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
+    $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
     $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
 
     $html .= '<div class="wpc-checkbox-description">';
@@ -617,10 +612,7 @@ class wpc_gui_v4 extends wps_ic
 
   public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false)
   {
-    $html = '';
-
-
-    $html .= '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
+    $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
     $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
 
     $html .= '<div class="wpc-checkbox-description">';
@@ -754,7 +746,7 @@ class wpc_gui_v4 extends wps_ic
                                            ';
 
     if (!empty($configure) && $configure !== false) {
-      $html .= '<h4>' . $title . '';
+      $html .= '<h4>' . $title;
       if ($beta) {
         $html .= '<span class="wpc-beta-badge">BETA</span>';
       }
@@ -845,7 +837,7 @@ class wpc_gui_v4 extends wps_ic
     }
 
     if (!empty($configure) && $configure !== false) {
-      $html .= '<h4>' . $title . '';
+      $html .= '<h4>' . $title;
       if ($beta) {
         $html .= '<span class="wpc-beta-badge">BETA</span>';
       }
@@ -1081,7 +1073,7 @@ $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip
                                            ';
 
     if (!empty($configure) && $configure !== false) {
-      $html .= '<h4>' . $title . '';
+      $html .= '<h4>' . $title;
       if ($beta) {
         $html .= '<span class="wpc-beta-badge">BETA</span>';
       }
@@ -1396,9 +1388,7 @@ $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip
 
   public static function presetModes()
   {
-    $html = '';
-
-    $html .= '<div class="wpc-preset-modes-container">
+    $html = '<div class="wpc-preset-modes-container">
                                 <div class="wpc-preset-modes-container-inner">
                                 <div class="wpc-preset-modes-icon">
                                   <img src="' . WPS_IC_URI . 'assets/v4/images/preset-modes.svg" style="width:80px;margin-left:20px;margin-right:40px;"/>
@@ -1416,14 +1406,14 @@ $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip
 
 
     $preset_config = get_option(WPS_IC_PRESET);
-    $preset = array('recommended' =>'Recommended Mode',
+    $preset = ['recommended' =>'Recommended Mode',
 										'safe' => 'Safe Mode',
                     'aggressive' =>'Aggressive Mode',
-                    'custom' =>'Custom');
+                    'custom' =>'Custom'];
 
     if (empty($preset_config)) {
-      update_option('wps_ic_preset_setting', 'custom');
-      $preset_config = 'custom';
+      update_option('wps_ic_preset_setting', 'aggressive');
+      $preset_config = 'aggressive';
     }
 
     $html .= '<input type="hidden" name="wpc_preset_mode" value="' . $preset_config . '" />
@@ -1462,8 +1452,7 @@ $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip
 	    $lockedClass = 'wpc-locked-setting';
     }
 
-    $html = '';
-    $html .= '<div class="wpc-tab-content-box wpc-tab-content-cname '. $lockedClass .'" 
+    $html = '<div class="wpc-tab-content-box wpc-tab-content-cname '. $lockedClass .'" 
     style="display:flex;align-items:center;justify-content: space-between;">
                                 <div style="display:flex;align-items:center;">
                                     <img src="' . WPS_IC_URI . 'assets/images/icon-exclude-list.svg"

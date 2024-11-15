@@ -27,19 +27,19 @@ class wps_ic_cache_integrations
 
         // Purge Combined
         // When plugins have a simple method, add them to the array ('Plugin Name' => 'method_name')
-        $others = array(
+        $others = [
             'WP Super Cache' => 'wp_cache_clear_cache',
             'W3 Total Cache' => 'w3tc_pgcache_flush',
             'WP Fastest Cache' => 'wpfc_clear_all_cache',
             'WP Rocket' => 'rocket_clean_domain',
             'Cachify' => 'cachify_flush_cache',
-            'Comet Cache' => array('comet_cache', 'clear'),
+            'Comet Cache' => ['comet_cache', 'clear'],
             'SG Optimizer' => 'sg_cachepress_purge_cache',
             'Pantheon' => 'pantheon_wp_clear_edge_all',
-            'Zen Cache' => array('zencache', 'clear'),
-            'Breeze' => array('Breeze_PurgeCache', 'breeze_cache_flush'),
-            'Swift Performance' => array('Swift_Performance_Cache', 'clear_all_cache'),
-        );
+            'Zen Cache' => ['zencache', 'clear'],
+            'Breeze' => ['Breeze_PurgeCache', 'breeze_cache_flush'],
+            'Swift Performance' => ['Swift_Performance_Cache', 'clear_all_cache'],
+        ];
 
         foreach ($others as $plugin => $method) {
             if (is_callable($method)) {
@@ -50,7 +50,7 @@ class wps_ic_cache_integrations
         // Lite Speed
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
-            if (is_callable(array('LiteSpeed_Cache_Tags', 'add_purge_tag'))) {
+            if (is_callable(['LiteSpeed_Cache_Tags', 'add_purge_tag'])) {
                 LiteSpeed_Cache_Tags::add_purge_tag('*');
             }
         }
@@ -177,7 +177,7 @@ class wps_ic_cache_integrations
         }
 
         if (empty($parseUrl['host'])) {
-            return;
+            return false;
         }
 
 
@@ -188,26 +188,7 @@ class wps_ic_cache_integrations
         }
 
         // Flush original WP domain
-        $call = wp_remote_request($schema . $parseUrl['host'] . $parseUrl['path'] . '/', array('method' => 'PURGE', 'headers' => array('host' => $parseUrl['host'], 'X-Purge-Method' => 'default')));
-        /*
-        // Get table name for mapping
-        $wpdb->dmtable = (isset($wpdb->base_prefix) ? $wpdb->base_prefix : $wpdb->prefix) . 'domain_mapping';
-
-        // Flush all mapped domains
-        $blog_domains = $wpdb->get_col($wpdb->prepare("
-                SELECT dm.domain
-                FROM $wpdb->blogs AS b
-                INNER JOIN $wpdb->dmtable AS dm ON b.blog_id = dm.blog_id
-                WHERE b.blog_id = %d
-                ", $current_blog->blog_id));
-
-        if (empty($blog_domains)) {
-          return false;
-        }
-
-        foreach ($blog_domains as $blog_domain) {
-          wp_remote_request($schema . $blog_domain . '/', array('method' => 'PURGE', 'headers' => array('host' => $blog_domain, 'X-Purge-Method' => 'default')));
-        }*/
+        $call = wp_remote_request($schema . $parseUrl['host'] . $parseUrl['path'] . '/', ['method' => 'PURGE', 'headers' => ['host' => $parseUrl['host'], 'X-Purge-Method' => 'default']]);
 
         return true;
     }

@@ -71,7 +71,7 @@ class wps_ic_combine_css
             $this->hmwpReplace = true;
             $plugin_path = WP_PLUGIN_DIR . '/hide-my-wp/';
             include_once($plugin_path . 'classes/ObjController.php');
-            $hmwp_controller = new HMWP_Classes_ObjController;
+            $hmwp_controller = new HMWP_Classes_ObjController();
             $this->hmwp_rewrite = $hmwp_controller::getClass('HMWP_Models_Rewrite');
         }
     }
@@ -92,7 +92,7 @@ class wps_ic_combine_css
         }
 
         // Desktop Detection
-        $desktopKeywords = array('windows nt', 'macintosh', 'linux', 'cros', 'x11');
+        $desktopKeywords = ['windows nt', 'macintosh', 'linux', 'cros', 'x11'];
 
         foreach ($desktopKeywords as $keyword) {
             if (strpos($userAgent, $keyword) !== false) {
@@ -107,7 +107,7 @@ class wps_ic_combine_css
 
         if (isset($_SERVER['HTTP_USER_AGENT'])) {
             // Define an array of mobile device keywords to check against
-            $mobileKeywords = array('android', 'iphone', 'ipad', 'ipod', 'windows phone', 'blackberry', 'bb10', 'webos', 'symbian', 'playbook', 'kindle', 'silk', 'opera mini', 'opera mobi', 'palm');
+            $mobileKeywords = ['android', 'iphone', 'ipad', 'ipod', 'windows phone', 'blackberry', 'bb10', 'webos', 'symbian', 'playbook', 'kindle', 'silk', 'opera mini', 'opera mobi', 'palm'];
 
             // Check if the user agent contains any of the mobile device keywords
             foreach ($mobileKeywords as $keyword) {
@@ -233,7 +233,6 @@ class wps_ic_combine_css
         // Fix URLs inside @import statements
         $css = preg_replace_callback('/@import\s+["\']([^"\']+)["\'];?/i', [$this, 'fixImportPaths'], $css);
 
-
         return $css;
     }
 
@@ -299,6 +298,8 @@ class wps_ic_combine_css
                 }
             }
         }
+
+        return $matches[0];
     }
 
     public function moveUpDirectories($url, $upCount = 1)
@@ -355,11 +356,11 @@ class wps_ic_combine_css
 
     public function doInline($html)
     {
-        $wpcPreloads = array();
+        $wpcPreloads = [];
         preg_match_all('/<link\s+[^>]*\bhref=(["\'])(.*?)\1[^>]*>/is', $html, $matches);
 
         if (!empty($_GET['dbgStyleInline'])) {
-            return print_r(array($matches, $html), true);
+            return print_r([$matches, $html], true);
         }
 
         $excludes_class = new wps_ic_excludes();
@@ -372,7 +373,7 @@ class wps_ic_combine_css
                 }
 
                 if (!empty($_GET['dbgStyleInline2'])) {
-                    $html .= print_r(array('asd2', $href, self::$site_url, $matches[0][$k]), true);
+                    $html .= print_r(['asd2', $href, self::$site_url, $matches[0][$k]], true);
                     continue;
                 }
 
@@ -385,7 +386,7 @@ class wps_ic_combine_css
                 $cleanHref = trim($cleanHref[0]);
 
                 if (!empty($_GET['dbgStyleInline3'])) {
-                    $html .= print_r(array('asd3', $href, self::$site_url, strpos($cleanHref, self::$site_url) !== false), true);
+                    $html .= print_r(['asd3', $href, self::$site_url, strpos($cleanHref, self::$site_url) !== false], true);
                     continue;
                 }
 
@@ -404,7 +405,7 @@ class wps_ic_combine_css
                     $content = file_get_contents($relativePath);
 
                     if (!empty($_GET['dbgStyleInline4'])) {
-                        $html .= print_r(array('asd4', $cleanHref, strlen($content)), true);
+                        $html .= print_r(['asd4', $cleanHref, strlen($content)], true);
                         continue;
                     }
 
@@ -482,10 +483,7 @@ class wps_ic_combine_css
             }
         }
 
-        $preloadFonts = '';
-        foreach ($wpcPreloads as $i => $fontUrl) {
-            $preloadFonts .= $fontUrl;
-        }
+        $preloadFonts = implode('', $wpcPreloads);
 
         $html = str_replace('<!--WPC_INSERT_PRELOAD-->', $preloadFonts, $html);
 
@@ -635,7 +633,7 @@ class wps_ic_combine_css
                 break;
         }
 
-        return array('as' => $as, 'type' => $type, 'extra' => $extra);
+        return ['as' => $as, 'type' => $type, 'extra' => $extra];
     }
 
     public function minifyCSS($css)
@@ -644,7 +642,7 @@ class wps_ic_combine_css
         $css = str_replace(': ', ':', $css);
 
         // Remove whitespace
-        $css = str_replace(array("\r\n", "\r", "\n", "\t", '  ', '    ', '    '), '', $css);
+        $css = str_replace(["\r\n", "\r", "\n", "\t", '  ', '    ', '    '], '', $css);
 
         $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); // Remove comments
         $css = preg_replace('/\s+/', ' ', $css); // Remove multiple whitespaces
@@ -732,7 +730,7 @@ class wps_ic_combine_css
                         $foundUrls = str_replace("('", '', $foundUrls);
                         $foundUrls = str_replace('")', '', $foundUrls);
                         $foundUrls = str_replace("')", '', $foundUrls);
-                        return 'url("' . self::$site_url . '' . $foundUrls . '")';
+                        return 'url("' . self::$site_url . $foundUrls . '")';
                     } elseif (strpos($foundUrls, '/') === 0) {
                         // Handle URLs starting with '/'
                         return 'url("' . $cssPath . $foundUrls . '")';
@@ -743,6 +741,8 @@ class wps_ic_combine_css
                 }
             }
         }
+
+        return $matches[0];
     }
 
     public function replaceCSS($matches)
@@ -756,6 +756,8 @@ class wps_ic_combine_css
                 return '';
             }
         }
+
+        return $matches[0];
     }
 
     public function maybe_do_combine($html)
@@ -813,7 +815,7 @@ class wps_ic_combine_css
     public function replace($html)
     {
 
-        $html = preg_replace_callback($this->patterns, array($this, 'remove_scripts'), $html);
+        $html = preg_replace_callback($this->patterns, [$this, 'remove_scripts'], $html);
         $html = $this->insert_combined_scripts($html);
 
         return $html;
@@ -894,7 +896,7 @@ class wps_ic_combine_css
 
                     if (!empty($combineContent)) {
                         $header_links .= '<style type="text/css" id="' . basename($file) . '">';
-                        $header_links .= $this->minifyCss($combineContent);
+                        $header_links .= $this->minifyCSS($combineContent);
                         $header_links .= '</style>';
                     }
 
@@ -903,7 +905,7 @@ class wps_ic_combine_css
 
                     if (!empty($combineContent)) {
                         $footer_links .= '<style type="text/css" id="' . basename($file) . '">';
-                        $footer_links .= $this->minifyCss($combineContent);
+                        $footer_links .= $this->minifyCSS($combineContent);
                         $footer_links .= '</style>';
                     }
                 }
@@ -1019,7 +1021,7 @@ class wps_ic_combine_css
     {
         $html = $html[0];
         #return print_r($html[0], true);
-        $html = preg_replace_callback($this->patterns, array($this, 'script_combine_and_replace'), $html);
+        $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
         return $html;
     }
 
@@ -1032,13 +1034,13 @@ class wps_ic_combine_css
         $src = '';
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'before') {
-            return print_r(array($tag), true);
+            return print_r([$tag], true);
         }
 
         // Check if the CSS is Excluded
         if (self::$excludes->strInArray($tag, $this->allExcludes)) {
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                return print_r(array($tag, 'excluded'), true);
+                return print_r([$tag, 'excluded'], true);
             }
             return $tag;
         }
@@ -1056,7 +1058,7 @@ class wps_ic_combine_css
         }
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'preg') {
-            return print_r(array($tag), true);
+            return print_r([$tag], true);
         }
 
         if ($is_src_set == 1) {
@@ -1066,12 +1068,12 @@ class wps_ic_combine_css
             $src = $src[0];
 
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
-                return print_r(array($tag, 'file', $this->combine_external, $src), true);
+                return print_r([$tag, 'file', $this->combine_external, $src], true);
             }
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
                 if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r(array($tag, 'external'), true);
+                    return print_r([$tag, 'external'], true);
                 }
                 return $tag;
             } else if ($this->combine_external && $this->url_key_class->is_external($src)) {
@@ -1083,15 +1085,15 @@ class wps_ic_combine_css
             if (!$content) {
                 $this->no_content_excludes[] = $src;
                 if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r(array($tag, 'no content'), true);
+                    return print_r([$tag, 'no content'], true);
                 }
                 return $tag;
             }
 
             //replace relative urls
             $this->asset_url = $src;
-            $content = preg_replace_callback("/url(\(((?:[^()])+)\))/i", array($this, 'rewrite_relative_url'), $content);
-        } else if ($this->combine_inline_scripts == true) {
+            $content = preg_replace_callback("/url(\(((?:[^()])+)\))/i", [$this, 'rewrite_relative_url'], $content);
+        } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
             $content = $tag;
@@ -1099,19 +1101,19 @@ class wps_ic_combine_css
             $content = preg_replace('/<\/style>/', '', $content);
 
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
-                return print_r(array($tag, 'inline', $this->combine_inline_scripts, $content), true);
+                return print_r([$tag, 'inline', $this->combine_inline_scripts, $content], true);
             }
 
             if (!$count) {
                 //no href, and not a <style> tag
                 if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r(array($tag, 'not a style tag'), true);
+                    return print_r([$tag, 'not a style tag'], true);
                 }
                 return $tag;
             }
         } else {
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                return print_r(array($tag, 'unknown'), true);
+                return print_r([$tag, 'unknown'], true);
             }
             return $tag;
         }
@@ -1119,14 +1121,14 @@ class wps_ic_combine_css
 
         //sometimes php injects a zero width space char at the start of a new script, this clears it
         $content = preg_replace('/^[\pZ\pC]+|[\pZ\pC]+$/u', '', $content);
-        $content = str_replace(array('@font-face{', '@font-face {'), '@font-face{font-display: swap;', $content);
+        $content = str_replace(['@font-face{', '@font-face {'], '@font-face{font-display: swap;', $content);
 
         // Find BG and replace with mobile BG
         #if ($this::$isMobile) {
-            #$content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
+        #$content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
         #}
 
-        $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', array($this, 'changeFontToCDN'), $content);
+        $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
         $this->current_file .= $content . PHP_EOL;
@@ -1143,7 +1145,7 @@ class wps_ic_combine_css
         }
     }
 
-    function getRemoteContent($url)
+    public function getRemoteContent($url)
     {
         if (strpos($url, '//') === 0) {
             $url = 'https:' . $url;
@@ -1160,7 +1162,7 @@ class wps_ic_combine_css
         return wp_remote_retrieve_body($data);
     }
 
-    function getLocalContent($url)
+    public function getLocalContent($url)
     {
         if ($this->hmwpReplace) {
             //go trougn their replacements and reverse them to get true path to files
@@ -1247,7 +1249,7 @@ class wps_ic_combine_css
         $is_src_set = preg_match('/href=["|\'](.*?)["|\']/', $tag, $src);
         if ($is_src_set == 1) {
             //nothing
-        } else if ($this->combine_inline_scripts == true) {
+        } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
             $content = $tag;
@@ -1269,7 +1271,7 @@ class wps_ic_combine_css
         }
     }
 
-    function rewrite_relative_url($url)
+    public function rewrite_relative_url($url)
     {
 
         $matched_url = $url[2];

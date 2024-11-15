@@ -58,7 +58,7 @@ class wps_ic_elementor
     public function clear_cache()
     {
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll();;
+        $cache::purgeAll();
     }
 
     public function runIntegration($html)

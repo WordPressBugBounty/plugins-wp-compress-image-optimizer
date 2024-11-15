@@ -19,6 +19,8 @@ class wps_ic_excludes extends wps_ic
 	private static $excludesWebpOption;
 	private static $excludesAdaptiveOption;
 	private static $pageExcludesFiles;
+  private static $userLastLoadScript;
+  private static $userDeferScript;
 
 
 	// New
@@ -55,6 +57,8 @@ class wps_ic_excludes extends wps_ic
 			self::$excludesLazyOption = ! empty( self::$excludesOption['lazy'] ) ? self::$excludesOption['lazy'] : [];
 			self::$excludesAdaptiveOption = ! empty( self::$excludesOption['adaptive'] ) ? self::$excludesOption['adaptive'] : [];
 			self::$excludesWebpOption = ! empty( self::$excludesOption['webp'] ) ? self::$excludesOption['webp'] : [];
+      self::$userLastLoadScript = ! empty( self::$excludesOption['lastLoadScript'] ) ? self::$excludesOption['lastLoadScript'] : [];
+      self::$userDeferScript = ! empty( self::$excludesOption['deferScript'] ) ? self::$excludesOption['deferScript'] : [];
 		} else {
 			self::$excludesDelayJSOption = [];
 			self::$excludesCombineJSOption = [];
@@ -66,7 +70,6 @@ class wps_ic_excludes extends wps_ic
 			self::$excludesAdaptiveOption = [];
 			self::$excludesWebpOption = [];
 		}
-
 
 		self::$defaultLazyExcludes = [
 			'show-on-hover'
@@ -122,22 +125,22 @@ class wps_ic_excludes extends wps_ic
 
 		//Check if default excludes are disabled
 		if (!empty(self::$excludesOption['delay_js_default_excludes_disabled']) && self::$excludesOption['delay_js_default_excludes_disabled'] == '1') {
-			self::$defaultDelayJSExcludes = array();
+			self::$defaultDelayJSExcludes = [];
 		}
 
 		if (!empty(self::$excludesOption['js_combine_default_excludes_disabled']) && self::$excludesOption['js_combine_default_excludes_disabled'] == '1') {
-			self::$defaultCombineJSExcludes = array();
+			self::$defaultCombineJSExcludes = [];
 		}
 		if (!empty(self::$excludesOption['css_combine_default_excludes_disabled']) && self::$excludesOption['css_combine_default_excludes_disabled'] == '1') {
-			self::$defaultCombineCSSExcludes = array();
+			self::$defaultCombineCSSExcludes = [];
 		}
 
 		if (!empty(self::$excludesOption['critical_css_default_excludes_disabled']) && self::$excludesOption['critical_css_default_excludes_disabled'] == '1') {
-			self::$defaultCriticalCSSExcludes = array();
+			self::$defaultCriticalCSSExcludes = [];
 		}
 
 		if (!empty(self::$excludesOption['inline_css_default_excludes_disabled']) && self::$excludesOption['inline_css_default_excludes_disabled'] == '1') {
-			self::$defaultInlineCSSExcludes = array();
+			self::$defaultInlineCSSExcludes = [];
 		}
 	}
 
@@ -238,6 +241,16 @@ class wps_ic_excludes extends wps_ic
 
 		return self::$defaultDelayJSExcludes;
 	}
+
+  public function lastLoadScripts()
+  {
+    return isset(self::$userLastLoadScript) ? self::$userLastLoadScript : [];
+  }
+
+  public function deferScripts()
+  {
+    return isset(self::$userDeferScript) ? self::$userDeferScript : [];
+  }
 
 	public function combineCSSExcludes()
 	{

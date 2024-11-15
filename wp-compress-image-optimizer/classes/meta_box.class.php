@@ -109,15 +109,15 @@ class wps_ic_meta_box
         $settings = ['cdn', 'adaptive', 'advanced_cache', 'critical_css', 'delay_js']; // Include all settings you handle
 
         // Get existing settings from the options table
-        $wpc_excludes = get_option('wpc-excludes', array());
+        $wpc_excludes = get_option('wpc-excludes', []);
         if (!isset($wpc_excludes['page_excludes'])) {
-            $wpc_excludes['page_excludes'] = array();
+            $wpc_excludes['page_excludes'] = [];
         }
 
 
         // Make sure the $post_id index is an array
         if (!isset($wpc_excludes['page_excludes'][$post_id])) {
-            $wpc_excludes['page_excludes'][$post_id] = array();
+            $wpc_excludes['page_excludes'][$post_id] = [];
         }
 
         $changed = false;

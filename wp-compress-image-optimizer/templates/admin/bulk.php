@@ -30,7 +30,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                         <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-restore" style="display:none;"><i class="icon-pause"></i> Pause Restore</a>
                     </li>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . ''); ?>" class="wpc-btn-return">Return to Dashboard</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return">Return to Dashboard</a>
                     </li>
                 </ul>
             </div>

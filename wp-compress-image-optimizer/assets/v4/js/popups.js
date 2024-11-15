@@ -359,9 +359,29 @@ jQuery(document).ready(function ($) {
             var setting_name = $('input[type="text"],textarea', popup).data('setting-subset');
             var excludes = $('.exclude-list-textarea-value', popup).val();
 
-            console.log($('.exclude-list-textarea-value', popup).val())
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_save_excludes_settings', nonce: ajaxVar.nonce, group_name: setting_group, setting_name: setting_name, excludes: excludes, default_enabled: default_enabled, exclude_themes: exclude_themes, exclude_plugins: exclude_plugins, exclude_wp: exclude_wp, exclude_third: exclude_third}, function (response) {
-                if (response.success){
+// Check if this is the lastLoadScript setting
+            var deferScripts = '';
+            if (setting_name === 'lastLoadScript') {
+                // Get the value from defer scripts textarea
+                deferScripts = $('.exclude-list-textarea-value-defer', popup).val();
+            }
+
+            console.log($('.exclude-list-textarea-value', popup).val());
+
+            $.post(wps_ic_vars.ajaxurl, {
+                action: 'wps_ic_save_excludes_settings',
+                nonce: ajaxVar.nonce,
+                group_name: setting_group,
+                setting_name: setting_name,
+                excludes: excludes,
+                deferScript: deferScripts, // Add the deferScripts value to the POST data
+                default_enabled: default_enabled,
+                exclude_themes: exclude_themes,
+                exclude_plugins: exclude_plugins,
+                exclude_wp: exclude_wp,
+                exclude_third: exclude_third
+            }, function(response) {
+                if (response.success) {
                     Swal.close();
                 }
             });

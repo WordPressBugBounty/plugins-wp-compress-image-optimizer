@@ -3,13 +3,13 @@
 class wps_ic_cache_warmup{
 //not used
 
-	function run_precache_cron_job() {
+	public function run_precache_cron_job() {
 		error_reporting(E_ERROR);
 		ini_set('log_errors', 'On');
 		ini_set('error_log', WPS_IC_LOG . 'precache.txt');
 		ini_set('display_errors', 'Off');
 
-		$ids = get_option('wps_ic_precache_list', array());
+		$ids = get_option('wps_ic_precache_list', []);
 		$url_key_class = new wps_ic_url_key();
 		$this->log_precache_action("Starting cache warmup...");
 
@@ -40,7 +40,7 @@ class wps_ic_cache_warmup{
 			}
 
 			// "Call" the site by making an HTTP request
-			$response = wp_remote_get($url, array('timeout' => 0.01)); // set a reasonable timeout
+			$response = wp_remote_get($url, ['timeout' => 0.01]); // set a reasonable timeout
 
 			if (is_wp_error($response)) {
 				$failed_pages++;

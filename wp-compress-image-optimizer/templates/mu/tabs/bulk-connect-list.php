@@ -64,8 +64,7 @@ if (empty($mu_settings['autoconnect'])) {
 							switch_to_blog($site->blog_id);
 							$options              = get_option(WPS_IC_OPTIONS);
 							$settings             = get_option(WPS_IC_SETTINGS);
-							$apikey               = $options['api_key'];
-							$current_blog_details = get_blog_details(array('blog_id' => $site->blog_id));
+							$current_blog_details = get_blog_details(['blog_id' => $site->blog_id]);
 
 							$site_status_tag = 'wps-ic-mu-tag-not-connected';
 							$connected_class = ' wps-ic-mu-not-connected';
@@ -93,15 +92,15 @@ if (empty($mu_settings['autoconnect'])) {
 							        <td class="wpc-ic-mu-list-actions"><span class="' . $site_status_tag . '"></span></td>
                       <td class="wpc-ic-mu-list-title">' . $current_blog_details->blogname . '</td>
                       <td class="wpc-ic-mu-list-url">
-                      <a href="' . network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=link-websites#mu-' . $site->blog_id) . '" class="wpc-ic-mu-ignore ' . $connected_class . '" data-site-id="' . $site->blog_id . '">' . $current_blog_details->siteurl . '</a>
+                      <a href="' . get_admin_url($site->blog_id) . 'wp-admin/options-general.php?page=wpcompress&showAdvanced=true" class="wpc-ic-mu-ignore ' . $connected_class . '" data-site-id="' . $site->blog_id . '" target="_blank">' . $current_blog_details->siteurl . '</a>
                       </td>
                       <td class="wps-ic-mu-list-change-status">';
 
 
 							echo '<div class="wps-ic-mu-status-actions">';
 							if ( ! empty($options['api_key']) && ! empty($options['response_key'])) {
-								echo '<a href="#" class="wps-ic-mu-configure ic-tooltip hvr-grow" data-site-id="' . $site->blog_id . '" title="Configure"><i class="icon icon-cog"></i></a>';
-								echo '<a href="#" class="wps-ic-mu-disconnect wpc-mu-individual-disconnect-bulk ic-tooltip hvr-grow" data-site-id="' . $site->blog_id . '" title="Disconnect"><i class="icon icon-cancel"></i></a>';
+								echo '<a href="'.get_admin_url($site->blog_id) . 'wp-admin/options-general.php?page=wpcompress&showAdvanced=true" class="wps-ic-mu-configure hvr-grow" data-site-id="' . $site->blog_id . '" target="_blank" title="Configure"><i class="icon icon-cog"></i></a>';
+								echo '<a href="#" class="wps-ic-mu-disconnect wpc-mu-individual-disconnect-bulk hvr-grow" data-site-id="' . $site->blog_id . '" title="Disconnect"><i class="icon icon-link"></i> Disconnect</a>';
 							}
 							else {
 								echo '<a href="#" class="wps-ic-mu-connect wpc-mu-individual-connect-bulk hvr-grow" data-site-id="' . $site->blog_id . '"><i class="icon icon-link"></i> Connect</a>';
@@ -143,6 +142,21 @@ if (empty($mu_settings['autoconnect'])) {
 
     </div>
   </div>
+
+    <div id="wps-ic-mu-disconnect-popup" style="display:none;">
+        <div id="disconnect-popup-inner" class="swal-popup-inner bottom-border">
+
+            <div class="cdn-popup-top">
+                <img src="<?php echo WPS_IC_URI; ?>assets/mu/images/disconnect.svg" class="disconnect-logo"/>
+                <h3>Are you sure you wish to disconnect?</h3>
+                <p style="font-size:14px;">You may reconnect at any time. If you are in live mode, image optimization and delivery will stop immediately. If you've locally optimized images, images will remain in their current state after deactivation.</p>
+                <p style="color:#57A3E5;"><?php echo $current_blog_details->siteurl; ?></p>
+            </div>
+
+            <div class="cdn-popup-bottom-border">&nbsp;</div>
+
+        </div>
+    </div>
 
   <div class="wps-ic-mu-bulk-reconfiguring-outer" style="display: none;">
   <div class="wps-ic-mu-bulk-reconfiguring">

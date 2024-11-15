@@ -15,6 +15,10 @@ if (!empty($_POST['cache_refresh_time'])) {
     update_option(WPS_IC_SETTINGS, $settings);
 }
 
+if (!isset($settings['cache_refresh_time'])) {
+    $settings['cache_refresh_time'] = 60;
+}
+
 if (!empty($_GET['delete_option'])) {
     delete_option($_GET['delete_option']);
 }
@@ -203,7 +207,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             <p>
                 <?php
                 if (!empty($_POST['wpc_image_id'])) {
-                    $uncompressedImages = array();
+                    $uncompressedImages = [];
                     $image_id = sanitize_text_field($_POST['wpc_image_id']);
 
                     global $_wp_additional_image_sizes;
@@ -220,7 +224,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                         $image_sizes = array_merge($image_sizes, $_wp_additional_image_sizes);
                     }
 
-                    $AdditionalSizes = array('full');
+                    $AdditionalSizes = ['full'];
                     foreach ($AdditionalSizes as $size) {
                         $image_sizes[$size]['width'] = 'full';
                     }
@@ -259,7 +263,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             <p>
                 <?php
                 $parameters = get_option(WPS_IC_SETTINGS);
-                $translatedParameters = array();
+                $translatedParameters = [];
                 if (isset($parameters['generate_webp'])) {
                     $translatedParameters['webp'] = $parameters['generate_webp'];
                 }
@@ -496,7 +500,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <input type="text" name="cache_refresh_time" value="<?php echo
-                $settings['cache_refresh_time'] ?>">
+                $settings['cache_refresh_time']; ?>">
                 <input type="submit" value="Save cache refresh" name="save" class="button-primary"
                        style="float:right">
             </form>

@@ -340,16 +340,13 @@ class wps_ic_cache
         wp_send_json_error('Bad API Key');
       }
 
-      switch ($_GET['wpc_action']) {
-        case 'purge_other_cache':
+        if ($_GET['wpc_action'] == 'purge_other_cache') {
+            $options = get_option(WPS_IC_OPTIONS);
+            $options['css_hash'] = mt_rand(1000, 9999);
+            update_option(WPS_IC_OPTIONS, $options);
 
-          $options = get_option(WPS_IC_OPTIONS);
-          $options['css_hash'] = mt_rand(1000, 9999);
-          update_option(WPS_IC_OPTIONS, $options);
-
-          self::purgeOtherCache();
-          break;
-      }
+            self::purgeOtherCache();
+        }
     }
   }
 
@@ -453,7 +450,7 @@ class wps_ic_cache
     if (isset(self::$cache[$ID]) && !empty(self::$cache[$ID])) {
       return self::$cache[$ID];
     } else {
-      return array();
+      return [];
     }
   }
 

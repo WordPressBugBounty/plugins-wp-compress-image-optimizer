@@ -11,5 +11,5 @@ if (get_option('wps_ic_debug') == 'true') {
 }
 
 if (get_option('wps_ic_debug') == 'log') {
-	define('WPS_IC_DEBUG', 'true');
+    define('WPS_IC_DEBUG', 'true');
 }

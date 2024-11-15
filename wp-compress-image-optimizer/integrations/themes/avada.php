@@ -13,8 +13,7 @@ class wpc_avada {
     #$html = $this->delayBackgrounds($html);
 	  #$html = $this->insertJS($html);
 
-	  $html = str_replace('optimize.js', 'avada/optimize.js', $html);
-    return $html;
+      return str_replace('optimize.js', 'avada/optimize.js', $html);
   }
 
 

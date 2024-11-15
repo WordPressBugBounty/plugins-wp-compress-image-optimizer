@@ -52,7 +52,7 @@ class wps_ic_controller {
 	 */
 	public static function get_conflicts() {
 
-		$conflict_plugins = array(
+		$conflict_plugins = [
 			'WP Smush Pro - Image Optimization'    => 'wp-smush-pro/wp-smush.php',
 			'WP Smush - Image Optimization'        => 'wp-smushit/wp-smush.php',
 			'Imagify Image Optimizer'              => 'imagify/imagify.php',
@@ -66,14 +66,14 @@ class wps_ic_controller {
 			'Prizm Image'                          => 'prizm-image/wp-prizmimage.php',
 			'CW Image Optimizer'                   => 'cw-image-optimizer/cw-image-optimizer.php',
 			'ShortPixel'                           => 'shortpixel-image-optimiser/wp-shortpixel.php'
-		);
+        ];
 
-		$found = array();
+		$found = [];
 
 		// Go through plugin lists
 		foreach ( $conflict_plugins as $name => $path ) {
 			if ( is_plugin_active( $path ) ) {
-				$found[] = array( 'name' => $name, 'path' => $path );
+				$found[] = ['name' => $name, 'path' => $path];
 			}
 		}
 

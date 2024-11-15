@@ -110,7 +110,11 @@ class wps_ic_enqueues extends wps_ic
             add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend'], 1);
 
             if (is_admin()) {
-                if (!empty($_GET['view']) && ($_GET['view'] == 'advanced_settings_v4')) {
+                if (!empty($_GET['page']) && ($_GET['page'] == 'wpcompress-mu')) {
+                    // Multisite
+                    add_action('admin_enqueue_scripts', [$this, 'enqueue_all_scripts']);
+                    add_action('admin_enqueue_scripts', [$this, 'enqueue_v4']);
+                } elseif (!empty($_GET['view']) && ($_GET['view'] == 'advanced_settings_v4')) {
                     add_action('admin_enqueue_scripts', [$this, 'enqueue_v4']);
                 } elseif (!empty($_GET['view']) && $_GET['view'] == 'advanced_settings_v3') {
                     add_action('admin_enqueue_scripts', [$this, 'enqueue_v3']);
@@ -270,11 +274,11 @@ class wps_ic_enqueues extends wps_ic
         global $post;
         $excludes = get_option('wpc-excludes');
         if ($this->is_home_url()) {
-            $page_excludes = isset($excludes['page_excludes']['home']) ? $excludes['page_excludes']['home'] : array();
+            $page_excludes = isset($excludes['page_excludes']['home']) ? $excludes['page_excludes']['home'] : [];
         } else if (!empty(get_queried_object_id())) {
-            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : array();
+            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : [];
         } elseif (!empty($post->ID)) {
-            $page_excludes = isset($excludes['page_excludes'][$post->ID]) ? $excludes['page_excludes'][$post->ID] : array();
+            $page_excludes = isset($excludes['page_excludes'][$post->ID]) ? $excludes['page_excludes'][$post->ID] : [];
         } else {
             $page_excludes = [];
         }
@@ -617,30 +621,34 @@ class wps_ic_enqueues extends wps_ic
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/' . $filename, ['jquery'], $this::$version, true);
     }
 
-    public function script($name, $filename, $footer = true)
+    public function script($name, $filename, $footer = false)
     {
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/js/' . $filename, ['jquery'], $this::$version, $footer);
     }
 
     public function v4()
     {
+        // Tooltipster
+        #$this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
+        #$this->asset_script('admin-tooltip-wcio', 'tooltip/js/tooltipster.bundle.min.js');
+
+        wp_enqueue_style($this::$slug . '-tooltip-bundle-wcio', WPS_IC_URI . 'assets/tooltip/css/tooltipster.bundle.min.css', [], $this::$version);
+        wp_enqueue_script($this::$slug . '-admin-tooltip-wcio', WPS_IC_URI . 'assets/tooltip/js/tooltipster.bundle.min.js', ['jquery'], $this::$version);
+
         wp_enqueue_style($this::$slug . '-v4-style-css', WPS_IC_URI . 'assets/v4/css/style.css', [], $this::$version);
-        wp_enqueue_script($this::$slug . '-scripts-v4-js', WPS_IC_URI . 'assets/v4/js/scripts.js', ['jquery'], $this::$version);
-        wp_localize_script($this::$slug . '-scripts-v4-js', 'ajaxVar', array('nonce' => wp_create_nonce('ajax-nonce')));
         wp_enqueue_script($this::$slug . '-tabs-v4-js', WPS_IC_URI . 'assets/v4/js/tabs.js', ['jquery'], $this::$version);
         wp_enqueue_script($this::$slug . '-popups-js', WPS_IC_URI . 'assets/v4/js/popups.js', ['jquery'], $this::$version);
         wp_enqueue_script($this::$slug . '-tooltip-js', WPS_IC_URI . 'assets/v4/js/tooltip.js', ['jquery'], $this::$version);
         wp_enqueue_script($this::$slug . '-tooltip-js', WPS_IC_URI . 'assets/v4/js/tooltip.js', ['jquery'], $this::$version);
-
-        // Tooltipster
-        $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
-        $this->asset_script('admin-tooltip-wcio', 'tooltip/js/tooltipster.bundle.min.js');
+        wp_enqueue_script($this::$slug . '-scripts-v4-js', WPS_IC_URI . 'assets/v4/js/scripts.js', ['jquery'], $this::$version);
+        wp_localize_script($this::$slug . '-scripts-v4-js', 'ajaxVar', ['nonce' => wp_create_nonce('ajax-nonce')]);
     }
 
     public function enqueue_all()
     {
         $response_key = self::$response_key;
         $settings = self::$settings;
+
 
         $screen = get_current_screen();
 

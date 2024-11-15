@@ -30,8 +30,8 @@
         $sliderWidth = 'wpc-select-bar-width-1';
 
         if (empty($mode)) {
-            $recommendedModeSelected = 'wpc-active';
-            $sliderWidth = 'wpc-select-bar-width-2';
+          $agressiveModeSelected = 'wpc-active';
+          $sliderWidth = 'wpc-select-bar-width-3';
         } else {
             if ($mode == 'aggressive') {
                 $agressiveModeSelected = 'wpc-active';

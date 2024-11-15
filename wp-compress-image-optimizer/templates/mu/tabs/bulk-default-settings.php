@@ -4,15 +4,7 @@
  * GeoLocation Stuff
  */
 switch_to_blog(1);
-$geolocation = get_option('wps_ic_geo_locate');
-if (empty($geolocation)) {
-  $geolocation = $this->geoLocate();
-}
-else {
-  $geolocation = (object)$geolocation;
-}
 
-$geolocation_text = $geolocation->country_name.' ('.$geolocation->continent_name.')';
 
 $multisiteDefaultSettings = get_option('multisite_default_settings');
 if (empty($multisiteDefaultSettings)) {

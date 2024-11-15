@@ -72,69 +72,72 @@ class wps_ic_notices extends wps_ic {
 
 }
 
-class wps_ic_admin_notice {
+class wps_ic_admin_notice
+{
 
-	private $title;
-	private $message;
-	private $type;
-	private $tag;
-	private $global;
-	private $info;
+    private $title;
+    private $message;
+    private $type;
+    private $tag;
+    private $global;
+    private $info;
     private $support;
 
-	function __construct( $title, $message, $type, $global, $dismiss_tag, $info, $support) {
-		$this->title   = $title;
-		$this->message = $message;
-		$this->type    = $type;
-		$this->tag     = $dismiss_tag;
-		$this->global  = $global;
-		$this->info    = $info;
+    public function __construct($title, $message, $type, $global, $dismiss_tag, $info, $support)
+    {
+        $this->title = $title;
+        $this->message = $message;
+        $this->type = $type;
+        $this->tag = $dismiss_tag;
+        $this->global = $global;
+        $this->info = $info;
         $this->support = $support;
 
-		if ( $dismiss_tag != '' ) {
-			$notice_dismiss_info = get_option( 'wps_ic_notice_info' );
-			if ( isset( $notice_dismiss_info[ $dismiss_tag ] ) && $notice_dismiss_info[ $dismiss_tag ] == '0' ) {
-				return true;
-			}
-		}
+        if ($dismiss_tag != '') {
+            $notice_dismiss_info = get_option('wps_ic_notice_info');
+            if (isset($notice_dismiss_info[$dismiss_tag]) && $notice_dismiss_info[$dismiss_tag] == '0') {
+                return true;
+            }
+        }
 
-		add_action( 'admin_notices', [ $this, 'render_notice' ] );
-	}
+        add_action('admin_notices', [$this, 'render_notice']);
+    }
 
-	function render_notice() {
-		$screen = get_current_screen();
-		if ( ! $this->global && $screen->id != 'settings_page_wpcompress' ) {
-			return true;
-		}
-		?>
-      <div class="notice notice-<?php echo $this->type; ?> wpc-ic-notice wps-ic-tag-<?php echo $this->tag; ?>">
-          <div class="wps-ic-notice-header">
-              <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wps-ic-notice-icon"/>
-              <h4><?php echo $this->title; ?></h4>
-          </div>
-          <div class="wps-ic-notice-content">
-              <p><?php echo $this->message; ?></p>
+    public function render_notice()
+    {
+        $screen = get_current_screen();
+        if (!$this->global && $screen->id != 'settings_page_wpcompress') {
+            return true;
+        }
+        ?>
+        <div class="notice notice-<?php echo $this->type; ?> wpc-ic-notice wps-ic-tag-<?php echo $this->tag; ?>">
+            <div class="wps-ic-notice-header">
+                <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wps-ic-notice-icon"/>
+                <h4><?php echo $this->title; ?></h4>
+            </div>
+            <div class="wps-ic-notice-content">
+                <p><?php echo $this->message; ?></p>
 
-              <div style="margin-left:auto">
-								<?php
-                                if (!empty($this->support)){
-	                                echo '<a href="https://wpcompress.com/support" target="_blank" class="button-secondary wpc-notice-link" style="margin-right:5px;">Contact Support</a>';
-                                }
-			                    if ( !empty($this->info) ) {
-                                    echo '<a href="#" class="wps-ic-fix-notice button-secondary" style="margin-right:5px;" data-tag="' .
-                                         $this->tag .
-                                         '" data-plugin="' .
-                                         $this->info['plugin'] . '" data-setting="' . $this->info['setting'] .
-                                         '">Fix</a>';
-                                }
-								if ( $this->tag ) {
-									echo '<a href="#" class="wps-ic-dismiss-notice button-secondary" data-tag="' . $this->tag .
-									     '">Dismiss</a>';
-								} ?>
-              </div>
-          </div>
-      </div>
-		<?php
+                <div style="margin-left:auto">
+                    <?php
+                    if (!empty($this->support)) {
+                        echo '<a href="https://wpcompress.com/support" target="_blank" class="button-secondary wpc-notice-link" style="margin-right:5px;">Contact Support</a>';
+                    }
+                    if (!empty($this->info)) {
+                        echo '<a href="#" class="wps-ic-fix-notice button-secondary" style="margin-right:5px;" data-tag="' .
+                            $this->tag .
+                            '" data-plugin="' .
+                            $this->info['plugin'] . '" data-setting="' . $this->info['setting'] .
+                            '">Fix</a>';
+                    }
+                    if ($this->tag) {
+                        echo '<a href="#" class="wps-ic-dismiss-notice button-secondary" data-tag="' . $this->tag .
+                            '">Dismiss</a>';
+                    } ?>
+                </div>
+            </div>
+        </div>
+        <?php
 
-	}
+    }
 }

@@ -2,20 +2,7 @@
 global $wpc_siteID;
 // Change Active Blog
 switch_to_blog($wpc_siteID);
-$current_blog_details = get_blog_details(array('blog_id' => $wpc_siteID));
-
-/**
- * GeoLocation Stuff
- */
-$geolocation = get_option('wps_ic_geo_locate');
-if (empty($geolocation)) {
-	$geolocation = $this->geoLocate();
-}
-else {
-	$geolocation = (object)$geolocation;
-}
-
-$geolocation_text = $geolocation->country_name . ' (' . $geolocation->continent_name . ')';
+$current_blog_details = get_blog_details(['blog_id' => $wpc_siteID]);
 
 /**
  * Fetch settings, or if save is triggered save them.
@@ -265,7 +252,7 @@ else {
                     <input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo $settings['search-through']; ?>">
                     <ul>
 											<?php
-											$options = array('html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs');
+											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
 											foreach ($options as $key => $value) {
 												if ($key == $settings['search-through']) {
 													echo '<li class="current"><a href="#" class="wps-ic-search-through" data-value="' . $key . '">' . $value . '</a></li>';
@@ -523,7 +510,7 @@ else {
         <form method="post" action="#">
           <select name="location-select">
 						<?php
-						$location_select = array('Automatic' => 'Automatic', 'EU' => 'Europe', 'US' => 'United States', 'AS' => 'Asia', 'OC' => 'Oceania');
+						$location_select = ['Automatic' => 'Automatic', 'EU' => 'Europe', 'US' => 'United States', 'AS' => 'Asia', 'OC' => 'Oceania'];
 
 						foreach ($location_select as $k => $v) {
 							if ($k == $geolocation->continent) {

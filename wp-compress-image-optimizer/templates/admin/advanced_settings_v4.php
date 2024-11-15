@@ -17,7 +17,7 @@ $cache = new wps_ic_cache_integrations();
 
 if (!empty($_GET['stopBulk'])) {
     $local = new wps_ic_local();
-    $send = $local->sendToAPI(array('stop'), '', 'stopBulk');
+    $send = $local->sendToAPI(['stop'], '', 'stopBulk');
     if ($send) {
         delete_option('wps_ic_parsed_images');
         delete_option('wps_ic_BulkStatus');
@@ -160,19 +160,6 @@ if (!empty($_POST['options'])) {
 
 $gui = new wpc_gui_v4();
 
-
-/**
- * GeoLocation Stuff
- */
-$geolocation = get_option('wps_ic_geo_locate');
-if (empty($geolocation)) {
-    $geolocation = $this->geoLocate();
-} else {
-    $geolocation = (object)$geolocation;
-}
-
-$geolocation_text = $geolocation->country_name . ' (' . $geolocation->continent_name . ')';
-
 $proSite = get_option('wps_ic_prosite');
 $options = get_option(WPS_IC_OPTIONS);
 $settings = get_option(WPS_IC_SETTINGS);
@@ -203,6 +190,7 @@ $localLocked = false;
 if (!$localEnabled) {
     $localLocked = true;
 }
+
 ?>
 
     <script type="text/javascript">
@@ -242,11 +230,11 @@ if (!$localEnabled) {
                         if (!$showAdvanced) {
                             // Preset Modes
                             $preset_config = get_option(WPS_IC_PRESET);
-                            $preset = array('recommended' => 'Recommended Mode', 'safe' => 'Safe Mode', 'aggressive' => 'Aggressive Mode', 'custom' => 'Custom');
+                            $preset = ['recommended' => 'Recommended Mode', 'safe' => 'Safe Mode', 'aggressive' => 'Aggressive Mode', 'custom' => 'Custom'];
 
                             if (empty($preset_config)) {
-                                update_option('wps_ic_preset_setting', 'custom');
-                                $preset_config = 'custom';
+                                update_option('wps_ic_preset_setting', 'aggressive');
+                                $preset_config = 'aggressive';
                             }
 
                             if (empty($preset_config) || empty($preset[$preset_config])) {

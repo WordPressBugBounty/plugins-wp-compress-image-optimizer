@@ -47,9 +47,9 @@ jQuery(document).ready(function ($) {
             var cdn = $('.form-check-input', modes_popup).prop('checked');
 
             $.post(wps_ic_vars.ajaxurl, {
-                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce}, function (response) {
+                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce, activation: true}, function (response) {
                 if (response.success){
-                    location.reload();
+                    window.location.reload();
                 } else {
                     //error?
                 }

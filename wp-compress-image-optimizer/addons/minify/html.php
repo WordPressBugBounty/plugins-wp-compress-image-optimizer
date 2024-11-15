@@ -13,7 +13,7 @@ class wps_minifyHtml
     $css = str_replace(': ', ':', $css);
 
     // Remove whitespace
-    $css = str_replace(array("\r\n", "\r", "\n", "\t", '  ', '    ', '    '), '', $css);
+    $css = str_replace(["\r\n", "\r", "\n", "\t", '  ', '    ', '    '], '', $css);
 
     $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); // Remove comments
     $css = preg_replace('/\s+/', ' ', $css); // Remove multiple whitespaces
@@ -38,7 +38,7 @@ class wps_minifyHtml
         ''
     ];
 
-    $buffer = str_replace(array("\r\n", "\r", "\n", "\t", '  ', '    ', '    '), '', $buffer);
+    $buffer = str_replace(["\r\n", "\r", "\n", "\t", '  ', '    ', '    '], '', $buffer);
 
     $buffer = preg_replace($search, $replace, $buffer);
 

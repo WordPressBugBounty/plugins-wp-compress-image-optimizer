@@ -8,13 +8,15 @@ class wps_ic_js_delay
     public static $footerScripts;
 
     public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js'];
 
     public static $deferScripts = ['mediaelement', 'fitvid'];
 
     public function __construct()
     {
         self::$excludes = new wps_ic_excludes();
+        self::$lastLoadScripts = array_merge(self::$lastLoadScripts, self::$excludes->lastLoadScripts());
+        self::$deferScripts = array_merge(self::$deferScripts, self::$excludes->deferScripts());
     }
 
 
@@ -112,7 +114,7 @@ class wps_ic_js_delay
 
         // Is the script excluded from DelayJS?
         if (self::$excludes->excludedFromDelay($tag)) {
-            if (strpos($tagLower, 'defer') == false && strpos($tagLower, 'jquery') === false) {
+            if (!strpos($tagLower, 'defer') && strpos($tagLower, 'jquery') === false) {
                 $tag = str_replace('<script ', '<script data-wpc-att="excluded" ', $tag);
             }
 

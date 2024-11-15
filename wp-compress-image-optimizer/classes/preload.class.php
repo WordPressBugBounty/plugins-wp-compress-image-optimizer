@@ -23,8 +23,8 @@ class wps_ic_preload
 
         $js_size = 0;
         $css_size = 0;
-        $scripts = array();
-        $styles = array();
+        $scripts = [];
+        $styles = [];
 
 
         //scan plugins folder
@@ -74,8 +74,8 @@ class wps_ic_preload
         }
 
         //ALL scripts
-        update_option('wps_ic_found_scripts', array('files' => $scripts, 'size' => $js_size, 'count' => count($scripts)));
-        update_option('wps_ic_found_styles', array('files' => $styles, 'size' => $css_size, 'count' => count($styles)));
+        update_option('wps_ic_found_scripts', ['files' => $scripts, 'size' => $js_size, 'count' => count($scripts)]);
+        update_option('wps_ic_found_styles', ['files' => $styles, 'size' => $css_size, 'count' => count($styles)]);
 
         wp_remote_get(get_home_url() . "/pricing?action=get_enqueued&apikey=$this->apikey");
         wp_remote_get(get_home_url() . "/pricing?action=get_registered&apikey=$this->apikey");
@@ -91,7 +91,7 @@ class wps_ic_preload
         add_action('wp_footer',
             function () {
                 global $wp_scripts;
-                $scripts = array();
+                $scripts = [];
                 foreach ($wp_scripts->registered as $script) {
                     //check if is url
                     $check = filter_var($script->src, FILTER_SANITIZE_URL);
@@ -106,14 +106,14 @@ class wps_ic_preload
 
                     $scripts += [$script->handle => ['src' => $url, 'path' => $path]];
                 }
-                update_option('wps_ic_registered_scripts', array('files' => $scripts, 'count' => count($scripts)));
+                update_option('wps_ic_registered_scripts', ['files' => $scripts, 'count' => count($scripts)]);
             }
         , PHP_INT_MAX);
 
         add_action('wp_footer',
             function () {
                 global $wp_styles;
-                $styles = array();
+                $styles = [];
                 foreach ($wp_styles->registered as $style) {
 
                     //check if is url
@@ -129,7 +129,7 @@ class wps_ic_preload
 
                     $styles += [$style->handle => ['src' => $url, 'path' => $path]];
                 }
-                update_option('wps_ic_registered_styles', array('files' => $styles, 'count' => count($styles)));
+                update_option('wps_ic_registered_styles', ['files' => $styles, 'count' => count($styles)]);
             }
         , PHP_INT_MAX);
 
@@ -144,7 +144,7 @@ class wps_ic_preload
         add_action('wp_head',
             function () {
                 global $wp_scripts;
-                $scripts = array();
+                $scripts = [];
                 foreach ($wp_scripts->groups as $handle => $group) {
 
                     if ( $group > 0 || $wp_scripts->registered[$handle]->src === false){
@@ -176,7 +176,7 @@ class wps_ic_preload
         add_action('wp_footer',
             function () {
                 global $wp_scripts;
-                $scripts = array();
+                $scripts = [];
                 foreach ($wp_scripts->groups as $handle => $group) {
 
                     if ( $group == 0 || $wp_scripts->registered[$handle]->src === false){
@@ -208,7 +208,7 @@ class wps_ic_preload
         add_action('wp_footer',
             function () {
                 global $wp_styles;
-                $styles = array();
+                $styles = [];
                 foreach ($wp_styles->queue as $handle) {
 
                     if ($wp_styles->registered[$handle]->src === false){

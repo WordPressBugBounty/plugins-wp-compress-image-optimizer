@@ -37,7 +37,6 @@ class wps_ic_options
             'font-subsetting' => ['cdn','critical'],
         ];
 
-
         $this::$recommendedSettings = [
             'live-cdn' => '1',
             'serve' => [
@@ -45,8 +44,6 @@ class wps_ic_options
                 'png' => '1',
                 'gif' => '1',
                 'svg' => '1',
-                'css' => '1',
-                'js' => '0',
                 'fonts' => '0'
             ],
             'css' => 1,
@@ -106,8 +103,6 @@ class wps_ic_options
                 'png' => '0',
                 'gif' => '0',
                 'svg' => '0',
-                'css' => '0',
-                'js' => '0',
                 'fonts' => '0'
             ],
             'css' => '0',
@@ -140,6 +135,7 @@ class wps_ic_options
             'js_minify' => '0',
             'js_defer' => '0',
             'delay-js' => '0',
+            'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',
             'lazySkipCount' => '4',
@@ -198,6 +194,7 @@ class wps_ic_options
             'js_minify' => 0,
             'js_defer' => 0,
             'delay-js' => 1,
+            'font-subsetting' => 1,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
             'lazySkipCount' => '4',
@@ -457,7 +454,7 @@ class wps_ic_options
      */
     public function set_missing_options()
     {
-        $settings = array();
+        $settings = [];
 
         $settings = get_option(WPS_IC_SETTINGS);
 

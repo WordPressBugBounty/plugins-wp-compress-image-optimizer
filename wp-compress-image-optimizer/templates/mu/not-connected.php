@@ -2,20 +2,8 @@
 global $wpc_siteID;
 // Change Active Blog
 switch_to_blog($wpc_siteID);
-$current_blog_details = get_blog_details(array('blog_id' => $wpc_siteID));
+$current_blog_details = get_blog_details(['blog_id' => $wpc_siteID]);
 
-/**
- * GeoLocation Stuff
- */
-$geolocation = get_option('wps_ic_geo_locate');
-if (empty($geolocation)) {
-	$geolocation = $this->geoLocate();
-}
-else {
-	$geolocation = (object)$geolocation;
-}
-
-$geolocation_text = $geolocation->country_name . ' (' . $geolocation->continent_name . ')';
 
 /**
  * Fetch settings, or if save is triggered save them.

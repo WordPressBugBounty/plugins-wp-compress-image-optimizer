@@ -9,7 +9,7 @@ class wps_ic_comms extends wps_ic
     {
         if (!is_admin()) {
             if ((!empty($_POST['apikey']) && !empty($_POST['comms_action'])) || (!empty($_GET['apikey']) && !empty($_GET['comms_action']))) {
-                add_action('send_headers', array($this, 'start_comms'));
+                add_action('send_headers', [$this, 'start_comms']);
             }
         }
     }
@@ -27,14 +27,14 @@ class wps_ic_comms extends wps_ic
             // First check if CDN Zone already exists
             $options = get_option(WPS_IC_OPTIONS);
 
-            $request_params = array();
+            $request_params = [];
             $request_params['apiv3'] = 'true';
             $request_params['apikey'] = $options['api_key'];
             $request_params['action'] = 'cdn_check';
             $request_params['url'] = site_url();
 
-            $params = array('method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
-                'headers' => array(), 'body' => $request_params, 'cookies' => array());
+            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+                'headers' => [], 'body' => $request_params, 'cookies' => []];
 
             // Send call to API
             $call = wp_remote_post(WPS_IC_APIURL, $params);
@@ -102,7 +102,7 @@ class wps_ic_comms extends wps_ic
                     $image = wp_get_attachment_image_src($attachments[0]->ID, 'full');
                     $file_name = basename($image[0]);
 
-                    $call = wp_remote_get(WPS_IC_APIURL . '?get_restore=true&site=' . site_url('/') . '&attachment_id=' . $attachments[0]->ID . '&file_name=' . $file_name, array('timeout' => 25, 'sslverify' => false));
+                    $call = wp_remote_get(WPS_IC_APIURL . '?get_restore=true&site=' . site_url('/') . '&attachment_id=' . $attachments[0]->ID . '&file_name=' . $file_name, ['timeout' => 25, 'sslverify' => false]);
 
                     $original_image = wp_remote_retrieve_body($call);
                     $original_image = json_decode($original_image, true);
@@ -160,11 +160,11 @@ class wps_ic_comms extends wps_ic
 
                 }
 
-                $wps_ic->compress->single_bulk_v2(array('attachment_id' => $attachments[0]->ID));
+                $wps_ic->compress->single_bulk_v2(['attachment_id' => $attachments[0]->ID]);
 
                 $compressed_filesize = filesize($attachment_Path);
 
-                wp_send_json_success(array('original_size' => $original_filesize, 'compressed_size' => $compressed_filesize));
+                wp_send_json_success(['original_size' => $original_filesize, 'compressed_size' => $compressed_filesize]);
             }
         } else {
             wp_send_json_error('no-images');
@@ -207,7 +207,7 @@ class wps_ic_comms extends wps_ic
             $stats = $wpdb->get_results("SELECT COUNT(ID) as count, created, original, compressed, saved FROM " . $wpdb->prefix . "ic_stats GROUP BY attachment_ID ORDER BY created DESC");
         }
 
-        $output = array();
+        $output = [];
 
         if ($stats) {
             foreach ($stats as $stat) {
@@ -231,7 +231,7 @@ class wps_ic_comms extends wps_ic
     {
 
         $form = $_POST['form'];
-        $savedForm = array();
+        $savedForm = [];
         parse_str($form, $savedForm);
 
         if (!empty($savedForm)) {
@@ -279,8 +279,13 @@ class wps_ic_comms extends wps_ic
     {
         global $wpdb, $wps_ic;
 
+      while (ob_get_level()) {
+        ob_end_clean();
+      }
+      ob_start();
+
         $wps_ic = new wps_ic();
-        $output = array();
+        $output = [];
 
         if (is_multisite()) {
             $current_blog_id = get_current_blog_id();
@@ -338,7 +343,7 @@ class wps_ic_comms extends wps_ic
         $wps_ic->ajax->wps_ic_restore_bulk_prep_background_hidden('none');
         $wps_ic->ajax->wps_ic_restore_hidden_bulk();
 
-        wp_remote_get(site_url('?ic_restore_queue_ping=true'), array('timeout' => 10, 'sslverify' => false));
+        wp_remote_get(site_url('?ic_restore_queue_ping=true'), ['timeout' => 10, 'sslverify' => false]);
         wp_send_json_success('scheduled-restore-all');
     }
 
@@ -401,7 +406,7 @@ class wps_ic_comms extends wps_ic
         $wps_ic->ajax->wps_ic_compress_bulk_prep_hidden_background('none');
         $queue = $wps_ic->queue->get_hidden_compress_bulk_queue();
 
-        $queued_array = array();
+        $queued_array = [];
 
         if ($queue) {
             foreach ($queue as $attachment_ID => $attachment) {
@@ -416,12 +421,12 @@ class wps_ic_comms extends wps_ic
                 $queue = $wps_ic->queue->add_queue($attachment_ID, 'hidden_compress_bulk');
 
                 if (count($queued_array) >= 3) {
-                    $queued_array = array();
+                    $queued_array = [];
                 }
 
             }
 
-            wp_remote_get(site_url('?ic_queue_ping=true'), array('timeout' => 10, 'sslverify' => false));
+            wp_remote_get(site_url('?ic_queue_ping=true'), ['timeout' => 10, 'sslverify' => false]);
         }
 
         wp_send_json_success('scheduled-compress-all');
@@ -483,7 +488,7 @@ class wps_ic_comms extends wps_ic
         }
 
         if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
-            wp_send_json_error(array('msg' => 'bad-apikey', 'form' => print_r($form, true), 'post' => print_r($_POST, true), 'get' => print_r($_GET, true)));
+            wp_send_json_error(['msg' => 'bad-apikey', 'form' => print_r($form, true), 'post' => print_r($_POST, true), 'get' => print_r($_GET, true)]);
         }
 
         $cdnEnabled = 0;
@@ -590,7 +595,7 @@ class wps_ic_comms extends wps_ic
         update_option('wpc-inline', $wpc_excludes);
 
         $wpc_excludes = get_option('wpc-excludes');
-        $wpc_excludes['delay_js'] = array();
+        $wpc_excludes['delay_js'] = [];
         update_option('wpc-excludes', $wpc_excludes);
 
 
@@ -646,7 +651,7 @@ class wps_ic_comms extends wps_ic
         $inlines = get_option('wpc-inline');
         $url_excludes = get_option('wpc-url-excludes');
         $mode = get_option(WPS_IC_PRESET);
-        wp_send_json_success(array('settings' => $options, 'excludes' => $excludes, 'inline' => $inlines, 'wpc-url-excludes' => $url_excludes, 'mode' => $mode));
+        wp_send_json_success(['settings' => $options, 'excludes' => $excludes, 'inline' => $inlines, 'wpc-url-excludes' => $url_excludes, 'mode' => $mode]);
     }
 
 

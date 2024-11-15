@@ -188,8 +188,8 @@ class wps_ic_queue extends wps_ic {
     $type          = $type;
     $attachment_id = (int)$attachment_id;
 
-    $output          = array();
-    $args            = array();
+    $output          = [];
+    $args            = [];
     $where_attach_id = '';
 
     $args[] = $type;
@@ -209,7 +209,7 @@ class wps_ic_queue extends wps_ic {
         if ($row->status == 'done') {
           break;
         }
-        $output = array('ID' => $row->attachment_ID, 'type' => $row->type, 'status' => $row->status);
+        $output = ['ID' => $row->attachment_ID, 'type' => $row->type, 'status' => $row->status];
         break;
       }
     }
@@ -228,8 +228,8 @@ class wps_ic_queue extends wps_ic {
     $type          = $type;
     $attachment_id = (int)$attachment_id;
 
-    $output          = array();
-    $args            = array();
+    $output          = [];
+    $args            = [];
     $where_attach_id = '';
 
     $args[] = $type;
@@ -249,7 +249,7 @@ class wps_ic_queue extends wps_ic {
         if ($row->status == 'done') {
           break;
         }
-        $output = array('ID' => $row->attachment_ID, 'type' => $row->type, 'status' => $row->status);
+        $output = ['ID' => $row->attachment_ID, 'type' => $row->type, 'status' => $row->status];
         break;
       }
     }
@@ -295,8 +295,8 @@ class wps_ic_queue extends wps_ic {
     $type          = $type;
     $attachment_id = (int)$attachment_id;
 
-    $output          = array();
-    $args            = array();
+    $output          = [];
+    $args            = [];
     $where_attach_id = '';
 
     $args[] = $type;
@@ -314,7 +314,7 @@ class wps_ic_queue extends wps_ic {
 
     if ($fetch) {
       foreach ($fetch as $row) {
-        $output[ $row->attachment_ID ] = array('ID' => $row->attachment_ID, 'type' => $row->type, 'hash' => $row->hash, 'status' => $row->status);
+        $output[ $row->attachment_ID ] = ['ID' => $row->attachment_ID, 'type' => $row->type, 'hash' => $row->hash, 'status' => $row->status];
       }
     }
 

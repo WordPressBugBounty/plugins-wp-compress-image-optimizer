@@ -24,7 +24,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
             <div class="wp-ic-header-buttons-container">
                 <ul>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . ''); ?>" class="wpc-btn-return">Return to Dashboard</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return">Return to Dashboard</a>
                     </li>
                 </ul>
             </div>

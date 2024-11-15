@@ -707,19 +707,6 @@ jQuery(document).ready(function ($) {
             }
         });
 
-        /*
-        var r = confirm("Are you sure you wish to disconnect this site?");
-        if (r == true) {
-            var table = $('.wpc-mu-list-table');
-            $(table).hide();
-            $(this).hide();
-            $('.wpmu-loading').show();
-            var siteID = $(this).data('site-id');
-
-            $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
-                console.log(response);
-            });
-        }*/
 
         return false;
     });
@@ -731,32 +718,39 @@ jQuery(document).ready(function ($) {
         var tableColumn = $(this).parents('td');
         var sidebarList = $('.wp-compress-mu-site-list');
 
-        //$('.wps-ic-mu-bulk-site-list').hide();
-        //$('.wps-ic-mu-bulk-saving').show();
+        Swal.fire({
+            title: '', position: 'top', html: jQuery('#wps-ic-mu-disconnect-popup').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: true, allowOutsideClick: true, confirmButtonText:'Yes, disconnect the site!', cancelButtonText:'No, leave the site connected!', customClass: {
+                container: 'wps-ic-mu-popup-no-padding wps-ic-mu-popup-actions wps-ic-mu-popup-disconnect-all',
+            }, onOpen: function () {
 
-        $('.wps-ic-mu-status-actions', tableRow).hide();
-        $('.wps-ic-mu-status-loading .wps-ic-mu-status-text', tableRow).html('Disconnecting...');
-        $('.wps-ic-mu-status-loading', tableRow).show();
-
-        var siteID = $(this).data('site-id');
-        var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
-
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
-            if (response.success) {
-                $('.wpc-ic-mu-list-checkbox input[type="checkbox"]',tableRow).attr('data-status', 'disconnected');
-                $(sidebarItem).removeClass('wps-ic-mu-connected').addClass('wps-ic-mu-not-connected');
-                $('.wpc-ic-mu-list-actions>span', tableRow).attr('class', 'wps-ic-mu-tag-not-connected');
-                $('.wpc-ic-mu-sites-checkbox', tableRow).removeAttr('disabled');
-                $('.wps-ic-mu-status-actions', tableRow).html(response.data.html_status).show();
-                $('.wps-ic-mu-status-loading', tableRow).hide();
-
-                $('.ic-tooltip').tooltipster({
-                    maxWidth:'300',
-                    delay:50,
-                });
             }
-            else {
-                // Error
+        }).then((result) => {
+            if (result.value) {
+
+                $('.wps-ic-mu-status-actions', tableRow).hide();
+                $('.wps-ic-mu-status-loading .wps-ic-mu-status-text', tableRow).html('Disconnecting...');
+                $('.wps-ic-mu-status-loading', tableRow).show();
+
+                var siteID = $(this).data('site-id');
+                var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
+
+                $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
+                    if (response.success) {
+                        $('.wpc-ic-mu-list-checkbox input[type="checkbox"]', tableRow).attr('data-status', 'disconnected');
+                        $(sidebarItem).removeClass('wps-ic-mu-connected').addClass('wps-ic-mu-not-connected');
+                        $('.wpc-ic-mu-list-actions>span', tableRow).attr('class', 'wps-ic-mu-tag-not-connected');
+                        $('.wpc-ic-mu-sites-checkbox', tableRow).removeAttr('disabled');
+                        $('.wps-ic-mu-status-actions', tableRow).html(response.data.html_status).show();
+                        $('.wps-ic-mu-status-loading', tableRow).hide();
+
+                        $('.ic-tooltip').tooltipster({
+                            maxWidth: '300',
+                            delay: 50,
+                        });
+                    } else {
+                        // Error
+                    }
+                });
             }
         });
 

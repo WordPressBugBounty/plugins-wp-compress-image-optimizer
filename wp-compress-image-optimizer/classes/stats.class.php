@@ -31,7 +31,7 @@ class wps_ic_stats {
 		if (!$transient || empty($transient)) {
 			if (!empty(self::$api_key)) {
 				$uri  = WPS_IC_KEYSURL . '?action=get_chart_local_stats_sum_v6&apikey=' . self::$api_key;
-				$call = wp_remote_get($uri, array('sslverify' => false, 'timeout' => '50'));
+				$call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => '50']);
 				$body = wp_remote_retrieve_body($call);
 				if (wp_remote_retrieve_response_code($call) == 200) {
 
@@ -56,7 +56,7 @@ class wps_ic_stats {
 		if (!$transient || empty($transient)) {
 			if (!empty(self::$api_key)) {
 				$uri  = WPS_IC_KEYSURL . '?action=get_chart_local_stats_v6&apikey=' . self::$api_key;
-				$call = wp_remote_get($uri, array('sslverify' => false, 'timeout' => '50'));
+				$call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => '50']);
 				$body = wp_remote_retrieve_body($call);
 				if (wp_remote_retrieve_response_code($call) == 200) {
 

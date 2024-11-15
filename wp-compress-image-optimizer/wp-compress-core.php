@@ -3,6 +3,8 @@ global $ic_running;
 include 'debug.php';
 include 'defines.php';
 
+
+
 include 'addons/cdn/cdn-rewrite.php';
 include 'addons/legacy/compress.php';
 
@@ -41,17 +43,16 @@ class wps_ic
     public static $zone_name;
     public static $quality;
     public static $options;
-    public $upgrader;
-    public $cache;
-    public $cacheLogic;
-    public $remote_restore;
-    public $comms;
-
     public static $js_debug;
     public static $debug;
     public static $local;
     public static $media_lib_ajax;
     private static $accountStatus;
+    public $upgrader;
+    public $cache;
+    public $cacheLogic;
+    public $remote_restore;
+    public $comms;
     public $notices;
     public $enqueues;
     public $templates;
@@ -67,6 +68,7 @@ class wps_ic
     public $cdn;
     public $mu;
     public $mainwp;
+    public $offloading;
     protected $excludes_class;
 
     /**
@@ -79,10 +81,10 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.16';
+        self::$version = '6.21.18';
         $wps_ic = $this;
 
-        if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']) == true)) {
+        if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
             //It has to be here, init() is too late
             new wps_ic_visitor_mode();
         }
@@ -96,6 +98,10 @@ class wps_ic
         $headers = getallheaders();
         $isHeaderConnectivityTest = isset($headers['Action']) && $headers['Action'] === 'connectivityTest';
         if ($isPostConnectivityTest || $isGetConnectivityTest || $isHeaderConnectivityTest) {
+          while (ob_get_level()) {
+            ob_end_clean();
+          }
+          ob_start();
             echo json_encode(['message' => 'Connectivity Test passed.']);
             die();
         }
@@ -113,6 +119,14 @@ class wps_ic
         //$cache_warmup = new wps_ic_cache_warmup();
         //$cache_warmup->add_hooks();
     }
+
+
+    public function offloaderHooks()
+    {
+        $offloader = new wps_ic_offloading();
+    }
+
+
 
     /**
      * Write Debug Log
@@ -138,9 +152,9 @@ class wps_ic
         }
     }
 
-    static function generate_critical_cron()
+    public static function generate_critical_cron()
     {
-        $criticalCSS = new wps_criticalCss;
+        $criticalCSS = new wps_criticalCss();
         $criticalCSS->generate_critical_cron();
     }
 
@@ -195,7 +209,7 @@ class wps_ic
                 $liveQuota = $data->liveCredits->value;
             }
 
-            if (!empty($proSite) && $proSite == true) {
+            if (!empty($proSite) && $proSite) {
                 $localCredits = 'Unlimited';
                 $localQuota = 'Unlimited';
             } else {
@@ -210,7 +224,7 @@ class wps_ic
                 $liveQuota = $data->liveCredits->value;
             }
 
-            if (!empty($proSite) && $proSite == true) {
+            if (!empty($proSite) && $proSite) {
                 $localCredits = 'Unlimited';
                 $localQuota = 'Unlimited';
             } else {
@@ -293,7 +307,7 @@ class wps_ic
          * Site is not connected
          */
         if (!$options || empty($options['api_key'])) {
-            $data = array();
+            $data = [];
             $data['account']['allow_local'] = false;
             $data['account']['allow_live'] = false;
             $data['account']['allow_cname'] = false;
@@ -368,7 +382,7 @@ class wps_ic
 
                 if ($quota_type == 'pageviews') {
 
-                    $data = array();
+                    $data = [];
                     $data['account']['quotaType'] = 'pageviews';
 
                     $data['account'] = (object)$data['account'];
@@ -403,8 +417,7 @@ class wps_ic
                     // Account Status Transient
                     set_transient('wps_ic_account_status', $body->data, 5 * 60);
                     return $body->data;
-                }
-                else {
+                } else {
 
                     // If pro site,raise flag
                     if (!empty($proSite) && $proSite == '1') {
@@ -486,7 +499,7 @@ class wps_ic
                             }
                         }
 
-                        #update_option(WPS_IC_SETTINGS, $settings);
+                        update_option(WPS_IC_SETTINGS, $settings);
                     }
                 }
 
@@ -502,7 +515,7 @@ class wps_ic
                 return false;
             }
         } else {
-            $data = array();
+            $data = [];
             $data['account']['allow_local'] = false;
             $data['account']['allow_live'] = false;
             $data['account']['allow_cname'] = false;
@@ -1245,12 +1258,9 @@ class wps_ic
             self::$response_key = $this::$options['response_key'];
         }
 
-        // Usual Checks
-        #$this->checkFavicon();
-
+        #$this->offloading = new wps_ic_offloading();
         $this->upgrader = new wps_ic_upgrader();
         $this->mainwp = new wps_ic_mainwp();
-
 
         if (is_admin()) {
             $this->inAdmin();
@@ -1506,10 +1516,13 @@ class wps_ic
         $options = new wps_ic_options();
         $defaultSettings = $options->getDefault();
 
+        #var_dump(print_r($defaultSettings,true));
         if (empty($settings) || !is_array($settings)) {
             $settings = [];
         }
 
+        #var_dump(print_r($settings, true));
+        #var_dump(print_r($settings, true));
         foreach ($defaultSettings as $option_key => $option_value) {
             if (is_array($option_value)) {
                 foreach ($option_value as $option_value_k => $option_value_v) {
@@ -1524,6 +1537,8 @@ class wps_ic
                 }
             }
         }
+
+        #var_dump(print_r($settings, true));
 
         update_option(WPS_IC_SETTINGS, $settings);
         return $settings;
@@ -1599,7 +1614,7 @@ class wps_ic
         // Purge Hooks
         $this->cacheLogic->purgeHooks();
 
-        add_filter('big_image_size_threshold', array($this, 'max_image_width'), 999, 1);
+        add_filter('big_image_size_threshold', [$this, 'max_image_width'], 999, 1);
 
         // Connect to API Notice
         $this->notices->connect_api_notice();
@@ -1638,7 +1653,7 @@ class wps_ic
             if (is_admin()) {
                 if (!empty($_GET['deauth'])) {
                     $this->ajax->wps_ic_deauthorize_api();
-                    wp_safe_redirect(admin_url('admin.php?page=' . self::$slug . ''));
+                    wp_safe_redirect(admin_url('admin.php?page=' . self::$slug));
                     die();
                 }
             }
@@ -1810,13 +1825,13 @@ class wps_ic
     public function do_enqueues()
     {
         global $post;
-        $wpc_excludes = get_option('wpc-excludes', array());
+        $wpc_excludes = get_option('wpc-excludes', []);
         if ($this->is_home_url()) {
-            $page_excludes = isset($wpc_excludes['page_excludes']['home']) ? $wpc_excludes['page_excludes']['home'] : array();
+            $page_excludes = isset($wpc_excludes['page_excludes']['home']) ? $wpc_excludes['page_excludes']['home'] : [];
         } else if (!empty(get_queried_object_id())) {
-            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : array();
+            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : [];
         } elseif (!empty($post->ID)) {
-            $page_excludes = isset($wpc_excludes['page_excludes'][$post->ID]) ? $wpc_excludes['page_excludes'][$post->ID] : array();
+            $page_excludes = isset($wpc_excludes['page_excludes'][$post->ID]) ? $wpc_excludes['page_excludes'][$post->ID] : [];
         } else {
             $page_excludes = [];
         }
@@ -1935,7 +1950,7 @@ class wps_ic
 
         return $sources;
 
-        $pseudoSources = array();
+        $pseudoSources = [];
         if ($sources) {
             foreach ($sources as $key => $data) {
                 if ($this->urlIsExcluded($data['url'])) {
@@ -1957,7 +1972,7 @@ class wps_ic
 
             $preloaded_pages = get_option('wpc_preloaded_status');
             if ($preloaded_pages === false) {
-                $preloaded_pages = array();
+                $preloaded_pages = [];
             }
 
             $preloaded_pages[$post->ID] = $status;
@@ -2050,7 +2065,7 @@ function wps_ic_format_bytes($bytes, $force_unit = null, $format = null, $si = f
     $format = ($format === null) ? '%01.2f %s' : (string)$format;
 
     // IEC prefixes (binary)
-    if ($si == false or strpos($force_unit, 'i') !== false) {
+    if (!$si or strpos($force_unit, 'i') !== false) {
         $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
         $mod = 1000;
     } // SI prefixes (decimal)
@@ -2105,6 +2120,7 @@ add_filter('wp_lazy_loading_enabled', '__return_false', 1);
 // TODO: Maybe it's required on some themes?
 // Backend
 $wpsIc = new wps_ic();
+#add_action('wp', [$wpsIc, 'offloaderHooks'], 1);
 add_action('init', [$wpsIc, 'init'], 100);
 
 // Frontend do replace
@@ -2132,37 +2148,38 @@ register_deactivation_hook(WPC_PLUGIN_FILE, [$wpsIc, 'deactivation']);
 register_uninstall_hook(WPC_PLUGIN_FILE, 'uninstall');
 
 
-function uninstall() {
-  try {
-    $settings = get_option(WPS_IC_SETTINGS);
-    $options = get_option(WPS_IC_OPTIONS);
-    $connectivity = get_option('wpc-connectivity-status');
-    $url = get_home_url();
+function uninstall()
+{
+    try {
+        $settings = get_option(WPS_IC_SETTINGS);
+        $options = get_option(WPS_IC_OPTIONS);
+        $connectivity = get_option('wpc-connectivity-status');
+        $url = get_home_url();
 
-    $data = [
-      'settings' => $settings,
-      'options' => $options,
-      'connectivity' => $connectivity,
-      'url' => $url
-    ];
+        $data = [
+            'settings' => $settings,
+            'options' => $options,
+            'connectivity' => $connectivity,
+            'url' => $url
+        ];
 
-    $json_data = json_encode($data);
+        $json_data = json_encode($data);
 
-    $url = 'https://frankfurt.zapwp.net/uninstall/uninstall.php'; // Replace with your actual URL
+        $url = 'https://frankfurt.zapwp.net/uninstall/uninstall.php'; // Replace with your actual URL
 
-    $args = [
-      'body'        => $json_data,
-      'timeout'     => '5',
-      'redirection' => '5',
-      'httpversion' => '1.0',
-      'blocking'    => true,
-      'headers'     => [
-        'Content-Type' => 'application/json',
-      ],
-    ];
+        $args = [
+            'body' => $json_data,
+            'timeout' => '5',
+            'redirection' => '5',
+            'httpversion' => '1.0',
+            'blocking' => true,
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+        ];
 
-    $response = wp_remote_post($url, $args);
-  } catch (Exception $e) {
-      error_log($e->getMessage());
-  }
+        $response = wp_remote_post($url, $args);
+    } catch (Exception $e) {
+        error_log($e->getMessage());
+    }
 }

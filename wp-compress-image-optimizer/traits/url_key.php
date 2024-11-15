@@ -28,7 +28,7 @@ class wps_ic_url_key
 			$url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 		}
 
-	  $url = str_replace(array('https://', 'http://'), '', $url);
+	  $url = str_replace(['https://', 'http://'], '', $url);
 	  $url = rtrim($url, '?');
 	  $url = rtrim($url, '/');
 	  $url = str_replace('wpc_visitor_mode=true', '', $url);
@@ -38,9 +38,9 @@ class wps_ic_url_key
 	  $url = rtrim($url, '?');
 	  $url = rtrim($url, '/');
 
-    $url = str_replace(array('?'), '', $url);
-    $url = str_replace(array('='), '-', $url);
-	  $url = str_replace(array('&'), '_', $url);
+    $url = str_replace(['?'], '', $url);
+    $url = str_replace(['='], '-', $url);
+	  $url = str_replace(['&'], '_', $url);
 
     $this->urlKey = $this->createUrlKey($url);
 

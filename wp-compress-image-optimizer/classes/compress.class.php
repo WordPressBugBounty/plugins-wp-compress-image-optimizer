@@ -38,7 +38,7 @@ class wps_ic_compress {
 
     // Get files done
 
-    return array('queue' => $compress_queue, 'done' => $done, 'total' => $queue_transient['total'], 'action' => $queue_transient['action']);
+    return ['queue' => $compress_queue, 'done' => $done, 'total' => $queue_transient['total'], 'action' => $queue_transient['action']];
   }
 
 
@@ -50,7 +50,7 @@ class wps_ic_compress {
     $attachment_id = (int)$attachment_id;
 
     // Remove Queue
-    $wps_ic->queue->change_queue_status($attachment_id, 'restoring', array('code' => 'restoring'));
+    $wps_ic->queue->change_queue_status($attachment_id, 'restoring', ['code' => 'restoring']);
     delete_option('wps_ic_restore_queue_status');
 
     $reset = get_post_meta($attachment_id, 'wps_ic_reset', true);
@@ -74,7 +74,7 @@ class wps_ic_compress {
     $image     = wp_get_attachment_image_src($attachment_id, 'full');
     $file_name = basename($image[0]);
 
-    $call = wp_remote_get(WPS_IC_APIURL . '?get_restore=true&site=' . site_url('/') . '&attachment_id=' . $attachment_id . '&filename=' . $file_name, array('timeout' => 25, 'sslverify' => false));
+    $call = wp_remote_get(WPS_IC_APIURL . '?get_restore=true&site=' . site_url('/') . '&attachment_id=' . $attachment_id . '&filename=' . $file_name, ['timeout' => 25, 'sslverify' => false]);
 
     $original_image = wp_remote_retrieve_body($call);
     $original_image = json_decode($original_image, true);
@@ -100,13 +100,13 @@ class wps_ic_compress {
       $this->restore_wpml_image($attachment_id);
 
       // Remove Queue
-      $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'not_able'));
+      $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'not_able']);
     } else if ( ! empty($file_data) && ! empty($original_image)) {
 
       // Fix for old API
 
       // Verify we can get to the original Image
-      $call = wp_remote_get($original_image, array('timeout' => 60, 'sslverify' => false));
+      $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
 
       if (wp_remote_retrieve_response_code($call) == 200) {
         // Original Image is accessible
@@ -115,7 +115,7 @@ class wps_ic_compress {
           // Setup URL
           $original_image = WPS_IC_APIURL . '?find_restore=true&site=' . site_url('/') . '&filename=' . $file_name;
 
-          $call = wp_remote_get($original_image, array('timeout' => 60, 'sslverify' => false));
+          $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
 
           if (wp_remote_retrieve_response_code($call) == 200) {
             $body           = wp_remote_retrieve_body($call);
@@ -144,13 +144,13 @@ class wps_ic_compress {
       } else {
 
         // Remove from Bulk Compress Background
-        $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'remote_404'));
+        $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'remote_404']);
       }
 
       $this->restore_wpml_image($attachment_id);
 
       /// Delete file from compressed table for stats
-      $wpdb->update($wpdb->prefix . 'ic_compressed', array('restored' => '1'), array('attachment_ID' => $attachment_id));
+      $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
       // Delete compress data
       delete_post_meta($attachment_id, 'wps_ic_started');
@@ -173,7 +173,7 @@ class wps_ic_compress {
       update_post_meta($attachment_id, 'wps_ic_dimmensions', $metadata);
 
       // Remove Queue
-      $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'restored'));
+      $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'restored']);
       $wps_ic->queue->add_queue($attachment_id, 'regenerate_thumbnail');
 
     } else {
@@ -201,7 +201,7 @@ class wps_ic_compress {
       $this->restore_wpml_image($attachment_id);
 
       // Remove Queue
-      $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'backup_empty'));
+      $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'backup_empty']);
     }
   }
 
@@ -236,7 +236,7 @@ class wps_ic_compress {
     update_post_meta($attachment_id, '_wp_attachment_metadata', $metadata);
 
     // Remove Queue
-    $wps_ic->queue->change_queue_status($attachment_id, 'reset', array('code' => 'reset'));
+    $wps_ic->queue->change_queue_status($attachment_id, 'reset', ['code' => 'reset']);
 
     if ($response == 'json') {
       wp_send_json_success();
@@ -254,15 +254,12 @@ class wps_ic_compress {
 
         $dimensions = getimagesize($file_data);
 
-        $output = '';
-        $output .= '<div class="wps-ic-uncompressed">';
+        $output = '<div class="wps-ic-uncompressed">';
         $output .= '<img src="' . $logo_uncompressed . '" />';
         $output .= '<h5>Not Viewed</h5>';
         $output .= '</div>';
 
-        $actions = '';
-
-        $actions .= '<div class="wps-ic-media-actions">';
+        $actions = '<div class="wps-ic-media-actions">';
         $actions .= '<ul class="wps-ic-noncompressed-icon">';
         $actions .= '<li class="wps-ic-weight"><span>' . $uncompressed_value . '</span></li>';
         $actions .= '<li class="wps-ic-size"><span>' . $dimensions[0] . 'x' . $dimensions[1] . '</span></li>';
@@ -287,15 +284,12 @@ class wps_ic_compress {
 
         $actions .= '<div id="wps-ic-compare' . $attachment_id . '" class="lightbox wp-ic-compare"></div>';
 
-        wp_send_json_success(array('info' => $output, 'actions' => $actions, 'attachment_id' => $attachment_id));
+        wp_send_json_success(['info' => $output, 'actions' => $actions, 'attachment_id' => $attachment_id]);
       } else if ($response == 'complete') {
 
         $last_image = wp_get_attachment_image_src($attachment_id, 'full');
 
-        $html = '';
-
-        $html .= '<div class="wps-ic-sample-data" id="wps-ic-sample-data-' . $attachment_id . '">';
-
+        $html = '<div class="wps-ic-sample-data" id="wps-ic-sample-data-' . $attachment_id . '">';
         //
         $html .= '<h3>Restore Complete</h3>';
         $html .= '<p>As long as you keep the backup original images setting on, you can restore your images back to original at any point if you want to recompress on different settings.</p>';
@@ -307,7 +301,7 @@ class wps_ic_compress {
         $html .= '<a href="#"></a>';
         $html .= '</div>';
 
-        wp_send_json_success(array('html' => $html));
+        wp_send_json_success(['html' => $html]);
       }
     }
 
@@ -379,7 +373,7 @@ class wps_ic_compress {
       $file_name = basename($image[0]);
 
       // Call Parameters
-      $request_params                  = array();
+      $request_params                  = [];
       $request_params['apiv3']         = 'true';
       $request_params['action']        = 'restore';
       $request_params['filename']      = $file_name;
@@ -387,18 +381,18 @@ class wps_ic_compress {
       $request_params['attachment_id'] = $attachment_id;
       $request_params['site']          = site_url();
 
-      $params = array(
+      $params = [
         'method'      => 'POST',
         'timeout'     => 120,
         'redirection' => 3,
         'sslverify'   => false,
         'httpversion' => '1.0',
         'blocking'    => true, // TODO: Mozda true?
-        'headers'     => array('user-agent' => WPS_IC_API_USERAGENT),
+        'headers'     => ['user-agent' => WPS_IC_API_USERAGENT],
         'body'        => $request_params,
-        'cookies'     => array(),
+        'cookies'     => [],
         'user-agent'  => WPS_IC_API_USERAGENT
-      );
+      ];
 
       $call = wp_remote_post(WPS_IC_APIURL, $params);
       $body = wp_remote_retrieve_body($call);
@@ -415,7 +409,7 @@ class wps_ic_compress {
       if ($body['success'] == 'true') {
 
         // Verify we can get to the original Image
-        $call = wp_remote_get($original_image, array('timeout' => 60, 'sslverify' => false));
+        $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
 
         if (wp_remote_retrieve_response_code($call) != 200) {
           return false;
@@ -438,7 +432,18 @@ class wps_ic_compress {
 //	        $mime_type = finfo_file( $file_info, $tempfile );
 //	        finfo_close( $file_info );
 
+            //$mime_type = mime_content_type($tempfile);
+
+          // Verify if the downloaded file is an image
+          if (function_exists('mime_content_type')){
             $mime_type = mime_content_type($tempfile);
+          } else if (function_exists('finfo_open')) {
+            $file_info = finfo_open(FILEINFO_MIME_TYPE);
+            $mime_type = finfo_file($file_info, $tempfile);
+            finfo_close($file_info);
+          } else {
+            $mime_type = wp_get_image_mime($tempfile);
+          }
 
 	        if ( in_array( $mime_type, [ 'image/jpeg', 'image/png', 'image/gif' ] ) ) {
 		        $imageSize = getimagesize( $tempfile );
@@ -448,7 +453,7 @@ class wps_ic_compress {
 				        unlink( $tempfile );
 
 				        /// Delete file from compressed table for stats
-				        $wpdb->update( $wpdb->prefix . 'ic_compressed', array( 'restored' => '1' ), array( 'attachment_ID' => $attachment_id ) );
+				        $wpdb->update( $wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
 				        // Delete compress data
 				        delete_post_meta( $attachment_id, 'wps_ic_started' );
@@ -467,7 +472,7 @@ class wps_ic_compress {
 				        $imagesize                   = getimagesize( $uploadfile );
 				        $metadata['width']           = $imagesize[0];
 				        $metadata['height']          = $imagesize[1];
-				        $dimensions                  = array();
+				        $dimensions                  = [];
 				        $dimensions['old']['width']  = $imagesize[0];
 				        $dimensions['old']['height'] = $imagesize[1];
 				        update_post_meta( $attachment_id, '_wp_attachment_metadata', $metadata );
@@ -478,7 +483,7 @@ class wps_ic_compress {
 				        $this->restore_thumbnails( $attachment_id );
 
 				        // Remove Queue
-				        $wps_ic->queue->change_queue_status( $attachment_id, 'restored', array( 'code' => 'restored' ) );
+				        $wps_ic->queue->change_queue_status( $attachment_id, 'restored', ['code' => 'restored']);
 			        }
 		        }
 	        }
@@ -500,7 +505,7 @@ class wps_ic_compress {
           $this->restore_thumbnails($attachment_id);
 
           // Remove from Bulk Compress Background
-          $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'remote_404'));
+          $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'remote_404']);
         }
 
       } else {
@@ -522,7 +527,7 @@ class wps_ic_compress {
         $this->restore_thumbnails($attachment_id);
 
         // Remove Queue
-        $wps_ic->queue->change_queue_status($attachment_id, 'restored', array('code' => 'no_backup'));
+        $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'no_backup']);
         //}
       }
     }
@@ -567,8 +572,8 @@ class wps_ic_compress {
 
     $site_url = site_url();
 
-    $call_response = array();
-    $response      = array();
+    $call_response = [];
+    $response      = [];
 
     if (empty($apikey)) {
       $apikey = $wps_ic::$api_key;
@@ -586,14 +591,14 @@ class wps_ic_compress {
       require_once(ABSPATH . "wp-includes" . '/option.php');
     }
 
-    $send_to_compress = array();
+    $send_to_compress = [];
 
     foreach ($attachments['attachments'] as $key => $attachment_ID) {
 
       $compressed = get_post_meta($attachment_ID, 'wps_ic_data', true);
 
       if ( ! empty($compressed['new']['size'])) {
-        $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', array('code' => 'not_able'));
+        $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'not_able']);
         $wps_ic->queue->remove_queue($attachment_ID);
 
         // Delete in Queue Meta
@@ -603,7 +608,7 @@ class wps_ic_compress {
         continue;
       }
 
-      $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', array('code' => 'compressing'));
+      $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', ['code' => 'compressing']);
 
       // Create local backup if selected
       if ( ! empty($settings['backup-location']) && $settings['backup-location'] == 'local') {
@@ -617,7 +622,7 @@ class wps_ic_compress {
       $attach_id = (int)$attach_id;
 
       // Get all image sizes
-      $thumbs         = array();
+      $thumbs         = [];
       $thumbs['full'] = wp_get_attachment_image_src($attach_id, 'full');
       $uri            = explode('?', $thumbs['full'][0]);
       $thumbs['full'] = $uri[0];
@@ -638,7 +643,6 @@ class wps_ic_compress {
 
           if ($uri[0] == $thumbs['full']) {
             unset($thumbs[ $value ]);
-            continue;
           } else {
             $thumbs[ $value ] = $uri[0];
           }
@@ -659,7 +663,7 @@ class wps_ic_compress {
 			$send_to_compress[ $attach_id ] = $thumbs;
     }
 
-    $request_params                  = array();
+    $request_params                  = [];
     $request_params['apiv3']         = 'true';
     $request_params['resize_max']    = '0';
     $request_params['preserve_exif'] = '0';
@@ -688,18 +692,18 @@ class wps_ic_compress {
       $request_params['resize_max']           = $params['size'];
     }
 
-    $params = array(
+    $params = [
       'method'      => 'POST',
       'timeout'     => 120,
       'redirection' => 3,
       'sslverify'   => false,
       'httpversion' => '1.0',
       'blocking'    => true, // TODO: Mozda true?
-      'headers'     => array(),
+      'headers'     => [],
       'body'        => $request_params,
-      'cookies'     => array(),
+      'cookies'     => [],
       'user-agent'  => WPS_IC_API_USERAGENT
-    );
+    ];
 
     $start = microtime(true);
 
@@ -724,7 +728,7 @@ class wps_ic_compress {
 
           if ( ! empty($image_data['compressed']['full']['no-credits']) && $image_data['compressed']['full']['no-credits'] == 'true') {
             $this->not_enough_credits($attachment_ID);
-            $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', array('code' => 'not_enough_credits'));
+            $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'not_enough_credits']);
 
             if ( ! empty($params['debug_tool'])) {
               return 'Not enough credits';
@@ -732,7 +736,7 @@ class wps_ic_compress {
 
           } else {
 
-            if (empty($image_data['compressed']['full']['size']) || $image_data['compressed']['full']['size'] == false) {
+            if (empty($image_data['compressed']['full']['size']) || !$image_data['compressed']['full']['size']) {
               update_post_meta($attachment_ID, 'wps_ic_data', 'not_able');
             } else {
               if ($image_data['compressed']['full']['original'] < $image_data['compressed']['full']['size']) {
@@ -808,24 +812,24 @@ class wps_ic_compress {
     global $wps_ic;
     $apikey = $wps_ic::$api_key;
 
-    $request_params                = array();
+    $request_params                = [];
     $request_params['apiv3']       = 'true';
     $request_params['apikey']      = $apikey;
     $request_params['action']      = 'fetch_thumbnails';
     $request_params['attachments'] = json_encode($attachments);
 
-    $params = array(
+    $params = [
       'method'      => 'POST',
       'timeout'     => 60,
       'redirection' => 3,
       'sslverify'   => false,
       'httpversion' => '1.0',
       'blocking'    => true, // TODO: Mozda true?
-      'headers'     => array('user-agent' => WPS_IC_API_USERAGENT),
+      'headers'     => ['user-agent' => WPS_IC_API_USERAGENT],
       'body'        => $request_params,
-      'cookies'     => array(),
+      'cookies'     => [],
       'user-agent'  => WPS_IC_API_USERAGENT
-    );
+    ];
 
     // Send call to API
     $call     = wp_remote_post(WPS_IC_APIURL, $params);
@@ -848,7 +852,7 @@ class wps_ic_compress {
 
     $webps = get_post_meta($attachment_ID, 'webp_list', true);
     if ( ! $webps) {
-      $webps = array();
+      $webps = [];
     }
 
     foreach ($images_array as $image_size => $image_data) {
@@ -869,7 +873,7 @@ class wps_ic_compress {
       }
 
       if ( ! empty($image_data['webp'])) {
-        $current_thumbnail_path = str_replace(array('.png', '.jpg', '.jpeg'), '.webp', $current_thumbnail_path);
+        $current_thumbnail_path = str_replace(['.png', '.jpg', '.jpeg'], '.webp', $current_thumbnail_path);
         $temp_file              = download_url($image_data['webp'], 60);
 
         if ($temp_file) {
@@ -886,7 +890,7 @@ class wps_ic_compress {
   }
 
 
-  public function update_wpml_image($attachmentID, $metadata = array()) {
+  public function update_wpml_image($attachmentID, $metadata = []) {
     global $wpdb;
 
     if ( ! function_exists('icl_object_id')) {
@@ -953,7 +957,7 @@ class wps_ic_compress {
         $imagesize                   = getimagesize($uploadfile);
         $metadata['width']           = $imagesize[0];
         $metadata['height']          = $imagesize[1];
-        $dimensions                  = array();
+        $dimensions                  = [];
         $dimensions['old']['width']  = $imagesize[0];
         $dimensions['old']['height'] = $imagesize[1];
         update_post_meta($child->ID, '_wp_attachment_metadata', $metadata);
@@ -968,7 +972,7 @@ class wps_ic_compress {
   public function update_image($attachment_ID, $images_array, $retry = true, $quality = '') {
     global $wps_ic, $wpdb;
 
-    $child_metadata        = array();
+    $child_metadata        = [];
     $settings              = get_option(WPS_IC_SETTINGS);
     $image_data            = $images_array['full'];
     $image_url             = $image_data['uri'];
@@ -990,7 +994,7 @@ class wps_ic_compress {
     // First delete the current file
     clearstatcache();
 
-    $dimensions                  = array();
+    $dimensions                  = [];
     $dimensions['old']['width']  = $uncompressed_dimensions[0];
     $dimensions['old']['height'] = $uncompressed_dimensions[1];
 
@@ -998,7 +1002,7 @@ class wps_ic_compress {
     $child_metadata['wps_ic_noncompressed_size'] = $uncompressed_file_size;
 
     // Change Queue to Compressing
-    $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', array('code' => 'compressing'));
+    $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', ['code' => 'compressing']);
 
     if (empty($image_url)) {
       // Update compress data
@@ -1021,7 +1025,7 @@ class wps_ic_compress {
       delete_post_meta($attachment_ID, 'wps_ic_compressing');
 
       // Remove From Queue
-      $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', array('code' => 'not_able'));
+      $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'not_able']);
       $this->delete_local_backup($attachment_ID);
     } else {
 
@@ -1085,7 +1089,7 @@ class wps_ic_compress {
           delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
           delete_post_meta($attachment_ID, 'wps_ic_compressing');
 
-          $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', array('code' => 'compressed'));
+          $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'compressed']);
           if ( ! empty($image_data['webp'])) {
 
             // First delete the current file
@@ -1100,7 +1104,7 @@ class wps_ic_compress {
               clearstatcache();
 
               // Rename image into webp
-              $permfile = str_replace(array('.jpg', '.jpeg', '.png'), '.webp', $file_data);
+              $permfile = str_replace(['.jpg', '.jpeg', '.png'], '.webp', $file_data);
 
               // Copy image from temporary file into real file
               if (file_exists($permfile)) {
@@ -1143,7 +1147,7 @@ class wps_ic_compress {
           delete_post_meta($attachment_ID, 'wps_ic_compressing');
 
           // Remove From Queue
-          $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', array('code' => 'unable to copy'));
+          $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'unable to copy']);
           $this->delete_local_backup($attachment_ID);
         }
 
@@ -1223,7 +1227,7 @@ class wps_ic_compress {
     $type      = wp_check_filetype($file_data);
     $exif      = exif_imagetype($file_data);
 
-    $allowed_types         = array();
+    $allowed_types         = [];
     $allowed_types['jpg']  = 'jpg';
     $allowed_types['jpeg'] = 'jpeg';
     $allowed_types['gif']  = 'gif';
@@ -1257,14 +1261,12 @@ class wps_ic_compress {
       $excluded_list[$file_name] = $file_name;
       update_option('wps_ic_excluded_list', $excluded_list);
 
-      $output = '';
-      $output .= '<div class="wps-ic-excluded">';
+      $output = '<div class="wps-ic-excluded">';
       $output .= '<img src="' . $logo_excluded . '" />';
       $output .= '<h5>Excluded</h5>';
       $output .= '</div>';
 
-      $actions = '';
-      $actions .= '<div class="wps-ic-media-actions-toolbox">';
+      $actions = '<div class="wps-ic-media-actions-toolbox">';
       $actions .= '<ul class="wps-ic-include">';
       $actions .= '<li class="no-padding">';
       $actions .= '<a href="#" class="wps-ic-pro-include" data-attachment_id="' . $attachment_id . '">Exclude</a>';
@@ -1289,14 +1291,12 @@ class wps_ic_compress {
       unset($excluded_list[$file_name]);
       update_option('wps_ic_excluded_list', $excluded_list);
 
-      $output = '';
-      $output .= '<div class="wps-ic-uncompressed">';
+      $output = '<div class="wps-ic-uncompressed">';
       $output .= '<img src="' . $logo_uncompressed . '" />';
       $output .= '<h5>Not Viewed</h5>';
       $output .= '</div>';
 
-      $actions = '';
-      $actions .= '<div class="wps-ic-media-actions">';
+      $actions = '<div class="wps-ic-media-actions">';
       $actions .= '<ul class="wps-ic-noncompressed-icon">';
       $actions .= '<li class="wps-ic-weight"><span>' . $uncompressed_value . '</span></li>';
       $actions .= '<li class="wps-ic-size"><span>' . $dimensions[0] . 'x' . $dimensions[1] . '</span></li>';
@@ -1314,7 +1314,7 @@ class wps_ic_compress {
 
     }
 
-    wp_send_json_success(array('info' => $output, 'actions' => $actions));
+    wp_send_json_success(['info' => $output, 'actions' => $actions]);
   }
 
 
@@ -1338,14 +1338,12 @@ class wps_ic_compress {
       $excluded_list[$file_name] = $file_name;
       update_option('wps_ic_excluded_list', $excluded_list);
 
-      $output = '';
-      $output .= '<div class="wps-ic-excluded">';
+      $output = '<div class="wps-ic-excluded">';
       $output .= '<img src="' . $logo_excluded . '" />';
       $output .= '<h5>Excluded</h5>';
       $output .= '</div>';
 
-      $actions = '';
-      $actions .= '<div class="wps-ic-media-actions-toolbox">';
+      $actions = '<div class="wps-ic-media-actions-toolbox">';
       $actions .= '<ul class="wps-ic-include">';
       $actions .= '<li class="no-padding">';
       $actions .= apply_filters('wps_ic_pro_include', $attachment_id);
@@ -1370,14 +1368,12 @@ class wps_ic_compress {
       unset($excluded_list[$file_name]);
       update_option('wps_ic_excluded_list', $excluded_list);
 
-      $output = '';
-      $output .= '<div class="wps-ic-uncompressed">';
+      $output = '<div class="wps-ic-uncompressed">';
       $output .= '<img src="' . $logo_uncompressed . '" />';
       $output .= '<h5>Not Viewed</h5>';
       $output .= '</div>';
 
-      $actions = '';
-      $actions .= '<div class="wps-ic-media-actions">';
+      $actions = '<div class="wps-ic-media-actions">';
       $actions .= '<ul class="wps-ic-noncompressed-icon">';
       $actions .= '<li class="wps-ic-weight"><span>' . $uncompressed_value . '</span></li>';
       $actions .= '<li class="wps-ic-size"><span>' . $dimensions[0] . 'x' . $dimensions[1] . '</span></li>';
@@ -1404,7 +1400,7 @@ class wps_ic_compress {
 
     }
 
-    wp_send_json_success(array('info' => $output, 'actions' => $actions));
+    wp_send_json_success(['info' => $output, 'actions' => $actions]);
   }
 
 
@@ -1424,7 +1420,7 @@ class wps_ic_compress {
     if (wp_update_attachment_metadata($attID, wp_generate_attachment_metadata($attID, $fullsizepath))) {
       wp_send_json_success();
     } else {
-      wp_send_json_error(array('ID' => $attID, 'path' => $fullsizepath));
+      wp_send_json_error(['ID' => $attID, 'path' => $fullsizepath]);
     }
   }
 

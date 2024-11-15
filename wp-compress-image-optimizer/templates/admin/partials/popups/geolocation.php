@@ -24,7 +24,7 @@
       <form method="post" action="#">
         <select name="location-select">
           <?php
-          $location_select = array('Automatic' => 'Automatic', 'EU' => 'Europe', 'US' => 'United States', 'AS' => 'Asia', 'OC' => 'Oceania');
+          $location_select = ['Automatic' => 'Automatic', 'EU' => 'Europe', 'US' => 'United States', 'AS' => 'Asia', 'OC' => 'Oceania'];
           
           foreach ($location_select as $k => $v) {
             if ($k == $geolocation->continent) {

@@ -119,7 +119,7 @@ function replaceCSS($matches)
           $walker .= '/' . $removedQueryVar;
 
           if (!empty($_GET['debugWalker2'])) {
-            return print_r(array($dirName, $walker, $cssPath, $foundUrls), true);
+            return print_r([$dirName, $walker, $cssPath, $foundUrls], true);
           }
 
           // Once again, check if the file exists in figured out path
@@ -143,7 +143,7 @@ function replaceCSS($matches)
           $foundUrls = str_replace("('", '', $foundUrls);
           $foundUrls = str_replace('")', '', $foundUrls);
           $foundUrls = str_replace("')", '', $foundUrls);
-          return 'url("' . $siteUrl . '' . $foundUrls . '")';
+          return 'url("' . $siteUrl . $foundUrls . '")';
         } else {
           // Let's guess it's in root where the file is
           $cleanUrl = $foundUrls;

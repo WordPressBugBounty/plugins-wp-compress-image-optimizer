@@ -4,19 +4,10 @@
  * GeoLocation Stuff
  */
 switch_to_blog(1);
-$geolocation = get_option('wps_ic_geo_locate');
-if (empty($geolocation)) {
-	$geolocation = $this->geoLocate();
-}
-else {
-	$geolocation = (object)$geolocation;
-}
-
-$geolocation_text = $geolocation->country_name . ' (' . $geolocation->continent_name . ')';
 
 $multisiteDefaultSettings = get_option('multisite_default_settings');
 if (empty($multisiteDefaultSettings)) {
-	$multisiteDefaultSettings = array('live-cdn'          => 'live',
+	$multisiteDefaultSettings = ['live-cdn'          => 'live',
 																		'retina'            => '1',
 																		'generate_webp'     => '1',
 																		'generate_adaptive' => '1',
@@ -30,7 +21,7 @@ if (empty($multisiteDefaultSettings)) {
 																		'on-upload'         => '0',
 																		'defer-js'          => '0',
                                     'serve'                  => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'],
-																		'search-through'    => 'html');
+																		'search-through'    => 'html'];
 	update_option('multisite_default_settings', $multisiteDefaultSettings);
 }
 
@@ -269,7 +260,7 @@ else {
 										<input type="hidden" name="wp-ic-setting[search-through]" id="wp-ic-search-through" value="<?php echo $settings['search-through']; ?>">
 										<ul>
 											<?php
-											$options = array('html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs');
+											$options = ['html' => 'HTML Only', 'html+css' => 'HTML + CSS', 'all' => 'All URLs'];
 											foreach ($options as $key => $value) {
 												if ($key == $settings['search-through']) {
 													echo '<li class="current"><a href="#" class="wps-ic-search-through" data-value="' . $key . '">' . $value . '</a></li>';

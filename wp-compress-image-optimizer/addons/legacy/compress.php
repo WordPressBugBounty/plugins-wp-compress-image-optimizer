@@ -43,7 +43,7 @@ class wps_local_compress
         $this->webp_sizes = get_intermediate_image_sizes();
         $uploads_dir = wp_upload_dir();
 
-        self::$allowed_types = array('jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png');
+        self::$allowed_types = ['jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png'];
         self::$backup_directory = $uploads_dir['basedir'] . '/wp-compress-backups';
         self::$settings = get_option(WPS_IC_SETTINGS);
         self::$options = get_option(WPS_IC_OPTIONS);
@@ -55,20 +55,21 @@ class wps_local_compress
         if (!file_exists(self::$backup_directory)) {
             $made_dir = mkdir(self::$backup_directory, 0755);
             if (!$made_dir) {
-                update_option('wpc_errors', array('unable-to-create-backup-dir' => self::$backup_directory));
+                update_option('wpc_errors', ['unable-to-create-backup-dir' => self::$backup_directory]);
             } else {
                 delete_option('wpc_errors');
             }
         }
 
-        add_action('delete_attachment', array($this, 'on_delete'));
+
+        add_action('delete_attachment', [$this, 'on_delete']);
 
         if (!empty(self::$settings['on-upload']) && self::$settings['on-upload'] == '1' && empty($_GET['restoreImage'])) {
             /*
              * This works but uploads a full sized image to storage for every size variation
              */
 
-            add_filter('wp_generate_attachment_metadata', array($this, 'on_upload'), PHP_INT_MAX, 2);
+            add_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX, 2);
             // TODO: Causing problems with showing 0% saved, while actually compressed
         }
 
@@ -121,8 +122,16 @@ class wps_local_compress
             self::$apiURL = 'https://' . $local_server . '/local/' . $apiVersion . '/';
         }
 
+        if (!isset(self::$options['api_key'])) {
+            self::$options['api_key'] = '';
+        }
+
+        if (!isset(self::$settings['optimization'])) {
+            self::$settings['optimization'] = '';
+        }
+
         // Setup paraams for POST to API
-        self::$apiParams = array();
+        self::$apiParams = [];
         self::$apiParams['apikey'] = self::$options['api_key'];
         self::$apiParams['quality'] = self::$settings['optimization'];
         self::$apiParams['retina'] = 'false';
@@ -154,6 +163,7 @@ class wps_local_compress
     {
         global $_wp_additional_image_sizes;
 
+        $image_sizes = []; // Initialize $image_sizes as an empty array
         $default_image_sizes = get_intermediate_image_sizes();
 
         foreach ($default_image_sizes as $size) {
@@ -166,7 +176,7 @@ class wps_local_compress
             $image_sizes = array_merge($image_sizes, $_wp_additional_image_sizes);
         }
 
-        $AdditionalSizes = array('full');
+        $AdditionalSizes = ['full'];
         foreach ($AdditionalSizes as $size) {
             $image_sizes[$size]['width'] = 'full';
         }
@@ -183,7 +193,7 @@ class wps_local_compress
             return $force_location;
         }
 
-        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
+        $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
         if (wp_remote_retrieve_response_code($call) == 200) {
             $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);
@@ -193,14 +203,14 @@ class wps_local_compress
 
                 return $body->data;
             } else {
-                update_option('wps_ic_geo_locate', array('country' => 'EU', 'server' => 'frankfurt.zapwp.net'));
+                update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
-                return array('country' => 'EU', 'server' => 'frankfurt.zapwp.net');
+                return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
             }
         } else {
-            update_option('wps_ic_geo_locate', array('country' => 'EU', 'server' => 'frankfurt.zapwp.net'));
+            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
-            return array('country' => 'EU', 'server' => 'frankfurt.zapwp.net');
+            return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
         }
     }
 
@@ -241,12 +251,12 @@ class wps_local_compress
         // Fetch the image content
         $file_content = $wpc_filesystem->get_contents($file_path);
 
-        $post_fields = array('action' => 'compress', 'imageID' => $attachment_id, 'filename' => $file_basename, 'apikey' => self::$apiParams['apikey'], 'key' => self::$apiParams['apikey'], 'image' => $image[0], 'url' => $image[0], 'exif' => $exif, 'mime' => $mime, 'content' => base64_encode($file_content), 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp'], 'count_thumbs' => $this->total_sizes);
+        $post_fields = ['action' => 'compress', 'imageID' => $attachment_id, 'filename' => $file_basename, 'apikey' => self::$apiParams['apikey'], 'key' => self::$apiParams['apikey'], 'image' => $image[0], 'url' => $image[0], 'exif' => $exif, 'mime' => $mime, 'content' => base64_encode($file_content), 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp'], 'count_thumbs' => $this->total_sizes];
 
         $tmp_location = $file_path . '_tmp';
         $file_location = $file_path;
         $original_filesize = filesize($file_path);
-        $response = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
+        $response = wp_remote_post(self::$apiURL, ['timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($response) == 200) {
             $body = wp_remote_retrieve_body($response);
@@ -307,8 +317,8 @@ class wps_local_compress
         }
 
         // Setup Image Stats
-        $stats = array();
-        $backup_list = array();
+        $stats = [];
+        $backup_list = [];
 
         // Create backup directory
         $this->create_backup_directory();
@@ -358,6 +368,8 @@ class wps_local_compress
         update_post_meta($imageID, 'ic_stats', $stats);
         update_post_meta($imageID, 'ic_backup_images', $backup_list);
         update_post_meta($imageID, 'ic_original_stats', $stats);
+
+        return true;
     }
 
 
@@ -440,7 +452,7 @@ class wps_local_compress
         // Is the image type supported
         if (!$this->is_supported($imageID)) {
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'file-not-supported'));
+                wp_send_json_error(['msg' => 'file-not-supported']);
             } else {
                 return 'file-not-supported';
             }
@@ -452,7 +464,7 @@ class wps_local_compress
             $html = $media_library->compress_details($imageID);
 
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html));
+                wp_send_json_error(['msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html]);
             } else {
                 return 'file-already-compressed';
             }
@@ -468,8 +480,8 @@ class wps_local_compress
         }
 
         // Prepare the request params
-        $post_fields = array('action' => 'doSingleImage', 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID,
-            'siteurl' => self::$siteUrl, 'parameters' => json_encode(['maxWidth' => WPS_IC_MAXWIDTH, 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp']]));
+        $post_fields = ['action' => 'doSingleImage', 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID,
+            'siteurl' => self::$siteUrl, 'parameters' => json_encode(['maxWidth' => WPS_IC_MAXWIDTH, 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp']])];
 
         // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL, ['timeout' => 90, 'blocking' => true, 'body' => $post_fields, 'sslverify' =>
@@ -478,13 +490,13 @@ class wps_local_compress
         if (wp_remote_retrieve_response_code($notify) == 200) {
             // All good, let's wait for queue
             if ($output == 'json') {
-                wp_send_json_success(array('waiting-queue', 'call' => print_r($notify, true)));
+                wp_send_json_success(['waiting-queue', 'call' => print_r($notify, true)]);
             }
         } else {
             delete_transient('wps_ic_compress_' . $imageID);
             // We were unable to contact API
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'unable-to-contact-api', 'url' => self::$apiURL, 'call' => print_r($notify, true)));
+                wp_send_json_error(['msg' => 'unable-to-contact-api', 'url' => self::$apiURL, 'call' => print_r($notify, true)]);
             }
         }
     }
@@ -495,10 +507,10 @@ class wps_local_compress
 
         $upload_dir = wp_upload_dir();
         $imageID = $arg;
-        $return = array();
-        $compressed = array();
+        $return = [];
+        $compressed = [];
         $extension = '';
-        $stats = array();
+        $stats = [];
 
         $image_url_full = wp_get_attachment_image_src($imageID, 'full');
         $image_url_full = $image_url_full[0];
@@ -545,7 +557,7 @@ class wps_local_compress
             $file_basename = basename($image[0]);
 
             // Setup POST Params
-            $headers = array('timeout' => 300, 'httpversion' => '1.0', 'blocking' => true,);
+            $headers = ['timeout' => 300, 'httpversion' => '1.0', 'blocking' => true,];
 
             // Figure out image type
             $exif = exif_imagetype($file_path);
@@ -556,7 +568,7 @@ class wps_local_compress
             // Fetch the image content
             $file_content = $wpc_filesystem->get_contents($file_path);
 
-            $post_fields = array('action' => 'compress', 'imageID' => $imageID, 'filename' => $file_basename, 'apikey' => self::$apiParams['apikey'], 'key' => self::$apiParams['apikey'], 'image' => $image[0], 'url' => $image[0], 'exif' => $exif, 'mime' => $mime, 'content' => base64_encode($file_content), 'quality' => self::$apiParams['quality'], 'width' => '1', 'retina' => 'false', 'webp' => 'true');
+            $post_fields = ['action' => 'compress', 'imageID' => $imageID, 'filename' => $file_basename, 'apikey' => self::$apiParams['apikey'], 'key' => self::$apiParams['apikey'], 'image' => $image[0], 'url' => $image[0], 'exif' => $exif, 'mime' => $mime, 'content' => base64_encode($file_content), 'quality' => self::$apiParams['quality'], 'width' => '1', 'retina' => 'false', 'webp' => 'true'];
 
             if (!empty($size)) {
                 if ($size == 'full') {
@@ -572,7 +584,7 @@ class wps_local_compress
 
             // WebP File Path
             $webp_file_location = str_replace('.' . $extension, '.webp', $file_location);
-            $call = wp_remote_post(self::$apiURL, array('timeout' => 300, 'method' => 'POST', 'headers' => $headers, 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
+            $call = wp_remote_post(self::$apiURL, ['timeout' => 300, 'method' => 'POST', 'headers' => $headers, 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
@@ -615,7 +627,7 @@ class wps_local_compress
             require_once(ABSPATH . "wp-includes" . '/option.php');
         }
 
-        $output = array();
+        $output = [];
 
         wp_raise_memory_limit('image');
         ini_set('memory_limit', '1024M');
@@ -630,7 +642,7 @@ class wps_local_compress
         // Remote backup?
 
         //check api for original
-        $params = array('timeout' => 300,
+        $params = ['timeout' => 300,
             'method' => 'POST',
             'sslverify' => false,
             'body' => [
@@ -639,7 +651,7 @@ class wps_local_compress
                 'imageID' => $imageID
             ],
             'user-agent' => WPS_IC_API_USERAGENT
-        );
+        ];
 
         $call = wp_remote_post(self::$apiURL, $params);
         //file_put_contents( WPS_IC_CACHE . 'test3.txt', print_r( $call, true ) );
@@ -672,13 +684,13 @@ class wps_local_compress
                             $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
 
                             if ($output == 'json') {
-                                wp_send_json_error(array(
+                                wp_send_json_error([
                                     'msg' => 'failed-to-get-backup',
                                     'apiUrl' => self::$apiURL,
                                     'apikey' => self::$apiParams['apikey'],
                                     'imageID' => $imageID,
                                     'url' => $downloadImage
-                                ));
+                                ]);
                             }
 
                             return false;
@@ -688,7 +700,18 @@ class wps_local_compress
 //                        $mime_type = finfo_file($file_info, $downloadImage);
 //                        finfo_close($file_info);
 
+                        //$mime_type = mime_content_type($downloadImage);
+
+                      // Verify if the downloaded file is an image
+                      if (function_exists('mime_content_type')){
                         $mime_type = mime_content_type($downloadImage);
+                      } else if (function_exists('finfo_open')) {
+                        $file_info = finfo_open(FILEINFO_MIME_TYPE);
+                        $mime_type = finfo_file($file_info, $downloadImage);
+                        finfo_close($file_info);
+                      } else {
+                        $mime_type = wp_get_image_mime($downloadImage);
+                      }
 
                         if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
                             $imageSize = getimagesize($downloadImage);
@@ -721,24 +744,24 @@ class wps_local_compress
                                 delete_transient('wps_ic_compress_' . $imageID);
 
                                 $originalFilePath = wp_get_original_image_path($imageID);
-                                remove_filter('wp_generate_attachment_metadata', array($this, 'on_upload'), PHP_INT_MAX);
+                                remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
                                 $oldMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
                                 wp_update_attachment_metadata($imageID, $oldMeta);
                                 // Add for heartbeat to pickup
-                                set_transient('wps_ic_heartbeat_' . $imageID, array(
+                                set_transient('wps_ic_heartbeat_' . $imageID, [
                                     'imageID' => $imageID,
                                     'status' => 'restored'
-                                ), 60);
+                                ], 60);
 
                                 $this->writeLog('Ended Image ID - restored ' . $imageID);
 
                                 if ($output == 'json') {
-                                    wp_send_json_success(array('msg' => 'backup-restored'));
+                                    wp_send_json_success(['msg' => 'backup-restored']);
                                 }
                             }
-                            wp_send_json_error(array('msg' => 'invalid-backup'));
+                            wp_send_json_error(['msg' => 'invalid-backup']);
                         }
-                        wp_send_json_error(array('msg' => 'invalid-backup'));
+                        wp_send_json_error(['msg' => 'invalid-backup']);
                     }
                 }
             }
@@ -749,7 +772,7 @@ class wps_local_compress
 
             // Failure to contact API
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'unable-to-contact-api'));
+                wp_send_json_error(['msg' => 'unable-to-contact-api']);
             }
         }
     }
@@ -832,7 +855,7 @@ class wps_local_compress
             require_once(ABSPATH . "wp-includes" . '/option.php');
         }
 
-        $output = array();
+        $output = [];
 
         wp_raise_memory_limit('image');
         ini_set('memory_limit', '1024M');
@@ -850,7 +873,7 @@ class wps_local_compress
         // Remote backup?
 
         //check api for original
-        $params = array('timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => ['getS3Backup' => true, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID], 'user-agent' => WPS_IC_API_USERAGENT);
+        $params = ['timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => ['getS3Backup' => true, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID], 'user-agent' => WPS_IC_API_USERAGENT];
 
         $call = wp_remote_post(self::$apiURL, $params);
 
@@ -884,7 +907,7 @@ class wps_local_compress
                             $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
 
                             if ($output == 'json') {
-                                wp_send_json_error(array('msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID, 'url' => $downloadImage));
+                                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID, 'url' => $downloadImage]);
                             }
 
                             return false;
@@ -909,17 +932,17 @@ class wps_local_compress
                         delete_transient('wps_ic_compress_' . $imageID);
 
                         $originalFilePath = wp_get_original_image_path($imageID);
-                        remove_filter('wp_generate_attachment_metadata', array($this, 'on_upload'), PHP_INT_MAX);
+                        remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
                         $oldMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
                         wp_update_attachment_metadata($imageID, $oldMeta);
 
                         // Add for heartbeat to pickup
-                        set_transient('wps_ic_heartbeat_' . $imageID, array('imageID' => $imageID, 'status' => 'restored'), 60);
+                        set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
                         $this->writeLog('Ended Image ID - restored ' . $imageID);
 
                         if ($output == 'json') {
-                            wp_send_json_success(array('msg' => 'backup-restored'));
+                            wp_send_json_success(['msg' => 'backup-restored']);
                         }
 
                         return true;
@@ -1014,18 +1037,18 @@ class wps_local_compress
                     delete_transient('wps_ic_compress_' . $imageID);
 
                     // Add for heartbeat to pickup
-                    set_transient('wps_ic_heartbeat_' . $imageID, array('imageID' => $imageID, 'status' => 'restored'), 60);
+                    set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
                     $this->writeLog('Ended Image ID - restored ' . $imageID);
 
                     if ($output == 'json') {
-                        wp_send_json_success(array('msg' => 'backup-restored'));
+                        wp_send_json_success(['msg' => 'backup-restored']);
                     }
                 }
             } else {
                 $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
                 if ($output == 'json') {
-                    wp_send_json_error(array('msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID));
+                    wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID]);
                 }
             }
 
@@ -1036,7 +1059,7 @@ class wps_local_compress
 
             // Failure to contact API
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'unable-to-contact-api'));
+                wp_send_json_error(['msg' => 'unable-to-contact-api']);
             }
         }
     }
@@ -1054,7 +1077,7 @@ class wps_local_compress
         // Is the image type supported
         if (!$this->is_supported($imageID)) {
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'file-not-supported'));
+                wp_send_json_error(['msg' => 'file-not-supported']);
             } else {
                 return 'file-not-supported';
             }
@@ -1066,7 +1089,7 @@ class wps_local_compress
             $html = $media_library->compress_details($imageID);
 
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html));
+                wp_send_json_error(['msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html]);
             } else {
                 return 'file-already-compressed';
             }
@@ -1082,7 +1105,7 @@ class wps_local_compress
         }
 
         // Prepare the request params
-        $post_fields = array(
+        $post_fields = [
             'action' => 'queueSingleImage',
             'imageID' => $imageID,
             'siteUrl' => self::$siteUrl,
@@ -1093,10 +1116,10 @@ class wps_local_compress
                 'retina' => self::$apiParams['retina'],
                 'webp' => self::$apiParams['webp']
             ],
-        );
+        ];
 
         // Notify API to queue to queue the request
-        $notify = wp_remote_post(self::$apiURL . 'queueManager.php', array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
+        $notify = wp_remote_post(self::$apiURL . 'queueManager.php', ['timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($notify) == 200) {
             // All good, let's wait for queue
@@ -1104,7 +1127,7 @@ class wps_local_compress
         } else {
             delete_transient('wps_ic_compress_' . $imageID);
             // We were unable to contact API
-            wp_send_json_error(array('msg' => 'unable-to-contact-api'));
+            wp_send_json_error(['msg' => 'unable-to-contact-api']);
         }
     }
 
@@ -1119,7 +1142,7 @@ class wps_local_compress
         if (!$this->is_supported($imageID)) {
             if (!$bulk) {
                 if ($output == 'json') {
-                    wp_send_json_error(array('msg' => 'file-not-supported'));
+                    wp_send_json_error(['msg' => 'file-not-supported']);
                 } else {
                     return 'file-not-supported';
                 }
@@ -1135,7 +1158,7 @@ class wps_local_compress
                 $html = $media_library->compress_details($imageID);
 
                 if ($output == 'json') {
-                    wp_send_json_error(array('msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html));
+                    wp_send_json_error(['msg' => 'file-already-compressed', 'imageID' => $imageID, 'html' => $html]);
                 } else {
                     return 'file-already-compressed';
                 }
@@ -1148,7 +1171,7 @@ class wps_local_compress
         $inProcess = get_post_meta($imageID, 'ic_bulk_running', true);
         if ($inProcess && $inProcess == 'true') {
             if ($output == 'json') {
-                wp_send_json_error(array('msg' => 'file-in-bulk', 'imageID' => $imageID));
+                wp_send_json_error(['msg' => 'file-in-bulk', 'imageID' => $imageID]);
             } else {
                 return 'file-in-bulk';
             }
@@ -1163,12 +1186,12 @@ class wps_local_compress
 
         $stats = get_post_meta($imageID, 'ic_stats', true);
         if (empty($stats) || !$stats) {
-            $stats = array();
+            $stats = [];
         }
 
-        $post_fields = array('action' => 'compressArray', 'imageID' => $imageID, 'siteUrl' => self::$siteUrl, 'maxWidth' => WPS_IC_MAXWIDTH, 'apikey' => self::$apiParams['apikey'], 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp'],);
+        $post_fields = ['action' => 'compressArray', 'imageID' => $imageID, 'siteUrl' => self::$siteUrl, 'maxWidth' => WPS_IC_MAXWIDTH, 'apikey' => self::$apiParams['apikey'], 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp'],];
 
-        $response = wp_remote_post(self::$apiURL, array('timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT));
+        $response = wp_remote_post(self::$apiURL, ['timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($response) == 200) {
             set_transient('wps_ic_compress_' . $imageID, 'sent-to-api', 30);
@@ -1179,7 +1202,7 @@ class wps_local_compress
             if ($body->success == 'true') {
                 // All good
                 if ($output == 'json') {
-                    wp_send_json_success(array(self::$apiURL, $post_fields, $body));
+                    wp_send_json_success([self::$apiURL, $post_fields, $body]);
                 } else {
                     return 'done';
                 }
@@ -1188,7 +1211,7 @@ class wps_local_compress
 
                 // Error?
                 if ($output == 'json') {
-                    wp_send_json_error(array('msg' => $body->data->msg, 'server' => $body->data->server));
+                    wp_send_json_error(['msg' => $body->data->msg, 'server' => $body->data->server]);
                 } else {
                     return 'done';
                 }
@@ -1198,7 +1221,7 @@ class wps_local_compress
             delete_transient('wps_ic_compress_' . $imageID);
 
             // We were unable to contact API
-            wp_send_json_error(array('msg' => 'unable-to-contact-api'));
+            wp_send_json_error(['msg' => 'unable-to-contact-api']);
         }
     }
 
@@ -1207,7 +1230,7 @@ class wps_local_compress
         if (defined('WPS_IC_DEBUG') && WPS_IC_DEBUG == 'true') {
             $debug_log = get_post_meta($attachmentID, 'ic_debug', true);
             if (!$debug_log) {
-                $debug_log = array();
+                $debug_log = [];
             }
             $debug_log[] = $mesage;
             update_post_meta($attachmentID, 'ic_debug', $debug_log);
@@ -1217,8 +1240,8 @@ class wps_local_compress
     public function generate_retina($arg)
     {
         $imageID = $arg;
-        $return = array();
-        $compressed = array();
+        $return = [];
+        $compressed = [];
         $filename = '';
 
         $image = $image_url = wp_get_attachment_image_src($imageID, 'full');
@@ -1272,7 +1295,7 @@ class wps_local_compress
             $retinaAPIUrl = str_replace('r:0', 'r:1', $retinaAPIUrl);
             $retinaAPIUrl = str_replace('w:1', 'w:' . $image['width'], $retinaAPIUrl);
 
-            $call = wp_remote_get($retinaAPIUrl, array('timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
+            $call = wp_remote_get($retinaAPIUrl, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
@@ -1294,10 +1317,10 @@ class wps_local_compress
         $stats = get_post_meta($imageID, 'ic_stats', true);
 
         if (empty($stats)) {
-            $stats = array();
+            $stats = [];
         }
         if (empty($return['stats'])) {
-            $return['stats'] = array();
+            $return['stats'] = [];
         }
 
         $stats = array_merge($stats, $return['stats']);
@@ -1313,7 +1336,7 @@ class wps_local_compress
     public function regenerate_thumbnails($imageID)
     {
         wp_raise_memory_limit('image');
-        $thumbs = array();
+        $thumbs = [];
         $thumbs['total']['old'] = 0;
         $thumbs['total']['new'] = 0;
 
@@ -1373,11 +1396,11 @@ class wps_local_compress
     public function restartCompressWorker()
     {
         // Prepare the request params
-        $post_fields = array(
+        $post_fields = [
             'action' => 'restartCompressWorker',
             'apikey' => self::$apiParams['apikey'],
             'siteurl' => self::$siteUrl,
-        );
+        ];
 
         // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL, [
@@ -1393,11 +1416,11 @@ class wps_local_compress
     public function restartRestoreWorker()
     {
         // Prepare the request params
-        $post_fields = array(
+        $post_fields = [
             'action' => 'restartRestoreWorker',
             'apikey' => self::$apiParams['apikey'],
             'siteurl' => self::$siteUrl,
-        );
+        ];
 
         // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL, [

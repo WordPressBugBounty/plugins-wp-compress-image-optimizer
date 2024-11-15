@@ -50,7 +50,7 @@ class wps_ic_mainwp extends wps_ic
                     wp_send_json_error('site-already-connected');
                 }
 
-                if ($body->success == true && $body->data->apikey != '' && $body->data->response_key != '') {
+                if ($body->success && $body->data->apikey != '' && $body->data->response_key != '') {
                     $options = new wps_ic_options();
                     $options->set_option('api_key', $body->data->apikey);
                     $options->set_option('response_key', $body->data->response_key);
@@ -63,6 +63,8 @@ class wps_ic_mainwp extends wps_ic
                     }
 
                     $configuration = $options->get_preset('recommended');
+                    #var_dump(print_r($configuration,true));
+
                     update_option(WPS_IC_SETTINGS, $configuration);
                     update_option(WPS_IC_PRESET, 'recommended');
                     delete_transient('wps_ic_account_status');

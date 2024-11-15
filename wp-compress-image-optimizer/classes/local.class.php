@@ -20,8 +20,8 @@ class wps_ic_local
 
   public function __construct()
   {
-    self::$imageSizes = array();
-    self::$allowed_types = array('jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png');
+    self::$imageSizes = [];
+    self::$allowed_types = ['jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png'];
 
     $location = get_option('wps_ic_geo_locate');
     if (empty($location)) {
@@ -62,7 +62,7 @@ class wps_ic_local
 	  }
 
     // Define default parameters and their values
-    self::$defaultParameters = array('webp' => '0', 'quality' => '2', 'retina' => '0', 'exif' => '0');
+    self::$defaultParameters = ['webp' => '0', 'quality' => '2', 'retina' => '0', 'exif' => '0'];
 
     // Get All Image Sizes
     self::$imageSizes = $this->getAllThumbSizes();
@@ -97,7 +97,7 @@ class wps_ic_local
       return $force_location;
     }
 
-    $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), array('timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT));
+    $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     if (wp_remote_retrieve_response_code($call) == 200) {
       $body = wp_remote_retrieve_body($call);
       $body = json_decode($body);
@@ -107,14 +107,14 @@ class wps_ic_local
 
         return $body->data;
       } else {
-        update_option('wps_ic_geo_locate', array('country' => 'EU', 'server' => 'frankfurt.zapwp.net'));
+        update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
-        return array('country' => 'EU', 'server' => 'frankfurt.zapwp.net');
+        return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
       }
     } else {
-      update_option('wps_ic_geo_locate', array('country' => 'EU', 'server' => 'frankfurt.zapwp.net'));
+      update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
-      return array('country' => 'EU', 'server' => 'frankfurt.zapwp.net');
+      return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
     }
   }
 
@@ -135,7 +135,7 @@ class wps_ic_local
       $image_sizes = array_merge($image_sizes, $_wp_additional_image_sizes);
     }
 
-    $AdditionalSizes = array('full');
+    $AdditionalSizes = ['full'];
     foreach ($AdditionalSizes as $size) {
       $image_sizes[$size]['width'] = 'full';
     }
@@ -182,7 +182,7 @@ class wps_ic_local
     return $translatedParameters;
   }
 
-  public function getDefaultParameters($override = array())
+  public function getDefaultParameters($override = [])
   {
     foreach (self::$defaultParameters as $index => $value) {
       if (isset($override[$index])) {
@@ -204,7 +204,7 @@ class wps_ic_local
 
 
   public function sendBulkToApi($imageArray, $action = 'createQueue') {
-    $body = array();
+    $body = [];
     $body['apikey'] = self::$apikey;
     $body['siteUrl'] = self::$siteUrl;
 
@@ -229,15 +229,15 @@ class wps_ic_local
 
       if (!$responseBody || $responseBody->success == 'false') {
         if ($responseBody->data->msg == 'invalid-apikey') {
-          return array('status' => 'failed', 'status_code' => 200, 'reason' => 'bad-apikey', 'call' => print_r($call,true), 'body' => print_r($body,true));
+          return ['status' => 'failed', 'status_code' => 200, 'reason' => 'bad-apikey', 'call' => print_r($call,true), 'body' => print_r($body,true)];
         } else {
-          return array('status' => 'failed', 'status_code' => 200, 'reason' => $responseBody->data->msg, 'call' => print_r($call,true), 'body' => print_r($body,true));
+          return ['status' => 'failed', 'status_code' => 200, 'reason' => $responseBody->data->msg, 'call' => print_r($call,true), 'body' => print_r($body,true)];
         }
       } else {
-        return array('status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call));
+        return ['status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call)];
       }
     } else {
-      return array('status' => 'failed', 'status_code' => wp_remote_retrieve_response_code($call), 'postBody' => $body, 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call));
+      return ['status' => 'failed', 'status_code' => wp_remote_retrieve_response_code($call), 'postBody' => $body, 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call)];
     }
   }
 
@@ -248,9 +248,9 @@ class wps_ic_local
    * @param $parameters Array of parameters from Settings
    * @return void
    */
-  public function sendToAPI($imageArray = array(), $parameters = '', $action = '')
+  public function sendToAPI($imageArray = [], $parameters = '', $action = '')
   {
-    $body = array();
+    $body = [];
     $body['apikey'] = self::$apikey;
     $body['siteurl'] = self::$siteUrl;
 
@@ -278,15 +278,15 @@ class wps_ic_local
 
       if (!$responseBody || $responseBody->success == 'false') {
         if ($responseBody->data->msg == 'invalid-apikey') {
-          return array('status' => 'failed', 'status_code' => 200, 'reason' => 'bad-apikey', 'call' => print_r($call,true), 'body' => print_r($body,true));
+          return ['status' => 'failed', 'status_code' => 200, 'reason' => 'bad-apikey', 'call' => print_r($call,true), 'body' => print_r($body,true)];
         } else {
-          return array('status' => 'failed', 'status_code' => 200, 'reason' => $responseBody->data->msg, 'call' => print_r($call,true), 'body' => print_r($body,true));
+          return ['status' => 'failed', 'status_code' => 200, 'reason' => $responseBody->data->msg, 'call' => print_r($call,true), 'body' => print_r($body,true)];
         }
       } else {
-        return array('status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call));
+        return ['status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call)];
       }
     } else {
-      return array('status' => 'failed', 'status_code' => wp_remote_retrieve_response_code($call), 'postBody' => $body, 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call));
+      return ['status' => 'failed', 'status_code' => wp_remote_retrieve_response_code($call), 'postBody' => $body, 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($call)];
     }
   }
 
@@ -298,14 +298,14 @@ class wps_ic_local
   {
     global $wpdb;
 
-    self::$uncompressedImages = array();
-    self::$compressedImages = array();
+    self::$uncompressedImages = [];
+    self::$compressedImages = [];
 
     delete_option('wps_ic_parsed_images');
     delete_option('wps_ic_BulkStatus');
 
     $bulkStatus = get_option('wps_ic_BulkStatus');
-    if (!$bulkStatus) $bulkStatus = array();
+    if (!$bulkStatus) $bulkStatus = [];
 
     $queryUncompressed = $wpdb->get_results("SELECT * FROM " . $wpdb->posts . " posts WHERE posts.post_type='attachment' AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif') AND NOT EXISTS (SELECT meta_value FROM " . $wpdb->postmeta . " meta WHERE meta.post_id=posts.ID and meta.meta_key='ic_stats')");
 
@@ -334,7 +334,7 @@ class wps_ic_local
     }
 
     update_option('wps_ic_BulkStatus', $bulkStatus);
-    return array('compressed' => self::$compressedImages, 'uncompressed' => self::$uncompressedImages);
+    return ['compressed' => self::$compressedImages, 'uncompressed' => self::$uncompressedImages];
   }
 
 
@@ -345,7 +345,7 @@ class wps_ic_local
 
     global $wpdb;
 
-    $uncompressedImages = array();
+    $uncompressedImages = [];
     $bulkStatus['foundImageCount'] = 0;
     $bulkStatus['foundThumbCount'] = 0;
 
@@ -367,7 +367,7 @@ class wps_ic_local
       update_option('wps_ic_BulkStatus', $bulkStatus);
     }
 
-    return array('uncompressed' => self::$uncompressedImages);
+    return ['uncompressed' => self::$uncompressedImages];
   }
 
 
@@ -383,8 +383,8 @@ class wps_ic_local
 
     global $wpdb;
 
-    self::$uncompressedImages = array();
-    self::$compressedImages = array();
+    self::$uncompressedImages = [];
+    self::$compressedImages = [];
 
     if (!empty($_GET['dbgBulk'])) {
       ini_set('display_errors', 1);
@@ -422,7 +422,7 @@ class wps_ic_local
       update_option('wps_ic_BulkStatus', $bulkStatus);
     }
 
-    return array('compressed' => self::$compressedImages, 'uncompressed' => self::$uncompressedImages);
+    return ['compressed' => self::$compressedImages, 'uncompressed' => self::$uncompressedImages];
   }
 
 }

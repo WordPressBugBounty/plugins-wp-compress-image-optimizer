@@ -18,8 +18,8 @@
                         echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Exclude from JS Delay</h3>
-                        <p>Add excluded files or paths as desired as we use wildcard searching.</p>
+                        <h3>Configure JS Delay</h3>
+                        <p>Add files or paths as desired as we use wildcard searching.</p>
                     </div>
                 </div>
             </div>
@@ -29,35 +29,26 @@
                     <div class="cdn-popup-content-inner">
                       <?php
                       $excludes = get_option('wpc-excludes');
-                      if (!empty($excludes['delay_js'])) {
-                        $excludes['delay_js'] = implode("\n", $excludes['delay_js']);
+                      if (!empty($excludes['lastLoadScript'])) {
+                        $excludes['lastLoadScript'] = implode("\n", $excludes['lastLoadScript']);
                       } else {
-                        $excludes['delay_js'] = '';
+                        $excludes['lastLoadScript'] = '';
+                      }
+
+                      if (!empty($excludes['deferScript'])) {
+                        $excludes['deferScript'] = implode("\n", $excludes['deferScript']);
+                      } else {
+                        $excludes['deferScript'] = '';
                       }
 
                       ?>
-                        <textarea name="wpc-excludes[delay_js]" data-setting-name="wpc-excludes" data-setting-subset="delay_js" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo $excludes['delay_js']; ?></textarea>
-
-                        <div class="wps-default-excludes-container">
-                            <div class="wps-default-excludes-enabled-checkbox-container">
-                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-third">
-                                <p>Exclude Third Party Scripts</p>
-                            </div>
-                            <div class="wps-default-excludes-enabled-checkbox-container">
-                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-themes">
-                                <p>Exclude Themes Files</p>
-                            </div>
-                            <div class="wps-default-excludes-enabled-checkbox-container">
-                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-plugins">
-                                <p>Exclude Plugins Files</p>
-                            </div>
-                            <div class="wps-default-excludes-enabled-checkbox-container">
-                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-wp">
-                                <p>Exclude WordPress Files</p>
-                            </div>
-                        </div>
+                        <h4>Delay last</h4>
+                        <textarea name="wpc-excludes[lastLoadScript]" data-setting-name="wpc-excludes" data-setting-subset="lastLoadScript" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js"><?php echo $excludes['lastLoadScript']; ?></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
+
+                        <h4>Defer</h4>
+                        <textarea name="wpc-excludes[deferScript]" data-setting-name="wpc-excludes" data-setting-subset="deferScript" class="exclude-list-textarea-value-defer" placeholder="e.g. plugin-name/js/script.js, scripts.js"><?php echo $excludes['deferScript']; ?></textarea>
 
                     </div>
                 </div>
@@ -65,9 +56,7 @@
                     <div>
                         <h3>Examples:</h3>
                         <div>
-                            <p>.svg would exclude all assets with that extension</p>
-                            <p>imagename would exclude any file with that name</p>
-                            <p>/myplugin/image.jpg would exclude that specific file</p>
+                            <p>/myplugin/image.js would exclude that specific file</p>
                             <p>/wp-content/myplugin/ would exclude everything using that path</p>
                         </div>
                     </div>

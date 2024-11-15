@@ -4,7 +4,7 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 6.21.16
+ * Version: 6.21.18
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /langs
@@ -27,7 +27,7 @@ if (empty($_GET['disableWPC']) && !(defined('DOING_CRON') && DOING_CRON)) {
   function pause_wpcompress_plugin_deactivate_delete(){
     deactivate_plugins('wp-compress-image-optimizer/wp-compress.php');
 
-    delete_plugins(array('wp-compress-image-optimizer/wp-compress.php'));
+    delete_plugins(['wp-compress-image-optimizer/wp-compress.php']);
 
     $active_plugins = get_option('active_plugins');
     $plugin_slug = 'wp-compress-image-optimizer/wp-compress.php';

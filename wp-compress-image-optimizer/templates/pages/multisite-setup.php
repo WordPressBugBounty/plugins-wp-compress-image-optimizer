@@ -8,12 +8,10 @@ if ( ! empty($_GET['tab'])) {
 }
 
 // Menu configuration
-$menu_items   = array();
-$menu_items[] = array('url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=default-settings'), 'tab' => 'default-settings', 'title' => 'Default Settings', 'class' => 'wp-mu-default-settings');
-$menu_items[] = array('url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=manage-websites'), 'tab' => 'manage-websites', 'title' => 'Manage Websites', 'class' => 'wp-mu-manage-websites');
-#$menu_items[] = array('url' => network_admin_url('admin.php?page=wpcompress-mu&tab=bulk-configure-settings'), 'tab' => 'bulk-configure-settings', 'title' => 'Bulk Configure Settings', 'class' => 'wp-mu-bulk-configure');
-#$menu_items[] = array('url' => network_admin_url('admin.php?page=wpcompress-mu&tab=bulk-connect-list'), 'tab' => 'bulk-configure-settings', 'title' => 'Bulk Connect', 'class' => 'wp-mu-bulk-configure');
-#$menu_items[] = array('url' => network_admin_url('admin.php?page=wpcompress-mu-connect'), 'tab' => '', 'title' => 'Connect Sample', 'class' => 'wp-mu-multisite-connect');
+$menu_items   = [];
+$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=default-settings'), 'tab' => 'default-settings', 'title' => 'Default Settings', 'class' => 'wp-mu-default-settings'];
+$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=manage-websites'), 'tab' => 'manage-websites', 'title' => 'Manage Websites', 'class' => 'wp-mu-manage-websites'];
+
 
 ?>
 <div class="wrap">
@@ -52,7 +50,7 @@ $menu_items[] = array('url' => network_admin_url('admin.php?page=' . $wps_ic::$s
 								switch_to_blog($site->blog_id);
 								$options              = get_option(WPS_IC_OPTIONS);
 								$apikey               = $options['api_key'];
-								$current_blog_details = get_blog_details(array('blog_id' => $site->blog_id));
+								$current_blog_details = get_blog_details(['blog_id' => $site->blog_id]);
 								$options              = get_option(WPS_IC_OPTIONS);
 
 								$connected_class = ' wps-ic-mu-not-connected';

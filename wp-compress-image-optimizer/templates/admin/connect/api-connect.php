@@ -43,8 +43,8 @@ global $wps_ic;
     echo '<h3 class="ic-title">Faster Loading Images on Autopilot</h3>';
     echo '<h4 class="ic-subtitle">We\'ll automaticall optimize and server your images from our lightning-fast global CDN for increased performance.</h4>';
     echo '<div class="ic-input-holder">';
-    echo '<a href="' . admin_url('options-general.php?page=' . $wps_ic::$slug . '') . '" class="button button-primary">Start</a>';
-    echo '<a href="' . admin_url('options-general.php?page=' . $wps_ic::$slug . '') . '" class="grey-link" style="display:block;">I want to use Legacy Mode</a>';
+    echo '<a href="' . admin_url('options-general.php?page=' . $wps_ic::$slug) . '" class="button button-primary">Start</a>';
+    echo '<a href="' . admin_url('options-general.php?page=' . $wps_ic::$slug) . '" class="grey-link" style="display:block;">I want to use Legacy Mode</a>';
     echo '</div>';
     echo '</div>';
     ?>
@@ -96,7 +96,7 @@ global $wps_ic;
         <div class="wps-ic-success-message-container-text" style="display: block">
           <h1 class="ic-title">It’s Really That Simple...</h1>
           <h3 class="ic-text">It may take a few moments to start serving all assets, but you're all set up with lightning-fast live optimization!</h3>
-          <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . ''); ?>" class="wps-ic-dashboard-btn">Continue</a>
+          <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wps-ic-dashboard-btn">Continue</a>
         </div>
       </div>
 

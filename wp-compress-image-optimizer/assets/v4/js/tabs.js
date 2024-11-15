@@ -306,6 +306,10 @@ jQuery(document).ready(function ($) {
 
         var newSettingsSate = getSettingsState();
 
+        if ($(this).closest('.wp-compress-mu-content').length > 0) {
+            return false;
+        }
+
         if (didSettingsChanged(settingsState, newSettingsSate)) {
             showSaveButton();
         } else {

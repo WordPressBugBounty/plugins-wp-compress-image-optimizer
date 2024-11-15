@@ -91,9 +91,9 @@ class wps_rewriteLogic
         global $post;
 
         if ($this->is_home_url()) {
-            $per_page_settings = isset(self::$excludes['per_page_settings']['home']) ? self::$excludes['per_page_settings']['home'] : array();
+            $per_page_settings = isset(self::$excludes['per_page_settings']['home']) ? self::$excludes['per_page_settings']['home'] : [];
         } elseif (!empty($post->ID)) {
-            $per_page_settings = isset(self::$excludes['per_page_settings'][$post->ID]) ? self::$excludes['per_page_settings'][$post->ID] : array();
+            $per_page_settings = isset(self::$excludes['per_page_settings'][$post->ID]) ? self::$excludes['per_page_settings'][$post->ID] : [];
         }
 
 
@@ -154,7 +154,7 @@ class wps_rewriteLogic
 
     public function runMissingSettings($settings)
     {
-        $required = array('css', 'css_image_urls', 'css_minify', 'js', 'js_minify', 'emoji-remove', 'preserve_exit', 'fonts');
+        $required = ['css', 'css_image_urls', 'css_minify', 'js', 'js_minify', 'emoji-remove', 'preserve_exit', 'fonts'];
         foreach ($required as $key => $value) {
             if (empty($settings[$key]) || !isset($settings[$key])) {
                 $settings[$key] = '';
@@ -211,7 +211,7 @@ class wps_rewriteLogic
 
     public function setupApiParams()
     {
-        $conditions = array('css_image_urls', 'css_minify', 'js_minify', 'preserve_exif', 'emoji-remove', 'css', 'js');
+        $conditions = ['css_image_urls', 'css_minify', 'js_minify', 'preserve_exif', 'emoji-remove', 'css', 'js'];
         foreach ($conditions as $key => $condition) {
             if (is_array($condition)) {
                 if (!isset(self::$settings[$condition[0]][$condition[1]])) {
@@ -310,7 +310,7 @@ class wps_rewriteLogic
         if (!empty(self::$exif) && self::$exif == '1') {
             self::$apiUrl = 'https://' . self::$zoneName . '/q:' . self::$settings['optimization'] . '/e:1';
         } else {
-            self::$apiUrl = 'https://' . self::$zoneName . '/q:' . self::$settings['optimization'] . '';
+            self::$apiUrl = 'https://' . self::$zoneName . '/q:' . self::$settings['optimization'];
         }
     }
 
@@ -325,9 +325,9 @@ class wps_rewriteLogic
             $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
 
             // Define an array of mobile device keywords to check against
-            $mobileKeywords = array(
+            $mobileKeywords = [
                 'android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'
-            );
+            ];
 
             // Check if the user agent contains any of the mobile device keywords
             foreach ($mobileKeywords as $keyword) {
@@ -358,7 +358,7 @@ class wps_rewriteLogic
             remove_filter('comment_text_rss', 'wp_staticize_emoji');
             remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
             add_filter('emoji_svg_url', '__return_false');
-            add_filter('tiny_mce_plugins', array($this, 'disable_emojicons_tinymce'));
+            add_filter('tiny_mce_plugins', [$this, 'disable_emojicons_tinymce']);
         }
     }
 
@@ -420,9 +420,9 @@ class wps_rewriteLogic
     public function disable_emojicons_tinymce($plugins)
     {
         if (is_array($plugins)) {
-            return array_diff($plugins, array('wpemoji'));
+            return array_diff($plugins, ['wpemoji']);
         } else {
-            return array();
+            return [];
         }
     }
 
@@ -853,7 +853,7 @@ class wps_rewriteLogic
         if (empty($html)) {
             return 'no favicon';
         } else {
-            return print_r(array($html), true);
+            return print_r([$html], true);
         }
     }
 
@@ -942,7 +942,7 @@ SCRIPT;
         $criticalCss = $this->addCriticalCSS($html);
 
         if (!empty($_GET['extractCrit'])) {
-            return print_r(array($criticalCss), true);
+            return print_r([$criticalCss], true);
         }
 
         $html = str_replace('<!--WPC_INSERT_CRITICAL-->', $criticalCss, $html);
@@ -1091,7 +1091,7 @@ SCRIPT;
         $criticalCSSExists = $criticalCSS->criticalExists();
 
         if (!empty($_GET['dbgLazyCss0'])) {
-            return print_r(array($criticalCSSExists), true);
+            return print_r([$criticalCSSExists], true);
         }
 
         if (empty($criticalCSSExists)) {
@@ -1102,7 +1102,7 @@ SCRIPT;
         $lazyCss = 'wpc-stylesheet';
 
         if (!empty($_GET['dbgLazyCss'])) {
-            return print_r(array($html), true);
+            return print_r([$html], true);
         }
 
         if (strpos($fullTag, 'rs6') !== false) {
@@ -1117,7 +1117,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbgLazyCss2'])) {
-            return print_r(array($fullTag, self::$excludes_class->criticalCSSExcludes()), true);
+            return print_r([$fullTag, self::$excludes_class->criticalCSSExcludes()], true);
         }
 
         if (self::$excludes_class->strInArray($fullTag, self::$excludes_class->criticalCSSExcludes())) {
@@ -1127,7 +1127,7 @@ SCRIPT;
         preg_match('/(href)\s*\=["\']?((?:.(?!["\']?\s+(?:\S+)=|\s*\/?[>"\']))+.)["\']?/is', $fullTag, $href);
 
         if (!empty($_GET['dbgLazyCss3'])) {
-            return print_r(array($fullTag, $href), true);
+            return print_r([$fullTag, $href], true);
         }
 
         if (!empty($href[2])) {
@@ -1153,7 +1153,7 @@ SCRIPT;
         preg_match('/(rel)\s*\=["\']?((?:.(?!["\']?\s+(?:\S+)=|\s*\/?[>"\']))+.)["\']?/is', $fullTag, $linkRel);
 
         if (!empty($_GET['dbgLazyCss4'])) {
-            return print_r(array($fullTag, $linkRel), true);
+            return print_r([$fullTag, $linkRel], true);
         }
 
         if (!empty($linkRel)) {
@@ -1172,7 +1172,7 @@ SCRIPT;
         preg_match('/(type)\s*\=["\']?((?:.(?!["\']?\s+(?:\S+)=|\s*\/?[>"\']))+.)["\']?/is', $fullTag, $linkType);
 
         if (!empty($_GET['dbgLazyCss5'])) {
-            return print_r(array($fullTag, $linkType), true);
+            return print_r([$fullTag, $linkType], true);
         }
 
         if (!empty($linkType)) {
@@ -1391,7 +1391,7 @@ SCRIPT;
 
     public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])
     {
-        $found_tags = array();
+        $found_tags = [];
 
         if (strpos($image, 'trp-gettext') !== false) {
             //TRP inserts <trp-gettext data-trpgettextoriginal=19> ... </trp-gettext> to translate alt tag, breaks our usuall regex
@@ -1411,7 +1411,7 @@ SCRIPT;
             preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
 
             if (!empty($_GET['dbg_img1'])) {
-                return array($image, $matches);
+                return [$image, $matches];
             }
 
             $attributes = [];
@@ -1434,7 +1434,7 @@ SCRIPT;
             }
 
             if (!empty($_GET['dbg_img2'])) {
-                return array($image, $attributes);
+                return [$image, $attributes];
             }
 
             foreach ($attributes as $tag => $value) {
@@ -1455,7 +1455,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbg_img3'])) {
-            return array($image, $image_tags);
+            return [$image, $image_tags];
         }
 
         if (!empty($image_tags[1])) {
@@ -1496,7 +1496,7 @@ SCRIPT;
         #preg_match_all('/\s*([a-zA-Z-:]+)\s*=\s*("|\')(.*?)\2/is', $image, $image_tags);
 
         if (!empty($_GET['dbgExtract'])) {
-            return array($image, $image_tags);
+            return [$image, $image_tags];
         }
 
         if (!empty($image_tags)) {
@@ -1524,7 +1524,7 @@ SCRIPT;
             $scriptTag = $matches[0];
 
             if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'defferFontAwesome') {
-                return print_r(array($matches), true);
+                return print_r([$matches], true);
             }
 
             if (strpos($scriptTag, 'defer') === false) {
@@ -1585,7 +1585,7 @@ SCRIPT;
         $url = $image['image'];
         $original_url = $url;
 
-        if (strpos($url, self::$zoneName) == false) {
+        if (!strpos($url, self::$zoneName)) {
             // File has already been replaced
             if ($this->defaultExcluded($url)) {
                 return $tag;
@@ -1618,7 +1618,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbgBgRep'])) {
-            return print_r(array($newUrl, self::$apiUrl), true);
+            return print_r([$newUrl, self::$apiUrl], true);
         }
 
         return $return_tag;
@@ -1658,7 +1658,7 @@ SCRIPT;
         $url = $image['image'];
 
 
-        if (strpos($url, self::$zoneName) == false) {
+        if (!strpos($url, self::$zoneName)) {
 
             if ($this->defaultExcluded($url)) {
                 return $tag;
@@ -1700,7 +1700,7 @@ SCRIPT;
         $url = $image['image'];
         $original_url = $url;
 
-        if (strpos($url, self::$zoneName) == false) {
+        if (!strpos($url, self::$zoneName)) {
             // File has already been replaced
             if ($this->defaultExcluded($url)) {
                 return $tag;
@@ -1758,7 +1758,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbgAjax'])) {
-            return print_r(array($_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]), true);
+            return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
         }
 
         if ($this->checkIsSlashed($image[0])) {
@@ -1768,11 +1768,11 @@ SCRIPT;
         }
 
         $newImageElement = '';
-        $original_img_tag = array();
+        $original_img_tag = [];
         $original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
 
         if (!empty($_GET['ajaxImage'])) {
-            return print_r(array($original_img_tag, $imageElement), true);
+            return print_r([$original_img_tag, $imageElement], true);
         }
 
         if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
@@ -1831,7 +1831,7 @@ SCRIPT;
             return $html[0];
         }
 
-        if (strpos($url, self::$zoneName) == false) {
+        if (!strpos($url, self::$zoneName)) {
             // File has already been replaced
             if ($this->defaultExcluded($url)) {
                 return $url;
@@ -1881,7 +1881,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbgAjax'])) {
-            return print_r(array($_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]), true);
+            return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
         }
 
         // Woocommerce ajax load more?
@@ -1915,7 +1915,7 @@ SCRIPT;
         $isLogo = false;
         $isSlider = false;
 
-        if (strpos($image[0], self::$zoneName) == false) {
+        if (!strpos($image[0], self::$zoneName)) {
             // File has already been replaced
             if ($this->defaultExcluded($image[0])) {
                 return $image[0];
@@ -1954,7 +1954,7 @@ SCRIPT;
         }
 
         // Original URL was
-        $original_img_tag = array();
+        $original_img_tag = [];
         $original_img_tag['original_tags'] = $this->getAllTags($image[0], []);
 
         if (!empty($_GET['dbg_img'])) {
@@ -1997,7 +1997,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbg_img_src'])) {
-            return print_r(array('src_is_empty' => empty($original_img_tag['original_tags']['src']), 'data-src_is_empty' => empty($original_img_tag['original_tags']['data-src']), 'data-cp-src_is_empty' => empty($original_img_tag['original_tags']['data-cp-src']), 'src' => $image_source, 'tags' => $original_img_tag), true);
+            return print_r(['src_is_empty' => empty($original_img_tag['original_tags']['src']), 'data-src_is_empty' => empty($original_img_tag['original_tags']['data-src']), 'data-cp-src_is_empty' => empty($original_img_tag['original_tags']['data-cp-src']), 'src' => $image_source, 'tags' => $original_img_tag], true);
         }
 
         $original_img_tag['original_src'] = $image_source;
@@ -2006,7 +2006,7 @@ SCRIPT;
          * Fetch image actual size
          */
         if (!empty($original_img_tag['original_tags']['width'])) {
-            $size = array();
+            $size = [];
             $size[0] = $original_img_tag['original_tags']['width'];
             $size[1] = $original_img_tag['original_tags']['height'];
         } else {
@@ -2072,7 +2072,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbg_tags'])) {
-            return print_r(array($original_img_tag), true);
+            return print_r([$original_img_tag], true);
         }
 
 
@@ -2201,7 +2201,7 @@ SCRIPT;
 
 
         if (!empty($_GET['dbg_tag'])) {
-            return print_r(array('$isLogo' => $isLogo, 'skipLazy' => $skipLazy, 'adaptiveEnabled' => self::$adaptiveEnabled, '$lazyLoadedImages' => self::$lazyLoadedImages, '$lazyLoadedImagesLimit' => self::$lazyLoadedImagesLimit, '$lazyEnabled' => self::$lazyEnabled, '$nativeLazyEnabled' => self::$nativeLazyEnabled, '$isSlider' => $isSlider, '$original_img_tag' => $original_img_tag), true);
+            return print_r(['$isLogo' => $isLogo, 'skipLazy' => $skipLazy, 'adaptiveEnabled' => self::$adaptiveEnabled, '$lazyLoadedImages' => self::$lazyLoadedImages, '$lazyLoadedImagesLimit' => self::$lazyLoadedImagesLimit, '$lazyEnabled' => self::$lazyEnabled, '$nativeLazyEnabled' => self::$nativeLazyEnabled, '$isSlider' => $isSlider, '$original_img_tag' => $original_img_tag], true);
         }
 
         // PerfMatters Fix for lazy loading
@@ -2282,7 +2282,7 @@ SCRIPT;
 
         if ($isLogo || !empty(self::$removeSrcset) && self::$removeSrcset == '1') {
             unset($original_img_tag['original_tags']['srcset'], $original_img_tag['original_tags']['data-srcset']);
-        } elseif (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1' && $skipLazy == false) {
+        } elseif (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1' && !$skipLazy) {
             if (!empty($original_img_tag['original_tags']['srcset'])) {
                 $build_image_tag .= 'data-srcset="' . $original_img_tag['original_tags']['srcset'] . '" ';
             } elseif (!empty($original_img_tag['original_tags']['data-srcset'])) {
@@ -2381,7 +2381,7 @@ SCRIPT;
         $build_image_tag .= '/>';
 
         if (!empty($_GET['dbgAjaxEnd'])) {
-            return print_r(array($_POST, $_GET, wp_doing_ajax(), self::$isAjax, $image[0]), true);
+            return print_r([$_POST, $_GET, wp_doing_ajax(), self::$isAjax, $image[0]], true);
         }
 
         if (!empty($_GET['dbg_buildimg'])) {
@@ -2403,11 +2403,11 @@ SCRIPT;
         }
 
         $newImageElement = '';
-        $original_img_tag = array();
+        $original_img_tag = [];
         $original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
 
         if (!empty($_GET['ajaxImage'])) {
-            return print_r(array($original_img_tag, $imageElement), true);
+            return print_r([$original_img_tag, $imageElement], true);
         }
 
         if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {

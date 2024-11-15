@@ -7,9 +7,9 @@ if (!class_exists('wps_ic_url_key')) {
 class wps_criticalCss
 {
 
-  static $API_URL = WPS_IC_CRITICAL_API_URL;
-  static $API_URL_PING = WPS_IC_CRITICAL_API_URL_PING;
-  static $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
+    static public $API_URL = WPS_IC_CRITICAL_API_URL;
+    static public $API_URL_PING = WPS_IC_CRITICAL_API_URL_PING;
+    static public $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
   public static $url;
   public $urlKey;
   public $serverRequest;
@@ -104,7 +104,7 @@ class wps_criticalCss
 
   public function getCriticalPages()
   {
-    $pages = array();
+    $pages = [];
 
     $posts = get_posts(['posts_per_page' => '-1', 'post_type' => 'page']);
     $totalPosts = count($posts);
@@ -128,7 +128,7 @@ class wps_criticalCss
 
         $permalink = get_permalink($post->ID);
 
-        if (file_exists(WPS_IC_CRITICAL . '' . $link . '_critical.css')) {
+        if (file_exists(WPS_IC_CRITICAL . $link . '_critical.css')) {
           $pages[$post->ID]['css'] = 'Done';
         } else {
           $pages[$post->ID]['css'] = 'Not Generated';
@@ -161,7 +161,7 @@ class wps_criticalCss
         $criticalAssets = json_decode(get_post_meta($post->ID, 'wpc_critical_assets', true), true);
 
         $permalink = get_permalink($post->ID);
-        if (file_exists(WPS_IC_CRITICAL . '' . $link . '_critical.css')) {
+        if (file_exists(WPS_IC_CRITICAL . $link . '_critical.css')) {
           $pages[$post->ID]['css'] = 'Done';
         } else {
           $pages[$post->ID]['css'] = 'Not Generated';
@@ -193,7 +193,7 @@ class wps_criticalCss
 
         $criticalAssets = json_decode(get_option('wpc_critical_assets_home'), true);
 
-        if (file_exists(WPS_IC_CRITICAL . '' . $link . '_critical.css')) {
+        if (file_exists(WPS_IC_CRITICAL . $link . '_critical.css')) {
           $pages['home']['css'] = 'Done';
         } else {
           $pages['home']['css'] = 'Not Generated';
@@ -230,7 +230,7 @@ class wps_criticalCss
 
         $permalink = get_permalink($post->ID);
 
-        if (file_exists(WPS_IC_CRITICAL . '' . $link . '_critical.css')) {
+        if (file_exists(WPS_IC_CRITICAL . $link . '_critical.css')) {
           $pages[$post->ID]['css'] = 'Done';
         } else {
           $pages[$post->ID]['css'] = 'Not Generated';
@@ -265,7 +265,7 @@ class wps_criticalCss
 
   public function sendCriticalUrlPing()
   {
-    $urlList = array();
+    $urlList = [];
 
     $homePage = get_option('page_on_front');
     $blogPage = get_option('page_for_posts');
@@ -295,6 +295,10 @@ class wps_criticalCss
 
   public function sendCriticalUrl($realUrl = '', $postID = 0)
   {
+    while (ob_get_level()) {
+      ob_end_clean();
+    }
+    ob_start();
     $type = 'meta';
 
     if (empty($realUrl)) {
@@ -653,10 +657,10 @@ class wps_criticalCss
   public function criticalExists($returnDir = false)
   {
     if (!empty($_GET['debugCritical_replace'])) {
-      return array(WPS_IC_CRITICAL, $this->urlKey, 'file' => WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css', 'exists' => file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css'));
+      return [WPS_IC_CRITICAL, $this->urlKey, 'file' => WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css', 'exists' => file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css')];
     }
 
-    $return = array();
+    $return = [];
 
     if (file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css')) {
       if ($returnDir) {

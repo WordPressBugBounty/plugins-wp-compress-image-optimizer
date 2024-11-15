@@ -5,34 +5,29 @@
  */
 
 switch_to_blog(1);
-$geolocation = get_option('wps_ic_geo_locate');
+$options = new wps_ic_options();
 
 include WPS_IC_DIR . 'classes/gui-v4.class.php';
+
 $multisiteDefaultSettings = get_option('multisite_default_settings');
 
 if (empty($multisiteDefaultSettings['qualityLevel'])) {
-  $multisiteDefaultSettings['qualityLevel'] = '2';
+    $multisiteDefaultSettings = $options->getDefault();
 }
 
 $multisiteDefaultSettings['optimizationLevel'] = $multisiteDefaultSettings['qualityLevel'];
 $multisiteDefaultSettings['optimization'] = $multisiteDefaultSettings['qualityLevel'];
+
 $gui = new wpc_gui_v4($multisiteDefaultSettings);
 
-if (empty($geolocation)) {
-  $geolocation = $this->geoLocate();
-} else {
-  $geolocation = (object)$geolocation;
-}
-
-$geolocation_text = $geolocation->country_name . ' (' . $geolocation->continent_name . ')';
-
-$multisiteDefaultSettings = get_option('multisite_default_settings');
-if (empty($multisiteDefaultSettings)) {
-  $multisiteDefaultSettings = array('live-cdn' => 'live', 'retina' => '1', 'generate_webp' => '1', 'generate_adaptive' => '1', 'lazy' => '1', 'js' => '0', 'css' => '0', 'css_image_urls' => '0', 'external-url' => '0', 'remove-render-blocking' => '0', 'background-sizing' => '0', 'replace-all-link' => '0', 'emoji-remove' => '1', 'on-upload' => '0', 'defer-js' => '0', 'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'], 'search-through' => 'html');
-  update_option('multisite_default_settings', $multisiteDefaultSettings);
-}
-
 $settings = $multisiteDefaultSettings;
+
+$cacheLocked = false;
+$cssLocked = false;
+$delayLocked = false;
+
+$cssEnabled = $gui::isFeatureEnabled('css');
+$delayEnabled = $gui::isFeatureEnabled('delay-js');
 
 ?>
 <form method="POST" action="#" class="wpc-ic-mu-default-settting-form">
@@ -46,16 +41,6 @@ $settings = $multisiteDefaultSettings;
                     <span class="wpc-ic-mu-site-status-circle"></span>
                     <h3><?php echo 'Default Settings'; ?></h3>
                     <h5><?php echo 'setup your default configuration'; ?></h5>
-                </div>
-                <div style="display: inline-block;vertical-align: middle;margin-left:20px;">
-                    <div class="checkbox-container-v3-inverse wps-ic-ajax-checkbox wps-ic-ajax-live-cdn" style="display: inline-block;">
-                        <div class="checkbox-label-left">Local</div>
-                        <input type="checkbox" id="live-cdn-toggle" value="live" name="options[live-cdn]" data-setting_name="live-cdn" data-setting_value="live" <?php echo checked($settings['live-cdn'], 'live'); ?>/>
-                        <div>
-                            <label for="live-cdn-toggle" class="live-cdn-toggle label-live-cdn-toggle"></label>
-                        </div>
-                        <div class="checkbox-label-right">Live</div>
-                    </div>
                 </div>
             </div>
             <div class="wpc-ic-mu-site-right-side">
@@ -71,6 +56,32 @@ $settings = $multisiteDefaultSettings;
                         <div class="wpc-settings-tab-content-inner">
                             <div class="wpc-tab-content-box">
                               <?php echo $gui::optimizationLevel('Optimization Level', 'optimizationLevel', 'Select your preferred image compression strength.', 'tab-icons/optimization-level.svg', '', 'optimizationLevel'); ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="wpc-settings-tabs">
+                    <div class="wpc-settings-tab-content">
+                        <div class="wpc-settings-tab-content-inner">
+                            <div class="wpc-tab-content-box">
+                                <?php echo $gui::checkboxTabTitleCheckbox('Performance Features', 'Optimize your images & scripts in real-time via our top-rated global CDN.', 'tab-icons/real-time.svg', '', '', '', '', false); ?>
+
+                                <div class="wpc-spacer"></div>
+
+                                <div class="wpc-items-list-row real-time-optimization">
+
+                                    <?php echo $gui::checkboxDescription_v4('Enable Caching', 'Speed up your site by statically caching entire pages.', '', '', ['cache', 'advanced'], $cacheLocked, '', ''); ?>
+
+                                    <?php
+                                    echo $gui::checkboxDescription_v4('Critical CSS', 'Optimize initial page load by removing unused CSS.', '', '', ['critical', 'css'], $cssLocked, '1', '', false, '', $cssEnabled); ?>
+
+                                    <?php
+                                    echo $gui::checkboxDescription_v4('Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, '', 'delay-js', $delayLocked, 'right', '', false, '', $delayEnabled); ?>
+
+
+
+
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -126,7 +137,7 @@ $settings = $multisiteDefaultSettings;
                                 <div class="wpc-items-list-row mb-20">
                                   <?php echo $gui::checkboxDescription_v4('Remove Srcset', 'Disable theme srcset to avoid unintended conflicts with adaptive images or lazy loading.', false, '0', 'remove-srcset', false, 'right'); ?>
 
-                                  <?php echo $gui::inputDescription_v4('Max Image Width', 'Insert maximum dimensions of images, we will scale your original images to that width.', false, '0', 'max-original-width', false, 'right'); ?>
+                                  <?php echo $gui::checkboxDescription_v4('Font SubSetting', 'Font subsetting is the practice of embedding only the necessary characters from a font, reducing file size and improving load times.', false, false, 'font-subsetting', false, 'right', false, false, ''); ?>
                                 </div>
                             </div>
                         </div>

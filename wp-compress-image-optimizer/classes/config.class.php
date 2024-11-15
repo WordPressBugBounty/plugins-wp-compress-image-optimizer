@@ -51,7 +51,7 @@ class wps_ic_config
   {
     require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
     require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
-    return new WP_Filesystem_Direct(new StdClass());
+    return new WP_Filesystem_Direct(new stdClass());
   }
 
   public function exists($path)
