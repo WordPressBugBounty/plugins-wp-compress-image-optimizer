@@ -1378,7 +1378,7 @@ class wps_ic_combine_css
 
         if ((strpos($matched_url, '.eot') !== false || strpos($matched_url, '.woff') !== false || strpos($matched_url, '.woff2') !== false || strpos($matched_url, '.ttf') !== false) && $this->settings['serve']['fonts'] == 1) {
             if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
-                if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
+                if (strpos($matched_url, 'icon') !== false || strpos($matched_url, 'awesome') !== false || strpos($matched_url, 'lightgallery') !== false || strpos($matched_url, 'gallery') !== false || strpos($matched_url, 'side-cart-woocommerce') !== false) {
                     $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
                 } else {
                     $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
