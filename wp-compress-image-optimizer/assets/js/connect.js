@@ -1,8 +1,19 @@
 jQuery(document).ready(function ($) {
 
 
+    function showProApiKey() {
+        $('.wpc-pro-version-btn').on('click', function (e) {
+            e.preventDefault();
+            $('.wps-ic-selection-form').fadeOut(function () {
+                $('.wps-ic-pro-form-field').show();
+            });
+            return false;
+        });
+    }
+
+
     function popupModes(data) {
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             position: 'center',
             html: jQuery('#select-mode').html(),
@@ -47,8 +58,9 @@ jQuery(document).ready(function ($) {
             var cdn = $('.form-check-input', modes_popup).prop('checked');
 
             $.post(wps_ic_vars.ajaxurl, {
-                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce, activation: true}, function (response) {
-                if (response.success){
+                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce, activation: true
+            }, function (response) {
+                if (response.success) {
                     window.location.reload();
                 } else {
                     //error?
@@ -64,7 +76,7 @@ jQuery(document).ready(function ($) {
      * Single Checkbox
      */
     function hookCheckbox() {
-        $('label', '.swal2-content').on('click', function(){
+        $('label', '.swal2-content').on('click', function () {
             var parent = $(this).parent();
             var checkbox = $('input[type="checkbox"]', parent);
             $(checkbox).prop('checked', !$(checkbox).prop('checked'));
@@ -92,7 +104,7 @@ jQuery(document).ready(function ($) {
             e.preventDefault();
 
             var parent = $('.wpc-popup-columns', '.swal2-container');
-            var selectBar = $('.wpc-select-bar .wpc-select-bar-inner','.swal2-container');
+            var selectBar = $('.wpc-select-bar .wpc-select-bar-inner', '.swal2-container');
             var selectBarValue = $(this).data('slider-bar');
             var modeSelect = $(this).data('mode');
 
@@ -102,14 +114,14 @@ jQuery(document).ready(function ($) {
             $('.wpc-popup-column', parent).removeClass('wpc-active');
             $(this).addClass('wpc-active');
 
-            var checked = $('.form-check-input','.wpc-popup-option-checkbox').is(':checked');
+            var checked = $('.form-check-input', '.wpc-popup-option-checkbox').is(':checked');
 
             if (modeSelect == 'safe') {
                 // Safe mode - turn off CDN
-                $('.form-check-input','.wpc-popup-option-checkbox').removeAttr('checked').prop('checked', false);
+                $('.form-check-input', '.wpc-popup-option-checkbox').removeAttr('checked').prop('checked', false);
             } else {
                 if (!checked) {
-                    $('.form-check-input','.wpc-popup-option-checkbox').attr('checked','checked').prop('checked', true);
+                    $('.form-check-input', '.wpc-popup-option-checkbox').attr('checked', 'checked').prop('checked', true);
                 }
             }
 
@@ -117,50 +129,104 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    var swalFunc = function open_connect_popup() {
-        Swal.fire({
+
+    function liteConnectPopup() {
+        WPCSwal.fire({
             title: '',
             showClass: {
                 popup: 'in'
             },
-            html: jQuery('.wps-ic-connect-form').html(),
-            width: 700,
+            html: jQuery('.wps-ic-lite-connect-form').html(),
+            width: 900,
             position: 'center',
             customClass: {
                 container: 'in',
-                popup: 'wps-ic-connect-popup'
-            }, //customClass:'wps-ic-connect-popup',
+                popup: 'wps-ic-lite-connect-popup'
+            },
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
             allowOutsideClick: false,
             onOpen: function () {
 
+                showProApiKey();
+
                 $('.wps-ic-connect-retry').on('click', function (e) {
                     e.preventDefault();
-                    swalFunc();
+                    liteConnectPopup();
                     return false;
                 });
 
                 var swal_container = $('.swal2-container');
                 var form = $('#wps-ic-connect-form', swal_container);
-                $('#wps-ic-connect-form', swal_container).on('submit', function (e) {
+                var submitBtn = $('.wps-ic-submit-btn', swal_container);
+
+                $('.wps-ic-lite-input-container', swal_container).on('click', function () {
+                    $('.wps-ic-lite-input-container', swal_container).removeClass('wpc-error');
+                });
+
+
+                var form_container = $('.wps-lite-form-container', swal_container);
+                var success_message = $('.wps-ic-success-message-container', swal_container);
+                var error_message_container = $('.wps-ic-error-message-container', swal_container);
+                var error_message_text = $('.wps-ic-invalid-apikey', swal_container);
+                var unableToCommunicate = $('.wps-ic-unable-to-communicate', swal_container);
+                var already_connected = $('.wps-ic-site-already-connected', swal_container);
+                var success_message_text = $('.wps-ic-success-message-container-text', swal_container);
+                var success_message_choice_text = $('.wps-ic-success-message-choice-container-text', swal_container);
+                var success_message_buttons = $('.wps-ic-success-message-choice-container-text a', swal_container);
+                var finishing = $('.wps-ic-finishing-container', swal_container);
+                var loader = $('.wps-ic-loading-container', swal_container);
+                var loaderLite = $('.wpc-loading-lite', swal_container);
+                var tests = $('.wps-ic-tests-container', swal_container);
+                var init = $('.wps-ic-init-container', swal_container);
+
+
+                $('.wps-use-lite').on('click', function (e) {
                     e.preventDefault();
 
-                    var form_container = $('.wps-ic-form-container', swal_container);
-                    var success_message = $('.wps-ic-success-message-container', swal_container);
-                    var error_message_container = $('.wps-ic-error-message-container', swal_container);
-                    var error_message_text = $('.wps-ic-error-message-container-text', swal_container);
-                    var already_connected = $('.wps-ic-error-already-connected', swal_container);
-                    var success_message_text = $('.wps-ic-success-message-container-text', swal_container);
-                    var success_message_choice_text = $('.wps-ic-success-message-choice-container-text', swal_container);
-                    var success_message_buttons = $('.wps-ic-success-message-choice-container-text a', swal_container);
-                    var finishing = $('.wps-ic-finishing-container', swal_container);
                     var nonce = $('input[name="nonce"]', swal_container).val();
+                    var apikey = $('input[name="apikey"]', form_container).val();
 
-                    var loader = $('.wps-ic-loading-container', swal_container);
-                    var tests = $('.wps-ic-tests-container', swal_container);
-                    var init = $('.wps-ic-init-container', swal_container);
+
+                    $(init, swal_container).hide();
+                    $(form_container).hide();
+                    $(loader).hide();
+                    $(loaderLite).show();
+
+
+                    $.post(ajaxurl, {
+                        action: 'wps_lite_connect',
+                        nonce: nonce,
+                        timeout: 20000
+                    }, function (response) {
+                        if (response.success) {
+                            // Connect
+                            $('.wps-ic-connect-inner').addClass('padded');
+                            WPCSwal.close();
+                            window.location.reload();
+                        } else {
+                            if (response.data.msg == 'api-issue') {
+                                $(loaderLite).hide();
+                                $(unableToCommunicate).show();
+                            }
+                        }
+                    });
+
+                    return false;
+                });
+
+
+                $('#wps-ic-connect-form', swal_container).on('submit', function (e) {
+
+                    var nonce = $('input[name="nonce"]', swal_container).val();
+                    var apikey = $('input[name="apikey"]', form_container).val();
+
+                    if (apikey == '' || typeof apikey == "undefined") {
+                        $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
+                        //$('.wps-ic-lite-input-field-error', swal_container).show();
+                        return false;
+                    }
 
                     $(already_connected).hide();
                     $(error_message_text).hide();
@@ -169,9 +235,8 @@ jQuery(document).ready(function ($) {
                     $(init, swal_container).hide();
                     $(form_container).hide();
                     $(loader).show();
+                    $(loaderLite).hide();
                     $(tests).hide();
-
-                    var apikey = $('input[name="apikey"]', form_container).val();
 
                     $.post(ajaxurl, {
                         action: 'wps_ic_live_connect',
@@ -182,93 +247,10 @@ jQuery(document).ready(function ($) {
                         if (response.success) {
                             // Connect
                             $('.wps-ic-connect-inner').addClass('padded');
-                            Swal.close();
-                            popupModes(response.data);
+                            WPCSwal.close();
 
-                            /**
-                             * Figure out what optimization mode is enabled
-                             */
-                            if (response.data.liveMode == '0') {
-                                var liveBtn = $('.wpc-live-btn', '.wpc-select-mode-containers');
-                                var liveBtnText = $('.wpc-live-btn-text', liveBtn);
-                                $(liveBtn).addClass('wpc-disabled-option');
-                                $(liveBtnText).addClass('wpc-disabled-button');
-                                $(liveBtnText).html('Disabled');
-                            }
-
-                            if (response.data.localMode == '0') {
-                                var localBtn = $('.wpc-local-btn', '.wpc-select-mode-containers');
-                                var localBtnText = $('.wpc-local-btn-text', localBtn);
-                                $(localBtn).addClass('wpc-disabled-option');
-                                $(localBtnText).addClass('wpc-disabled-button');
-                                $(localBtnText).html('Disabled');
-                            }
-
-                            $('.wpc-live-btn', success_message_choice_text).on('click', function (e) {
-                                e.preventDefault();
-
-                                var btn = $(this);
-                                if ($(btn).hasClass('wpc-disabled-option')) {
-                                    return false;
-                                }
-
-                                $.post(ajaxurl, {
-                                    action: 'wpc_ic_set_mode',
-                                    value: 'recommended'
-                                }, function (response) {
-                                    $(loader).hide();
-                                    $(tests).hide();
-                                    setTimeout(function (){
-                                        window.location.reload();
-                                    },1000);
-                                });
-                            });
-
-                            $('.wpc-local-btn', success_message_choice_text).on('click', function (e) {
-                                e.preventDefault();
-
-                                var btn = $(this);
-                                if ($(btn).hasClass('wpc-disabled-option')) {
-                                    return false;
-                                }
-
-                                $.post(ajaxurl, {
-                                    action: 'wpc_ic_set_mode',
-                                    value: 'safe'
-                                }, function (response) {
-                                    $(loader).hide();
-                                    $(tests).hide();
-                                    setTimeout(function (){
-                                        window.location.reload();
-                                    },1000);
-                                });
-                            });
-
-
-                            $(success_message_buttons).on('click', function (e) {
-                                e.preventDefault();
-
-                                var btn = $(this);
-                                if ($(btn).hasClass('wpc-disabled-option')) {
-                                    return false;
-                                }
-
-                                $(finishing).show();
-                                $(success_message).hide();
-                                $(success_message_choice_text).hide();
-
-                                setTimeout(function () {
-                                    $(loader).hide();
-                                    $(tests).hide();
-                                }, 2000);
-                            });
-
-                            $(loader).hide();
-                            $(tests).hide();
+                            window.location.reload();
                         } else {
-                            // Not OK
-                            // msg = 'Your api key does not match our records.';
-                            //                 title = 'API Key Validation';
 
                             if (response.data.msg == 'site-already-connected') {
                                 $(already_connected).show();
@@ -279,6 +261,9 @@ jQuery(document).ready(function ($) {
                                 $(success_message).hide();
                                 $(loader).hide();
                                 $(tests).hide();
+                            } else if (response.data.msg == 'api-issue') {
+                                $(loaderLite).hide();
+                                $(unableToCommunicate).show();
                             } else {
                                 $(error_message_text).show();
                                 $(error_message_container).show();
@@ -295,13 +280,20 @@ jQuery(document).ready(function ($) {
                     });
 
                     return false;
-                })
+                });
 
             }
         });
     }
 
-    swalFunc();
+
+    liteConnectPopup();
+
+    $('.wpc-add-access-key-btn,.wpc-add-access-key-btn-pro').on('click', function (e) {
+        e.preventDefault();
+        liteConnectPopup();
+        return false;
+    });
 
 
 });

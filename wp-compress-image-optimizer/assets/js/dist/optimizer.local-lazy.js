@@ -19,6 +19,43 @@ checkMobile();
 var preloadRunned = false;
 var windowWidth = window.innerWidth;
 
+
+document.addEventListener('DOMContentLoaded', function() {
+    const preloadedLinks = new Set(); // To avoid duplicate preloads
+
+    document.body.addEventListener('mouseover', function() {
+        // Check if the hovered element is a link
+        const link = event.target.closest('a');
+        if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
+
+        // Preload the link if it meets certain criteria
+        if (link.origin === location.origin) { // Same origin links only
+            preloadLink(link.href);
+        }
+    });
+
+    document.body.addEventListener('touchstart', function(){
+        const link = event.target.closest('a');
+        if (!link || preloadedLinks.has(link.href)) return;
+
+        if (link.origin === location.origin) {
+            preloadLink(link.href);
+        }
+    });
+
+    function preloadLink(url) {
+        preloadedLinks.add(url); // Mark this URL as preloaded
+        fetch(url, { method: 'GET', mode: 'no-cors' })
+            .then(function () { // Use traditional function syntax
+                //console.log('Preloaded: ' + url);
+            })
+            .catch(function (err) { // Use traditional function syntax
+                //console.error('Preload failed for: ' + url, err);
+            });
+    }
+});
+
+
 window.addEventListener('DOMContentLoaded', function () {
     //registerEvents();
 });
@@ -37,41 +74,6 @@ function registerEvents() {
         });
     });
 }
-
-window.addEventListener('DOMContentLoaded', function () {
-    // Function to detect if the browser is Safari
-    function isSafari() {
-        return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    }
-
-    // Only run the code if Safari is detected
-    if (isSafari()) {
-        // Add your Safari-specific code here
-        var iframes = [].slice.call(document.querySelectorAll("iframe.wpc-iframe-delay"));
-
-        if (iframes.length > 0) {
-            iframes.forEach(function (element, index) {
-                var promise = new Promise(function (resolve, reject) {
-                    var iframeUrl = element.getAttribute('data-wpc-src');
-                    element.setAttribute('src', iframeUrl);
-                    element.removeAttribute('data-wpc-src');
-                    element.classList.remove("wpc-iframe-delay");
-
-                    element.addEventListener('load', function () {
-                        resolve();
-                    });
-
-                    element.addEventListener('error', function () {
-                        reject();
-                    });
-                });
-
-                // Assuming customPromiseFlag is an array where you want to store promises
-                customPromiseFlag.push(promise);
-            });
-        }
-    }
-});
 
 function preloadTimeout(event) {
 

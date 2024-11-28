@@ -10,6 +10,7 @@ class wps_ic_options
     public static $options;
     public static $recommendedSettings;
     public static $aggressiveSettings;
+    public static $liteSettings;
     public static $safeSettings;
     public static $preloadSettings;
     public $purgeList;
@@ -25,8 +26,8 @@ class wps_ic_options
                 'png' => ['critical'],
                 'gif' => ['critical'],
                 'svg' => ['critical'],
-                'fonts' => ['critical']
             ],
+            'fonts' => ['critical'],
             'critical' => ['css' => ['critical']],
             'background-sizing' => ['critical'],
             'css_minify' => ['combine'],
@@ -35,20 +36,23 @@ class wps_ic_options
             'js_minify' => ['combine'],
             'delay-js' => ['combine'],
             'font-subsetting' => ['cdn','critical'],
+            'imagesPreset' => ['cdn','critical'],
+            'cdnAll' => ['cdn','critical'],
         ];
 
         $this::$recommendedSettings = [
+            'imagesPreset' => '1',
+            'cdnAll' => '1',
             'live-cdn' => '1',
             'serve' => [
                 'jpg' => '1',
                 'png' => '1',
                 'gif' => '1',
                 'svg' => '1',
-                'fonts' => '0'
             ],
             'css' => 1,
             'js' => 0,
-            'fonts' => 0,
+            'fonts' => 1,
             'generate_adaptive' => 1,
             'generate_webp' => 1,
             'retina' => 1,
@@ -69,14 +73,14 @@ class wps_ic_options
             'iframe-lazy' => 1,
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
-            'critical' => ['css' => 0],
+            'critical' => ['css' => 1],
             'css_minify' => 0,
             'css_combine' => 0,
             'inline-css' => 0,
             'js_combine' => 0,
             'js_minify' => 0,
             'js_defer' => 0,
-            'delay-js' => 0,
+            'delay-js' => 1,
             'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
@@ -97,13 +101,14 @@ class wps_ic_options
         ];
 
         $this::$safeSettings = [
+            'imagesPreset' => '0',
+            'cdnAll' => '0',
             'live-cdn' => '0',
             'serve' => [
                 'jpg' => '0',
                 'png' => '0',
                 'gif' => '0',
                 'svg' => '0',
-                'fonts' => '0'
             ],
             'css' => '0',
             'js' => '0',
@@ -152,7 +157,67 @@ class wps_ic_options
             'preload-crit-fonts' => '0'
         ];
 
+        $this::$liteSettings = [
+            'imagesPreset' => '1',
+            'cdnAll' => '0',
+            'live-cdn' => '0',
+            'serve' => [
+                'jpg' => '0',
+                'png' => '0',
+                'gif' => '0',
+                'svg' => '0',
+            ],
+            'css' => '0',
+            'js' => '0',
+            'fonts' => '0',
+            'generate_adaptive' => '1',
+            'generate_webp' => '1',
+            'retina' => '1',
+            'retina-in-srcset' => '0',
+            'nativeLazy' => '1',
+            'lazy' => '0',
+            'remove-srcset' => '1',
+            'background-sizing' => '0',
+            'qualityLevel' => '1',
+            'optimization' => 'lossless',
+            'on-upload' => '0',
+            'emoji-remove' => '1',
+            'disable-oembeds' => '0',
+            'disable-dashicons' => '0',
+            'disable-gutenberg' => '0',
+            'external-url' => '0',
+            'disable-cart-fragments' => '0',
+            'gtag-lazy' => 0,
+            'fontawesome-lazy' => 0,
+            'iframe-lazy' => 0,
+            'critical' => ['css' => '1'],
+            'css_minify' => '0',
+            'css_combine' => '0',
+            'inline-css' => '0',
+            'js_combine' => '0',
+            'js_minify' => '0',
+            'js_defer' => '0',
+            'delay-js' => '1',
+            'font-subsetting' => '0',
+            'scripts-to-footer' => '0',
+            'inline-js' => '0',
+            'lazySkipCount' => '4',
+            'disable-trigger-dom-event' => '0',
+            'cache' => ['advanced' => '1', 'mobile' => '1', 'minify' => '0'],
+            'local' => ['media-library' => '0'],
+            'status' => [
+                'hide_in_admin_bar' => '0',
+                'hide_cache_status' => '0',
+                'hide_critical_css_status' => '0',
+                'hide_preload_status' => '0'
+            ],
+            'hide_compress' => '0',
+            'preload-crit-fonts' => '0'
+        ];
+
         $this::$aggressiveSettings = [
+            'imagesPreset' => '1',
+            'cdnAll' => '1',
             'live-cdn' => '1',
             'serve' => [
                 'jpg' => '1',
@@ -222,6 +287,9 @@ class wps_ic_options
         $settings = '';
 
         switch ($preset) {
+            case 'lite':
+                $settings = self::$liteSettings;
+                break;
             case 'recommended':
                 $settings = self::$recommendedSettings;
                 break;
@@ -446,24 +514,6 @@ class wps_ic_options
     public function set_recommended_options()
     {
         update_option(WPS_IC_SETTINGS, self::$recommendedSettings);
-    }
-
-
-    /**
-     * Set missing options
-     */
-    public function set_missing_options()
-    {
-        $settings = [];
-
-        $settings = get_option(WPS_IC_SETTINGS);
-
-        if (!$settings) {
-            $settings['live-cdn'] = '1';
-        }
-
-        // Save the settings
-        update_option(WPS_IC_SETTINGS, $settings);
     }
 
 

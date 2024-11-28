@@ -38,21 +38,8 @@ class wps_ic_requests
 
     $call = wp_remote_post($url, $params);
     return $call;
-//    if (wp_remote_retrieve_response_code($call) == 200) {
-//      // Successful response
-//      $body = wp_remote_retrieve_body($call);
-//      $bodyDecoded = json_decode($body);
-//
-//      if (empty($bodyDecoded)) {
-//        return $body;
-//      } else {
-//        return $bodyDecoded;
-//      }
-//
-//    } else {
-//      return false;
-//    }
   }
+
 
   public function GET($baseUrl, $params, $configParams = ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]) {
 

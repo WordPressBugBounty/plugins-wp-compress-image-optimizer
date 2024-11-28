@@ -1,6 +1,43 @@
 var preloadRunned = false;
 var windowWidth = window.innerWidth;
 
+
+document.addEventListener('DOMContentLoaded', function() {
+    const preloadedLinks = new Set(); // To avoid duplicate preloads
+
+    document.body.addEventListener('mouseover', function() {
+        // Check if the hovered element is a link
+        const link = event.target.closest('a');
+        if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
+
+        // Preload the link if it meets certain criteria
+        if (link.origin === location.origin) { // Same origin links only
+            preloadLink(link.href);
+        }
+    });
+
+    document.body.addEventListener('touchstart', function(){
+        const link = event.target.closest('a');
+        if (!link || preloadedLinks.has(link.href)) return;
+
+        if (link.origin === location.origin) {
+            preloadLink(link.href);
+        }
+    });
+
+    function preloadLink(url) {
+        preloadedLinks.add(url); // Mark this URL as preloaded
+        fetch(url, { method: 'GET', mode: 'no-cors' })
+            .then(function () { // Use traditional function syntax
+                //console.log('Preloaded: ' + url);
+            })
+            .catch(function (err) { // Use traditional function syntax
+                //console.error('Preload failed for: ' + url, err);
+            });
+    }
+});
+
+
 window.addEventListener('DOMContentLoaded', function () {
     //registerEvents();
 });

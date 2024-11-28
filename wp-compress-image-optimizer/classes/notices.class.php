@@ -44,7 +44,7 @@ class wps_ic_notices extends wps_ic {
 			add_action( 'admin_notices', array( $this, 'activate_list_mode' ) );
 		}
 
-		if ( empty( parent::$response_key ) ) {
+		if ( empty( parent::$api_key ) ) {
 			add_action( 'all_admin_notices', array( $this, 'connect_api_message' ) );
 		}
 

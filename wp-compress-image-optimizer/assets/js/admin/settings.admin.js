@@ -96,7 +96,7 @@ jQuery(document).ready(function ($) {
             $(form).hide(function () {
                 $(loading).show();
 
-                Swal.fire({
+                WPCSwal.fire({
                     title: '',
                     html: $('#wps-ic-connection-tests').html(),
                     showConfirmButton: false,
@@ -106,7 +106,7 @@ jQuery(document).ready(function ($) {
                         jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                             e.preventDefault();
 
-                            swal.close();
+                            WPCSwal.close();
                         });
                     }
                 });
@@ -143,9 +143,9 @@ jQuery(document).ready(function ($) {
                                                                         $(form).hide();
                                                                         $(loading).hide();
                                                                         /*var swal = $('#swal2-content');*/
-                                                                        swal.close();
+                                                                        WPCSwal.close();
 
-                                                                        Swal.fire({
+                                                                        WPCSwal.fire({
                                                                             title: '',
                                                                             html: $('#wps-ic-connection-tests-done').html(),
                                                                             showConfirmButton: false,
@@ -155,7 +155,7 @@ jQuery(document).ready(function ($) {
                                                                                 jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                                                                                     e.preventDefault();
 
-                                                                                    swal.close();
+                                                                                    WPCSwal.close();
                                                                                 });
                                                                             }
                                                                         });
@@ -246,14 +246,14 @@ jQuery(document).ready(function ($) {
                 title = 'Image Restore';
             }
 
-            swal.close();
+            WPCSwal.close();
 
             $('ul>li', '#wps-ic-test-error').html('<span class="fas"></span> ' + title);
             $('ul>li span', '#wps-ic-test-error').addClass('failed');
             $('ul>li span', '#wps-ic-test-error').addClass('fa-times');
             $('.ic-error-msg', '#wps-ic-test-error').html(msg);
 
-            Swal.fire({
+            WPCSwal.fire({
                 title: '',
                 html: $('#wps-ic-test-error').html(),
                 showConfirmButton: false,
@@ -263,7 +263,7 @@ jQuery(document).ready(function ($) {
                     jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                         e.preventDefault();
                         window.location.reload();
-                        swal.close();
+                        WPCSwal.close();
                     });
 
                 },

@@ -80,7 +80,7 @@ jQuery(document).ready(function ($) {
                         $(cname_configured).html(response.data.configured).show();
                         $('.btn-close').on('click', function (e) {
                             e.preventDefault();
-                            Swal.close();
+                            WPCSwal.close();
                             return false;
                         });
                     }, 1000);
@@ -152,7 +152,7 @@ jQuery(document).ready(function ($) {
                         $(cname_configured).html(response.data.configured).show();
                         $('.btn-close').on('click', function (e) {
                             e.preventDefault();
-                            Swal.close();
+                            WPCSwal.close();
                             return false;
                         });
                     }, 1000);
@@ -206,7 +206,7 @@ jQuery(document).ready(function ($) {
                 $(label_enabled).hide();
                 $(cname_disabled).show();
                 $(label_disabled).show();
-                Swal.close();
+                WPCSwal.close();
             }
         });
     }
@@ -222,7 +222,7 @@ jQuery(document).ready(function ($) {
         var popupID = $(this).data('popup');
         var popupWidth = $(this).data('popup-width');
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '', html: jQuery('#' + popupID).html(), width: popupWidth, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                 container: 'no-padding-popup-bottom-bg switch-legacy-popup',
             }, onOpen: function () {
@@ -261,7 +261,7 @@ jQuery(document).ready(function ($) {
 
     $('.btn-close').on('click', function (e) {
         e.preventDefault();
-        Swal.close();
+        WPCSwal.close();
         return false;
     });
 
@@ -292,7 +292,7 @@ jQuery(document).ready(function ($) {
             console.log($('.exclude-list-textarea-value', popup).val())
             $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_save_excludes_settings', group_name: setting_group, setting_name: setting_name, excludes: excludes, default_enabled: default_enabled}, function (response) {
                 if (response.success){
-                    Swal.close();
+                    WPCSwal.close();
                 }
             });
 

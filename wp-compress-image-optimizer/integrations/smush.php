@@ -12,6 +12,20 @@ class wps_ic_smush extends wps_ic_integrations
     $this->plugin = 'Smush';
   }
 
+  public function getConflictList()
+  {
+    $perfmatters_options = get_option( 'perfmatters_options' );
+    $conflict = [];
+
+    if ( isset($this->wps_settings['lazy']) && $this->wps_settings['lazy'] == '1' ) {
+      if ( $this->settings->get('lazy_load') ) {
+        $conflict[] ='lazy';
+      }
+    }
+
+    return $conflict;
+  }
+
   public function do_checks()
   {
     if ( ! method_exists( $this->settings, 'get' ) ){

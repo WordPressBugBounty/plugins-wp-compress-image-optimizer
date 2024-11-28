@@ -288,15 +288,21 @@ class wps_ic_menu extends wps_ic
             die();
         }
 
-        $response_key = '';
-        if (!empty(self::$options['response_key'])) {
-            $response_key = self::$options['response_key'];
+        $apikey = '';
+        if (!empty(self::$options['api_key'])) {
+            $apikey = self::$options['api_key'];
         }
 
-        if (empty($response_key) || !$response_key) {
-            $this->templates->get_admin_page('connect/api-connect');
-            $this->templates->get_admin_page('advanced_settings_v4');
+        if (empty($apikey) || !$apikey) {
+            // Old Version
+            #$this->templates->get_admin_page('connect/api-connect');
+            #$this->templates->get_admin_page('advanced_settings_v4');
+            // Lite Version
+            $this->templates->get_admin_page('connect/lite-api-connect');
+            $this->templates->get_admin_page('lite_settings');
         } else {
+
+
             if (!empty($_GET['view'])) {
                 switch ($_GET['view']) {
                     case 'preload':
@@ -310,8 +316,14 @@ class wps_ic_menu extends wps_ic
                         break;
                 }
             } else {
-                $this->templates->get_admin_page('advanced_settings_v4');
+                $gui = get_option(WPS_IC_GUI);
+                if (empty($gui) || (!empty($gui) && $gui == 'lite')) {
+                    $this->templates->get_admin_page('lite_settings');
+                } else {
+                    $this->templates->get_admin_page('advanced_settings_v4');
+                }
             }
+
         }
     }
 

@@ -5,17 +5,17 @@ jQuery(document).ready(function ($) {
     var searchPending = false;
     var searchTerm = '';
 
-    $(document).on('input', '#live-search', function() {
+    $(document).on('input', '#live-search', function () {
         doSearch()
     });
 
-    $(document).on('keypress', '#live-search', function(e) {
+    $(document).on('keypress', '#live-search', function (e) {
         if (e.which === 13) {
             e.preventDefault();
         }
     });
 
-    function doSearch(){
+    function doSearch() {
         searchTerm = $('#live-search').val();
         if (fetchRunning === false) {
             fetchPosts(selectedTypes, currentPage);
@@ -23,6 +23,26 @@ jQuery(document).ready(function ($) {
             searchPending = true;
         }
     }
+
+    $('.wpc-change-ui-to-simple').on('click', function (e){
+        e.preventDefault();
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wpsChangeGui',
+                view:'lite',
+                nonce: ajaxVar.nonce,
+            },
+            success: function (response) {
+                window.location.reload();
+            }
+        });
+
+        return false;
+    });
+
 
     $('.wps-ic-stop-bulk-restore,.wps-ic-stop-bulk-compress').on('click', function (e) {
         e.preventDefault();
@@ -158,7 +178,7 @@ jQuery(document).ready(function ($) {
                 },
             });
 
-            $(document).on('click', '.LockedTooltip', function(event) {
+            $(document).on('click', '.LockedTooltip', function (event) {
                 window.open('https://wpcompress.com/optimize/', '_blank');
                 event.preventDefault();
                 event.stopPropagation();
@@ -214,7 +234,7 @@ jQuery(document).ready(function ($) {
 
         var popupHtml = '<div id="' + ID + '" class="cdn-popup-inner ajax-settings-popup bottom-border exclude-list-popup">' + $('#custom-cdn .cdn-popup-loading').html() + '</div>';
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             html: popupHtml,
             width: 750,
@@ -269,7 +289,7 @@ jQuery(document).ready(function ($) {
             }, function (response) {
                 if (response.success) {
                     updatePosts(selectedTypes, currentPage);
-                    Swal.close();
+                    WPCSwal.close();
                 }
             });
 
@@ -483,7 +503,7 @@ jQuery(document).ready(function ($) {
 
         var popupHtml = '<div id="' + ID + '" class="cdn-popup-inner ajax-settings-popup bottom-border exclude-list-popup">' + $('#custom-cdn .cdn-popup-loading').html() + '</div>';
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             html: popupHtml,
             width: 750,
@@ -534,7 +554,7 @@ jQuery(document).ready(function ($) {
             var exclude_wp = '0';
             var exclude_third = '0';
 
-console.log('lol')
+            console.log('lol')
             if ($('.wps-exclude-third', popup).is(':checked')) {
                 exclude_third = 1;
             }
@@ -569,7 +589,7 @@ console.log('lol')
                 exclude_third: exclude_third
             }, function (response) {
                 if (response.success) {
-                    Swal.close();
+                    WPCSwal.close();
                 }
             });
 
@@ -581,7 +601,7 @@ console.log('lol')
     var globalSettings;
     var locked;
 
-    function fetchPosts(selected, page) {
+    function fetchPosts(selected, page, optimizedResponse) {
         var offset = (page - 1) * itemsPerPage;
         var pagesHtml = '';
         var selectedTypesOnThisCall = selected;
@@ -610,13 +630,13 @@ console.log('lol')
                                                     ${createPreloadedIndicator(item)}
                                                         ${item.title}    
                                                         ${createPreloadStatus(item)}`;
-                                                        if (local === false) {
-                                                            pagesHtml += `<div class="wpc-dropdown-row-arrow">
+                    if (local === false) {
+                        pagesHtml += `<div class="wpc-dropdown-row-arrow">
                                                             <i class="icon-down-open"></i>
                                                     </div>`;
-                                                            pagesHtml += `${createRetestButton(item)}`;
-                                                        }
-                                                        pagesHtml += `</div>
+                        pagesHtml += `${createRetestButton(item)}`;
+                    }
+                    pagesHtml += `</div>
                                                     <div class="wpc-dropdown-row-right-side">
                                                         <ul>`;
                     if (response.data.allow_live === '1') {
@@ -625,23 +645,23 @@ console.log('lol')
                     pagesHtml += `<li> ${createIndicator(item, 'adaptive', globalSettings['generate_adaptive'], 'generate-adaptive-tooltip', locked['adaptive'])}</li>
                                                          <li> ${createIndicator(item, 'advanced_cache', globalSettings.cache.advanced, 'advanced-cache-tooltip', locked['caching'])}</li>`;
                     if (local === false) {
-                        pagesHtml += `<li> ${createIndicator(item, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip',locked['css'])}</li>`;
+                        pagesHtml += `<li> ${createIndicator(item, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip', locked['css'])}</li>`;
                     }
-                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js', globalSettings['delay-js'], 'delay-js-tooltip',locked['delay-js'])}</li>
+                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js', globalSettings['delay-js'], 'delay-js-tooltip', locked['delay-js'])}</li>
                                                         </ul>
                                                         <div class="per-page-settings-cog"></div>
                                                     </div>
                                                 </div>`;
 
 
-
-                    if (item.id === 'home' && (!!(item?.test?.desktop ?? false) || !!(item?.test?.mobile ?? false))){
+                    if (item.id === 'home' && (!!(item?.test?.desktop ?? false) || !!(item?.test?.mobile ?? false))) {
                         pagesHtml += `<div class="test-results wpc-dropdown-row-data" style="display:flex">`;
                     } else {
                         pagesHtml += ` <div class="test-results wpc-dropdown-row-data" style="display:flex;display:none">`;
                     }
 
                     if (local === false) {
+                        console.log('644');
                         pagesHtml += insertResultsRow(item)
                     }
                     pagesHtml += '</div></div>';
@@ -678,12 +698,12 @@ console.log('lol')
                 //     position: 'top-left',
                 // });
 
-                if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses){
+                if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses) {
                     //something was clikcked before call finished, call again
                     updateOptimizationStatus();
                 }
                 fetchRunning = false;
-                if (searchPending === true){
+                if (searchPending === true) {
                     doSearch();
                     searchPending = false;
                 }
@@ -752,6 +772,7 @@ console.log('lol')
     function insertResultsRow(item) {
         var html = '';
 
+        // console.log(response);
 // Determine if a test has been run
         var testRun = item.test && (item.test.desktop || item.test.mobile);
 
@@ -768,6 +789,13 @@ console.log('lol')
 // Test is Running
         var isRunningDisplay = ((item.running === '1' || item.runningOther === '1') && !testRun) ? 'block' : 'none';
         html += `<div class="test-is-running" style="display: ${isRunningDisplay};"><p>We are running optimizations, please wait...</p></div>`;
+
+        // if (response.data && response.data.optimizationStatus && response.data.optimizationStatus.status) {
+        //     html += `<div class="current-status" style="display: ${isRunningDisplay};">
+        //         <p>Current Status: ${response.data.optimizationStatus.status}</p>
+        //      </div>`;
+        // }
+
 
 // Test Not Run - Optimize and Run Performance Test button
         if ((item.running === '0' && item.runningOther === '0') && (item.cacheGenerated !== '1' || item.critGenerated !== '1')) {
@@ -812,11 +840,12 @@ console.log('lol')
         if (typeof item.errors === 'object' && item.errors !== null && 'skip' in item.errors) {
             return `<div class="wpc-page-status-gray">
                 <i class="icon-gray"></i>
-                `+item.errors.skip+`: `+httpErrorCodes[item.errors.skip]+`
+                ` + item.errors.skip + `: ` + httpErrorCodes[item.errors.skip] + `
                 </div>`;
         }
 
-        if (item.preloaded === '1') {
+        //if (item.preloaded === '1') {
+        if (true) {
             return `<div class="wpc-page-status">
                 <i class="wpc-icon-check"></i>
                 Optimized
@@ -859,7 +888,8 @@ console.log('lol')
                 return '<div class="wpc-circle-status"><div class="lds-ring"><div></div><div></div><div></div><div></div></div></div>';
             }
         }
-        if (preloaded === '1') {
+        //if (preloaded === '1') {
+        if (true) {
             return '<div class="wpc-circle-status"><div class="wpc-critical-circle wpc-done"></div></div>';
         }
         return '<div class="wpc-circle-status"><div class="wpc-critical-circle"></div></div>';
@@ -868,7 +898,7 @@ console.log('lol')
     function createIndicator(pageItem, settingName, globalSetting, tooltipText, locked = false) {
         var pageSetting = pageItem[settingName];
 
-        if (locked){
+        if (locked) {
             return `<div class="${settingName}"><div class="page_off exclude_dropdown_anchor LockedTooltip" data-setting_state="0" data-pop-text="<i class='wpc-sparkle-icon'></i> Optimize Plan Required"></div></div>`;
         }
 
@@ -884,7 +914,7 @@ console.log('lol')
         }
 
         var disabled = '';
-        if (pageItem.running === '1'){
+        if (pageItem.running === '1') {
             disabled = 'wpc-disable-clickable'
         }
 
@@ -935,20 +965,20 @@ console.log('lol')
             success: function (response) {
                 globalSettings = response.data.global_settings;
                 locked = response.data['locked'];
-                $.each(response.data.pages, function(index, newItem) {
-                        var $row = $('#optimizationTable').find(`#${newItem.id}`);
+                $.each(response.data.pages, function (index, newItem) {
+                    var $row = $('#optimizationTable').find(`#${newItem.id}`);
 
-                        var newPreloadedHtml = createPreloadedIndicator(newItem);
-                        var $preloadedElement = $row.find('.wpc-dropdown-row-left-side .wpc-circle-status');
-                        if ($preloadedElement.html() !== newPreloadedHtml) {
-                            $preloadedElement.replaceWith(newPreloadedHtml);
-                        }
+                    var newPreloadedHtml = createPreloadedIndicator(newItem);
+                    var $preloadedElement = $row.find('.wpc-dropdown-row-left-side .wpc-circle-status');
+                    if ($preloadedElement.html() !== newPreloadedHtml) {
+                        $preloadedElement.replaceWith(newPreloadedHtml);
+                    }
 
-                        var newPreloadedStatus = createPreloadStatus(newItem);
-                        var $preloadedStatus = $row.find('.wpc-dropdown-row-left-side .wpc-page-status');
-                        if ($preloadedStatus.html() !== newPreloadedStatus) {
-                            $preloadedStatus.replaceWith(newPreloadedStatus);
-                        }
+                    var newPreloadedStatus = createPreloadStatus(newItem);
+                    var $preloadedStatus = $row.find('.wpc-dropdown-row-left-side .wpc-page-status');
+                    if ($preloadedStatus.html() !== newPreloadedStatus) {
+                        $preloadedStatus.replaceWith(newPreloadedStatus);
+                    }
 
                     var newRetestButton = createRetestButton(newItem);
                     var $retestButton = $row.find('.wpc-test-redo');
@@ -957,10 +987,10 @@ console.log('lol')
                     }
 
 
-                        var newStatusHtml = '';
-                        if (response.data.allow_live === '1') {
-                            newStatusHtml += `<li> ${createIndicator(newItem, 'cdn', globalSettings['live-cdn'], 'live-cdn-tooltip', locked['csn'])}</li>`;
-                        }
+                    var newStatusHtml = '';
+                    if (response.data.allow_live === '1') {
+                        newStatusHtml += `<li> ${createIndicator(newItem, 'cdn', globalSettings['live-cdn'], 'live-cdn-tooltip', locked['csn'])}</li>`;
+                    }
                     newStatusHtml += `
                     <li> ${createIndicator(newItem, 'adaptive', globalSettings['generate_adaptive'], 'generate-adaptive-tooltip', locked['adaptive'])}</li>
                     <li> ${createIndicator(newItem, 'advanced_cache', globalSettings.cache.advanced, 'advanced-cache-tooltip', locked['caching'])}</li>`;
@@ -971,58 +1001,59 @@ console.log('lol')
                     <li> ${createIndicator(newItem, 'delay_js', globalSettings['delay-js'], 'delay-js-tooltip', locked['delay-js'])}</li>
                 `;
                     var $statusElement = $row.find('.wpc-dropdown-row-right-side ul');
-                        if ($statusElement.html().trim() !== newStatusHtml.trim()) {
-                            $statusElement.html(newStatusHtml);
-                        }
+                    if ($statusElement.html().trim() !== newStatusHtml.trim()) {
+                        $statusElement.html(newStatusHtml);
+                    }
 
-                        var newTestResultsHtml = insertResultsRow(newItem);
-                        var $testResultsElement = $row.find('.test-results');
-                        var shouldUpdate =
-                            $testResultsElement.find('.test-is-running').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-is-running').css('display') ||
-                            $testResultsElement.find('.test-not-runned').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-not-runned').css('display') ||
-                            $testResultsElement.find('.wpc-test-results').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-results').css('display') ||
-                            $testResultsElement.find('.wpc-test-redo').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-redo').css('display');
+                    console.log('985');
+                    var newTestResultsHtml = insertResultsRow(newItem);
+                    var $testResultsElement = $row.find('.test-results');
+                    var shouldUpdate =
+                        $testResultsElement.find('.test-is-running').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-is-running').css('display') ||
+                        $testResultsElement.find('.test-not-runned').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-not-runned').css('display') ||
+                        $testResultsElement.find('.wpc-test-results').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-results').css('display') ||
+                        $testResultsElement.find('.wpc-test-redo').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-redo').css('display');
 
-                        if (shouldUpdate && local === false) {
-                            $testResultsElement.html(newTestResultsHtml);
+                    if (shouldUpdate && local === false) {
+                        $testResultsElement.html(newTestResultsHtml);
 
-                            // Circle Progress Bar
-                            setTimeout(function () {
-                                $('.circle-progress-bar', $testResultsElement).circleProgress({
-                                    size: 50,
-                                    startAngle: -Math.PI / 6 * 3,
-                                    lineCap: 'round',
-                                    thickness: '5',
-                                    fill: {
-                                        gradient: ["#61CB70", "#61CB70"],
-                                        gradientAngle: Math.PI / 7
-                                    },
-                                    emptyFill: 'rgba(176,224,176,0.5)'
-                                });
-                            }, 200); // 200ms timeout
-                        }
+                        // Circle Progress Bar
+                        setTimeout(function () {
+                            $('.circle-progress-bar', $testResultsElement).circleProgress({
+                                size: 50,
+                                startAngle: -Math.PI / 6 * 3,
+                                lineCap: 'round',
+                                thickness: '5',
+                                fill: {
+                                    gradient: ["#61CB70", "#61CB70"],
+                                    gradientAngle: Math.PI / 7
+                                },
+                                emptyFill: 'rgba(176,224,176,0.5)'
+                            });
+                        }, 200); // 200ms timeout
+                    }
                 });
                 initTooltipster()
 
                 var totalPages = response.data.total_pages;
-                var paginationHtml =  createPaginationHtml(currentPage, totalPages);
+                var paginationHtml = createPaginationHtml(currentPage, totalPages);
 
 
-                    var $paginationElement = $('#pagination');
-                    if ($paginationElement.html().trim() !== paginationHtml.trim()) {
-                        $paginationElement.html(paginationHtml);
-                    }
+                var $paginationElement = $('#pagination');
+                if ($paginationElement.html().trim() !== paginationHtml.trim()) {
+                    $paginationElement.html(paginationHtml);
+                }
 
-                if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses){
+                if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses) {
                     //something was clikcked before call finished, call again
                     updateOptimizationStatus();
                 }
                 fetchRunning = false;
-                if (searchPending === true){
+                if (searchPending === true) {
                     doSearch();
                     searchPending = false;
                 }
-                }
+            }
 
         });
     }
@@ -1034,7 +1065,7 @@ console.log('lol')
     $('#optimizationTable').on('click', '.exclude_dropdown_anchor', function (e) {
         e.stopPropagation(); // Prevent event bubbling
 
-        if ($(this).hasClass('LockedTooltip')){
+        if ($(this).hasClass('LockedTooltip')) {
             return;
         }
 
@@ -1170,7 +1201,7 @@ console.log('lol')
                 }
             });
         } else {
-            setTimeout(function() {
+            setTimeout(function () {
                 updatePosts(selectedTypes, currentPage);
             }, 1000)
             $.ajax({
@@ -1251,7 +1282,6 @@ console.log('lol')
         var ttfb = calculateGains(results.desktop.before.ttfb, results.desktop.after.ttfb, 'ttfb');
         var pageSize = calculateGains(results.desktop.before.pageSize, results.desktop.after.pageSize, 'pageSize');
         var requests = calculateGains(results.desktop.before.requests, results.desktop.after.requests, 'requests');
-
 
 
         return `
@@ -1423,9 +1453,9 @@ console.log('lol')
             // Update and animate the page title only if not preparing
             if (!isPreparing) {
                 pageTitleContainer.addClass('wpc-message-exit');
-                setTimeout(function() {
+                setTimeout(function () {
                     pageTitleContainer.html(newPageTitle + ': ').removeClass('wpc-message-exit').addClass('wpc-message-enter');
-                    setTimeout(function() {
+                    setTimeout(function () {
                         pageTitleContainer.removeClass('wpc-message-enter');
                     }, 500);
                 }, 500);
@@ -1441,9 +1471,9 @@ console.log('lol')
             } else {
                 if (pageTitleContainer.text() !== newPageTitle + ': ' && !isPreparing) {
                     pageTitleContainer.addClass('wpc-message-exit');
-                    setTimeout(function() {
+                    setTimeout(function () {
                         pageTitleContainer.html(newPageTitle + ': ').removeClass('wpc-message-exit').addClass('wpc-message-enter');
-                        setTimeout(function() {
+                        setTimeout(function () {
                             pageTitleContainer.removeClass('wpc-message-enter');
                         }, 500);
                     }, 500);
@@ -1451,11 +1481,11 @@ console.log('lol')
 
                 messageContainer.addClass('wpc-message-exit');
 
-                setTimeout(function() {
+                setTimeout(function () {
                     var message = statusMessages[currentMessageIndex];
                     messageContainer.html(message).removeClass('wpc-message-exit').addClass('wpc-message-enter');
 
-                    setTimeout(function() {
+                    setTimeout(function () {
                         messageContainer.removeClass('wpc-message-enter');
                     }, 500);
 
@@ -1470,7 +1500,7 @@ console.log('lol')
 
         if (lastOptimizationId !== newOptimizationId || currentMessageIndex === 0) {
             displayNextMessage();
-            messageDisplayInterval = setInterval(function() {
+            messageDisplayInterval = setInterval(function () {
                 if (currentMessageIndex < statusMessages.length - 1) {
                     displayNextMessage();
                 }
@@ -1479,9 +1509,9 @@ console.log('lol')
     }
 
 
-
     var local = false
     var callInProgress = false
+
     function updateOptimizationStatus() {
         // Make an AJAX call to check the optimization status
         if (!callInProgress) {
@@ -1489,7 +1519,7 @@ console.log('lol')
             if (typeof selectedOptimizes === "undefined" || selectedOptimizes === null) {
                 //We are not on our settings page
                 selectedOptimizes = false;
-            } else if (selectedOptimizes.length === 0){
+            } else if (selectedOptimizes.length === 0) {
                 selectedOptimizes = 'do-not-optimize';
             }
 
@@ -1512,30 +1542,29 @@ console.log('lol')
                     if (response.data.connectivity === 'failed') {
                         local = true;
                     }
+
                     var optimized;
                     var total;
                     if ($('#optimizationTable').find('div').length === 0 && $('.wpc-optimization-status').find('div').length > 0) {
                         //if table not populatd - first load
-                        fetchPosts(selectedTypes, currentPage);
+                        fetchPosts(selectedTypes, currentPage, response);
                         //Optimization bar update
                         optimized = response.data.optimized || 0;
-                        $('.optimized-pages-text').each(function() {
+                        total = response.data.total || 0;
+                        $('.optimized-pages-text').each(function () {
                             var $this = $(this);
-                            var countTo = optimized;
+                            var countTo = total;
                             $this.text('0'); // Ensure it starts from 0
-                            if (optimized == 0){
-                                return;
-                            }
-                            $({ countNum: $this.text() }).animate({
+                            $({countNum: $this.text()}).animate({
                                     countNum: countTo
                                 },
                                 {
                                     duration: 3000,
                                     easing: 'swing',
-                                    step: function() {
+                                    step: function () {
                                         $this.text(Math.floor(this.countNum).toLocaleString());
                                     },
-                                    complete: function() {
+                                    complete: function () {
                                         $this.text(this.countNum.toLocaleString());
                                     }
                                 });
@@ -1547,52 +1576,56 @@ console.log('lol')
                         updatePosts(selectedTypes, currentPage);
 
                         optimized = response.data.optimized || 0;
-                        $('.optimized-pages-text').text(optimized);
+                        total = response.data.total || 0;
+                        //$('.optimized-pages-text').text(optimized);
+                        $('.optimized-pages-text').text(total);
                         $('.optimized-pages-bottom-text').text('Pages Optimized');
                         $('.wpc-smart-optimization-title').text('Smart Optimization in Progress...');
                     }
 
-                        if (response.data.optimizationStatus) {
-                            if (response.data.optimizationStatus.pageTitle && response.data.optimizationStatus.pageTitle.trim() !== ''){
-                                $('.wpc-smart-optimization-text').html('We’re warming up the cache and running optimizations for <span style="font-weight: 600; color: #4C4C4C">' + limitStringLength(response.data.optimizationStatus.pageTitle, 35) + '</span>');
-                            }
-                            $('.wpc-page-optimizations-running').show();
-                            $('.wpc-start-optimizations, .wpc-optimization-complete, .wpc-preparing-optimization, .wpc-optimization-locked').hide();
-                            if (animationFrameId === null) {
-                                startBarAnimation()
-                            }
-                            if (typeof optimizationCheckInterval === 'undefined') {
-                                optimizationCheckInterval = setInterval(updateOptimizationStatus, 5000);
-                            }
-                        } else if ($('.wpc-optimization-status').find('div').length === 0){
-                            //Not our settings page
+                    if (response.data.optimizationStatus) {
+                        if (response.data.optimizationStatus.pageTitle && response.data.optimizationStatus.pageTitle.trim() !== '') {
+                            $('.wpc-smart-optimization-text').html('We’re warming up the cache and running optimizations for <span style="font-weight: 600; color: #4C4C4C">' + limitStringLength(response.data.optimizationStatus.pageTitle, 35) + '</span>');
+                        }
+                        $('.wpc-page-optimizations-running').show();
+                        $('.wpc-start-optimizations, .wpc-optimization-complete, .wpc-preparing-optimization, .wpc-optimization-locked').hide();
+                        if (animationFrameId === null) {
+                            startBarAnimation()
+                        }
+                        if (typeof optimizationCheckInterval === 'undefined') {
+                            optimizationCheckInterval = setInterval(updateOptimizationStatus, 5000);
+                        }
+                    } else if ($('.wpc-optimization-status').find('div').length === 0) {
+                        //Not our settings page
+                    } else {
+
+                        stopBarAnimation();
+                        clearInterval(optimizationCheckInterval);
+                        fetchPosts(selectedTypes, currentPage);
+                        optimized = response.data.optimized || 0;
+                        total = response.data.total || 0;
+                        //$('.optimized-pages-text').text(optimized);
+                        $('.optimized-pages-text').text(total);
+                        $('.optimized-pages-bottom-text').text('Pages Optimized');
+                        $('.wpc-smart-optimization-title').text('Smart Optimization + Performance');
+                        $('.wpc-smart-optimization-text').text('No need to lift a finger, your website is intelligently optimized around the clock based on demand.');
+                        $('.optimizations-progress-bar-text').hide();
+                        $('.wpc-optimizer-running').hide();
+                        if (response.data.optimized < response.data.total) {
+                            $('.wpc-start-optimizations').show();
+                            $('.wpc-optimization-complete').hide();
                         } else {
-
-                            stopBarAnimation();
-                            clearInterval(optimizationCheckInterval);
-                            fetchPosts(selectedTypes, currentPage);
-                            optimized = response.data.optimized || 0;
-                            $('.optimized-pages-text').text(optimized);
-                            $('.optimized-pages-bottom-text').text('Pages Optimized');
-                            $('.wpc-smart-optimization-title').text('Smart Optimization + Performance');
-                            $('.wpc-smart-optimization-text').text('No need to lift a finger, your website is intelligently optimized around the clock based on demand.');
-                            $('.optimizations-progress-bar-text').hide();
-                            $('.wpc-optimizer-running').hide();
-                            if (response.data.optimized < response.data.total) {
-                                $('.wpc-start-optimizations').show();
-                                $('.wpc-optimization-complete').hide();
-                            } else {
-                                $('.wpc-optimization-complete').show();
-                                $('.wpc-start-optimizations').hide();
-                            }
+                            $('.wpc-optimization-complete').show();
+                            $('.wpc-start-optimizations').hide();
                         }
+                    }
 
 
-                        lastResponse = response;
-                        if (selectedOptimizesOnThisCall !== selectedOptimizes) {
-                            //something was clikcked before call finished, call again
-                            updateOptimizationStatus();
-                        }
+                    lastResponse = response;
+                    if (selectedOptimizesOnThisCall !== selectedOptimizes) {
+                        //something was clikcked before call finished, call again
+                        updateOptimizationStatus();
+                    }
 
 
                 },
@@ -1727,7 +1760,7 @@ console.log('lol')
                 tableHtml += '</table>';
 
                 // Display the tables in a SweetAlert
-                Swal.fire({
+                WPCSwal.fire({
                     title: 'API Test Results',
                     html: tableHtml,
                     width: '500px'
@@ -1735,7 +1768,7 @@ console.log('lol')
             },
             error: function (error) {
                 // Display error in SweetAlert
-                Swal.fire({
+                WPCSwal.fire({
                     title: 'Error!',
                     text: 'An error occurred while fetching the data.',
                     icon: 'error'
@@ -1795,9 +1828,8 @@ console.log('lol')
     }
 
 
-
     //DROPDOWN SELECTORS
-    $('.selector-dropdown').on('click', '.dropdown-header', function(e) {
+    $('.selector-dropdown').on('click', '.dropdown-header', function (e) {
         e.stopPropagation(); // Prevent event bubbling
         var $dropdownMenu = $(this).next('.dropdown-menu');
 
@@ -1807,7 +1839,7 @@ console.log('lol')
         $dropdownMenu.slideToggle(200);
     });
 
-    $('.selector-dropdown').on('click', '.dropdown-item', function(e) {
+    $('.selector-dropdown').on('click', '.dropdown-item', function (e) {
         e.stopPropagation(); // Prevent event bubbling
         var $this = $(this);
         $this.toggleClass('selected');
@@ -1831,36 +1863,42 @@ console.log('lol')
             }
         } else {
             if (dropdownType === 'type') {
-                selectedTypes = selectedTypes.filter(function(item) { return item !== value; });
+                selectedTypes = selectedTypes.filter(function (item) {
+                    return item !== value;
+                });
             } else if (dropdownType === 'status') {
-                selectedStatuses = selectedStatuses.filter(function(item) { return item !== value; });
+                selectedStatuses = selectedStatuses.filter(function (item) {
+                    return item !== value;
+                });
             } else if (dropdownType === 'optimize') {
-                selectedOptimizes = selectedOptimizes.filter(function(item) { return item !== value; });
+                selectedOptimizes = selectedOptimizes.filter(function (item) {
+                    return item !== value;
+                });
                 updateOptimizationStatus();
             }
         }
         fetchPosts(selectedTypes, currentPage);
     });
 
-    $('.selector-dropdown').on('mouseleave', function() {
+    $('.selector-dropdown').on('mouseleave', function () {
         var $dropdownMenu = $(this).find('.dropdown-menu');
-        dropdownTimeout = setTimeout(function() {
+        dropdownTimeout = setTimeout(function () {
             $dropdownMenu.slideUp(200);
         }, 500);
     });
 
-    $('.selector-dropdown').on('mouseenter', '.dropdown-menu', function() {
+    $('.selector-dropdown').on('mouseenter', '.dropdown-menu', function () {
         clearTimeout(dropdownTimeout);
     });
 
-    $('.selector-dropdown').on('mouseleave', '.dropdown-menu', function() {
+    $('.selector-dropdown').on('mouseleave', '.dropdown-menu', function () {
         var $dropdownMenu = $(this);
-        dropdownTimeout = setTimeout(function() {
+        dropdownTimeout = setTimeout(function () {
             $dropdownMenu.slideUp(200);
         }, 500);
     });
 
-    $(document).on('click', function() {
+    $(document).on('click', function () {
         $('.selector-dropdown .dropdown-menu').slideUp(200);
     });
 
@@ -1870,7 +1908,7 @@ console.log('lol')
     //     console.log('Selected Optimizes:', selectedOptimizes);
     // });
 
-    $('.textareaChange').blur(function(){
+    $('.textareaChange').blur(function () {
         $('.action-buttons').fadeOut(500, function () {
         });
 

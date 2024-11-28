@@ -15,6 +15,7 @@ class wps_ic_enqueues extends wps_ic
     public static $quality;
     public static $zone_name;
     public static $js_debug;
+    public static $api_key;
     public static $response_key;
     public static $site_url;
     public static $delay_js_override;
@@ -34,6 +35,7 @@ class wps_ic_enqueues extends wps_ic
         self::$zone_name = parent::$zone_name;
         self::$quality = parent::$quality;
         self::$js_debug = parent::$js_debug;
+        self::$api_key = parent::$api_key;
         self::$response_key = parent::$response_key;
         self::$site_url = site_url();
         self::$preloaderAPI = 0;
@@ -613,18 +615,37 @@ class wps_ic_enqueues extends wps_ic
         wp_localize_script($this::$slug . '-admin-settings-live', 'wps_ic_vars', ['ajaxurl' => admin_url('admin-ajax.php')]);
 
         #$this->bootstrap();
-        $this->v4();
+        $gui = get_option(WPS_IC_GUI);
+        if (!empty($gui) && $gui == 'lite') {
+            $this->lite();
+            wp_enqueue_style($this::$slug . '-v4-style-css', WPS_IC_URI . 'assets/v4/css/style.css', [], $this::$version);
+        } else {
+            $this->lite();
+            $this->v4();
+        }
     }
 
     public function asset_script($name, $filename)
     {
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/' . $filename, ['jquery'], $this::$version, true);
+
+        if ($name = 'admin-sweetalert'){
+          wp_add_inline_script($this::$slug . '-' . $name, 'window.WPCSwal = window.Swal;');
+        }
     }
 
     public function script($name, $filename, $footer = false)
     {
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/js/' . $filename, ['jquery'], $this::$version, $footer);
     }
+
+
+    public function lite()
+    {
+        wp_enqueue_script($this::$slug . '-lite-js', WPS_IC_URI . 'assets/v4/js/lite.js', ['jquery'], $this::$version);
+        wp_localize_script($this::$slug . '-lite-js', 'ajaxVar', ['nonce' => wp_create_nonce('ajax-nonce')]);
+    }
+
 
     public function v4()
     {
@@ -646,7 +667,7 @@ class wps_ic_enqueues extends wps_ic
 
     public function enqueue_all()
     {
-        $response_key = self::$response_key;
+        $apikey = self::$api_key;
         $settings = self::$settings;
 
 
@@ -717,7 +738,7 @@ class wps_ic_enqueues extends wps_ic
                     }
                 }
 
-                if (!empty($response_key)) {
+                if (!empty($apikey)) {
                     if ($screen->base == 'settings_page_' . $this::$slug && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
@@ -862,7 +883,7 @@ class wps_ic_enqueues extends wps_ic
 
     public function enqueue_bulk()
     {
-        $response_key = self::$response_key;
+        $apikey = self::$api_key;
         $settings = self::$settings;
 
         $screen = get_current_screen();
@@ -895,7 +916,7 @@ class wps_ic_enqueues extends wps_ic
                     }
                 }
 
-                if (!empty($response_key)) {
+                if (!empty($apikey)) {
                     if (in_array($screen->base, $page_array) && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');

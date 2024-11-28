@@ -6,6 +6,23 @@ class wps_ic_perfmatters extends wps_ic_integrations {
 		return function_exists( 'perfmatters_version_check' );
 	}
 
+  public function getConflictList()
+  {
+    $perfmatters_options = get_option( 'perfmatters_options' );
+    $conflict = [];
+
+    if ( $this->wps_settings['delay-js'] && ! empty( $perfmatters_options['assets']['delay_js'] ) && $perfmatters_options['assets']['delay_js'] ) {
+      $conflict[] ='delay-js';
+    }
+
+    if ( $this->wps_settings['lazy'] && ! empty( $perfmatters_options['lazyload']['lazy_loading'] ) &&
+      $perfmatters_options['lazyload']['lazy_loading'] ) {
+      $conflict[] ='lazy';
+    }
+
+    return $conflict;
+  }
+
 	public function do_checks() {
 		// Logic to check for conflicts
 		$perfmatters_options = get_option( 'perfmatters_options' );

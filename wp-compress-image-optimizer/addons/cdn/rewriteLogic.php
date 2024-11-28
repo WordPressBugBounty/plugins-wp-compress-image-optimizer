@@ -1897,12 +1897,12 @@ SCRIPT;
 
         //fixes images not loading in shop pagination on some woo themes
         if (strpos($_SERVER['REQUEST_URI'], 'pjax=') !== false) {
-
             self::$adaptiveEnabled = '0';
         }
 
         if (strpos($image[0], 'breakdance') !== false) {
-            self::$lazyEnabled = '0';
+           self::$lazyEnabled = '0';
+            self::$adaptiveEnabled = '0';
         }
 
         if (strpos($image[0], 'data:image') !== false || strpos($image[0], 'blank') !== false || strpos($image[0], 'gform_ajax_spinner') !== false || strpos($image[0], 'spinner.svg') !== false) {
@@ -1964,6 +1964,7 @@ SCRIPT;
         /**
          * strpos blank is required to make it work when image has placeholder containing "blank" in it.
          */
+        $image_source = '';
         if (!empty($original_img_tag['original_tags']['src'])) {
             $image_source = $original_img_tag['original_tags']['src'];
         } else {
@@ -2200,6 +2201,13 @@ SCRIPT;
         }
 
 
+        if (self::$adaptiveEnabled == '0') {
+            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped';
+            $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
+            unset($original_img_tag['additional_tags']['data-wpc-loaded']);
+        }
+
+
         if (!empty($_GET['dbg_tag'])) {
             return print_r(['$isLogo' => $isLogo, 'skipLazy' => $skipLazy, 'adaptiveEnabled' => self::$adaptiveEnabled, '$lazyLoadedImages' => self::$lazyLoadedImages, '$lazyLoadedImagesLimit' => self::$lazyLoadedImagesLimit, '$lazyEnabled' => self::$lazyEnabled, '$nativeLazyEnabled' => self::$nativeLazyEnabled, '$isSlider' => $isSlider, '$original_img_tag' => $original_img_tag], true);
         }
@@ -2317,10 +2325,18 @@ SCRIPT;
                */
             if (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1') {
                 $build_image_tag .= 'src="' . $original_img_tag['src'] . '" ';
-                $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
+
+                if (!empty($original_img_tag['data-src'])) {
+                    $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
+                }
+
             } elseif (!empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') {
                 $build_image_tag .= 'src="' . $original_img_tag['src'] . '" ';
-                $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
+
+                if (!empty($original_img_tag['data-src'])) {
+                    $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
+                }
+
             } else {
                 if (!empty($original_img_tag['original_tags']['data-src'])) {
                     $build_image_tag .= 'src="' . $original_img_tag['original_tags']['data-src'] . '" ';
@@ -2336,9 +2352,9 @@ SCRIPT;
 
         if (!empty($original_img_tag['original_tags'])) {
             foreach ($original_img_tag['original_tags'] as $tag => $value) {
-                if ($tag == 'class' || $tag == 'src' || $tag == 'data-src' || $tag == 'data-mk-image-src-set' || $tag == 'data-prehidden') {
+                if ($tag == 'class' || $tag == 'src' || $tag == 'srcset' || $tag == 'data-src' || $tag == 'data-mk-image-src-set' || $tag == 'data-prehidden') {
                     continue;
-                } else if (!is_null($value)) {
+                } elseif (!empty($value)) {
                     $build_image_tag .= $tag . '="' . $value . '" ';
                 } else {
                     $build_image_tag .= $tag . ' ';

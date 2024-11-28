@@ -22,6 +22,7 @@ class wps_ic_ajax extends wps_ic
 
     public static $version;
     public static $Requests;
+    public static $apikey;
 
     public function __construct()
     {
@@ -32,20 +33,24 @@ class wps_ic_ajax extends wps_ic
             self::$cacheIntegrations = new wps_ic_cache_integrations();
             self::$settings = get_option(WPS_IC_SETTINGS);
             self::$options = get_option(WPS_IC_OPTIONS);
+            self::$apikey = parent::$api_key;
             self::$count_thumbs = count(get_intermediate_image_sizes());
             self::$local = parent::$local;
             self::$logo_compressed = WPS_IC_URI . 'assets/images/legacy/logo-compressed.svg';
             self::$logo_uncompressed = WPS_IC_URI . 'assets/images/legacy/logo-not-compressed.svg';
             self::$logo_excluded = WPS_IC_URI . 'assets/images/legacy/logo-excluded.svg';
 
-            if (!empty(parent::$response_key)) {
+            if (!empty(parent::$api_key)) {
                 // Pull Stats
+                $this->add_ajax('wpsChangeGui');
+                $this->add_ajax('wps_fetchInitialTest');
                 $this->add_ajax('wps_ic_pull_stats');
 
                 // Critical CSS
                 $this->add_ajax('wps_ic_critical_get_assets');
                 $this->add_ajax('wps_ic_critical_run');
                 $this->add_ajax('wps_ic_get_setting');
+                $this->add_ajax('wps_ic_saveSetting');
                 $this->add_ajax('wps_ic_save_excludes_settings');
 
                 // GeoLocation for Popups
@@ -94,9 +99,12 @@ class wps_ic_ajax extends wps_ic
 
                 $this->add_ajax('wps_ic_get_page_excludes_popup_html');
                 $this->add_ajax('wps_ic_save_page_excludes_popup');
+                $this->add_ajax('wps_ic_resetTest');
+                $this->add_ajax('wps_ic_runTest');
                 $this->add_ajax('wps_ic_run_tests');
                 $this->add_ajax('wps_ic_start_optimizations');
                 $this->add_ajax('wps_ic_stop_optimizations');
+                $this->add_ajax('wpsRunQuickTest');
                 $this->add_ajax('wps_ic_run_single_optimization');
                 $this->add_ajax('wps_ic_test_api_connectivity');
                 $this->add_ajax('wps_ic_get_per_page_settings_html');
@@ -113,8 +121,11 @@ class wps_ic_ajax extends wps_ic
 
                 // Exclude Image from Compress
                 $this->add_ajax('wps_ic_simple_exclude_image');
+                $this->add_ajax('wps_lite_connect');
+                $this->add_ajax('wps_ic_live_connect');
             } else {
                 // Connect
+                $this->add_ajax('wps_lite_connect');
                 $this->add_ajax('wps_ic_live_connect');
             }
 
@@ -277,6 +288,106 @@ class wps_ic_ajax extends wps_ic
         self::$Requests->POST(self::$API_URL, $params);
 
         wp_send_json_success($params);
+    }
+
+    public function wps_fetchInitialTest()
+    {
+        $initialFailed = get_transient('wps_initial_failed');
+        if (empty($initialFailed)) {
+            $initialFailed = 1;
+        }
+
+        $warmup = new wps_ic_preload_warmup();
+
+        $testPath = self::$apikey . '/home/results.json?random=' . time();
+        $testUrl = $warmup::$apiUrl . 'tests/' . $testPath;
+        $download = wp_remote_get($testUrl, ['timeout' => 10, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+
+        if (!is_wp_error($download)) {
+            $body = wp_remote_retrieve_body($download);
+            if (!empty($body)) {
+                $body = json_decode($body, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $tests = get_option(WPS_IC_TESTS);
+                    $tests['home'] = $body;
+                    update_option(WPS_IC_TESTS, $tests);
+                    update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
+                    delete_transient('wpc_initial_test');
+                    wp_send_json_success();
+                }
+            }
+        }
+
+
+        if ($initialFailed >= WPS_IC_TEST_FAILURES) {
+            delete_transient('wps_initial_failed');
+            delete_transient('wpc_initial_test');
+            update_option(WPS_IC_LITE_GPS, ['result' => array(), 'failed' => true, 'lastRun' => time()]);
+            $tests = get_option(WPS_IC_TESTS);
+            unset($tests['home']);
+            update_option(WPS_IC_TESTS, $tests);
+            wp_send_json_error(['reset' => 'true']);
+        }
+
+        $initialFailed += 1;
+        set_transient('wps_initial_failed', $initialFailed, 5*60);
+        wp_send_json_error(['failed' => $initialFailed]);
+    }
+
+    public function wps_ic_saveSetting()
+    {
+        $what = sanitize_text_field($_POST['what']);
+        $setting = sanitize_text_field($_POST['setting']);
+        $value = sanitize_text_field($_POST['value']);
+
+        $settings = get_option(WPS_IC_SETTINGS);
+
+        // Parse the string into an associative array
+        parse_str($what, $output);
+
+        //
+        switch ($setting) {
+            case 'options[cdnAll]':
+                $output['options']['serve'] = ['jpg' => $value, 'gif' => $value, 'png' => $value, 'svg' => $value];
+                $output['options']['css'] = $value;
+                $output['options']['js'] = $value;
+                $output['options']['font'] = $value;
+                break;
+            case 'imagesPreset':
+                $output['options']['retina'] = $value;
+                $output['options']['generate_adaptive'] = $value;
+                $output['options']['generate_webp'] = $value;
+                break;
+        }
+
+
+        if (empty($settings)) {
+            $options = new wps_ic_options();
+            $settings = $options->get_preset('lite');
+        }
+
+        $mergedSettings = $this->custom_merge($output['options'], $settings);
+        self::$cacheIntegrations->purgeAll();
+
+        update_option(WPS_IC_SETTINGS, $mergedSettings);
+        wp_send_json_success();
+    }
+
+    public function custom_merge(array $array1, array $array2)
+    {
+        $result = $array1;
+
+        foreach ($array2 as $key => $value) {
+            if (is_array($value) && isset($result[$key]) && is_array($result[$key])) {
+                // Recursively merge nested arrays
+                $result[$key] = $this->custom_merge($result[$key], $value);
+            } elseif (!isset($result[$key])) {
+                // Add keys from $array2 only if they don't exist in $array1
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -563,16 +674,16 @@ class wps_ic_ajax extends wps_ic
             $wpc_excludes[$setting_name . '_exclude_wp'] = $exclude_wp;
             $wpc_excludes[$setting_name . '_exclude_third'] = $exclude_third;
 
-            if ($setting_name == 'lastLoadScript' && isset($_POST['deferScript'])){
-              //this function was made for excludes popup having only 1 textfield, so this is added for defer
-              $defer = sanitize_text_field($_POST['deferScript']);
-              $defer = rtrim($defer, "\n");
-              $defer = explode("\n", $defer);
-              $defer = array_filter($defer, 'trim');
-              $wpc_excludes['deferScript'] = $defer;
+            if ($setting_name == 'lastLoadScript' && isset($_POST['deferScript'])) {
+                //this function was made for excludes popup having only 1 textfield, so this is added for defer
+                $defer = sanitize_text_field($_POST['deferScript']);
+                $defer = rtrim($defer, "\n");
+                $defer = explode("\n", $defer);
+                $defer = array_filter($defer, 'trim');
+                $wpc_excludes['deferScript'] = $defer;
             }
 
-          $updated = update_option($setting_group, $wpc_excludes);
+            $updated = update_option($setting_group, $wpc_excludes);
         } else {
             wp_send_json_error('Forbidden.');
         }
@@ -1009,7 +1120,7 @@ class wps_ic_ajax extends wps_ic
             }
 
             if ($error) {
-                wp_send_json_error($body->data);
+                wp_send_json_error();
             } else {
                 wp_send_json_success();
             }
@@ -1018,70 +1129,37 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_error('0');
     }
 
+
+    /**
+     * Lite Connect
+     */
+    public function wps_lite_connect()
+    {
+        $connect = new wps_ic_connect();
+        $call = $connect->connectLite();
+    }
+
+
+    public function wpsChangeGui()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $view = sanitize_text_field($_POST['view']);
+        update_option(WPS_IC_GUI, $view);
+        update_option('wpsShowAdvanced', 'true');
+        wp_send_json_success();
+    }
+
+
     /**
      * Connect With API
      */
     public function wps_ic_live_connect()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wpc_live_connect')) {
-            wp_send_json_error('Forbidden.');
-        }
-        // API Key
-        $apikey = sanitize_text_field($_POST['apikey']);
-        $siteurl = urlencode(site_url());
-        delete_option('wpsShowAdvanced');
-
-        // Required for DEBUG?
-        $uri = WPS_IC_KEYSURL . '?action=connectV6&apikey=' . $apikey . '&domain=' . $siteurl . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
-
-        // Verify API Key is our database and user has is confirmed getresponse
-        $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connectV6', 'apikey' => $apikey, 'domain' => $siteurl, 'plugin_version' => self::$version, 'hash' => md5(time()), 'time_hash' => time()], ['timeout' => 60]);
-
-        if (!empty($call)) {
-            if (!empty($call->data->code) && $call->data->code == 'site-user-different') {
-                // Popup Site Already Connected
-                wp_send_json_error(['msg' => 'site-already-connected', 'url' => $uri]);
-            }
-
-
-            if ($call->success && $call->data->apikey != '' && $call->data->response_key != '') {
-                $options = new wps_ic_options();
-                $options->set_option('api_key', $call->data->apikey);
-                $options->set_option('response_key', $call->data->response_key);
-
-                // CDN Does exist or we just created it
-                $zone_name = $call->data->zone_name;
-
-                if (!empty($zone_name)) {
-                    update_option('ic_cdn_zone_name', $zone_name);
-                }
-
-                $settings = get_option(WPS_IC_SETTINGS);
-                $sizes = get_intermediate_image_sizes();
-                if ($sizes) {
-                    foreach ($sizes as $key => $value) {
-                        $settings['thumbnails'][$value] = 1;
-                    }
-                }
-
-                $default_Settings = ['js' => '1', 'css' => '0', 'css_image_urls' => '0', 'external-url' => '0', 'replace-all-link' => '0', 'emoji-remove' => '0', 'disable-oembeds' => '0', 'disable-gutenber' => '0', 'disable-dashicons' => '0', 'on-upload' => '0', 'defer-js' => '0', 'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'], 'search-through' => 'html', 'preserve-exif' => '0', 'minify-css' => '0', 'minify-js' => '0'];
-
-                $settings = array_merge($settings, $default_Settings);
-
-                $settings['live-cdn'] = '1';
-                update_option(WPS_IC_SETTINGS, $settings);
-
-                // TODO: Setup the Cache Options, if cache is active
-
-                wp_send_json_success(['liveMode' => $call->data->liveMode, 'localMode' => $call->data->localMode]);
-            }
-
-            wp_send_json_error(['uri' => $uri]);
-        } else {
-            wp_send_json_error(['Cannot Call API', $uri, $call]);
-        }
-
-        wp_send_json_error('0');
+        $connect = new wps_ic_connect();
+        $call = $connect->connect();
     }
 
     /**
@@ -1800,6 +1878,8 @@ class wps_ic_ajax extends wps_ic
         $apikey = $options['api_key'];
         $site = site_url();
 
+        delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPS_IC_TESTS);
         delete_option('wpsShowAdvanced');
 
         $options['api_key'] = '';
@@ -2253,9 +2333,9 @@ class wps_ic_ajax extends wps_ic
         $cache = new wps_ic_cache_integrations();
         $cache::purgeAll();
 
-        if (!empty($_POST['activation']) && $_POST['activation']){
-          $warmup_class = new wps_ic_preload_warmup();
-          $warmup_class->optimizeSingle('home');
+        if (!empty($_POST['activation']) && $_POST['activation']) {
+            $warmup_class = new wps_ic_preload_warmup();
+            $warmup_class->optimizeSingle('home');
         }
 
         wp_send_json_success();
@@ -2652,15 +2732,95 @@ class wps_ic_ajax extends wps_ic
 
     }
 
+
+    public function wpsRunQuickTest()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        if (empty(self::$options['api_key'])) {
+            wp_send_json_error('not-connected');
+        }
+
+        $id = sanitize_text_field($_POST['id']);
+        $dash = true;
+
+        $warmup_class = new wps_ic_preload_warmup();
+        $warmup_class->optimizeSingle('home', true, $dash);
+        wp_send_json_error('error');
+    }
+
+
     public function wps_ic_run_single_optimization()
     {
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
             wp_send_json_error('Forbidden.');
         }
+
+        if (empty(self::$options['api_key'])) {
+            wp_send_json_error('not-connected');
+        }
+
         $id = sanitize_text_field($_POST['id']);
+        if(!empty($_POST['dash'])){
+          $dash = sanitize_text_field($_POST['dash']);
+        } else {
+          $dash = false;
+        }
+
+
         $warmup_class = new wps_ic_preload_warmup();
-        $warmup_class->optimizeSingle($id);
+        $warmup_class->optimizeSingle($id, true, $dash);
+        wp_send_json_error('error');
     }
+
+
+    public function wps_ic_resetTest()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $tests = get_option(WPS_IC_TESTS);
+        unset($tests['home']);
+        update_option(WPS_IC_TESTS, $tests);
+
+        delete_transient('wpc_initial_test');
+        delete_option(WPS_IC_LITE_GPS);
+
+        $id = sanitize_text_field($_POST['id']);
+        $retest = sanitize_text_field($_POST['retest']);
+
+        $warmup = new wps_ic_preload_warmup();
+        $warmup->resetTest($id, $retest, false);
+
+        wp_send_json_success('started');
+    }
+
+
+    public function wps_ic_runTest()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $running = get_transient('wps_icInitialTest');
+        if ($running) {
+            wp_send_json_success('already-running');
+        }
+
+        set_transient('wps_icInitialTest', 'true', 1 * 60);
+
+        $id = sanitize_text_field($_POST['id']);
+        $retest = sanitize_text_field($_POST['retest']);
+
+        $warmup_class = new wps_ic_preload_warmup();
+        $urlKey = $warmup_class->doTestRemote($id, $retest, false);
+
+        wp_send_json_success();
+    }
+
 
     public function wps_ic_run_tests()
     {
@@ -2727,7 +2887,6 @@ class wps_ic_ajax extends wps_ic
         }
 
         $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => get_option('wpc-connectivity-status')];
-
         wp_send_json_success($response);
     }
 

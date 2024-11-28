@@ -101,7 +101,7 @@ jQuery(document).ready(function ($) {
 
 
         if (selectedSites.length == 0) {
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', position: 'top', html: jQuery('.wps-ic-mu-popup-select-sites').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, customClass: {
                     container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                 }, onOpen: function () {
@@ -136,7 +136,7 @@ jQuery(document).ready(function ($) {
         });
 
         if (selectedSites.length == 0) {
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', position: 'top', html: jQuery('.wps-ic-mu-popup-empty-sites').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                     container: 'wps-ic-mu-popup-no-padding',
                 }, onOpen: function () {
@@ -146,7 +146,7 @@ jQuery(document).ready(function ($) {
             return false;
         }
         else {
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', position: 'top', html: jQuery('div.wps-ic-mu-bulk-disconnect-all').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: true, allowOutsideClick: true, confirmButtonText:'Yes, disconnect selected sites!', cancelButtonText:'No, leave the sites connected!', customClass: {
                     container: 'wps-ic-mu-popup-no-padding wps-ic-mu-popup-actions wps-ic-mu-popup-disconnect-all',
                 }, onOpen: function () {
@@ -210,7 +210,7 @@ jQuery(document).ready(function ($) {
         });
 
         if (selectedSites.length == 0) {
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', position: 'top', html: jQuery('.wps-ic-mu-popup-empty-sites').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                     container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                 }, onOpen: function () {
@@ -460,7 +460,7 @@ jQuery(document).ready(function ($) {
 
 
     function openConfigurePopup(popup,popupwidth) {
-        Swal.fire({
+        WPCSwal.fire({
             title: '', html: jQuery('#' + popup).html(), width: popupwidth, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                 container: 'no-padding-popup-bottom-bg switch-legacy-popup',
             }, onOpen: function () {
@@ -650,7 +650,7 @@ jQuery(document).ready(function ($) {
                 $('.wpc-mu-api-connect-form>input[type="text"]').show();
                 //alert('Failure to conenct');
 
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', position: 'top', html: jQuery('.wpc-mu-connect-failure').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
@@ -678,7 +678,7 @@ jQuery(document).ready(function ($) {
         var siteID = $(this).data('site-id');
         var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '', position: 'top', html: jQuery('#wps-ic-mu-disconnect-popup').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: true, allowOutsideClick: true, confirmButtonText:'Yes, disconnect the site!', cancelButtonText:'No, leave the site connected!', customClass: {
                 container: 'wps-ic-mu-popup-no-padding wps-ic-mu-popup-actions wps-ic-mu-popup-disconnect-all',
             }, onOpen: function () {
@@ -718,7 +718,7 @@ jQuery(document).ready(function ($) {
         var tableColumn = $(this).parents('td');
         var sidebarList = $('.wp-compress-mu-site-list');
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '', position: 'top', html: jQuery('#wps-ic-mu-disconnect-popup').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: true, allowOutsideClick: true, confirmButtonText:'Yes, disconnect the site!', cancelButtonText:'No, leave the site connected!', customClass: {
                 container: 'wps-ic-mu-popup-no-padding wps-ic-mu-popup-actions wps-ic-mu-popup-disconnect-all',
             }, onOpen: function () {
@@ -882,7 +882,7 @@ jQuery(document).ready(function ($) {
 
             if (cname_field == '') {
                 //wps-ic-mu-popup-empty-cname
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', position: 'center', html: jQuery('.wps-ic-mu-popup-empty-cname').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
@@ -917,7 +917,7 @@ jQuery(document).ready(function ($) {
                             $(cname_configured).html(response.data.configured).show();
                             $('.btn-close').on('click', function (e) {
                                 e.preventDefault();
-                                Swal.close();
+                                WPCSwal.close();
                                 return false;
                             });
                         }, 1000);
@@ -989,7 +989,7 @@ jQuery(document).ready(function ($) {
                         $(cname_configured).html(response.data.configured).show();
                         $('.btn-close').on('click', function (e) {
                             e.preventDefault();
-                            Swal.close();
+                            WPCSwal.close();
                             return false;
                         });
                     }, 1000);
@@ -1041,7 +1041,7 @@ jQuery(document).ready(function ($) {
                 $(label_enabled).hide();
                 $(cname_disabled).show();
                 $(label_disabled).show();
-                Swal.close();
+                WPCSwal.close();
             }
         });
     }
@@ -1071,7 +1071,7 @@ jQuery(document).ready(function ($) {
                     $(top).show();
                     $(content).show();
                     $(loading).hide();
-                    Swal.close();
+                    WPCSwal.close();
                 }
             });
 
@@ -1143,7 +1143,7 @@ jQuery(document).ready(function ($) {
                     $(top).hide();
                     //$(content).show();
                     $(loading).hide();
-                    Swal.close();
+                    WPCSwal.close();
 
                     //window.location.reload();
                 }

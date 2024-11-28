@@ -2,9 +2,6 @@
 global $ic_running;
 include 'debug.php';
 include 'defines.php';
-
-
-
 include 'addons/cdn/cdn-rewrite.php';
 include 'addons/legacy/compress.php';
 
@@ -81,13 +78,14 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.21.19';
+        self::$version = '6.30.00';
         $wps_ic = $this;
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
             //It has to be here, init() is too late
             new wps_ic_visitor_mode();
         }
+
 
         if (!empty($_GET['preload_mode'])) {
             die('Preloaded');
@@ -98,10 +96,10 @@ class wps_ic
         $headers = getallheaders();
         $isHeaderConnectivityTest = isset($headers['Action']) && $headers['Action'] === 'connectivityTest';
         if ($isPostConnectivityTest || $isGetConnectivityTest || $isHeaderConnectivityTest) {
-          while (ob_get_level()) {
-            ob_end_clean();
-          }
-          ob_start();
+            while (ob_get_level()) {
+                ob_end_clean();
+            }
+            ob_start();
             echo json_encode(['message' => 'Connectivity Test passed.']);
             die();
         }
@@ -119,14 +117,6 @@ class wps_ic
         //$cache_warmup = new wps_ic_cache_warmup();
         //$cache_warmup->add_hooks();
     }
-
-
-    public function offloaderHooks()
-    {
-        $offloader = new wps_ic_offloading();
-    }
-
-
 
     /**
      * Write Debug Log
@@ -160,6 +150,12 @@ class wps_ic
 
     public static function onUpgrade_force_regen()
     {
+        // Remove Tests
+        delete_option(WPS_IC_TESTS);
+        delete_option(WPS_IC_LITE_GPS);
+        // Setup UI to Simple
+        update_option(WPS_IC_GUI, 'lite');
+        //
         delete_option('wps_ic_gen_hp_url');
     }
 
@@ -499,7 +495,8 @@ class wps_ic
                             }
                         }
 
-                        update_option(WPS_IC_SETTINGS, $settings);
+                        // TODO: Removed
+                        #update_option(WPS_IC_SETTINGS, $settings);
                     }
                 }
 
@@ -704,6 +701,10 @@ class wps_ic
         // Preload the home page only
         $cacheLogic::preloadPage(0);
 
+        // Remove Tests
+        delete_option(WPS_IC_TESTS);
+        delete_option(WPS_IC_LITE_GPS);
+
         if (is_multisite()) {
         } else {
             $options = get_option(WPS_IC_OPTIONS);
@@ -773,6 +774,11 @@ class wps_ic
 
         // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
+        delete_option(WPS_IC_GUI);
+
+        // Remove Tests
+        delete_option(WPS_IC_TESTS);
+        delete_option(WPS_IC_LITE_GPS);
 
         // Multisite Settings
         $settings = get_option(WPS_IC_MU_SETTINGS);
@@ -796,7 +802,6 @@ class wps_ic
         $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     }
 
-
     public static function checkQuotaStatus()
     {
         // Update Stats
@@ -814,7 +819,6 @@ class wps_ic
             }
         }
     }
-
 
     /**
      * Popup on plugin deactivation button
@@ -918,6 +922,10 @@ class wps_ic
         </script><?php
     }
 
+    public function offloaderHooks()
+    {
+        $offloader = new wps_ic_offloading();
+    }
 
     /**
      * WP Init helper
@@ -1045,6 +1053,30 @@ class wps_ic
             $warmup = new wps_ic_preload_warmup();
             $warmup->doTest($id, true);
             die('Test done?');
+        }
+
+        if (!empty($_GET['fetchTest']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
+            $warmup = new wps_ic_preload_warmup();
+            $testUrl = $warmup::$apiUrl . 'tests/' . $_GET['fetchTest'];
+            $download = wp_remote_get($testUrl, ['timeout' => 10, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+
+            if (!is_wp_error($download)) {
+                $body = wp_remote_retrieve_body($download);
+                $body = json_decode($body, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $tests = get_option(WPS_IC_TESTS);
+                    $tests['home'] = $body;
+
+                    delete_transient('wpc_initial_test');
+
+                    update_option(WPS_IC_TESTS, $tests);
+                    update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
+                    wp_send_json_success($tests);
+                } else {
+                    wp_send_json_error('json-error');
+                }
+            }
+            wp_send_json_error('download-error');
         }
 
         if (!empty($_GET['wpc_start_test_lcp']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
@@ -1492,6 +1524,7 @@ class wps_ic
         return false;
     }
 
+
     /**
      * FrontEnd Editors Detection for various page builders
      * @return bool
@@ -1507,6 +1540,7 @@ class wps_ic
         return false;
     }
 
+
     public function fillMissingSettings($settings)
     {
         if (!class_exists('wps_ic_options')) {
@@ -1521,13 +1555,14 @@ class wps_ic
             $settings = [];
         }
 
-        #var_dump(print_r($settings, true));
-        #var_dump(print_r($settings, true));
+
         foreach ($defaultSettings as $option_key => $option_value) {
             if (is_array($option_value)) {
                 foreach ($option_value as $option_value_k => $option_value_v) {
                     if (!isset($settings[$option_key][$option_value_k])) {
-                        $settings[$option_key] = [];
+                        if (!isset($settings[$option_key])) {
+                            $settings[$option_key] = [];
+                        }
                         $settings[$option_key][$option_value_k] = '0';
                     }
                 }
@@ -1537,8 +1572,6 @@ class wps_ic
                 }
             }
         }
-
-        #var_dump(print_r($settings, true));
 
         update_option(WPS_IC_SETTINGS, $settings);
         return $settings;
@@ -1623,7 +1656,7 @@ class wps_ic
         if (empty(self::$settings['css']) && empty(self::$settings['js']) && empty(self::$settings['serve']['jpg']) && empty(self::$settings['serve']['png']) && empty(self::$settings['serve']['gif']) && empty(self::$settings['serve']['svg'])) {
             $this->localMode();
         } else {
-            if (!empty(self::$response_key)) {
+            if (!empty(self::$api_key)) {
                 $this->media_library = new wps_ic_media_library_live();
                 $this->stats = new wps_ic_stats();
                 $this->comms = new wps_ic_comms();
@@ -1790,7 +1823,7 @@ class wps_ic
                 /***
                  * Live Active
                  */
-                if (!empty(self::$response_key)) {
+                if (!empty(self::$api_key)) {
                     $this->comms = new wps_ic_comms();
                 }
             }
@@ -2114,14 +2147,15 @@ function isFeatureEnabled($featureName)
 }
 
 
-// TODO: maybe set in if (lazy_enabled==1)
-add_filter('wp_lazy_loading_enabled', '__return_false', 1);
-
 // TODO: Maybe it's required on some themes?
 // Backend
 $wpsIc = new wps_ic();
 #add_action('wp', [$wpsIc, 'offloaderHooks'], 1);
+
+#add_filter('wp_lazy_loading_enabled', '__return_false', 1);
+
 add_action('init', [$wpsIc, 'init'], 100);
+
 
 // Frontend do replace
 $cdn = new wps_cdn_rewrite();

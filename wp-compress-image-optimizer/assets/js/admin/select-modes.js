@@ -1,7 +1,7 @@
 jQuery(document).ready(function ($) {
 
     if (wpc_ic_modes.showModes == true) {
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             position: 'center',
             html: jQuery('#select-mode').html(),
@@ -29,7 +29,7 @@ jQuery(document).ready(function ($) {
     $('.wpc-dropdown-trigger-popup,.wpc-dropdown-trigger-popup button,.wpc-select-modes').on('click', function (e) {
         e.preventDefault();
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             position: 'center',
             html: jQuery('#select-mode').html(),

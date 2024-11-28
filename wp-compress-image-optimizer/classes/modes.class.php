@@ -23,7 +23,7 @@ class wps_ic_modes extends wps_ic {
 
   public function triggerPopup() {
     echo "<script type='text/javascript'>";
-    echo "Swal.fire({
+    echo "WPCSwal.fire({
             title: '',
             position: 'center',
             html: jQuery('#select-mode').html(),

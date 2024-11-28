@@ -113,6 +113,16 @@ if (!empty($_POST['options'])) {
     // Get Purge List
     $purgeList = $options_class->getPurgeList($options);
 
+    // For Lite Settings
+    if (!empty($options['generate_adaptive']) && !empty($options['retina']) && !empty($options['generate_webp'])) {
+        $options['imagesPreset'] = '1';
+    }
+
+    // For Lite Settings
+    if (!empty($options['css']) || !empty($options['js']) || !empty($options['fonts']) || !empty($options['serve']['jpg']) && !empty($options['serve']['gif']) || !empty($options['serve']['png']) || !empty($options['serve']['svg'])) {
+        $options['cdnAll'] = '1';
+    }
+
     update_option(WPS_IC_SETTINGS, $options);
     $cache::purgeAll(); //this only clears cache files
 
@@ -158,6 +168,16 @@ if (!empty($_POST['options'])) {
     }
 }
 
+if (!empty($_GET['resetTest'])) {
+    delete_transient('wpc_initial_test');
+    update_option(WPS_IC_LITE_GPS, ['result' => array(), 'failed' => false, 'lastRun' => time()]);
+    $tests = get_option(WPS_IC_TESTS);
+    unset($tests['home']);
+    update_option(WPS_IC_TESTS, $tests);
+}
+
+
+
 $gui = new wpc_gui_v4();
 
 $proSite = get_option('wps_ic_prosite');
@@ -191,7 +211,43 @@ if (!$localEnabled) {
     $localLocked = true;
 }
 
-?>
+
+$settings = get_option(WPS_IC_SETTINGS);
+$initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+$initialTestRunning = get_transient('wpc_initial_test');
+$option = get_option(WPS_IC_OPTIONS);
+
+if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
+    ?>
+    <script type="text/javascript">
+        jQuery(document).ready(function ($) {
+            var checkFetch = setInterval(function () {
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'wps_fetchInitialTest',
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            clearInterval(checkFetch);
+                            setTimeout(function () {
+                                window.location.reload();
+                            }, 2000);
+                        } else if (response.success == false) {
+                            if (response.data.reset == 'true') {
+                                clearInterval(checkFetch);
+                                setTimeout(function () {
+                                    window.location.reload();
+                                }, 2000);
+                            }
+                        }
+                    }
+                });
+            }, 5000);
+        });
+    </script>
+<?php } ?>
 
     <script type="text/javascript">
         var selectedTypes = <?php echo json_encode([]); ?>;
@@ -286,18 +342,17 @@ if (!$localEnabled) {
                                 <?php
                                 if (!$showAdvanced) {
                                     ?>
-                                    <a href="<?php
-                                    echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&showAdvanced=true'); ?>"
-                                       class="wpc-plain-btn"><img src="<?php
+                                    <a href="#"
+                                       class="wpc-plain-btn wpc-change-ui-to-simple"><img src="<?php
                                         echo WPS_IC_ASSETS; ?>/v4/images/popups/selectMode/advanced-settings.svg"
-                                                                  title="Advanced Settings"/> Advanced Settings</a>
+                                                                                          title="Advanced Settings"/>
+                                        Advanced Settings</a>
                                     <?php
                                 } else { ?>
-                                    <a href="<?php
-                                    echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&showAdvanced=false'); ?>"
-                                       class="wpc-plain-btn"><img src="<?php
-                                        echo WPS_IC_ASSETS; ?>/v4/images/popups/selectMode/advanced-settings.svg"
-                                                                  title="Advanced Settings"/> Simple Settings</a>
+                                    <a href="#"
+                                       class="wpc-plain-btn wpc-change-ui-to-simple"><img
+                                                src="<?php echo WPS_IC_ASSETS; ?>/v4/images/popups/selectMode/advanced-settings.svg"
+                                                title="Advanced Settings"/> Simple Settings</a>
                                     <?php
                                 } ?>
 
@@ -533,39 +588,40 @@ if (!$localEnabled) {
                             <div class="wpc-settings-tab-content-inner">
                                 <div class="wpc-tab-content active-tab" id="dashboard">
 
-                                    <div class="wpc-tab-content-box"
-                                         style="padding: 20px 20px !important;display:none;">
-                                        <?php
-                                        include WPS_IC_DIR . 'templates/admin/partials/v4/pull-stats.php'; ?>
-                                    </div>
+                                    <div class="wpc-settings-flex-body" style="padding-top:0px;">
+                                        <div class="wpc-settings-content">
+                                            <div class="wpc-settings-content-inner"
+                                                 style="padding: 20px 20px !important;display:none;">
+                                                <?php
+                                                include WPS_IC_DIR . 'templates/admin/partials/v4/pull-stats.php'; ?>
+                                            </div>
 
-                                    <div class="wpc-tab-content-box">
-                                        <?php
-                                        echo $gui::usageGraph(); ?>
-                                    </div>
+                                            <div class="wpc-settings-content-inner">
+                                                <div class="wpc-rounded-box wpc-rounded-box-full">
+                                                    <?php
+                                                    echo $gui::usageGraph(); ?>
+                                                </div>
+                                            </div>
 
-                                    <?php
-                                    if (($localEnabled || $cdnEnabled) && ($allowLive || $allowLocal)) {
-                                        ?>
-                                        <div class="wpc-tab-content-box wpc-usage-stats-width-<?php
-                                        echo $usageStatsWidth; ?>">
                                             <?php
-                                            echo $gui::usageStats();
+                                            if (($localEnabled || $cdnEnabled) && ($allowLive || $allowLocal)) {
+                                                echo $gui::usageStats();
+                                            }
+
+                                            include WPS_IC_DIR . 'templates/admin/partials/v4/footer-scripts.php';
                                             ?>
-                                        </div>
-                                    <?php }
 
-                                    include WPS_IC_DIR . 'templates/admin/partials/v4/footer-scripts.php';
-                                    ?>
-
-                                    <?php
-                                    if (empty($hideSidebar)) { ?>
-                                        <div class="wpc-tab-content-box">
                                             <?php
-                                            echo $gui::presetModes(); ?>
+                                            if (empty($hideSidebar)) { ?>
+                                                <div class="wpc-tab-content-box">
+                                                    <?php
+                                                    echo $gui::presetModes(); ?>
+                                                </div>
+                                                <?php
+                                            } ?>
+
                                         </div>
-                                        <?php
-                                    } ?>
+                                    </div>
 
                                 </div>
                                 <div class="wpc-tab-content" id="cdn-delivery-options" style="display:none;">
@@ -782,7 +838,7 @@ if (!$localEnabled) {
                                         <div class="wpc-items-list-row mb-0">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Cache Compatibility', 'Prevent cached webpages from opening as a download on LiteSpeed or OpenLiteSpeed servers.', '', '', ['cache', 'compatibility'], $cacheLocked, '', ''); ?>
+                                            #echo $gui::checkboxDescription_v4('Cache Compatibility', 'Prevent cached webpages from opening as a download on LiteSpeed or OpenLiteSpeed servers.', '', '', ['cache', 'compatibility'], $cacheLocked, '', ''); ?>
 
                                             <?php
                                             echo $gui::inputDescription_v4('Expire Cache After', 'Recreate cache if it\'s stale or expired after a set duration.', 'Expire after', 'hours', false, ['cache', 'expire'], $cacheLocked, '6'); ?>
@@ -812,7 +868,7 @@ if (!$localEnabled) {
                                             echo $gui::checkboxDescription_v4('Critical CSS', 'Optimize initial page load by removing unused CSS.', '', '', ['critical', 'css'], $cssLocked, '1', 'exclude-critical-css', false, '', $cssEnabled); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Inline CSS', 'Insert CSS files directly into your page.', false, '0', 'inline-css', $cssLocked, 'right', 'exclude-inline-css'); ?>
+                                            #echo $gui::checkboxDescription_v4('Inline CSS', 'Insert CSS files directly into your page.', false, '0', 'inline-css', $cssLocked, 'right', 'exclude-inline-css'); ?>
 
 
                                         </div>
@@ -822,7 +878,7 @@ if (!$localEnabled) {
                                         <div class="wpc-items-list-row mb-0">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Combine CSS', 'Merge CSS files to minimize HTTP requests.', false, 'combine-css', 'css_combine', false, 'right', 'exclude-css-combine'); ?>
+                                            #echo $gui::checkboxDescription_v4('Combine CSS', 'Merge CSS files to minimize HTTP requests.', false, 'combine-css', 'css_combine', false, 'right', 'exclude-css-combine'); ?>
 
                                             <?php
                                             #echo $gui::checkboxDescription_v4('Optimize Google Fonts', 'Optimize google fonts.', false, 'google_fonts', 'google_fonts', false, 'right', false); ?>
@@ -852,8 +908,8 @@ if (!$localEnabled) {
                                             $jsLocked = true;
                                         }
 
-                                        #echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', '', '', false, '1', false, false, 'left', 'delay-js-configuration');
-                                        echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', '', '', false); ?>
+                                        echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', '', '', false, '1', false, false, 'left', 'delay-js-configuration');
+                                        //echo $gui::checkboxTabTitle('JavaScript Optimizations', "Enhance your site performance by enabling global JavaScript optimization.", 'javascript-optimization/js-icon.svg', '', '', false); ?>
 
                                         <div class="wpc-spacer"></div>
 

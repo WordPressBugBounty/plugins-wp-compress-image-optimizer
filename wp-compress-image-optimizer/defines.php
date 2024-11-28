@@ -38,6 +38,13 @@ define('WPS_IC_IN_BULK', 'wps_ic_in_bulk');
 define('WPS_IC_MU_SETTINGS', 'wps_ic_mu_settings');
 
 
+// How many tests can fail before it's marked as failuire?
+define('WPS_IC_TEST_FAILURES', 80);
+
+
+define('WPS_IC_TESTS', 'wpc-tests');
+define('WPS_IC_LITE_GPS', 'wps_ic_initial_gps');
+define('WPS_IC_GUI', 'wps_ic_gui');
 define('WPS_IC_SETTINGS', 'wps_ic_settings');
 if (!defined('WPS_IC_CACHE')) {
 	define('WPS_IC_CACHE', WP_CONTENT_DIR . '/cache/wp-cio/');

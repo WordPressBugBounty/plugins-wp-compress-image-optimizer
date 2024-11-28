@@ -239,7 +239,7 @@ jQuery(document).ready(function ($) {
         } else {
 
             if (showPopup && popupID != '') {
-                Swal.fire({
+                WPCSwal.fire({
                     title: '',
                     html: jQuery('#' + popupID + '-popup').html(),
                     width: 600,
@@ -255,14 +255,14 @@ jQuery(document).ready(function ($) {
                         if (!showConfirmButton) {
                             $('.wpc-popup-cancel').on('click', function(e){
                                 e.preventDefault();
-                                Swal.clickCancel();
+                                WPCSwal.clickCancel();
                                 window.open('https://wpcompress.com/support/', '_blank');
                                 return false;
                             });
 
                             $('.wpc-popup-confirm').on('click', function(e){
                                 e.preventDefault();
-                                Swal.clickConfirm();
+                                WPCSwal.clickConfirm();
                                 return false;
                             });
                         }

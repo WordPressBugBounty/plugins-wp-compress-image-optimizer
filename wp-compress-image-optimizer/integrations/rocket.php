@@ -6,6 +6,20 @@ class wps_ic_rocket extends wps_ic_integrations {
 		return function_exists( 'get_rocket_option' );
 	}
 
+  public function getConflictsList(){
+    $rocket_settings = get_option( 'wp_rocket_settings' );
+    $conflict = [];
+    if ( $this->wps_settings['delay-js'] && ! empty( $rocket_settings['delay_js'] ) && $rocket_settings['delay_js'] ) {
+      $conflict[] ='delay-js';
+    }
+
+    if ( $this->wps_settings['lazy'] && ! empty( $rocket_settings['lazyload'] ) && $rocket_settings['lazyload'] ) {
+      $conflict[] ='lazy';
+    }
+
+    return $conflict;
+  }
+
 	public function do_checks() {
 		// Logic to check for conflicts
 		$rocket_settings = get_option( 'wp_rocket_settings' );
@@ -41,5 +55,6 @@ class wps_ic_rocket extends wps_ic_integrations {
 
 		return update_option( 'wp_rocket_settings', $rocket_settings );
 	}
+
 
 }

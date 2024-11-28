@@ -148,7 +148,7 @@ jQuery(document).ready(function ($) {
                 $(loading).hide();
 
                 // Failure Pop Up
-                Swal.fire({
+                WPCSwal.fire({
                     title: '',
                     html: $('#' + response.data.msg).html(),
                     width: 600,
@@ -226,7 +226,7 @@ jQuery(document).ready(function ($) {
         var loading = $('.wps-ic-image-loading-' + attachment_id);
 
         // Load Popup
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             html: $('#no-credits-popup').html(),
             width: 600,
@@ -272,7 +272,7 @@ jQuery(document).ready(function ($) {
                 if (response.success) {
                     if (response.data == 'no-credits') {
                         // Load Popup
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '',
                             html: $('#no-credits-popup').html(),
                             width: 600,
@@ -294,7 +294,7 @@ jQuery(document).ready(function ($) {
                     $(parent).html(response.data.html).show();
 
                     // Failure Pop Up
-                    Swal.fire({
+                    WPCSwal.fire({
                         title: '',
                         html: $('#' + response.data.msg).html(),
                         width: 600,

@@ -3,11 +3,13 @@
 class wps_ic_preload_warmup
 {
 
-    private static $apiUrl;
+    public static $standaloneWarmup;
+    public static $apiUrl;
+    public static $warmupVersion;
 
     public function __construct()
     {
-        $warmupVersion = 'v3/';
+        self::$warmupVersion = 'v4/';
         $location = get_option('wps_ic_geo_locate');
         if (empty($location)) {
             $location = $this->geoLocate();
@@ -17,6 +19,12 @@ class wps_ic_preload_warmup
             $location = (array)$location;
         }
 
+        $this->getApiUrl();
+    }
+
+
+    public function getApiUrl()
+    {
         if (isset($location) && !empty($location)) {
             if (is_array($location) && !empty($location['server'])) {
                 if (empty($location['continent'])) {
@@ -41,9 +49,10 @@ class wps_ic_preload_warmup
             self::$apiUrl = 'https://germany.zapwp.net/warmup/';
         }
 
-        self::$apiUrl .= $warmupVersion;
-
+        self::$standaloneWarmup = str_replace('warmup', 'standalone_warmup', self::$apiUrl);
+        self::$apiUrl .= self::$warmupVersion;
     }
+
 
     public function geoLocate()
     {
@@ -393,7 +402,7 @@ class wps_ic_preload_warmup
 
             $exclude_array = $page_excludes;
 
-            $tests = get_option('wpc-tests');
+            $tests = get_option(WPS_IC_TESTS);
 
             if (!empty($tests[$urlKey])) {
                 $test = $tests[$urlKey];
@@ -583,6 +592,7 @@ class wps_ic_preload_warmup
 
     public function downloadDesktopCrit()
     {
+
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Cache-Control: post-check=0, pre-check=0', false);
         header('Pragma: no-cache');
@@ -594,7 +604,6 @@ class wps_ic_preload_warmup
             echo json_encode('no-apikey');
             die();
         }
-
         if (!empty($_GET['id'])) {
             $id = sanitize_text_field($_GET['id']);
         } else {
@@ -608,6 +617,7 @@ class wps_ic_preload_warmup
             echo json_encode('no-url');
             die();
         }
+
 
         if (get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
 
@@ -901,6 +911,9 @@ class wps_ic_preload_warmup
         fwrite($fp, $body);
         fclose($fp);
 
+      $stats = new wps_ic_stats();
+      $stats->saveWarmupStats($body);
+
         if (function_exists('gzencode')) {
             $this->saveGzCacheLocal($cachePath, $body);
         }
@@ -1001,7 +1014,7 @@ class wps_ic_preload_warmup
         }
     }
 
-    public function optimizeSingle($id, $test = true)
+    public function optimizeSingleQuick($id, $test = true, $dash = false)
     {
 
         if ($id == 'home') {
@@ -1020,9 +1033,67 @@ class wps_ic_preload_warmup
             }
         }
 
-        $page_links[$id] = ['url' => $url, 'test' => $test, 'home' => $is_home];
+        $action = 'runQuickTest';
 
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'createQueue', 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 300]);
+        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+
+
+        var_dump($call);
+        die();
+
+        if (is_wp_error($call)) {
+            wp_send_json_error($call->get_error_message());
+        }
+
+        if (wp_remote_retrieve_response_code($call) == 200) {
+            $response_body = wp_remote_retrieve_body($call);
+            $response_body = json_decode($response_body, true);
+            if ($response_body['success'] == 'true') {
+                //added
+                set_transient('wpc_initial_test', 'running', 2*60);
+            } else {
+                wp_send_json_error(print_r($response_body['data'], true));
+            }
+        } else {
+            wp_send_json_error(print_r($call, true));
+        }
+
+      wp_send_json_success(true);
+    }
+
+
+    public function optimizeSingle($id, $test = true, $dash = false)
+    {
+
+        if ($id == 'home') {
+            $url = home_url();
+            $is_home = 'true';
+        } else {
+            $url = get_permalink($id);
+
+            $normalized_url = preg_replace('#^https?://(www\.)?#', '', rtrim($url, '/'));
+            $normalized_home_url = preg_replace('#^https?://(www\.)?#', '', rtrim(home_url(), '/'));
+
+            if ($normalized_url == $normalized_home_url) {
+                $is_home = 'true';
+            } else {
+                $is_home = 'false';
+            }
+        }
+
+        $page_links[$id] = ['url' => $url, 'test' => $test, 'home' => $is_home, 'dash' => $dash];
+
+        $action = 'createQueue';
+        if ($id == 'home') {
+            $action = 'createQueue';
+        }
+
+
+        if ($dash) {
+          $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
+        } else {
+          $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+        }
 
         if (is_wp_error($call)) {
             wp_send_json_error($call->get_error_message());
@@ -1033,14 +1104,58 @@ class wps_ic_preload_warmup
             $response_body = json_decode($response_body, true);
             if ($response_body['success'] == 'true') {
                 $transient = set_transient('wpc-page-optimizations-status', ['id' => $id, 'status' => 'warmup'], 60 * 5);
-                wp_send_json_success($transient);
+
+                //added
+                set_transient('wpc_test_' . $id, 'started', 60);
+                set_transient('wpc_initial_test', 'running', 3*60);
+                //
+
             } else {
                 wp_send_json_error(print_r($response_body['data'], true));
             }
         } else {
             wp_send_json_error(print_r($call, true));
         }
+
+      wp_send_json_success($transient);
     }
+
+
+    public function resetTest($id, $retest = false, $return = true)
+    {
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => 'home', 'url' => home_url(), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'resetTest'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+
+        #var_dump($call);
+    }
+
+
+    public function doTestRemote($id, $retest = false, $return = true)
+    {
+        if ($id == 'home') {
+            $url = home_url();
+        } else {
+            $url = get_permalink($id);
+        }
+
+        $url_key_class = new wps_ic_url_key();
+        $urlKey = $url_key_class->setup($url);
+        $urlKey = sanitize_title($urlKey);
+
+        set_transient('wpc_test_' . $id, 'started', 60);
+        set_transient('wpc_initial_test', 'running', 2*60);
+
+        $results = get_option(WPS_IC_TESTS, []);
+        if ($retest === false) {
+            if (!empty($results[$urlKey])) {
+                wp_send_json_success($results[$urlKey]);
+            }
+        }
+
+        $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestRemote'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+
+        wp_send_json_success('waiting');
+    }
+
 
     public function doTest($id, $retest = false, $return = true)
     {
@@ -1049,19 +1164,20 @@ class wps_ic_preload_warmup
         } else {
             $url = get_permalink($id);
         }
+
         $url_key_class = new wps_ic_url_key();
         $urlKey = $url_key_class->setup($url);
 
         set_transient('wpc_test_' . $id, 'started', 60);
 
-        $results = get_option('wpc-tests', []);
+        $results = get_option(WPS_IC_TESTS, []);
         if ($retest === false) {
             if (!empty($results[$urlKey])) {
                 wp_send_json_success($results[$urlKey]);
             }
         } else {
             $results[$urlKey] = [];
-            update_option('wpc-tests', $results);
+            update_option(WPS_IC_TESTS, $results);
         }
 
         $call = wp_remote_post(self::$apiUrl, ['timeout' => 100, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
@@ -1074,11 +1190,13 @@ class wps_ic_preload_warmup
 
             if (!empty($decodedBody['success']) && $decodedBody['success'] == 'true') {
                 // Update the option with new results
-                $results = get_option('wpc-tests', []);
+                $results = get_option(WPS_IC_TESTS, []);
                 $results[$urlKey] = $decodedBody['data'];
-                update_option('wpc-tests', $results);
+                update_option(WPS_IC_TESTS, $results);
                 if ($return) {
                     wp_send_json_success($decodedBody['data']);
+                } else {
+                    return $urlKey;
                 }
             }
         }
@@ -1086,6 +1204,8 @@ class wps_ic_preload_warmup
         if ($return) {
             wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']], $call);
         }
+
+        return false;
     }
 
     public function doTestLCP($id, $retest = false)
@@ -1100,14 +1220,14 @@ class wps_ic_preload_warmup
 
         set_transient('wpc_test_' . $id, 'started', 60);
 
-        $results = get_option('wpc-tests', []);
+        $results = get_option(WPS_IC_TESTS, []);
         if ($retest === false) {
             if (!empty($results[$urlKey])) {
                 wp_send_json_success($results[$urlKey]);
             }
         } else {
             $results[$urlKey] = [];
-            update_option('wpc-tests', $results);
+            update_option(WPS_IC_TESTS, $results);
         }
 
         $call = wp_remote_post(self::$apiUrl, ['timeout' => 100, 'blocking' => true, 'body' => ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestLCP'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
@@ -1118,7 +1238,7 @@ class wps_ic_preload_warmup
             $decodedBody = json_decode($body, true);
             if (!empty($decodedBody['success']) && $decodedBody['success'] == 'true') {
                 // Update the option with new results
-                $results = get_option('wpc-tests', []);
+                $results = get_option(WPS_IC_TESTS, []);
                 $results[$urlKey] = $decodedBody['data'];
 
                 if (!empty($results[$urlKey]['preloads'])) {
@@ -1170,7 +1290,7 @@ class wps_ic_preload_warmup
 
                 }
 
-                update_option('wpc-tests', $results);
+                update_option(WPS_IC_TESTS, $results);
                 $this->localCacheWarmup($url);
 
                 sleep(10);
@@ -1378,7 +1498,7 @@ class wps_ic_preload_warmup
         if (!empty($connectivity) && $connectivity == 'failed') {
             //engage local mode
             set_transient('wpc-page-optimizations-status', ['id' => '', 'status' => 'started', 'mode' => 'local'], 60 * 3);
-            wp_send_json_success();
+            wp_send_json_success('failed-connectivity');
         } else {
             update_option('wpc-connectivity-status', 'passed');
         }

@@ -316,6 +316,9 @@ class wps_cacheHtml
             fwrite($fp, $buffer);
             fclose($fp);
 
+            $stats = new wps_ic_stats();
+            $stats->saveWarmupStats($buffer);
+
             if (function_exists('gzencode')) {
                 $this->saveGzCache($buffer, $prefix);
             }

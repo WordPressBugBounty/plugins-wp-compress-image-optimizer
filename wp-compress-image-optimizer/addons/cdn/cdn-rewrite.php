@@ -195,8 +195,8 @@ class wps_cdn_rewrite
         }
 
         $options = get_option(WPS_IC_OPTIONS);
-        $response_key = $options['response_key'];
-        if (empty($response_key)) {
+        $apikey = $options['api_key'];
+        if (empty($apikey)) {
             return true;
         }
 
@@ -891,7 +891,6 @@ class wps_cdn_rewrite
             return $html;
         }
 
-
         if (self::$cdnEnabled == 0) {
             $htmlBefore = $html;
             $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$this, 'local_script_encode'], $html);
@@ -935,7 +934,7 @@ class wps_cdn_rewrite
         }
 
 
-        $html = preg_replace_callback('/<head>/si', [$this, 'injectPreloadImages'], $html);
+        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -1696,8 +1695,8 @@ class wps_cdn_rewrite
         self::$findImages = rtrim(self::$findImages, '|');
 
         // Plugin is NOT Activated
-        $response_key = self::$options['api_key'];
-        if (empty($response_key)) {
+        $apikey = self::$options['api_key'];
+        if (empty($apikey)) {
             return;
         }
 
@@ -1824,6 +1823,7 @@ class wps_cdn_rewrite
             self::$settings['serve']['gif'] = 1;
             self::$settings['serve']['svg'] = 1;
         }
+
 
         if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
@@ -2077,7 +2077,6 @@ class wps_cdn_rewrite
         if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
         }
-
 
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
@@ -2494,6 +2493,7 @@ class wps_cdn_rewrite
 
     public function cdnRewriter($html)
     {
+
         self::$wpcPreloadLinks = [];
 
         $isUserLoggedIn = is_user_logged_in();
@@ -2626,7 +2626,7 @@ class wps_cdn_rewrite
             $dbg .= $html;
         }
 
-        $html = preg_replace_callback('/<head>/si', [$this, 'injectPreloadImages'], $html);
+        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -3120,9 +3120,11 @@ class wps_cdn_rewrite
         return '';
     }
 
-    public function injectPreloadImages()
+    public function injectPreloadImages($matches)
     {
-        $inject = '<head>';
+        $originalHead = $matches[0];
+
+        $inject = $originalHead;
         $inject .= '<!--WPC_INSERT_CRITICAL-->';
         $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
         $inject .= '<!--WPC_INSERT_PRELOAD-->';

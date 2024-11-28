@@ -8,7 +8,8 @@ class wps_ic_js_delay
     public static $footerScripts;
 
     public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids',
+'fusion', 'avada-scrollspy.js'];
 
     public static $deferScripts = ['mediaelement', 'fitvid'];
 

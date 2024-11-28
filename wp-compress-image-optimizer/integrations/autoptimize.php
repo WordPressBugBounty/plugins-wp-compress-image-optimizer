@@ -11,6 +11,21 @@ class wps_ic_autoptimize extends wps_ic_integrations
     $this->plugin = 'Autoptimize';
   }
 
+  public function getConflictList()
+  {
+
+    $conflict = [];
+
+    if ( isset($this->wps_settings['lazy']) && $this->wps_settings['lazy'] == '1' ) {
+      if (  $this->settings_img['autoptimize_imgopt_checkbox_field_3'] ) {
+        $conflict[] ='lazy';
+      }
+    }
+
+    return $conflict;
+
+  }
+
   public function do_checks()
   {
 

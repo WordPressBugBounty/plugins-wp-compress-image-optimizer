@@ -10,7 +10,6 @@ class wps_ic_upgrader extends wps_ic
         if (!$this->is_latest() || !empty($_GET['force_update'])) {
             self::$options = get_option(WPS_IC_OPTIONS);
 
-            //$this->setup_default_options();
             if (file_exists(WPS_IC_DIR . 'local_script_decode.txt')) {
                 unlink(WPS_IC_DIR . 'local_script_decode.txt');
             }
@@ -93,34 +92,6 @@ class wps_ic_upgrader extends wps_ic
         update_option(WPS_IC_SETTINGS, $old_settings);
     }
 
-
-    public function setup_default_options()
-    {
-        $old_settings = get_option(WPS_IC_SETTINGS);
-        $default_Settings = [
-            'js' => '0',
-            'css' => '0',
-            'css_image_urls' => '0',
-            'external-url' => '0',
-            'replace-all-link' => '0',
-            'emoji-remove' => '1',
-            'disable-oembeds' => '1',
-            'disable-gutenber' => '0',
-            'disable-dashicons' => '0',
-            'on-upload' => '0',
-            'defer-js' => '0',
-            'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'],
-            'search-through' => 'html'
-        ];
-
-        foreach ($default_Settings as $name => $defaultValue) {
-            if (!isset($old_settings[$name]) || empty($old_settings[$name])) {
-                $old_settings[$name] = $defaultValue;
-            }
-        }
-
-        update_option(WPS_IC_SETTINGS, $old_settings);
-    }
 
 
     public function update_to_latest()

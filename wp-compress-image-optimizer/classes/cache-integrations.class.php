@@ -67,8 +67,8 @@ class wps_ic_cache_integrations
         }
 
         // Breeze Purge
-        if (function_exists('breeze_cache_flush')) {
-            Breeze_PurgeCache::breeze_cache_flush();
+        if (class_exists("Breeze_PurgeCache")) {
+          Breeze_PurgeCache::breeze_cache_flush();
         }
 
         // Purge Autoptimize
@@ -97,10 +97,17 @@ class wps_ic_cache_integrations
             self::purgeVarnish();
         }
 
+        if (class_exists('Nginx_Helper')) {
+          global $nginx_purger;
+          $nginx_purger->purge_all();
+        }
+
     }
 
     public static function purgeBreeze()
     {
+        do_action( 'breeze_clear_all_cache' ); //working
+
         if (defined('BREEZE_VERSION')) {
             global $wp_filesystem;
             require_once(ABSPATH . 'wp-admin/includes/file.php');
@@ -119,9 +126,10 @@ class wps_ic_cache_integrations
     public static function purgeCacheFiles($url_key = false)
     {
         $cache_dir = WPS_IC_CACHE;
+        $url_key = sanitize_title($url_key);
 
         //whenever we delete cache we want to delete tests results
-        $test_results = get_option('wpc-tests', []);
+        $test_results = get_option(WPS_IC_TESTS, []);
 
         if (!$url_key) {
             self::removeDirectory($cache_dir);
@@ -131,7 +139,7 @@ class wps_ic_cache_integrations
             unset($test_results[$url_key]);
         }
 
-        update_option('wpc-tests', $test_results);
+        #update_option(WPS_IC_TESTS, $test_results);
         return true;
     }
 

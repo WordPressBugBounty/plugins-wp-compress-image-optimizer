@@ -42,7 +42,7 @@ jQuery(document).ready(function ($) {
 
                         $(loading).hide();
 
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '',
                             text: 'You have successfully connected to the Compression Cloud!',
                             imageUrl: 'https://www.wpcompress.com/confirmed.png',
@@ -67,7 +67,7 @@ jQuery(document).ready(function ($) {
 
                         $(loading).hide();
 
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '',
                             html: response.data.msg,
                             imageUrl: 'https://www.wpcompress.com/error.png',

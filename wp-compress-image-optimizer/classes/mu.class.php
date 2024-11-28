@@ -959,7 +959,9 @@ class wps_ic_mu extends wps_ic
             if (is_array($option_value)) {
                 foreach ($option_value as $option_value_k => $option_value_v) {
                     if (empty($settings[$option_key][$option_value_k])) {
-                        $settings[$option_key] = [];
+                        if (!isset($settings[$option_key])) {
+                            $settings[$option_key] = [];
+                        }
                         $settings[$option_key][$option_value_k] = '0';
                     }
                 }

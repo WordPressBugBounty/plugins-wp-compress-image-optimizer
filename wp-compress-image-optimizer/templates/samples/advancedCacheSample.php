@@ -22,8 +22,10 @@ include_once $pluginExists . 'addons/cache/advancedCache.php';
 
 $config = new wps_ic_config();
 include_once $config->getConfigPath();
-if (isset($_COOKIE[$wpcio_logged_in_cookie])) {
-  return;
+foreach($_COOKIE as $key => $value) {
+  if (strpos($key, 'wordpress_logged_in_') === 0) {
+    return; // Don't cache for logged-in users
+  }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

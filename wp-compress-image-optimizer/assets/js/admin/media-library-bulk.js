@@ -77,7 +77,7 @@ jQuery(document).ready(function ($) {
                     }
 
                     // Failure Pop Up
-                    Swal.fire({
+                    WPCSwal.fire({
                         title: '',
                         html: $('#' + response.data.msg).html(),
                         width: 600,
@@ -127,7 +127,7 @@ jQuery(document).ready(function ($) {
                         $('.bulk-preparing-optimize').hide();
 
                         // Failure Pop Up
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '',
                             html: $('#' + response.data.msg).html(),
                             width: 600,
@@ -224,7 +224,7 @@ jQuery(document).ready(function ($) {
                         $('.bulk-preparing-optimize').hide();
 
                         // Failure Pop Up
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '',
                             html: $('#' + response.data.msg).html(),
                             width: 600,

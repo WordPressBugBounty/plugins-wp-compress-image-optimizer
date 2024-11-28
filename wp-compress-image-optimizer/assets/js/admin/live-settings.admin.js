@@ -8,7 +8,7 @@ jQuery(document).ready(function ($) {
 
 
     var swalFunc = function open_connect_popup() {
-        Swal.fire({
+        WPCSwal.fire({
             title: '',
             showClass: {
                 popup: 'in'
@@ -192,7 +192,7 @@ jQuery(document).ready(function ($) {
 
             if (cname_field == '') {
                 //wps-ic-mu-popup-empty-cname
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', position: 'center', html: jQuery('.wps-ic-mu-popup-empty-cname').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
@@ -240,7 +240,7 @@ jQuery(document).ready(function ($) {
                             $(cname_configured).html(response.data.configured).show();
                             $('.btn-close').on('click', function (e) {
                                 e.preventDefault();
-                                Swal.close();
+                                WPCSwal.close();
                                 return false;
                             });
                         }, 1000);
@@ -311,7 +311,7 @@ jQuery(document).ready(function ($) {
                         $(cname_configured).html(response.data.configured).show();
                         $('.btn-close').on('click', function (e) {
                             e.preventDefault();
-                            Swal.close();
+                            WPCSwal.close();
                             return false;
                         });
                     }, 1000);
@@ -364,7 +364,7 @@ jQuery(document).ready(function ($) {
                 $(label_enabled).hide();
                 $(cname_disabled).show();
                 $(label_disabled).show();
-                Swal.close();
+                WPCSwal.close();
             }
         });
     }
@@ -395,7 +395,7 @@ jQuery(document).ready(function ($) {
                     $(top).show();
                     $(content).show();
                     $(loading).hide();
-                    Swal.close();
+                    WPCSwal.close();
                 }
 
             });
@@ -601,7 +601,7 @@ jQuery(document).ready(function ($) {
         if (setting_name == 'live-cdn') {
 
             if (allow_live_popup && 1==0) {
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', html: jQuery('#no-live-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, confirmButtonText: 'Okay, I Understand', allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
@@ -611,7 +611,7 @@ jQuery(document).ready(function ($) {
             }
 
             if (leftover_popup) {
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', html: jQuery('#no-credits-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, confirmButtonText: 'Okay, I Understand', allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
@@ -703,16 +703,16 @@ jQuery(document).ready(function ($) {
 
         parsed = parsed.replace(/\&$/, '');
 
-        Swal.fire({
+        WPCSwal.fire({
             title: '', html: jQuery('#saving-settings-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                 container: 'no-padding-popup-bottom-bg',
             }, onOpen: function () {
 
                 $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_save_all_settings', settings: parsed}, function (response) {
                     if (response.success) {
-                        swal.close();
+                        WPCSwal.close();
 
-                        Swal.fire({
+                        WPCSwal.fire({
                             title: '', html: jQuery('#settings-saved-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, showCloseButton: true, customClass: {
                                 container: 'no-padding-popup-bottom-bg',
                             },
@@ -724,7 +724,7 @@ jQuery(document).ready(function ($) {
                     }
                 });
 
-                //swal.close();
+                //WPCSwal.close();
 
             }
         });
@@ -833,7 +833,7 @@ jQuery(document).ready(function ($) {
             // Disable Local Popup
             return false;
 
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', html: jQuery('#local-disabled-popup').html(), width: 900, showCancelButton: true, cancelButtonColor: '#fdfdfd', cancelButtonText: "Ok", showConfirmButton: false, customClass: {
                     container: 'no-padding-popup-bottom-bg switch-legacy-popup local-disabled-popup',
                 }, onOpen: function () {
@@ -856,7 +856,7 @@ jQuery(document).ready(function ($) {
 
         if (ap_status == '1') {
             // Turning OFF
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', html: jQuery('#legacy-enable-popup').html(), width: 900, showCancelButton: true, cancelButtonColor: '#fdfdfd', confirmButtonColor: '#fdfdfd', confirmButtonText: 'Switch to Local', cancelButtonText: "Stay on Live", customClass: {
                     container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                 }, onOpen: function () {
@@ -991,7 +991,7 @@ jQuery(document).ready(function ($) {
 
 
     function lockedPopup() {
-        Swal.fire({
+        WPCSwal.fire({
             title: '', html: jQuery('#locked-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, showCloseButton: true, customClass: {
                 container: 'no-padding-popup-bottom-bg',
             }, onOpen: function () {
@@ -1171,7 +1171,7 @@ jQuery(document).ready(function ($) {
      * Status: Required 5.00.00
      */
     function show_compatibility_popup(popupID) {
-        Swal.fire({
+        WPCSwal.fire({
             title: '', html: jQuery('#' + popupID + '-compatibility-popup').html(), width: 600, showCancelButton: false, showConfirmButton: true, confirmButtonText: 'Okay, I Understand', allowOutsideClick: false, customClass: {
                 container: 'no-padding-popup-bottom-bg switch-legacy-popup',
             }, onOpen: function () {
@@ -1321,12 +1321,12 @@ jQuery(document).ready(function ($) {
             $(form).hide(function () {
                 $(loading).show();
 
-                Swal.fire({
+                WPCSwal.fire({
                     title: '', html: $('#wps-ic-connection-tests').html(), showConfirmButton: false, showCloseButton: false, allowOutsideClick: false, onOpen: function () {
                         jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                             e.preventDefault();
 
-                            swal.close();
+                            WPCSwal.close();
                         });
                     }
                 });
@@ -1344,13 +1344,13 @@ jQuery(document).ready(function ($) {
 
                                     $(form).hide();
                                     $(loading).hide();
-                                    swal.close();
+                                    WPCSwal.close();
 
-                                    Swal.fire({
+                                    WPCSwal.fire({
                                         title: '', html: $('#wps-ic-connection-tests-done').html(), showConfirmButton: false, showCloseButton: false, allowOutsideClick: false, onOpen: function () {
                                             jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                                                 e.preventDefault();
-                                                swal.close();
+                                                WPCSwal.close();
                                             });
                                         }
                                     });
@@ -1441,19 +1441,19 @@ jQuery(document).ready(function ($) {
                 title = 'Image Restore';
             }
 
-            swal.close();
+            WPCSwal.close();
 
             $('ul>li', '#wps-ic-test-error').html('<span class="fas"></span> ' + title);
             $('ul>li span', '#wps-ic-test-error').addClass('failed');
             $('ul>li span', '#wps-ic-test-error').addClass('fa-times');
             $('.ic-error-msg', '#wps-ic-test-error').html(msg);
 
-            Swal.fire({
+            WPCSwal.fire({
                 title: '', html: $('#wps-ic-test-error').html(), showConfirmButton: false, showCloseButton: true, allowOutsideClick: false, onOpen: function () {
                     jQuery('body').on('click', '.wps-ic-swal-close', function (e) {
                         e.preventDefault();
                         window.location.reload();
-                        swal.close();
+                        WPCSwal.close();
                     });
 
                 }, onClose: function () {
