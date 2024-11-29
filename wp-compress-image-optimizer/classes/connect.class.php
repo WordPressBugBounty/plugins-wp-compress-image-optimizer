@@ -53,8 +53,9 @@ class wps_ic_connect extends wps_ic
                 }
 
                 $default_Settings = self::$options->get_preset('lite');
+                $settings = array_merge($settings, $default_Settings);
 
-                update_option(WPS_IC_SETTINGS, $default_Settings);
+                update_option(WPS_IC_SETTINGS, $settings);
                 update_option(WPS_IC_GUI, 'lite');
                 update_option('wpsShowAdvanced', 'true');
                 delete_option('wps_ic_allow_live');
@@ -133,19 +134,21 @@ class wps_ic_connect extends wps_ic
                 }
 
                 $settings = get_option(WPS_IC_SETTINGS);
-                $sizes = get_intermediate_image_sizes();
-                if ($sizes) {
-                    foreach ($sizes as $key => $value) {
-                        $settings['thumbnails'][$value] = 1;
+
+                if (empty($settings) || count($settings) >= 3) {
+                    $sizes = get_intermediate_image_sizes();
+                    if ($sizes) {
+                        foreach ($sizes as $key => $value) {
+                            $settings['thumbnails'][$value] = 1;
+                        }
                     }
+
+                    $default_Settings = self::$options->get_preset('recommended');
+                    $settings = array_merge($settings, $default_Settings);
+
+                    $settings['live-cdn'] = '1';
+                    update_option(WPS_IC_SETTINGS, $settings);
                 }
-
-                $default_Settings = ['js' => '1', 'css' => '1', 'css_image_urls' => '0', 'external-url' => '0', 'replace-all-link' => '0', 'emoji-remove' => '0', 'disable-oembeds' => '0', 'disable-gutenber' => '0', 'disable-dashicons' => '0', 'on-upload' => '0', 'defer-js' => '0', 'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'], 'search-through' => 'html', 'preserve-exif' => '0', 'minify-css' => '0', 'minify-js' => '0'];
-
-                $settings = array_merge($settings, $default_Settings);
-
-                $settings['live-cdn'] = '1';
-                update_option(WPS_IC_SETTINGS, $settings);
 
                 // TODO: Setup the Cache Options, if cache is active
 

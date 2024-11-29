@@ -10,7 +10,14 @@ class wps_ic_preload_warmup
     public function __construct()
     {
         self::$warmupVersion = 'v4/';
-        $location = get_option('wps_ic_geo_locate');
+        $this->getApiUrl();
+    }
+
+
+    public function getApiUrl()
+    {
+
+        $location = get_option('wps_ic_geo_locate_v2');
         if (empty($location)) {
             $location = $this->geoLocate();
         }
@@ -19,12 +26,7 @@ class wps_ic_preload_warmup
             $location = (array)$location;
         }
 
-        $this->getApiUrl();
-    }
 
-
-    public function getApiUrl()
-    {
         if (isset($location) && !empty($location)) {
             if (is_array($location) && !empty($location['server'])) {
                 if (empty($location['continent'])) {
@@ -51,6 +53,7 @@ class wps_ic_preload_warmup
 
         self::$standaloneWarmup = str_replace('warmup', 'standalone_warmup', self::$apiUrl);
         self::$apiUrl .= self::$warmupVersion;
+
     }
 
 
@@ -67,16 +70,16 @@ class wps_ic_preload_warmup
             $body = json_decode($body);
 
             if ($body->success) {
-                update_option('wps_ic_geo_locate', $body->data);
+                update_option('wps_ic_geo_locate_v2', $body->data);
 
                 return $body->data;
             } else {
-                update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
                 return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
             }
         } else {
-            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
             return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
         }
@@ -911,8 +914,8 @@ class wps_ic_preload_warmup
         fwrite($fp, $body);
         fclose($fp);
 
-      $stats = new wps_ic_stats();
-      $stats->saveWarmupStats($body);
+        $stats = new wps_ic_stats();
+        $stats->saveWarmupStats($body);
 
         if (function_exists('gzencode')) {
             $this->saveGzCacheLocal($cachePath, $body);
@@ -1050,7 +1053,7 @@ class wps_ic_preload_warmup
             $response_body = json_decode($response_body, true);
             if ($response_body['success'] == 'true') {
                 //added
-                set_transient('wpc_initial_test', 'running', 2*60);
+                set_transient('wpc_initial_test', 'running', 2 * 60);
             } else {
                 wp_send_json_error(print_r($response_body['data'], true));
             }
@@ -1058,7 +1061,7 @@ class wps_ic_preload_warmup
             wp_send_json_error(print_r($call, true));
         }
 
-      wp_send_json_success(true);
+        wp_send_json_success(true);
     }
 
 
@@ -1090,9 +1093,11 @@ class wps_ic_preload_warmup
 
 
         if ($dash) {
-          $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
+            $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
+
         } else {
-          $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+            $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+
         }
 
         if (is_wp_error($call)) {
@@ -1107,7 +1112,7 @@ class wps_ic_preload_warmup
 
                 //added
                 set_transient('wpc_test_' . $id, 'started', 60);
-                set_transient('wpc_initial_test', 'running', 3*60);
+                set_transient('wpc_initial_test', 'running', 3 * 60);
                 //
 
             } else {
@@ -1117,7 +1122,7 @@ class wps_ic_preload_warmup
             wp_send_json_error(print_r($call, true));
         }
 
-      wp_send_json_success($transient);
+        wp_send_json_success($transient);
     }
 
 
@@ -1142,7 +1147,7 @@ class wps_ic_preload_warmup
         $urlKey = sanitize_title($urlKey);
 
         set_transient('wpc_test_' . $id, 'started', 60);
-        set_transient('wpc_initial_test', 'running', 2*60);
+        set_transient('wpc_initial_test', 'running', 2 * 60);
 
         $results = get_option(WPS_IC_TESTS, []);
         if ($retest === false) {
@@ -1202,7 +1207,10 @@ class wps_ic_preload_warmup
         }
 
         if ($return) {
-            wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']], $call);
+            if (is_wp_error($call)) {
+                $call = $call->get_error_messages();
+            }
+            wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']], print_r($call, true));
         }
 
         return false;
@@ -1526,13 +1534,16 @@ class wps_ic_preload_warmup
 
     public function simpleConnectivityTest()
     {
-      while (ob_get_level()) {
-        ob_end_clean();
-      }
-      ob_start();
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        ob_start();
         //only test post with params outbound and get with params inbound, what we are using
         $url = home_url();
         $api_key = get_option(WPS_IC_OPTIONS)['api_key'];
+
+        if (empty($api_key)) return;
+
         $results = [];
 
         // Function to process the response

@@ -361,7 +361,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        if (empty($settings)) {
+        if (empty($settings) || count($settings) <= 3) {
             $options = new wps_ic_options();
             $settings = $options->get_preset('lite');
         }
@@ -2064,7 +2064,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         update_option('wpc-ic-force-location', $location_data);
-        update_option('wps_ic_geo_locate', $location_data);
+        update_option('wps_ic_geo_locate_v2', $location_data);
 
         wp_send_json_success($location_data);
     }

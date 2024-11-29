@@ -113,6 +113,12 @@ class wps_cdn_rewrite
         self::$settings = get_option(WPS_IC_SETTINGS);
         self::$excludes = get_option('wpc-excludes');
 
+        if (empty(self::$settings)) {
+            $options = new wps_ic_options();
+            $settings = $options->get_preset('lite');
+            self::$settings = $settings;
+        }
+
         if (empty(self::$excludes)) {
             self::$excludes = [];
         }

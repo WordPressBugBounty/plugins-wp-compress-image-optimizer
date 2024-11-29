@@ -63,25 +63,11 @@ class wps_ic_mainwp extends wps_ic
                     }
 
                     $configuration = $options->get_preset('recommended');
-                    #var_dump(print_r($configuration,true));
 
                     update_option(WPS_IC_SETTINGS, $configuration);
                     update_option(WPS_IC_PRESET, 'recommended');
                     delete_transient('wps_ic_account_status');
 
-//
-//                    $settings = get_option(WPS_IC_SETTINGS);
-//                    $sizes = get_intermediate_image_sizes();
-//                    foreach ($sizes as $key => $value) {
-//                        $settings['thumbnails'][$value] = 1;
-//                    }
-//
-//                    $default_Settings = ['js' => '1', 'css' => '0', 'css_image_urls' => '0', 'external-url' => '0', 'replace-all-link' => '0', 'emoji-remove' => '0', 'disable-oembeds' => '0', 'disable-gutenber' => '0', 'disable-dashicons' => '0', 'on-upload' => '0', 'defer-js' => '0', 'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'], 'search-through' => 'html', 'preserve-exif' => '0', 'minify-css' => '0', 'minify-js' => '0'];
-//
-//                    $settings = array_merge($settings, $default_Settings);
-//
-//                    $settings['live-cdn'] = '1';
-//                    update_option(WPS_IC_SETTINGS, $settings);
                     wp_send_json_success();
                 }
 

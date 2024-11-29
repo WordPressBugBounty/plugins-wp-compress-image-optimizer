@@ -197,12 +197,12 @@ class wps_ic_mu extends wps_ic
                         $body = json_decode($body);
 
                         if ($body->success) {
-                            update_option('wps_ic_geo_locate', $body->data);
+                            update_option('wps_ic_geo_locate_v2', $body->data);
                         } else {
-                            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                         }
                     } else {
-                        update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                        update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                     }
 
                     $results['connected'][] = $siteID;
@@ -413,7 +413,7 @@ class wps_ic_mu extends wps_ic
         }
 
         update_option('wpc-ic-force-location', $location_data);
-        update_option('wps_ic_geo_locate', $location_data);
+        update_option('wps_ic_geo_locate_v2', $location_data);
 
         wp_send_json_success($location_data);
     }
@@ -714,12 +714,12 @@ class wps_ic_mu extends wps_ic
                         $body = json_decode($body);
 
                         if ($body->success) {
-                            update_option('wps_ic_geo_locate', $body->data);
+                            update_option('wps_ic_geo_locate_v2', $body->data);
                         } else {
-                            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                         }
                     } else {
-                        update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                        update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                     }
                 } else {
                     $reconnect_msg = 'api-error';
@@ -903,12 +903,12 @@ class wps_ic_mu extends wps_ic
                         $body = json_decode($body);
 
                         if ($body->success) {
-                            update_option('wps_ic_geo_locate', $body->data);
+                            update_option('wps_ic_geo_locate_v2', $body->data);
                         } else {
-                            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                         }
                     } else {
-                        update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                        update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
                     }
 
                     include WPS_IC_DIR . 'templates/mu/connected.php';

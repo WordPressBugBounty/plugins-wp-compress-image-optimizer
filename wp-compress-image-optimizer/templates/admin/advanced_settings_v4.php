@@ -1241,7 +1241,7 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                         <div class="wpc-spacer"></div>
 
                                         <?php
-                                        $location = get_option('wps_ic_geo_locate');
+                                        $location = get_option('wps_ic_geo_locate_v2');
                                         if (empty($location)) {
                                             $location = $this->geoLocate();
                                         }

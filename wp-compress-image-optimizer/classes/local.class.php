@@ -23,7 +23,7 @@ class wps_ic_local
     self::$imageSizes = [];
     self::$allowed_types = ['jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png'];
 
-    $location = get_option('wps_ic_geo_locate');
+    $location = get_option('wps_ic_geo_locate_v2');
     if (empty($location)) {
       $location = $this->geoLocate();
     }
@@ -103,16 +103,16 @@ class wps_ic_local
       $body = json_decode($body);
 
       if ($body->success) {
-        update_option('wps_ic_geo_locate', $body->data);
+        update_option('wps_ic_geo_locate_v2', $body->data);
 
         return $body->data;
       } else {
-        update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+        update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
         return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
       }
     } else {
-      update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+      update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
 
       return ['country' => 'EU', 'server' => 'frankfurt.zapwp.net'];
     }

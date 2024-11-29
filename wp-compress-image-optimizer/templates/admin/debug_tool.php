@@ -262,6 +262,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td colspan="3">
             <p>
                 <?php
+                $locate = get_option('wps_ic_geo_locate_v2');
+                echo print_r($locate,true);
+                ?>
+            </p>
+        </td>
+    </tr>
+    <tr>
+        <td>Generate Ajax Params</td>
+        <td colspan="3">
+            <p>
+                <?php
                 $parameters = get_option(WPS_IC_SETTINGS);
                 $translatedParameters = [];
                 if (isset($parameters['generate_webp'])) {

@@ -24,6 +24,7 @@ class wps_ic_menu extends wps_ic
 
             $this->templates = new wps_ic_templates();
 
+            // API Key is removed!
             if (empty(self::$connected['api_key']) || empty(self::$connected['response_key'])) {
                 $option['hide_compress'] = '0';
                 update_option(WPS_IC_SETTINGS, $option);

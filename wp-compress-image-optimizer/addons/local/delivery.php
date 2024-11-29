@@ -63,7 +63,7 @@ class wpc_ic_delivery
 
     public function getAPIUrl()
     {
-        $location = get_option('wps_ic_geo_locate');
+        $location = get_option('wps_ic_geo_locate_v2');
         if (empty($location)) {
             $location = $this->geoLocate();
         }

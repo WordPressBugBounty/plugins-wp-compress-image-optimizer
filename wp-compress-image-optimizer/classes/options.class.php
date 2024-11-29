@@ -176,7 +176,7 @@ class wps_ic_options
             'retina-in-srcset' => '0',
             'nativeLazy' => '1',
             'lazy' => '0',
-            'remove-srcset' => '1',
+            'remove-srcset' => '0',
             'background-sizing' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
@@ -201,8 +201,6 @@ class wps_ic_options
             'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',
-            'lazySkipCount' => '4',
-            'disable-trigger-dom-event' => '0',
             'cache' => ['advanced' => '1', 'mobile' => '1', 'minify' => '0'],
             'local' => ['media-library' => '0'],
             'status' => [
@@ -211,7 +209,11 @@ class wps_ic_options
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
             ],
+            'lazySkipCount' => '4',
+            'disable-trigger-dom-event' => '0',
             'hide_compress' => '0',
+            'preload-scripts' => '1',
+            'fetchpriority-high' => '1',
             'preload-crit-fonts' => '0'
         ];
 

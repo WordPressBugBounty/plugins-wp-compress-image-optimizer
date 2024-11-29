@@ -78,7 +78,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.00';
+        self::$version = '6.30.01';
         $wps_ic = $this;
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
@@ -717,7 +717,8 @@ class wps_ic
                 // Setup Default Options
                 $options = new wps_ic_options();
                 $settings = get_option(WPS_IC_SETTINGS);
-                if (!$settings || empty($settings)) {
+
+                if (!$settings || count($settings)<=3) {
                     $options->set_defaults();
                 }
 
@@ -1547,14 +1548,13 @@ class wps_ic
             require_once 'classes/options.class.php';
         }
 
+        $foundMissing = false;
         $options = new wps_ic_options();
         $defaultSettings = $options->getDefault();
 
-        #var_dump(print_r($defaultSettings,true));
-        if (empty($settings) || !is_array($settings)) {
+        if (empty($settings) || count($settings)<=3) {
             $settings = [];
         }
-
 
         foreach ($defaultSettings as $option_key => $option_value) {
             if (is_array($option_value)) {
@@ -1564,16 +1564,21 @@ class wps_ic
                             $settings[$option_key] = [];
                         }
                         $settings[$option_key][$option_value_k] = '0';
+                        $foundMissing = true;
                     }
                 }
             } else {
                 if (!isset($settings[$option_key])) {
                     $settings[$option_key] = '0';
+                    $foundMissing = true;
                 }
             }
         }
 
-        update_option(WPS_IC_SETTINGS, $settings);
+        if ($foundMissing) {
+            update_option(WPS_IC_SETTINGS, $settings);
+        }
+
         return $settings;
     }
 
@@ -1606,6 +1611,14 @@ class wps_ic
         if (!$this::$settings) {
             $options = new wps_ic_options();
             $options->set_recommended_options();
+        }
+
+        // Fix to enabled preload-scripts on all sites!
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (empty($this::$settings['preload-scripts'])) {
+            $settings['preload-scripts'] = '1';
+            $settings['fetchpriority-high'] = '1';
+            update_option(WPS_IC_SETTINGS, $settings);
         }
 
         if (!empty(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') {
@@ -2054,14 +2067,14 @@ class wps_ic
             $body = json_decode($body);
 
             if ($body->success) {
-                update_option('wps_ic_geo_locate', $body->data);
+                update_option('wps_ic_geo_locate_v2', $body->data);
             } else {
-                update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
             }
 
             wp_send_json_success($body->data);
         } else {
-            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
         }
 
         return false;
@@ -2080,12 +2093,12 @@ class wps_ic
             $body = json_decode($body);
 
             if ($body->success) {
-                update_option('wps_ic_geo_locate', $body->data);
+                update_option('wps_ic_geo_locate_v2', $body->data);
             } else {
-                update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+                update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
             }
         } else {
-            update_option('wps_ic_geo_locate', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
+            update_option('wps_ic_geo_locate_v2', ['country' => 'EU', 'server' => 'frankfurt.zapwp.net']);
         }
     }
 
