@@ -657,6 +657,10 @@ class wps_cdn_rewrite
      */
     public static function image_url_matching_site_url($image)
     {
+      // If the image starts with a slash or wp-content, it's a local image
+      if (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0) {
+        return true;
+      }
         $site_url = self::$site_url;
         $image = str_replace(['https://', 'http://'], '', $image);
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
@@ -2733,6 +2737,12 @@ class wps_cdn_rewrite
         $regEx = '#(?<=[(\"\'])(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
+        //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
+        $regEx = '/background-image:\s*url\((\'|"|)(.*?)\1\)/i';
+        $html = preg_replace_callback($regEx, function($matches) {
+          return 'background-image: url(' . $this->cdn_rewrite_url([$matches[2]]) . ')';
+        }, $html);
+
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'combine_css') {
             return $html;
         }
@@ -3539,6 +3549,32 @@ class wps_cdn_rewrite
                 if (self::is_excluded($url, $url)) {
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
+
+              if (strpos($url, '.jpg') !== false || strpos($url, '.gif') !== false || strpos($url, '.png') !== false) {
+                $ext = '';
+                if (strpos($url, '.jpg') !== false) {
+                  $ext = 'jpg';
+                } elseif (strpos($url, '.gif') !== false) {
+                  $ext = 'gif';
+                } elseif (strpos($url, '.png') !== false) {
+                  $ext = 'png';
+                }
+
+                if (!empty(self::$settings['serve'][$ext])) {
+                  $webp = '/wp:' . self::$webp;
+                  if (self::isExcludedFrom('webp', $url)) {
+                    $webp = '/wp:0';
+                  }
+
+                  if (!self::is_excluded($url, $url)) {
+                      $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:1/u:' . self::reformat_url($url);
+                  }
+                } else {
+                  $newUrl = self::reformat_url($url, false);
+                }
+
+                return $newUrl;
+              }
 
                 return $url;
 

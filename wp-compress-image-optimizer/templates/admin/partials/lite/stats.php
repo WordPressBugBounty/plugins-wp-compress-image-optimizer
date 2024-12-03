@@ -298,7 +298,7 @@ $option = get_option(WPS_IC_OPTIONS);
                 </ul>
             <?php } ?>
             <?php
-            if (empty($option) || (!empty($option['version']) && $option['version'] == 'lite')) {
+            if (empty($option) || (!empty($option['version']) && $option['version'] == 'lite' && !get_option('hide_wpcompress_plugin'))) {
                 ?>
                 <div class="wpc-page-speed-footer">
                     <div class="wpc-ps-f-left">

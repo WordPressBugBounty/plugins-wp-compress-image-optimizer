@@ -279,8 +279,7 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                         <?php
                         } ?>
                         <div class="wpc-header-logo">
-                            <img src="<?php
-                            echo WPS_IC_URI; ?>assets/v4/images/main-logo.svg"/>
+                            <img src="<?php echo WPS_IC_URI; ?>assets/v4/images/main-logo.svg"/>
                         </div>
                         <?php
                         if (!$showAdvanced) {

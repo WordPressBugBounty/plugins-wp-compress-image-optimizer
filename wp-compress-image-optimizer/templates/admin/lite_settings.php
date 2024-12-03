@@ -699,7 +699,7 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                     </ul>
                                 <?php } ?>
                                 <?php
-                                if (empty($option) || (!empty($option['version']) && $option['version'] == 'lite')) {
+                                if (empty($option) || (!empty($option['version']) && $option['version'] == 'lite'  && !get_option('hide_wpcompress_plugin'))) {
                                     ?>
                                     <div class="wpc-page-speed-footer">
                                         <div class="wpc-ps-f-left">

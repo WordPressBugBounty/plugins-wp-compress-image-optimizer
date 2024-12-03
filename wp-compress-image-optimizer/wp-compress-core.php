@@ -78,8 +78,13 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.01';
+        self::$version = '6.30.03';
         $wps_ic = $this;
+
+        if (class_exists('whtlbl_whitelabel_plugin')) {
+            $wlpl = new whtlbl_whitelabel_plugin();
+            self::$slug = $wlpl->slug;
+        }
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
             //It has to be here, init() is too late

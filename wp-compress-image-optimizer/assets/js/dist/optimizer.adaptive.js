@@ -542,12 +542,28 @@ function runAdaptive() {
                 newApiURL = adaptiveImage.src;
             }
 
+            // Check and update the srcset attribute if data-srcset exists
+            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+                newApiURLSrcset = adaptiveImage.dataset.srcset;
+                adaptiveImage.srcset = newApiURLSrcset;
+            }
+
             newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:1');
             adaptiveImage.src = newApiURL;
             adaptiveImage.classList.add("ic-fade-in");
             adaptiveImage.classList.add("wpc-remove-lazy");
             adaptiveImage.classList.remove("wps-ic-lazy-image");
             adaptiveImage.removeAttribute('data-wpc-loaded');
+
+            // Remove Dataset
+            if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
+                adaptiveImage.removeAttribute('data-src'); // Remove dataset.src
+            }
+
+            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+                adaptiveImage.removeAttribute('data-srcset');
+            }
+
             return;
         }
 

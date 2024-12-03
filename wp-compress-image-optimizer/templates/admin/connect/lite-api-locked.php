@@ -86,8 +86,8 @@ global $wps_ic;
 
                             <div class="wps-spacer" style="height: 30px;"></div>
 
-                            <div class="wps-ic-lite-connect-footer">
-                                <p>You may <a href="#">create a free account</a> to unlock bonus performance features and get access to the management portal.</p>
+                            <div class="wps-ic-lite-connect-footer" <?php if (get_option('hide_wpcompress_plugin')) {echo 'style="display:none;"';} ?>>
+                                <p>You may <a href="https://app.wpcompress.com/" target="_blank">create a free account</a> to unlock bonus performance features and get access to the management portal.</p>
                             </div>
 
                         </div>

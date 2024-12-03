@@ -628,8 +628,7 @@ class wps_ic_enqueues extends wps_ic
     public function asset_script($name, $filename)
     {
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/' . $filename, ['jquery'], $this::$version, true);
-
-        if ($name = 'admin-sweetalert'){
+        if (strpos($name,'admin-sweetalert') !== false) {
           wp_add_inline_script($this::$slug . '-' . $name, 'window.WPCSwal = window.Swal;');
         }
     }

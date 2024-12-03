@@ -57,11 +57,27 @@ function runLazy() {
                             newApiURL = lazyImage.src;
                         }
 
+                        // Check and update the srcset attribute if data-srcset exists
+                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+                            newApiURLSrcset = adaptiveImage.dataset.srcset;
+                            adaptiveImage.srcset = newApiURLSrcset;
+                        }
+
                         newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:1');
                         lazyImage.src = newApiURL;
                         lazyImage.classList.add("ic-fade-in");
                         lazyImage.classList.add("wpc-remove-lazy");
                         lazyImage.classList.remove("wps-ic-lazy-image");
+
+                        // Remove Dataset
+                        if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
+                            adaptiveImage.removeAttribute('data-src'); // Remove dataset.src
+                        }
+
+                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+                            adaptiveImage.removeAttribute('data-srcset');
+                        }
+
                         return;
                     }
 

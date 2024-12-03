@@ -2310,6 +2310,24 @@ SCRIPT;
             }
         }
 
+        // Add srcset - Remove SrcSet is Disabled!
+        if (empty(self::$removeSrcset)) {
+            $srcSetTag = 'srcset';
+
+            if ((!empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') || (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1')) {
+                if (!$skipLazy) {
+                    $srcSetTag = 'data-srcset';
+                }
+            }
+
+            if (!empty($original_img_tag['original_tags']['srcset'])) {
+                $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['srcset'] . '" ';
+            } else {
+                $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['data-srcset'] . '" ';
+            }
+        }
+
+        // add data-src
         if (empty($original_img_tag['data-src'])) {
             $original_img_tag['data-src'] = '';
         }

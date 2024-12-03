@@ -128,7 +128,7 @@ class wps_ic_stats
         $initialTestRunning = get_transient('wpc_initial_test');
 
         $option = get_option(WPS_IC_OPTIONS);
-        if (!empty($option['version']) && $option['version'] == 'lite') {
+        if (!empty($option['version']) && $option['version'] == 'lite' && !get_option('hide_wpcompress_plugin')) {
 
             $html = '<div class="wpc-stats-unlock"><a href="#" class="wpc-custom-btn wpc-custom-btn-locked"><span>Unlock 24/7 Monitoring</span> <img src="' . WPS_IC_URI . 'assets/lite/images/unlock-24-7.svg" alt="Unlock 24/7 Monitoring"/></a></div>';
 
