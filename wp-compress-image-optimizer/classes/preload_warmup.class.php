@@ -11,6 +11,9 @@ class wps_ic_preload_warmup
     {
         self::$warmupVersion = 'v4/';
         $this->getApiUrl();
+        $this->logFilePath = WPS_IC_DIR . 'warmup-log.txt';
+        $this->logFile = fopen($this->logFilePath, 'a');
+        $this->get_filesystem();
     }
 
 
@@ -1019,7 +1022,6 @@ class wps_ic_preload_warmup
 
     public function optimizeSingleQuick($id, $test = true, $dash = false)
     {
-
         if ($id == 'home') {
             $url = home_url();
             $is_home = 'true';
@@ -1091,21 +1093,23 @@ class wps_ic_preload_warmup
             $action = 'createQueue';
         }
 
-
+        $warmup = new wps_ic_preload_warmup();
         if ($dash) {
+            $warmup->writeLog('Starting warmup.');
             $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
-
         } else {
             $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
 
         }
 
         if (is_wp_error($call)) {
+            $warmup->writeLog('Got ' . $call->get_error_message());
             wp_send_json_error($call->get_error_message());
         }
 
         if (wp_remote_retrieve_response_code($call) == 200) {
             $response_body = wp_remote_retrieve_body($call);
+            $warmup->writeLog('Got ' . $response_body);
             $response_body = json_decode($response_body, true);
             if ($response_body['success'] == 'true') {
                 $transient = set_transient('wpc-page-optimizations-status', ['id' => $id, 'status' => 'warmup'], 60 * 5);
@@ -1116,9 +1120,16 @@ class wps_ic_preload_warmup
                 //
 
             } else {
-                wp_send_json_error(print_r($response_body['data'], true));
+                //wp_send_json_error(print_r($response_body['data'], true));
             }
+
+          if ($dash && !empty($response_body['testID'])){
+            $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+            $warmupLog[$response_body['testID']] = ['started' => date('Y-m-d H:i:s')];
+            update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
+          }
         } else {
+            $warmup->writeLog('Got ' . wp_remote_retrieve_response_code($call) . ': ' . wp_remote_retrieve_body($call));
             wp_send_json_error(print_r($call, true));
         }
 
@@ -1619,5 +1630,92 @@ class wps_ic_preload_warmup
 
         return false;
     }
+
+  public function getWarmupLog() {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+
+    if (!empty($_GET['apikey'])) {
+      $apikey = sanitize_text_field($_GET['apikey']);
+    } else {
+      echo json_encode('no-apikey');
+      die();
+    }
+
+    if (!empty($apikey) && get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+      if (file_exists($this->logFilePath)) {
+        $logContents = file_get_contents($this->logFilePath);
+        echo $logContents;
+      } else {
+        echo json_encode('Log file does not exist');
+      }
+      die();
+    }
+
+    echo json_encode('wrong-apikey');
+    die();
+  }
+
+  public function writeLog($message)
+  {
+    fwrite($this->logFile, "[" . date('d.m.Y H:i:s') . "] " . $message . "\r\n");
+  }
+
+  public function get_filesystem()
+  {
+    require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php');
+    require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php');
+    global $wpc_filesystem;
+
+    if (!defined('FS_CHMOD_DIR')) {
+      define('FS_CHMOD_DIR', (fileperms(ABSPATH) & 0777 | 0755));
+    }
+
+    if (!defined('FS_CHMOD_FILE')) {
+      define('FS_CHMOD_FILE', (fileperms(ABSPATH . 'index.php') & 0777 | 0644));
+    }
+
+    if (!isset($wpc_filesystem) || !is_object($wpc_filesystem)) {
+      $wpc_filesystem = new WP_Filesystem_Direct('');
+    }
+  }
+
+  public function isWarmupFailing(){
+    //Check for 2 consecutiove fails older than 5 minutes with no successful tests done after
+    $warmupFailing = false;
+    $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+    $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+
+    if (!empty($_GET['test_warmup_fail'])) {
+        return true;
+    }
+
+    for ($i = 0; $i < count($warmupLog) - 1; $i++) {
+      $current = $warmupLog[$i];
+      $next = $warmupLog[$i + 1];
+
+      if (!isset($current['ended']) && !isset($next['ended'])
+        && $current['started'] < $fiveMinutesAgo
+        && $next['started'] < $fiveMinutesAgo) {
+
+        // Check if there are any successful tests after these two
+        $hasSuccessAfter = false;
+        for ($j = $i + 2; $j < count($warmupLog); $j++) {
+          if (isset($warmupLog[$j]['ended'])) {
+            $hasSuccessAfter = true;
+            break;
+          }
+        }
+
+        if (!$hasSuccessAfter) {
+          $warmupFailing = true;
+          break;
+        }
+      }
+    }
+
+    return $warmupFailing;
+  }
 
 }

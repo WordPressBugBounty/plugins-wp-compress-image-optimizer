@@ -41,19 +41,9 @@ if ($option = 'exclude-url-from-all'){
             <form method="post" class="wpc-save-popup-data" action="#">
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
-                      <?php
-                      $excludes = get_option('wpc-url-excludes');
-                      if ( ! empty($excludes[$current_option])) {
-                        $excludes[$current_option] = implode("\n", $excludes[$current_option]);
-                      } else {
-	                      $excludes[$current_option] = '';
-                      }
-
-                      ?>
                         <textarea name="wpc-url-excludes" data-setting-name="wpc-url-excludes"
                                   data-setting-subset="<?php echo $current_option; ?>"  class="exclude-list-textarea-value"
-                                  placeholder="e.g. www.example.com example.com example.com/page1"><?php echo
-                          $excludes[$current_option]; ?></textarea>
+                                  placeholder="e.g. www.example.com example.com example.com/page1"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 

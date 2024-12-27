@@ -27,16 +27,7 @@
     <form method="post" class="wpc-save-popup-data" action="#">
       <div class="cdn-popup-content-full">
         <div class="cdn-popup-content-inner">
-          <?php
-          $excludes = get_option('wpc-excludes');
-          if ( ! empty($excludes['css_render_blocking'])) {
-            $excludes['css_render_blocking'] = implode("\n", $excludes['css_render_blocking']);
-          } else {
-	          $excludes['css_render_blocking'] = '';
-          }
-          
-          ?>
-          <textarea name="wpc-excludes[css_render_blocking]" data-setting-name="wpc-excludes" data-setting-subset="css_render_blocking" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo $excludes['css_render_blocking']; ?></textarea>
+          <textarea name="wpc-excludes[css_render_blocking]" data-setting-name="wpc-excludes" data-setting-subset="css_render_blocking" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
 
             <div class="wps-default-excludes-container">
             <div class="wps-default-excludes-enabled-checkbox-container">

@@ -4,6 +4,7 @@ include 'debug.php';
 include 'defines.php';
 include 'addons/cdn/cdn-rewrite.php';
 include 'addons/legacy/compress.php';
+include 'addons/cf-sdk/cf-sdk.php';
 
 //TRAITS
 include 'traits/excludes.php';
@@ -44,6 +45,7 @@ class wps_ic
     public static $debug;
     public static $local;
     public static $media_lib_ajax;
+    public $integrations;
     private static $accountStatus;
     public $upgrader;
     public $cache;
@@ -78,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.03';
+        self::$version = '6.30.04';
         $wps_ic = $this;
 
         if (class_exists('whtlbl_whitelabel_plugin')) {
@@ -112,8 +114,8 @@ class wps_ic
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
 
-        $integrations = new wps_ic_integrations();
-        $integrations->add_admin_hooks();
+        $this->integrations = new wps_ic_integrations();
+        $this->integrations->add_admin_hooks();
 
         $preload = new wps_ic_preload_warmup();
         $preload->setupCronPreload();
@@ -984,6 +986,12 @@ class wps_ic
             die();
         }
 
+        if (!empty($_GET['getWarmupLog'])) {
+            $preload = new wps_ic_preload_warmup();
+            $preload->getWarmupLog();
+            die();
+        }
+
         if (!empty($_GET['override_version'])) {
             self::$version = mt_rand(100, 999);
         }
@@ -1077,6 +1085,11 @@ class wps_ic
 
                     update_option(WPS_IC_TESTS, $tests);
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
+                    if (!empty($body['testID'])) {
+                        $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+                        $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
+                        update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
+                    }
                     wp_send_json_success($tests);
                 } else {
                     wp_send_json_error('json-error');
@@ -1604,8 +1617,7 @@ class wps_ic
             // Htaccess
             $htaccess = new wps_ic_htaccess();
             // Integrations
-            $integrations = new wps_ic_integrations();
-            $integrations->init();
+            $this->integrations->init();
         }
 
         // Run Multisite
@@ -1748,16 +1760,11 @@ class wps_ic
     {
         add_action('wp', [$this, 'do_enqueues']);
 
-        /**
-         * Preload Status
-         */
-        add_action('template_redirect', [$this, 'preloadPageStatusUpdate']);
 
         /**
          * Integrations
          */
-        $integrations = new wps_ic_integrations();
-        $integrations->apply_frontend_filters();
+        $this->integrations->apply_frontend_filters();
 
         /**
          * Various integrations for 3rd party plugins
@@ -1993,55 +2000,6 @@ class wps_ic
         }
     }
 
-    public function replaceImageSources($sources, $size_array, $image_src, $image_meta, $attachment_id)
-    {
-        if ((function_exists('is_amp_endpoint') && is_amp_endpoint())) {
-            return $sources;
-        }
-
-        return $sources;
-
-        $pseudoSources = [];
-        if ($sources) {
-            foreach ($sources as $key => $data) {
-                if ($this->urlIsExcluded($data['url'])) {
-                    //if any of the items are excluded, don't replace
-                    return $sources;
-                }
-            }
-        }
-
-        return $sources;
-    }
-
-    public function preloadPageStatusUpdate()
-    {
-        //Setting preload status
-        if (isset($_GET['preload_status'])) {
-            global $post;
-            $status = sanitize_text_field($_GET['preload_status']);
-
-            $preloaded_pages = get_option('wpc_preloaded_status');
-            if ($preloaded_pages === false) {
-                $preloaded_pages = [];
-            }
-
-            $preloaded_pages[$post->ID] = $status;
-            update_option('wpc_preloaded_status', $preloaded_pages);
-            wp_send_json_success();
-        }
-    }
-
-    public function checkFavicon()
-    {
-        $favicon = get_transient('wps_ic_favicon');
-        if (empty($favicon)) {
-            $faviconLocation = ABSPATH . 'favicon.ico';
-            $site_icon_id = get_option('site_icon');
-            if (!file_exists($faviconLocation) && empty($site_icon_id)) {
-            }
-        }
-    }
 
     public function exclude_from_autoptimize($config)
     {

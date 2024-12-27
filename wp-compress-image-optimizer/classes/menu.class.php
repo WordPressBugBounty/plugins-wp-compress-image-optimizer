@@ -182,18 +182,6 @@ class wps_ic_menu extends wps_ic
                 }
             }
 
-
-            if (1 == 0) { //if preload
-                $preloaded_pages = get_option('wpc_preloaded_status');
-                global $post;
-                if (is_object($post) && $preloaded_pages && ($preloaded_pages[$post->ID])) {
-                    $status = '<span class="wp-compress-admin-bar-success"></span>';
-                } else {
-                    $status = '<span class="wp-compress-admin-bar-fail"></span>';
-                }
-                $admin_bar->add_menu(['id' => 'wp-preload-status', 'title' => '<div class="wp-compress-preload-status">Preload: ' . $status . '</div>', 'href' => '', 'meta' => ['title' => __(''), 'html' => ''],]);
-            }
-
         }
 
     }

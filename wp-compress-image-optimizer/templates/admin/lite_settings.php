@@ -153,14 +153,13 @@ $optimizationStatus = $stats->getLiteOptimizationStatus($optimizedStats);
 $settings = get_option(WPS_IC_SETTINGS);
 $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
 $initialTestRunning = get_transient('wpc_initial_test');
+$warmupLog = get_option(WPC_WARMUP_LOG_SETTING);
 $option = get_option(WPS_IC_OPTIONS);
 
-// Check is the test running or has successfully ended?
-if (empty($initialTestRunning) && empty($initialPageSpeedScore)) {
+$warmup_class = new wps_ic_preload_warmup();
+$warmupFailing = $warmup_class->isWarmupFailing();
 
-}
-
-if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
+if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore) && empty($initialTestRunning))) {
     ?>
     <script type="text/javascript">
         jQuery(document).ready(function ($) {
@@ -183,6 +182,11 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                 setTimeout(function () {
                                     window.location.reload();
                                 }, 2000);
+                            } else if (response.data.warmupFailing == true){
+                                clearInterval(checkFetch);
+                                setTimeout(function () {
+                                    window.location.reload();
+                                }, 2000);
                             }
                         }
                     }
@@ -198,6 +202,11 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
         var selectedOptimizes = <?php echo json_encode($optimize); ?>;
     </script>
     <div class="wpc-advanced-settings-container wpc-lite-settings-container wps_ic_settings_page">
+        <?php
+        $wps_ic->integrations->render_plugin_notices();
+        ?>
+
+
         <form method="POST" class="wpc-lite-form"
               action="<?php echo admin_url('options-general.php?page=' . $gui::$slug); ?>">
             <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
@@ -459,9 +468,17 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                             <div class="wpc-box-title circle no-separator">
                                 <h3>PageSpeed Score</h3>
                                 <?php
-                                if (empty($initialPageSpeedScore) || !empty($initialTestRunning)) {
+                                if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) {
                                     ?>
                                     <span class="wpc-test-in-progress">Running...</span>
+                                <?php } elseif(empty($initialPageSpeedScore) && $warmupFailing){
+                                  ?>
+                                    <div class="wpc-box-title-right">
+                                        <a href="#" class="wps-ic-initial-retest">
+                                            <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                        </a>
+                                        <span class="wpc-test-not-going">Error, connection to API Failed.</span>
+                                    </div>
                                 <?php } else {
                                     $date = new DateTime();
 
@@ -501,6 +518,14 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                         <span>Usually takes about 2 minutes...</span>
                                     </div>
                                 <?php
+                                } elseif ($warmupFailing){
+                                    #print_r($warmupLog);
+
+                                    echo '<div style="padding:35px 15px;text-align: center;">';
+                                    echo '<strong>Error! Seems connection to our API was blocked by Firewall on your server.</strong>';
+                                    echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Tutorial</a>';
+                                    echo '</div>';
+
                                 } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
                                 $home_page_id = get_option('page_on_front');
                                 ?>
@@ -516,21 +541,6 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                                     dash: 'true',
                                                     nonce: ajaxVar.nonce,
                                                 }, success: function (response) {
-                                                    /*
-                                                    $.ajax({
-                                                        url: ajaxurl,
-                                                        type: 'POST',
-                                                        data: {
-                                                            action: 'wps_ic_runTest',
-                                                            id: 'home',
-                                                            retest: true,
-                                                            nonce: ajaxVar.nonce,
-                                                        },
-                                                        success: function (response) {
-                                                            console.log('Tested');
-                                                        }
-                                                    });
-                                                    */
                                                 }, error: function (response) {
                                                     console.log(response);
                                                 }
@@ -725,47 +735,6 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                                         <p><img src="<?php echo WPS_IC_ASSETS . '/lite/images/wohoo.png'; ?>"/> Woohoo! Your Website is Now Loading Faster!</p>
                                                         <span class="wpc-badge-success"><img src="<?php echo WPS_IC_ASSETS . '/lite/images/checkbox-link.svg'; ?>"/> Site Optimized</span>
                                                     </div>
-                                                    <?php
-
-                                                    //                                            $beforeMobileGPSCalc = $mobileBeforeGPS*100;
-                                                    //                                            $afterMobileGPSCalc = $mobileAfterGPS*100;
-                                                    //                                            $beforeGPSCalc = $beforeGPS*100;
-                                                    //                                            $afterGPSCalc = $afterGPS*100;
-                                                    //
-                                                    //                                            $mobileDiff = $afterMobileGPSCalc-$beforeMobileGPSCalc;
-                                                    //                                            $desktopDiff = $afterGPSCalc-$beforeGPSCalc;
-                                                    //
-                                                    //                                            if ($mobileDiff <= 10) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            } else if ($mobileDiff <= 20) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            } else if ($mobileDiff <= 30) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            } else if ($mobileDiff <= 40) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            } else if ($mobileDiff <= 50) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            } else if ($mobileDiff <= 60) {
-                                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                                    //                                            }
-                                                    //
-                                                    //                                            if ($desktopDiff <= 10) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            } else if ($desktopDiff <= 20) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            } else if ($desktopDiff <= 30) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            } else if ($desktopDiff <= 40) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            } else if ($desktopDiff <= 50) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            } else if ($desktopDiff <= 60) {
-                                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                                    //                                            }
-                                                    //
-                                                    //                                            echo '!';
-
-                                                    ?>
                                                 </div>
                                             </div>
                                         <?php }
@@ -777,54 +746,12 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                     <div class="wpc-badge-container">
                                         <p style="text-align: center;font-weight: bold;font-family: 'proxima_semibold';">Ooops! Seems we had some issues with testing your site! Please retry!</p>
                                     </div>
-                                    <?php
-
-                                    //                                            $beforeMobileGPSCalc = $mobileBeforeGPS*100;
-                                    //                                            $afterMobileGPSCalc = $mobileAfterGPS*100;
-                                    //                                            $beforeGPSCalc = $beforeGPS*100;
-                                    //                                            $afterGPSCalc = $afterGPS*100;
-                                    //
-                                    //                                            $mobileDiff = $afterMobileGPSCalc-$beforeMobileGPSCalc;
-                                    //                                            $desktopDiff = $afterGPSCalc-$beforeGPSCalc;
-                                    //
-                                    //                                            if ($mobileDiff <= 10) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            } else if ($mobileDiff <= 20) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            } else if ($mobileDiff <= 30) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            } else if ($mobileDiff <= 40) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            } else if ($mobileDiff <= 50) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            } else if ($mobileDiff <= 60) {
-                                    //                                                echo 'Congrats! You\'ve improved your mobile score by '.$mobileDiff;
-                                    //                                            }
-                                    //
-                                    //                                            if ($desktopDiff <= 10) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            } else if ($desktopDiff <= 20) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            } else if ($desktopDiff <= 30) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            } else if ($desktopDiff <= 40) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            } else if ($desktopDiff <= 50) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            } else if ($desktopDiff <= 60) {
-                                    //                                                echo 'and your desktop score by '.$desktopDiff;
-                                    //                                            }
-                                    //
-                                    //                                            echo '!';
-
-                                    ?>
                                 </div>
                             </div>
                                 <?php
                                         }
                                     }
                                 } ?>
-
                             </div>
                         </div>
                     </div>

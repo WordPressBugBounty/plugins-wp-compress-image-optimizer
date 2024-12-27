@@ -73,13 +73,16 @@ class wps_criticalCss
         $urlKey = $this->url_key_class->setup($url);
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll($urlKey);
 
         if (!function_exists('download_url')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
 
-        $CSS = download_url($CritUrl);
+        $CSS = wp_remote_get($CritUrl, [
+          'headers' => [
+            'user-agent' => WPS_IC_API_USERAGENT
+          ]
+        ]);
 
         if (is_wp_error($CSS)) {
             // Get the error message
@@ -100,8 +103,21 @@ class wps_criticalCss
         }
 
         $fp = fopen($critical_path . 'critical_' . $mode . '.css', 'w+');
-        fwrite($fp, file_get_contents($CSS));
+        fwrite($fp, wp_remote_retrieve_body($CSS));
         fclose($fp);
+
+        $cache::purgeAll($urlKey);
+
+        //remove criticalCombine temp folder
+        $files = scandir(WPS_IC_COMBINE . $urlKey);
+        foreach ($files as $file) {
+          if ($file != "." && $file != "..") {
+            $subdir = WPS_IC_COMBINE . $urlKey . "/" . $file;
+            if (is_dir($subdir) && strpos($file, "criticalCombine") !== false) {
+              $this->removeDirectory($subdir);
+            }
+          }
+        }
     }
 
     public function getCriticalPages()
@@ -295,7 +311,7 @@ class wps_criticalCss
         die();
     }
 
-    public function sendCriticalUrl($realUrl = '', $postID = 0)
+    public function sendCriticalUrl($realUrl = '', $postID = 0, $timeout = 120)
     {
         while (ob_get_level()) {
             ob_end_clean();
@@ -346,7 +362,7 @@ class wps_criticalCss
         ['api_key']];
 
         $requests = new wps_ic_requests();
-        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 300]);
+        $call = $requests->POST(self::$API_URL, $args, ['timeout' => $timeout]);
         $code = $requests->getResponseCode($call);
 
         if ($code == 200) {
@@ -407,7 +423,6 @@ class wps_criticalCss
     {
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll($urlKey);
 
         $json = json_decode($CSS, true);
 
@@ -423,8 +438,17 @@ class wps_criticalCss
             echo $json['hostname'];
         }
 
-        $desktop = download_url($json['desktop']);
-        $mobile = download_url($json['mobile']);
+        $desktop = wp_remote_get($json['desktop'], [
+          'headers' => [
+            'user-agent' => WPS_IC_API_USERAGENT
+          ]
+        ]);
+
+        $mobile = wp_remote_get($json['mobile'], [
+          'headers' => [
+            'user-agent' => WPS_IC_API_USERAGENT
+          ]
+        ]);
 
         if (is_wp_error($desktop)) {
             // Get the error message
@@ -443,14 +467,14 @@ class wps_criticalCss
         mkdir($critical_path, 0777, true);
 
         $fp = fopen($critical_path . 'critical_desktop.css', 'w+');
-        fwrite($fp, file_get_contents($desktop));
+        fwrite($fp, wp_remote_retrieve_body($desktop));
         fclose($fp);
 
         if (is_wp_error($mobile)) {
             wp_send_json_error(['msg' => 'Error downloading css file.', 'url' => $json['mobile']]);
         }
         $fp = fopen($critical_path . 'critical_mobile.css', 'w+');
-        fwrite($fp, file_get_contents($mobile));
+        fwrite($fp, wp_remote_retrieve_body($mobile));
         fclose($fp);
 
         //remove criticalCombine temp folder
@@ -471,6 +495,8 @@ class wps_criticalCss
                 update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
             }
         }
+
+      $cache::purgeAll($urlKey);
 
     }
 

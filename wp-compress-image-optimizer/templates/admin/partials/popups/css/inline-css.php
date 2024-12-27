@@ -27,17 +27,8 @@
             <form method="post" class="wpc-save-popup-data" action="#">
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
-                      <?php
-                      $excludes = get_option('wpc-inline');
-                      if ( ! empty($excludes['inline_css'])) {
-                        $excludes['inline_css'] = implode("\n", $excludes['inline_css']);
-                      } else {
-                        $excludes['inline_css'] = '';
-                      }
-
-                      ?>
                         <textarea name="wpc-excludes[inline_css]" data-setting-name="wpc-inline"
-                                  data-setting-subset="inline_css" class="exclude-list-textarea-value" placeholder="e.g. theme-style-css"><?php echo $excludes['inline_css']; ?></textarea>
+                                  data-setting-subset="inline_css" class="exclude-list-textarea-value" placeholder="e.g. theme-style-css"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 

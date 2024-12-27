@@ -126,20 +126,13 @@ class wps_ic_cache_integrations
     public static function purgeCacheFiles($url_key = false)
     {
         $cache_dir = WPS_IC_CACHE;
-        $url_key = sanitize_title($url_key);
-
-        //whenever we delete cache we want to delete tests results
-        $test_results = get_option(WPS_IC_TESTS, []);
 
         if (!$url_key) {
             self::removeDirectory($cache_dir);
-            $test_results = [];
         } else {
             self::removeFiles($cache_dir . $url_key);
-            unset($test_results[$url_key]);
         }
 
-        #update_option(WPS_IC_TESTS, $test_results);
         return true;
     }
 

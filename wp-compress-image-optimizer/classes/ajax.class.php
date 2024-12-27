@@ -46,6 +46,11 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_fetchInitialTest');
                 $this->add_ajax('wps_ic_pull_stats');
 
+                // Cloudflare
+                $this->add_ajax('wpc_ic_checkCFToken');
+                $this->add_ajax('wpc_ic_checkCFConnect');
+                $this->add_ajax('wpc_ic_checkCFDisconnect');
+
                 // Critical CSS
                 $this->add_ajax('wps_ic_critical_get_assets');
                 $this->add_ajax('wps_ic_critical_run');
@@ -154,6 +159,70 @@ class wps_ic_ajax extends wps_ic
         add_action('wp_ajax_nopriv_' . $hook, [$this, $hook]);
     }
 
+    public static function wpc_ic_checkCFDisconnect() {
+        delete_option(WPS_IC_CF);
+        wp_send_json_success();
+    }
+
+
+    public static function wpc_ic_checkCFConnect()
+    {
+        $token = sanitize_text_field($_POST['token']);
+        $zoneInput = sanitize_text_field($_POST['zone']);
+
+        $cfapi = new WPC_CloudflareAPI($token);
+        $zones = $cfapi->listZones();
+
+        if (is_wp_error($zones)) {
+            wp_send_json_error($zones->get_error_message());
+        } else {
+            $zonesOutput = [];
+            foreach ($zones['result'] as $zone) {
+                #echo "Zone: {$zone['name']}, ID: {$zone['id']}" . PHP_EOL;
+                $zonesOutput[$zone['id']] = $zone['name'];
+            }
+        }
+
+        if (!empty($zonesOutput) && !empty($zonesOutput[$zoneInput])) {
+            $save = ['token' => $token, 'zone' => $zoneInput, 'zoneName' => $zonesOutput[$zoneInput]];
+            update_option(WPS_IC_CF, $save);
+            wp_send_json_success($save);
+        }
+
+        wp_send_json_error();
+    }
+
+
+    public static function wpc_ic_checkCFToken()
+    {
+        $token = sanitize_text_field($_POST['token']);
+
+        $cfapi = new WPC_CloudflareAPI($token);
+
+        $zones = $cfapi->listZones();
+        if (is_wp_error($zones)) {
+            wp_send_json_error($zones->get_error_message());
+        } else {
+            $zonesOutput = [];
+            foreach ($zones['result'] as $zone) {
+                #echo "Zone: {$zone['name']}, ID: {$zone['id']}" . PHP_EOL;
+                $zonesOutput[$zone['id']] = $zone['name'];
+            }
+
+            if (!empty($zonesOutput)) {
+                # $zonesDropdown = '<select name="wpc-cf-zone-list">';
+                $zonesDropdown = '<option value="0">Select a zone</option>';
+                foreach ($zonesOutput as $zoneID => $zoneName) {
+                    $zonesDropdown .= '<option value="' . $zoneID . '">' . $zoneName . '</option>';
+                }
+                #$zonesDropdown .= '</select>';
+                wp_send_json_success($zonesDropdown);
+            }
+        }
+
+        wp_send_json_error('unknown-error');
+    }
+
     public static function isFeatureEnabled($featureName)
     {
         $feature = get_transient($featureName . 'Enabled');
@@ -211,7 +280,7 @@ class wps_ic_ajax extends wps_ic
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
-        $criticalCSS->sendCriticalUrl($realUrl, $postID);
+        $criticalCSS->sendCriticalUrl($realUrl, $postID, 30);
 
         wp_send_json_success('sent');
     }
@@ -239,12 +308,18 @@ class wps_ic_ajax extends wps_ic
                     update_option(WPS_IC_TESTS, $tests);
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
                     delete_transient('wpc_initial_test');
+                    if (!empty($body['testID'])) {
+                      $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+                      $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
+                      update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
+                    }
                     wp_send_json_success();
                 }
             }
         }
 
 
+        /*
         if ($initialFailed >= WPS_IC_TEST_FAILURES) {
             delete_transient('wps_initial_failed');
             delete_transient('wpc_initial_test');
@@ -254,10 +329,15 @@ class wps_ic_ajax extends wps_ic
             update_option(WPS_IC_TESTS, $tests);
             wp_send_json_error(['reset' => 'true']);
         }
+        */
+
+        $warmup_class = new wps_ic_preload_warmup();
+        $warmupFailing = $warmup_class->isWarmupFailing();
 
         $initialFailed += 1;
         set_transient('wps_initial_failed', $initialFailed, 5*60);
-        wp_send_json_error(['failed' => $initialFailed]);
+
+        wp_send_json_error(['failed' => $initialFailed, 'warmupFailing' => $warmupFailing]);
     }
 
     public function wps_ic_saveSetting()
@@ -855,7 +935,6 @@ class wps_ic_ajax extends wps_ic
         update_option(WPS_IC_OPTIONS, $options);
 
         delete_transient('wps_ic_css_cache');
-        delete_option('wpc_preloaded_status');
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 
@@ -887,8 +966,6 @@ class wps_ic_ajax extends wps_ic
         if (!empty($call)) {
             if ($call->success == 'true') {
                 delete_transient('wps_ic_purging_cdn');
-                //Clear preloaded pages list
-                update_option('wpc_preloaded_status', []);
                 wp_send_json_success();
             }
         }
@@ -2714,6 +2791,7 @@ class wps_ic_ajax extends wps_ic
 
         delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPC_WARMUP_LOG_SETTING);
 
         $id = sanitize_text_field($_POST['id']);
         $retest = sanitize_text_field($_POST['retest']);

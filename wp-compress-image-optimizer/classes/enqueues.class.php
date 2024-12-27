@@ -309,7 +309,12 @@ class wps_ic_enqueues extends wps_ic
             $delayOn = "true";
         }
 
-        echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '"};';
+        $linkPreload = "true";
+        if (is_user_logged_in()){
+            $linkPreload = "false";
+        }
+
+        echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '", "linkPreload":"' . $linkPreload . '"};';
         echo '</script>';
 
         $optimizeRemove = get_option('wps_optimizejs_remove');

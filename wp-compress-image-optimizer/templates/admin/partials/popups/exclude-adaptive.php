@@ -1,7 +1,7 @@
 <div id="exclude-adaptive-popup" style="display: none;">
     <div id="" class="cdn-popup-inner ajax-settings-popup bottom-border exclude-list-popup">
 
-        <div class="cdn-popup-loading" style="display: none;">
+        <div class="cdn-popup-loading">
             <div class="wpc-popup-saving-logo-container">
                 <div class="wpc-popup-saving-preparing-logo">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
@@ -10,7 +10,7 @@
             </div>
         </div>
 
-        <div class="cdn-popup-content">
+        <div class="cdn-popup-content" style="display: none;">
             <div class="cdn-popup-top">
                 <div class="inline-heading">
                     <div class="inline-heading-icon">
@@ -27,19 +27,9 @@
             <form method="post" class="wpc-save-popup-data" action="#">
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
-                      <?php
-                      $excludes = get_option('wpc-excludes');
-                      if ( ! empty($excludes['adaptive'])) {
-                        $excludes['adaptive'] = implode("\n", $excludes['adaptive']);
-                      } else {
-	                      $excludes['adaptive'] = '';
-                      }
-
-                      ?>
                         <textarea name="wpc-excludes[adaptive]" data-setting-name="wpc-excludes"
                                   data-setting-subset="adaptive"  class="exclude-list-textarea-value"
-                                  placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo
-                          $excludes['adaptive']; ?></textarea>
+                                  placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 

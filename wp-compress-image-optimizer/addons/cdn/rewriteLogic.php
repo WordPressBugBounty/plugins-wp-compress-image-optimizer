@@ -303,7 +303,7 @@ class wps_rewriteLogic
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
             if (!empty($_GET['custom_server'])) {
-                self::$zoneName = $_GET['custom_server'] . '/key:' . self::$options['api_key'];
+                self::$zoneName = sanitize_text_field($_GET['custom_server']) . '/key:' . self::$options['api_key'];
             }
         }
 
@@ -2551,6 +2551,11 @@ SCRIPT;
 
 
     public function replace_with_480w($srcset) {
+        // First check if 480w already exists in the srcset
+        if (preg_match('/\s480w/', $srcset)) {
+            return $srcset;
+        }
+
         // Extract both w: values and srcset widths (for URLs) using regex
         preg_match_all('/w:(\d+)/', $srcset, $w_matches); // Matches the "w:" pattern widths
         preg_match_all('/(\S+)\s(\d+)w/', $srcset, $srcset_matches); // Matches srcset widths
@@ -2558,33 +2563,50 @@ SCRIPT;
         $w_widths = array_map('intval', $w_matches[1]); // w: values
         $srcset_widths = array_map('intval', $srcset_matches[2]); // srcset widths
 
-        // Combine all widths to search for the nearest to 480
-        $all_widths = array_merge($w_widths, $srcset_widths);
-
-        // Check if 480w already exists in the srcset
-        if (!in_array(480, $srcset_widths)) {
-            // Find the nearest width to 480 in the srcset
-            $nearest = null;
-            foreach ($srcset_widths as $width) {
-                if ($nearest === null || abs($width - 480) < abs($nearest - 480)) {
-                    $nearest = $width;
-                }
+        // Find the nearest width larger than 480 in the srcset
+        $nearest = null;
+        foreach ($srcset_widths as $width) {
+            if ($width > 480 && ($nearest === null || $width < $nearest)) {
+                $nearest = $width;
             }
-            // Replace the nearest width in the srcset with 480w
-            $srcset = str_replace($nearest . 'w', '480w', $srcset);
         }
 
-        // Now handle the "w:" part
-        if (!in_array(480, $w_widths)) {
-            // Find the nearest "w:" width to 480
-            $nearest_w = null;
-            foreach ($w_widths as $w_width) {
-                if ($nearest_w === null || abs($w_width - 480) < abs($nearest_w - 480)) {
-                    $nearest_w = $w_width;
-                }
+        // Find the nearest "w:" width larger than 480
+        $nearest_w = null;
+        foreach ($w_widths as $w_width) {
+            if ($w_width > 480 && ($nearest_w === null || $w_width < $nearest_w)) {
+                $nearest_w = $w_width;
             }
-            // Replace the nearest "w:" width with "w:480"
-            $srcset = str_replace('w:' . $nearest_w, 'w:480', $srcset);
+        }
+
+        // Get the URL pattern for the nearest width
+        if ($nearest !== null) {
+            preg_match('/(.*\s)' . $nearest . 'w/', $srcset, $matches);
+            if (!empty($matches)) {
+                $url_pattern = $matches[1];
+                // Create new 480w entry using the same URL pattern
+                $new_480w_entry = $url_pattern . '480w';
+
+                // Insert the new 480w entry before the nearest width entry since it's smaller
+                $srcset = str_replace($url_pattern . $nearest . 'w', $new_480w_entry . ', ' . $url_pattern . $nearest . 'w', $srcset);
+            }
+        }
+
+        // Handle the "w:" part - add w:480 after the nearest w: value
+        if ($nearest_w !== null) {
+            // Get the full URL pattern containing w:{nearest_w}
+            preg_match('/(.*w:)' . $nearest_w . '(.*)/', $srcset, $url_matches);
+            if (!empty($url_matches)) {
+                $before_w = $url_matches[1];
+                $after_w = $url_matches[2];
+
+                // Create a copy of the URL with w:480
+                $new_url = str_replace('w:' . $nearest_w, 'w:480', $url_matches[0]);
+
+                // Add the new URL before the existing one since it's smaller
+                $parts = explode($url_matches[0], $srcset, 2);
+                $srcset = $parts[0] . $new_url . ', ' . $url_matches[0] . (isset($parts[1]) ? $parts[1] : '');
+            }
         }
 
         return $srcset;

@@ -9,7 +9,7 @@ if (empty($_GET['min_debug'])) {
   define('WPS_IC_MIN', ''); // .min => script.min.js
 }
 
-define('WPS_IC_ENV', 'dev');
+define('WPS_IC_CF', 'wps-ic-cf');
 define('WPS_IC_GB', 1000000000);
 define('WPC_IC_CACHE_EXPIRE', 86400); // 24 hours
 
@@ -77,6 +77,7 @@ define('WPS_IC_COMBINE_URL', WP_CONTENT_URL . '/cache/combine/');
 
 define('WPS_IC_LOG', WPS_IC_DIR . 'logs/');
 define('WPS_IC_LOG_URL', WPS_IC_URI . 'logs/');
+define('WPC_WARMUP_LOG_SETTING', 'wps_ic_warmup_log');
 
 if (!file_exists(WP_CONTENT_DIR . '/cache')) {
   mkdir(WP_CONTENT_DIR . '/cache');

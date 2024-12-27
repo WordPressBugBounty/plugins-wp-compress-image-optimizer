@@ -27,18 +27,9 @@
       <form method="post" class="wpc-save-popup-data" action="#">
         <div class="cdn-popup-content-full">
           <div class="cdn-popup-content-inner">
-            <?php
-            $excludes = get_option('wpc-excludes');
-            if (!empty($excludes['css_minify'])) {
-              $excludes['css_minify'] = implode("\n", $excludes['css_minify']);
-            } else {
-	            $excludes['css_minify'] = '';
-            }
-
-            ?>
             <textarea name="wpc-excludes[css_minify]" data-setting-name="wpc-excludes" data-setting-subset="css_minify"
                       class="exclude-list-textarea-value"
-                      placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"><?php echo $excludes['css_minify']; ?></textarea>
+                      placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
               <div class="wps-default-excludes-container">
               <div class="wps-default-excludes-enabled-checkbox-container">
                   <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-default-excludes">

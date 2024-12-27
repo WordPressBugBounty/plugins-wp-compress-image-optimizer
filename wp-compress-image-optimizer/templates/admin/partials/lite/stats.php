@@ -42,6 +42,9 @@ $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
 $initialTestRunning = get_transient('wpc_initial_test');
 $option = get_option(WPS_IC_OPTIONS);
 
+$warmup_class = new wps_ic_preload_warmup();
+$warmupFailing = $warmup_class->isWarmupFailing();
+
 ?>
 <div class="wpc-settings-content-inner">
     <div class="wpc-rounded-box wpc-rounded-box-half">
@@ -67,10 +70,14 @@ $option = get_option(WPS_IC_OPTIONS);
         <div class="wpc-box-title circle no-separator">
             <h3>PageSpeed Score</h3>
             <?php
-            if (empty($initialPageSpeedScore) || !empty($initialTestRunning)) {
-                ?>
+            if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) {
+              ?>
                 <span class="wpc-test-in-progress">Running...</span>
-            <?php } else {
+            <?php } else if(empty($initialPageSpeedScore) && $warmupFailing){
+              ?>
+                <span class="wpc-test-in-progress">Error, warmup not going.</span>
+            <?php }
+            else {
                 $date = new DateTime();
 
                 // Get the WordPress timezone
@@ -109,6 +116,9 @@ $option = get_option(WPS_IC_OPTIONS);
                     <span>Usually takes about 2 minutes...</span>
                 </div>
             <?php
+            }
+            else if ($warmupFailing){
+              print_r($warmupLog);
             } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
             $home_page_id = get_option('page_on_front');
             ?>

@@ -461,8 +461,9 @@ class wps_cdn_rewrite
         if (strlen(trim(self::$zone_name)) > 0) {
             if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
                 if (!empty($_GET['custom_server'])) {
-                    self::$zone_name = $_GET['custom_server'] . '/key:' . self::$options['api_key'];
-                    echo '<link rel="dns-prefetch" href="//' . $_GET['custom_server'] . '" />';
+                    $custom_server = sanitize_text_field($_GET['custom_server']);
+                    self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
+                    echo '<link rel="dns-prefetch" href="//' . $custom_server . '" />';
                 }
             } else {
 //				echo '<link rel="dns-prefetch" href="https://cdn.zapwp.net" />';
@@ -1635,8 +1636,6 @@ class wps_cdn_rewrite
         self::$preloaderAPI = 0;
 
         self::$settings = get_option(WPS_IC_SETTINGS);
-        $this->compatibility = new wps_ic_compatibility();
-        self::$settings = $this->compatibility->check(self::$settings);
 
         if ($this->is_home_url()) {
             self::$post_id = 'home';
@@ -1752,11 +1751,6 @@ class wps_cdn_rewrite
 
         //Rocket settings check
         //$this->rocketOverride();
-
-        $integrations = new wps_ic_integrations();
-        self::$defer_js_override = $integrations->is_override_active('defer_js');
-        self::$delay_js_override = $integrations->is_override_active('delay_js');
-        self::$lazy_override = $integrations->is_override_active('lazy');
 
         // default excluded keywords
         self::$default_excluded_list = [
@@ -1900,7 +1894,7 @@ class wps_cdn_rewrite
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
             if (!empty($_GET['custom_server'])) {
-                self::$zone_name = $_GET['custom_server'] . '/key:' . self::$options['api_key'];
+                self::$zone_name = sanitize_text_field($_GET['custom_server']) . '/key:' . self::$options['api_key'];
             }
         }
 
@@ -2596,6 +2590,7 @@ class wps_cdn_rewrite
         // TODO: Fix so that it checks does iframe already have load="lazy|auto"
         if (!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1' && !$isUserLoggedIn) {
             $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', [$this, 'replace_iframe_tags'], $html);
+            $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'encode_iframe') {
@@ -3301,6 +3296,47 @@ class wps_cdn_rewrite
             return $links[0];
         }
     }
+
+
+    public function replace_source_tags($source)
+    {
+        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
+        if (!empty($sourceAtts[1])) {
+            $iFrame = '<source';
+            $hasClass = false;
+
+            $attNames = $sourceAtts[1];
+            $attValues = $sourceAtts[2];
+
+            if (!in_array('loading', $attNames)) {
+                $attNames[] = 'loading';
+            }
+
+            foreach ($attNames as $i => $attName) {
+                if ($attName == 'src') {
+                    $attName = 'data-wpc-src';
+                } elseif ($attName == 'class') {
+                    $hasClass = true;
+                    $attValues[$i] .= ' wpc-iframe-delay';
+                } elseif ($attName == 'loading') {
+                    $attValues[$i] = 'lazy';
+                }
+
+                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
+            }
+
+            if (!$hasClass) {
+                $iFrame .= 'class="wpc-iframe-delay"';
+            }
+
+            $iFrame .= '';
+
+            return $iFrame;
+        } else {
+            return $source;
+        }
+    }
+
 
     public function replace_iframe_tags($iframe)
     {

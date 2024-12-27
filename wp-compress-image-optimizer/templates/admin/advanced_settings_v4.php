@@ -847,6 +847,50 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
 
                                     </div>
 
+                                    <div class="wpc-tab-content-box" id="cf-connect-options" style="display: none;">
+                                        <?php
+                                        echo $gui::checkboxTabTitle('CloudFlare Connection', "Boost your site's performance by enabling global CSS optimization.", 'css-optimization/css-icon.svg', ''); ?>
+
+                                        <div class="wpc-spacer"></div>
+
+                                        <div class="wpc-items-list-row mb-0">
+
+                                            <div class="wpc-cf-connect-form">
+                                                <?php
+                                                $cf = get_option(WPS_IC_CF);
+                                                if (empty($cf)) {
+                                                    ?>
+                                                    <div class="wpc-cf-loader" style="display: none;">
+                                                        <span>Connecting....</span>
+                                                    </div>
+                                                    <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load">
+                                                        <label for="wpc-cf-token">Insert your Cloudflare Token:</label>
+                                                        <input type="text" name="wpc-cf-token" id="wpc-cf-token"/>
+                                                        <input type="button" class="wpc-cf-token-check" value="Connect"/>
+                                                    </div>
+                                                    <div class="wpc-select-holder-no-change" id="wpc-cf-zone-list-holder" style="display: none;">
+                                                        <label for="wpc-cf-zone-list">Select Cloudflare Zone:</label>
+                                                        <select name="wpc-cf-zone-list" id="wpc-cf-zone-list">
+                                                        </select>
+                                                        <input type="button" class="wpc-cf-token-connect" value="Connect"/>
+                                                    </div>
+                                                <?php } else { ?>
+                                                    <div class="wpc-cf-loader" style="display: none;">
+                                                        <span>Disconnecting....</span>
+                                                    </div>
+                                                    <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load">
+                                                        <label for="wpc-cf-token">Connected to Cloudflare on ZoneID:</label>
+                                                        <?php
+                                                        echo $cf['zoneName'] . ' on ID: ' . $cf['zone'];
+                                                        ?>
+                                                        <input type="button" class="wpc-cf-token-disconnect" value="Disconnect"/>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+
+                                        </div>
+                                    </div>
+
                                     <div class="wpc-tab-content-box" id="css-optimization-options">
                                         <?php
 

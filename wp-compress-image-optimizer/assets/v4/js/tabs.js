@@ -1,6 +1,63 @@
 jQuery(document).ready(function ($) {
 
 
+    $('.wpc-cf-token-check').on('click', function(e){
+        e.preventDefault();
+
+        var cFToken = $('input[name="wpc-cf-token"]').val();
+        $('.wpc-cf-token-hide-on-load').hide();
+        $('.wpc-cf-loader').show();
+
+        $.post(ajaxurl, {
+            action: 'wpc_ic_checkCFToken',
+            token: cFToken,
+        }, function (response) {
+
+            $('select[name="wpc-cf-zone-list"]', '#wpc-cf-zone-list-holder').html(response.data);
+            $('.wpc-cf-loader').hide(function(){
+                $('#wpc-cf-zone-list-holder').show();
+            });
+        });
+
+        return false;
+    });
+
+
+    $('.wpc-cf-token-connect').on('click', function (e){
+        e.preventDefault();
+
+        var cFToken = $('input[name="wpc-cf-token"]').val();
+        var cFZone = $('select[name="wpc-cf-zone-list"]').val();
+        $('.wpc-cf-token-hide-on-load').hide();
+        $('.wpc-cf-loader').show();
+
+        $.post(ajaxurl, {
+            action: 'wpc_ic_checkCFConnect',
+            token: cFToken,
+            zone: cFZone,
+        }, function (response) {
+
+
+
+        });
+
+        return false;
+    });
+
+
+    $('.wpc-cf-token-disconnect').on('click', function(e){
+        e.preventDefault();
+        $.post(ajaxurl, {
+            action: 'wpc_ic_checkCFDisconnect',
+        }, function (response) {
+
+
+
+        });
+        return false;
+    });
+
+
     $('.wpc-save-button').on('click', function (e) {
         $('.save-button').hide();
         $('.wpc-loading-spinner').show();

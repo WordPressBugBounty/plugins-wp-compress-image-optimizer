@@ -128,8 +128,6 @@ class wps_ic_upgrader extends wps_ic
         self::purgeBreeze();
         self::purge_cache_files();
 
-        //Clear preloaded pages list
-        update_option('wpc_preloaded_status', []);
 
         // Clear cache.
         if (function_exists('rocket_clean_domain')) {

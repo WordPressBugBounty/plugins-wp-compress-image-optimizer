@@ -256,12 +256,16 @@ jQuery(document).ready(function ($) {
                 else {
                     var popup = $('.swal2-container .ajax-settings-popup');
                     var form = $('form', popup);
+                    var loading = $('.cdn-popup-loading', popup);
+                    var content = $('.cdn-popup-content', popup);
 
                     $('input[type="text"],textarea', form).each(function (i, item) {
                         var settingName = $(item).data('setting-name');
                         var settingSubset = $(item).data('setting-subset');
 
                         $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset}, function (response) {
+                            $(content).show();
+                            $(loading).hide();
                             $(item).val(response.data.value);
 
                             if (response.data.exclude_third == '1') {

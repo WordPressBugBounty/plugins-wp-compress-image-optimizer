@@ -33,6 +33,10 @@ class wps_ic_integrations extends wps_ic
         $this->notices_class = new wps_ic_notices();
     }
 
+    public function render_plugin_notices(){
+      $this->notices_class->render_plugin_notices();
+    }
+
     public function fix($plugin, $setting)
     {
         $this->init();
@@ -105,26 +109,9 @@ class wps_ic_integrations extends wps_ic
         }
     }
 
-    public function add_override($setting)
-    {
-        $this->int_option['overrides'][$setting] = true;
-    }
-
     public function getConflicts()
     {
         return get_option('wps_ic_conflicts', []);;
-    }
-
-    public function remove_override($setting)
-    {
-        //this is only called from fix_setting() from ajax
-        unset ($this->int_option['overrides'][$setting]);
-        update_option('wps_ic_integrations', $this->int_option['overrides']);
-    }
-
-    public function is_override_active($setting)
-    {
-        return isset($this->int_option['overrides'][$setting]) ? $this->int_option['overrides'][$setting] : false;
     }
 
     public function apply_frontend_filters()

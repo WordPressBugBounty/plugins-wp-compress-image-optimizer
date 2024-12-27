@@ -245,7 +245,6 @@ class wps_ic_cache
         update_option(WPS_IC_OPTIONS, $options);
 
         delete_transient('wps_ic_css_cache');
-        delete_option('wpc_preloaded_status');
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 
@@ -401,7 +400,6 @@ class wps_ic_cache
         update_option(WPS_IC_OPTIONS, $options);
 
         delete_transient('wps_ic_css_cache');
-        delete_option('wpc_preloaded_status');
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 

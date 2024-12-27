@@ -7,7 +7,7 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js'];
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie'];
     public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter'];
 
     public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui'];
@@ -64,7 +64,7 @@ class wps_ic_js_delay
                 $fullTag = $matches[0];
                 $src = $matches[1];
 
-                if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false && strpos($src, 'optimize.dev.js') === false) {
+                if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false && strpos($src, 'optimize.dev.js') === false && strpos($src, 'mediaelement') === false) {
                     $preloadTags[] = '<link rel="none" href="' . htmlspecialchars($src) . '" as="script" class="wpc-preload-links">';
                 }
 
