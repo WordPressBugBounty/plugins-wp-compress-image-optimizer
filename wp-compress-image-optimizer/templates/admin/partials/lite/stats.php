@@ -44,7 +44,6 @@ $option = get_option(WPS_IC_OPTIONS);
 
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
-
 ?>
 <div class="wpc-settings-content-inner">
     <div class="wpc-rounded-box wpc-rounded-box-half">
@@ -69,15 +68,13 @@ $warmupFailing = $warmup_class->isWarmupFailing();
     <div class="wpc-rounded-box wpc-rounded-box-half">
         <div class="wpc-box-title circle no-separator">
             <h3>PageSpeed Score</h3>
-            <?php
-            if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) {
-              ?>
+            <?php if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) { ?>
                 <span class="wpc-test-in-progress">Running...</span>
-            <?php } else if(empty($initialPageSpeedScore) && $warmupFailing){
-              ?>
-                <span class="wpc-test-in-progress">Error, warmup not going.</span>
-            <?php }
-            else {
+            <?php } elseif (empty($initialPageSpeedScore) && $warmupFailing){ ?>
+                <span class="wpc-test-in-progress"><a href="#" class="wps-ic-initial-retest">
+                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    </a> Error, warmup not going.</span>
+            <?php } else {
                 $date = new DateTime();
 
                 // Get the WordPress timezone
@@ -93,16 +90,20 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                     }
                 }
 
-                // Apply the timezone to the DateTime object
-                $date->setTimezone(new DateTimeZone($timezone));
-                $date->setTimestamp($initialPageSpeedScore['lastRun']);
-                $lastRun = $date->format('F jS, Y @ g:i A');
+                if (empty($initialPageSpeedScore['lastRun'])) {
+                    $lastRun = '';
+                } else {
+                    // Apply the timezone to the DateTime object
+                    $date->setTimezone(new DateTimeZone($timezone));
+                    $date->setTimestamp($initialPageSpeedScore['lastRun']);
+                    $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
+                }
                 ?>
                 <div class="wpc-box-title-right">
                     <a href="#" class="wps-ic-initial-retest">
                         <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
                     </a>
-                    <span><?php echo "Last Tested " . $lastRun; ?></span>
+                    <span><?php echo $lastRun; ?></span>
                 </div>
             <?php } ?>
         </div>
@@ -116,9 +117,11 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                     <span>Usually takes about 2 minutes...</span>
                 </div>
             <?php
-            }
-            else if ($warmupFailing){
-              print_r($warmupLog);
+            } elseif ($warmupFailing){
+                echo '<div style="padding:35px 15px;text-align: center;">';
+                echo '<strong>Error! Seems connection to our API was blocked by Firewall on your server.</strong>';
+                echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Tutorial</a>';
+                echo '</div>';
             } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
             $home_page_id = get_option('page_on_front');
             ?>
@@ -135,21 +138,6 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                                 nonce: ajaxVar.nonce,
                             }, success: function (response) {
                                 console.log('Optimized');
-                                /*
-                                $.ajax({
-                                    url: ajaxurl,
-                                    type: 'POST',
-                                    data: {
-                                        action: 'wps_ic_runTest',
-                                        id: 'home',
-                                        retest: true,
-                                        nonce: ajaxVar.nonce,
-                                    },
-                                    success: function (response) {
-                                        console.log('Tested');
-                                    }
-                                });
-                                */
                             }, error: function (response) {
                                 console.log(response);
                             }

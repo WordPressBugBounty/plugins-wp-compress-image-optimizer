@@ -1055,7 +1055,7 @@ class wps_ic_preload_warmup
             $response_body = json_decode($response_body, true);
             if ($response_body['success'] == 'true') {
                 //added
-                set_transient('wpc_initial_test', 'running', 2 * 60);
+                set_transient('wpc_initial_test', 'running', 5 * 60);
             } else {
                 wp_send_json_error(print_r($response_body['data'], true));
             }
@@ -1116,7 +1116,7 @@ class wps_ic_preload_warmup
 
                 //added
                 set_transient('wpc_test_' . $id, 'started', 60);
-                set_transient('wpc_initial_test', 'running', 3 * 60);
+                set_transient('wpc_initial_test', 'running', 5 * 60);
                 //
 
             } else {
@@ -1158,7 +1158,7 @@ class wps_ic_preload_warmup
         $urlKey = sanitize_title($urlKey);
 
         set_transient('wpc_test_' . $id, 'started', 60);
-        set_transient('wpc_initial_test', 'running', 2 * 60);
+        set_transient('wpc_initial_test', 'running', 5 * 60);
 
         $results = get_option(WPS_IC_TESTS, []);
         if ($retest === false) {

@@ -22,6 +22,14 @@ if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
 }
 // End
 
+// reset GPS Test
+if (!empty($_GET['resetTest'])) {
+    delete_transient('wpc_test_running');
+    delete_transient('wpc_initial_test');
+    delete_option(WPS_IC_LITE_GPS);
+    delete_option(WPC_WARMUP_LOG_SETTING);
+}
+
 $options = get_option(WPS_IC_OPTIONS);
 
 if (!empty($_POST)) {
@@ -159,7 +167,7 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 
-if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore) && empty($initialTestRunning))) {
+if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
     ?>
     <script type="text/javascript">
         jQuery(document).ready(function ($) {
@@ -191,7 +199,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                         }
                     }
                 });
-            }, 5000);
+            }, 10000);
         });
     </script>
 <?php } ?>
@@ -468,7 +476,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                             <div class="wpc-box-title circle no-separator">
                                 <h3>PageSpeed Score</h3>
                                 <?php
-                                if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) {
+                                if (empty($initialPageSpeedScore) && !empty(get_transient('wpc_test_running')) && !$warmupFailing) {
                                     ?>
                                     <span class="wpc-test-in-progress">Running...</span>
                                 <?php } elseif(empty($initialPageSpeedScore) && $warmupFailing){
@@ -495,22 +503,34 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         }
                                     }
 
-                                    // Apply the timezone to the DateTime object
-                                    $date->setTimezone(new DateTimeZone($timezone));
-                                    $date->setTimestamp($initialPageSpeedScore['lastRun']);
-                                    $lastRun = $date->format('F jS, Y @ g:i A');
+                                    // Patch: IF-ovi su losi
+                                    if (!empty($initialPageSpeedScore)) {
+                                        // Apply the timezone to the DateTime object
+                                        $date->setTimezone(new DateTimeZone($timezone));
+                                        $date->setTimestamp($initialPageSpeedScore['lastRun']);
+                                        $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
+                                        ?>
+                                        <div class="wpc-box-title-right">
+                                            <a href="#" class="wps-ic-initial-retest">
+                                                <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                            </a>
+                                            <span><?php echo $lastRun; ?></span>
+                                        </div>
+                                            <?php
+                                    } else {
+                                        $lastRun = "Running...";
+                                        ?>
+                                        <div class="wpc-box-title-right">
+                                            <span class="wpc-test-in-progress">Running...</span>
+                                        </div>
+                                            <?php
+                                    }
                                     ?>
-                                    <div class="wpc-box-title-right">
-                                        <a href="#" class="wps-ic-initial-retest">
-                                            <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                                        </a>
-                                        <span><?php echo "Last Tested " . $lastRun; ?></span>
-                                    </div>
                                 <?php } ?>
                             </div>
                             <div class="wpc-box-content wpc-box-centered">
                                 <?php
-                                if (empty($options['api_key'])) {
+                                if (empty($options['api_key']) || (empty($initialPageSpeedScore) && !empty(get_transient('wpc_test_running')))) {
                                     ?>
 
                                     <div class="wpc-pagespeed-running">
@@ -518,15 +538,14 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <span>Usually takes about 2 minutes...</span>
                                     </div>
                                 <?php
-                                } elseif ($warmupFailing){
-                                    #print_r($warmupLog);
-
+                                } elseif (empty($initialPageSpeedScore) && $warmupFailing){
                                     echo '<div style="padding:35px 15px;text-align: center;">';
                                     echo '<strong>Error! Seems connection to our API was blocked by Firewall on your server.</strong>';
                                     echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Tutorial</a>';
                                     echo '</div>';
 
-                                } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
+                                } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) && empty(get_transient('wpc_test_running')))) {
+
                                 $home_page_id = get_option('page_on_front');
                                 ?>
                                     <script type="text/javascript">

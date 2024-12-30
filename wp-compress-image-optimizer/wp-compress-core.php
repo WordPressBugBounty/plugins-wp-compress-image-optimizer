@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.04';
+        self::$version = '6.30.05';
         $wps_ic = $this;
 
         if (class_exists('whtlbl_whitelabel_plugin')) {
@@ -158,8 +158,11 @@ class wps_ic
     public static function onUpgrade_force_regen()
     {
         // Remove Tests
-        delete_option(WPS_IC_TESTS);
+        delete_transient('wpc_test_running');
+        delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPC_WARMUP_LOG_SETTING);
+
         // Setup UI to Simple
         update_option(WPS_IC_GUI, 'lite');
         //
@@ -711,6 +714,9 @@ class wps_ic
         // Remove Tests
         delete_option(WPS_IC_TESTS);
         delete_option(WPS_IC_LITE_GPS);
+        delete_transient('wpc_test_running');
+        delete_transient('wpc_initial_test');
+        delete_option(WPC_WARMUP_LOG_SETTING);
 
         if (is_multisite()) {
         } else {
@@ -786,7 +792,10 @@ class wps_ic
 
         // Remove Tests
         delete_option(WPS_IC_TESTS);
+        delete_transient('wpc_test_running');
+        delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPC_WARMUP_LOG_SETTING);
 
         // Multisite Settings
         $settings = get_option(WPS_IC_MU_SETTINGS);

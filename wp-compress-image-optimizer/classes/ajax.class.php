@@ -1881,9 +1881,13 @@ class wps_ic_ajax extends wps_ic
         $apikey = $options['api_key'];
         $site = site_url();
 
+        delete_transient('wpc_test_running');
+        delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPC_WARMUP_LOG_SETTING);
         delete_option(WPS_IC_TESTS);
         delete_option('wpsShowAdvanced');
+
 
         $options['api_key'] = '';
         $options['response_key'] = '';
@@ -2746,8 +2750,14 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('not-connected');
         }
 
+        if (get_transient('wpc_test_running')) {
+            wp_send_json_error('already-running');
+        }
+
         $id = sanitize_text_field($_POST['id']);
         $dash = true;
+
+        set_transient('wpc_test_running', 'running', 5 * 60);
 
         $warmup_class = new wps_ic_preload_warmup();
         $warmup_class->optimizeSingle('home', true, $dash);
@@ -2789,12 +2799,15 @@ class wps_ic_ajax extends wps_ic
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
 
+        delete_transient('wpc_test_running');
         delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
         delete_option(WPC_WARMUP_LOG_SETTING);
 
         $id = sanitize_text_field($_POST['id']);
         $retest = sanitize_text_field($_POST['retest']);
+
+        set_transient('wpc_initial_test', 'running', 5 * 60);
 
         $warmup = new wps_ic_preload_warmup();
         $warmup->resetTest($id, $retest, false);
