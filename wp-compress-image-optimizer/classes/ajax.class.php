@@ -280,7 +280,7 @@ class wps_ic_ajax extends wps_ic
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
-        $criticalCSS->sendCriticalUrl($realUrl, $postID, 30);
+        $criticalCSS->sendCriticalUrl($realUrl, $postID, 10);
 
         wp_send_json_success('sent');
     }
@@ -2361,6 +2361,12 @@ class wps_ic_ajax extends wps_ic
             $skip_lazy = '';
         }
 
+      if (isset($settings['purge_on_new_post'])) {
+        $purge_on_new_post = 'checked';
+      } else {
+        $purge_on_new_post = '';
+      }
+
         // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
         $html .= '<div class="wpc-popup-saving-logo-container">';
@@ -2391,10 +2397,13 @@ class wps_ic_ajax extends wps_ic
         $html .= '<strong>Skip Lazy Loading: &nbsp</strong>';
         $html .= '<p>Skip &nbsp</p> <input type="number" class="per_page_lazy_skip" min="0" max="99" value="' . $skip_lazy . '"/> <p>&nbsp Images</p>';
         $html .= '</div>';
-        //$html .= '<div class="wps-default-excludes-enabled-checkbox-container">';
-        //$html .= '<input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-default-excludes">';
-        //$html .= '<p>Disable Default Excludes</p>';
-        //$html .= '</div>';
+        $html .= '</div>';
+
+        $html .= '<div class="wps-default-excludes-container">';
+        $html .= '<div class="wps-default-excludes-enabled-checkbox-container" style="padding-left: 0">';
+        $html .= '<input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-purge-on-new-post" '.$purge_on_new_post.'>';
+        $html .= '<p>Purge cache on new post</p>';
+        $html .= '</div>';
 
 
         $html .= '</div>';
@@ -2422,9 +2431,14 @@ class wps_ic_ajax extends wps_ic
 
         $id = sanitize_text_field($_POST['id']);
         $skip_lazy = false;
+        $purge_on_new_post = false;
 
         if (isset($_POST['skip_lazy'])) {
             $skip_lazy = sanitize_text_field($_POST['skip_lazy']);
+        }
+
+        if (isset($_POST['purge_on_new_post'])) {
+          $purge_on_new_post = sanitize_text_field($_POST['purge_on_new_post']);
         }
 
         $wpc_excludes = get_option('wpc-excludes', []);
@@ -2437,10 +2451,16 @@ class wps_ic_ajax extends wps_ic
             $wpc_excludes['per_page_settings'][$id] = [];
         }
 
-        if ($skip_lazy !== false) {
-            $wpc_excludes['per_page_settings'][$id]['skip_lazy'] = $skip_lazy;
+        if ($purge_on_new_post != 'false') {
+            $wpc_excludes['per_page_settings'][$id]['purge_on_new_post'] = $skip_lazy;
         } else {
-            unset($wpc_excludes['per_page_settings'][$id]['skip_lazy']);
+            unset($wpc_excludes['per_page_settings'][$id]['purge_on_new_post']);
+        }
+
+        if ($skip_lazy !== false) {
+          $wpc_excludes['per_page_settings'][$id]['skip_lazy'] = $skip_lazy;
+        } else {
+          unset($wpc_excludes['per_page_settings'][$id]['skip_lazy']);
         }
 
         // Update the 'wpc-excludes' option with the new data

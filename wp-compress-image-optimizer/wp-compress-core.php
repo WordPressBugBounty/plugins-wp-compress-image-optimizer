@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.05';
+        self::$version = '6.30.06';
         $wps_ic = $this;
 
         if (class_exists('whtlbl_whitelabel_plugin')) {
@@ -949,6 +949,7 @@ class wps_ic
      */
     public function init()
     {
+
 
         if (!is_admin()) {
             // Raise memory limit
@@ -2201,4 +2202,9 @@ function uninstall()
     } catch (Exception $e) {
         error_log($e->getMessage());
     }
+}
+
+function wpcGetHeader($headerName) {
+    $headerKey = 'HTTP_' . str_replace('-', '_', strtoupper($headerName));
+    return $_SERVER[$headerKey] ?? null;
 }

@@ -129,6 +129,7 @@ class wps_cdn_rewrite
 
         self::$excludes['cdn'][] = '.php'; //pagelayer .php requests fix
         self::$excludes['cdn'][] = '/wp-fastest-cache/'; //icon in admin bugfix
+        self::$excludes['cdn'][] = '/wp-content/plugins/ameliabooking/v3/public/assets/'; //amelia fix
 
         self::$removeSrcset = self::$settings['remove-srcset'];
 
@@ -885,7 +886,7 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        if (!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true') {
+        if ((!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true') || !empty(wpcGetHeader('criticalCombine'))) {
             $this->criticalCombine = true;
         }
         //Do something with the buffer (HTML)
@@ -955,7 +956,7 @@ class wps_cdn_rewrite
         }
 
         $combine_css = new wps_ic_combine_css();
-        if (!empty($_GET['criticalCombine']) || ($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1'))) {
+        if (!empty(wpcGetHeader('criticalCombine')) || !empty($_GET['criticalCombine']) || ($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1'))) {
             if (empty($_GET['stopCombineCSS'])) {
                 $html = $combine_css->maybe_do_combine($html);
             }
@@ -967,7 +968,7 @@ class wps_cdn_rewrite
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists();
 
-        if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine'])) {
+        if (empty(wpcGetHeader('criticalCombine')) && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine'])) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {
 
                 if ($criticalActive && !self::$preloaderAPI) {
@@ -990,7 +991,7 @@ class wps_cdn_rewrite
             }
         }
 
-        if (empty($_GET['criticalCombine'])) {
+        if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
                 // TODO: Maybe add something?
                 if ($criticalActive && !empty($criticalCSSExists)) {
@@ -1010,7 +1011,7 @@ class wps_cdn_rewrite
             }
         }
 
-        if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine'])) {
+        if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {
                 if (!empty($_GET['debugCriticalRunning'])) {
                     $html .= print_r([self::$settings['critical']['css'], $criticalCSSExists, $criticalRunning], true);
@@ -1058,7 +1059,7 @@ class wps_cdn_rewrite
         }
 
         //Delay JS
-        if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine'])) {
+        if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
 
             $delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
@@ -1668,7 +1669,7 @@ class wps_cdn_rewrite
         }
 
         $this->criticalCombine = false;
-        if (!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true') {
+        if (!empty(wpcGetHeader('criticalCombine')) || (!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true')) {
             $this->criticalCombine = true;
             self::$settings['critical']['css'] = 0;
         }
@@ -1833,7 +1834,7 @@ class wps_cdn_rewrite
             self::$cdnEnabled = 0;
         }
 
-        if (!empty($_GET['criticalCombine'])) {
+        if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
             self::$cdnEnabled = 0;
             self::$settings['css'] = 0;
             self::$settings['js'] = 0;
@@ -2085,7 +2086,7 @@ class wps_cdn_rewrite
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
 
-                if (self::$settings['inline-css'] == '1' && empty($_GET['criticalCombine'])) {
+                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) || empty(wpcGetHeader('criticalCombine')))) {
                     add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
                 } else {
                     if (self::$css == "1") {
@@ -2105,7 +2106,7 @@ class wps_cdn_rewrite
         } else {
             // Local Mode
             if (self::dontRunif()) {
-                if (self::$settings['inline-css'] == '1' && empty($_GET['criticalCombine'])) {
+                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine')))) {
                     add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
                 }
 
@@ -2507,7 +2508,7 @@ class wps_cdn_rewrite
         }
 
         $criticalCombine = false;
-        if (!empty($_GET['criticalCombine']) && $_GET['criticalCombine']) {
+        if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
             $criticalCombine = true;
         }
 
@@ -2778,7 +2779,7 @@ class wps_cdn_rewrite
             }
         }
 
-        if (empty($_GET['criticalCombine'])) {
+        if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
                 //			  // TODO: Maybe add something?
                 //			  if($criticalActive && !empty($criticalCSSExists)) {
@@ -2900,7 +2901,7 @@ class wps_cdn_rewrite
         //Delay JS
         $delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
 
-        if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine'])) {
+        if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
             if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
                 if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {

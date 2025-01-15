@@ -29,7 +29,11 @@ foreach($_COOKIE as $key => $value) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-	return;
+    return;
+}
+
+if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC'])) {
+    return;
 }
 
 if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){

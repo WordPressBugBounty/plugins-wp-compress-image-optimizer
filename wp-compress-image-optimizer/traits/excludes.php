@@ -87,7 +87,13 @@ class wps_ic_excludes extends wps_ic
         'gtranslate',
         'gformRedirect()',
         'wpgb_settings',
-        'latepoint_helper'
+        'latepoint_helper',
+        'wc-order-attribution-js-extra',
+        'mailchimp_public_data',
+        'porto-theme-js-extra',
+        'porto-live-search-js-extra',
+        'yith-wcan-shortcodes-js-extra',
+        'jqueryParams'
 		];
 
 		self::$defaultCombineJSExcludes = [

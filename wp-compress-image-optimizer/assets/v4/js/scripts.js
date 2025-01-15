@@ -280,12 +280,14 @@ jQuery(document).ready(function ($) {
             $(loading).show();
 
             var skip_lazy = $('.per_page_lazy_skip', popup).val();
+            var purge_on_new_post = $('.wps-purge-on-new-post', popup).is(':checked');
 
             $.post(wps_ic_vars.ajaxurl, {
                 action: 'wps_ic_save_per_page_settings',
                 nonce: ajaxVar.nonce,
                 id: ID,
-                skip_lazy: skip_lazy
+                skip_lazy: skip_lazy,
+                purge_on_new_post: purge_on_new_post
             }, function (response) {
                 if (response.success) {
                     updatePosts(selectedTypes, currentPage);

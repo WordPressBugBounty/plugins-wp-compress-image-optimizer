@@ -37,7 +37,6 @@ class wps_ic_perfmatters extends wps_ic_integrations {
 					]
 				] );
 
-			$this->add_override( 'delay-js' );
 		}
 
 		if ( $this->wps_settings['lazy'] && ! empty( $perfmatters_options['lazyload']['lazy_loading'] ) &&
@@ -51,7 +50,6 @@ class wps_ic_perfmatters extends wps_ic_integrations {
 					]
 				] );
 
-			$this->add_override( 'lazy' );
 		}
 
 	}
@@ -61,10 +59,8 @@ class wps_ic_perfmatters extends wps_ic_integrations {
 
 		if ( $setting == 'delay_js' ) {
 			$perfmatters_options['assets']['delay_js'] = 0;
-			$this->remove_override( 'delay-js' );
 		} else if ( $setting == 'lazyload' ) {
 			$perfmatters_options['lazyload']['lazy_loading'] = 0;
-			$this->remove_override( 'lazy' );
 		}
 
 		return update_option( 'perfmatters_options', $perfmatters_options );

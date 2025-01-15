@@ -407,6 +407,10 @@ class wps_cacheHtml
 
     public function removeCacheFiles($post_id)
     {
+        if ($post_id == 'home'){
+          $post_id = 0;
+        }
+
         if ($post_id == 'all') {
             self::removeDirectory(WPS_IC_CACHE);
             self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/');
@@ -431,8 +435,10 @@ class wps_cacheHtml
 
     public static function removeDirectory($path)
     {
+
         $path = rtrim($path, '/');
         $files = glob($path . '/*');
+
         if (!empty($files)) {
             foreach ($files as $file) {
                 is_dir($file) ? self::removeDirectory($file) : unlink($file);
@@ -440,6 +446,7 @@ class wps_cacheHtml
         }
 
         $files = glob($path . '/*');
+
         if (is_dir($path) && empty($files)) {
             rmdir($path);
         }

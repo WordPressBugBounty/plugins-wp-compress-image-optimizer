@@ -150,6 +150,27 @@ class wps_ic_cache
         self::purgeHook('permalink_structure_changed');
         self::purgeHook('customize_save');
         self::purgeHook('update_option_theme_mods_' . get_option('stylesheet'));
+
+        //per page settings
+        add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+    }
+
+    public static function purgeCachePerPage() {
+      // Get the excludes option
+      $wpc_excludes = get_option('wpc-excludes', []);
+
+      // Check if per_page_settings exists
+      if (!isset($wpc_excludes['per_page_settings']) || empty($wpc_excludes['per_page_settings'])) {
+        return;
+      }
+
+      // Loop through each page settings
+      foreach ($wpc_excludes['per_page_settings'] as $page_id => $settings) {
+        // Check if purge_on_new_post is enabled
+        if (isset($settings['purge_on_new_post']) && $settings['purge_on_new_post'] !== 'false') {
+          self::removeHtmlCacheFiles($page_id);
+        }
+      }
     }
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
@@ -272,10 +293,12 @@ class wps_ic_cache
 
     public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
     {
-        if (!is_int($post_id) && $post_id !== 'all') {
+
+        if (!is_int($post_id) && $post_id !== 'all' && $post_id !== 'home') {
             $post_id = 'all';
         }
         $cacheHtml = new wps_cacheHtml();
+
         $cacheHtml->removeCacheFiles($post_id);
     }
 

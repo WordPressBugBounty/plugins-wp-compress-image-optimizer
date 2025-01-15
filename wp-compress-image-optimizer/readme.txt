@@ -4,8 +4,8 @@ Donate link:
 Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 5.6
-Tested up to: 6.6
-Stable tag: 6.30.05
+Tested up to: 6.7
+Stable tag: 6.30.06
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,13 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.30.06 =
+* Added Request Headers for Critical CSS
+* Improved DelayJS Excludes
+* Purge Cache On New Post in Per Page Settings
+* Exclude Amelia JS by Default
+* Exclude jQuery Params from Delay
 
 = 6.30.05 =
 * Patch for UI - Test Ran @ Wrong Date

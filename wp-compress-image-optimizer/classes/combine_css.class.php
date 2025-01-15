@@ -47,7 +47,7 @@ class wps_ic_combine_css
     $this->combine_external = false;
     $this->allExcludes = self::$excludes->combineCSSExcludes();
 
-    if (!empty($_GET['criticalCombine'])) {
+    if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
       $this->settings['inline-css'] = '0';
       $this->criticalCombine = true;
       $this->filesize_cap = '10000000000'; //in bytes

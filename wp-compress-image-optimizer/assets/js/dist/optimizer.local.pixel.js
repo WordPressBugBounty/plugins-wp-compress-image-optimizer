@@ -34,8 +34,13 @@ if (n489D_vars.linkPreload === 'true') {
             const link = event.target.closest('a');
             if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
 
-            // Preload the link if it meets certain criteria
-            if (link.origin === location.origin) { // Same origin links only
+            // Check if the link contains any excluded strings
+            const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+                link.href.includes(excludeStr)
+            );
+
+            // Only preload if link is not excluded and is same origin
+            if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
         });
@@ -44,7 +49,13 @@ if (n489D_vars.linkPreload === 'true') {
             const link = event.target.closest('a');
             if (!link || preloadedLinks.has(link.href)) return;
 
-            if (link.origin === location.origin) {
+            // Check if the link contains any excluded strings
+            const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+                link.href.includes(excludeStr)
+            );
+
+            // Only preload if link is not excluded and is same origin
+            if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
         });

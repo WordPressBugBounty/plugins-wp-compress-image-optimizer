@@ -314,7 +314,9 @@ class wps_ic_enqueues extends wps_ic
             $linkPreload = "false";
         }
 
-        echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '", "linkPreload":"' . $linkPreload . '"};';
+        $excludeLink = ['add-to-cart'];
+
+        echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '", "linkPreload":"' . $linkPreload . '", "excludeLink":' . json_encode($excludeLink) . '};';
         echo '</script>';
 
         $optimizeRemove = get_option('wps_optimizejs_remove');
