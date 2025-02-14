@@ -12,6 +12,7 @@ class wps_ic_preload_warmup
         self::$warmupVersion = 'v4/';
         $this->getApiUrl();
         $this->logFilePath = WPS_IC_DIR . 'warmup-log.txt';
+        // TODO: Bug, can't update plugin because of it because file gets created before the plugin is disabled!
         $this->logFile = fopen($this->logFilePath, 'a');
         $this->get_filesystem();
     }
@@ -913,12 +914,12 @@ class wps_ic_preload_warmup
             mkdir(rtrim($cachePath, '/'), 0777, true);
         }
 
-        $fp = fopen($cachePath . 'index.html', 'w+');
-        fwrite($fp, $body);
-        fclose($fp);
-
-        $stats = new wps_ic_stats();
-        $stats->saveWarmupStats($body);
+//        $fp = fopen($cachePath . 'index.html', 'w+');
+//        fwrite($fp, $body);
+//        fclose($fp);
+//
+//        $stats = new wps_ic_stats();
+//        $stats->saveWarmupStats($body);
 
         if (function_exists('gzencode')) {
             $this->saveGzCacheLocal($cachePath, $body);

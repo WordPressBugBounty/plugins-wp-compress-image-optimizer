@@ -80,7 +80,13 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.06';
+        self::$version = '6.30.07';
+
+        $development = get_option('wps_ic_development');
+        if (!empty($development) && $development == 'true') {
+            self::$version = time();
+        }
+
         $wps_ic = $this;
 
         if (class_exists('whtlbl_whitelabel_plugin')) {

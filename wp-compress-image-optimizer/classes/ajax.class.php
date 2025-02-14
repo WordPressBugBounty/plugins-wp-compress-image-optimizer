@@ -50,6 +50,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
                 $this->add_ajax('wpc_ic_checkCFDisconnect');
+                $this->add_ajax('wpc_ic_setupCF');
 
                 // Critical CSS
                 $this->add_ajax('wps_ic_critical_get_assets');
@@ -159,11 +160,17 @@ class wps_ic_ajax extends wps_ic
         add_action('wp_ajax_nopriv_' . $hook, [$this, $hook]);
     }
 
-    public static function wpc_ic_checkCFDisconnect() {
+    public static function wpc_ic_checkCFDisconnect()
+    {
+        $cfSettings = get_option(WPS_IC_CF);
+
+        $zone = $cfSettings['zone'];
+        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+        $cfapi->removeWhitelistIP($zone);
+
         delete_option(WPS_IC_CF);
         wp_send_json_success();
     }
-
 
     public static function wpc_ic_checkCFConnect()
     {
@@ -192,7 +199,6 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_error();
     }
 
-
     public static function wpc_ic_checkCFToken()
     {
         $token = sanitize_text_field($_POST['token']);
@@ -201,7 +207,17 @@ class wps_ic_ajax extends wps_ic
 
         $zones = $cfapi->listZones();
         if (is_wp_error($zones)) {
-            wp_send_json_error($zones->get_error_message());
+
+            $error = 'Unkown error.';
+            if ($zones->get_error_message() == 'Invalid request headers') {
+                $error = 'Invalid request headers - Invalid API Token.';
+            } else if ($zones->get_error_message() == 'Invalid access token') {
+                $error = 'Invalid access token - Token format is correct, but the API Token is invalid.';
+            } else {
+                $error = $zones->get_error_message();
+            }
+
+            wp_send_json_error($error);
         } else {
             $zonesOutput = [];
             foreach ($zones['result'] as $zone) {
@@ -211,9 +227,10 @@ class wps_ic_ajax extends wps_ic
 
             if (!empty($zonesOutput)) {
                 # $zonesDropdown = '<select name="wpc-cf-zone-list">';
-                $zonesDropdown = '<option value="0">Select a zone</option>';
+                #$zonesDropdown = '<option value="0">Select a zone</option>';
                 foreach ($zonesOutput as $zoneID => $zoneName) {
-                    $zonesDropdown .= '<option value="' . $zoneID . '">' . $zoneName . '</option>';
+                    #$zonesDropdown .= '<option value="' . $zoneID . '">' . $zoneName . '</option>';
+                    $zonesDropdown .= '<div data-selected-zone="' . $zoneName . '" data-selected-zone-id="' . $zoneID . '">' . $zoneName . '</div>';
                 }
                 #$zonesDropdown .= '</select>';
                 wp_send_json_success($zonesDropdown);
@@ -231,6 +248,37 @@ class wps_ic_ajax extends wps_ic
         }
 
         return true;
+    }
+
+    public function wpc_purgeCF($return = false)
+    {
+        $cfSettings = get_option(WPS_IC_CF);
+
+        $zone = $cfSettings['zone'];
+        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+        if ($cfapi) {
+            $cfapi->purgeCache($zone);
+        }
+
+        if ($return) {
+            return true;
+        } else {
+            wp_send_json_success();
+        }
+    }
+
+    public function wpc_ic_setupCF()
+    {
+        $token = sanitize_text_field($_POST['token']);
+        $zoneInput = sanitize_text_field($_POST['zone']);
+
+        $cfapi = new WPC_CloudflareAPI($token);
+        $whitelist = $cfapi->whitelistIPs($zoneInput);
+        if (is_wp_error($whitelist)) {
+            wp_send_json_error($whitelist->get_error_message());
+        }
+
+        wp_send_json_success('whitelisted-successfully');
     }
 
     public function wpc_send_critical_remote()
@@ -309,9 +357,9 @@ class wps_ic_ajax extends wps_ic
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
                     delete_transient('wpc_initial_test');
                     if (!empty($body['testID'])) {
-                      $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
-                      $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
-                      update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
+                        $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+                        $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
+                        update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
                     }
                     wp_send_json_success();
                 }
@@ -335,9 +383,9 @@ class wps_ic_ajax extends wps_ic
         $warmupFailing = $warmup_class->isWarmupFailing();
 
         $initialFailed += 1;
-        set_transient('wps_initial_failed', $initialFailed, 5*60);
+        set_transient('wps_initial_failed', $initialFailed, 5 * 60);
 
-        wp_send_json_error(['failed' => $initialFailed, 'warmupFailing' => $warmupFailing]);
+        wp_send_json_error(['failed' => $initialFailed, 'warmupFailing' => $warmupFailing, 'url' => $testUrl]);
     }
 
     public function wps_ic_saveSetting()
@@ -682,7 +730,7 @@ class wps_ic_ajax extends wps_ic
 
             if ($setting_name == 'lastLoadScript' && isset($_POST['deferScript'])) {
                 //this function was made for excludes popup having only 1 textfield, so this is added for defer
-                $defer = sanitize_text_field($_POST['deferScript']);
+                $defer = $_POST['deferScript'];
                 $defer = rtrim($defer, "\n");
                 $defer = explode("\n", $defer);
                 $defer = array_filter($defer, 'trim');
@@ -862,6 +910,9 @@ class wps_ic_ajax extends wps_ic
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
+
+        $this->wpc_purgeCF(true);
+        sleep(6);
 
         $this->cacheLogic = new wps_ic_cache();
         $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
@@ -2361,11 +2412,11 @@ class wps_ic_ajax extends wps_ic
             $skip_lazy = '';
         }
 
-      if (isset($settings['purge_on_new_post'])) {
-        $purge_on_new_post = 'checked';
-      } else {
-        $purge_on_new_post = '';
-      }
+        if (isset($settings['purge_on_new_post'])) {
+            $purge_on_new_post = 'checked';
+        } else {
+            $purge_on_new_post = '';
+        }
 
         // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
@@ -2401,7 +2452,7 @@ class wps_ic_ajax extends wps_ic
 
         $html .= '<div class="wps-default-excludes-container">';
         $html .= '<div class="wps-default-excludes-enabled-checkbox-container" style="padding-left: 0">';
-        $html .= '<input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-purge-on-new-post" '.$purge_on_new_post.'>';
+        $html .= '<input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-purge-on-new-post" ' . $purge_on_new_post . '>';
         $html .= '<p>Purge cache on new post</p>';
         $html .= '</div>';
 
@@ -2438,7 +2489,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         if (isset($_POST['purge_on_new_post'])) {
-          $purge_on_new_post = sanitize_text_field($_POST['purge_on_new_post']);
+            $purge_on_new_post = sanitize_text_field($_POST['purge_on_new_post']);
         }
 
         $wpc_excludes = get_option('wpc-excludes', []);
@@ -2458,9 +2509,9 @@ class wps_ic_ajax extends wps_ic
         }
 
         if ($skip_lazy !== false) {
-          $wpc_excludes['per_page_settings'][$id]['skip_lazy'] = $skip_lazy;
+            $wpc_excludes['per_page_settings'][$id]['skip_lazy'] = $skip_lazy;
         } else {
-          unset($wpc_excludes['per_page_settings'][$id]['skip_lazy']);
+            unset($wpc_excludes['per_page_settings'][$id]['skip_lazy']);
         }
 
         // Update the 'wpc-excludes' option with the new data
@@ -2796,10 +2847,10 @@ class wps_ic_ajax extends wps_ic
         }
 
         $id = sanitize_text_field($_POST['id']);
-        if(!empty($_POST['dash'])){
-          $dash = sanitize_text_field($_POST['dash']);
+        if (!empty($_POST['dash'])) {
+            $dash = sanitize_text_field($_POST['dash']);
         } else {
-          $dash = false;
+            $dash = false;
         }
 
 

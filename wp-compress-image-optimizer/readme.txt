@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 5.6
 Tested up to: 6.7
-Stable tag: 6.30.06
+Stable tag: 6.30.07
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,26 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.30.07 =
+* Fixed Critical CSS for Elementor Cloud & Similar Services
+* Fixed Critical CSS for CloudFlare Services
+* Added CloudFlare Integration API
+* Added Additional Delay Last Excludes & Delay Excludes
+* Fixed Link Preload "src" Bug
+* Improved Caching Logic - Added "cache-control"
+* Added "wcpay_assets,trust,stats.wp,divi-custom-script-js-extra,jetpack-stats" to Default Excludes
+* Added "flexslider" to Default Defer
+* Added CDN Exclusion for "is_feed"
+* Added Fix for Background Images
+* Fixed DeferJs UI
+* Fixed AMP Pages Having Leftover Javascript
+* Added wp_trash and delete_post Purge Hooks
+* Added PHP Fix for DateTimeZone
+* Added Patch for Corrupt Cache File Detection
+* Fixed Image Width/Height Attributes
+* Ignoring Image URL from CDN if URL Contains White Space
+* Added Porto LazyLoading Compatibility
 
 = 6.30.06 =
 * Added Request Headers for Critical CSS

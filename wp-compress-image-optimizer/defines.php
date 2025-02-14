@@ -64,6 +64,10 @@ $plugin_dir = str_replace(site_url('/', 'http'), '', $plugin_dir);
 define('WPS_IC_URI', plugin_dir_url(__FILE__));
 define('WPS_IC_DIR', plugin_dir_path(__FILE__));
 define('WPS_IC_ASSETS', WPS_IC_URI . 'assets');
+
+// IP Whitelisting
+define('WPC_API_WHITELIST', WPS_IC_DIR . 'whitelist-ip.txt');
+
 define('WPS_IC_IMAGES', $plugin_dir . '/wp-compress-image-optimizer/assets/images');
 define('WPS_IC_TEMPLATES', plugin_dir_path(__FILE__) . 'templates/');
 

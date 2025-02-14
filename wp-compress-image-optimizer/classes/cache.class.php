@@ -153,6 +153,8 @@ class wps_ic_cache
 
         //per page settings
         add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+        add_action('wp_trash_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+        add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
     }
 
     public static function purgeCachePerPage() {

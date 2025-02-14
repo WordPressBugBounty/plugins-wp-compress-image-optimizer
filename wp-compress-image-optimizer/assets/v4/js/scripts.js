@@ -5,6 +5,13 @@ jQuery(document).ready(function ($) {
     var searchPending = false;
     var searchTerm = '';
 
+
+    // Fancy Dropdown
+    $('.wpc-cf-zone-list').on('click', function(){
+        $('.wpc-cf-zone-list-items').toggle();
+    });
+
+
     $(document).on('input', '#live-search', function () {
         doSearch()
     });

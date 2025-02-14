@@ -165,18 +165,12 @@ class wps_cdn_rewrite
         $home_url = rtrim(home_url(), '/');
         $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
         $current_url = rtrim($current_url, '/');
+        $current_url = explode('?', $current_url);
+        $current_url = $current_url[0];
+        $home_url = rtrim($home_url, '/');
+        $current_url = rtrim($current_url, '/');
 
         return $home_url === $current_url;
-    }
-
-
-    public function buffer_local_go()
-    {
-        if (self::$isAjax) {
-            $wps_ic_cdn = new wps_cdn_rewrite();
-        }
-
-        ob_start([$this, 'buffer_local_callback']);
     }
 
     public static function init()
@@ -327,6 +321,56 @@ class wps_cdn_rewrite
         }
 
         return $formatted_url;
+    }
+
+    public static function is_image($image)
+    {
+        if (strpos($image, '.webp') === false && strpos($image, '.jpg') === false && strpos($image, '.jpeg') === false && strpos($image, '.png') === false && strpos($image, '.ico') === false && strpos($image, '.svg') === false && strpos($image, '.gif') === false) {
+            return false;
+        } else {
+            // Serve JPG Enabled?
+            if (strpos($image, '.jpg') !== false || strpos($image, '.jpeg') !== false) {
+                // is JPEG enabled
+                if (self::$settings['serve']['jpg'] == '0') {
+                    return false;
+                }
+            }
+
+            // Serve GIF Enabled?
+            if (strpos($image, '.gif') !== false) {
+                // is JPEG enabled
+                if (self::$settings['serve']['gif'] == '0') {
+                    return false;
+                }
+            }
+
+            // Serve PNG Enabled?
+            if (strpos($image, '.png') !== false) {
+                // is PNG enabled
+                if (self::$settings['serve']['png'] == '0') {
+                    return false;
+                }
+            }
+
+            // Serve SVG Enabled?
+            if (strpos($image, '.svg') !== false) {
+                // is SVG enabled
+                if (self::$settings['serve']['svg'] == '0') {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public function buffer_local_go()
+    {
+        if (self::$isAjax) {
+            $wps_ic_cdn = new wps_cdn_rewrite();
+        }
+
+        ob_start([$this, 'buffer_local_callback']);
     }
 
     public function isActive()
@@ -659,10 +703,10 @@ class wps_cdn_rewrite
      */
     public static function image_url_matching_site_url($image)
     {
-      // If the image starts with a slash or wp-content, it's a local image
-      if (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0) {
-        return true;
-      }
+        // If the image starts with a slash or wp-content, it's a local image
+        if (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0) {
+            return true;
+        }
         $site_url = self::$site_url;
         $image = str_replace(['https://', 'http://'], '', $image);
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
@@ -879,6 +923,8 @@ class wps_cdn_rewrite
         return $src;
     }
 
+    // TODO: IMPORANT! If you don't want to run it needs to return false!
+
     public function buffer_local_callback($html)
     {
 
@@ -968,7 +1014,7 @@ class wps_cdn_rewrite
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists();
 
-        if (empty(wpcGetHeader('criticalCombine')) && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine'])) {
+        if (!self::$isAmp->isAmp() && empty(wpcGetHeader('criticalCombine')) && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine'])) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {
 
                 if ($criticalActive && !self::$preloaderAPI) {
@@ -1024,10 +1070,49 @@ class wps_cdn_rewrite
                     $criticalCSSExists = $criticalCSS->criticalExists();
                     $criticalCSSContent = file_get_contents($criticalCSSExists['file']);
 
+                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
+                    $createPreloadLinks = function ($cssContent) {
+                        $preloadLinks = '';
+                        $loadedFonts = []; // Array to track already added URLs
+                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
+
+                        // Proceed only if the comment is found
+                        if ($commentPos !== false) {
+                            $relevantContent = substr($cssContent, 0, $commentPos);
+                            $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
+                            if (preg_match_all($fontPattern, $relevantContent, $matches, PREG_SET_ORDER)) {
+                                foreach ($matches as $match) {
+                                    $fontUrl = $match[2];
+                                    if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
+                                        continue;
+                                    }
+                                    // Check if the font URL is already in the array
+                                    if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
+                                        if (!in_array($fontUrl, $loadedFonts)) {
+                                            $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
+                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return $preloadLinks;
+                    };
+
+                    // Function to get the CSS content after the "/* Preload Fonts */" comment
+                    $getCSSAfterPreloadComment = function ($cssContent) {
+                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
+                        return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
+                    };
+
+
+                    $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent);
+
                     return print_r([
                         'critActive:' => $criticalActive,
                         'preloadApi' => self::$preloaderAPI,
                         'excluded' => self::isURLExcluded('critical_css'),
+                        $preloadLinks_Desktop,
                         $criticalCSSExists,
                         $criticalCSSContent
                     ], true);
@@ -1094,8 +1179,9 @@ class wps_cdn_rewrite
             }
         }
 
+
         if (!empty($_GET['pagelayer-live'])) {
-            return true;
+            return false;
         }
 
         // Any hide login plugins active?
@@ -1156,7 +1242,7 @@ class wps_cdn_rewrite
         }
 
 
-        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['bwc']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['elementor-preview']) || !empty($_GET['PageSpeed']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['et_fb']) || !empty($_GET['tatsu']) || !empty($_GET['tatsu-header']) || !empty($_GET['tatsu-footer']) || !empty($_GET['tve'])  || !empty($_GET['is-editor-iframe']) || !empty
+        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['bwc']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['elementor-preview']) || !empty($_GET['PageSpeed']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['et_fb']) || !empty($_GET['tatsu']) || !empty($_GET['tatsu-header']) || !empty($_GET['tatsu-footer']) || !empty($_GET['tve']) || !empty($_GET['is-editor-iframe']) || !empty
             ($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
             return false;
         }
@@ -1398,7 +1484,7 @@ class wps_cdn_rewrite
 
     public static function isFEBuilder()
     {
-        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['elementor-preview']) || !empty($_GET['tatsu']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || !empty($_GET['tve']) || !empty($_GET['et_fb']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['ct_builder']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks'])|| !empty($_GET['is-editor-iframe']) || !empty($_GET['brizy-edit-iframe']) || !empty($_GET['brizy-edit']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
+        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['elementor-preview']) || !empty($_GET['tatsu']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || !empty($_GET['tve']) || !empty($_GET['et_fb']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['ct_builder']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['brizy-edit-iframe']) || !empty($_GET['brizy-edit']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
             return true;
         } else {
             return false;
@@ -1561,6 +1647,10 @@ class wps_cdn_rewrite
     public function buffer_callback_v3()
     {
 
+        if (is_feed()) {
+            return true;
+        }
+
         if (is_admin()) {
             return true;
         }
@@ -1614,6 +1704,25 @@ class wps_cdn_rewrite
             return;
         }
 
+        // Integrations
+        include_once WPS_IC_DIR . 'integrations/addon/integrations.php';
+        $wpcAddonIntegrations = new wpc_addon_integrations();
+        if ($wpcAddonIntegrations->wpMaintenance()) {
+            return true;
+        }
+
+        // Check if WP_CLI is being used
+        if (defined('WP_CLI') && WP_CLI) {
+            // WP_CLI detected, don't run the block
+            return;
+        }
+
+        // Check if WP REST API is being accessed
+        if (defined('REST_REQUEST') && REST_REQUEST) {
+            // WP REST API detected, don't run the block
+            return;
+        }
+
         // Raise memory limit
         ini_set('memory_limit', '1024M');
 
@@ -1656,9 +1765,6 @@ class wps_cdn_rewrite
             self::$page_excludes_files = [];
         }
 
-        if (isset(self::$page_excludes['adaptive'])) {
-            self::$adaptive_enabled = self::$page_excludes['adaptive'];
-        }
 
         if (self::$isAmp->isAmp()) {
             self::$lazy_enabled = '0';
@@ -1755,6 +1861,7 @@ class wps_cdn_rewrite
 
         // default excluded keywords
         self::$default_excluded_list = [
+            'wp-admin',
             'redditstatic',
             'ai-uncode',
             'gtm',
@@ -1912,6 +2019,15 @@ class wps_cdn_rewrite
         self::$adaptive_enabled = self::$settings['generate_adaptive'];
         self::$webp_enabled = self::$settings['generate_webp'];
         self::$retina_enabled = self::$settings['retina'];
+
+        if (isset(self::$page_excludes['adaptive'])) {
+            //self::$lazy_enabled = self::$page_excludes['adaptive'];
+            //self::$native_lazy_enabled = self::$page_excludes['adaptive'];
+            self::$adaptive_enabled = self::$page_excludes['adaptive'];
+            //self::$webp_enabled = self::$page_excludes['adaptive'];
+            //self::$retina_enabled = self::$page_excludes['adaptive'];
+        }
+
         if (!empty(self::$settings['replace-all-link'])) {
             self::$replaceAllLinks = self::$settings['replace-all-link'];
         } else {
@@ -2128,6 +2244,7 @@ class wps_cdn_rewrite
 
     public function preload_custom_assetsMobile()
     {
+        $alreadyPreloaded = [];
         $preloads = get_option('wps_ic_preloadsMobile');
 
         if (!empty($preloads) && is_array($preloads)) {
@@ -2197,13 +2314,16 @@ class wps_cdn_rewrite
 
 
                 if (!empty($as)) {
-                    echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+                    if (!in_array(esc_url($preload), $alreadyPreloaded)) {
+                        $alreadyPreloaded[] = esc_url($preload);
+                        echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
 
-                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                        echo ' fetchpriority="high"';
+                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                            echo ' fetchpriority="high"';
+                        }
+
+                        echo ' ' . $extra . '>' . "\n";
                     }
-
-                    echo ' ' . $extra . '>' . "\n";
                 }
             }
         }
@@ -2211,7 +2331,12 @@ class wps_cdn_rewrite
 
     public function preload_custom_assets()
     {
+        $alreadyPreloaded = [];
         $preloads = get_option('wps_ic_preloads');
+
+        if (!empty($_GET['dbgPreload'])) {
+            echo print_r('asd ' . $preloads, true);
+        }
 
         if (!empty($preloads) && is_array($preloads)) {
             $newPreloads = [];
@@ -2279,13 +2404,16 @@ class wps_cdn_rewrite
 
 
                 if (!empty($as)) {
-                    echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+                    if (!in_array(esc_url($preload), $alreadyPreloaded)) {
+                        $alreadyPreloaded[] = esc_url($preload);
+                        echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
 
-                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                        echo ' fetchpriority="high"';
+                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                            echo ' fetchpriority="high"';
+                        }
+
+                        echo ' ' . $extra . '>' . "\n";
                     }
-
-                    echo ' ' . $extra . '>' . "\n";
                 }
             }
         }
@@ -2576,6 +2704,7 @@ class wps_cdn_rewrite
             }, $html);
         }
 
+
         //Prep Site URL
         $this->getRegexp();
 
@@ -2725,19 +2854,6 @@ class wps_cdn_rewrite
             $addslashes = true;
         }
 
-        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cdn_rewrite_url_2') {
-            return $html;
-        }
-
-        // Find all URLs on page that have not been replaced
-        $regEx = '#(?<=[(\"\'])(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
-        $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
-
-        //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
-        $regEx = '/background-image:\s*url\((\'|"|)(.*?)\1\)/i';
-        $html = preg_replace_callback($regEx, function($matches) {
-          return 'background-image: url(' . $this->cdn_rewrite_url([$matches[2]]) . ')';
-        }, $html);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'combine_css') {
             return $html;
@@ -2757,7 +2873,7 @@ class wps_cdn_rewrite
         }
 
 
-        if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
+        if (!self::$isAmp->isAmp() && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {
 
                 if ($criticalActive && !self::$preloaderAPI) {
@@ -2790,6 +2906,7 @@ class wps_cdn_rewrite
             } else {
                 // Find and Preload Fonts!!
                 self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
+
                 if (!empty(self::$wpcPreloadLinks)) {
                     $preloadFonts = implode('', self::$wpcPreloadLinks);
 
@@ -2811,10 +2928,43 @@ class wps_cdn_rewrite
                     $criticalCSSExists = $criticalCSS->criticalExists();
                     $criticalCSSContent = file_get_contents($criticalCSSExists['file']);
 
+                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
+                    $createPreloadLinks = function ($cssContent) {
+                        $preloadLinks = '';
+                        $loadedFonts = []; // Array to track already added URLs
+                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
+
+                        // Proceed only if the comment is found
+                        if ($commentPos !== false) {
+                            $relevantContent = substr($cssContent, 0, $commentPos);
+                            $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
+                            if (preg_match_all($fontPattern, $relevantContent, $matches, PREG_SET_ORDER)) {
+                                foreach ($matches as $match) {
+                                    $fontUrl = $match[2];
+                                    if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
+                                        continue;
+                                    }
+                                    // Check if the font URL is already in the array
+                                    if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
+                                        if (!in_array($fontUrl, $loadedFonts)) {
+                                            $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
+                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return $preloadLinks;
+                    };
+
+
+                    $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent);
+
                     return print_r([
                         'critActive:' => $criticalActive,
                         'preloadApi' => self::$preloaderAPI,
                         'excluded' => self::isURLExcluded('critical_css'),
+                        $preloadLinks_Desktop,
                         $criticalCSSExists,
                         $criticalCSSContent
                     ], true);
@@ -2843,6 +2993,21 @@ class wps_cdn_rewrite
                 }
             }
         }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cdn_rewrite_url_2') {
+            return $html;
+        }
+
+        // Find all URLs on page that have not been replaced
+        $regEx = '#(?<=[(\"\'])(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
+        $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
+
+        //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
+        $regEx = '/background-image:\s*url\((\'|"|)(.*?)\1\)/i';
+        $html = preg_replace_callback($regEx, function ($matches) {
+            $url = str_replace('&#039;', '', $matches[2]);
+            return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
+        }, $html);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'externalUrls') {
             return $html;
@@ -2901,7 +3066,7 @@ class wps_cdn_rewrite
         //Delay JS
         $delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
 
-        if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+        if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
             if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
                 if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
@@ -2998,409 +3163,6 @@ class wps_cdn_rewrite
         }
     }
 
-    public function set_image_sizes($matches)
-    {
-
-        if (empty(self::$settings['add-image-sizes']) || self::$settings['add-image-sizes'] == '0') {
-            return $matches[0];
-        }
-
-        // Check if the image is within a <picture> tag
-        if (strpos($matches[0], '<picture>') !== false) {
-            // Extract the <img> tag src from the <picture>
-            preg_match('/<img[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si', $matches[0], $imgMatches);
-            if (!$imgMatches) {
-                return $matches[0]; // No <img> tag found within <picture>, return original
-            }
-            $imageUrl = $imgMatches[1];
-        } else {
-            // Direct <img> tag
-            $imageUrl = $matches[1];
-        }
-
-        // Convert URL to local path for local images, or keep as URL for external images
-        $localPath = $this->url_to_path($imageUrl);
-
-        if (!$localPath) {
-            // If the image is external and external image handling is disabled, return the tag unchanged
-            return $matches[0];
-        }
-
-        // Get image dimensions
-        $dimensions = $this->get_image_dimensions($localPath);
-        if ($dimensions === false) {
-            // Couldn't get dimensions, return the tag unchanged
-            return $matches[0];
-        }
-
-        // Construct the width and height string
-        $widthHeightStr = 'width="' . round($dimensions[0], 0) . '" height="' . round($dimensions[1], 0) . '"';
-
-        // Insert width and height into the <img> tag
-        if (isset($imgMatches)) {
-            // For <picture>, reconstruct the <img> tag with dimensions added
-            $newImgTag = preg_replace('/<img([^>]+)>/', '<img$1 ' . $widthHeightStr . '>', $imgMatches[0]);
-
-            // Replace the old <img> tag with the new one within <picture>
-            return str_replace($imgMatches[0], $newImgTag, $matches[0]);
-        } else {
-            // For direct <img> tags, add dimensions directly
-            return preg_replace('/<img/', '<img ' . $widthHeightStr, $matches[0]);
-        }
-    }
-
-    public function url_to_path($url)
-    {
-        $parsedUrl = parse_url($url);
-        $siteUrl = parse_url(get_site_url());
-
-        // Check if URL is external
-        if (!isset($parsedUrl['host']) || !isset($siteUrl['host']) || $parsedUrl['host'] !== $siteUrl['host']) {
-            return false; // URL is external, can't convert to local path
-        }
-
-        // Construct the path relative to WordPress root
-        $relPath = isset($parsedUrl['path']) ? $parsedUrl['path'] : '';
-
-        // Get WordPress base directory path
-        $wpBasePath = ABSPATH;
-
-        // Sometimes, WordPress is installed in a subdirectory, adjust for that
-        if (!empty($siteUrl['path']) && $siteUrl['path'] !== '/') {
-            $wpBasePath = str_replace(trim($siteUrl['path'], '/'), '', $wpBasePath);
-        }
-
-        // Combine the base path with the relative path
-        $localPath = realpath($wpBasePath . $relPath);
-
-        // Check if the file exists and return the path, or false if it doesn't
-        return file_exists($localPath) ? $localPath : false;
-    }
-
-    public function get_image_dimensions($filename)
-    {
-        if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) === 'svg') {
-            // Handle SVG files
-            $svgfile = @simplexml_load_file(rawurlencode($filename), 'SimpleXMLElement', LIBXML_NOERROR | LIBXML_NOWARNING);
-            if ($svgfile) {
-                $attributes = $svgfile->attributes();
-                $width = isset($attributes->width) ? (string)$attributes->width : null;
-                $height = isset($attributes->height) ? (string)$attributes->height : null;
-
-                // Clean and format width and height.
-                $width = $this->format_svg_value($width);
-                $height = $this->format_svg_value($height);
-
-                if ($width && $height) {
-                    // Return dimensions if directly available
-                    return [$width, $height];
-                } elseif (isset($attributes->viewBox)) {
-                    // Parse viewBox for dimensions if width/height not available
-                    $viewBox = explode(' ', $attributes->viewBox);
-                    if (count($viewBox) === 4) {
-                        $width = $viewBox[2];
-                        $height = $viewBox[3];
-                        return [$width, $height];
-                    }
-                }
-            }
-            // Return false if dimensions could not be determined
-            return false;
-        } else {
-            // Handle other image types (JPG, PNG, etc.)
-            $sizes = @getimagesize($filename);
-            return $sizes ? [$sizes[0], $sizes[1]] : false;
-        }
-    }
-
-    public function format_svg_value($value)
-    {
-        // No unit or empty, return the value directly.
-        if (empty($value) || is_numeric($value)) {
-            return $value;
-        }
-
-        // Pattern to find numbers possibly followed by 'px'
-        $px_pattern = '/([0-9]+)\s*px/i';
-
-        // If pixel unit or numeric, extract and return the numeric value.
-        if (preg_match($px_pattern, $value, $matches)) {
-            return $matches[1];
-        }
-
-        // Return an empty string for unsupported units.
-        return '';
-    }
-
-    public function injectPreloadImages($matches)
-    {
-        $originalHead = $matches[0];
-
-        $inject = $originalHead;
-        $inject .= '<!--WPC_INSERT_CRITICAL-->';
-        $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
-        $inject .= '<!--WPC_INSERT_PRELOAD-->';
-        return $inject;
-    }
-
-
-    public function elementorAnimations($matches)
-    {
-        $animationData = $matches[1];
-        if (strpos($animationData, '_animation')) {
-            #$matches[0] = str_replace('elementor-invisible', '', $matches[0]);
-            #$matches[0] = preg_replace('/(<div[^>]*\sclass="[^"]*)(")/si', "$1 " . "animated fadeInLeft" . " $2", $matches[0]);
-            return $matches[0];
-        }
-        return $matches[0];
-    }
-
-
-    public function removeBgOverlay($html)
-    {
-        return '';
-    }
-
-
-    public function gtagDelay($src)
-    {
-        // TODO: We have already delayed things, but speed tests don't recognize it
-        $tag = trim($src[0]);
-        $srcToLower = strtolower($tag);
-
-        if (strpos($tag, 'wps-inline') !== false) {
-            return $tag;
-        }
-
-        // Optimizer Exclude
-        if (strpos($srcToLower, 'optimizer.pixel') !== false || strpos($srcToLower, 'optimizer.adaptive') !== false || strpos($srcToLower, 'optimizer.local') !== false) {
-            return $tag;
-        }
-
-        if (strpos($srcToLower, 'googletag') !== false || strpos($srcToLower, 'gtag') !== false || strpos($srcToLower, 'facebook') !== false || strpos($srcToLower, 'recaptcha') !== false || strpos($srcToLower, 'tween') !== false || strpos($srcToLower, 'fontawesome') !== false) {
-
-            if (strpos($srcToLower, 'src=') === false) {
-                if (strpos($srcToLower, 'type=') === false) {
-                    $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
-                } else {
-                    $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
-                }
-            } else {
-                if (strpos($srcToLower, 'type=') === false) {
-                    $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
-                } else {
-                    $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
-                }
-            }
-
-        }
-
-        return $tag;
-    }
-
-    public function local_script_encode($html)
-    {
-        $found = strlen($html[0]);
-
-        $encoded = base64_encode($html[0]);
-        $decode = base64_decode($encoded);
-        $replaced = strlen($decode);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'script') {
-            return print_r([$html], true);
-        }
-
-        $slashed = addslashes($html[0]);
-        $encoded = base64_encode($slashed);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_encode') {
-            return print_r($encoded, true);
-        }
-
-        return '[script-wpc]' . $encoded . '[/script-wpc]';
-    }
-
-    public function local_script_decode($html)
-    {
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode') {
-            return print_r([$html], true);
-        }
-
-        $decode = str_replace('[script-wpc]', '', $html[0]);
-        $decode = str_replace('[/script-wpc]', '', $decode);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode_end') {
-            return print_r([$decode], true);
-        }
-
-        $decode = base64_decode($decode);
-        $decode = stripslashes($decode);
-
-        return $decode;
-    }
-
-    public function crittr_replace_css($links)
-    {
-        preg_match_all('/([a-zA-Z\-\_]*)\s*\=["|\'](.*?)["|\']/is', $links[0], $linkAtts);
-
-        if (!empty($_GET['dbg_links'])) {
-            return print_r([$links], true);
-        }
-
-        if (!empty($_GET['dbg_links_atts'])) {
-            return print_r([$linkAtts], true);
-        }
-
-        if (!empty($linkAtts[1])) {
-            $linkHtml = '<link';
-            $linkRel = '';
-
-            $attNames = $linkAtts[1];
-            $attValues = $linkAtts[2];
-
-            foreach ($attNames as $i => $attName) {
-                if ($attName == 'rel' && $attValues[$i] == 'dns-prefetch') {
-                    $linkRel = $attValues[$i];
-                } elseif ($attName == 'href') {
-                    if (!empty($_GET['dbg_link_href'])) {
-                        return print_r([$attValues[$i], substr($attValues[$i], 0, 11)], true);
-                    }
-
-                    if (strpos($attValues[$i], self::$site_url) === false) {
-
-                    } else {
-
-                        if (strpos($attValues[$i], self::$zone_name) === false) {
-                            $attValues[$i] = WPS_IC_URI . 'fixCss.php?zoneName=' . self::$zone_name . '&css=' . urlencode($attValues[$i]) . '&rand=' . time();
-                        }
-
-                    }
-                }
-
-                $linkHtml .= ' ' . $attName . '="' . $attValues[$i] . '"';
-            }
-
-            if (!empty($_GET['dbg_links_output'])) {
-                return print_r([$linkHtml], true);
-            }
-
-            $linkHtml .= '/>';
-
-            if ($linkRel == 'stylesheet') {
-                return $linkHtml;
-            } else {
-                return $links[0];
-            }
-
-
-        } else {
-            return $links[0];
-        }
-    }
-
-
-    public function replace_source_tags($source)
-    {
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
-        if (!empty($sourceAtts[1])) {
-            $iFrame = '<source';
-            $hasClass = false;
-
-            $attNames = $sourceAtts[1];
-            $attValues = $sourceAtts[2];
-
-            if (!in_array('loading', $attNames)) {
-                $attNames[] = 'loading';
-            }
-
-            foreach ($attNames as $i => $attName) {
-                if ($attName == 'src') {
-                    $attName = 'data-wpc-src';
-                } elseif ($attName == 'class') {
-                    $hasClass = true;
-                    $attValues[$i] .= ' wpc-iframe-delay';
-                } elseif ($attName == 'loading') {
-                    $attValues[$i] = 'lazy';
-                }
-
-                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
-            }
-
-            if (!$hasClass) {
-                $iFrame .= 'class="wpc-iframe-delay"';
-            }
-
-            $iFrame .= '';
-
-            return $iFrame;
-        } else {
-            return $source;
-        }
-    }
-
-
-    public function replace_iframe_tags($iframe)
-    {
-      if (strpos($iframe[0], 'gform') !== false){
-        return $iframe[0];
-      }
-
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $iframe[0], $iframeAtts);
-
-        if (!empty($iframeAtts[1])) {
-            $iFrame = '<iframe';
-            $hasClass = false;
-
-            $attNames = $iframeAtts[1];
-            $attValues = $iframeAtts[2];
-
-            if (!in_array('loading', $attNames)) {
-                $attNames[] = 'loading';
-            }
-
-            foreach ($attNames as $i => $attName) {
-                if ($attName == 'src') {
-                    $attName = 'data-wpc-src';
-                } elseif ($attName == 'class') {
-                    $hasClass = true;
-                    $attValues[$i] .= ' wpc-iframe-delay';
-                } elseif ($attName == 'loading') {
-                    $attValues[$i] = 'lazy';
-                }
-
-                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
-            }
-
-            if (!$hasClass) {
-                $iFrame .= 'class="wpc-iframe-delay"';
-            }
-
-            $iFrame .= '></iframe>';
-
-            return $iFrame;
-        } else {
-            return $iframe;
-        }
-    }
-
-    public function maybe_addslashes($image, $addslashes = false)
-    {
-        if ($addslashes) {
-            $image = addslashes($image);
-        }
-
-        return $image;
-    }
-
-    public function specialChars($url)
-    {
-        if (!self::$brizyActive) {
-            $url = htmlspecialchars($url);
-        }
-
-        return $url;
-    }
-
     public function cdn_rewrite_url($url, $addslashes = false)
     {
         $width = 1;
@@ -3412,6 +3174,11 @@ class wps_cdn_rewrite
         $url = $url[0];
         if (strpos($url, 'cookie') !== false) {
             return $this->maybe_slash($url, $addslashes);
+        }
+
+        // Check if the URL contains spaces or encoded spaces (%20)
+        if (strpos($url, ' ') !== false || strpos($url, '%20') !== false) {
+            return $url;
         }
 
         if (self::isExcluded('cdn', $url)) {
@@ -3587,31 +3354,31 @@ class wps_cdn_rewrite
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
 
-              if (strpos($url, '.jpg') !== false || strpos($url, '.gif') !== false || strpos($url, '.png') !== false) {
-                $ext = '';
-                if (strpos($url, '.jpg') !== false) {
-                  $ext = 'jpg';
-                } elseif (strpos($url, '.gif') !== false) {
-                  $ext = 'gif';
-                } elseif (strpos($url, '.png') !== false) {
-                  $ext = 'png';
+                if (strpos($url, '.jpg') !== false || strpos($url, '.gif') !== false || strpos($url, '.png') !== false) {
+                    $ext = '';
+                    if (strpos($url, '.jpg') !== false) {
+                        $ext = 'jpg';
+                    } elseif (strpos($url, '.gif') !== false) {
+                        $ext = 'gif';
+                    } elseif (strpos($url, '.png') !== false) {
+                        $ext = 'png';
+                    }
+
+                    if (!empty(self::$settings['serve'][$ext])) {
+                        $webp = '/wp:' . self::$webp;
+                        if (self::isExcludedFrom('webp', $url)) {
+                            $webp = '/wp:0';
+                        }
+
+                        if (!self::is_excluded($url, $url)) {
+                            $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:1/u:' . self::reformat_url($url);
+                        }
+                    } else {
+                        $newUrl = self::reformat_url($url, false);
+                    }
+
+                    return $newUrl;
                 }
-
-                if (!empty(self::$settings['serve'][$ext])) {
-                  $webp = '/wp:' . self::$webp;
-                  if (self::isExcludedFrom('webp', $url)) {
-                    $webp = '/wp:0';
-                  }
-
-                  if (!self::is_excluded($url, $url)) {
-                      $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:1/u:' . self::reformat_url($url);
-                  }
-                } else {
-                  $newUrl = self::reformat_url($url, false);
-                }
-
-                return $newUrl;
-              }
 
                 return $url;
 
@@ -3703,45 +3470,406 @@ class wps_cdn_rewrite
         return false;
     }
 
-    public static function is_image($image)
+    public function set_image_sizes($matches)
     {
-        if (strpos($image, '.webp') === false && strpos($image, '.jpg') === false && strpos($image, '.jpeg') === false && strpos($image, '.png') === false && strpos($image, '.ico') === false && strpos($image, '.svg') === false && strpos($image, '.gif') === false) {
+
+        if (empty(self::$settings['add-image-sizes']) || self::$settings['add-image-sizes'] == '0') {
+            return $matches[0];
+        }
+
+        // Check if the image is within a <picture> tag
+        if (strpos($matches[0], '<picture>') !== false) {
+            // Extract the <img> tag src from the <picture>
+            preg_match('/<img[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si', $matches[0], $imgMatches);
+            if (!$imgMatches) {
+                return $matches[0]; // No <img> tag found within <picture>, return original
+            }
+            $imageUrl = $imgMatches[1];
+        } else {
+            // Direct <img> tag
+            $imageUrl = $matches[1];
+        }
+
+        // Convert URL to local path for local images, or keep as URL for external images
+        $localPath = $this->url_to_path($imageUrl);
+
+        if (!$localPath) {
+            // If the image is external and external image handling is disabled, return the tag unchanged
+            return $matches[0];
+        }
+
+        // Get image dimensions
+        $dimensions = $this->get_image_dimensions($localPath);
+        if ($dimensions === false) {
+            // Couldn't get dimensions, return the tag unchanged
+            return $matches[0];
+        }
+
+        // Construct the width and height string
+        $widthHeightStr = 'width="' . round($dimensions[0], 0) . '" height="' . round($dimensions[1], 0) . '"';
+
+        if ($dimensions[0] <= 5 || $dimensions[1] <= 5) {
+            $widthHeightStr = '';
+        }
+
+        // Insert width and height into the <img> tag
+        if (isset($imgMatches)) {
+            // For <picture>, reconstruct the <img> tag with dimensions added
+            $newImgTag = preg_replace('/<img([^>]+)>/', '<img$1 ' . $widthHeightStr . '>', $imgMatches[0]);
+
+            // Replace the old <img> tag with the new one within <picture>
+            return str_replace($imgMatches[0], $newImgTag, $matches[0]);
+        } else {
+            // For direct <img> tags, add dimensions directly
+            return preg_replace('/<img/', '<img ' . $widthHeightStr, $matches[0]);
+        }
+    }
+
+    public function url_to_path($url)
+    {
+        $parsedUrl = parse_url($url);
+        $siteUrl = parse_url(get_site_url());
+
+        // Check if URL is external
+        if (!isset($parsedUrl['host']) || !isset($siteUrl['host']) || $parsedUrl['host'] !== $siteUrl['host']) {
+            return false; // URL is external, can't convert to local path
+        }
+
+        // Construct the path relative to WordPress root
+        $relPath = isset($parsedUrl['path']) ? $parsedUrl['path'] : '';
+
+        // Get WordPress base directory path
+        $wpBasePath = ABSPATH;
+
+        // Sometimes, WordPress is installed in a subdirectory, adjust for that
+        if (!empty($siteUrl['path']) && $siteUrl['path'] !== '/') {
+            $wpBasePath = str_replace(trim($siteUrl['path'], '/'), '', $wpBasePath);
+        }
+
+        // Combine the base path with the relative path
+        $localPath = realpath($wpBasePath . $relPath);
+
+        // Check if the file exists and return the path, or false if it doesn't
+        return file_exists($localPath) ? $localPath : false;
+    }
+
+    public function get_image_dimensions($filename)
+    {
+        if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) === 'svg') {
+            // Handle SVG files
+            $svgfile = @simplexml_load_file(rawurlencode($filename), 'SimpleXMLElement', LIBXML_NOERROR | LIBXML_NOWARNING);
+            if ($svgfile) {
+                $attributes = $svgfile->attributes();
+                $width = isset($attributes->width) ? (string)$attributes->width : null;
+                $height = isset($attributes->height) ? (string)$attributes->height : null;
+
+                // Clean and format width and height.
+                $width = $this->format_svg_value($width);
+                $height = $this->format_svg_value($height);
+
+                if ($width && $height) {
+                    // Return dimensions if directly available
+                    return [$width, $height];
+                } elseif (isset($attributes->viewBox)) {
+                    // Parse viewBox for dimensions if width/height not available
+                    $viewBox = explode(' ', $attributes->viewBox);
+                    if (count($viewBox) === 4) {
+                        $width = $viewBox[2];
+                        $height = $viewBox[3];
+                        return [$width, $height];
+                    }
+                }
+            }
+            // Return false if dimensions could not be determined
             return false;
         } else {
-            // Serve JPG Enabled?
-            if (strpos($image, '.jpg') !== false || strpos($image, '.jpeg') !== false) {
-                // is JPEG enabled
-                if (self::$settings['serve']['jpg'] == '0') {
-                    return false;
-                }
-            }
-
-            // Serve GIF Enabled?
-            if (strpos($image, '.gif') !== false) {
-                // is JPEG enabled
-                if (self::$settings['serve']['gif'] == '0') {
-                    return false;
-                }
-            }
-
-            // Serve PNG Enabled?
-            if (strpos($image, '.png') !== false) {
-                // is PNG enabled
-                if (self::$settings['serve']['png'] == '0') {
-                    return false;
-                }
-            }
-
-            // Serve SVG Enabled?
-            if (strpos($image, '.svg') !== false) {
-                // is SVG enabled
-                if (self::$settings['serve']['svg'] == '0') {
-                    return false;
-                }
-            }
-
-            return true;
+            // Handle other image types (JPG, PNG, etc.)
+            $sizes = @getimagesize($filename);
+            return $sizes ? [$sizes[0], $sizes[1]] : false;
         }
+    }
+
+    public function format_svg_value($value)
+    {
+        // No unit or empty, return the value directly.
+        if (empty($value) || is_numeric($value)) {
+            return $value;
+        }
+
+        // Pattern to find numbers possibly followed by 'px'
+        $px_pattern = '/([0-9]+)\s*px/i';
+
+        // If pixel unit or numeric, extract and return the numeric value.
+        if (preg_match($px_pattern, $value, $matches)) {
+            return $matches[1];
+        }
+
+        // Return an empty string for unsupported units.
+        return '';
+    }
+
+    public function injectPreloadImages($matches)
+    {
+        $originalHead = $matches[0];
+
+        $inject = $originalHead;
+        $inject .= '<!--WPC_INSERT_CRITICAL-->';
+        $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
+        $inject .= '<!--WPC_INSERT_PRELOAD-->';
+        return $inject;
+    }
+
+    public function elementorAnimations($matches)
+    {
+        $animationData = $matches[1];
+        if (strpos($animationData, '_animation')) {
+            #$matches[0] = str_replace('elementor-invisible', '', $matches[0]);
+            #$matches[0] = preg_replace('/(<div[^>]*\sclass="[^"]*)(")/si', "$1 " . "animated fadeInLeft" . " $2", $matches[0]);
+            return $matches[0];
+        }
+        return $matches[0];
+    }
+
+    public function removeBgOverlay($html)
+    {
+        return '';
+    }
+
+    public function gtagDelay($src)
+    {
+        // TODO: We have already delayed things, but speed tests don't recognize it
+        $tag = trim($src[0]);
+        $srcToLower = strtolower($tag);
+
+        if (strpos($tag, 'wps-inline') !== false) {
+            return $tag;
+        }
+
+        // Optimizer Exclude
+        if (strpos($srcToLower, 'optimizer.pixel') !== false || strpos($srcToLower, 'optimizer.adaptive') !== false || strpos($srcToLower, 'optimizer.local') !== false) {
+            return $tag;
+        }
+
+        if (strpos($srcToLower, 'googletag') !== false || strpos($srcToLower, 'gtag') !== false || strpos($srcToLower, 'facebook') !== false || strpos($srcToLower, 'recaptcha') !== false || strpos($srcToLower, 'tween') !== false || strpos($srcToLower, 'fontawesome') !== false) {
+
+            if (strpos($srcToLower, 'src=') === false) {
+                if (strpos($srcToLower, 'type=') === false) {
+                    $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
+                } else {
+                    $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
+                }
+            } else {
+                if (strpos($srcToLower, 'type=') === false) {
+                    $tag = str_replace('<script', '<script type="wpc-delay-last-script" data-from-wpc="3078"', $srcToLower);
+                } else {
+                    $tag = str_replace('text/javascript', 'wpc-delay-last-script', $srcToLower);
+                }
+            }
+
+        }
+
+        return $tag;
+    }
+
+    public function local_script_encode($html)
+    {
+        $found = strlen($html[0]);
+
+        $encoded = base64_encode($html[0]);
+        $decode = base64_decode($encoded);
+        $replaced = strlen($decode);
+
+        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'script') {
+            return print_r([$html], true);
+        }
+
+        $slashed = addslashes($html[0]);
+        $encoded = base64_encode($slashed);
+
+        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_encode') {
+            return print_r($encoded, true);
+        }
+
+        return '[script-wpc]' . $encoded . '[/script-wpc]';
+    }
+
+    public function local_script_decode($html)
+    {
+        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode') {
+            return print_r([$html], true);
+        }
+
+        $decode = str_replace('[script-wpc]', '', $html[0]);
+        $decode = str_replace('[/script-wpc]', '', $decode);
+
+        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode_end') {
+            return print_r([$decode], true);
+        }
+
+        $decode = base64_decode($decode);
+        $decode = stripslashes($decode);
+
+        return $decode;
+    }
+
+    public function crittr_replace_css($links)
+    {
+        preg_match_all('/([a-zA-Z\-\_]*)\s*\=["|\'](.*?)["|\']/is', $links[0], $linkAtts);
+
+        if (!empty($_GET['dbg_links'])) {
+            return print_r([$links], true);
+        }
+
+        if (!empty($_GET['dbg_links_atts'])) {
+            return print_r([$linkAtts], true);
+        }
+
+        if (!empty($linkAtts[1])) {
+            $linkHtml = '<link';
+            $linkRel = '';
+
+            $attNames = $linkAtts[1];
+            $attValues = $linkAtts[2];
+
+            foreach ($attNames as $i => $attName) {
+                if ($attName == 'rel' && $attValues[$i] == 'dns-prefetch') {
+                    $linkRel = $attValues[$i];
+                } elseif ($attName == 'href') {
+                    if (!empty($_GET['dbg_link_href'])) {
+                        return print_r([$attValues[$i], substr($attValues[$i], 0, 11)], true);
+                    }
+
+                    if (strpos($attValues[$i], self::$site_url) === false) {
+
+                    } else {
+
+                        if (strpos($attValues[$i], self::$zone_name) === false) {
+                            $attValues[$i] = WPS_IC_URI . 'fixCss.php?zoneName=' . self::$zone_name . '&css=' . urlencode($attValues[$i]) . '&rand=' . time();
+                        }
+
+                    }
+                }
+
+                $linkHtml .= ' ' . $attName . '="' . $attValues[$i] . '"';
+            }
+
+            if (!empty($_GET['dbg_links_output'])) {
+                return print_r([$linkHtml], true);
+            }
+
+            $linkHtml .= '/>';
+
+            if ($linkRel == 'stylesheet') {
+                return $linkHtml;
+            } else {
+                return $links[0];
+            }
+
+
+        } else {
+            return $links[0];
+        }
+    }
+
+    public function replace_source_tags($source)
+    {
+        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
+        if (!empty($sourceAtts[1])) {
+            $iFrame = '<source';
+            $hasClass = false;
+
+            $attNames = $sourceAtts[1];
+            $attValues = $sourceAtts[2];
+
+            if (!in_array('loading', $attNames)) {
+                $attNames[] = 'loading';
+            }
+
+            foreach ($attNames as $i => $attName) {
+                if ($attName == 'src') {
+                    $attName = 'data-wpc-src';
+                } elseif ($attName == 'class') {
+                    $hasClass = true;
+                    $attValues[$i] .= ' wpc-iframe-delay';
+                } elseif ($attName == 'loading') {
+                    $attValues[$i] = 'lazy';
+                }
+
+                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
+            }
+
+            if (!$hasClass) {
+                $iFrame .= 'class="wpc-iframe-delay"';
+            }
+
+            $iFrame .= '';
+
+            return $iFrame;
+        } else {
+            return $source;
+        }
+    }
+
+    public function replace_iframe_tags($iframe)
+    {
+        if (strpos($iframe[0], 'gform') !== false) {
+            return $iframe[0];
+        }
+
+        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $iframe[0], $iframeAtts);
+
+        if (!empty($iframeAtts[1])) {
+            $iFrame = '<iframe';
+            $hasClass = false;
+
+            $attNames = $iframeAtts[1];
+            $attValues = $iframeAtts[2];
+
+            if (!in_array('loading', $attNames)) {
+                $attNames[] = 'loading';
+            }
+
+            foreach ($attNames as $i => $attName) {
+                if ($attName == 'src') {
+                    $attName = 'data-wpc-src';
+                } elseif ($attName == 'class') {
+                    $hasClass = true;
+                    $attValues[$i] .= ' wpc-iframe-delay';
+                } elseif ($attName == 'loading') {
+                    $attValues[$i] = 'lazy';
+                }
+
+                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
+            }
+
+            if (!$hasClass) {
+                $iFrame .= 'class="wpc-iframe-delay"';
+            }
+
+            $iFrame .= '></iframe>';
+
+            return $iFrame;
+        } else {
+            return $iframe;
+        }
+    }
+
+    public function maybe_addslashes($image, $addslashes = false)
+    {
+        if ($addslashes) {
+            $image = addslashes($image);
+        }
+
+        return $image;
+    }
+
+    public function specialChars($url)
+    {
+        if (!self::$brizyActive) {
+            $url = htmlspecialchars($url);
+        }
+
+        return $url;
     }
 
     public function local_image_tags($image)

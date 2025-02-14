@@ -500,13 +500,25 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             $timezone = 'UTC';
                                         } else {
                                             $timezone = timezone_name_from_abbr('', $gmt_offset * 3600, 0);
+
+                                            // If timezone_name_from_abbr() fails, set default timezone
+                                            if (!$timezone) {
+                                                $timezone = 'UTC'; // Default to UTC to prevent errors
+                                            }
                                         }
                                     }
 
                                     // Patch: IF-ovi su losi
                                     if (!empty($initialPageSpeedScore)) {
                                         // Apply the timezone to the DateTime object
-                                        $date->setTimezone(new DateTimeZone($timezone));
+
+                                        try {
+                                            $date->setTimezone(new DateTimeZone($timezone));
+                                        } catch (Exception $e) {
+                                            #error_log("Invalid timezone: $timezone - Falling back to UTC");
+                                            $date->setTimezone(new DateTimeZone('UTC')); // Default to UTC
+                                        }
+
                                         $date->setTimestamp($initialPageSpeedScore['lastRun']);
                                         $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
                                         ?>

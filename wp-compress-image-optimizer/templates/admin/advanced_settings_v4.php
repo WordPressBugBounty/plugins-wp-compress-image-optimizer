@@ -177,7 +177,6 @@ if (!empty($_GET['resetTest'])) {
 }
 
 
-
 $gui = new wpc_gui_v4();
 
 $proSite = get_option('wps_ic_prosite');
@@ -240,11 +239,16 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                 setTimeout(function () {
                                     window.location.reload();
                                 }, 2000);
+                            } else if (response.data.warmupFailing == true) {
+                                clearInterval(checkFetch);
+                                setTimeout(function () {
+                                    window.location.reload();
+                                }, 2000);
                             }
                         }
                     }
                 });
-            }, 5000);
+            }, 10000);
         });
     </script>
 <?php } ?>
@@ -847,50 +851,6 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
 
                                     </div>
 
-                                    <div class="wpc-tab-content-box" id="cf-connect-options" style="display: none;">
-                                        <?php
-                                        echo $gui::checkboxTabTitle('CloudFlare Connection', "Boost your site's performance by enabling global CSS optimization.", 'css-optimization/css-icon.svg', ''); ?>
-
-                                        <div class="wpc-spacer"></div>
-
-                                        <div class="wpc-items-list-row mb-0">
-
-                                            <div class="wpc-cf-connect-form">
-                                                <?php
-                                                $cf = get_option(WPS_IC_CF);
-                                                if (empty($cf)) {
-                                                    ?>
-                                                    <div class="wpc-cf-loader" style="display: none;">
-                                                        <span>Connecting....</span>
-                                                    </div>
-                                                    <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load">
-                                                        <label for="wpc-cf-token">Insert your Cloudflare Token:</label>
-                                                        <input type="text" name="wpc-cf-token" id="wpc-cf-token"/>
-                                                        <input type="button" class="wpc-cf-token-check" value="Connect"/>
-                                                    </div>
-                                                    <div class="wpc-select-holder-no-change" id="wpc-cf-zone-list-holder" style="display: none;">
-                                                        <label for="wpc-cf-zone-list">Select Cloudflare Zone:</label>
-                                                        <select name="wpc-cf-zone-list" id="wpc-cf-zone-list">
-                                                        </select>
-                                                        <input type="button" class="wpc-cf-token-connect" value="Connect"/>
-                                                    </div>
-                                                <?php } else { ?>
-                                                    <div class="wpc-cf-loader" style="display: none;">
-                                                        <span>Disconnecting....</span>
-                                                    </div>
-                                                    <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load">
-                                                        <label for="wpc-cf-token">Connected to Cloudflare on ZoneID:</label>
-                                                        <?php
-                                                        echo $cf['zoneName'] . ' on ID: ' . $cf['zone'];
-                                                        ?>
-                                                        <input type="button" class="wpc-cf-token-disconnect" value="Disconnect"/>
-                                                    </div>
-                                                <?php } ?>
-                                            </div>
-
-                                        </div>
-                                    </div>
-
                                     <div class="wpc-tab-content-box" id="css-optimization-options">
                                         <?php
 
@@ -1256,6 +1216,76 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                     </div>
                                 </div>
                                 <div class="wpc-tab-content" id="integrations" style="display:none;">
+                                    <div class="wpc-tab-content-box" id="cf-connect-options" style="display: block;">
+                                        <?php
+                                        echo $gui::checkboxTabTitle('CloudFlare Integration', "Seamlessly connect with Cloudflare for automated cache purging and uninterrupted access.", 'cf-logo.png', '', '', '', '', '', '', '', '', 'https://help.wpcompress.com/en-us/article/cloudflare-integration-setup-guide-for-automated-cache-purging-17ger3i/?bust=1739284717272 ', 'How to?'); ?>
+
+                                        <div class="wpc-spacer"></div>
+
+                                        <div class="wpc-items-list-row mb-0">
+
+                                            <div class="wpc-cf-connect-form">
+                                                <?php
+                                                $cf = get_option(WPS_IC_CF);
+                                                if (empty($cf)) {
+                                                    ?>
+                                                    <div class="wpc-cf-loader" style="display: none;">
+                                                        <span><div class="wpcLoader"></div> Connecting....</span>
+                                                    </div>
+                                                    <div class="wpc-cf-loader-zone" style="display: none;">
+                                                        <span><div class="wpcLoader"></div> Connecting, this might take up to 60 seconds....</span>
+                                                    </div>
+                                                    <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load wpc-cf-insert-token-step">
+                                                        <label for="wpc-cf-token">
+                                                            <div class="circle-check"></div>
+                                                            Login to Cloudflare:</label>
+                                                        <input type="text" name="wpc-cf-token" id="wpc-cf-token"/>
+                                                        <input type="button" class="wpc-cf-token-check wpc-cf-button" value="Connect"/>
+                                                    </div>
+                                                    <div class="wpc-select-holder-no-change" id="wpc-cf-zone-list-holder" style="display: none;">
+                                                        <input type="hidden" name="wpc-cf-zone" value=""/>
+                                                        <label for="wpc-cf-zone-list">
+                                                            <div class="circle-check"></div>
+                                                            Select account/site you wish to connect:</label>
+                                                        <!--<select name="wpc-cf-zone-list" id="wpc-cf-zone-list">
+                                                        </select>-->
+                                                        <div class="wpc-cf-zone-list">
+                                                            <div class="wpc-cf-zone-list-selected" id="wpc-cf-zone-list-selected">Select a zone</div>
+                                                            <div class="wpc-cf-zone-list-items" style="display: none;">
+                                                            </div>
+                                                        </div>
+                                                        <input type="button" class="wpc-cf-token-connect wpc-cf-button" value="Connect"/>
+                                                    </div>
+                                                    <div class="wpc-cf-loader-error" style="display: none;">
+                                                        <span></span>
+                                                    </div>
+                                                <?php } else {
+                                                    ?>
+                                                    <div class="wpc-cf-loader-disconnecting" style="display: none;">
+                                                        <span><div class="wpcLoader"></div> Disconnecting, this might take up to 60 seconds....</span>
+                                                    </div>
+                                                    <div class="wpc-input-holder-no-change wpc-cf-token-connected">
+                                                        <div style="display:flex;align-items: center">
+                                                            <label for="wpc-cf-token" style="flex:1;max-width:100px;padding:0;">
+                                                                <div class="circle-check active"></div>
+                                                                Connected </label>
+                                                            <div class="wpc-cf-token-connected-info" style="flex: 2;">
+                                                                <div class="wpc-cf-token-connected-info-left">
+                                                                    <?php
+                                                                    echo '<strong>' . $cf['zoneName'] . '</strong> on ID: <strong>' . $cf['zone'] . '</strong>';
+                                                                    ?>
+                                                                </div>
+                                                                <div class="wpc-cf-token-connected-info-right">
+                                                                    <input type="button" class="wpc-cf-token-disconnect wpc-cf-button" value="Disconnect"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                <?php } ?>
+                                            </div>
+
+                                        </div>
+                                    </div>
                                     <div class="wpc-tab-content-box">
 
                                         <?php

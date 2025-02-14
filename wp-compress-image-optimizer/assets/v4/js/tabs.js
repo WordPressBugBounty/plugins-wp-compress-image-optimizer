@@ -5,18 +5,47 @@ jQuery(document).ready(function ($) {
         e.preventDefault();
 
         var cFToken = $('input[name="wpc-cf-token"]').val();
+        if (cFToken === '') {
+            $('.wpc-cf-loader-error').html('Cloudflare API Error: Token field is empty.').show();
+            console.error('Cloudflare API Error: Token field is empty.');
+            return false; // Stop further execution
+        }
+
         $('.wpc-cf-token-hide-on-load').hide();
         $('.wpc-cf-loader').show();
+        $('.wpc-cf-loader-error').hide();
 
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFToken',
             token: cFToken,
         }, function (response) {
 
-            $('select[name="wpc-cf-zone-list"]', '#wpc-cf-zone-list-holder').html(response.data);
-            $('.wpc-cf-loader').hide(function(){
-                $('#wpc-cf-zone-list-holder').show();
-            });
+            if (response.success) {
+                $('.wpc-cf-zone-list-items', '#wpc-cf-zone-list-holder').html(response.data);
+                $('.wpc-cf-loader').hide(function () {
+                    $('#wpc-cf-zone-list-holder').show();
+                });
+
+                $('#wpc-cf-zone-list-holder').on('click', '.wpc-cf-zone-list-items>div', function () {
+                    var selected = $(this);
+                    var selectedValue = $(selected).data('selected-zone');
+                    var selectedID = $(selected).data('selected-zone-id');
+                    var selectedIndicator = $('.wpc-cf-zone-list-selected');
+
+                    $('.wpc-cf-zone-list-items').hide();
+                    $('input[name="wpc-cf-zone"]').val(selectedID);
+                    $(selectedIndicator).html(selectedValue);
+
+                    console.log(selectedValue);
+                    return false;
+                });
+
+            } else {
+                $('.wpc-cf-token-hide-on-load').show();
+                $('.wpc-cf-loader').hide();
+                $('.wpc-cf-loader-error>span').html(response.data);
+                $('.wpc-cf-loader-error').show();
+            }
         });
 
         return false;
@@ -26,17 +55,48 @@ jQuery(document).ready(function ($) {
     $('.wpc-cf-token-connect').on('click', function (e){
         e.preventDefault();
 
+        $('.wpc-cf-loader-error').html('').hide();
         var cFToken = $('input[name="wpc-cf-token"]').val();
-        var cFZone = $('select[name="wpc-cf-zone-list"]').val();
+        var cFZone = $('input[name="wpc-cf-zone"]').val();
+
+        if (cFToken === '') {
+            $('.wpc-cf-loader-error').html('Cloudflare API Error: Token field is empty.').show();
+            console.error('Cloudflare API Error: Token field is empty.');
+            return; // Stop further execution
+        }
+
+        if (cFZone === '') {
+            $('.wpc-cf-loader-error').html('Cloudflare API Error: You haven\'t selected a zone.').show();
+            console.error('Cloudflare API Error: You haven\'t selected a zone.');
+            return; // Stop further execution
+        }
+
         $('.wpc-cf-token-hide-on-load').hide();
-        $('.wpc-cf-loader').show();
+        $('#wpc-cf-zone-list-holder').hide();
+        $('.wpc-cf-loader-zone').show();
 
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFConnect',
             token: cFToken,
             zone: cFZone,
+            _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
         }, function (response) {
 
+                $.post(ajaxurl, {
+                    action: 'wpc_ic_setupCF',
+                    token: cFToken,
+                    zone: cFZone,
+                    _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
+                }, function (response) {
+                    if(response.success) {
+                        $('.wpc-cf-loader-zone').hide();
+                        window.location.reload();
+                    } else {
+                        $('.wpc-cf-loader-zone').hide();
+                        $('.wpc-cf-insert-token-step').show();
+                        $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+                    }
+                });
 
 
         });
@@ -46,13 +106,17 @@ jQuery(document).ready(function ($) {
 
 
     $('.wpc-cf-token-disconnect').on('click', function(e){
+        $('.wpc-cf-token-hide-on-load').hide();
+        $('.wpc-cf-token-connected').hide();
+        $('.wpc-cf-loader-disconnecting').show();
+        $('.wpc-cf-loader-error').hide();
+
         e.preventDefault();
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFDisconnect',
+            _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
         }, function (response) {
-
-
-
+            window.location.reload();
         });
         return false;
     });

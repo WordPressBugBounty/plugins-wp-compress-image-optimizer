@@ -87,6 +87,11 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                         $timezone = 'UTC';
                     } else {
                         $timezone = timezone_name_from_abbr('', $gmt_offset * 3600, 0);
+
+                        // If timezone_name_from_abbr() fails, set default timezone
+                        if (!$timezone) {
+                            $timezone = 'UTC'; // Default to UTC to prevent errors
+                        }
                     }
                 }
 

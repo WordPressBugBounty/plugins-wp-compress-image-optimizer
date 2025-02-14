@@ -286,9 +286,15 @@ class wps_ic_menu extends wps_ic
             // Old Version
             #$this->templates->get_admin_page('connect/api-connect');
             #$this->templates->get_admin_page('advanced_settings_v4');
-            // Lite Version
-            $this->templates->get_admin_page('connect/lite-api-connect');
-            $this->templates->get_admin_page('lite_settings');
+
+            if (!empty($_GET['showAdvanced'])) {
+                $this->templates->get_admin_page('advanced_settings_v4');
+            } else {
+                // Lite Version
+                $this->templates->get_admin_page('connect/lite-api-connect');
+                $this->templates->get_admin_page('lite_settings');
+            }
+
         } else {
 
 
@@ -306,6 +312,11 @@ class wps_ic_menu extends wps_ic
                 }
             } else {
                 $gui = get_option(WPS_IC_GUI);
+
+                if (!empty($_GET['showAdvanced'])) {
+                    update_option(WPS_IC_GUI, 'pro');
+                }
+
                 if (empty($gui) || (!empty($gui) && $gui == 'lite')) {
                     $this->templates->get_admin_page('lite_settings');
                 } else {

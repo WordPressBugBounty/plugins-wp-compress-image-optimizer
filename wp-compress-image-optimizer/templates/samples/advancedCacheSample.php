@@ -28,16 +28,48 @@ foreach($_COOKIE as $key => $value) {
   }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Don't cache for POST requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'HEAD') {
     return;
 }
 
+// Don't cache if critical combine or cache disable headers are present
 if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC'])) {
     return;
 }
 
+// Don't cache if DONOTCACHEPAGE constant is defined
 if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){
 	return;
+}
+
+// Check Cache-Control headers
+if (isset($_SERVER['HTTP_CACHE_CONTROL'])) {
+    $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
+
+    // Skip caching if no-cache, no-store, or private directives are present
+    if (strpos($cacheControl, 'no-cache') !== false ||
+        strpos($cacheControl, 'no-store') !== false ||
+        strpos($cacheControl, 'private') !== false) {
+        return;
+    }
+}
+
+// Don't cache for specific WooCommerce pages or AJAX requests
+$excluded_pages = ['cart', 'checkout', 'my-account'];
+$request_uri = $_SERVER['REQUEST_URI'];
+$is_excluded_page = false;
+
+foreach ($excluded_pages as $page) {
+    if (strpos($request_uri, "/$page") !== false) {
+        $is_excluded_page = true;
+        break;
+    }
+}
+
+// Check for wc-ajax requests
+if ($is_excluded_page || strpos($request_uri, 'wc-ajax') !== false) {
+    return;
 }
 
 $prefix = '';

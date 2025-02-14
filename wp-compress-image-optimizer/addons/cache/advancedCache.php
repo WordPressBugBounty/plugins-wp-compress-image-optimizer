@@ -198,8 +198,8 @@ class wps_advancedCache
             return true;
         }
 
-        if (empty($buffer) || strlen($buffer) < 100) {
-            return true;
+        if (empty($buffer) || strlen($buffer) < 100 || strpos($buffer, '</body>') === false) {
+            return $buffer;
         }
 
         if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE) {
@@ -237,13 +237,6 @@ class wps_advancedCache
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
         }
 
-        $fp = fopen($this->cachePath . $prefix . 'index.html', 'w+');
-        fwrite($fp, $buffer);
-        fclose($fp);
-
-        $stats = new wps_ic_stats();
-        $stats->saveWarmupStats($buffer);
-
         if (function_exists('gzencode')) {
             $this->saveGzCache($buffer, $prefix);
         }
@@ -260,7 +253,6 @@ class wps_advancedCache
         $fp = fopen($this->cachePath . $prefix . 'index.html' . '_gzip', 'w+');
         fwrite($fp, gzencode($buffer, 8));
         fclose($fp);
-
 
         return $buffer;
     }

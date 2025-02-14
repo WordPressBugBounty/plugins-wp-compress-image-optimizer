@@ -7,10 +7,11 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slider', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter'];
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'adsbygoogle'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slide', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk'];
 
-    public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui'];
+    // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"
+    public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui', 'flexslide'];
 
     public function __construct()
     {
@@ -52,8 +53,7 @@ class wps_ic_js_delay
 
     public function preload_scripts($html)
     {
-        $pattern = '/<script[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si';
-
+        $pattern = '/<script[^>]*src=[\'"]([^\'"]+)[\'"][^>]*id=[\'"]([^\'"]+)[\'"][^>]*>/si';
         $preloadTags = [];
         $matchesCount = 0;
 
@@ -63,9 +63,11 @@ class wps_ic_js_delay
             if ($matchesCount > 2) {
                 $fullTag = $matches[0];
                 $src = $matches[1];
-
-                if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false && strpos($src, 'optimize.dev.js') === false && strpos($src, 'mediaelement') === false) {
-                    $preloadTags[] = '<link rel="none" href="' . htmlspecialchars($src) . '" as="script" class="wpc-preload-links">';
+                $id = $matches[2];
+                if (!empty($src)) {
+                    if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false && strpos($src, 'optimize.dev.js') === false && strpos($src, 'mediaelement') === false && strpos($src, 'stats.wp') === false) {
+                        $preloadTags[] = '<link rel="none" href="' . htmlspecialchars($src) . '" as="script" class="wpc-preload-links" id="'.$id.'">';
+                    }
                 }
 
                 return $fullTag;
@@ -111,6 +113,7 @@ class wps_ic_js_delay
         }
 
         $tagLower = strtolower($tag);
+        #return print_r([$tagLower],true);
 
         // Is the script excluded from DelayJS?
         if (self::$excludes->excludedFromDelay($tag)) {
@@ -138,7 +141,6 @@ class wps_ic_js_delay
                 return $tag;
             }
 
-            return $tag;
         } elseif ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
 
             // Required for usercentrics plugin
@@ -152,10 +154,6 @@ class wps_ic_js_delay
                 return $tag;
             }
 
-            // If it's a jetblock element, DO NOT delay-last!!!
-//            if (strpos($tagLower, 'jet-block') !== false) {
-//                return $tag;
-//            }
 
             // Patches for scripts that need to run last?
             if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {

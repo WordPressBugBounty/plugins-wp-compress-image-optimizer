@@ -595,10 +595,15 @@ class wpc_gui_v4 extends wps_ic
         return $html;
     }
 
-    public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false)
+    public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false, $helpBtn = false, $helpBtnText = false)
     {
         $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
-        $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
+
+        if ($icon == 'cf-logo.png') {
+            $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" style="height:auto !important;padding-bottom: 12px !important;margin-right: 15px;" /></div>';
+        } else {
+            $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
+        }
 
         $html .= '<div class="wpc-checkbox-description">';
 
@@ -680,6 +685,12 @@ class wpc_gui_v4 extends wps_ic
         if (!empty($additionalConfigure)) {
             $html .= '<div class="form-check">';
             $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $additionalConfigure . '" data-popup-width="750">Configure</a>';
+            $html .= '</div>';
+        }
+
+        if (!empty($helpBtn)) {
+            $html .= '<div class="form-check" style="max-width:120px;">';
+            $html .= '<a href="'.$helpBtn.'" target="_blank" class="wps-ic-help-btn">'.$helpBtnText.'</a>';
             $html .= '</div>';
         }
 

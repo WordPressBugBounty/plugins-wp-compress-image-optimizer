@@ -242,7 +242,7 @@ class wps_cacheHtml
             return $buffer;
         }
 
-        if (empty($buffer) || strlen($buffer) < 100) {
+        if (empty($buffer) || strlen($buffer) < 100 || strpos($buffer, '</body>') === false) {
             return $buffer;
         }
 
@@ -289,39 +289,8 @@ class wps_cacheHtml
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
         }
 
-        $fp = fopen($this->cachePath . $prefix . 'index.html', 'w+');
-
-        $attempt = 0;
-        $maxAttempts = 3;
-        $filePath = $this->cachePath . $prefix . 'index.html';
-
-        while ($attempt < $maxAttempts) {
-            $fp = fopen($filePath, 'w+');
-
-            if ($fp === false) {
-                // If fopen fails, unlink the file and try again
-                @unlink($filePath); // Suppress warnings if file doesn't exist
-                $attempt++;
-            } else {
-                // File opened successfully, break out of the loop
-                break;
-            }
-        }
-
-        if ($fp === false) {
-            // After 3 attempts, if still failing, log an error and handle as appropriate
-            // Handle the error (e.g., return from the function or throw an exception)
-        } else {
-            // Proceed with file writing
-            fwrite($fp, $buffer);
-            fclose($fp);
-
-            $stats = new wps_ic_stats();
-            $stats->saveWarmupStats($buffer);
-
-            if (function_exists('gzencode')) {
-                $this->saveGzCache($buffer, $prefix);
-            }
+        if (function_exists('gzencode')) {
+            $this->saveGzCache($buffer, $prefix);
         }
 
         return $buffer;
@@ -352,7 +321,6 @@ class wps_cacheHtml
         $fp = fopen($this->cachePath . $prefix . 'index.html' . '_gzip', 'w+');
         fwrite($fp, gzencode($buffer, 8));
         fclose($fp);
-
 
         return $buffer;
     }
@@ -402,7 +370,7 @@ class wps_cacheHtml
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
 
-        header('X-Cache-By: WP Compress');
+        header('X-Cache-By: WP Compress - Gzip');
     }
 
     public function removeCacheFiles($post_id)

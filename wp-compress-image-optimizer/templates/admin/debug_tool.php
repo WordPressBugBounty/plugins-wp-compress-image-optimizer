@@ -160,6 +160,26 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
+        <td>Plugin Development Mode</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['php_development'])) {
+                    update_option('wps_ic_development', sanitize_text_field($_GET['php_development']));
+                }
+
+                $development = get_option('wps_ic_development');
+
+                if (empty($development) || $development == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>Enable PHP Debug</td>
         <td colspan="3">
             <p>

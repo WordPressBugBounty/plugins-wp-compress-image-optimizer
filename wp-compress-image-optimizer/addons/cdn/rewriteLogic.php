@@ -63,6 +63,10 @@ class wps_rewriteLogic
     public static $isAjax;
     public static $isAmp;
 
+    public static $page_excludes;
+    public static $post_id;
+    public static $page_excludes_files;
+
     public function __construct()
     {
         self::$imageCounter = 0;
@@ -91,11 +95,22 @@ class wps_rewriteLogic
         global $post;
 
         if ($this->is_home_url()) {
-            $per_page_settings = isset(self::$excludes['per_page_settings']['home']) ? self::$excludes['per_page_settings']['home'] : [];
-        } elseif (!empty($post->ID)) {
-            $per_page_settings = isset(self::$excludes['per_page_settings'][$post->ID]) ? self::$excludes['per_page_settings'][$post->ID] : [];
+            self::$post_id = 'home';
+            self::$page_excludes = isset(self::$excludes['page_excludes']['home']) ? self::$excludes['page_excludes']['home'] : [];
+            self::$page_excludes_files = isset(self::$excludes['page_excludes_files']['home']) ? self::$excludes['page_excludes_files']['home'] : [];
+        } elseif (!empty(get_queried_object_id())) {
+            self::$post_id = get_queried_object_id();
+            self::$page_excludes = isset(self::$excludes['page_excludes'][self::$post_id]) ? self::$excludes['page_excludes'][self::$post_id] : [];
+            self::$page_excludes_files = isset(self::$excludes['page_excludes_files'][self::$post_id]) ? self::$excludes['page_excludes_files'][self::$post_id] : [];
+        } else if (!empty($post->ID)) {
+            self::$post_id = $post->ID;
+            self::$page_excludes = isset(self::$excludes['page_excludes'][self::$post_id]) ? self::$excludes['page_excludes'][self::$post_id] : [];
+            self::$page_excludes_files = isset(self::$excludes['page_excludes_files'][self::$post_id]) ? self::$excludes['page_excludes_files'][self::$post_id] : [];
+        } else {
+            self::$post_id = false;
+            self::$page_excludes = [];
+            self::$page_excludes_files = [];
         }
-
 
         // Lazy Limits
         self::$lazyLoadedImages = 0;
@@ -107,8 +122,8 @@ class wps_rewriteLogic
             self::$lazyLoadSkipFirstImages = self::$settings['lazySkipCount'];
         }
 
-        if (!empty($per_page_settings) && isset($per_page_settings['skip_lazy']) && $per_page_settings['skip_lazy'] !== '') {
-            self::$lazyLoadSkipFirstImages = $per_page_settings['skip_lazy'];
+        if (!empty(self::$page_excludes) && isset(self::$page_excludes['skip_lazy']) && self::$page_excludes['skip_lazy'] !== '') {
+            self::$lazyLoadSkipFirstImages = self::$page_excludes['skip_lazy'];
         }
 
         self::$isAmp = new wps_ic_amp();
@@ -249,8 +264,14 @@ class wps_rewriteLogic
         self::$removeSrcset = self::$settings['remove-srcset'];
         self::$lazyEnabled = self::$settings['lazy'];
         self::$adaptiveEnabled = self::$settings['generate_adaptive'];
+
+        if (isset(self::$page_excludes['adaptive'])) {
+            self::$adaptiveEnabled = self::$page_excludes['adaptive'];
+        }
+
         self::$webpEnabled = self::$settings['generate_webp'];
         self::$retinaEnabled = self::$settings['retina'];
+
         if (!empty(self::$settings['replace-all-link'])) {
             self::$replaceAllLinks = self::$settings['replace-all-link'];
         } else {
@@ -956,6 +977,7 @@ SCRIPT;
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists(true);
 
+
         if (!empty($criticalCSSExists)) {
             $criticalCSSContent_Desktop = file_get_contents($criticalCSSExists['desktop']);
             $criticalCSSContent_Mobile = file_get_contents($criticalCSSExists['mobile']);
@@ -977,9 +999,11 @@ SCRIPT;
                                 continue;
                             }
                             // Check if the font URL is already in the array
-                            if (!in_array($fontUrl, $loadedFonts) && (!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
-                                $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
-                                $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                            if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
+                                if (!in_array($fontUrl, $loadedFonts)) {
+                                    $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
+                                    $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                }
                             }
                         }
                     }
@@ -987,7 +1011,7 @@ SCRIPT;
                 return $preloadLinks;
             };
 
-// Function to get the CSS content after the "/* Preload Fonts */" comment
+            // Function to get the CSS content after the "/* Preload Fonts */" comment
             $getCSSAfterPreloadComment = function ($cssContent) {
                 $commentPos = strpos($cssContent, '/* Preload Fonts */');
                 return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
@@ -996,6 +1020,7 @@ SCRIPT;
 
             $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent_Desktop);
             $preloadLinks_Mobile = $createPreloadLinks($criticalCSSContent_Mobile);
+
 
             $criticalCSSContent_Desktop_After = $getCSSAfterPreloadComment($criticalCSSContent_Desktop);
             $criticalCSSContent_Mobile_After = $getCSSAfterPreloadComment($criticalCSSContent_Mobile);
@@ -1900,7 +1925,7 @@ SCRIPT;
             self::$adaptiveEnabled = '0';
         }
 
-        if (strpos($image[0], 'breakdance') !== false) {
+        if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false) {
            self::$lazyEnabled = '0';
             self::$adaptiveEnabled = '0';
         }
@@ -1943,6 +1968,7 @@ SCRIPT;
             return $image[0];
         }
 
+
         // Remove fetchpriority attribute
         $image[0] = preg_replace('/\bfetchpriority="[^"]*"\s*/si', '', $image[0]);
         // Remove decoding attribute
@@ -1961,6 +1987,17 @@ SCRIPT;
             return print_r([$image[0], $original_img_tag['original_tags']], true);
         }
 
+        if (!empty($_GET['dbg_src_first'])) {
+            return print_r([$original_img_tag['original_tags']['src'], 'empty_space' => strpos($original_img_tag['original_tags']['src'], ' '), 'encoded_space' => strpos($original_img_tag['original_tags']['src'], '%20')], true);
+        }
+
+        if (!empty($original_img_tag['original_tags']['src'])) {
+            // Check if the URL contains spaces or encoded spaces (%20)
+            if (strpos($original_img_tag['original_tags']['src'], ' ') !== false || strpos($original_img_tag['original_tags']['src'], '%20') !== false) {
+                return $image[0];
+            }
+        }
+
         /**
          * strpos blank is required to make it work when image has placeholder containing "blank" in it.
          */
@@ -1972,6 +2009,9 @@ SCRIPT;
                 $image_source = $original_img_tag['original_tags']['data-src'];
             } elseif (!empty($original_img_tag['original_tags']['data-cp-src'])) {
                 $image_source = $original_img_tag['original_tags']['data-cp-src'];
+            } elseif (!empty($original_img_tag['original_tags']['data-oi'])) {
+                // Porto Lazy Load
+                $image_source = $original_img_tag['original_tags']['data-oi'];
             }
         }
 
@@ -1998,7 +2038,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['dbg_img_src'])) {
-            return print_r(['src_is_empty' => empty($original_img_tag['original_tags']['src']), 'data-src_is_empty' => empty($original_img_tag['original_tags']['data-src']), 'data-cp-src_is_empty' => empty($original_img_tag['original_tags']['data-cp-src']), 'src' => $image_source, 'tags' => $original_img_tag], true);
+            return print_r(['src_is_empty' => empty($original_img_tag['original_tags']['src']), 'data-src_is_empty' => empty($original_img_tag['original_tags']['data-src']), 'data-cp-src_is_empty' => empty($original_img_tag['original_tags']['data-cp-src']), 'src' => $image_source, 'porto-lazy-src' => $original_img_tag['original_tags']['data-oi'], 'tags' => $original_img_tag], true);
         }
 
         $original_img_tag['original_src'] = $image_source;
@@ -2291,9 +2331,9 @@ SCRIPT;
         if ($isLogo || !empty(self::$removeSrcset) && self::$removeSrcset == '1') {
             unset($original_img_tag['original_tags']['srcset'], $original_img_tag['original_tags']['data-srcset']);
         } elseif (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1' && !$skipLazy) {
-            if (!empty($original_img_tag['original_tags']['srcset'])) {
+            if (!empty($original_img_tag['original_tags']['srcset']) && strpos($original_img_tag['original_tags']['srcset'], 'lazy') === false && strpos($original_img_tag['original_tags']['srcset'], 'placeholder') === false) {
                 $build_image_tag .= 'data-srcset="' . $original_img_tag['original_tags']['srcset'] . '" ';
-            } elseif (!empty($original_img_tag['original_tags']['data-srcset'])) {
+            } else if (!empty($original_img_tag['original_tags']['data-srcset'])) {
                 $build_image_tag .= 'data-srcset="' . $original_img_tag['original_tags']['data-srcset'] . '" ';
             }
             unset($original_img_tag['original_tags']['srcset'], $original_img_tag['original_tags']['data-srcset']);
@@ -2320,9 +2360,9 @@ SCRIPT;
                 }
             }
 
-            if (!empty($original_img_tag['original_tags']['srcset'])) {
+            if (!empty($original_img_tag['original_tags']['srcset']) && strpos($original_img_tag['original_tags']['srcset'], 'lazy') === false && strpos($original_img_tag['original_tags']['srcset'], 'placeholder') === false) {
                 $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['srcset'] . '" ';
-            } else {
+            } else if (!empty($original_img_tag['original_tags']['data-srcset'])) {
                 $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['data-srcset'] . '" ';
             }
         }
@@ -2370,12 +2410,14 @@ SCRIPT;
 
         if (!empty($original_img_tag['original_tags'])) {
             foreach ($original_img_tag['original_tags'] as $tag => $value) {
-                if ($tag == 'class' || $tag == 'src' || $tag == 'srcset' || $tag == 'data-src' || $tag == 'data-mk-image-src-set' || $tag == 'data-prehidden') {
-                    continue;
-                } elseif (!empty($value)) {
-                    $build_image_tag .= $tag . '="' . $value . '" ';
-                } else {
-                    $build_image_tag .= $tag . ' ';
+                if (!empty($value)) {
+                    if ($tag == 'class' || $tag == 'src' || $tag == 'srcset' || $tag == 'data-src' || $tag == 'data-mk-image-src-set' || $tag == 'data-prehidden') {
+                        continue;
+                    } elseif (!empty($value)) {
+                        $build_image_tag .= $tag . '="' . $value . '" ';
+                    } else {
+                        $build_image_tag .= $tag . ' ';
+                    }
                 }
             }
         }
@@ -2403,7 +2445,9 @@ SCRIPT;
 
             // Check if tag already exists, if so - replace it
             $value = trim($value);
-            $build_image_tag .= $tag . '="' . $value . '" ';
+            if (!empty($value)) {
+                $build_image_tag .= $tag . '="' . $value . '" ';
+            }
         }
 
         if (empty($original_img_tag['original_tags']['alt'])) {
@@ -2514,7 +2558,7 @@ SCRIPT;
                             $srcset_width = str_replace('x', '', $srcset_width);
                             $extension = 'x';
                         } else {
-                            $width_url = str_replace('w', '', $srcset_width);
+                            $srcset_width = $width_url = str_replace('w', '', $srcset_width);
                             $extension = 'w';
                         }
 
@@ -2527,7 +2571,7 @@ SCRIPT;
                             $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . $extension . ', ';
                         } else {
                             // Non-retina URL
-                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . ', ';
+                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . $extension . ', ';
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
