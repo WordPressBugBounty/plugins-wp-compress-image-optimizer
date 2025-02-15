@@ -572,6 +572,7 @@ class wpc_gui_v4 extends wps_ic
             }
         }
 
+
         if (!empty($option) && !$locked) {
             $html .= '<div class="form-check">';
             $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all" data-for-div-id="' . $option . '" type="checkbox" value="1" id="select-all-' . $option . '" name="select-all-' . $option . '">';
@@ -598,6 +599,7 @@ class wpc_gui_v4 extends wps_ic
     public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false, $helpBtn = false, $helpBtnText = false)
     {
         $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
+
 
         if ($icon == 'cf-logo.png') {
             $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" style="height:auto !important;padding-bottom: 12px !important;margin-right: 15px;" /></div>';

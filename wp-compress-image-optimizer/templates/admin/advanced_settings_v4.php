@@ -545,9 +545,6 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                         <span class="wpc-title">Smart Optimization</span>
                                     </a>
                                 </li>
-                                <?php
-                                if (get_option('wpc_show_hidden_menus') == 'true') {
-                                    ?>
                                     <li>
                                         <a href="#" class="" data-tab="integrations">
                                 <span class="wpc-icon-container">
@@ -559,6 +556,9 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
                                             <span class="wpc-title">Integrations</span>
                                         </a>
                                     </li>
+                                <?php
+                                if (get_option('wpc_show_hidden_menus') == 'true') {
+                                    ?>
                                     <li>
                                         <a href="#" class="" data-tab="system-information">
                                 <span class="wpc-icon-container">
@@ -1286,6 +1286,7 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
 
                                         </div>
                                     </div>
+                                    <?php if (get_option('wpc_show_hidden_menus') == 'true') { ?>
                                     <div class="wpc-tab-content-box">
 
                                         <?php
@@ -1304,6 +1305,7 @@ if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($init
 
 
                                     </div>
+                                    <?php } ?>
                                 </div>
                                 <div class="wpc-tab-content" id="system-information" style="display:none;">
                                     <div class="wpc-tab-content-box">
