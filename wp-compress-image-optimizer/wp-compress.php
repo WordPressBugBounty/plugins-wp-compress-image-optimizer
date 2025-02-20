@@ -4,11 +4,16 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 6.30.08
+ * Version: 6.30.09
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /langs
  */
+
+if ((!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC']) && ((defined( 'DOING_CRON' ) && DOING_CRON) || (defined('REST_REQUEST') && REST_REQUEST) || (defined('WP_CLI') && WP_CLI)))) {
+    // Required for Scheduled Posts
+    include 'wp-compress-cron.php';
+}
 
 if (!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC']) && !(defined('DOING_CRON') && DOING_CRON) && !(defined('WP_CLI') && WP_CLI) && !(defined('REST_REQUEST') && REST_REQUEST)) {
   // CRON fix for WPvivid scheduled backups

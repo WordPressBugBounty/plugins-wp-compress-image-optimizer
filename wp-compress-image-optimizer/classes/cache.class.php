@@ -157,6 +157,7 @@ class wps_ic_cache
         add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
     }
 
+
     public static function purgeCachePerPage() {
       // Get the excludes option
       $wpc_excludes = get_option('wpc-excludes', []);
@@ -174,6 +175,16 @@ class wps_ic_cache
         }
       }
     }
+
+
+    public function cronPurgeAll()
+    {
+        self::resetHashes();
+        self::removeHtmlCacheFiles();
+        self::removeCombinedFiles();
+        self::removeCriticalFiles();
+    }
+
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
     {
@@ -300,7 +311,6 @@ class wps_ic_cache
             $post_id = 'all';
         }
         $cacheHtml = new wps_cacheHtml();
-
         $cacheHtml->removeCacheFiles($post_id);
     }
 

@@ -2,9 +2,9 @@
 global $ic_running;
 include 'debug.php';
 include 'defines.php';
-include 'addons/cdn/cdn-rewrite.php';
-include 'addons/legacy/compress.php';
-include 'addons/cf-sdk/cf-sdk.php';
+include_once 'addons/cdn/cdn-rewrite.php';
+include_once 'addons/legacy/compress.php';
+include_once 'addons/cf-sdk/cf-sdk.php';
 
 //TRAITS
 include 'traits/excludes.php';
@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.08';
+        self::$version = '6.30.09';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -170,7 +170,7 @@ class wps_ic
         delete_option(WPC_WARMUP_LOG_SETTING);
 
         // Setup UI to Simple
-        update_option(WPS_IC_GUI, 'lite');
+        //update_option(WPS_IC_GUI, 'lite');
         //
         delete_option('wps_ic_gen_hp_url');
     }
@@ -1346,7 +1346,7 @@ class wps_ic
     {
         return;
         // TODO: Bad API Url, that's critical CSS
-        $call = wp_remote_post(WPS_IC_CRITICAL_API_URL, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['url' => site_url()]]);
+        $call = wp_remote_post(WPS_IC_CRITICAL_API_HOMEPAGE_URL, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['url' => site_url()]]);
 
         if (wp_remote_retrieve_response_code($call) == 200) {
             // ALL OK, run preloader

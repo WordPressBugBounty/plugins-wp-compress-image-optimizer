@@ -143,7 +143,7 @@ class wps_ic_connect extends wps_ic
                         }
                     }
 
-                    $default_Settings = self::$options->get_preset('recommended');
+                    $default_Settings = self::$options->get_preset('aggressive');
                     $settings = array_merge($settings, $default_Settings);
 
                     $settings['live-cdn'] = '1';

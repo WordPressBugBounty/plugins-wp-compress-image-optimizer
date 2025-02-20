@@ -375,8 +375,8 @@ class wps_cacheHtml
 
     public function removeCacheFiles($post_id)
     {
-        if ($post_id == 'home'){
-          $post_id = 0;
+        if ($post_id == 'home') {
+            $post_id = 0;
         }
 
         if ($post_id == 'all') {

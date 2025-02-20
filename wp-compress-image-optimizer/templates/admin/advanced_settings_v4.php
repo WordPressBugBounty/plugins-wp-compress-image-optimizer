@@ -66,7 +66,6 @@ if (!empty($_GET['show_hidden_menus'])) {
     update_option('wpc_show_hidden_menus', $_GET['show_hidden_menus']);
 }
 
-
 // Save Settings
 if (!empty($_POST['options'])) {
 
@@ -216,7 +215,10 @@ $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
 $initialTestRunning = get_transient('wpc_initial_test');
 $option = get_option(WPS_IC_OPTIONS);
 
-if (!empty($option['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
+$warmup_class = new wps_ic_preload_warmup();
+$warmupFailing = $warmup_class->isWarmupFailing();
+
+if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
     ?>
     <script type="text/javascript">
         jQuery(document).ready(function ($) {

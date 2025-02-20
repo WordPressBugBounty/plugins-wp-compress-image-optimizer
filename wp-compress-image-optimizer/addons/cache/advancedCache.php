@@ -163,6 +163,58 @@ class wps_advancedCache
     }
 
 
+    public function is_get_refreshed_fragments()
+    {
+        if (!isset($_GET['wc-ajax'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return false;
+        }
+
+        if ('get_refreshed_fragments' !== $_GET['wc-ajax']) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return false;
+        }
+
+        if (!empty($_COOKIE['woocommerce_cart_hash'])) {
+            return false;
+        }
+
+        if (!empty($_COOKIE['woocommerce_items_in_cart'])) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    public function byPass()
+    {
+        // Cart Fragments
+        if (!$this->is_get_refreshed_fragments()) {
+            return true;
+        }
+
+        // Don't cache for specific WooCommerce pages or AJAX requests
+        $excluded_pages = ['cart', 'checkout', 'my-account'];
+        $request_uri = $_SERVER['REQUEST_URI'];
+        $is_excluded_page = false;
+
+        foreach ($excluded_pages as $page) {
+            if (str_contains($request_uri, $page)) {
+                $is_excluded_page = true;
+                break;
+            }
+        }
+
+        // Check for wc-ajax requests
+        if ($is_excluded_page || str_contains($request_uri, 'wc-ajax')) {
+            return true;
+        }
+
+
+
+        return false;
+    }
+
+
     public function cacheExists($prefix = '')
     {
         if (!empty($prefix)) {

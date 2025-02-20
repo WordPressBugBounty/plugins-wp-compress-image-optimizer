@@ -1926,7 +1926,7 @@ SCRIPT;
         }
 
         if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false) {
-           self::$lazyEnabled = '0';
+            self::$lazyEnabled = '0';
             self::$adaptiveEnabled = '0';
         }
 
@@ -2266,7 +2266,7 @@ SCRIPT;
         }
 
         if (!self::$excludes_class->isAdaptiveExcluded($image_source, $original_img_tag['original_tags']['class'])) {
-            $original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag['original_tags']['srcset']);
+            $original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
         } else {
             // TODO: For some reason this was commented out (class)
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';
@@ -2361,9 +2361,9 @@ SCRIPT;
             }
 
             if (!empty($original_img_tag['original_tags']['srcset']) && strpos($original_img_tag['original_tags']['srcset'], 'lazy') === false && strpos($original_img_tag['original_tags']['srcset'], 'placeholder') === false) {
-                $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['srcset'] . '" ';
+                $build_image_tag .= $srcSetTag . '="' . $original_img_tag['original_tags']['srcset'] . '" ';
             } else if (!empty($original_img_tag['original_tags']['data-srcset'])) {
-                $build_image_tag .= $srcSetTag.'="' . $original_img_tag['original_tags']['data-srcset'] . '" ';
+                $build_image_tag .= $srcSetTag . '="' . $original_img_tag['original_tags']['data-srcset'] . '" ';
             }
         }
 
@@ -2533,17 +2533,43 @@ SCRIPT;
         }
     }
 
-    public function rewriteSrcset($srcset)
+    public function rewriteSrcset($original_img_tag, $srcset)
     {
         if (!empty($srcset)) {
             $newSrcSet = '';
-            preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/', $srcset, $srcset_links);
+            preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/si', $srcset, $srcset_links);
+
+
+            // Find image size closest to 480, but not smaller
+            $find = 480;
+            $find960 = 960;
+            $found960 = 0;
+            $found = 0;
+            $img480 = 0;
+            $img960 = 0;
+
 
             if (!empty($srcset_links)) {
                 foreach ($srcset_links[0] as $i => $srcset) {
                     $src = explode(' ', $srcset);
-                    $srcset_url = $src[0];
-                    $srcset_width = $src[1];
+                    $srcset_url = trim($src[0]);
+                    $srcset_width = trim($src[1]);
+
+                    if ($srcset_width >= $find) {
+                        if (!$found || $found > $srcset_width) {
+                            $found = $srcset_width;
+                            $img480 = $srcset_url;
+                        }
+                    }
+
+                    // Retina
+                    if ($srcset_width >= $find960) {
+                        if (!$found960 || $found960 > $srcset_width) {
+                            $found960 = $srcset_width;
+                            $img960 = $srcset_url;
+                        }
+                    }
+
 
                     $webp = '/wp:' . self::$webp;
                     if (self::isExcludedFrom('webp', $srcset_url)) {
@@ -2575,34 +2601,46 @@ SCRIPT;
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . str_replace('w', '', $srcset_width) * 2 . $extension . ', ';
+                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url*2) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $srcset_width . $extension .' 2x, ';
                             }
                         }
                     }
+
                 }
 
-                $newSrcSet = $this->replace_with_480w($newSrcSet);
+                #$newSrcSet = $this->replace_with_480w($newSrcSet);
+
+                // Inject the previously found 480
+                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w 1x, ';
+
+                // Retina URL
+                if (self::$settings['retina-in-srcset'] == '1') {
+                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
+                }
 
                 $newSrcSet = rtrim($newSrcSet);
                 $newSrcSet = rtrim($newSrcSet, ',');
+
+                return $newSrcSet;
             }
 
-            return $newSrcSet;
+            return $srcset;
         }
 
         return $srcset;
     }
 
 
-    public function replace_with_480w($srcset) {
+    public function replace_with_480w($srcset)
+    {
         // First check if 480w already exists in the srcset
         if (preg_match('/\s480w/', $srcset)) {
             return $srcset;
         }
 
         // Extract both w: values and srcset widths (for URLs) using regex
-        preg_match_all('/w:(\d+)/', $srcset, $w_matches); // Matches the "w:" pattern widths
-        preg_match_all('/(\S+)\s(\d+)w/', $srcset, $srcset_matches); // Matches srcset widths
+        preg_match_all('/w:(\d+)/si', $srcset, $w_matches); // Matches the "w:" pattern widths
+        preg_match_all('/(\S+)\s(\d+)w/si', $srcset, $srcset_matches); // Matches srcset widths
 
         $w_widths = array_map('intval', $w_matches[1]); // w: values
         $srcset_widths = array_map('intval', $srcset_matches[2]); // srcset widths

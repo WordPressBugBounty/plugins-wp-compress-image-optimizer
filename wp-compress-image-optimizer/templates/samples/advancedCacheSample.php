@@ -55,22 +55,6 @@ if (isset($_SERVER['HTTP_CACHE_CONTROL'])) {
     }
 }
 
-// Don't cache for specific WooCommerce pages or AJAX requests
-$excluded_pages = ['cart', 'checkout', 'my-account'];
-$request_uri = $_SERVER['REQUEST_URI'];
-$is_excluded_page = false;
-
-foreach ($excluded_pages as $page) {
-    if (strpos($request_uri, "/$page") !== false) {
-        $is_excluded_page = true;
-        break;
-    }
-}
-
-// Check for wc-ajax requests
-if ($is_excluded_page || strpos($request_uri, 'wc-ajax') !== false) {
-    return;
-}
 
 $prefix = '';
 $cache = new wps_advancedCache();
@@ -78,7 +62,7 @@ $mobile = $cache->is_mobile();
 
 if ($mobile) $prefix = 'mobile';
 
-if ($cache->cacheExists($prefix)) {
+if (!$cache->byPass() && $cache->cacheExists($prefix)) {
   $isCacheExpired = $cache->cacheExpired();
 
   // Not required as get cache sorts this

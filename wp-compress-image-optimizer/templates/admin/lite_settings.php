@@ -333,15 +333,21 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </li>
                                 <li>
                                     <?php
-                                    $cdnLocked = !get_option('wps_ic_allow_live');
-                                    echo $gui::simpleCheckbox('Images', '', false, '0', 'imagesPreset', $cdnLocked);
+			                            $liteActive = empty($option['api_key']);
+			                            echo $gui::simpleCheckbox('Images', '', false, '0', 'imagesPreset', $liteActive);
                                     ?>
                                 </li>
                                 <li>
-                                    <?php
-                                    $cdnLocked = !get_option('wps_ic_allow_live');
-                                    echo $gui::simpleCheckbox('CDN', '', false, '0', 'cdnAll', $cdnLocked);
-                                    ?>
+			                        <?php
+			                            $cdnLocked = !get_option( 'wps_ic_allow_live' );
+			                            if ($liteActive) {
+				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', true );
+			                            } else if ($cdnLocked){
+				                            //dont display the toggle, off in portal
+			                            } else {
+				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', false );
+			                            }
+			                        ?>
                                 </li>
                                 <li class="wpc-menu-divider">
                                     <?php

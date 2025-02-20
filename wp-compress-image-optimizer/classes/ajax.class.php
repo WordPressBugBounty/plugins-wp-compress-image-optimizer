@@ -320,11 +320,10 @@ class wps_ic_ajax extends wps_ic
         /**
          * Is Critical Ajax Already Running?
          */
-        $running = get_transient('wpc_critical_ajax_' . $postID);
-        if (!empty($running) && $running == 'true') {
-            wp_send_json_success(['already-running', $realUrl]);
-        }
-
+//        $running = get_transient('wpc_critical_ajax_' . $postID);
+//        if (!empty($running) && $running == 'true') {
+//            wp_send_json_success(['already-running', $realUrl]);
+//        }
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 

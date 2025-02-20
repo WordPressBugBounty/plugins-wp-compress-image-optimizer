@@ -102,7 +102,8 @@ class wps_ic_excludes extends wps_ic
             'g5plus_variable',
             'mhcookie',
             'must-have-cookie/assets/js/script.js',
-            'application/ld+json'
+            'application/ld+json',
+            'wpforms_settings'
         ];
 
         self::$defaultCombineJSExcludes = [

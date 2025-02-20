@@ -25,7 +25,8 @@ define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 define('WPS_IC_CRITICAL_API_URL_PING', 'https://critical-api.wpcompress.com/post.php');
 
 ####define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.wpcompress.com/penthouse.php');
-define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
+define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/ajax-call.php');
+define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
 #define('WPS_IC_CRITICAL_API_URL', 'https://critical-ded4.wpcompress.com/pagespeed.php');
 
 define('WPS_IC_CRITICAL_API_ASSETS_URL', 'https://loadbalancer-critical.zapwp.net/assets.php');

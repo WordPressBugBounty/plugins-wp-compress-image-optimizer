@@ -79,9 +79,9 @@ class wps_criticalCss
         }
 
         $CSS = wp_remote_get($CritUrl, [
-          'headers' => [
-            'user-agent' => WPS_IC_API_USERAGENT
-          ]
+            'headers' => [
+                'user-agent' => WPS_IC_API_USERAGENT
+            ]
         ]);
 
         if (is_wp_error($CSS)) {
@@ -111,12 +111,27 @@ class wps_criticalCss
         //remove criticalCombine temp folder
         $files = scandir(WPS_IC_COMBINE . $urlKey);
         foreach ($files as $file) {
-          if ($file != "." && $file != "..") {
-            $subdir = WPS_IC_COMBINE . $urlKey . "/" . $file;
-            if (is_dir($subdir) && strpos($file, "criticalCombine") !== false) {
-              $this->removeDirectory($subdir);
+            if ($file != "." && $file != "..") {
+                $subdir = WPS_IC_COMBINE . $urlKey . "/" . $file;
+                if (is_dir($subdir) && strpos($file, "criticalCombine") !== false) {
+                    $this->removeDirectory($subdir);
+                }
             }
-          }
+        }
+    }
+
+    public static function removeDirectory($path)
+    {
+        $path = rtrim($path, '/');
+        $files = glob($path . '/*');
+        if (!empty($files)) {
+            foreach ($files as $file) {
+                is_dir($file) ? self::removeDirectory($file) : unlink($file);
+            }
+        }
+
+        if (is_dir($path)) {
+            rmdir($path);
         }
     }
 
@@ -319,6 +334,7 @@ class wps_criticalCss
         ob_start();
         $type = 'meta';
 
+
         if (empty($realUrl)) {
             if ($postID === 'home' || !$postID || $postID == 0) {
 
@@ -358,32 +374,18 @@ class wps_criticalCss
             wp_send_json_success('Exists');
         }
 
-        $args = ['v7' => 'true', 'url' => $url, 'pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)
-        ['api_key']];
-
+        $url = rtrim($url, '?');
         $requests = new wps_ic_requests();
-        $call = $requests->POST(self::$API_URL, $args, ['timeout' => $timeout]);
-        $code = $requests->getResponseCode($call);
 
-        if ($code == 200) {
-            $body = $requests->getResponseBody($call);
+        $criticalAPI = get_transient('wpc_api_' . $postID);
+        if (empty($criticalAPI)) {
 
-            if (!empty($body) && strlen($body) > 128) {
-                $this->saveCriticalCss($url_key, $body, $type);
-            } else {
-                wp_send_json_error(['msg' => 'API returned empty response.', 'response body' => $body]);
-            }
+            $this->initCritical($postID, $url, $url_key, $type, $pages);
 
-        } else if (is_wp_error($call)) {
-            $error_message = $requests->getErrorMessage($call);
-
-            if (strpos($error_message, 'cURL error 28') !== false) {
-                wp_send_json_error(['msg' => 'Request timeout, API is likely blocked.', 'error' => $error_message]);
-            }
-
-            wp_send_json_error(['msg' => 'Error code ' . $code, 'error' => $error_message]);
         } else {
-            wp_send_json_error(['code' => $code]);
+
+            $this->checkIsCriticalDone($criticalAPI, $postID, $url, $url_key, $type, $pages);
+
         }
 
     }
@@ -419,12 +421,62 @@ class wps_criticalCss
         return $return;
     }
 
+    public function initCritical($postID, $url, $url_key, $type, $pages, $timeout = 120)
+    {
+        $requests = new wps_ic_requests();
+
+        $args = ['v7' => 'true', 'url' => $url, 'pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)
+        ['api_key']];
+
+        $call = $requests->POST(self::$API_URL, $args, ['timeout' => $timeout]);
+        $code = $requests->getResponseCode($call);
+
+        if ($code == 200) {
+            $body = $requests->getResponseBody($call);
+            $json = json_decode($body, true);
+
+            if (!empty($json['apiResults'])) {
+                set_transient('wpc_api_' . $postID, $json['apiResults'], 60 * 15);
+                wp_send_json_success(['msg' => 'transient set for ' . $postID, 'apikey' => get_option(WPS_IC_OPTIONS)
+                ['api_key'], 'url' => $url, 'api' => $json['api']]);
+            } else {
+                if (!empty($body) && strlen($body) > 128) {
+                    $this->saveCriticalCss($url_key, $body, $type);
+                } else {
+                    wp_send_json_error(['msg' => 'API returned empty response.', 'response body' => $body]);
+                }
+            }
+
+        } else if (is_wp_error($call)) {
+            $error_message = $requests->getErrorMessage($call);
+
+            if (strpos($error_message, 'cURL error 28') !== false) {
+                wp_send_json_error(['msg' => 'Request timeout, API is likely blocked.', 'error' => $error_message]);
+            }
+
+            wp_send_json_error(['msg' => 'Error code ' . $code, 'error' => $error_message]);
+        } else {
+            wp_send_json_error(['code' => $code]);
+        }
+    }
+
+
+    public function isJson($string) {
+        json_decode($string);
+        return (json_last_error() === JSON_ERROR_NONE);
+    }
+
     public function saveCriticalCss($urlKey, $CSS, $type = 'meta')
     {
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
 
-        $json = json_decode($CSS, true);
+        if (is_array($CSS)) {
+            $json = $CSS;
+        } else {
+            $json = json_decode($CSS, true);
+        }
+
 
         if (!function_exists('download_url')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
@@ -439,15 +491,15 @@ class wps_criticalCss
         }
 
         $desktop = wp_remote_get($json['desktop'], [
-          'headers' => [
-            'user-agent' => WPS_IC_API_USERAGENT
-          ]
+            'headers' => [
+                'user-agent' => WPS_IC_API_USERAGENT
+            ]
         ]);
 
         $mobile = wp_remote_get($json['mobile'], [
-          'headers' => [
-            'user-agent' => WPS_IC_API_USERAGENT
-          ]
+            'headers' => [
+                'user-agent' => WPS_IC_API_USERAGENT
+            ]
         ]);
 
         if (is_wp_error($desktop)) {
@@ -496,22 +548,31 @@ class wps_criticalCss
             }
         }
 
-      $cache::purgeAll($urlKey);
+        $cache::purgeAll($urlKey);
 
     }
 
-    public static function removeDirectory($path)
+    public function checkIsCriticalDone($criticalAPI, $postID, $url, $url_key, $type, $pages, $timeout = 120)
     {
-        $path = rtrim($path, '/');
-        $files = glob($path . '/*');
-        if (!empty($files)) {
-            foreach ($files as $file) {
-                is_dir($file) ? self::removeDirectory($file) : unlink($file);
-            }
-        }
+        $requests = new wps_ic_requests();
 
-        if (is_dir($path)) {
-            rmdir($path);
+        $args = ['v7' => 'true', 'url' => $url, 'pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)
+        ['api_key']];
+
+        $call = $requests->GET($criticalAPI, $args, ['timeout' => $timeout]);
+
+        if ($call) {
+            $call = (array)$call;
+            if (is_array($call) && !empty($call['desktop'])) {
+                $this->saveCriticalCss($url_key, $call, $type);
+            } else {
+                //delete_transient('wpc_api_' . $postID);
+                wp_send_json_error(['msg' => 'API Done returned empty response.', 'response body' => $call]);
+            }
+
+        } else {
+            //delete_transient('wpc_api_' . $postID);
+            wp_send_json_error(['code' => $call, 'api' => $criticalAPI]);
         }
     }
 

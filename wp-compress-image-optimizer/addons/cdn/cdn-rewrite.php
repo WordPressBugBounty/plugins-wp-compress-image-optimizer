@@ -7,6 +7,7 @@ include WPS_IC_DIR . 'addons/criticalCss/criticalCss.php';
 class wps_cdn_rewrite
 {
 
+    public $cdn;
     public static $settings;
     public static $options;
     public static $lazy_excluded_list;
@@ -656,10 +657,12 @@ class wps_cdn_rewrite
 
     public function defaultExcluded($string)
     {
+        if (!empty(self::$default_excluded_list)) {
         foreach (self::$default_excluded_list as $i => $excluded_string) {
             if (strpos($string, $excluded_string) !== false) {
                 return true;
             }
+        }
         }
 
         return false;
@@ -965,8 +968,7 @@ class wps_cdn_rewrite
 
             $html = preg_replace_callback('/\[script\-wpc\](.*?)\[\/script\-wpc\]/i', [$this, 'local_script_decode'], $html);
 
-            $html = preg_replace_callback('/<style\b[^>]*>(.*?)<\/style>?/is', [self::$rewriteLogic,
-                'replaceBackgroundImagesInCSSLocal'], $html);
+            $html = preg_replace_callback('/<style\b[^>]*>(.*?)<\/style>?/is', [self::$rewriteLogic, 'replaceBackgroundImagesInCSSLocal'], $html);
 
             //Combine JS
             if ($this->doCacheCombine() && (isset(self::$settings['js_combine']) && self::$settings['js_combine'] == '1')) {
@@ -1700,12 +1702,14 @@ class wps_cdn_rewrite
 
     public function mainInit()
     {
+
         if (is_admin()) {
-            return;
+            return true;
         }
 
         // Integrations
         include_once WPS_IC_DIR . 'integrations/addon/integrations.php';
+
         $wpcAddonIntegrations = new wpc_addon_integrations();
         if ($wpcAddonIntegrations->wpMaintenance()) {
             return true;
@@ -1714,13 +1718,13 @@ class wps_cdn_rewrite
         // Check if WP_CLI is being used
         if (defined('WP_CLI') && WP_CLI) {
             // WP_CLI detected, don't run the block
-            return;
+            return true;
         }
 
         // Check if WP REST API is being accessed
         if (defined('REST_REQUEST') && REST_REQUEST) {
             // WP REST API detected, don't run the block
-            return;
+            return true;
         }
 
         // Raise memory limit
@@ -1730,7 +1734,7 @@ class wps_cdn_rewrite
         self::$options = get_option(WPS_IC_OPTIONS);
 
         if (!isset(self::$options['api_key']) || empty(self::$options['api_key'])) {
-            return;
+            return true;
         }
 
         if ($this->is_home_url()) {
@@ -1764,7 +1768,6 @@ class wps_cdn_rewrite
             self::$page_excludes = [];
             self::$page_excludes_files = [];
         }
-
 
         if (self::$isAmp->isAmp()) {
             self::$lazy_enabled = '0';
@@ -1809,12 +1812,6 @@ class wps_cdn_rewrite
         self::$findImages .= 'webp|';
 
         self::$findImages = rtrim(self::$findImages, '|');
-
-        // Plugin is NOT Activated
-        $apikey = self::$options['api_key'];
-        if (empty($apikey)) {
-            return;
-        }
 
         if (strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false || !empty($_GET['dbg_preload'])) {
             self::$preloaderAPI = 1;
@@ -1882,7 +1879,7 @@ class wps_cdn_rewrite
         self::$assets_to_defer = ['themes', 'tracking', 'fontawesome'];
 
         if (!empty($_GET['ignore_ic'])) {
-            return;
+            return true;
         }
 
         if (!empty($_GET['randomHash'])) {
@@ -1890,7 +1887,7 @@ class wps_cdn_rewrite
         }
 
         if (strpos($_SERVER['REQUEST_URI'], '.xml') !== false) {
-            return;
+            return true;
         }
 
         if (empty(self::$options['css_hash'])) {
