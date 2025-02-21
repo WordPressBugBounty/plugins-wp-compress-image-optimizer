@@ -44,16 +44,16 @@ if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){
 }
 
 // Check Cache-Control headers
-if (isset($_SERVER['HTTP_CACHE_CONTROL'])) {
-    $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
-
-    // Skip caching if no-cache, no-store, or private directives are present
-    if (strpos($cacheControl, 'no-cache') !== false ||
-        strpos($cacheControl, 'no-store') !== false ||
-        strpos($cacheControl, 'private') !== false) {
-        return;
-    }
-}
+//if (isset($_SERVER['HTTP_CACHE_CONTROL'])) {
+//    $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
+//
+//    // Skip caching if no-cache, no-store, or private directives are present
+//    if (strpos($cacheControl, 'no-cache') !== false ||
+//        strpos($cacheControl, 'no-store') !== false ||
+//        strpos($cacheControl, 'private') !== false) {
+//        #return;
+//    }
+//}
 
 
 $prefix = '';

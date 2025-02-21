@@ -163,44 +163,35 @@ class wps_advancedCache
     }
 
 
-    public function is_get_refreshed_fragments()
+    public function isWooFragments()
     {
-        if (!isset($_GET['wc-ajax'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            return false;
+        if ((isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'wc-ajax=get_refreshed_fragments') !== false) ||
+            (isset($_GET['wc-ajax']) && $_GET['wc-ajax'] === 'get_refreshed_fragments')) {
+            return true;
         }
 
-        if ('get_refreshed_fragments' !== $_GET['wc-ajax']) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            return false;
-        }
-
-        if (!empty($_COOKIE['woocommerce_cart_hash'])) {
-            return false;
-        }
-
-        if (!empty($_COOKIE['woocommerce_items_in_cart'])) {
-            return false;
-        }
-
-        return true;
+        return false;
     }
 
 
     public function byPass()
     {
         // Cart Fragments
-        if (!$this->is_get_refreshed_fragments()) {
+        if ($this->isWooFragments()) {
             return true;
         }
 
         // Don't cache for specific WooCommerce pages or AJAX requests
         $excluded_pages = ['cart', 'checkout', 'my-account'];
-        $request_uri = $_SERVER['REQUEST_URI'];
+        $request_uri = trim($_SERVER['REQUEST_URI']);
         $is_excluded_page = false;
 
-        foreach ($excluded_pages as $page) {
-            if (str_contains($request_uri, $page)) {
-                $is_excluded_page = true;
-                break;
+        if (!empty($request_uri) && $request_uri !== '/') {
+            foreach ($excluded_pages as $page) {
+                if (str_contains($request_uri, $page)) {
+                    $is_excluded_page = true;
+                    break;
+                }
             }
         }
 
@@ -208,8 +199,6 @@ class wps_advancedCache
         if ($is_excluded_page || str_contains($request_uri, 'wc-ajax')) {
             return true;
         }
-
-
 
         return false;
     }
@@ -221,6 +210,7 @@ class wps_advancedCache
             $prefix = $prefix . '_';
         }
 
+
         if (function_exists('gzencode')) {
             if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && filesize($this->cachePath . $prefix . 'index.html' . '_gzip') > 0) {
                 return true;
@@ -229,9 +219,9 @@ class wps_advancedCache
 
         if (file_exists($this->cachePath . $prefix . 'index.html') && filesize($this->cachePath . $prefix . 'index.html') > 0) {
             return true;
-        } else {
-            return false;
         }
+
+        return false;
     }
 
 
