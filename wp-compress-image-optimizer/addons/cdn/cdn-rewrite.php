@@ -1149,17 +1149,28 @@ class wps_cdn_rewrite
         if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
 
-            $delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
 
-            if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
-                if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
-                    $html = $js_delay->preload_scripts($html);
+            #$delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
+            $delayActive = true;
+
+            if (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') {
+                // Disable
+                $delayActive = false;
+            }
+
+
+            if ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')) {
+                if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+                    if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
+                        $html = $js_delay->preload_scripts($html);
+                    }
+                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
+                } else {
+                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
                 }
-                $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
-            } else {
-                $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
             }
         }
+
 
         // Cache
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
@@ -1773,7 +1784,7 @@ class wps_cdn_rewrite
             self::$lazy_enabled = '0';
             self::$adaptive_enabled = '0';
             self::$retina_enabled = '0';
-            self::$settings['delay_js'] = '0';
+            self::$settings['delay-js'] = '0';
             self::$settings['inline-js'] = '0';
         }
 
@@ -2671,7 +2682,7 @@ class wps_cdn_rewrite
             self::$lazy_enabled = '0';
             self::$adaptive_enabled = '0';
             self::$retina_enabled = '0';
-            self::$settings['delay_js'] = '0';
+            self::$settings['delay-js'] = '0';
             self::$settings['inline-js'] = '0';
         }
 
@@ -2863,10 +2874,7 @@ class wps_cdn_rewrite
 
         if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '1') {
             // TODO: Maybe add something?
-            $html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [
-                $this,
-                'gtagDelay'
-            ], $html);
+            $html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [$this, 'gtagDelay'], $html);
         }
 
 
@@ -3061,19 +3069,28 @@ class wps_cdn_rewrite
 
 
         //Delay JS
-        $delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
+        #$delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
+        $delayActive = true;
 
-        if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-            $js_delay = new wps_ic_js_delay();
-            if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
-                if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
-                    $html = $js_delay->preload_scripts($html);
+        if (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') {
+            // Disable
+            $delayActive = false;
+        }
+
+
+        if ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')) {
+            if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+                $js_delay = new wps_ic_js_delay();
+
+                if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+                    if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
+                        $html = $js_delay->preload_scripts($html);
+                    }
+                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
+                } else {
+                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
                 }
-                $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
-            } else {
-                $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
             }
-
         }
 
         if (!empty($_GET['testGtag'])) {
@@ -3637,6 +3654,10 @@ class wps_cdn_rewrite
         // TODO: We have already delayed things, but speed tests don't recognize it
         $tag = trim($src[0]);
         $srcToLower = strtolower($tag);
+
+        if (self::$isAmp->isAmp()) {
+            return $tag;
+        }
 
         if (strpos($tag, 'wps-inline') !== false) {
             return $tag;

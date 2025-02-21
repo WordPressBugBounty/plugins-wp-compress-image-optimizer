@@ -7,7 +7,7 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'adsbygoogle'];
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'adsbygoogle', 'document.write', 'document.documentElement'];
     public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slide', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk'];
 
     // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"
@@ -113,10 +113,10 @@ class wps_ic_js_delay
         }
 
         $tagLower = strtolower($tag);
-        #return print_r([$tagLower],true);
+
 
         // Is the script excluded from DelayJS?
-        if (self::$excludes->excludedFromDelay($tag)) {
+        if (self::$excludes->excludedFromDelay($tagLower)) {
             if (!strpos($tagLower, 'defer') && strpos($tagLower, 'jquery') === false) {
                 $tag = str_replace('<script ', '<script data-wpc-att="excluded" ', $tag);
             }
@@ -128,7 +128,7 @@ class wps_ic_js_delay
         if ($this->checkKeyword($tagLower, self::$doNotDelay)) {
             // Do not delay these!!!
             return $tag;
-        } elseif ($this->checkKeyword($tagLower, self::$deferScripts)) {
+        } else if ($this->checkKeyword($tagLower, self::$deferScripts)) {
 
             // Required for usercentrics plugin
             if (strpos($tagLower, 'loader.js') !== false || strpos($tagLower, 'uc-block') !== false) {
@@ -141,7 +141,7 @@ class wps_ic_js_delay
                 return $tag;
             }
 
-        } elseif ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
+        } else if ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
 
             // Required for usercentrics plugin
             if (strpos($tagLower, 'loader.js') !== false || strpos($tagLower, 'uc-block') !== false) {
@@ -157,7 +157,8 @@ class wps_ic_js_delay
 
             // Patches for scripts that need to run last?
             if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
-                $tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
+                #$tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
+                $tag = preg_replace('/<script(?![^>]*\btype=)/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
             } else {
                 $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script" data-from-wpc="128"', $tag);
             }
