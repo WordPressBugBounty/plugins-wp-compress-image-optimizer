@@ -206,6 +206,7 @@ class wps_ic_ajax extends wps_ic
         $cfapi = new WPC_CloudflareAPI($token);
 
         $zones = $cfapi->listZones();
+
         if (is_wp_error($zones)) {
 
             $error = 'Unkown error.';
@@ -220,19 +221,27 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error($error);
         } else {
             $zonesOutput = [];
+
             foreach ($zones['result'] as $zone) {
-                #echo "Zone: {$zone['name']}, ID: {$zone['id']}" . PHP_EOL;
                 $zonesOutput[$zone['id']] = $zone['name'];
             }
 
             if (!empty($zonesOutput)) {
-                # $zonesDropdown = '<select name="wpc-cf-zone-list">';
-                #$zonesDropdown = '<option value="0">Select a zone</option>';
                 foreach ($zonesOutput as $zoneID => $zoneName) {
-                    #$zonesDropdown .= '<option value="' . $zoneID . '">' . $zoneName . '</option>';
                     $zonesDropdown .= '<div data-selected-zone="' . $zoneName . '" data-selected-zone-id="' . $zoneID . '">' . $zoneName . '</div>';
                 }
-                #$zonesDropdown .= '</select>';
+
+                for ($i=2;$i<=20;$i++) {
+                    $zones = $cfapi->listZones($i);
+                    if (!empty($zones['result'])) {
+                        foreach ($zones['result'] as $zone) {
+                            $zonesDropdown .= '<div data-selected-zone="' . $zone['name'] . '" data-selected-zone-id="' . $zone['id'] . '">' . $zone['name'] . '</div>';
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
                 wp_send_json_success($zonesDropdown);
             }
         }
@@ -248,23 +257,6 @@ class wps_ic_ajax extends wps_ic
         }
 
         return true;
-    }
-
-    public function wpc_purgeCF($return = false)
-    {
-        $cfSettings = get_option(WPS_IC_CF);
-
-        $zone = $cfSettings['zone'];
-        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
-        if ($cfapi) {
-            $cfapi->purgeCache($zone);
-        }
-
-        if ($return) {
-            return true;
-        } else {
-            wp_send_json_success();
-        }
     }
 
     public function wpc_ic_setupCF()
@@ -314,7 +306,7 @@ class wps_ic_ajax extends wps_ic
          */
         $criticalCSSExists = $criticalCSS->criticalExistsAjax($realUrl);
         if (!empty($criticalCSSExists)) {
-            wp_send_json_success(['exists', $realUrl]);
+            wp_send_json_success(['exists', $realUrl, $criticalCSSExists]);
         }
 
         /**
@@ -353,6 +345,19 @@ class wps_ic_ajax extends wps_ic
                     $tests = get_option(WPS_IC_TESTS);
                     $tests['home'] = $body;
                     update_option(WPS_IC_TESTS, $tests);
+
+                    if (!empty($body['desktop']['lcp'])) {
+                        $preloadsLcp = get_option('wps_ic_preloads', []);
+                        $preloadsLcp['lcp'] = '';
+                        update_option('wps_ic_preloads', $preloadsLcp);
+                    }
+
+                    if (!empty($body['mobile']['lcp'])) {
+                        $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
+                        $preloadsLcp['lcp'] = '';
+                        update_option('wps_ic_preloadsMobile', $preloadsLcp);
+                    }
+
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
                     delete_transient('wpc_initial_test');
                     if (!empty($body['testID'])) {
@@ -920,6 +925,23 @@ class wps_ic_ajax extends wps_ic
         sleep(3);
         delete_transient('wps_ic_purging_cdn');
         wp_send_json_success();
+    }
+
+    public function wpc_purgeCF($return = false)
+    {
+        $cfSettings = get_option(WPS_IC_CF);
+
+        $zone = $cfSettings['zone'];
+        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+        if ($cfapi) {
+            $cfapi->purgeCache($zone);
+        }
+
+        if ($return) {
+            return true;
+        } else {
+            wp_send_json_success();
+        }
     }
 
     /**
@@ -2982,6 +3004,7 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'ajax-nonce')) {
             wp_send_json_error('Forbidden.');
         }
+				delete_option('wpc-warmup-errors');
         $warmup_class = new wps_ic_preload_warmup();
         $warmup_class->startOptimizations();
     }

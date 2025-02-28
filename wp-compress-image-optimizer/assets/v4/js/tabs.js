@@ -18,6 +18,7 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFToken',
             token: cFToken,
+            _nonce: Math.random().toString(36).substr(2, 9)
         }, function (response) {
 
             if (response.success) {
@@ -79,7 +80,7 @@ jQuery(document).ready(function ($) {
             action: 'wpc_ic_checkCFConnect',
             token: cFToken,
             zone: cFZone,
-            _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
+            _nonce: Math.random().toString(36).substr(2, 9)
         }, function (response) {
 
                 $.post(ajaxurl, {

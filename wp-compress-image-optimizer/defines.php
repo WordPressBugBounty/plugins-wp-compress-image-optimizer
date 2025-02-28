@@ -1,6 +1,6 @@
 <?php
 
-define('WPS_IC_MAXWIDTH', 2000);
+define('WPS_IC_MAXWIDTH', 3000);
 define('WPS_IC_QUEUE_EXECUTION_TIME', 360);
 define('WPS_IC_LOCAL_V', 4);
 if (empty($_GET['min_debug'])) {

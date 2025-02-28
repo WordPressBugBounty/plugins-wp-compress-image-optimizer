@@ -7,6 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+
 if (is_multisite()) {
     $current_blog_id = get_current_blog_id();
     switch_to_blog($current_blog_id);
@@ -582,6 +583,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </span>
                                 </span>
                                             <span class="wpc-title">Debug</span>
+                                        </a>
+                                    </li>
+                                    <li style="display: block;">
+                                        <a href="#" class="" data-tab="logger">
+                                <span class="wpc-icon-container">
+                                <span class="wpc-icon">
+                                    <img src="<?php
+                                    echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
+                                </span>
+                                </span>
+                                            <span class="wpc-title">Logger</span>
                                         </a>
                                     </li>
                                     <?php
@@ -1400,6 +1412,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <div class="wpc-tab-content" id="debug" style="display:none;">
                                     <?php
                                     include_once 'debug_tool.php'; ?>
+                                </div>
+
+                                <div class="wpc-tab-content" id="logger" style="display:none;">
+			                            <?php
+			                            include_once 'logger_menu.php'; ?>
                                 </div>
                             </div>
                         </div>

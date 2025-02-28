@@ -101,8 +101,8 @@ class WPC_CloudflareAPI {
      *
      * @return array|WP_Error List of zones or WP_Error
      */
-    public function listZones() {
-        return $this->getRequest('zones');
+    public function listZones($page = 1) {
+        return $this->getRequest('zones', ['per_page' => 50, 'page' => $page]);
     }
 
     /**

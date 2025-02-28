@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.11';
+        self::$version = '6.30.13';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -795,6 +795,7 @@ class wps_ic
         // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
         delete_option(WPS_IC_GUI);
+        delete_option('wps_log_critCombine');
 
         // Remove Tests
         delete_option(WPS_IC_TESTS);

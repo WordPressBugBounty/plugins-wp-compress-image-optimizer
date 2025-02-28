@@ -24,6 +24,8 @@ class wps_ic_combine_css
     public $combined_dir;
     public $urlKey;
     public $url_key_class;
+		public $log_criticalCombine;
+		public $logger;
 
     public function __construct()
     {
@@ -767,6 +769,11 @@ class wps_ic_combine_css
     public function maybe_do_combine($html)
     {
 
+		    if (!empty(get_option('wps_log_critCombine'))){
+			    $this->log_criticalCombine = true;
+			    $this->logger = new wps_ic_logger('criticalCombine');
+		    }
+
         // Disabled for some reason?!
         if (1 == 0 && $this->combine_exists() && (empty($_GET['forceRecombine']) && !$this->criticalCombine)) {
             $this->no_content_excludes = get_option('wps_no_content_excludes_css');
@@ -1031,6 +1038,10 @@ class wps_ic_combine_css
 
     public function script_combine_and_replace($tag)
     {
+				if ($this->log_criticalCombine){
+					$this->logger->log('Starting new script.');
+				}
+
         $tag = trim($tag[0]);
         if (empty($tag)) {
             return $tag;
@@ -1046,6 +1057,9 @@ class wps_ic_combine_css
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
                 return print_r([$tag, 'excluded'], true);
             }
+		        if ($this->log_criticalCombine){
+			        $this->logger->log('It is excluded.', true);
+		        }
             return $tag;
         }
 
@@ -1071,6 +1085,10 @@ class wps_ic_combine_css
             $src = str_replace('"', "", $src);
             $src = $src[0];
 
+		        if ($this->log_criticalCombine){
+			        $this->logger->log('Src: ' . $src);
+		        }
+
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
                 return print_r([$tag, 'file', $this->combine_external, $src], true);
             }
@@ -1079,6 +1097,9 @@ class wps_ic_combine_css
                 if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
                     return print_r([$tag, 'external'], true);
                 }
+		            if ($this->log_criticalCombine){
+			            $this->logger->log('Is External.');
+		            }
                 return $tag;
             } else if ($this->combine_external && $this->url_key_class->is_external($src)) {
                 $content = $this->getRemoteContent($src);
@@ -1104,6 +1125,10 @@ class wps_ic_combine_css
         } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
+		        if ($this->log_criticalCombine){
+			        $this->logger->log('Is inline.');
+		        }
+
             $content = $tag;
             $content = preg_replace('/<style(.*?)>/', '', $content, -1, $count);
             $content = preg_replace('/<\/style>/', '', $content);
@@ -1125,6 +1150,10 @@ class wps_ic_combine_css
             }
             return $tag;
         }
+
+		    if ($this->log_criticalCombine){
+			    $this->logger->log('Fetched.');
+		    }
 
 
         //sometimes php injects a zero width space char at the start of a new script, this clears it
@@ -1155,6 +1184,10 @@ class wps_ic_combine_css
 
     public function getRemoteContent($url)
     {
+		    if ($this->log_criticalCombine){
+			    $this->logger->log('Fetching script content.');
+		    }
+
         if (strpos($url, '//') === 0) {
             $url = 'https:' . $url;
         }
@@ -1164,8 +1197,17 @@ class wps_ic_combine_css
         //todo Check if file is really css
 
         if (is_wp_error($data)) {
+
+		        if ($this->log_criticalCombine){
+			        $this->logger->log('Failed fetching script content.' , true);
+		        }
+
             return false;
         }
+
+		    if ($this->log_criticalCombine){
+			    $this->logger->log('Script content fetched.');
+		    }
 
         return wp_remote_retrieve_body($data);
     }
@@ -1174,12 +1216,19 @@ class wps_ic_combine_css
     {
         $output = [];
 
+	    if ($this->log_criticalCombine){
+		    $this->logger->log('Fetching script content.');
+	    }
+
         if ($this->hmwpReplace) {
             //go trougn their replacements and reverse them to get true path to files
             foreach ($this->hmwp_rewrite->_replace['to'] as $key => $value) {
                 $replace = $this->hmwp_rewrite->_replace['from'][$key];
                 $url = str_replace($value, $replace, $url);
             }
+	        if ($this->log_criticalCombine){
+		        $this->logger->log('Did hidemywp replacements and got ' . $url);
+	        }
         }
 
         if (strpos($url, $this->zone_name) !== false) {
@@ -1255,13 +1304,26 @@ class wps_ic_combine_css
             return $output;
         }
 
+		    if ($this->log_criticalCombine){
+			    $this->logger->log('Fetching script content.' . $finalPath);
+		    }
+
         if (file_exists($finalPath)) {
             $content = file_get_contents($finalPath);
         }
 
         if (!$content) {
+
+		        if ($this->log_criticalCombine){
+			        $this->logger->log('Fetch failed,', true);
+		        }
+
             return false;
         }
+
+		    if ($this->log_criticalCombine){
+			    $this->logger->log('Fetched.');
+		    }
 
         return $content;
     }

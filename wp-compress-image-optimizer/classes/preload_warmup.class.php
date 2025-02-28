@@ -1099,7 +1099,15 @@ class wps_ic_preload_warmup
             $warmup->writeLog('Starting warmup.');
             $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
         } else {
-            $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+
+					$errors = get_option('wpc-warmup-errors', []);
+
+					//delete previous errors for the page
+					if(isset($errors[$id])){
+						unset($errors[$id]);
+						update_option('wpc-warmup-errors', $errors);
+					}
+					$call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
 
         }
 
@@ -1295,7 +1303,6 @@ class wps_ic_preload_warmup
                     $preloadsMobile = array_map('stripslashes', $preloadsMobile);
                     #if (!in_array($mobilePreload, $preloadsMobile)) {
                     if (!empty($mobilePreload) && $mobilePreload !== 'none') {
-                        #$preloadsMobile['lcp'] = preg_replace('/w:[0-9]{1,4}/', 'w:480', $mobilePreload);
                         $preloadsMobile['lcp'] = $mobilePreload;
                     }
                     #}

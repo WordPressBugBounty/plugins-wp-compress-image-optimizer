@@ -310,7 +310,7 @@ class wps_ic_enqueues extends wps_ic
         }
 
         $linkPreload = "true";
-        if (is_user_logged_in()){
+        if (is_user_logged_in()) {
             $linkPreload = "false";
         }
 
@@ -323,9 +323,9 @@ class wps_ic_enqueues extends wps_ic
         $debugOptimize = get_option('wps_optimizejs_debug');
         if (empty($optimizeRemove)) {
             if (empty($debugOptimize) || $debugOptimize == 'false') {
-                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js" defer></script>';
+                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
             } else {
-                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js" defer></script>';
+                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
             }
         }
 
@@ -513,36 +513,26 @@ class wps_ic_enqueues extends wps_ic
             }
         }
 
-        //Tracking script
-        //    if ((self::$settings['css'] == 1 || self::$settings['js'] == 1 || self::$settings['serve']['jpg'] == 1 || self::$settings['serve']['png'] == 1 || self::$settings['serve']['gif'] == 1 || self::$settings['serve']['svg'] == 1 || self::$settings['delay-js'] == 1 || self::$settings['critical']['css'] == 1 || self::$settings['cache']['advanced'] == 1 || self::$settings['css_combine'] == 1 || self::$settings['inline-js'] == 1)) {
-        //      add_action('wp_footer', [$this, 'enqueue_tracking_script'], 9999);
-        //    }
+        // Integration for Javascript in Themes/Plugins
+        add_action('wp_footer', [$this, 'enqueueIntegration'], 9999);
     }
 
 
-    public function enqueue_tracking_script()
+    public function enqueueIntegration()
     {
-        if (!empty(self::$zone_name) && empty($_GET['disableTracking'])) {
-            ?>
-            <img src="https://<?php
-            echo self::$zone_name; ?>/stats.api" class="no-delay" alt="" width="1" height="1"
-                 style="display:none !important;"/>
-            <?php
-        if (self::$settings['delay-js'] == '0') { ?>
-            <script type="text/javascript">
-                <?php } else {?>
-                <script type="text/javascript-no-delay">
-                    <?php } ?>
-                    var wpc_u = window.location.href;
-                    var wpc_z = ngf298gh738qwbdh0s87v_vars.zoneName;
-                    var wpc_d = {
-                    wpc_u: wpc_u,
-                    wpc_z: wpc_z,
-                    hash: Date.now()
-                };
-                    navigator.sendBeacon("https://<?php echo self::$zone_name; ?>/ping", JSON.stringify(wpc_d));
-            </script>
-            <?php
+
+        $theme = wp_get_theme(); // Get the current theme object
+
+        // Check if the theme name or template matches BuddyBoss
+        if ($theme->get('Name') === 'BuddyBoss Theme' || $theme->get('Template') === 'buddyboss-theme') {
+            if (!empty(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') { ?>
+                <script type="wpc-delay-last-script">
+                    setTimeout(function(){
+                    BuddyBossTheme.init();
+                    },1000);
+                </script>
+                <?php
+            }
         }
     }
 
@@ -635,8 +625,8 @@ class wps_ic_enqueues extends wps_ic
     public function asset_script($name, $filename)
     {
         wp_enqueue_script($this::$slug . '-' . $name, WPS_IC_URI . 'assets/' . $filename, ['jquery'], $this::$version, true);
-        if (strpos($name,'admin-sweetalert') !== false) {
-          wp_add_inline_script($this::$slug . '-' . $name, 'window.WPCSwal = window.Swal;');
+        if (strpos($name, 'admin-sweetalert') !== false) {
+            wp_add_inline_script($this::$slug . '-' . $name, 'window.WPCSwal = window.Swal;');
         }
     }
 

@@ -7,7 +7,7 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'adsbygoogle', 'document.write', 'document.documentElement'];
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'document.write', 'document.documentElement'];
     public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slide', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk'];
 
     // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"

@@ -3,9 +3,9 @@ Contributors: aresit
 Donate link:
 Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
-Requires at least: 5.6
-Tested up to: 6.7
-Stable tag: 6.30.11
+Requires at least: 7.0
+Tested up to: 6.8
+Stable tag: 6.30.13
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,16 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.30.13 =
+* Minor UI Fix
+
+= 6.30.12 =
+* Added Patch for Critical CSS 404 Not Found Issue
+* Remove Status Records in Smart Optimization on Start of Process
+* Added CriticalCombine Logger for Easier Debugging
+* Raised Max Width for Local Mode
+* Added CF Listing Zones to Have Bigger Limit
 
 = 6.30.11 =
 * DelayJS Patch in Rewrite Logic

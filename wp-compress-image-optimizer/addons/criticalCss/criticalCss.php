@@ -414,7 +414,7 @@ class wps_criticalCss
             }
         }
 
-        if (!isset($return['mobile']) && !isset($return['desktop'])) {
+        if (!isset($return['mobile']) || !isset($return['desktop'])) {
             return false;
         }
 

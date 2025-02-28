@@ -1040,14 +1040,14 @@ class wps_cdn_rewrite
         }
 
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-                // TODO: Maybe add something?
-                if ($criticalActive && !empty($criticalCSSExists)) {
-                    //critical exists, dont inline
-                } else {
-                    $html = $combine_css->doInline($html);
-                }
-            } else {
+//            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
+//                // TODO: Maybe add something?
+//                if ($criticalActive && !empty($criticalCSSExists)) {
+//                    //critical exists, dont inline
+//                } else {
+//                    $html = $combine_css->doInline($html);
+//                }
+//            } else {
 
                 //Combine CSS
                 if (($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1')) || $this->criticalCombine) {
@@ -1056,7 +1056,7 @@ class wps_cdn_rewrite
                     }
                 }
 
-            }
+            #}
         }
 
         if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
@@ -1748,13 +1748,14 @@ class wps_cdn_rewrite
             return true;
         }
 
-        if ($this->is_home_url()) {
+        // Was only adding to home page
+        #if ($this->is_home_url()) {
             if (!self::is_mobile()) {
                 add_action('wp_head', [$this, 'preload_custom_assets'], 1);
             } else {
                 add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
             }
-        }
+        #}
 
         self::$excludes_class = new wps_ic_excludes();
         self::$isAmp = new wps_ic_amp();
@@ -2210,14 +2211,14 @@ class wps_cdn_rewrite
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
 
-                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) || empty(wpcGetHeader('criticalCombine')))) {
-                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
-                } else {
+//                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) || empty(wpcGetHeader('criticalCombine')))) {
+//                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
+//                } else {
                     if (self::$css == "1") {
                         add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
                         add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
                     }
-                }
+                #}
 
                 if (self::$js == "1") {
                     add_filter('script_loader_tag', [$this, 'rewrite_script_tag'], 10, 3);
@@ -2230,9 +2231,9 @@ class wps_cdn_rewrite
         } else {
             // Local Mode
             if (self::dontRunif()) {
-                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine')))) {
-                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
-                }
+//                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine')))) {
+//                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
+//                }
 
                 if (self::$css == "1") {
                     add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
@@ -2255,6 +2256,10 @@ class wps_cdn_rewrite
         $alreadyPreloaded = [];
         $preloads = get_option('wps_ic_preloadsMobile');
 
+        if (!empty($_GET['dbgPreloadMobile'])) {
+            echo print_r($preloads, true);
+        }
+
         if (!empty($preloads) && is_array($preloads)) {
 
             $newPreloads = [];
@@ -2269,6 +2274,11 @@ class wps_cdn_rewrite
                     $key = 'custom_' . ($index + 1);
                     $newPreloads[$key] = $value;
                 }
+            }
+
+            if (!empty($_GET['dbgPreloadMobile'])) {
+                echo print_r('New Preloads', true);
+                echo print_r($newPreloads, true);
             }
 
             foreach ($newPreloads as $preload) {
@@ -2319,7 +2329,6 @@ class wps_cdn_rewrite
                         $as = '';
                         break;
                 }
-
 
                 if (!empty($as)) {
                     if (!in_array(esc_url($preload), $alreadyPreloaded)) {
@@ -2847,14 +2856,14 @@ class wps_cdn_rewrite
         }
 
         if (!$criticalCombine) {
-            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-                // TODO: Maybe add something?
-                if ($criticalActive && !empty($criticalCSSExists)) {
-                    //critical exists, dont inline
-                } else {
-                    $html = $combine_css->doInline($html);
-                }
-            }
+//            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
+//                // TODO: Maybe add something?
+//                if ($criticalActive && !empty($criticalCSSExists)) {
+//                    //critical exists, dont inline
+//                } else {
+//                    $html = $combine_css->doInline($html);
+//                }
+//            }
         }
 
         $addslashes = false;
@@ -2901,23 +2910,22 @@ class wps_cdn_rewrite
         }
 
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
+            #if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
                 //			  // TODO: Maybe add something?
                 //			  if($criticalActive && !empty($criticalCSSExists)) {
                 //					//critical exists, dont inline
                 //			  } else {
                 //				  $html = $combine_css->doInline($html);
                 //			  }
-            } else {
+            #} else {
                 // Find and Preload Fonts!!
                 self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
 
                 if (!empty(self::$wpcPreloadLinks)) {
                     $preloadFonts = implode('', self::$wpcPreloadLinks);
-
                     $html = str_replace('<!--WPC_INSERT_PRELOAD-->', $preloadFonts, $html);
                 }
-            }
+            #}
         }
 
         if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
@@ -3630,6 +3638,7 @@ class wps_cdn_rewrite
         $inject .= '<!--WPC_INSERT_CRITICAL-->';
         $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
         $inject .= '<!--WPC_INSERT_PRELOAD-->';
+
         return $inject;
     }
 
@@ -4127,40 +4136,53 @@ class wps_cdn_rewrite
     {
         $found_tags = [];
 
-        preg_match_all('/(\w+(?:-\w+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
+		    $image = html_entity_decode($image);
 
-        $attributes = [];
-        unset ($matches[0]);
+		    //fix for empty tags
+		    preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
 
-        foreach ($matches as $match) {
-            $attrName = $match[1]; // The attribute name
-            // Determine the attribute value based on the capturing group that caught it
-            // If no value is present, consider it as null or an empty string
-            $attrValue = isset($match[2]) ? $match[2] : (isset($match[3]) ? $match[3] : (isset($match[4]) ? $match[4] : null));
+		    if (!empty($_GET['dbg_img1'])) {
+			    return [$image, $matches];
+		    }
 
-            // Save the attribute and its value (if any) as key => value pairs in the array
-            $attributes[$attrName] = $attrValue;
-        }
+		    $attributes = [];
+		    unset ($matches[0]);
 
-        if (!empty($_GET['getAllTags'])) {
-            return [$image, $attributes];
-        }
+		    foreach ($matches as $match) {
+			    $attrName = $match[1]; // The attribute name
+			    // Determine the attribute value based on the capturing group that caught it
+			    $attrValue = null;
+			    // Iterate through potential groups and assign the first non-empty value
+			    foreach ([2, 3, 4] as $index) {
+				    if (!empty($match[$index])) {
+					    $attrValue = $match[$index];
+					    break; // Stop at the first non-empty value
+				    }
+			    }
 
-        foreach ($attributes as $tag => $value) {
-            if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
-                continue;
-            }
+			    // Save the attribute and its value (if any) as key => value pairs in the array
+			    $attributes[$attrName] = $attrValue;
+		    }
 
-            if ($tag == 'data-mk-image-src-set') {
-                $value = htmlspecialchars_decode($value);
-                $value = json_decode($value, true);
-                $value = $value['default'];
-            }
+		    if (!empty($_GET['dbg_img2'])) {
+			    return [$image, $attributes];
+		    }
 
-            $found_tags[$tag] = $value;
-        }
+		    foreach ($attributes as $tag => $value) {
+			    if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
+				    continue;
+			    }
 
-        return $found_tags;
+			    if ($tag == 'data-mk-image-src-set') {
+				    $value = htmlspecialchars_decode($value);
+				    $value = json_decode($value, true);
+				    $value = $value['default'];
+			    }
+
+			    $found_tags[$tag] = $value;
+		    }
+
+	    return $found_tags;
     }
 
     public static function get_image_size($url)

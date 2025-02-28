@@ -979,57 +979,65 @@ SCRIPT;
 
 
         if (!empty($criticalCSSExists)) {
-            $criticalCSSContent_Desktop = file_get_contents($criticalCSSExists['desktop']);
-            $criticalCSSContent_Mobile = file_get_contents($criticalCSSExists['mobile']);
+            if (file_exists($criticalCSSExists['desktop']) && file_exists($criticalCSSExists['mobile'])) {
+                $criticalCSSContent_Desktop = file_get_contents($criticalCSSExists['desktop']);
+                $criticalCSSContent_Mobile = file_get_contents($criticalCSSExists['mobile']);
 
-            // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
-            $createPreloadLinks = function ($cssContent) {
-                $preloadLinks = '';
-                $loadedFonts = []; // Array to track already added URLs
-                $commentPos = strpos($cssContent, '/* Preload Fonts */');
+                if (str_contains($criticalCSSContent_Desktop, '<body>') || str_contains($criticalCSSContent_Mobile, '<body>')) {
+                    // Do Nothing, it's html
+                } else {
 
-                // Proceed only if the comment is found
-                if ($commentPos !== false) {
-                    $relevantContent = substr($cssContent, 0, $commentPos);
-                    $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
-                    if (preg_match_all($fontPattern, $relevantContent, $matches, PREG_SET_ORDER)) {
-                        foreach ($matches as $match) {
-                            $fontUrl = $match[2];
-                            if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
-                                continue;
-                            }
-                            // Check if the font URL is already in the array
-                            if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
-                                if (!in_array($fontUrl, $loadedFonts)) {
-                                    $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
-                                    $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
+                    $createPreloadLinks = function ($cssContent) {
+                        $preloadLinks = '';
+                        $loadedFonts = []; // Array to track already added URLs
+                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
+
+                        // Proceed only if the comment is found
+                        if ($commentPos !== false) {
+                            $relevantContent = substr($cssContent, 0, $commentPos);
+                            $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
+                            if (preg_match_all($fontPattern, $relevantContent, $matches, PREG_SET_ORDER)) {
+                                foreach ($matches as $match) {
+                                    $fontUrl = $match[2];
+                                    if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
+                                        continue;
+                                    }
+                                    // Check if the font URL is already in the array
+                                    if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
+                                        if (!in_array($fontUrl, $loadedFonts)) {
+                                            $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
+                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                        }
+                                    }
                                 }
                             }
                         }
+                        return $preloadLinks;
+                    };
+
+                    // Function to get the CSS content after the "/* Preload Fonts */" comment
+                    $getCSSAfterPreloadComment = function ($cssContent) {
+                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
+                        return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
+                    };
+
+
+                    $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent_Desktop);
+                    $preloadLinks_Mobile = $createPreloadLinks($criticalCSSContent_Mobile);
+
+
+                    $criticalCSSContent_Desktop_After = $getCSSAfterPreloadComment($criticalCSSContent_Desktop);
+                    $criticalCSSContent_Mobile_After = $getCSSAfterPreloadComment($criticalCSSContent_Mobile);
+
+                    // Append preload links followed by the critical CSS after the preload comment
+                    if ($this->isMobile() && !empty($criticalCSSContent_Mobile)) {
+                        $output .= "\r\n" . $preloadLinks_Mobile . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-mobile">' . $criticalCSSContent_Mobile_After . '</style>';
+                    } elseif (!empty($criticalCSSContent_Desktop)) {
+                        $output .= "\r\n" . $preloadLinks_Desktop . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-desktop">' . $criticalCSSContent_Desktop_After . '</style>';
                     }
+
                 }
-                return $preloadLinks;
-            };
-
-            // Function to get the CSS content after the "/* Preload Fonts */" comment
-            $getCSSAfterPreloadComment = function ($cssContent) {
-                $commentPos = strpos($cssContent, '/* Preload Fonts */');
-                return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
-            };
-
-
-            $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent_Desktop);
-            $preloadLinks_Mobile = $createPreloadLinks($criticalCSSContent_Mobile);
-
-
-            $criticalCSSContent_Desktop_After = $getCSSAfterPreloadComment($criticalCSSContent_Desktop);
-            $criticalCSSContent_Mobile_After = $getCSSAfterPreloadComment($criticalCSSContent_Mobile);
-
-            // Append preload links followed by the critical CSS after the preload comment
-            if ($this->isMobile() && !empty($criticalCSSContent_Mobile)) {
-                $output .= "\r\n" . $preloadLinks_Mobile . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-mobile">' . $criticalCSSContent_Mobile_After . '</style>';
-            } elseif (!empty($criticalCSSContent_Desktop)) {
-                $output .= "\r\n" . $preloadLinks_Desktop . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-desktop">' . $criticalCSSContent_Desktop_After . '</style>';
             }
         }
 
@@ -1925,7 +1933,7 @@ SCRIPT;
             self::$adaptiveEnabled = '0';
         }
 
-        if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false) {
+        if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false || strpos($image[0], 'notlazy') !== false || strpos($image[0], 'nolazy') !== false || strpos($image[0], 'jet-image') !== false) {
             self::$lazyEnabled = '0';
             self::$adaptiveEnabled = '0';
         }
@@ -2601,7 +2609,7 @@ SCRIPT;
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url*2) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $srcset_width . $extension .' 2x, ';
+                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url * 2) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $srcset_width . $extension . ' 2x, ';
                             }
                         }
                     }

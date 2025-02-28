@@ -61,6 +61,18 @@ if (isset($_POST['savePreloads'])) {
         update_option('wps_ic_preloadsMobile', $preloadsLcp);
     }
 
+    if (empty($_POST['preloads_lcp'])) {
+        $preloadsLcp = get_option('wps_ic_preloads', []);
+        $preloadsLcp['lcp'] = '';
+        update_option('wps_ic_preloads', $preloadsLcp);
+    }
+
+    if (empty($_POST['preloadsMobile_lcp'])) {
+        $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
+        $preloadsLcp['lcp'] = '';
+        update_option('wps_ic_preloadsMobile', $preloadsLcp);
+    }
+
 }
 
 if (!empty($_POST['preloads_lcp'])) {
@@ -499,11 +511,11 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <h3>Automatic Preloads found by API (can edit)</h3>
-                <input type="text" name="preloads_lcp" style="width:100%;height:150px;"  value="<?php
+                <textarea name="preloads_lcp" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['lcp'])) {
                         echo $preloads['lcp'];
                     }
-                    ?>" />
+                    ?></textarea>
                 <h3>Manual Desktop Preloads (can edit)</h3>
                 <textarea name="preloads" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['custom']) && is_array($preloads['custom'])) {
@@ -512,11 +524,11 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                     ?></textarea>
 
                 <h3>Automatic Mobile Preloads found by API (can edit)</h3>
-                <input type="text" name="preloadsMobile_lcp" style="width:100%;height:150px;" value="<?php
+                <textarea name="preloadsMobile_lcp" style="width:100%;height:150px;"><?php
                 if (!empty($preloadsMobile['lcp'])) {
                     echo $preloadsMobile['lcp'];
                 }
-                ?>" />
+                    ?></textarea>
                 <h3>Manual Mobile Preloads (can edit)</h3>
                 <textarea name="preloadsMobile" style="width:100%;height:150px;"><?php
                     if (!empty($preloadsMobile['custom']) && is_array($preloadsMobile['custom'])) {
