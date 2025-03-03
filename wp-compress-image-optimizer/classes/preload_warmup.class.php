@@ -89,6 +89,25 @@ class wps_ic_preload_warmup
         }
     }
 
+    public function get_filesystem()
+    {
+        require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php');
+        require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php');
+        global $wpc_filesystem;
+
+        if (!defined('FS_CHMOD_DIR')) {
+            define('FS_CHMOD_DIR', (fileperms(ABSPATH) & 0777 | 0755));
+        }
+
+        if (!defined('FS_CHMOD_FILE')) {
+            define('FS_CHMOD_FILE', (fileperms(ABSPATH . 'index.php') & 0777 | 0644));
+        }
+
+        if (!isset($wpc_filesystem) || !is_object($wpc_filesystem)) {
+            $wpc_filesystem = new WP_Filesystem_Direct('');
+        }
+    }
+
     public static function isFeatureEnabled($featureName)
     {
         $feature = get_transient($featureName . 'Enabled');
@@ -103,6 +122,8 @@ class wps_ic_preload_warmup
     {
         $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
     }
+
+    // Filter function to modify search to only search post titles
 
     public function getPagesForFiltering($post_type, $post_status, $page_number, $offset, $search = '')
     {
@@ -199,8 +220,6 @@ class wps_ic_preload_warmup
 
         return $return;
     }
-
-    // Filter function to modify search to only search post titles
 
     public function getPages($post_type, $page, $offset, $limit, $search = '')
     {
@@ -1067,7 +1086,6 @@ class wps_ic_preload_warmup
         wp_send_json_success(true);
     }
 
-
     public function optimizeSingle($id, $test = true, $dash = false)
     {
 
@@ -1100,14 +1118,14 @@ class wps_ic_preload_warmup
             $call = wp_remote_post(self::$standaloneWarmup, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'id' => $id, 'critical' => 'true', 'test' => 'true'], 'timeout' => 120]);
         } else {
 
-					$errors = get_option('wpc-warmup-errors', []);
+            $errors = get_option('wpc-warmup-errors', []);
 
-					//delete previous errors for the page
-					if(isset($errors[$id])){
-						unset($errors[$id]);
-						update_option('wpc-warmup-errors', $errors);
-					}
-					$call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
+            //delete previous errors for the page
+            if (isset($errors[$id])) {
+                unset($errors[$id]);
+                update_option('wpc-warmup-errors', $errors);
+            }
+            $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'pages' => json_encode($page_links), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
 
         }
 
@@ -1132,11 +1150,11 @@ class wps_ic_preload_warmup
                 //wp_send_json_error(print_r($response_body['data'], true));
             }
 
-          if ($dash && !empty($response_body['testID'])){
-            $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
-            $warmupLog[$response_body['testID']] = ['started' => date('Y-m-d H:i:s')];
-            update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
-          }
+            if ($dash && !empty($response_body['testID'])) {
+                $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+                $warmupLog[$response_body['testID']] = ['started' => date('Y-m-d H:i:s')];
+                update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
+            }
         } else {
             $warmup->writeLog('Got ' . wp_remote_retrieve_response_code($call) . ': ' . wp_remote_retrieve_body($call));
             wp_send_json_error(print_r($call, true));
@@ -1145,6 +1163,10 @@ class wps_ic_preload_warmup
         wp_send_json_success($transient);
     }
 
+    public function writeLog($message)
+    {
+        fwrite($this->logFile, "[" . date('d.m.Y H:i:s') . "] " . $message . "\r\n");
+    }
 
     public function resetTest($id, $retest = false, $return = true)
     {
@@ -1152,7 +1174,6 @@ class wps_ic_preload_warmup
 
         #var_dump($call);
     }
-
 
     public function doTestRemote($id, $retest = false, $return = true)
     {
@@ -1180,7 +1201,6 @@ class wps_ic_preload_warmup
 
         wp_send_json_success('waiting');
     }
-
 
     public function doTest($id, $retest = false, $return = true)
     {
@@ -1639,91 +1659,69 @@ class wps_ic_preload_warmup
         return false;
     }
 
-  public function getWarmupLog() {
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Cache-Control: post-check=0, pre-check=0', false);
-    header('Pragma: no-cache');
+    public function getWarmupLog()
+    {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Cache-Control: post-check=0, pre-check=0', false);
+        header('Pragma: no-cache');
 
-    if (!empty($_GET['apikey'])) {
-      $apikey = sanitize_text_field($_GET['apikey']);
-    } else {
-      echo json_encode('no-apikey');
-      die();
-    }
-
-    if (!empty($apikey) && get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
-      if (file_exists($this->logFilePath)) {
-        $logContents = file_get_contents($this->logFilePath);
-        echo $logContents;
-      } else {
-        echo json_encode('Log file does not exist');
-      }
-      die();
-    }
-
-    echo json_encode('wrong-apikey');
-    die();
-  }
-
-  public function writeLog($message)
-  {
-    fwrite($this->logFile, "[" . date('d.m.Y H:i:s') . "] " . $message . "\r\n");
-  }
-
-  public function get_filesystem()
-  {
-    require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php');
-    require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php');
-    global $wpc_filesystem;
-
-    if (!defined('FS_CHMOD_DIR')) {
-      define('FS_CHMOD_DIR', (fileperms(ABSPATH) & 0777 | 0755));
-    }
-
-    if (!defined('FS_CHMOD_FILE')) {
-      define('FS_CHMOD_FILE', (fileperms(ABSPATH . 'index.php') & 0777 | 0644));
-    }
-
-    if (!isset($wpc_filesystem) || !is_object($wpc_filesystem)) {
-      $wpc_filesystem = new WP_Filesystem_Direct('');
-    }
-  }
-
-  public function isWarmupFailing(){
-    //Check for 2 consecutiove fails older than 5 minutes with no successful tests done after
-    $warmupFailing = false;
-    $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
-    $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
-
-    if (!empty($_GET['test_warmup_fail'])) {
-        return true;
-    }
-
-    for ($i = 0; $i < count($warmupLog) - 1; $i++) {
-      $current = $warmupLog[$i];
-      $next = $warmupLog[$i + 1];
-
-      if (!isset($current['ended']) && !isset($next['ended'])
-        && $current['started'] < $fiveMinutesAgo
-        && $next['started'] < $fiveMinutesAgo) {
-
-        // Check if there are any successful tests after these two
-        $hasSuccessAfter = false;
-        for ($j = $i + 2; $j < count($warmupLog); $j++) {
-          if (isset($warmupLog[$j]['ended'])) {
-            $hasSuccessAfter = true;
-            break;
-          }
+        if (!empty($_GET['apikey'])) {
+            $apikey = sanitize_text_field($_GET['apikey']);
+        } else {
+            echo json_encode('no-apikey');
+            die();
         }
 
-        if (!$hasSuccessAfter) {
-          $warmupFailing = true;
-          break;
+        if (!empty($apikey) && get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+            if (file_exists($this->logFilePath)) {
+                $logContents = file_get_contents($this->logFilePath);
+                echo $logContents;
+            } else {
+                echo json_encode('Log file does not exist');
+            }
+            die();
         }
-      }
+
+        echo json_encode('wrong-apikey');
+        die();
     }
 
-    return $warmupFailing;
-  }
+    public function isWarmupFailing()
+    {
+        //Check for 2 consecutiove fails older than 5 minutes with no successful tests done after
+        $warmupFailing = false;
+        $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
+        $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+
+        if (!empty($_GET['test_warmup_fail'])) {
+            return true;
+        }
+
+        for ($i = 0; $i < count($warmupLog) - 1; $i++) {
+            $current = $warmupLog[$i];
+            $next = $warmupLog[$i + 1];
+
+            if (!isset($current['ended']) && !isset($next['ended'])
+                && $current['started'] < $fiveMinutesAgo
+                && $next['started'] < $fiveMinutesAgo) {
+
+                // Check if there are any successful tests after these two
+                $hasSuccessAfter = false;
+                for ($j = $i + 2; $j < count($warmupLog); $j++) {
+                    if (isset($warmupLog[$j]['ended'])) {
+                        $hasSuccessAfter = true;
+                        break;
+                    }
+                }
+
+                if (!$hasSuccessAfter) {
+                    $warmupFailing = true;
+                    break;
+                }
+            }
+        }
+
+        return $warmupFailing;
+    }
 
 }

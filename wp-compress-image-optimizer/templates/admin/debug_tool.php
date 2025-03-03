@@ -505,6 +505,15 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
+        <td>Preloads Debug - Last Warmup</td>
+        <td colspan="3">
+            <?php
+            $lastLog = get_option('wps_ic_last_warmpup');
+            echo print_r($lastLog,true);
+            ?>
+        </td>
+    </tr>
+    <tr>
         <td>Preloads Desktop</td>
         <td colspan="3">
             <form method="post" action="<?php

@@ -341,20 +341,25 @@ class wps_ic_ajax extends wps_ic
             $body = wp_remote_retrieve_body($download);
             if (!empty($body)) {
                 $body = json_decode($body, true);
-                if (json_last_error() === JSON_ERROR_NONE) {
+
+                // For debugging warmup
+                update_option('wps_ic_last_warmpup', $body);
+
+                #if (json_last_error() === JSON_ERROR_NONE) {
+                if (is_array($body) && !empty($body['desktop']['before'])) {
                     $tests = get_option(WPS_IC_TESTS);
                     $tests['home'] = $body;
                     update_option(WPS_IC_TESTS, $tests);
 
                     if (!empty($body['desktop']['lcp'])) {
                         $preloadsLcp = get_option('wps_ic_preloads', []);
-                        $preloadsLcp['lcp'] = '';
+                        $preloadsLcp['lcp'] = $body['desktop']['lcp'];
                         update_option('wps_ic_preloads', $preloadsLcp);
                     }
 
                     if (!empty($body['mobile']['lcp'])) {
                         $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-                        $preloadsLcp['lcp'] = '';
+                        $preloadsLcp['lcp'] = $body['mobile']['lcp'];
                         update_option('wps_ic_preloadsMobile', $preloadsLcp);
                     }
 
