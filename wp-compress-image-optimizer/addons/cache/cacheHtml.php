@@ -366,7 +366,7 @@ class wps_cacheHtml
             $expiresTime = time() + $cacheSeconds;
             header('Expires: ' . gmdate('D, d M Y H:i:s', $expiresTime) . ' GMT');
         } else {
-            header('Cache-Control: public, max-age=0'); // Ensures that the file is not cached
+            header('Cache-Control: public, max-age=' . 60*60); // Ensures that the file is not cached
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
 

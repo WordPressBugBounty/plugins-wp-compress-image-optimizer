@@ -2281,7 +2281,7 @@ class wps_cdn_rewrite
                 echo print_r($newPreloads, true);
             }
 
-            foreach ($newPreloads as $preload) {
+            foreach ($newPreloads as $key => $preload) {
                 $type = '';
                 $extra = '';
                 $ext = pathinfo($preload, PATHINFO_EXTENSION);
@@ -2323,6 +2323,8 @@ class wps_cdn_rewrite
                             $type = 'image/webp';
                         } else if ($ext == 'svg') {
                             $type = 'image/svg+xml';
+                        } else if ($ext == 'avif') {
+                            $type = 'image/avif';
                         }
                         break;
                     default:
@@ -2352,7 +2354,7 @@ class wps_cdn_rewrite
         $preloads = get_option('wps_ic_preloads');
 
         if (!empty($_GET['dbgPreload'])) {
-            echo print_r('asd ' . $preloads, true);
+            echo print_r($preloads, true);
         }
 
         if (!empty($preloads) && is_array($preloads)) {
@@ -2370,7 +2372,7 @@ class wps_cdn_rewrite
                 }
             }
 
-            foreach ($newPreloads as $preload) {
+            foreach ($newPreloads as $key => $preload) {
                 $extra = '';
                 $type = '';
                 $ext = pathinfo($preload, PATHINFO_EXTENSION);
@@ -2412,6 +2414,8 @@ class wps_cdn_rewrite
                             $type = 'image/webp';
                         } else if ($ext == 'svg') {
                             $type = 'image/svg+xml';
+                        } else if ($ext == 'avif') {
+                            $type = 'image/avif';
                         }
                         break;
                     default:
@@ -2687,7 +2691,7 @@ class wps_cdn_rewrite
         self::$isAmp = new wps_ic_amp();
         $combine_css = new wps_ic_combine_css();
 
-        if (self::$isAmp->isAmp()) {
+        if (self::$isAmp->isAmp($html)) {
             self::$lazy_enabled = '0';
             self::$adaptive_enabled = '0';
             self::$retina_enabled = '0';

@@ -188,6 +188,17 @@ class wps_ic_ajax extends wps_ic
                 #echo "Zone: {$zone['name']}, ID: {$zone['id']}" . PHP_EOL;
                 $zonesOutput[$zone['id']] = $zone['name'];
             }
+
+            for ($i=2;$i<=20;$i++) {
+                $zones = $cfapi->listZones($i);
+                if (!empty($zones['result'])) {
+                    foreach ($zones['result'] as $zone) {
+                        $zonesOutput[$zone['id']] = $zone['name'];
+                    }
+                } else {
+                    break;
+                }
+            }
         }
 
         if (!empty($zonesOutput) && !empty($zonesOutput[$zoneInput])) {
@@ -196,7 +207,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success($save);
         }
 
-        wp_send_json_error();
+        wp_send_json_error(print_r($zones,true));
     }
 
     public static function wpc_ic_checkCFToken()

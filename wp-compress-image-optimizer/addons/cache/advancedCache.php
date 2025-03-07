@@ -165,6 +165,22 @@ class wps_advancedCache
 
     public function isWooFragments()
     {
+        if ( ! isset( $_GET['wc-ajax'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return true;
+        }
+
+        if ( 'get_refreshed_fragments' !== $_GET['wc-ajax'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return true;
+        }
+
+        if ( ! empty( $_COOKIE['woocommerce_cart_hash'] ) ) {
+            return true;
+        }
+
+        if ( ! empty( $_COOKIE['woocommerce_items_in_cart'] ) ) {
+            return true;
+        }
+
         if ((isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'wc-ajax=get_refreshed_fragments') !== false) ||
             (isset($_GET['wc-ajax']) && $_GET['wc-ajax'] === 'get_refreshed_fragments')) {
             return true;
@@ -340,7 +356,7 @@ class wps_advancedCache
             $expiresTime = time() + $cacheSeconds;
             header('Expires: ' . gmdate('D, d M Y H:i:s', $expiresTime) . ' GMT');
         } else {
-            header('Cache-Control: public, max-age=0');
+            header('Cache-Control: public, max-age=' . 60*60);
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
 

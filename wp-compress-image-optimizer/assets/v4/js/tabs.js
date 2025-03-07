@@ -83,13 +83,14 @@ jQuery(document).ready(function ($) {
             _nonce: Math.random().toString(36).substr(2, 9)
         }, function (response) {
 
+            if(response.success) {
                 $.post(ajaxurl, {
                     action: 'wpc_ic_setupCF',
                     token: cFToken,
                     zone: cFZone,
                     _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
                 }, function (response) {
-                    if(response.success) {
+                    if (response.success) {
                         $('.wpc-cf-loader-zone').hide();
                         window.location.reload();
                     } else {
@@ -98,6 +99,11 @@ jQuery(document).ready(function ($) {
                         $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
                     }
                 });
+            } else {
+                $('.wpc-cf-loader-zone').hide();
+                $('.wpc-cf-insert-token-step').show();
+                $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+            }
 
 
         });

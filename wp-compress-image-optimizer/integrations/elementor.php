@@ -81,7 +81,7 @@ class wps_ic_elementor
             '/(<section[^>]*class="[^"]*?)elementor-top-section([^"]*")/i',
             function ($matches) use (&$count) {
                 $count++;
-                if ($count > 3) {
+                if ($count > 5) {
                     return $matches[1] . 'elementor-top-section wpc-delay-elementor' . $matches[2];
                 } else {
                     return $matches[0];

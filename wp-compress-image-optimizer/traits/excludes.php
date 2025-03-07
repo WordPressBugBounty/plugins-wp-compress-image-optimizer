@@ -103,7 +103,8 @@ class wps_ic_excludes extends wps_ic
             'mhcookie',
             'must-have-cookie/assets/js/script.js',
             'application/ld+json',
-            'wpforms_settings'
+            'wpforms_settings',
+            'var jnewsoption'
         ];
 
         self::$defaultCombineJSExcludes = [

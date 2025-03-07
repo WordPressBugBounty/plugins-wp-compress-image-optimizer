@@ -31,7 +31,14 @@ class wps_ic_amp
   }
 
 
-	public function isAmp() {
+	public function isAmp($html = '') {
+
+		if (!empty($html)){
+			if (preg_match('/<html[^>]*\samp[^>]*>/i', $html)) {
+				self::$isAmp = true;
+			}
+		}
+
     return self::$isAmp;
   }
 

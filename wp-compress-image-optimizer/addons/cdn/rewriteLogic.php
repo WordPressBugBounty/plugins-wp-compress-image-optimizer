@@ -884,6 +884,19 @@ class wps_rewriteLogic
         return $html;
     }
 
+
+    public function isWooCartOrCheckout() {
+        // Check if WooCommerce is active
+        if ( class_exists( 'WooCommerce' ) ) {
+            // Check if current page is Cart or Checkout
+            if ( is_cart() || is_checkout() ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     public function addCriticalAjax($args)
     {
         global $post;
@@ -892,6 +905,10 @@ class wps_rewriteLogic
             $script = print_r($post, true);
             $script .= print_r($realUrl = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], true);
             return $script;
+        }
+
+        if ($this->isWooCartOrCheckout()) {
+            return '</body>';
         }
 
         $script = '';
@@ -2158,7 +2175,7 @@ SCRIPT;
                 // If we loaded less images than skip first variable
                 $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth('logo') . '/u:' . self::reformatUrl($image_source);
                 $original_img_tag['original_tags']['src'] = $original_img_tag['src'];
-                $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wpc-excluded-adaptive wpc-lazy-skipped';
+                $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wpc-excluded-adaptive wpc-lazy-skipped1';
                 $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
                 unset($original_img_tag['additional_tags']['data-wpc-loaded']);
             } else {
@@ -2170,9 +2187,9 @@ SCRIPT;
                     $original_img_tag['additional_tags']['loading'] = 'lazy';
                 } else {
                     // We are under lazy limit, load image
-                    $original_img_tag['src'] = $source_svg;
+                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, true) . '/u:' . self::reformatUrl($image_source);
                     $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, true) . '/u:' . self::reformatUrl($image_source);
-                    $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wpc-excluded-adaptive wpc-lazy-skipped';
+                    $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wpc-excluded-adaptive wpc-lazy-skipped2';
                     $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
                     unset($original_img_tag['additional_tags']['data-wpc-loaded']);
                 }
@@ -2243,16 +2260,15 @@ SCRIPT;
             if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
                 $original_img_tag['additional_tags']['fetchpriority'] = 'high';
             }
-            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped';
+            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped3';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
             unset($original_img_tag['additional_tags']['data-wpc-loaded'], $original_img_tag['original_tags']['data-src'], $original_img_tag['data-src']);
         }
 
 
         if (self::$adaptiveEnabled == '0') {
-            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped';
+            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
-            unset($original_img_tag['additional_tags']['data-wpc-loaded']);
         }
 
 

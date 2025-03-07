@@ -632,6 +632,8 @@ class wps_ic_combine_css
                     $type = 'image/webp';
                 } else if ($ext == 'svg') {
                     $type = 'image/svg+xml';
+                } else if ($ext == 'avif') {
+                    $type = 'image/avif';
                 }
                 break;
             default:
@@ -1231,7 +1233,7 @@ class wps_ic_combine_css
 	        }
         }
 
-        if (strpos($url, $this->zone_name) !== false) {
+        if (!empty($this->zone_name) && strpos($url, $this->zone_name) !== false) {
             preg_match('/a:(.*?)(\?|$)/', $url, $match);
             $url = trim($match[1]);
         }

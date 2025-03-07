@@ -7,8 +7,10 @@ class wps_ic_js_delay
     public static $excludes;
     public static $footerScripts;
 
-    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'document.write', 'document.documentElement'];
-    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slide', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk'];
+
+    public static $doNotDelay = ['n489d_vars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'borlabs', 'nekitWidgetData', 'document.write', 'document.documentElement', 'presto'];
+    public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'slide', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk','jnews-main'];
+
 
     // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"
     public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui', 'flexslide'];
@@ -101,11 +103,27 @@ class wps_ic_js_delay
     }
 
 
+    public function isWooCartOrCheckout() {
+        // Check if WooCommerce is active
+        if ( class_exists( 'WooCommerce' ) ) {
+            // Check if current page is Cart or Checkout
+            if ( is_cart() || is_checkout() ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     public function delay_script_replace($tag)
     {
 
         if (!empty($_GET['removeScripts'])) {
             return '';
+        }
+
+        if ($this->isWooCartOrCheckout()) {
+            return $tag[0];
         }
 
         if (is_array($tag)) {
