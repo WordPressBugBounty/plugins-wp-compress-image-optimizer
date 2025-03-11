@@ -165,11 +165,8 @@ class wps_advancedCache
 
     public function isWooFragments()
     {
-        if ( ! isset( $_GET['wc-ajax'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-            return true;
-        }
 
-        if ( 'get_refreshed_fragments' !== $_GET['wc-ajax'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        if (isset($_GET['wc-ajax']) && $_GET['wc-ajax'] !== 'get_refreshed_fragments' ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
             return true;
         }
 
@@ -250,6 +247,16 @@ class wps_advancedCache
         return false;
     }
 
+
+    public function ignoreServerCacheControl() {
+        if (!empty($this->options['cache']['ignore-server-control']) &&  $this->options['cache']['ignore-server-control'] == '1') {
+            return true;
+        }
+
+        return false;
+    }
+
+
     public function saveCache($buffer, $prefix = '')
     {
         if (!empty($_GET['disable_cache'])) {
@@ -268,6 +275,15 @@ class wps_advancedCache
             }
             return $buffer;
         }
+
+	    if (empty($this->options['cache']['ignore-server-control']) ||  $this->options['cache']['ignore-server-control'] == '0') {
+		    $cacheControl = strtolower( $_SERVER['HTTP_CACHE_CONTROL'] );
+		    if ( strpos( $cacheControl, 'no-cache' ) !== false ||
+		         strpos( $cacheControl, 'no-store' ) !== false ||
+		         strpos( $cacheControl, 'private' ) !== false ) {
+			    return $buffer;
+		    }
+	    }
 
         if (!empty($prefix)) {
             $prefix = $prefix . '_';

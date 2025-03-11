@@ -29,7 +29,11 @@ jQuery(document).ready(function ($) {
         var status = $('#status_'+pageID);
         var assets_count =  $('#assets_'+pageID);
         link.text = 'In Progress';
-        $.post(ajaxurl, {action: 'wps_ic_critical_get_assets', pageID: pageID}, function (response) {
+        $.post(ajaxurl, {
+            action: 'wps_ic_critical_get_assets',
+            pageID: pageID,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             var files = JSON.parse(response.data);
 
             assets_count.html(files.img+' image, '+files.js+' JS and '+files.css+' CSS files found.');
@@ -39,7 +43,8 @@ jQuery(document).ready(function ($) {
                 url: ajaxurl,
                 data: {
                     action: 'wps_ic_critical_run',
-                    pageID: pageID
+                    pageID: pageID,
+                    wps_ic_nonce: wpc_ajaxVar.nonce
                 },
                 timeout: 0, //ms
                 error: function (jqXHR, textStatus, errorThrown) {
@@ -50,14 +55,6 @@ jQuery(document).ready(function ($) {
                     status.html('Done');
                 }
             });
-
-                //     $.post(ajaxurl, {action: 'wps_ic_critical_run', pageID: pageID, timeout:0}, function (response) {
-                // if (response.success) {
-                //     link.text = 'Done';
-                //     status.html('Done');
-                // } else {
-                //     link.text = 'Not Done';
-                // }
 
                 if ( process_all === 1 ){
                     process_next_link();
@@ -130,7 +127,8 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wps_ic_ajax_v2_checkbox',
             optionName: optionName,
-            optionValue: newValue
+            optionValue: newValue,
+            wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.data.newValue == '1') {
                 $('.circle-check', parent).addClass('active');

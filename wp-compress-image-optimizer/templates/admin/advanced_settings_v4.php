@@ -140,8 +140,8 @@ if (!empty($_POST['options'])) {
         $cacheLogic->purgeCDN();
     }
 
+	$htacces = new wps_ic_htaccess();
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
-        $htacces = new wps_ic_htaccess();
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
             // Modify HTAccess
@@ -159,13 +159,25 @@ if (!empty($_POST['options'])) {
         $this->cacheLogic::preloadPage(0); // Purge & Preload
     } else {
         // Modify HTAccess
-        $htacces = new wps_ic_htaccess();
         $htacces->removeHtaccessRules();
 
         // Add WP_CACHE to wp-config.php
         $htacces->setWPCache(false);
         $htacces->removeAdvancedCache();
     }
+
+
+	if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
+        echo 1;
+		$htacces->removeWebpReplace();
+	} else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
+        echo 2;
+		$htacces->addWebpReplace();
+	} else {
+        echo 3;
+		$htacces->removeWebpReplace();
+	}
+
 }
 
 if (!empty($_GET['resetTest'])) {
@@ -859,7 +871,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             #echo $gui::checkboxDescription_v4('Cache Compatibility', 'Prevent cached webpages from opening as a download on LiteSpeed or OpenLiteSpeed servers.', '', '', ['cache', 'compatibility'], $cacheLocked, '', ''); ?>
 
                                             <?php
-                                            echo $gui::inputDescription_v4('Expire Cache After', 'Recreate cache if it\'s stale or expired after a set duration.', 'Expire after', 'hours', false, ['cache', 'expire'], $cacheLocked, '6'); ?>
+                                            #echo $gui::inputDescription_v4('Expire Cache After', 'Recreate cache if it\'s stale or expired after a set duration.', 'Expire after', 'hours', false, ['cache', 'expire'], $cacheLocked, '6'); ?>
+
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Ignore server cache control', 'Always cache pages, even when no-cache is set.', '', '', ['cache', 'ignore-server-control'], $cacheLocked, '', '');
+                                            ?>
 
                                         </div>
 
@@ -1071,6 +1087,16 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4('Preload critical fonts', 'Preload fonts from generated critical CSS', false, false, 'preload-crit-fonts', false, 'right', false, false, '');
 
                                             echo $gui::checkboxDescription_v4('Font SubSetting', 'Font subsetting is the practice of embedding only the necessary characters from a font, reducing file size and improving load times.', false, false, 'font-subsetting', false, 'right', false, false, ''); ?>
+
+
+                                        </div>
+
+                                        <div class="wpc-items-list-row mb-20">
+
+			                                    <?php
+			                                    echo $gui::checkboxDescription_v4('Htaccess Webp replace', 'Replace images with webp via .htaccess file when in local mode.', false, false, 'htaccess-webp-replace', false, 'right', false, false, '');
+
+			                                     ?>
 
 
                                         </div>

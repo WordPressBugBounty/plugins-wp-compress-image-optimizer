@@ -304,7 +304,7 @@ jQuery(document).ready(function ($) {
     $('.wps-ic-deauthorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
-        $.post(ajaxurl, {action: 'wps_ic_deauthorize_api'}, function (response) {
+        $.post(ajaxurl, {action: 'wps_ic_deauthorize_api',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 window.location.reload();
             } else {

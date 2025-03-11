@@ -2,7 +2,10 @@ jQuery(document).ready(function ($) {
 
 
     $('.wpc-update-stats-btn').on('click', function(e){
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_pull_stats'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_pull_stats',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
         });
     });
 
@@ -206,7 +209,11 @@ jQuery(document).ready(function ($) {
 
             $('h4', loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_cname_add',
+                cname: cname_field,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 $(top).show();
                 $(step_1_retry).hide();
                 $('h4', loading).hide();
@@ -287,7 +294,10 @@ jQuery(document).ready(function ($) {
             $(content).hide();
 
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_retry'}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_cname_retry',
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 $(top).hide();
                 $(content).hide();
                 $(loading).show();
@@ -317,7 +327,10 @@ jQuery(document).ready(function ($) {
                     }, 1000);
 
                 } else {
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {
+                        action: 'wps_ic_remove_cname',
+                        wps_ic_nonce: wpc_ajaxVar.nonce
+                    }, function (response) {
                         if (response.success) {
                             $(loading).hide();
                             $(content).show();
@@ -356,7 +369,10 @@ jQuery(document).ready(function ($) {
         var label_disabled = $('.label-disabled');
 
         $(loading).show();
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_remove_cname',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 $(configure).show();
                 $(configured).hide();
@@ -387,7 +403,13 @@ jQuery(document).ready(function ($) {
             var lazyExcludeList = $('[name="exclude-lazy-textarea"]', popupData).val();
             var delayExcludeList = $('[name="delay-js-exclude-list-textarea"]', popupData).val();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_exclude_list', excludeList: excludeList, lazyExcludeList:lazyExcludeList, delayExcludeList: delayExcludeList}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_exclude_list',
+                excludeList: excludeList,
+                lazyExcludeList:lazyExcludeList,
+                delayExcludeList: delayExcludeList,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 if (response.success) {
                     $('.exclude-list-textarea-value').text(excludeList);
                     $('.exclude-lazy-textarea-value').text(lazyExcludeList);
@@ -418,7 +440,11 @@ jQuery(document).ready(function ($) {
             $(content).hide();
             $(loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_geolocation_force', location: $('select[name="location-select"]', popup).val()}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_geolocation_force',
+                location: $('select[name="location-select"]', popup).val(),
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 if (response.success) {
 
                     var continent = response.data.continent;
@@ -450,7 +476,10 @@ jQuery(document).ready(function ($) {
             $(content).hide();
             $(loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_geolocation'}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_geolocation',
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 console.log(response.data);
                 if (response.success) {
                     var continent = response.data.continent;
@@ -522,7 +551,13 @@ jQuery(document).ready(function ($) {
         var value = $(checkbox).data('setting_value');
         var checked = $(checkbox).is(':checked');
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_ajax_checkbox', setting_name: setting_name, value: value, checked: checked}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_ajax_checkbox',
+            setting_name: setting_name,
+            value: value,
+            checked: checked,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 // OK
             }
@@ -659,7 +694,13 @@ jQuery(document).ready(function ($) {
             }
         }
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_ajax_checkbox', setting_name: setting_name, value: value, checked: checked}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_ajax_checkbox',
+            setting_name: setting_name,
+            value: value,
+            checked: checked,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 // OK
             }
@@ -708,7 +749,11 @@ jQuery(document).ready(function ($) {
                 container: 'no-padding-popup-bottom-bg',
             }, onOpen: function () {
 
-                $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_save_all_settings', settings: parsed}, function (response) {
+                $.post(wpc_ajaxVar.ajaxurl, {
+                    action: 'wps_ic_save_all_settings',
+                    settings: parsed,
+                    wps_ic_nonce: wpc_ajaxVar.nonce
+                }, function (response) {
                     if (response.success) {
                         WPCSwal.close();
 
@@ -804,7 +849,10 @@ jQuery(document).ready(function ($) {
         $(loading).show();
         $(span).html('Purging');
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_purge_cdn'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_purge_cdn',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
 
             if (response.success) {
                 $(btn).removeClass('loading');
@@ -892,7 +940,14 @@ jQuery(document).ready(function ($) {
                         $('.wps-ic-live-compress').show();
                     }
 
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting_name, value: value, checked: checked, checkbox: true}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {
+                        action: 'wps_ic_settings_change',
+                        what: setting_name,
+                        value: value,
+                        checked: checked,
+                        checkbox: true,
+                        wps_ic_nonce: wpc_ajaxVar.nonce
+                    }, function (response) {
                         if (response.success) {
                             // Nothing
                             saving_settings = false;
@@ -937,7 +992,14 @@ jQuery(document).ready(function ($) {
                 $('.wps-ic-live-compress').show();
             }
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting_name, value: value, checked: checked, checkbox: true}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_settings_change',
+                what: setting_name,
+                value: value,
+                checked: checked,
+                checkbox: true,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
                 if (response.success) {
                     // Nothing
                     saving_settings = false;
@@ -979,7 +1041,12 @@ jQuery(document).ready(function ($) {
 
         $('input#wp-ic-setting-optimization').attr('value', value);
 
-        $.post(ajaxurl, {action: 'wps_ic_settings_change', what: 'optimization', value: value}, function (response) {
+        $.post(ajaxurl, {
+            action: 'wps_ic_settings_change',
+            what: 'optimization',
+            value: value,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 // Nothing
             }
@@ -1045,7 +1112,14 @@ jQuery(document).ready(function ($) {
             if ($(input).is(':checked')) {
 
                 setTimeout(function () {
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting_name + '-minify', value: 0, checked: false, checkbox: true}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {
+                        action: 'wps_ic_settings_change',
+                        what: setting_name + '-minify',
+                        value: 0,
+                        checked: false,
+                        checkbox: true,
+                        wps_ic_nonce: wpc_ajaxVar.nonce
+                    }, function (response) {
                         if (response.success) {
                             // Nothing
                             //saving_settings = false;
@@ -1143,7 +1217,14 @@ jQuery(document).ready(function ($) {
         }
 
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting_name, value: value, checked: checked, checkbox: true}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_settings_change',
+            what: setting_name,
+            value: value,
+            checked: checked,
+            checkbox: true,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             disable_other_toggles('enable');
 
             if (response.success) {
@@ -1220,7 +1301,14 @@ jQuery(document).ready(function ($) {
             show_cdn_popup();
         }
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting, value: value, checked: checked, checkbox: true}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_settings_change',
+            what: setting,
+            value: value,
+            checked: checked,
+            checkbox: true,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 // Nothing
                 saving_settings = false;
@@ -1244,7 +1332,14 @@ jQuery(document).ready(function ($) {
         var setting = $(input).data('setting_name');
         var value = $(input).attr('value');
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_settings_change', what: setting, value: value, checked: false, checkbox: false}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_settings_change',
+            what: setting,
+            value: value,
+            checked: false,
+            checkbox: false,
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 // Nothing
             }
@@ -1262,7 +1357,10 @@ jQuery(document).ready(function ($) {
     if ($('.wps-ic-trigger_connect').length) {
         var link = $('.wps-ic-authorize-api').attr('href');
         $.ajaxSetup({async: false, cache: false});
-        $.post(ajaxurl, {action: 'wps_ic_authorize_api'}, function (response) {
+        $.post(ajaxurl, {
+            action: 'wps_ic_authorize_api',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
             if (response.success) {
                 window.location.href = link;
             }
@@ -1331,13 +1429,19 @@ jQuery(document).ready(function ($) {
                     }
                 });
 
-                $.post(ajaxurl, {action: 'wps_ic_api_test', test_id: 'verify_api_key', apikey: apikey, fail_test: fail_test}, function (response) {
+                $.post(ajaxurl, {
+                    action: 'wps_ic_api_test',
+                    test_id: 'verify_api_key',
+                    apikey: apikey,
+                    fail_test: fail_test,
+                    wps_ic_nonce: wpc_ajaxVar.nonce
+                }, function (response) {
                     if (response.success == true) {
 
                         test_finished(form, loading, 'verify_api_key', 'success');
 
                         if (run_Ajax()) {
-                            $.post(ajaxurl, {action: 'wps_ic_api_connect', apikey: apikey, fail_test: fail_test}, function (response) {
+                            $.post(ajaxurl, {action: 'wps_ic_api_connect', apikey: apikey, fail_test: fail_test,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                                 if (response.success == true) {
 
                                     test_finished(form, loading, 'finalization', 'success');
@@ -1477,7 +1581,7 @@ jQuery(document).ready(function ($) {
     $('.wps-ic-authorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
-        $.post(ajaxurl, {action: 'wps_ic_authorize_api'}, function (response) {
+        $.post(ajaxurl, {action: 'wps_ic_authorize_api',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 window.location.reload();
             }
@@ -1497,7 +1601,7 @@ jQuery(document).ready(function ($) {
     $('.wps-ic-deauthorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
-        $.post(ajaxurl, {action: 'wps_ic_deauthorize_api'}, function (response) {
+        $.post(ajaxurl, {action: 'wps_ic_deauthorize_api',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 window.location.reload();
             }

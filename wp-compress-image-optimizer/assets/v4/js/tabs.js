@@ -18,7 +18,8 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFToken',
             token: cFToken,
-            _nonce: Math.random().toString(36).substr(2, 9)
+            _nonce: Math.random().toString(36).substr(2, 9),
+            wps_ic_nonce: ajaxVar.nonce,
         }, function (response) {
 
             if (response.success) {
@@ -80,7 +81,8 @@ jQuery(document).ready(function ($) {
             action: 'wpc_ic_checkCFConnect',
             token: cFToken,
             zone: cFZone,
-            _nonce: Math.random().toString(36).substr(2, 9)
+            _nonce: Math.random().toString(36).substr(2, 9),
+            wps_ic_nonce: ajaxVar.nonce,
         }, function (response) {
 
             if(response.success) {
@@ -88,6 +90,7 @@ jQuery(document).ready(function ($) {
                     action: 'wpc_ic_setupCF',
                     token: cFToken,
                     zone: cFZone,
+                    wps_ic_nonce: ajaxVar.nonce,
                     _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
                 }, function (response) {
                     if (response.success) {
@@ -121,6 +124,7 @@ jQuery(document).ready(function ($) {
         e.preventDefault();
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFDisconnect',
+            wps_ic_nonce: ajaxVar.nonce,
             _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
         }, function (response) {
             window.location.reload();
@@ -148,6 +152,7 @@ jQuery(document).ready(function ($) {
         //var selectedValue = $('.wpc-preset-dropdown').val();
         $.post(ajaxurl, {
             action: 'wpc_ic_ajax_set_preset',
+            wps_ic_nonce: ajaxVar.nonce,
             value: 'custom',
         }, function (response) {
 
@@ -243,6 +248,7 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wpc_ic_ajax_set_preset',
             value: value,
+            wps_ic_nonce: ajaxVar.nonce
         }, function (response) {
             var configuration = response.data;
             $.each(configuration, function (index, element) {
@@ -498,6 +504,7 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wpc_ic_ajax_set_preset',
             value: presetValue,
+            wps_ic_nonce: ajaxVar.nonce
         }, function (response) {
             $('.save-button').fadeIn(500);
 

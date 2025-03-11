@@ -40,7 +40,7 @@ jQuery(document).ready(function ($) {
             data: {
                 action: 'wpsChangeGui',
                 view:'lite',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
             },
             success: function (response) {
                 window.location.reload();
@@ -57,7 +57,7 @@ jQuery(document).ready(function ($) {
         $.ajax({
             url: ajaxurl,
             type: 'POST',
-            data: {action: 'wps_ic_StopBulk'},
+            data: {action: 'wps_ic_StopBulk',nonce: wpc_ajaxVar.nonce},
             success: function (response) {
                 if (response.success == true) {
                     window.location.reload();
@@ -257,9 +257,10 @@ jQuery(document).ready(function ($) {
                 var popup = $('.swal2-container .ajax-settings-popup');
                 $('.cdn-popup-loading', popup).show();
 
-                $.post(wps_ic_vars.ajaxurl, {
+                $.post(wpc_ajaxVar.ajaxurl, {
                     action: 'wps_ic_get_per_page_settings_html',
-                    id: ID
+                    id: ID,
+                    nonce: wpc_ajaxVar.nonce
                 }, function (response) {
                     popup.html(response.data.html);
                     savePerPageExcludes(popup, ID);
@@ -289,12 +290,12 @@ jQuery(document).ready(function ($) {
             var skip_lazy = $('.per_page_lazy_skip', popup).val();
             var purge_on_new_post = $('.wps-purge-on-new-post', popup).is(':checked');
 
-            $.post(wps_ic_vars.ajaxurl, {
+            $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_per_page_settings',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
                 id: ID,
                 skip_lazy: skip_lazy,
-                purge_on_new_post: purge_on_new_post
+                purge_on_new_post: purge_on_new_post,
             }, function (response) {
                 if (response.success) {
                     updatePosts(selectedTypes, currentPage);
@@ -316,6 +317,7 @@ jQuery(document).ready(function ($) {
 
         $.post(ajaxurl, {
             action: 'wps_ic_pull_stats',
+            wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             $(button).html(state);
         });
@@ -381,7 +383,8 @@ jQuery(document).ready(function ($) {
         link.text = 'In Progress';
         $.post(ajaxurl, {
             action: 'wps_ic_critical_get_assets',
-            pageID: pageID
+            pageID: pageID,
+            nonce: wpc_ajaxVar.nonce
         }, function (response) {
             var files = JSON.parse(response.data);
 
@@ -391,7 +394,8 @@ jQuery(document).ready(function ($) {
 
             $.post(ajaxurl, {
                 action: 'wps_ic_critical_run',
-                pageID: pageID
+                pageID: pageID,
+                wps_ic_nonce: wpc_ajaxVar.nonce
             }, function (response) {
                 if (response.success) {
                     link.text = 'Done';
@@ -465,6 +469,7 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wpc_ic_ajax_set_preset',
             value: 'custom',
+            wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
 
         });
@@ -493,7 +498,8 @@ jQuery(document).ready(function ($) {
         $.post(ajaxurl, {
             action: 'wps_ic_ajax_v2_checkbox',
             optionName: optionName,
-            optionValue: newValue
+            optionValue: newValue,
+            wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.data.newValue == '1') {
                 $('.circle-check', parent).addClass('active');
@@ -528,10 +534,11 @@ jQuery(document).ready(function ($) {
                 var popup = $('.swal2-container .ajax-settings-popup');
                 $('.cdn-popup-loading', popup).show();
 
-                $.post(wps_ic_vars.ajaxurl, {
+                $.post(wpc_ajaxVar.ajaxurl, {
                     action: 'wps_ic_get_page_excludes_popup_html',
                     id: ID,
-                    setting: setting
+                    setting: setting,
+                    nonce: wpc_ajaxVar.nonce
                 }, function (response) {
                     popup.html(response.data.html);
                     savePageExcludePopup(popup, ID, setting);
@@ -585,9 +592,9 @@ jQuery(document).ready(function ($) {
 
             var excludes = $('.exclude-list-textarea-value', popup).val();
 
-            $.post(wps_ic_vars.ajaxurl, {
+            $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_page_excludes_popup',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
                 id: ID,
                 setting: setting,
                 excludes: excludes,
@@ -623,7 +630,7 @@ jQuery(document).ready(function ($) {
                 action: 'wps_ic_get_optimization_status_pages',
                 post_type: selected,
                 post_status: selectedStatuses,
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
                 page: page,
                 offset: offset,
                 search: searchTerm
@@ -966,7 +973,7 @@ jQuery(document).ready(function ($) {
                 action: 'wps_ic_get_optimization_status_pages',
                 post_type: selectedTypes,
                 post_status: selectedStatuses,
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
                 page: page,
                 offset: offset,
                 search: searchTerm
@@ -1166,7 +1173,7 @@ jQuery(document).ready(function ($) {
                     id: ID,
                     setting_name: settingName,
                     setting_action: action,
-                    nonce: ajaxVar.nonce,
+                    nonce: wpc_ajaxVar.nonce,
                 },
                 success: function (response) {
                     updateOptimizationStatus();
@@ -1198,7 +1205,7 @@ jQuery(document).ready(function ($) {
                 data: {
                     action: 'wps_ic_run_single_optimization',
                     id: ID,
-                    nonce: ajaxVar.nonce,
+                    nonce: wpc_ajaxVar.nonce,
                 },
                 success: function (response) {
                     updateOptimizationStatus();
@@ -1220,7 +1227,7 @@ jQuery(document).ready(function ($) {
                     action: 'wps_ic_run_tests',
                     id: ID,
                     retest: retest,
-                    nonce: ajaxVar.nonce,
+                    nonce: wpc_ajaxVar.nonce,
                 },
                 success: function (response) {
                     clearInterval(optimizationCheckInterval);
@@ -1539,7 +1546,7 @@ jQuery(document).ready(function ($) {
                 data: {
                     action: 'wps_ic_check_optimization_status',
                     optimize: selectedOptimizes,
-                    nonce: ajaxVar.nonce,
+                    nonce: wpc_ajaxVar.nonce,
                 },
                 success: function (response) {
 
@@ -1660,7 +1667,7 @@ jQuery(document).ready(function ($) {
             type: 'POST',
             data: {
                 action: 'wps_ic_start_optimizations',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
             },
             success: function () {
                 updateOptimizationStatus();
@@ -1676,7 +1683,7 @@ jQuery(document).ready(function ($) {
             type: 'POST',
             data: {
                 action: 'wps_ic_stop_optimizations',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
             },
             success: function () {
                 updateOptimizationStatus();
@@ -1729,7 +1736,7 @@ jQuery(document).ready(function ($) {
             type: 'POST',
             data: {
                 action: 'wps_ic_test_api_connectivity',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
             },
             success: function (response) {
                 // Building the HTML table for the first section

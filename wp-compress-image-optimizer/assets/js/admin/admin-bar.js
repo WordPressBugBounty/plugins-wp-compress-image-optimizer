@@ -21,7 +21,7 @@ jQuery(document).ready(function ($) {
         var old_html = $(li).html();
         $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Generating Critical...</span>');
 
-        $.post(wpc_admin_vars.ajaxurl, {action: 'wps_ic_generate_critical_css'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_generate_critical_css',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(li).html(old_html);
             }
@@ -42,7 +42,7 @@ jQuery(document).ready(function ($) {
         var old_html = $(li).html();
         $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
-        $.post(wpc_admin_vars.ajaxurl, {action: 'wps_ic_purge_html'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_html', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(li).html(old_html);
                 if ($('#optimizationTable').find('div').length > 0) {
@@ -65,7 +65,7 @@ jQuery(document).ready(function ($) {
         var old_html = $(li).html();
         $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
-        $.post(wpc_admin_vars.ajaxurl, {action: 'wps_ic_purge_critical_css'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_critical_css', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(li).html(old_html);
             }
@@ -85,7 +85,7 @@ jQuery(document).ready(function ($) {
         var old_html = $(li).html();
         $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
-        $.post(wpc_admin_vars.ajaxurl, {action: 'wps_ic_purge_cdn'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_cdn', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(li).html(old_html);
             }
@@ -106,7 +106,7 @@ jQuery(document).ready(function ($) {
         var old_html = $(li).html();
         $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Preloading page...</span>');
 
-        $.post(wpc_admin_vars.ajaxurl, {action: 'wps_ic_preload_page'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_preload_page'}, function (response) {
             if (response.success) {
                 $(li).html(old_html);
             }

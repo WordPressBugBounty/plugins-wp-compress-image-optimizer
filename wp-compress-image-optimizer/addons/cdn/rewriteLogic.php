@@ -915,6 +915,7 @@ class wps_rewriteLogic
         if (isset($post) && !empty($post->ID)) {
 
             $realUrl = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+            $wpsNonce = wp_create_nonce('wps_ic_nonce_action');
 
             // TODO: Issues if DelayJS is disabled
             $script = <<<SCRIPT
@@ -941,7 +942,7 @@ class wps_rewriteLogic
                 }
             }
         };
-        xhr.send("action=wpc_send_critical_remote&postID={$post->ID}&realUrl={$realUrl}");
+        xhr.send("action=wpc_send_critical_remote&postID={$post->ID}&realUrl={$realUrl}&wps_ic_nonce={$wpsNonce}");
 
         removeEventListeners();
     }

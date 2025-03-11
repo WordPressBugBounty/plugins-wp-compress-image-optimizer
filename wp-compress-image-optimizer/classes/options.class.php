@@ -84,7 +84,7 @@ class wps_ic_options
             'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
-            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24],
+            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24, 'ignore-server-control' => 1],
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -97,7 +97,8 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '0'
+            'preload-crit-fonts' => '0',
+            'htaccess-webp-replace' => '0'
         ];
 
         $this::$safeSettings = [
@@ -145,7 +146,7 @@ class wps_ic_options
             'inline-js' => '0',
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
-            'cache' => ['advanced' => '0', 'mobile' => '0', 'minify' => '0', 'expire' => 24],
+            'cache' => ['advanced' => '0', 'mobile' => '0', 'minify' => '0', 'expire' => 24, 'ignore-server-control' => 0],
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -154,7 +155,8 @@ class wps_ic_options
                 'hide_preload_status' => '0'
             ],
             'hide_compress' => '0',
-            'preload-crit-fonts' => '0'
+            'preload-crit-fonts' => '0',
+            'htaccess-webp-replace' => '0'
         ];
 
         $this::$liteSettings = [
@@ -201,7 +203,7 @@ class wps_ic_options
             'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',
-            'cache' => ['advanced' => '1', 'mobile' => '1', 'minify' => '0', 'expire' => 24],
+            'cache' => ['advanced' => '1', 'mobile' => '1', 'minify' => '0', 'expire' => 24, 'ignore-server-control' => 1],
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -214,7 +216,8 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '0'
+            'preload-crit-fonts' => '0',
+            'htaccess-webp-replace' => '0'
         ];
 
         $this::$aggressiveSettings = [
@@ -266,7 +269,7 @@ class wps_ic_options
             'inline-js' => 0,
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
-            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24],
+            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24, 'ignore-server-control' => 1],
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -277,7 +280,8 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '1'
+            'preload-crit-fonts' => '1',
+            'htaccess-webp-replace' => '0'
         ];
 
         return $this;

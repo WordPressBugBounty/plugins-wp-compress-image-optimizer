@@ -166,7 +166,7 @@ jQuery(document).ready(function ($) {
                         var siteID = item;
                         var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-                        $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
+                        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                             if (response.success) {
                                 $('.wpc-ic-mu-list-checkbox input[type="checkbox"]',tableRow).removeAttr('checked');
                                 $('.wpc-ic-mu-list-checkbox input[type="checkbox"]',tableRow).attr('data-status', 'disconnected');
@@ -235,7 +235,7 @@ jQuery(document).ready(function ($) {
 
         $(overlay).show();
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_reconfigure_sites', sites: sites, settings: form_serialize}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_reconfigure_sites', sites: sites, settings: form_serialize,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(overlay).hide();
                 $('input[type="checkbox"]', '.wpc-ic-mu-bulk-site-list-container').removeAttr('checked');
@@ -271,7 +271,7 @@ jQuery(document).ready(function ($) {
         var form_serialize = $('.wpc-ic-mu-bulk-settting-form').serialize();
         var bulkPercentage = 0;
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_connect_bulk_prepare', sites: JSON.stringify(selectedSites), settings: form_serialize}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect_bulk_prepare', sites: JSON.stringify(selectedSites), settings: form_serialize,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 connectSingleSite(response.data, doneSites, totalSites);
             }
@@ -295,7 +295,7 @@ jQuery(document).ready(function ($) {
         var bulkPercentage = 0;
         var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_connect_single_site', bulk: 'true', siteID: siteID}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect_single_site', bulk: 'true', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(sidebarItem).removeClass('wps-ic-mu-not-connected').addClass('wps-ic-mu-connected');
                 doneSites++;
@@ -413,7 +413,7 @@ jQuery(document).ready(function ($) {
         $(overlay).show();
         $(overlayForm).hide();
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_save_site_settings', siteID: siteID, form: form_serialize}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_save_site_settings', siteID: siteID, form: form_serialize,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             setTimeout(function () {
                 $(siteContainer).show();
                 $(overlay).hide();
@@ -432,7 +432,7 @@ jQuery(document).ready(function ($) {
         $(overlay).show();
         $(overlayForm).hide();
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_save_default_settings', form: form_serialize}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_save_default_settings', form: form_serialize,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             setTimeout(function () {
                 $(siteContainer).show();
                 $(overlay).hide();
@@ -523,7 +523,7 @@ jQuery(document).ready(function ($) {
         $(siteContainer).hide();
         //$(loadingContainer).show();
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_get_site_settings', siteID: siteID}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_get_site_settings', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             window.location.hash = '#mu-' + siteID;
             $(content).html(response.data);
 
@@ -636,7 +636,7 @@ jQuery(document).ready(function ($) {
         var form = $(this);
         var token = $('input[name="api_token"]', form).val();
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_connect', token: token}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect', token: token,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
 
             if (response.success) {
                 // Popup
@@ -667,7 +667,7 @@ jQuery(document).ready(function ($) {
 
     $('body').on('change', '.wpc-ic-mu-setting-checkbox', function(e){
         var checked = $(this).is(':checked');
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_autoconnect_setting', checked:checked}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_autoconnect_setting', checked:checked,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
         });
     });
 
@@ -691,7 +691,7 @@ jQuery(document).ready(function ($) {
                 $(overlay).show();
                 $(overlayForm).hide();
 
-                $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
+                $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                     if (response.success) {
                         window.location.reload();
                     }
@@ -734,7 +734,7 @@ jQuery(document).ready(function ($) {
                 var siteID = $(this).data('site-id');
                 var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-                $.post(wps_ic_vars.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID}, function (response) {
+                $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_disconnect_single_site', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                     if (response.success) {
                         $('.wpc-ic-mu-list-checkbox input[type="checkbox"]', tableRow).attr('data-status', 'disconnected');
                         $(sidebarItem).removeClass('wps-ic-mu-connected').addClass('wps-ic-mu-not-connected');
@@ -771,7 +771,7 @@ jQuery(document).ready(function ($) {
         var siteID = $(this).data('site-id');
         var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_connect_single_site', siteID: siteID, single: 'true'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect_single_site', siteID: siteID, single: 'true',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $('.wpc-ic-mu-list-checkbox input[type="checkbox"]',tableRow).attr('data-status', 'connected');
                 $(sidebarItem).removeClass('wps-ic-mu-not-connected').addClass('wps-ic-mu-connected');
@@ -811,7 +811,7 @@ jQuery(document).ready(function ($) {
         var siteID = $(this).data('site-id');
         var sidebarItem = $('.wp-mu-site-' + siteID, sidebarList);
 
-        $.post(wps_ic_vars.ajaxurl, {action: 'mu_connect_single_site', siteID: siteID}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect_single_site', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $('.wpc-ic-mu-list-checkbox input[type="checkbox"]',row).attr('data-status', 'connected');
                 $(sidebarItem).removeClass('wps-ic-mu-not-connected').addClass('wps-ic-mu-connected');
@@ -894,7 +894,7 @@ jQuery(document).ready(function ($) {
                 return false;
             }
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field, siteID: wpc_siteID}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field, siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 $(top).show();
                 $(step_1_retry).hide();
 
@@ -965,7 +965,7 @@ jQuery(document).ready(function ($) {
             $(content).hide();
 
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_retry', siteID: wpc_siteID}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_retry', siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 $(top).hide();
                 $(content).hide();
                 $(loading).show();
@@ -995,7 +995,7 @@ jQuery(document).ready(function ($) {
                     }, 1000);
 
                 } else {
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname',siteID: wpc_siteID}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname',siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                         if (response.success) {
                             $(loading).hide();
                             $(content).show();
@@ -1033,7 +1033,7 @@ jQuery(document).ready(function ($) {
         var label_disabled = $('.label-disabled');
 
         $(loading).show();
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname', siteID: wpc_siteID}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(configure).show();
                 $(configured).hide();
@@ -1063,7 +1063,7 @@ jQuery(document).ready(function ($) {
             var lazyExcludeList = $('[name="exclude-lazy-textarea"]', popupData).val();
             var delayExcludeList = $('[name="delay-js-exclude-list-textarea"]', popupData).val();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_exclude_list', excludeList: excludeList, lazyExcludeList:lazyExcludeList, delayExcludeList: delayExcludeList, siteID: wpc_siteID}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_exclude_list', excludeList: excludeList, lazyExcludeList:lazyExcludeList, delayExcludeList: delayExcludeList, siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 if (response.success) {
                     $('.exclude-list-textarea-value').text(excludeList);
                     $('.exclude-lazy-textarea-value').text(lazyExcludeList);
@@ -1094,7 +1094,7 @@ jQuery(document).ready(function ($) {
             $(loading).show();
             $(overlay).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_geolocation_force', location: $('select[name="location-select"]', popup).val(), siteID: wpc_siteID}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_geolocation_force', location: $('select[name="location-select"]', popup).val(), siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 if (response.success) {
 
                     var continent = response.data.continent;
@@ -1106,7 +1106,7 @@ jQuery(document).ready(function ($) {
 
                     $('.wpc-dynamic-text', popup).html('We have detected that your server is located in ' + country_name + ' (' + continent + '), if that\'s not correct, please select the nearest region below.');
 
-                    $.post(wps_ic_vars.ajaxurl, {action: 'mu_get_site_settings', siteID: wpc_siteID}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_get_site_settings', siteID: wpc_siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                         var content = $('.wp-compress-mu-content-inner');
 
                         window.location.hash = '#mu-' + wpc_siteID;
@@ -1161,7 +1161,7 @@ jQuery(document).ready(function ($) {
             $(content).hide();
             $(loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_geolocation'}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_geolocation',wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 console.log(response.data);
                 if (response.success) {
                     var continent = response.data.continent;

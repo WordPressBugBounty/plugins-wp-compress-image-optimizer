@@ -57,7 +57,7 @@ jQuery(document).ready(function ($) {
             var selected_mode = $('div.wpc-active', modes_popup).data('mode');
             var cdn = $('.form-check-input', modes_popup).prop('checked');
 
-            $.post(wps_ic_vars.ajaxurl, {
+            $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce, activation: true
             }, function (response) {
                 if (response.success) {

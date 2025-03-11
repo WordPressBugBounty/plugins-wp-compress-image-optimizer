@@ -22,7 +22,7 @@ checkMobile();
     // document.cookie = 'ic_pixel_ratio=' + dpr + '; path=/';
 })(window);
 var preloadRunned = false;
-var windowWidth = window.innerWidth;
+var wpcWindowWidth = window.innerWidth;
 
 
 if (n489D_vars.linkPreload === 'true') {
@@ -35,9 +35,12 @@ if (n489D_vars.linkPreload === 'true') {
             if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
 
             // Check if the link contains any excluded strings
-            const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-                link.href.includes(excludeStr)
-            );
+            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+            //     link.href.includes(excludeStr)
+            // );
+            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
+                return link.href.indexOf(excludeStr) !== -1;
+            });
 
             // Only preload if link is not excluded and is same origin
             if (!isExcluded && link.origin === location.origin) {
@@ -50,9 +53,12 @@ if (n489D_vars.linkPreload === 'true') {
             if (!link || preloadedLinks.has(link.href)) return;
 
             // Check if the link contains any excluded strings
-            const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-                link.href.includes(excludeStr)
-            );
+            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+            //     link.href.includes(excludeStr)
+            // );
+            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
+                return link.href.indexOf(excludeStr) !== -1;
+            });
 
             // Only preload if link is not excluded and is same origin
             if (!isExcluded && link.origin === location.origin) {
@@ -107,12 +113,12 @@ function preloadTimeout(event) {
         if (jsDebug) {
             console.log('Event name in preload is ');
             console.log(event);
-            console.log('Before width: ' + windowWidth);
+            console.log('Before width: ' + wpcWindowWidth);
             console.log('After width: ' + window.innerWidth);
         }
 
         if (event == 'resize') {
-            if (windowWidth === window.innerWidth) {
+            if (wpcWindowWidth === window.innerWidth) {
                 // Nothing changed, ignore the event
                 return false;
             }

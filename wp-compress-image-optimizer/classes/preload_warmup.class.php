@@ -921,6 +921,15 @@ class wps_ic_preload_warmup
             return 'donotcache';
         }
 
+		    if (empty($this->options['cache']['ignore-server-control']) ||  $this->options['cache']['ignore-server-control'] == '0') {
+			    $cacheControl = strtolower( $_SERVER['HTTP_CACHE_CONTROL'] );
+			    if ( strpos( $cacheControl, 'no-cache' ) !== false ||
+			         strpos( $cacheControl, 'no-store' ) !== false ||
+			         strpos( $cacheControl, 'private' ) !== false ) {
+				    return 'donotcache';
+			    }
+		    }
+
         $excludes = get_option('wpc-excludes');
         $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
         if (!empty($excludes) && !empty($excludes['cache'])) {

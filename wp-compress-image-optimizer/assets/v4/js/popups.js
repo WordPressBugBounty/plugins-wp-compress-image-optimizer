@@ -57,7 +57,7 @@ jQuery(document).ready(function ($) {
 
             $('h4', loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field, wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 $(top).show();
                 $(step_1_retry).hide();
                 $('h4', loading).hide();
@@ -147,7 +147,7 @@ jQuery(document).ready(function ($) {
             $(content).hide();
 
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_retry'}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_retry', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                 $(top).hide();
                 $(content).hide();
                 $(loading).show();
@@ -178,7 +178,7 @@ jQuery(document).ready(function ($) {
 
                 }
                 else {
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                         if (response.success) {
                             $(loading).hide();
                             $(content).show();
@@ -217,7 +217,7 @@ jQuery(document).ready(function ($) {
         var label_disabled = $('.label-disabled');
 
         $(loading).show();
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
                 $(configure).show();
                 $(configured).hide();
@@ -263,7 +263,7 @@ jQuery(document).ready(function ($) {
                         var settingName = $(item).data('setting-name');
                         var settingSubset = $(item).data('setting-subset');
 
-                        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset}, function (response) {
+                        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset, wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
                             $(content).show();
                             $(loading).hide();
                             $(item).val(response.data.value);
@@ -372,9 +372,9 @@ jQuery(document).ready(function ($) {
 
             console.log($('.exclude-list-textarea-value', popup).val());
 
-            $.post(wps_ic_vars.ajaxurl, {
+            $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_excludes_settings',
-                nonce: ajaxVar.nonce,
+                nonce: wpc_ajaxVar.nonce,
                 group_name: setting_group,
                 setting_name: setting_name,
                 excludes: excludes,
@@ -383,7 +383,7 @@ jQuery(document).ready(function ($) {
                 exclude_themes: exclude_themes,
                 exclude_plugins: exclude_plugins,
                 exclude_wp: exclude_wp,
-                exclude_third: exclude_third
+                exclude_third: exclude_third,
             }, function(response) {
                 if (response.success) {
                     WPCSwal.close();
@@ -393,6 +393,5 @@ jQuery(document).ready(function ($) {
             return false;
         });
     }
-
 
 });

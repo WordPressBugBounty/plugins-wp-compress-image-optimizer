@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.15';
+        self::$version = '6.30.16';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -106,16 +106,21 @@ class wps_ic
 
         $isPostConnectivityTest = isset($_POST['action']) && sanitize_text_field($_POST['action']) === 'connectivityTest';
         $isGetConnectivityTest = isset($_GET['action']) && sanitize_text_field($_GET['action']) === 'connectivityTest';
-        $headers = getallheaders();
-        $isHeaderConnectivityTest = isset($headers['Action']) && $headers['Action'] === 'connectivityTest';
-        if ($isPostConnectivityTest || $isGetConnectivityTest || $isHeaderConnectivityTest) {
-            while (ob_get_level()) {
-                ob_end_clean();
-            }
-            ob_start();
-            echo json_encode(['message' => 'Connectivity Test passed.']);
-            die();
+
+	    $isHeaderConnectivityTest = false;
+        if (function_exists('getallheaders')) {
+	        $headers                  = getallheaders();
+	        $isHeaderConnectivityTest = isset( $headers['Action'] ) && $headers['Action'] === 'connectivityTest';
         }
+
+	    if ( $isPostConnectivityTest || $isGetConnectivityTest || $isHeaderConnectivityTest ) {
+		    while( ob_get_level() ) {
+			    ob_end_clean();
+		    }
+		    ob_start();
+		    echo json_encode( [ 'message' => 'Connectivity Test passed.' ] );
+		    die();
+	    }
 
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
@@ -853,6 +858,7 @@ class wps_ic
         wp_enqueue_style('wp-pointer');
         wp_enqueue_script('wp-pointer');
         wp_enqueue_script('utils'); // for user settings
+        $nonceVar = wp_create_nonce('wps_ic_nonce_action');
         ?>
         <script type="text/javascript">
             function deactivateButton() {
@@ -919,7 +925,7 @@ class wps_ic
 
                     jQuery('#wps-ic-reconnect-confirm', '.wp-pointer-content').on('click', function (e) {
                         e.preventDefault();
-                        jQuery.post(ajaxurl, {action: 'wps_ic_remove_key'}, function (response) {
+                        jQuery.post(ajaxurl, {action: 'wps_ic_remove_key',wps_ic_nonce:'<?php echo $nonceVar; ?>'}, function (response) {
                             if (response.success) {
                                 window.location.reload();
                             }

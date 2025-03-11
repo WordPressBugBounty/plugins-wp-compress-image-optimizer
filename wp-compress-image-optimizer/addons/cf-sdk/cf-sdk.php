@@ -346,9 +346,6 @@ class WPC_CloudflareAPI {
                     $expandedIp = $this->expandIPv6($ip);
                 }
 
-                var_dump('config ip ' . $rule['configuration']['value'] . "\r\n");
-                var_dump('remove ip ' . $ip . "-----");
-
                 if ($rule['configuration']['value'] === $ip || (strpos($ip, ':') !== false && $rule['configuration']['value'] === $expandedIp)) {
                     // Rule matches, delete it
                     $ruleId = $rule['id'];

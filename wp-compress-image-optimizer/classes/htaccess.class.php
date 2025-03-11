@@ -16,13 +16,11 @@ class wps_ic_htaccess extends wps_ic
         if (is_admin()) {
             $this->cacheConstant = "define('WP_CACHE', VALUE); // WP Compress Cache";
             $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
-            if (!empty($serverSoftware)) {
-                if (strtolower($serverSoftware) == 'litespeed' || strtolower($serverSoftware) == 'apache') {
-                    $this->isApache = true;
-                } else if (strtolower($serverSoftware) == 'nginx') {
-                    $this->isApache = false;
-                }
-            }
+		        if (strpos(strtolower($serverSoftware), 'litespeed') !== false || strpos(strtolower($serverSoftware), 'apache') !== false) {
+			        $this->isApache = true;
+		        } else if (strpos(strtolower($serverSoftware), 'nginx') !== false) {
+			        $this->isApache = false;
+		        }
         }
     }
 
@@ -669,6 +667,102 @@ HTACCESS;
 
         $this->fileSystem()->put_contents($this->advancedCachePath, '');
     }
+
+		public function addWebpReplace()
+		{
+			if (!$this->isApache) {
+				return;
+			}
+
+			$this->htaccessPath = $this->getHtaccessPath();
+			if (!$this->htaccessPath) return;
+
+			// Get Contents
+			$this->htaccessContent = $this->getContents($this->htaccessPath);
+
+			if (!$this->htaccessContent || empty($this->htaccessContent)) return;
+
+			// Check if WebP rules already exist
+			if ($this->hasWebpReplaceRules()) {
+				return;
+			}
+
+			$webpRules = $this->getWebpReplaceRules();
+
+			// Check if WordPress rules exist
+			if (strpos($this->htaccessContent, '# BEGIN WordPress') !== false) {
+				// Insert WebP rules before WordPress rules
+				$newHtaccessContent = preg_replace('/# BEGIN WordPress/i', $webpRules . PHP_EOL . '# BEGIN WordPress', $this->htaccessContent);
+			} else {
+				// If no WordPress rules, add to the beginning of the file
+				$newHtaccessContent = $webpRules . PHP_EOL . $this->htaccessContent;
+			}
+
+			if (!empty($newHtaccessContent)) {
+				if (!defined('FS_CHMOD_FILE')) {
+					define('FS_CHMOD_FILE', 0644);
+				}
+
+				$this->fileSystem()->put_contents($this->htaccessPath, $newHtaccessContent);
+			}
+		}
+
+		public function removeWebpReplace()
+		{
+			$this->htaccessPath = $this->getHtaccessPath();
+			if (!$this->htaccessPath) return;
+
+			// Get Contents
+			$this->htaccessContent = $this->getContents($this->htaccessPath);
+
+			if (!$this->htaccessContent || empty($this->htaccessContent)) return;
+
+			// Check if WebP rules don't exist
+			if (!$this->hasWebpReplaceRules()) {
+				return;
+			}
+
+			$cleanedHtaccessContent = preg_replace('/\s*#StartWPC-WebP-Replace.*#EndWPC-WebP-Replace\s*?/isU', PHP_EOL, $this->htaccessContent);
+
+			if (!empty($cleanedHtaccessContent)) {
+				if (!defined('FS_CHMOD_FILE')) {
+					define('FS_CHMOD_FILE', 0644);
+				}
+
+				$this->fileSystem()->put_contents($this->htaccessPath, $cleanedHtaccessContent);
+			}
+		}
+
+		private function hasWebpReplaceRules()
+		{
+			if (strpos($this->htaccessContent, '#StartWPC-WebP-Replace') !== false) {
+				return true;
+			}
+
+			return false;
+		}
+
+		private function getWebpReplaceRules()
+		{
+			$rules = '#StartWPC-WebP-Replace' . PHP_EOL;
+			$rules .= '<IfModule mod_rewrite.c>' . PHP_EOL;
+			$rules .= '    RewriteEngine On' . PHP_EOL;
+			$rules .= '    RewriteBase /' . PHP_EOL;
+			$rules .= '    # Check if browser supports WebP images.' . PHP_EOL;
+			$rules .= '    RewriteCond %{HTTP_ACCEPT} image/webp' . PHP_EOL;
+			$rules .= '    # Check if WebP replacement image exists with REPLACED extension' . PHP_EOL;
+			$rules .= '    RewriteCond %{DOCUMENT_ROOT}/$1.webp -f' . PHP_EOL;
+			$rules .= '    # Serve WebP image instead - replacing extension, not appending' . PHP_EOL;
+			$rules .= '    RewriteRule (.+)\.(jpe?g|png|gif)$ $1.webp [T=image/webp,L]' . PHP_EOL;
+			$rules .= '</IfModule>' . PHP_EOL;
+			$rules .= '<IfModule mod_headers.c>' . PHP_EOL;
+			$rules .= '    # Standard Vary header for WebP' . PHP_EOL;
+			$rules .= '    Header append Vary Accept env=REQUEST_image' . PHP_EOL;
+			$rules .= '</IfModule>' . PHP_EOL;
+			$rules .= '#EndWPC-WebP-Replace' . PHP_EOL;
+
+			return $rules;
+		}
 
     public function notice_not_readable_config()
     {

@@ -57,7 +57,11 @@ jQuery(document).ready(function ($) {
 
             $('h4', loading).show();
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_cname_add',
+                cname: cname_field,
+                wps_ic_nonce: wpsIcVars.nonce
+            }, function (response) {
                 $(top).show();
                 $(step_1_retry).hide();
                 $('h4', loading).hide();
@@ -128,7 +132,10 @@ jQuery(document).ready(function ($) {
             $(content).hide();
 
 
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_cname_retry'}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_cname_retry',
+                wps_ic_nonce: wpsIcVars.nonce
+            }, function (response) {
                 $(top).hide();
                 $(content).hide();
                 $(loading).show();
@@ -159,7 +166,10 @@ jQuery(document).ready(function ($) {
 
                 }
                 else {
-                    $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {
+                        action: 'wps_ic_remove_cname',
+                        wps_ic_nonce: wpsIcVars.nonce
+                    }, function (response) {
                         if (response.success) {
                             $(loading).hide();
                             $(content).show();
@@ -198,7 +208,10 @@ jQuery(document).ready(function ($) {
         var label_disabled = $('.label-disabled');
 
         $(loading).show();
-        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_remove_cname'}, function (response) {
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_remove_cname',
+            wps_ic_nonce: wpsIcVars.nonce
+        }, function (response) {
             if (response.success) {
                 $(configure).show();
                 $(configured).hide();
@@ -241,7 +254,12 @@ jQuery(document).ready(function ($) {
                         var settingName = $(item).data('setting-name');
                         var settingSubset = $(item).data('setting-subset');
 
-                        $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset}, function (response) {
+                        $.post(wpc_ajaxVar.ajaxurl, {
+                            action: 'wps_ic_get_setting',
+                            name: settingName,
+                            subset: settingSubset,
+                            wps_ic_nonce: wpsIcVars.nonce
+                        }, function (response) {
                             $(item).val(response.data);
                         });
 
@@ -290,7 +308,14 @@ jQuery(document).ready(function ($) {
             var excludes = $('.exclude-list-textarea-value', popup).val();
 
             console.log($('.exclude-list-textarea-value', popup).val())
-            $.post(wps_ic_vars.ajaxurl, {action: 'wps_ic_save_excludes_settings', group_name: setting_group, setting_name: setting_name, excludes: excludes, default_enabled: default_enabled}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_save_excludes_settings',
+                group_name: setting_group,
+                setting_name: setting_name,
+                excludes: excludes,
+                default_enabled: default_enabled,
+                nonce: wpsIcVars.nonce
+            }, function (response) {
                 if (response.success){
                     WPCSwal.close();
                 }
