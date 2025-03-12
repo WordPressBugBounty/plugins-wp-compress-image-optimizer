@@ -43,32 +43,8 @@ if (defined('DONOTCACHEPAGE') && DONOTCACHEPAGE){
 	return;
 }
 
-// Check Cache-Control headers
-// This is handled in saveCache functions - Denis
-//if (isset($_SERVER['HTTP_CACHE_CONTROL'])) {
-//    $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
-//
-//    // Skip caching if no-cache, no-store, or private directives are present
-//    if (strpos($cacheControl, 'no-cache') !== false ||
-//        strpos($cacheControl, 'no-store') !== false ||
-//        strpos($cacheControl, 'private') !== false) {
-//        #return;
-//    }
-//}
-
-
 $prefix = '';
 $cache = new wps_advancedCache();
-
-// Don't ignore cache control set! Then don't cache!
-if ($cache->ignoreServerCacheControl()) {
-    $cacheControl = strtolower( $_SERVER['HTTP_CACHE_CONTROL'] );
-    if ( strpos( $cacheControl, 'no-cache' ) !== false ||
-        strpos( $cacheControl, 'no-store' ) !== false ||
-        strpos( $cacheControl, 'private' ) !== false ) {
-        return;
-    }
-}
 
 $mobile = $cache->is_mobile();
 
