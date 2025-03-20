@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 7.0
 Tested up to: 6.8
-Stable tag: 6.30.17
+Stable tag: 6.30.18
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,10 +15,10 @@ Everything you need for a faster website – smart optimization, advanced cachin
 WP Compress - Instant Performance & Speed Optimization
 Instantly speed up WordPress performance and stop slow load times from costing you sales, signups, and visitors.
 
-**Load Faster, Rank Higher & Convert Better on Complete Autopilot**  
-Simply link your website and you’re good to go – with no maintenance required after setup.  
+**Load Faster, Rank Higher & Convert Better on Complete Autopilot**
+Simply link your website and you’re good to go – with no maintenance required after setup.
 
-*It’s really that easy.* 
+*It’s really that easy.*
 
 [youtube https://youtu.be/_iy7p_Ed8oE ]
 
@@ -39,7 +39,7 @@ Simply link your website and you’re good to go – with no maintenance require
 Enjoy one-click smart optimization for an instant performance upgrade, or customize settings, page rules and exclusions as you wish – either way, you’re in complete control.
 
 ## Set Up in Seconds, Optimized Forever
-WP Compress is pre-configured with one-click settings options right out of the box. 
+WP Compress is pre-configured with one-click settings options right out of the box.
 
 ## Essential Performance Suite
 Get started using the essential performance suite, offering everything you need for a faster site, from one-click optimization to critical CSS improvements and lazy loading.
@@ -50,9 +50,9 @@ Real-Time image optimization, media library compression, and advanced optimizati
 ## Agency Features for Professionals
 Agency access includes centralized management, detailed statistics, and custom branding, so you can take all of the credit for faster WordPress performance.
 
-**PRECONFIGURED FOR YOU, YET EXTREMELY FLEXIBLE**  
+**PRECONFIGURED FOR YOU, YET EXTREMELY FLEXIBLE**
 
-You’ll be good to go the moment you paste your access key into the WP Compress plugin. It comes pre-configured with what we think are the optimal and most supported settings – but feel free to play around!  
+You’ll be good to go the moment you paste your access key into the WP Compress plugin. It comes pre-configured with what we think are the optimal and most supported settings – but feel free to play around!
 
 _It’s really that simple and built for compatibility._
 
@@ -76,7 +76,7 @@ _The basics for a faster website, without lifting a finger past setup._
 - Frequent Updates
 - Expert Support
 
-**Powerful Optimization Engine**  
+**Powerful Optimization Engine**
 _Advanced optimization that automatically adapts based on the incoming visitor for our fastest load times across the entire globe!_
 
 - One-Click Smart Optimization
@@ -101,7 +101,7 @@ _Advanced optimization that automatically adapts based on the incoming visitor f
 - Preserve EXIF Data
 - Custom CDN Domains
 
-**INCREDIBLE AGENCY FEATURES:**  
+**INCREDIBLE AGENCY FEATURES:**
 *Not only is the plugin great for speeding up individual websites, but the whitelabel add-on is fully loaded with industry-leading Agency features such as:*
 
 - Centralized Management Portal
@@ -178,10 +178,10 @@ We also offer industry-leading live chat support with automatic ticket conversio
 
 ## Try it risk-free and see for yourself!
 
-- Lower Bounce Rates  
-- Ultra-Fast Response Times  
-- Better First Impressions  
-- Reduced Resource Usage  
+- Lower Bounce Rates
+- Ultra-Fast Response Times
+- Better First Impressions
+- Reduced Resource Usage
 - Increased Conversions
 
 ### How much does it cost?
@@ -221,6 +221,15 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.30.18 =
+* Fixed Issues with Image Sizings for Non Retina Devices
+* Fixed Ajax Call Incompatibiltiy with Certain Themes
+* Added Option to Disable Caching for Logged In Users
+* Fixed Bug in UI for Advanced Settings APIKey PopUp
+* Patch for Image Replace / CDN Issues
+* Added 'datatables' to DelayJS Last Load Excludes
+* Removed 'cookiebanner' from Default Delay Excludes
 
 = 6.30.17 =
 * Fixed Bug in Ignore Server Cache-Control

@@ -2636,7 +2636,7 @@ SCRIPT;
                 #$newSrcSet = $this->replace_with_480w($newSrcSet);
 
                 // Inject the previously found 480
-                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w 1x, ';
+                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
 
                 // Retina URL
                 if (self::$settings['retina-in-srcset'] == '1') {

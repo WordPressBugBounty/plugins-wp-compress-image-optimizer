@@ -280,7 +280,7 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '1',
+            'preload-crit-fonts' => '0',
             'htaccess-webp-replace' => '0'
         ];
 

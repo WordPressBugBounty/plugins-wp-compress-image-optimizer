@@ -168,13 +168,10 @@ if (!empty($_POST['options'])) {
 
 
 	if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
-        echo 1;
 		$htacces->removeWebpReplace();
 	} else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
-        echo 2;
 		$htacces->addWebpReplace();
 	} else {
-        echo 3;
 		$htacces->removeWebpReplace();
 	}
 
