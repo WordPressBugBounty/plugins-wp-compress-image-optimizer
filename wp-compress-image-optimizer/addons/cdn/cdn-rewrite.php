@@ -1673,6 +1673,11 @@ class wps_cdn_rewrite
             die();
         }
 
+
+		    if (!empty(self::$settings['disable-logged-in-opt']) && self::$settings['disable-logged-in-opt'] == '1'){
+			    return true;
+		    }
+
         // Is an ajax request?
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
 
@@ -4201,6 +4206,5 @@ class wps_cdn_rewrite
 
         return $sizes;
     }
-
 
 }

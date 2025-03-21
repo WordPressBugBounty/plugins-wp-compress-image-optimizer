@@ -915,7 +915,6 @@ class wps_rewriteLogic
         if (isset($post) && !empty($post->ID)) {
 
             $realUrl = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-            $wpsNonce = wp_create_nonce('wps_ic_nonce_action');
 
             // TODO: Issues if DelayJS is disabled
             $script = <<<SCRIPT
@@ -942,7 +941,7 @@ class wps_rewriteLogic
                 }
             }
         };
-        xhr.send("action=wpc_send_critical_remote&postID={$post->ID}&realUrl={$realUrl}&wps_ic_nonce={$wpsNonce}");
+        xhr.send("action=wpc_send_critical_remote&postID={$post->ID}&realUrl={$realUrl}");
 
         removeEventListeners();
     }
@@ -1307,7 +1306,7 @@ SCRIPT;
             return print_r([$html], true);
         }
 
-        if (strpos($html[0], 'text/template') !== false && strpos($html[0], 'text/x-template') !== false) {
+        if (strpos($html[0], 'text/template') !== false || strpos($html[0], 'text/x-template') !== false) {
             return $html[0];
         }
 
@@ -1334,6 +1333,12 @@ SCRIPT;
             $addslashes = true;
             $image[0] = stripslashes($image[0]);
         }
+
+		    if (strpos($image[0], '//') !== false) {
+				    // Replace any protocol-relative URLs with https: prefix
+				    // Pattern matches //domain.com/path pattern in HTML attributes
+				    $image[0] = preg_replace('/(["\']|\s|=)\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\/[^"\'\s>]*)/', '$1https://$2', $image[0]);
+		    }
 
         if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
             $image[0] = $this->maybe_addslashes($image[0], $addslashes);
@@ -1380,7 +1385,7 @@ SCRIPT;
         }
 
         if (!empty($image_src[1])) {
-            $NewSrc = 'https://' . self::$zoneName . '/m:0/a:' . $this->specialChars($image_src[1]);
+            $NewSrc = 'https://' . self::$zoneName . '/m:0/a:' . $this->specialChars(self::reformatUrl($image_src[1]));
             $img_tag = str_replace($image_src[1], $NewSrc, $img_tag);
         }
 
@@ -2401,7 +2406,14 @@ SCRIPT;
          * If image contains logo in filename, then it's a logo probably
          */
         if (strpos(strtolower($original_img_tag['original_tags']['class']), 'rs-lazyload') !== false || strpos(strtolower($original_img_tag['original_tags']['class']), 'rs') !== false || strpos(strtolower($image_source), 'logo') !== false || strpos(strtolower($original_img_tag['class']), 'logo') !== false) {
-            $build_image_tag .= 'src="' . $original_img_tag['original_tags']['src'] . '" ';
+	        $logoSrc = $original_img_tag['original_tags']['src'];
+
+	        // Check if it's a protocol-relative URL and convert it to https://
+	        if (strpos($logoSrc, '//') === 0 && strpos($logoSrc, 'https://') !== 0 && strpos($logoSrc, 'http://') !== 0) {
+		        $logoSrc = 'https:' . $logoSrc;
+	        }
+
+	        $build_image_tag .= 'src="' . $logoSrc . '" ';
         } else {
             /*
                * if data-src is not empty then we have src as SVG

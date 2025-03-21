@@ -300,12 +300,6 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_send_critical_remote()
     {
-        // Verify nonce for security
-        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
-            wp_send_json_error(['message' => 'Invalid nonce'], 403);
-            wp_die();
-        }
-
         $criticalCSS = new wps_criticalCss();
 
         $realUrl = urldecode($_POST['realUrl']);

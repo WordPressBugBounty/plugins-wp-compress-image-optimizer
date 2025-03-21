@@ -1095,6 +1095,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
 			                                     ?>
 
+                                                <?php
+
+                                                echo $gui::checkboxDescription_v4('Disable Optimizations for logged in users', 'Disable optimizations for logged in users.', false, '0', 'disable-logged-in-opt', false, 'right');
+
+                                                ?>
 
                                         </div>
 

@@ -84,7 +84,6 @@ class wps_ic_excludes extends wps_ic
         ];
 
         self::$defaultDelayJSExcludes = [
-            'cookiebanner',
             'gtranslate',
             'gformRedirect()',
             'wpgb_settings',

@@ -351,7 +351,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </li>
                                 <li class="wpc-menu-divider">
                                     <?php
-                                    if ($cdnLocked) {
+                                    if ($liteActive) {
                                         ?>
                                         <a href="#" class="wpc-lite-locked-advanced"><img src="<?php echo WPS_IC_URI; ?>assets/lite/images/advanced-settings.svg"/>Advanced Settings</a>
                                     <?php } else { ?>
