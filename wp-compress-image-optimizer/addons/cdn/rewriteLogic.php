@@ -2648,7 +2648,11 @@ SCRIPT;
                 #$newSrcSet = $this->replace_with_480w($newSrcSet);
 
                 // Inject the previously found 480
-                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
+                if (!empty($img480)) {
+                    $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
+                } else if (!empty($original_img_tag['original_src'])) {
+                    $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
+                }
 
                 // Retina URL
                 if (self::$settings['retina-in-srcset'] == '1') {

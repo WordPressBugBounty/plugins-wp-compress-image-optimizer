@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 7.0
 Tested up to: 6.8
-Stable tag: 6.30.19
+Stable tag: 6.30.20
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,9 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.30.20 =
+* Patch for SrcSet Being '0' on Certain Images
 
 = 6.30.19 =
 * Patch for Frontend Ajax Calls
