@@ -1,5 +1,6 @@
 <?php
 global $ic_running;
+global $wps_ic_cdn_instance;
 include 'debug.php';
 include 'defines.php';
 include_once 'addons/cdn/cdn-rewrite.php';
@@ -80,7 +81,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.20';
+        self::$version = '6.30.21';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2158,6 +2159,7 @@ add_action('init', [$wpsIc, 'init'], 100);
 
 // Frontend do replace
 $cdn = new wps_cdn_rewrite();
+$wps_ic_cdn_instance = $cdn;
 if ($cdn->isActive()) {
     add_action('plugins_loaded', [$cdn, 'checkCache_plugins_loaded'], 1);
     add_action('init', [$cdn, 'checkCache'], 1);

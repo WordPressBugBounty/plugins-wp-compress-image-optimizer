@@ -1284,11 +1284,13 @@ class wps_ic_combine_css
             $pathExploded = explode('uploads/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $uploadDir . '/' . $justPath;
-        } else {
+        } else if (strpos($path, 'themes/') !== false) {
             // Themes Dir: TEMPLATEPATH
             $pathExploded = explode('themes/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $themePath . '/' . $justPath;
+        } else {
+	          $finalPath = ABSPATH . $path;
         }
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {

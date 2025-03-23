@@ -1650,7 +1650,10 @@ class wps_cdn_rewrite
                     }
 
                 } else {
-                    ob_start([$this, 'saveCache']);
+	                if (!defined('WPS_IC_CACHE_BUFFER_STARTED')) {
+										//fallback cache buffer start, if we were unable to start in advanced-cache
+		                ob_start([$this, 'saveCache']);
+	                }
                 }
             }
 

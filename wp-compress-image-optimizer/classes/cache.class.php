@@ -306,12 +306,19 @@ class wps_ic_cache
 
     public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
     {
+		    if (self::is_cache_cleared()) {
+						//if multiple clear cache hooks are triggered in a single request
+			      return;
+		    }
 
         if (!is_int($post_id) && $post_id !== 'all' && $post_id !== 'home') {
             $post_id = 'all';
         }
+
         $cacheHtml = new wps_cacheHtml();
         $cacheHtml->removeCacheFiles($post_id);
+
+				self::mark_cache_cleared();
     }
 
     public static function preloadPage($post_id, $post = '', $update = '')
@@ -489,6 +496,18 @@ class wps_ic_cache
             return [];
         }
     }
+
+		// Check if cache was cleared already
+		private static function is_cache_cleared() {
+				global $wps_ic_cache_cleared;
+				return !empty($wps_ic_cache_cleared);
+		}
+
+		// Mark cache as cleared for this request
+		private static function mark_cache_cleared() {
+				global $wps_ic_cache_cleared;
+				$wps_ic_cache_cleared = true;
+		}
 
 
 }

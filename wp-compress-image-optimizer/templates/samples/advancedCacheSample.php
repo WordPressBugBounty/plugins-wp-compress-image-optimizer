@@ -61,3 +61,19 @@ if (!$cache->byPass() && $cache->cacheExists($prefix)) {
     die();
   }
 }
+
+//If cache wasn't served
+function wps_ic_early_buffer_callback($html) {
+		global $wps_ic_cdn_instance;
+
+		if (isset($wps_ic_cdn_instance) && method_exists($wps_ic_cdn_instance, 'saveCache')) {
+			return $wps_ic_cdn_instance->saveCache($html);
+		}
+
+		return $html;
+}
+
+
+//Start the buffer
+define('WPS_IC_CACHE_BUFFER_STARTED', true);
+ob_start('wps_ic_early_buffer_callback');
