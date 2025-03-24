@@ -2600,6 +2600,11 @@ class wps_cdn_rewrite
     public function saveCache($html)
     {
 
+		    if (empty(self::$cacheHtml)) {
+			    //mainInit() didnt run, we dont have to save cache, return the buffer.
+			    return $html;
+		    }
+
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
 
         if ($cacheActive) {
@@ -3024,11 +3029,11 @@ class wps_cdn_rewrite
         }
 
         // Find all URLs on page that have not been replaced
-        $regEx = '#(?<=[(\"\'])(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
-        $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
+	    $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
+	    $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
         //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
-        $regEx = '/background-image:\s*url\((\'|"|)(.*?)\1\)/i';
+	      $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
         $html = preg_replace_callback($regEx, function ($matches) {
             $url = str_replace('&#039;', '', $matches[2]);
             return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
