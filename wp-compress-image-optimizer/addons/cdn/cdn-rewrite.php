@@ -1677,7 +1677,7 @@ class wps_cdn_rewrite
         }
 
 
-		    if (!empty(self::$settings['disable-logged-in-opt']) && self::$settings['disable-logged-in-opt'] == '1'){
+		    if (!empty(self::$settings['disable-logged-in-opt']) && self::$settings['disable-logged-in-opt'] == '1' && is_user_logged_in()){
 			    return true;
 		    }
 
@@ -3410,7 +3410,7 @@ class wps_cdn_rewrite
                         }
 
                         if (!self::is_excluded($url, $url)) {
-                            $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:1/u:' . self::reformat_url($url);
+                            $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:' . self::$rewriteLogic->getCurrentMaxWidth(1) . '/u:' . self::reformat_url($url);
                         }
                     } else {
                         $newUrl = self::reformat_url($url, false);
