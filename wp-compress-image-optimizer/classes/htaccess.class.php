@@ -16,21 +16,20 @@ class wps_ic_htaccess extends wps_ic
         if (is_admin()) {
             $this->cacheConstant = "define('WP_CACHE', VALUE); // WP Compress Cache";
             $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
-		        if (strpos(strtolower($serverSoftware), 'litespeed') !== false || strpos(strtolower($serverSoftware), 'apache') !== false) {
-			        $this->isApache = true;
-		        } else if (strpos(strtolower($serverSoftware), 'nginx') !== false) {
-			        $this->isApache = false;
-		        }
+            if (strpos(strtolower($serverSoftware), 'litespeed') !== false || strpos(strtolower($serverSoftware), 'apache') !== false) {
+                $this->isApache = true;
+            } else if (strpos(strtolower($serverSoftware), 'nginx') !== false) {
+                $this->isApache = false;
+            }
         }
     }
 
 
-    public function checkHtaccess()
+    public function addGzip()
     {
         $error = false;
         $this->htaccessPath = $this->getHtaccessPath();
-
-        if (empty($this->htaccessPath) || !$this->isApache) {
+        if (empty($this->htaccessPath)) {
             return;
         }
 
@@ -51,20 +50,30 @@ class wps_ic_htaccess extends wps_ic
         // Get Contents
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
+
         // Did we retrieve the correct htaccess content?
         if (!empty($this->htaccessContent)) {
-            // Does it already have modifications?
+            if (strpos($this->htaccessContent, 'IfModule mod_deflate.c') == false) {
 
-            if (!$this->hasRewriteMods() || !empty($_GET['rebuildHtaccess'])) {
-                $this->modifyHtaccess();
-            }
+                $mimeTypes = array(
+                    'text/plain', 'text/css', 'text/javascript', 'application/javascript', 'application/x-javascript',
+                    'application/json', 'text/html', 'text/xml', 'application/atom+xml', 'application/rss+xml',
+                    'application/xhtml+xml', 'application/xml', 'text/x-component', 'application/vnd.ms-fontobject',
+                    'application/x-font-ttf', 'font/eot', 'font/opentype', 'image/bmp', 'image/svg+xml',
+                    'image/vnd.microsoft.icon', 'image/x-icon',
+                );
 
-            // Remove Mods Fix
-            if ($this->hasRewriteMods() && !empty($_GET['removeHtaccess'])) {
-                // Remove HtAccess Rules
-                $this->removeHtaccessRules();
+                $rules = "<IfModule mod_deflate.c>\n";
+                foreach ($mimeTypes as $type) {
+                    $rules .= "    AddOutputFilterByType DEFLATE {$type}\n";
+                }
+                $rules .= "</IfModule>\n";
+
+                // Append GZIP rules
+                file_put_contents($this->htaccessPath, "\n\n" . $rules, FILE_APPEND);
             }
         }
+
     }
 
     public function getHtaccessPath()
@@ -124,6 +133,48 @@ class wps_ic_htaccess extends wps_ic
     public function getContents($path)
     {
         return $this->fileSystem()->get_contents($path);
+    }
+
+    public function checkHtaccess()
+    {
+        $error = false;
+        $this->htaccessPath = $this->getHtaccessPath();
+
+        if (empty($this->htaccessPath) || !$this->isApache) {
+            return;
+        }
+
+        // Is the file writeable?
+        if ($this->exists($this->htaccessPath) && !$this->isWriteable($this->htaccessPath)) {
+            $error = true;
+            $this->notice('not-writeable-htaccess');
+        }
+
+        // Is the file readable?
+        if ($this->exists($this->htaccessPath) && !$this->isReadble($this->htaccessPath)) {
+            $error = true;
+            $this->notice('not-readable-htaccess');
+        }
+
+        if ($error) return;
+
+        // Get Contents
+        $this->htaccessContent = $this->getContents($this->htaccessPath);
+
+        // Did we retrieve the correct htaccess content?
+        if (!empty($this->htaccessContent)) {
+            // Does it already have modifications?
+
+            if (!$this->hasRewriteMods() || !empty($_GET['rebuildHtaccess'])) {
+                $this->modifyHtaccess();
+            }
+
+            // Remove Mods Fix
+            if ($this->hasRewriteMods() && !empty($_GET['removeHtaccess'])) {
+                // Remove HtAccess Rules
+                $this->removeHtaccessRules();
+            }
+        }
     }
 
     public function hasRewriteMods()
@@ -614,6 +665,18 @@ HTACCESS;
         if (!empty($advancedCacheSample)) {
             //this was generating a fatal error on activation
             //$this->fileSystem()->put_contents($this->advancedCachePath, $advancedCacheSample);
+            $settings = get_option(WPS_IC_SETTINGS);
+
+            $cacheLoggedIn = 'false';
+            if (!empty($settings['cache']['cache-logged-in']) && $settings['cache']['cache-logged-in'] == '1') {
+                $cacheLoggedIn = 'true';
+            }
+
+            // Set cache logged in const in advanced-cache
+            $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
+            $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
+            $advancedCacheSample = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
+
             file_put_contents($this->advancedCachePath, $advancedCacheSample);
         }
     }
@@ -668,101 +731,101 @@ HTACCESS;
         $this->fileSystem()->put_contents($this->advancedCachePath, '');
     }
 
-		public function addWebpReplace()
-		{
-			if (!$this->isApache) {
-				return;
-			}
+    public function addWebpReplace()
+    {
+        if (!$this->isApache) {
+            return;
+        }
 
-			$this->htaccessPath = $this->getHtaccessPath();
-			if (!$this->htaccessPath) return;
+        $this->htaccessPath = $this->getHtaccessPath();
+        if (!$this->htaccessPath) return;
 
-			// Get Contents
-			$this->htaccessContent = $this->getContents($this->htaccessPath);
+        // Get Contents
+        $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-			if (!$this->htaccessContent || empty($this->htaccessContent)) return;
+        if (!$this->htaccessContent || empty($this->htaccessContent)) return;
 
-			// Check if WebP rules already exist
-			if ($this->hasWebpReplaceRules()) {
-				return;
-			}
+        // Check if WebP rules already exist
+        if ($this->hasWebpReplaceRules()) {
+            return;
+        }
 
-			$webpRules = $this->getWebpReplaceRules();
+        $webpRules = $this->getWebpReplaceRules();
 
-			// Check if WordPress rules exist
-			if (strpos($this->htaccessContent, '# BEGIN WordPress') !== false) {
-				// Insert WebP rules before WordPress rules
-				$newHtaccessContent = preg_replace('/# BEGIN WordPress/i', $webpRules . PHP_EOL . '# BEGIN WordPress', $this->htaccessContent);
-			} else {
-				// If no WordPress rules, add to the beginning of the file
-				$newHtaccessContent = $webpRules . PHP_EOL . $this->htaccessContent;
-			}
+        // Check if WordPress rules exist
+        if (strpos($this->htaccessContent, '# BEGIN WordPress') !== false) {
+            // Insert WebP rules before WordPress rules
+            $newHtaccessContent = preg_replace('/# BEGIN WordPress/i', $webpRules . PHP_EOL . '# BEGIN WordPress', $this->htaccessContent);
+        } else {
+            // If no WordPress rules, add to the beginning of the file
+            $newHtaccessContent = $webpRules . PHP_EOL . $this->htaccessContent;
+        }
 
-			if (!empty($newHtaccessContent)) {
-				if (!defined('FS_CHMOD_FILE')) {
-					define('FS_CHMOD_FILE', 0644);
-				}
+        if (!empty($newHtaccessContent)) {
+            if (!defined('FS_CHMOD_FILE')) {
+                define('FS_CHMOD_FILE', 0644);
+            }
 
-				$this->fileSystem()->put_contents($this->htaccessPath, $newHtaccessContent);
-			}
-		}
+            $this->fileSystem()->put_contents($this->htaccessPath, $newHtaccessContent);
+        }
+    }
 
-		public function removeWebpReplace()
-		{
-			$this->htaccessPath = $this->getHtaccessPath();
-			if (!$this->htaccessPath) return;
+    private function hasWebpReplaceRules()
+    {
+        if (strpos($this->htaccessContent, '#StartWPC-WebP-Replace') !== false) {
+            return true;
+        }
 
-			// Get Contents
-			$this->htaccessContent = $this->getContents($this->htaccessPath);
+        return false;
+    }
 
-			if (!$this->htaccessContent || empty($this->htaccessContent)) return;
+    private function getWebpReplaceRules()
+    {
+        $rules = '#StartWPC-WebP-Replace' . PHP_EOL;
+        $rules .= '<IfModule mod_rewrite.c>' . PHP_EOL;
+        $rules .= '    RewriteEngine On' . PHP_EOL;
+        $rules .= '    RewriteBase /' . PHP_EOL;
+        $rules .= '    # Check if browser supports WebP images.' . PHP_EOL;
+        $rules .= '    RewriteCond %{HTTP_ACCEPT} image/webp' . PHP_EOL;
+        $rules .= '    # Check if WebP replacement image exists with REPLACED extension' . PHP_EOL;
+        $rules .= '    RewriteCond %{DOCUMENT_ROOT}/$1.webp -f' . PHP_EOL;
+        $rules .= '    # Serve WebP image instead - replacing extension, not appending' . PHP_EOL;
+        $rules .= '    RewriteRule (.+)\.(jpe?g|png|gif)$ $1.webp [T=image/webp,L]' . PHP_EOL;
+        $rules .= '</IfModule>' . PHP_EOL;
+        $rules .= '<IfModule mod_headers.c>' . PHP_EOL;
+        $rules .= '    # Standard Vary header for WebP' . PHP_EOL;
+        $rules .= '    Header append Vary Accept env=REQUEST_image' . PHP_EOL;
+        $rules .= '</IfModule>' . PHP_EOL;
+        $rules .= '#EndWPC-WebP-Replace' . PHP_EOL;
 
-			// Check if WebP rules don't exist
-			if (!$this->hasWebpReplaceRules()) {
-				return;
-			}
+        return $rules;
+    }
 
-			$cleanedHtaccessContent = preg_replace('/\s*#StartWPC-WebP-Replace.*#EndWPC-WebP-Replace\s*?/isU', PHP_EOL, $this->htaccessContent);
+    public function removeWebpReplace()
+    {
+        $this->htaccessPath = $this->getHtaccessPath();
+        if (!$this->htaccessPath) return;
 
-			if (!empty($cleanedHtaccessContent)) {
-				if (!defined('FS_CHMOD_FILE')) {
-					define('FS_CHMOD_FILE', 0644);
-				}
+        // Get Contents
+        $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-				$this->fileSystem()->put_contents($this->htaccessPath, $cleanedHtaccessContent);
-			}
-		}
+        if (!$this->htaccessContent || empty($this->htaccessContent)) return;
 
-		private function hasWebpReplaceRules()
-		{
-			if (strpos($this->htaccessContent, '#StartWPC-WebP-Replace') !== false) {
-				return true;
-			}
+        // Check if WebP rules don't exist
+        if (!$this->hasWebpReplaceRules()) {
+            return;
+        }
 
-			return false;
-		}
+        $cleanedHtaccessContent = preg_replace('/\s*#StartWPC-WebP-Replace.*#EndWPC-WebP-Replace\s*?/isU', PHP_EOL, $this->htaccessContent);
 
-		private function getWebpReplaceRules()
-		{
-			$rules = '#StartWPC-WebP-Replace' . PHP_EOL;
-			$rules .= '<IfModule mod_rewrite.c>' . PHP_EOL;
-			$rules .= '    RewriteEngine On' . PHP_EOL;
-			$rules .= '    RewriteBase /' . PHP_EOL;
-			$rules .= '    # Check if browser supports WebP images.' . PHP_EOL;
-			$rules .= '    RewriteCond %{HTTP_ACCEPT} image/webp' . PHP_EOL;
-			$rules .= '    # Check if WebP replacement image exists with REPLACED extension' . PHP_EOL;
-			$rules .= '    RewriteCond %{DOCUMENT_ROOT}/$1.webp -f' . PHP_EOL;
-			$rules .= '    # Serve WebP image instead - replacing extension, not appending' . PHP_EOL;
-			$rules .= '    RewriteRule (.+)\.(jpe?g|png|gif)$ $1.webp [T=image/webp,L]' . PHP_EOL;
-			$rules .= '</IfModule>' . PHP_EOL;
-			$rules .= '<IfModule mod_headers.c>' . PHP_EOL;
-			$rules .= '    # Standard Vary header for WebP' . PHP_EOL;
-			$rules .= '    Header append Vary Accept env=REQUEST_image' . PHP_EOL;
-			$rules .= '</IfModule>' . PHP_EOL;
-			$rules .= '#EndWPC-WebP-Replace' . PHP_EOL;
+        if (!empty($cleanedHtaccessContent)) {
+            if (!defined('FS_CHMOD_FILE')) {
+                define('FS_CHMOD_FILE', 0644);
+            }
 
-			return $rules;
-		}
+            $this->fileSystem()->put_contents($this->htaccessPath, $cleanedHtaccessContent);
+        }
+    }
 
     public function notice_not_readable_config()
     {

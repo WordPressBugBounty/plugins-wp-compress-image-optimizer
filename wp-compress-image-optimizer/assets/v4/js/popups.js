@@ -252,6 +252,8 @@ jQuery(document).ready(function ($) {
                 }
                 else if (popupID == 'remove-custom-cdn') {
                     RemoveCustomCname();
+                } else if (popupID == 'purge-settings'){
+                    purgeSettingsPopup();
                 }
                 else {
                     var popup = $('.swal2-container .ajax-settings-popup');
@@ -392,6 +394,241 @@ jQuery(document).ready(function ($) {
 
             return false;
         });
+    }
+
+
+    function purgeSettingsPopup(){
+        var popup = $('.swal2-container .ajax-settings-popup');
+        var form = $('form', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_get_purge_rules',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
+            if (response.success) {
+
+                // Set the hooks textarea value
+                $('.hooks-list-textarea-value', popup).val(response.data.hooks);
+
+                // Set checkbox values based on response data
+                if (response.data.all_pages == 1) {
+                    $('.wps-all-pages', popup).prop('checked', true);
+                }
+
+                if (response.data.home_page == 1) {
+                    $('.wps-home-page', popup).prop('checked', true);
+                }
+
+                if (response.data.recent_posts_widget == 1) {
+                    $('.wps-recent-posts-widget', popup).prop('checked', true);
+                }
+
+                if (response.data.archive_pages == 1) {
+                    $('.wps-archive-pages', popup).prop('checked', true);
+                }
+
+                if (response.data.scheduled) {
+                    $('.wps-scheduled-purge', popup).val(response.data.scheduled);
+                }
+            }
+            $(content).show();
+            $(loading).hide();
+        });
+
+        savePurgeSettingsPopup(popup);
+    }
+
+    function savePurgeSettingsPopup(popup) {
+        var save = $('.btn-save', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+        var form = $('.wpc-save-popup-data', popup);
+
+        $(save).on('click', function (e) {
+            e.preventDefault();
+            $(content).hide();
+            $(loading).show();
+
+            var all_pages = '0';
+            var home_page = '0';
+            var recent_posts_widget = '0';
+            var archive_pages = '0';
+
+            $('.wps-default-excludes-enabled-checkbox', popup).each(function() {
+                if ($(this).hasClass('wps-all-pages')) {
+                    all_pages = $(this).is(':checked') ? '1' : '0';
+                }
+                else if ($(this).hasClass('wps-home-page')) {
+                    home_page = $(this).is(':checked') ? '1' : '0';
+                }
+                else if ($(this).hasClass('wps-recent-posts-widget')) {
+                    recent_posts_widget = $(this).is(':checked') ? '1' : '0';
+                }
+                else if ($(this).hasClass('wps-archive-pages')) {
+                    archive_pages = $(this).is(':checked') ? '1' : '0';
+                }
+            });
+
+            var setting_group = $('input[type="text"],textarea', popup).data('setting-name');
+            var setting_name = $('input[type="text"],textarea', popup).data('setting-subset');
+            var hooks = $('.hooks-list-textarea-value', popup).val();
+            var scheduled = $('.wps-scheduled-purge', popup).val();
+
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_save_purge_hooks_settings',
+                group_name: setting_group,
+                setting_name: setting_name,
+                hooks: hooks,
+                all_pages: all_pages,
+                home_page: home_page,
+                recent_posts_widget: recent_posts_widget,
+                archive_pages: archive_pages,
+                scheduled: scheduled,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
+                if (response.success){
+                    WPCSwal.close();
+                }
+            });
+
+            return false;
+        });
+    }
+
+
+    //Export button
+    $('#wpc-export-button').on('click', function(e) {
+        e.preventDefault()
+        const exportSettings = $('.wps-export-settings').prop('checked');
+        const exportExcludes = $('.wps-export-excludes').prop('checked');
+        const exportCache = $('.wps-export-cache').prop('checked');
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wps_ic_export_settings',
+                settings: exportSettings,
+                excludes: exportExcludes,
+                cache: exportCache,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const blob = new Blob([JSON.stringify(response.data)], {type: 'application/json'});
+
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    var site = window.location.hostname;
+                    site = site.replace(/^www\./, '').split('.')[0];
+                    a.download = 'Settings-' + site + '.json';
+
+                    // Append to the document, trigger click, and clean up
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+
+                }
+            },
+            error: function(xhr, status, error) {
+
+            }
+        });
+    });
+
+    //Import button
+    $('#wpc-import-button').on('click', function(e) {
+        e.preventDefault()
+        $('#wpc-import-file').trigger('click');
+    });
+
+    $('#wpc-import-file').on('change', function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const importData = JSON.parse(e.target.result);
+
+            WPCSwal.fire({
+                title: '', html: jQuery('#import-popup').html(), width: 600, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, showCloseButton: true, customClass: {
+                    container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+                },onOpen: function () {
+                    importSettings(importData);
+                },onClose: function () {
+                    window.location.reload();
+                }
+            });
+        };
+        reader.readAsText(file);
+    });
+
+    //reset to default button
+    $('#wpc-set-default-button').on('click', function(e) {
+        e.preventDefault();
+
+        WPCSwal.fire({
+            title: '', html: '<h2>Reset everything to default?</h2>', width: 600, showCancelButton: true, showConfirmButton: true, allowOutsideClick: true, showCloseButton: true, customClass: {
+                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+            },onOpen: function () {
+
+            },onClose: function () {
+
+            },
+            confirmButtonText: 'Yes, reset it!',
+            preConfirm: function() {
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'wps_ic_set_default_settings',
+                        wps_ic_nonce: wpc_ajaxVar.nonce
+                    },
+                    success: function(response) {
+                        window.location.reload();
+                    },
+                    error: function(xhr, status, error) {
+
+                    }
+                });
+            }
+        });
+
+    });
+
+    function importSettings(importData){
+        var popup = $('.wpc-import-popup');
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+
+        $(loading).show();
+
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wps_ic_import_settings',
+                importData: importData,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            },
+            success: function (response) {
+                if (response.success) {
+                    window.location.reload();
+                }
+            },
+            error: function (xhr, status, error) {
+
+            }
+        });
+
+
     }
 
 });

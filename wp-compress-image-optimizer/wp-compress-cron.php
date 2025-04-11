@@ -16,17 +16,36 @@ class wps_ic_cron {
         include_once 'addons/cf-sdk/cf-sdk.php';
         include_once 'addons/cache/cacheHtml.php';
         include_once 'traits/url_key.php';
+
         $this->cache = new wps_ic_cache();
+	      $this->cache->init();
 
         if (!empty($_GET['runPurge'])) {
             $this->purgeCache(0);
         }
 
-        add_action( 'publish_future_post', [$this, 'purgeCache'], 100, 1 );
+	      add_action('transition_post_status', [$this->cache, 'purge_cache_on_post_changes'], 10, 3);
+// Add action to handle the scheduled purge
+	    add_action('wps_ic_scheduled_purge_hook', [$this,'purgeCache']);
+	      $purge_rules = get_option('wps_ic_purge_rules');
+				if ($purge_rules && !empty($purge_rules['scheduled'])){
+
+					$time = $purge_rules['scheduled'];
+
+					// Remove any existing scheduled events for this hook
+					wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
+
+					// Schedule new event with current time
+					wp_schedule_event(
+						strtotime($time),
+						'daily',
+						'wps_ic_scheduled_purge_hook'
+					);
+				}
     }
 
 
-    public function purgeCache($post_id)
+    public function purgeCache()
     {
         $options = get_option(WPS_IC_OPTIONS);
 
@@ -64,8 +83,8 @@ class wps_ic_cron {
         $this->wpc_purgeCF(true);
         sleep(6);
 
-        $this->cache::removeHtmlCacheFiles(0); // Purge & Preload
-        $this->cache::preloadPage(0); // Purge & Preload
+        $this->cache::removeHtmlCacheFiles('all'); // Purge & Preload
+        $this->cache::preloadPage('all'); // Purge & Preload
 
         sleep(3);
         delete_transient('wps_ic_purging_cdn');

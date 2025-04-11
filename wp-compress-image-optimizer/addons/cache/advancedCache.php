@@ -22,7 +22,21 @@ class wps_advancedCache
 
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
-        $this->cachePath = WPS_IC_CACHE . $this->urlKey . '/';
+
+	      // Append user cookie hash to the cache path if user is logged in
+	      $user_hash = '';
+				if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN){
+						foreach ( $_COOKIE as $key => $value ) {
+							if ( strpos( $key, 'wordpress_logged_in_' ) === 0 ) {
+								$user_hash = md5( $key . substr( $value, 0, 10 ) ) . '/';
+								break;
+							}
+						}
+
+				}
+
+	      $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . '/';
+
     }
 
     /**
@@ -166,6 +180,10 @@ class wps_advancedCache
     public function isWooFragments()
     {
 
+        if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
+            return true;
+        }
+
         if (isset($_GET['wc-ajax']) && $_GET['wc-ajax'] !== 'get_refreshed_fragments' ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
             return true;
         }
@@ -247,18 +265,9 @@ class wps_advancedCache
         return false;
     }
 
-
-    public function ignoreServerCacheControl() {
-        if (!empty($this->options['cache']['ignore-server-control']) &&  $this->options['cache']['ignore-server-control'] == '1') {
-            return true;
-        }
-
-        return false;
-    }
-
-
     public function saveCache($buffer, $prefix = '')
     {
+
         if (!empty($_GET['disable_cache'])) {
             return true;
         }
@@ -276,15 +285,6 @@ class wps_advancedCache
             return $buffer;
         }
 
-	    if (empty($this->options['cache']['ignore-server-control']) ||  $this->options['cache']['ignore-server-control'] == '0') {
-		    $cacheControl = strtolower( $_SERVER['HTTP_CACHE_CONTROL'] );
-		    if ( strpos( $cacheControl, 'no-cache' ) !== false ||
-		         strpos( $cacheControl, 'no-store' ) !== false ||
-		         strpos( $cacheControl, 'private' ) !== false ) {
-			    return $buffer;
-		    }
-	    }
-
         if (!empty($prefix)) {
             $prefix = $prefix . '_';
         }
@@ -301,11 +301,9 @@ class wps_advancedCache
             return $buffer;
         }
 
-        // Disable cache for logged in users
-        if (is_user_logged_in()) {
-            return $buffer;
-        }
-
+		    if (is_user_logged_in()) {
+				    return $buffer;
+		    }
 
         if (!file_exists($this->cachePath)) {
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
@@ -478,6 +476,5 @@ class wps_advancedCache
         // Delete the folder itself
         if (is_dir($folder)) rmdir($folder);
     }
-
 
 }

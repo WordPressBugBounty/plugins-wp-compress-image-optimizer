@@ -11,6 +11,7 @@ class wps_ic_cache
     public static $cache_option = 'wps_ic_modified_css_cache';
     public static $cache;
     public static $options;
+		public static $purge_rules;
     public static $Requests;
 
 
@@ -136,25 +137,50 @@ class wps_ic_cache
 
     public static function purgeHooks()
     {
-        // Elementor Purge Integration
-        self::purgeHook('save_post', 1, 1, 1, 1);
-        self::purgeHook('wp_insert_post', 1, 1, 1, 1);
-        self::purgeHook('switch_theme', 1, 1, 1, 1);
-        self::purgeHook('add_link');
-        self::purgeHook('edit_link');
-        self::purgeHook('delete_link');
-        self::purgeHook('update_option_sidebars_widgets');
-        self::purgeHook('update_option_category_base');
-        self::purgeHook('update_option_tag_base');
-        self::purgeHook('wp_update_nav_menu', 1, 1, 1, 1);
-        self::purgeHook('permalink_structure_changed');
-        self::purgeHook('customize_save');
-        self::purgeHook('update_option_theme_mods_' . get_option('stylesheet'));
+				self::$options = get_option(WPS_IC_SETTINGS);
 
-        //per page settings
+        if(!empty(self::$options['cache']['advanced']) && self::$options['cache']['advanced'] == '1') {
+
+	        self::$purge_rules = get_option('wps_ic_purge_rules');
+
+	        if (!empty(self::$options['cache']['purge-hooks']) && self::$options['cache']['purge-hooks'] == '1') {
+
+		        if (!empty(self::$purge_rules) && !empty(self::$purge_rules['hooks'])) {
+
+			        // List of hooks to also clear crit, combine, new cdn hashes
+			        $full_param_hooks = [
+				        'switch_theme',
+				        'wp_update_nav_menu',
+				        'update_option_theme_mods_' . get_option('stylesheet'),
+			        ];
+			        foreach (self::$purge_rules['hooks'] as $hook) {
+				        if (in_array($hook, $full_param_hooks)) {
+					        self::purgeHook($hook,1,1,1,1);
+				        } else {
+					        // For other hooks only clear cache
+					        self::purgeHook($hook);
+				        }
+			        }
+
+			        //Post publish hooks
+			        add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge the page/post
+			        if (!empty(self::$purge_rules['post-publish'])) {
+				        if (!empty(self::$purge_rules['post-publish']['all-pages']) ||
+				            !empty(self::$purge_rules['post-publish']['home-page']) ||
+				            !empty(self::$purge_rules['post-publish']['recent-posts-widget']) ||
+				            !empty(self::$purge_rules['post-publish']['archive-pages'])) {
+					        add_action('transition_post_status', ['wps_ic_cache', 'purge_cache_on_post_changes'], 10, 3);
+				        }
+			        }
+
+		        }
+	        }
+        }
+
+        //per page purge hooks from smart-opt screen scheckboxes
         add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('wp_trash_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
-        add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+				add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
     }
 
 
@@ -188,20 +214,21 @@ class wps_ic_cache
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
     {
+				//accepted_args 0 to force clearing all cache
         if ($hash) {
             add_action($hook, ['wps_ic_cache', 'resetHashes'], 10, 0);
         }
 
         if ($cache) {
-            add_action($hook, ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1);
+            add_action($hook, ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 0);
         }
 
         if ($combined) {
-            add_action($hook, ['wps_ic_cache', 'removeCombinedFiles'], 10, 1);
+            add_action($hook, ['wps_ic_cache', 'removeCombinedFiles'], 10, 0);
         }
 
         if ($critical) {
-            add_action($hook, ['wps_ic_cache', 'removeCriticalFiles'], 10, 1);
+            add_action($hook, ['wps_ic_cache', 'removeCriticalFiles'], 10, 0);
         }
     }
 
@@ -306,19 +333,36 @@ class wps_ic_cache
 
     public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
     {
-		    if (self::is_cache_cleared()) {
-						//if multiple clear cache hooks are triggered in a single request
-			      return;
-		    }
-
         if (!is_int($post_id) && $post_id !== 'all' && $post_id !== 'home') {
             $post_id = 'all';
         }
 
+		    if (self::is_cache_cleared()) {
+				    //if we cleared all, ignore subsequent clears in the same request
+				    return;
+		    }
+
         $cacheHtml = new wps_cacheHtml();
         $cacheHtml->removeCacheFiles($post_id);
 
-				self::mark_cache_cleared();
+		    $cache_integrations = new wps_ic_cache_integrations();
+		    if (is_int($post_id)) {
+			    $cache_integrations->purgeVarnish( $post_id );
+		    } else {
+			    $cache_integrations->purgeVarnish( 0 );
+		    }
+
+		    if (!self::is_cf_cache_cleared()) {
+					//since it clears all cache, we dont have to call it multiple times in a request
+			    //can add other cache clears here
+			    self::wpc_purgeCF( true );
+			    sleep( 6 );
+			    self::mark_cf_cache_cleared();
+		    }
+
+				if($post_id === 'all') {
+						self::mark_cache_cleared();
+				}
     }
 
     public static function preloadPage($post_id, $post = '', $update = '')
@@ -507,6 +551,85 @@ class wps_ic_cache
 		private static function mark_cache_cleared() {
 				global $wps_ic_cache_cleared;
 				$wps_ic_cache_cleared = true;
+		}
+
+		// Check if cf cache was cleared already
+		private static function is_cf_cache_cleared() {
+			global $wps_ic_cf_cache_cleared;
+			return !empty($wps_ic_cf_cache_cleared);
+		}
+
+		// Mark cf cache as cleared for this request
+		private static function mark_cf_cache_cleared() {
+			global $wps_ic_cf_cache_cleared;
+			$wps_ic_cf_cache_cleared = true;
+		}
+
+		public static function purge_cache_on_post_changes($new_status, $old_status, $post) {
+			// Skip conditions - no purging needed
+			if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+				return;
+			}
+			if (wp_is_post_revision($post->ID)) {
+				return;
+			}
+			if (empty(self::$purge_rules)) {
+				self::$purge_rules = get_option('wps_ic_purge_rules');
+			}
+
+			if ($new_status == 'publish' || ($old_status == 'publish' && $new_status != 'publish')) {
+				// If configured to clear all pages
+				if (!empty(self::$purge_rules['post-publish']['all-pages']) && self::$purge_rules['post-publish']['all-pages'] == '1') {
+					self::removeHtmlCacheFiles('all');
+				} // Otherwise, selectively clear based on settings
+				else {
+					// Clear home page if enabled
+					if (!empty(self::$purge_rules['post-publish']['home-page']) && self::$purge_rules['post-publish']['home-page'] == '1') {
+						self::removeHtmlCacheFiles('home');
+					}
+
+					// Clear archive pages if enabled
+					$cacheHtml = new wps_cacheHtml();
+
+					if (!empty(self::$purge_rules['post-publish']['archive-pages'] ) && self::$purge_rules['post-publish']['archive-pages'] == '1') {
+						if (!empty(self::$purge_rules['type-lists']['archive-pages'])){
+							foreach (self::$purge_rules['type-lists']['archive-pages'] as $urlKey){
+								$cacheHtml->removeCacheFilesByKey($urlKey);
+								self::$purge_rules['type-lists']['archive-pages'] = [];
+							}
+						}
+					}
+
+					// Clear archive pages if enabled
+					if (!empty(self::$purge_rules['post-publish']['recent-posts-widget'] ) && self::$purge_rules['post-publish']['recent-posts-widget'] == '1') {
+						if (!empty(self::$purge_rules['type-lists']['recent-posts-widget'])){
+							foreach (self::$purge_rules['type-lists']['recent-posts-widget'] as $urlKey){
+								$cacheHtml->removeCacheFilesByKey($urlKey);
+								self::$purge_rules['type-lists']['recent-posts-widget'] = [];
+							}
+						}
+					}
+					update_option('wps_ic_purge_rules', self::$purge_rules);
+				}
+			}
+
+		}
+
+		public static function wpc_purgeCF($return = false)
+		{
+			$cfSettings = get_option(WPS_IC_CF);
+
+			$zone = $cfSettings['zone'];
+			$cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+			if ($cfapi) {
+				$cfapi->purgeCache($zone);
+			}
+
+			if ($return) {
+				return true;
+			} else {
+				wp_send_json_success();
+			}
 		}
 
 

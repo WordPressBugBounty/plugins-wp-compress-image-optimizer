@@ -15,6 +15,8 @@ class wps_ic_options
     public static $preloadSettings;
     public $purgeList;
 
+		public static $purgeRules;
+
     public function __construct()
     {
 
@@ -184,16 +186,16 @@ class wps_ic_options
             'background-sizing' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
-            'on-upload' => '0',
-            'emoji-remove' => '1',
-            'disable-oembeds' => '0',
-            'disable-dashicons' => '0',
-            'disable-gutenberg' => '0',
-            'external-url' => '0',
-            'disable-cart-fragments' => '0',
-            'gtag-lazy' => 0,
-            'fontawesome-lazy' => 0,
-            'iframe-lazy' => 0,
+            'on-upload' => 0,
+            'emoji-remove' => 1,
+            'disable-oembeds' => 0,
+            'disable-dashicons' => 1,
+            'disable-gutenberg' => 0,
+            'external-url' => 0,
+            'disable-cart-fragments' => 1,
+            'iframe-lazy' => 1,
+            'gtag-lazy' => 1,
+            'fontawesome-lazy' => 1,
             'critical' => ['css' => '1'],
             'css_minify' => '0',
             'css_combine' => '0',
@@ -205,7 +207,14 @@ class wps_ic_options
             'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',
-            'cache' => ['advanced' => '1', 'mobile' => '1', 'minify' => '0', 'expire' => 24, 'ignore-server-control' => 1],
+            'cache' => [ 'advanced'              => '1',
+                         'mobile'                => '1',
+                         'minify'                => '0',
+                         'expire'                => 24,
+                         'ignore-server-control' => '1',
+                         'cache-logged-in'       => '1',
+                         'purge-hooks'           => 1
+            ],
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -272,7 +281,14 @@ class wps_ic_options
             'inline-js' => 0,
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
-            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24, 'ignore-server-control' => 1],
+            'cache' => [ 'advanced'              => 1,
+                         'mobile'                => 1,
+                         'minify'                => 0,
+                         'expire'                => 24,
+                         'ignore-server-control' => 1,
+                         'cache-logged-in'       => 1,
+                         'purge-hooks'           => 1
+            ],
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -283,10 +299,27 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '1',
+            'preload-crit-fonts' => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0'
         ];
+
+				$this::$purgeRules = ['post-publish' => ['all-pages' => 0,
+				                                         'home-page' => 1,
+				                                         'recent-posts-widget' => 1,
+				                                         'archive-pages' => 1],
+				                      'hooks' => ['switch_theme',
+				                                  'add_link',
+				                                  'edit_link',
+				                                  'delete_link',
+				                                  'update_option_sidebars_widgets',
+				                                  'update_option_category_base',
+				                                  'update_option_tag_base',
+				                                  'wp_update_nav_menu',
+				                                  'permalink_structure_changed',
+				                                  'customize_save',
+				                                  'update_option_theme_mods_' . get_option( 'stylesheet', '')]
+				];
 
         return $this;
     }
@@ -312,6 +345,9 @@ class wps_ic_options
             case 'preload':
                 $settings = $this->getPreloadSettings();
                 break;
+		        case 'purge_rules':
+								$settings = self::$purgeRules;
+								break;
         }
 
         return $settings;

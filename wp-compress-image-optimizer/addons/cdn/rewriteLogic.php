@@ -200,6 +200,13 @@ class wps_rewriteLogic
             self::$homeUrl = home_url();
         }
 
+		    self::$siteUrl = preg_replace('#^https?://#', '', self::$siteUrl);
+		    self::$homeUrl = preg_replace('#^https?://#', '', self::$homeUrl);
+
+
+		    self::$siteUrl = trim(self::$siteUrl, '/');
+		    self::$homeUrl = trim(self::$homeUrl, '/');
+
         $custom_cname = get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             self::$zoneName = get_option('ic_cdn_zone_name');
@@ -880,7 +887,13 @@ class wps_rewriteLogic
 
     public function runCriticalAjax($html)
     {
-        $html = preg_replace_callback('/<\/body>/si', [__CLASS__, 'addCriticalAjax'], $html);
+
+        if (str_contains($html, 'wpcRunningCritical')) {
+            return $html;
+        } else {
+            $html = preg_replace_callback('/<\/body>/si', [__CLASS__, 'addCriticalAjax'], $html);
+        }
+
         return $html;
     }
 
@@ -1807,61 +1820,72 @@ SCRIPT;
         return $html;
     }
 
-    public function replaceImageTagsDoSlash($image)
-    {
-        if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
-            return $image[0];
-        }
+		public function replaceImageTagsDoSlash($image)
+		{
+			if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
+				return $image[0];
+			}
 
-        if (!empty($_GET['dbgAjax'])) {
-            return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
-        }
+			if (!empty($_GET['dbgAjax'])) {
+				return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
+			}
 
-        if ($this->checkIsSlashed($image[0])) {
-            $imageElement = stripslashes($image[0]);
-        } else {
-            $imageElement = $image[0];
-        }
+			if ($this->checkIsSlashed($image[0])) {
+				$imageElement = stripslashes($image[0]);
+			} else {
+				$imageElement = $image[0];
+			}
 
-        $newImageElement = '';
-        $original_img_tag = [];
-        $original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
+			$newImageElement = '';
+			$original_img_tag = [];
+			$original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
 
-        if (!empty($_GET['ajaxImage'])) {
-            return print_r([$original_img_tag, $imageElement], true);
-        }
+			if (!empty($_GET['ajaxImage'])) {
+				return print_r([$original_img_tag, $imageElement], true);
+			}
 
-        if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
-            $newImageElement = $imageElement;
-        } else {
-            $newImageElement = '<img data-image-el-count="' . self::$imageCounter . '"';
-            // it's placeholder or blank file change something
-            foreach ($original_img_tag['original_tags'] as $tag => $value) {
-                if ($tag == 'data-src' || $tag == 'src') {
-                    $src = $value;
+			if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
+				$newImageElement = $imageElement;
+			} else {
+				$newImageElement = '<img data-image-el-count="' . self::$imageCounter . '"';
 
-                    $webp = '/wp:' . self::$webp;
-                    if (self::isExcludedFrom('webp', $src)) {
-                        $webp = '/wp:0';
-                    }
+				// Check if both src and data-src are defined
+				$preferredSrc = '';
+				if (isset($original_img_tag['original_tags']['src']) && isset($original_img_tag['original_tags']['data-src'])) {
+					// If both are defined, use data-src. Src is probably a palceholder and real src is in data-src
+					$preferredSrc = $original_img_tag['original_tags']['data-src'];
+				}
 
-                    $src = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1) . '/u:' . self::reformatUrl($src);
-                    $newImageElement .= 'src="' . $src . '" ';
-                } else if (!is_null($value)) {
-                    $newImageElement .= $tag . '="' . $value . '" ';
-                } else {
-                    $newImageElement .= $tag . ' ';
-                }
-            }
-            $newImageElement .= '/>';
-        }
+				// it's placeholder or blank file change something
+				foreach ($original_img_tag['original_tags'] as $tag => $value) {
+					if ($tag == 'src') {
+						$src = ($preferredSrc) ? $preferredSrc : $value;
 
-        if ($this->checkIsSlashed($image[0])) {
-            $newImageElement = addslashes($newImageElement);
-        }
+						$webp = '/wp:' . self::$webp;
+						if (self::isExcludedFrom('webp', $src)) {
+							$webp = '/wp:0';
+						}
 
-        return $newImageElement;
-    }
+						$src = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1) . '/u:' . self::reformatUrl($src);
+						$newImageElement .= 'src="' . $src . '" ';
+					} else if ($tag == 'data-src' && $preferredSrc) {
+						// Skip adding data-src as separate attribute if we've already used it for src
+						continue;
+					} else if (!is_null($value)) {
+						$newImageElement .= $tag . '="' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '" ';
+					} else {
+						$newImageElement .= $tag . ' ';
+					}
+				}
+				$newImageElement .= '/>';
+			}
+
+			if ($this->checkIsSlashed($image[0])) {
+				$newImageElement = addslashes($newImageElement);
+			}
+
+			return $newImageElement;
+		}
 
     public function checkIsSlashed($string)
     {
@@ -2572,9 +2596,16 @@ SCRIPT;
 
     public function rewriteSrcset($original_img_tag, $srcset)
     {
+
         if (!empty($srcset)) {
             $newSrcSet = '';
             preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/si', $srcset, $srcset_links);
+
+            // Fix max-width setting for img tag
+            $maxWidthMatches = [];
+            if (!empty($original_img_tag['original_tags']['sizes'])) {
+                preg_match('/max-width:\s*(\d+)px/si', $original_img_tag['original_tags']['sizes'], $maxWidthMatches);
+            }
 
 
             // Find image size closest to 480, but not smaller
@@ -2593,7 +2624,7 @@ SCRIPT;
                     $srcset_width = trim($src[1]);
 
                     if ($srcset_width >= $find) {
-                        if (!$found || $found > $srcset_width) {
+                        if (!$found || $found < $srcset_width) {
                             $found = $srcset_width;
                             $img480 = $srcset_url;
                         }
@@ -2625,38 +2656,46 @@ SCRIPT;
                             $extension = 'w';
                         }
 
+                        if ($srcset_width == '1') {
+                            $srcsetWidthExtension = '';
+                        } else {
+                            $srcsetWidthExtension = $srcset_width.$extension;
+                        }
+
+
                         if (strpos($srcset_url, self::$zoneName) !== false) {
-                            $newSrcSet .= $srcset_url . ' ' . $srcset_width . $extension . ', ';
+                            $newSrcSet .= $srcset_url . ' ' . $srcsetWidthExtension . ', ';
                             continue;
                         }
 
                         if (strpos($srcset_url, '.svg') !== false) {
-                            $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . $extension . ', ';
+                            $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
                         } else {
                             // Non-retina URL
-                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcset_width . $extension . ', ';
+                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($width_url * 2) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $srcset_width . $extension . ' 2x, ';
+                                $retinaWidth = (int)$width_url*2;
+                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ' 2x, ';
                             }
                         }
                     }
 
                 }
 
-                #$newSrcSet = $this->replace_with_480w($newSrcSet);
+                // Inject the previously found 480, if max-width bigger than 480
+                if (!empty($maxWidthMatches[1]) && $maxWidthMatches[1] >= 480) {
+                    if (!empty($img480)) {
+                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
+                    } else if (!empty($original_img_tag['original_src'])) {
+                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
+                    }
 
-                // Inject the previously found 480
-                if (!empty($img480)) {
-                    $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
-                } else if (!empty($original_img_tag['original_src'])) {
-                    $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
-                }
-
-                // Retina URL
-                if (self::$settings['retina-in-srcset'] == '1') {
-                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
+                    // Retina URL
+                    if (self::$settings['retina-in-srcset'] == '1') {
+                        $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
+                    }
                 }
 
                 $newSrcSet = rtrim($newSrcSet);

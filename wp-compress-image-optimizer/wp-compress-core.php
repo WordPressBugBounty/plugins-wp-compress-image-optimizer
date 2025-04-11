@@ -11,7 +11,6 @@ include_once 'addons/cf-sdk/cf-sdk.php';
 include 'traits/excludes.php';
 
 //CUSTOM_INCLUDE_HERE
-
 spl_autoload_register(function ($class_name) {
     if (strpos($class_name, 'wps_ic_') !== false) {
         $class_nameBase = str_replace('wps_ic_', '', $class_name);
@@ -81,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.23';
+        self::$version = '6.30.25';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -122,6 +121,8 @@ class wps_ic
 		    echo json_encode( [ 'message' => 'Connectivity Test passed.' ] );
 		    die();
 	    }
+
+        //var_dump(get_option('wps_ic_purge_rules'));
 
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
@@ -747,6 +748,13 @@ class wps_ic
                     $options->set_defaults();
                 }
 
+                $purge_rules = get_option('wps_ic_purge_rules');
+
+                if ($purge_rules === false ){
+	                $purge_rules = $options->get_preset('purge_rules');
+                    update_option('wps_ic_purge_rules', $purge_rules);
+                }
+
                 if (!file_exists(WPS_IC_DIR . 'cache')) {
                     // Folder does not exist
                     mkdir(WPS_IC_DIR . 'cache', 0755);
@@ -963,7 +971,6 @@ class wps_ic
      */
     public function init()
     {
-
 
         if (!is_admin()) {
             // Raise memory limit
@@ -1644,6 +1651,30 @@ class wps_ic
             $this->integrations->init();
         }
 
+
+        //check if zone name needs fixing
+        if (!empty($this::$options['api_key']) && empty($this::$zone_name) && get_option('wps_ic_allow_live') !== false){
+	        $url = 'https://apiv3.wpcompress.com/api/site/credits';
+	        $call = wp_remote_get($url, [
+		        'timeout' => 30,
+		        'sslverify' => false,
+		        'user-agent' => WPS_IC_API_USERAGENT,
+		        'headers' => [
+			        'apikey' => $this::$options['api_key'],
+		        ]
+	        ]);
+
+	        if (wp_remote_retrieve_response_code($call) == 200) {
+		        $body = wp_remote_retrieve_body($call);
+		        $body = json_decode($body, true);
+
+                if (!empty($body['zone_name'])) {
+	                self::$zone_name = $body['zone_name'];
+                    update_option('ic_cdn_zone_name', $body['zone_name']);
+                }
+	        }
+        }
+
         // Run Multisite
         if (is_multisite()) {
             $this->mu = new wps_ic_mu();
@@ -1676,6 +1707,8 @@ class wps_ic
             // Add WP_CACHE to wp-config.php
             $htacces->setWPCache(true);
             $htacces->setAdvancedCache();
+            // Add mod_Deflate to Htaccess
+            $htacces->addGzip();
         }
 
 

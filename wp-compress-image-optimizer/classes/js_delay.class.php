@@ -15,6 +15,7 @@ class wps_ic_js_delay
     // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"
     public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui', 'flexslide'];
 
+
     public function __construct()
     {
         self::$excludes = new wps_ic_excludes();

@@ -7,7 +7,6 @@ include WPS_IC_DIR . 'addons/criticalCss/criticalCss.php';
 class wps_cdn_rewrite
 {
 
-    public $cdn;
     public static $settings;
     public static $options;
     public static $lazy_excluded_list;
@@ -16,46 +15,43 @@ class wps_cdn_rewrite
     public static $cdnEnabled;
     public static $preloaderAPI;
     public static $excludes_class;
-
     public static $assets_to_preload;
     public static $assets_to_defer;
-
     public static $emoji_remove;
-
     public static $isAjax;
     public static $brizyCache;
     public static $brizyActive;
+    public static $regExURL;
 
     // Regexp Url & Dirs
-    public static $regExURL;
     public static $regExDir;
     public static $findImages;
+    public static $apiUrl;
 
     // Predefined API URLs
-    public static $apiUrl;
     public static $apiAssetUrl;
+    public static $updir;
 
     // Site URL, Upload Dir
-    public static $updir;
     public static $home_url;
     public static $site_url;
     public static $site_url_scheme;
+    public static $svg_placeholder;
 
     // SVG Placeholder (empty svg)
-    public static $svg_placeholder;
+    public static $excludes;
 
 
     // CSS / JS Variables
-    public static $excludes;
     public static $fonts;
     public static $css;
     public static $css_img_url;
     public static $css_minify;
     public static $js;
     public static $js_minify;
+    public static $replaceAllLinks;
 
     // Image Compress Variables
-    public static $replaceAllLinks;
     public static $external_url_excluded;
     public static $externalUrlEnabled;
     public static $zone_test;
@@ -72,12 +68,11 @@ class wps_cdn_rewrite
     public static $randomHash;
     public static $is_multisite;
     public static $keys;
+    public static $delay_js_override;
 
     //Overrides
-    public static $delay_js_override;
     public static $defer_js_override;
     public static $lazy_override;
-
     public static $rewriteLogic;
     public static $minifyHtml;
     public static $cacheHtml;
@@ -90,11 +85,11 @@ class wps_cdn_rewrite
     public static $wpcPreloadLinks;
     private static $isAmp;
     private static $themeIntegrations;
-
     private static $lazyLoadedImages;
     private static $lazyLoadedImagesLimit;
     private static $lazyLoadSkipFirstImages;
     private static $removeSrcset;
+    public $cdn;
     public $compatibility;
     public $criticalCombine;
     public $inline_js;
@@ -658,11 +653,11 @@ class wps_cdn_rewrite
     public function defaultExcluded($string)
     {
         if (!empty(self::$default_excluded_list)) {
-        foreach (self::$default_excluded_list as $i => $excluded_string) {
-            if (strpos($string, $excluded_string) !== false) {
-                return true;
+            foreach (self::$default_excluded_list as $i => $excluded_string) {
+                if (strpos($string, $excluded_string) !== false) {
+                    return true;
+                }
             }
-        }
         }
 
         return false;
@@ -1049,12 +1044,12 @@ class wps_cdn_rewrite
 //                }
 //            } else {
 
-                //Combine CSS
-                if (($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1')) || $this->criticalCombine) {
-                    if (empty($_GET['stopCombineCSS'])) {
-                        $html = $combine_css->maybe_do_combine($html);
-                    }
+            //Combine CSS
+            if (($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1')) || $this->criticalCombine) {
+                if (empty($_GET['stopCombineCSS'])) {
+                    $html = $combine_css->maybe_do_combine($html);
                 }
+            }
 
             #}
         }
@@ -1279,6 +1274,10 @@ class wps_cdn_rewrite
             return false;
         }
 
+        if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
+            return false;
+        }
+
         if (!empty($_GET['lc_action_launch_editing'])) {
             return false;
         }
@@ -1357,6 +1356,8 @@ class wps_cdn_rewrite
 
     public function doCacheCombine()
     {
+        //used to check if we should do cache or criticalCombine
+
         if (is_404()) {
             return false;
         }
@@ -1367,6 +1368,10 @@ class wps_cdn_rewrite
 
         if (!empty($_GET['forceRecombine']) && $_GET['forceRecombine'] == 'true') {
             return true;
+        }
+
+        if (current_user_can('manage_options')) {
+            return false;
         }
 
         $keys = new wps_ic_url_key();
@@ -1381,10 +1386,6 @@ class wps_cdn_rewrite
         }
 
         if (!empty($_GET)) {
-            return false;
-        }
-
-        if (current_user_can('manage_options')) {
             return false;
         }
 
@@ -1580,7 +1581,6 @@ class wps_cdn_rewrite
 
                     if (!$isCacheExpired && $isCacheValid) {
                         $cache->getCache($prefix);
-                        die();
                     }
 
                 }
@@ -1604,6 +1604,7 @@ class wps_cdn_rewrite
 
     public function checkCache_plugins_loaded()
     {
+
         if (!empty($_GET['disableCache']) || !empty($_GET['forceRecombine'])) {
             return true;
         }
@@ -1621,12 +1622,15 @@ class wps_cdn_rewrite
                 die('Check cache 23');
             }
 
+            $cache = new wps_cacheHtml();
             $isUserLoggedIn = is_user_logged_in();
+
             if ($isUserLoggedIn) {
-                return true;
+                if (!$cache->cacheLoggedIn()) {
+                    return true;
+                }
             }
 
-            $cache = new wps_cacheHtml();
             if ($cache->cacheEnabled()) {
 
                 if (!empty($_GET['cacheDbg2'])) {
@@ -1638,6 +1642,7 @@ class wps_cdn_rewrite
                 if ($mobile) {
                     $prefix = 'mobile';
                 }
+
                 if ($cache->cacheExists($prefix)) {
                     $isCacheExpired = false;
 
@@ -1646,14 +1651,13 @@ class wps_cdn_rewrite
 
                     if (!$isCacheExpired && $isCacheValid) {
                         $cache->getCache($prefix);
-                        die();
                     }
 
                 } else {
-	                if (!defined('WPS_IC_CACHE_BUFFER_STARTED')) {
-										//fallback cache buffer start, if we were unable to start in advanced-cache
-		                ob_start([$this, 'saveCache']);
-	                }
+                    if (!defined('WPS_IC_CACHE_BUFFER_STARTED')) {
+                        //fallback cache buffer start, if we were unable to start in advanced-cache
+                        ob_start([$this, 'saveCache']);
+                    }
                 }
             }
 
@@ -1677,9 +1681,9 @@ class wps_cdn_rewrite
         }
 
 
-		    if (!empty(self::$settings['disable-logged-in-opt']) && self::$settings['disable-logged-in-opt'] == '1' && is_user_logged_in()){
-			    return true;
-		    }
+        if (!empty(self::$settings['disable-logged-in-opt']) && self::$settings['disable-logged-in-opt'] == '1' && is_user_logged_in()) {
+            return true;
+        }
 
         // Is an ajax request?
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
@@ -1707,6 +1711,7 @@ class wps_cdn_rewrite
         if (isset($post->post_type) && strpos($post->post_type, 'wfocu') !== false) {
             // Ignore Post Types
         } else {
+
             if (!empty($_GET['generateCritical'])) {
                 if (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') {
                     self::$criticalCss->sendCriticalUrl();
@@ -1758,11 +1763,11 @@ class wps_cdn_rewrite
 
         // Was only adding to home page
         #if ($this->is_home_url()) {
-            if (!self::is_mobile()) {
-                add_action('wp_head', [$this, 'preload_custom_assets'], 1);
-            } else {
-                add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
-            }
+        if (!self::is_mobile()) {
+            add_action('wp_head', [$this, 'preload_custom_assets'], 1);
+        } else {
+            add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
+        }
         #}
 
         self::$excludes_class = new wps_ic_excludes();
@@ -2222,10 +2227,10 @@ class wps_cdn_rewrite
 //                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) || empty(wpcGetHeader('criticalCombine')))) {
 //                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
 //                } else {
-                    if (self::$css == "1") {
-                        add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
-                        add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
-                    }
+                if (self::$css == "1") {
+                    add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
+                    add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
+                }
                 #}
 
                 if (self::$js == "1") {
@@ -2527,39 +2532,19 @@ class wps_cdn_rewrite
     public function noscript_encode($html)
     {
         $html = base64_encode($html[0]);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_encode') {
-            return print_r([$html], true);
-        }
-
         return '[noscript-wpc]' . $html . '[/noscript-wpc]';
     }
 
     public function noscript_decode($html)
     {
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode') {
-            return print_r([$html], true);
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'no_decode') {
-            return $html[1];
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'after_base64_replace') {
-            return $html[1];
-        }
-
         $html = base64_decode($html[1]);
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'after_base64_decode') {
-            return $html;
+        // Optional: Safety check for valid decoded HTML
+        if ($html === false) {
+            return ''; // Or return $matches[0] to leave it unchanged
         }
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode_after') {
-            return print_r([str_replace('<iframe', 'framea', $html)], true);
-        }
-
-        return $html;
+        return $html; // Return decoded HTML, without the tags
     }
 
     public function jetsmart_ajax_rewrite($args)
@@ -2600,10 +2585,10 @@ class wps_cdn_rewrite
     public function saveCache($html)
     {
 
-		    if (empty(self::$cacheHtml)) {
-			    //mainInit() didnt run, we dont have to save cache, return the buffer.
-			    return $html;
-		    }
+        if (empty(self::$cacheHtml)) {
+            //mainInit() didnt run, we dont have to save cache, return the buffer.
+            return $html;
+        }
 
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
 
@@ -2616,7 +2601,6 @@ class wps_cdn_rewrite
                 }
             }
         }
-
         return $html;
     }
 
@@ -2686,6 +2670,13 @@ class wps_cdn_rewrite
          * Woocommerce fix - store stops working
          */
         if (isset($_GET['wc-ajax']) || isset($_GET['product_sku']) || !empty($_POST['product_sku'])) {
+            return $html;
+        }
+
+        /**
+         * WP Datatables Fix
+         */
+        if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
             return $html;
         }
 
@@ -2795,7 +2786,7 @@ class wps_cdn_rewrite
             $dbg .= $html;
         }
 
-        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html);
+        $html = preg_replace_callback('/<head\b[^>]*>/is', [$this, 'injectPreloadImages'], $html);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -2803,7 +2794,6 @@ class wps_cdn_rewrite
 
             return $dbg;
         }
-
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'wpFontsLocal') {
             return $html;
@@ -2818,6 +2808,13 @@ class wps_cdn_rewrite
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'setImageSize') {
             return $html;
         }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'removeTemplates') {
+            return $html;
+        }
+
+        $removedTemplates = $this->removeTemplates($html);
+        $html = $removedTemplates['html'];
 
         $html = preg_replace_callback('/<img[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si', [$this, 'set_image_sizes'], $html);
         $html = preg_replace_callback('/<picture>.*?<\/picture>/is', [$this, 'set_image_sizes'], $html);
@@ -2928,20 +2925,20 @@ class wps_cdn_rewrite
 
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             #if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-                //			  // TODO: Maybe add something?
-                //			  if($criticalActive && !empty($criticalCSSExists)) {
-                //					//critical exists, dont inline
-                //			  } else {
-                //				  $html = $combine_css->doInline($html);
-                //			  }
+            //			  // TODO: Maybe add something?
+            //			  if($criticalActive && !empty($criticalCSSExists)) {
+            //					//critical exists, dont inline
+            //			  } else {
+            //				  $html = $combine_css->doInline($html);
+            //			  }
             #} else {
-                // Find and Preload Fonts!!
-                self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
+            // Find and Preload Fonts!!
+            self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
 
-                if (!empty(self::$wpcPreloadLinks)) {
-                    $preloadFonts = implode('', self::$wpcPreloadLinks);
-                    $html = str_replace('<!--WPC_INSERT_PRELOAD-->', $preloadFonts, $html);
-                }
+            if (!empty(self::$wpcPreloadLinks)) {
+                $preloadFonts = implode('', self::$wpcPreloadLinks);
+                $html = str_replace('<!--WPC_INSERT_PRELOAD-->', $preloadFonts, $html);
+            }
             #}
         }
 
@@ -3029,11 +3026,11 @@ class wps_cdn_rewrite
         }
 
         // Find all URLs on page that have not been replaced
-	    $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
-	    $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
+        $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
+        $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
         //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
-	      $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
+        $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
         $html = preg_replace_callback($regEx, function ($matches) {
             $url = str_replace('&#039;', '', $matches[2]);
             return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
@@ -3071,7 +3068,13 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        $html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/i', [$this, 'noscript_decode'], $html);
+        # $html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/si', [$this, 'noscript_decode'], $html);
+        #return print_r([$html],true);
+        #$html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/i', [$this, 'noscript_decode'], $html);
+
+        $html = preg_replace_callback('/\[noscript-wpc\](.*?)\[\/noscript-wpc\]/is', [$this,'noscript_decode'], $html);
+
+        #return print_r([$html],true);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'Inline') {
             return $html;
@@ -3082,16 +3085,9 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        //Combine JS
-        if ($this->doCacheCombine() && (isset(self::$settings['js_combine']) && self::$settings['js_combine'] == '1')) {
-            $combine_js = new wps_ic_combine_js();
-            $html = $combine_js->maybe_do_combine($html);
-        }
-
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'delay_js') {
             return $html;
         }
-
 
         //Delay JS
         #$delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
@@ -3139,6 +3135,12 @@ class wps_cdn_rewrite
                 $html = self::$minifyHtml->minify($html);
             }
         }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'returnTemplates') {
+            return $html;
+        }
+
+        $html = $this->restoreTemplates($html, $removedTemplates['templates']);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cache_settings') {
             return $html;
@@ -3200,6 +3202,57 @@ class wps_cdn_rewrite
             self::$regExURL = self::$options['regExUrl'];
             self::$regExDir = self::$options['regexpDirectories'];
         }
+    }
+
+    /**
+     * Cleans up script templates from HTML, adds IDs
+     *
+     * @param string $html The original HTML content
+     * @return array Associative array containing modified HTML and saved templates
+     */
+    function removeTemplates($html)
+    {
+        $templates = [];
+        $templateIdPrefix = 'template_';
+        $templateCounter = 0;
+
+        // First, find all script tags with their content
+        preg_match_all('/<script\b[^>]*>(.*?)<\/script>/is', $html, $matches, PREG_SET_ORDER);
+
+        // Process each script tag
+        foreach ($matches as $match) {
+            $fullTag = $match[0];
+            $content = $match[1];
+
+            // Check if this is a template script
+            if (preg_match('/type\s*=\s*["\']text\/template["\']/i', $fullTag)) {
+                // Generate a unique ID
+                $templateId = $templateIdPrefix . $templateCounter++;
+
+                // Save the content
+                $templates[$templateId] = $content;
+
+                // Check if there's already an id attribute
+                if (preg_match('/\sid\s*=\s*["\'][^"\']*["\']/i', $fullTag)) {
+                    // Replace existing id
+                    $newTag = preg_replace('/(\sid\s*=\s*["\'])[^"\']*(["\'])/i', '$1' . $templateId . '$2', $fullTag);
+                } else {
+                    // Add id attribute before the closing >
+                    $newTag = preg_replace('/(<script\b[^>]*)>/i', '$1 id="' . $templateId . '">', $fullTag);
+                }
+
+                // Remove the content
+                $newTag = preg_replace('/(<script\b[^>]*>).*(<\/script>)/is', '$1$2', $newTag);
+
+                // Replace in the original HTML
+                $html = str_replace($fullTag, $newTag, $html);
+            }
+        }
+
+        return [
+            'html' => $html,
+            'templates' => $templates
+        ];
     }
 
     public function cdn_rewrite_url($url, $addslashes = false)
@@ -3277,7 +3330,13 @@ class wps_cdn_rewrite
                         continue;
                     }
 
-                    $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width_url . '/u:' . self::reformat_url($srcset_url) . ' ' . $srcset_width . $extension . ',';
+                    if ($srcset_width == '1') {
+                        $srcsetWidthExtension = '';
+                    } else {
+                        $srcsetWidthExtension = $srcset_width . $extension;
+                    }
+
+                    $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width_url . '/u:' . self::reformat_url($srcset_url) . ' ' . $srcsetWidthExtension . ',';
                 }
             }
 
@@ -3507,6 +3566,42 @@ class wps_cdn_rewrite
         }
 
         return false;
+    }
+
+    /**
+     * Restores script template content by ID from the saved templates array
+     *
+     * @param string $html The HTML with empty script templates
+     * @param array $templates The array of saved template content indexed by ID
+     * @return string The HTML with restored script template content
+     */
+    function restoreTemplates($html, $templates)
+    {
+        // Find all script tags
+        preg_match_all('/<script\b[^>]*><\/script>/is', $html, $matches, PREG_SET_ORDER);
+
+        // Process each empty script tag
+        foreach ($matches as $match) {
+            $fullTag = $match[0];
+
+            // Check if this is a template script with an id
+            if (preg_match('/type\s*=\s*["\']text\/template["\']/i', $fullTag) &&
+                preg_match('/id\s*=\s*["\']([^"\']+)["\']/i', $fullTag, $idMatch)) {
+
+                $templateId = $idMatch[1];
+
+                // Check if we have content for this ID
+                if (isset($templates[$templateId])) {
+                    // Restore the content
+                    $newTag = str_replace('></script>', '>' . $templates[$templateId] . '</script>', $fullTag);
+
+                    // Replace in the HTML
+                    $html = str_replace($fullTag, $newTag, $html);
+                }
+            }
+        }
+
+        return $html;
     }
 
     public function set_image_sizes($matches)
@@ -4153,53 +4248,53 @@ class wps_cdn_rewrite
     {
         $found_tags = [];
 
-		    $image = html_entity_decode($image);
+        $image = html_entity_decode($image);
 
-		    //fix for empty tags
-		    preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
+        //fix for empty tags
+        preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
 
-		    if (!empty($_GET['dbg_img1'])) {
-			    return [$image, $matches];
-		    }
+        if (!empty($_GET['dbg_img1'])) {
+            return [$image, $matches];
+        }
 
-		    $attributes = [];
-		    unset ($matches[0]);
+        $attributes = [];
+        unset ($matches[0]);
 
-		    foreach ($matches as $match) {
-			    $attrName = $match[1]; // The attribute name
-			    // Determine the attribute value based on the capturing group that caught it
-			    $attrValue = null;
-			    // Iterate through potential groups and assign the first non-empty value
-			    foreach ([2, 3, 4] as $index) {
-				    if (!empty($match[$index])) {
-					    $attrValue = $match[$index];
-					    break; // Stop at the first non-empty value
-				    }
-			    }
+        foreach ($matches as $match) {
+            $attrName = $match[1]; // The attribute name
+            // Determine the attribute value based on the capturing group that caught it
+            $attrValue = null;
+            // Iterate through potential groups and assign the first non-empty value
+            foreach ([2, 3, 4] as $index) {
+                if (!empty($match[$index])) {
+                    $attrValue = $match[$index];
+                    break; // Stop at the first non-empty value
+                }
+            }
 
-			    // Save the attribute and its value (if any) as key => value pairs in the array
-			    $attributes[$attrName] = $attrValue;
-		    }
+            // Save the attribute and its value (if any) as key => value pairs in the array
+            $attributes[$attrName] = $attrValue;
+        }
 
-		    if (!empty($_GET['dbg_img2'])) {
-			    return [$image, $attributes];
-		    }
+        if (!empty($_GET['dbg_img2'])) {
+            return [$image, $attributes];
+        }
 
-		    foreach ($attributes as $tag => $value) {
-			    if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
-				    continue;
-			    }
+        foreach ($attributes as $tag => $value) {
+            if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
+                continue;
+            }
 
-			    if ($tag == 'data-mk-image-src-set') {
-				    $value = htmlspecialchars_decode($value);
-				    $value = json_decode($value, true);
-				    $value = $value['default'];
-			    }
+            if ($tag == 'data-mk-image-src-set') {
+                $value = htmlspecialchars_decode($value);
+                $value = json_decode($value, true);
+                $value = $value['default'];
+            }
 
-			    $found_tags[$tag] = $value;
-		    }
+            $found_tags[$tag] = $value;
+        }
 
-	    return $found_tags;
+        return $found_tags;
     }
 
     public static function get_image_size($url)

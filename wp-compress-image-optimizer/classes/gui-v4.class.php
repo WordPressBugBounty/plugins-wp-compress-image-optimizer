@@ -1684,4 +1684,10 @@ class wpc_gui_v4 extends wps_ic
         }
     }
 
+		public static function checkbox($class, $checked){
+
+		}
+
+
+
 }

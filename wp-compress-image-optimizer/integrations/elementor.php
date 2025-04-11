@@ -67,9 +67,10 @@ class wps_ic_elementor
             $html = $this->hideSections($html);
         }
         $html = $this->delayBackgrounds($html);
-        #$html = $this->insertJS($html);
 
-        $html = str_replace('optimize.js', 'elementor/optimize.js', $html);
+        if (str_contains($html, 'elementor/optimize.js') === false) {
+            $html = str_replace('optimize.js', 'elementor/optimize.js', $html);
+        }
 
         return $html;
     }

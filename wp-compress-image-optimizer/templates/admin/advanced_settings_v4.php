@@ -569,6 +569,18 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <span class="wpc-title">Integrations</span>
                                         </a>
                                     </li>
+                                <li>
+                                    <a href="#" class="" data-tab="export_settings">
+                                <span class="wpc-icon-container">
+                                <span class="wpc-icon">
+                                    <img src="<?php
+                                    echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
+                                </span>
+                                </span>
+                                        <span class="wpc-title">Export/Import settings</span>
+                                    </a>
+                                </li>
+
                                 <?php
                                 if (get_option('wpc_show_hidden_menus') == 'true') {
                                     ?>
@@ -862,7 +874,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         </div>
 
-                                        <div class="wpc-items-list-row mb-0">
+                                        <div class="wpc-items-list-row mb-20">
 
                                             <?php
                                             #echo $gui::checkboxDescription_v4('Cache Compatibility', 'Prevent cached webpages from opening as a download on LiteSpeed or OpenLiteSpeed servers.', '', '', ['cache', 'compatibility'], $cacheLocked, '', ''); ?>
@@ -871,9 +883,23 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             #echo $gui::inputDescription_v4('Expire Cache After', 'Recreate cache if it\'s stale or expired after a set duration.', 'Expire after', 'hours', false, ['cache', 'expire'], $cacheLocked, '6'); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Ignore server cache control', 'Always cache pages, even when no-cache is set.', '', '', ['cache', 'ignore-server-control'], $cacheLocked, '', '');
+                                            echo $gui::checkboxDescription_v4('Ignore Server Cache Control', 'Always cache pages, even when no-cache is set by the server.', '', '', ['cache', 'ignore-server-control'], $cacheLocked, '', '');
                                             ?>
 
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Cache Logged-In Users', 'Enable caching of frontend pages for logged-in users.', '', '', ['cache', 'cache-logged-in'], $cacheLocked, '', '');
+                                            ?>
+                                        </div>
+
+                                        <div class="wpc-items-list-row mb-0">
+
+			                                    <?php
+			                                    echo $gui::checkboxDescription_v4('Purge Cache on Update', 'Purge all cache on plugin, theme, core or menu updates. Purge individual posts and pages on edit.', '', '', ['cache', 'purge-hooks'], $cacheLocked, '', 'purge-settings');
+			                                    ?>
+
+			                                    <?php
+			                                    //echo $gui::checkboxDescription_v4('Cache Logged-In Users', 'Enable caching of frontend pages for logged-in users.', '', '', ['cache', 'cache-logged-in'], $cacheLocked, '', '');
+			                                    ?>
                                         </div>
 
 
@@ -1329,6 +1355,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         </div>
                                     </div>
+
+
+
                                     <?php if (get_option('wpc_show_hidden_menus') == 'true') { ?>
                                     <div class="wpc-tab-content-box">
 
@@ -1350,6 +1379,47 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     </div>
                                     <?php } ?>
                                 </div>
+
+                                <div class="wpc-tab-content" id="export_settings" style="display:none;">
+                                    <div class="wpc-tab-content-box">
+
+                                      <?php
+                                      echo $gui::checkboxTabTitle('Export/Import settings', 'Export your settings to a file to easily import to other sites.', 'other-optimization/tab-icon.svg', ''); ?>
+
+                                    <div class="wpc-spacer"></div>
+
+                                        <div class="wpc-settings-export-form">
+                                            <div class="cdn-popup-inner"">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked>
+                                                    <p>Export Settings</p>
+                                                </div>
+                                            </div>
+                                            <div class="cdn-popup-inner"">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes">
+                                                    <p>Export Excludes</p>
+                                                </div>
+                                            </div>
+                                            <div class="cdn-popup-inner"">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache">
+                                                    <p>Export Cache Purge Settings</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="wpc-export-import-buttons">
+                                            <button id="wpc-export-button" class="wps-ic-help-btn" style="border:none">Export</button>
+                                            <button id="wpc-import-button" class="wps-ic-help-btn" style="border:none">Import</button>
+                                            <button id="wpc-set-default-button" class="wps-ic-help-btn" style="border:none;float:right">Reset to default</button>
+                                            <input type="file" id="wpc-import-file" style="display: none;" accept=".json">
+                                        </div>
+                                    </div>
+
+                                </div>
+
+
                                 <div class="wpc-tab-content" id="system-information" style="display:none;">
                                     <div class="wpc-tab-content-box">
 
@@ -1472,8 +1542,6 @@ include 'partials/popups/exclude-inline-css.php';
 
 // HTML Optimizations
 include 'partials/popups/exclude-minify-html.php';
-include 'partials/popups/exclude-simple-caching.php';
-include 'partials/popups/exclude-advanced-caching.php';
 
 // JS Optimizations
 include 'partials/popups/js/delay-js-configuration.php';
@@ -1489,3 +1557,10 @@ include 'partials/popups/css/exclude-css-combine.php';
 include 'partials/popups/css/exclude-css-minify.php';
 include 'partials/popups/css/exclude-css-render-blocking.php';
 include 'partials/popups/css/inline-css.php';
+
+//Cache
+include 'partials/popups/exclude-simple-caching.php';
+include 'partials/popups/exclude-advanced-caching.php';
+include 'partials/popups/purge-settings.php';
+
+include 'partials/popups/import-export.php';

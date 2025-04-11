@@ -25,7 +25,19 @@ class wps_cacheHtml
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-        $this->cachePath = WPS_IC_CACHE . $this->urlKey . '/';
+        // Append user cookie hash to the cache path if user is logged in
+        $user_hash = '';
+        if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN) {
+            foreach ($_COOKIE as $key => $value) {
+                if (strpos($key, 'wordpress_logged_in_') === 0) {
+                    $user_hash = md5($key . substr($value, 0, 10)) . '/';
+                    break;
+                }
+            }
+
+        }
+
+        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . '/';
     }
 
     /**
@@ -246,14 +258,14 @@ class wps_cacheHtml
             return $buffer;
         }
 
-				if (empty($this->options['cache']['ignore-server-control']) ||  $this->options['cache']['ignore-server-control'] == '0') {
-					$cacheControl = strtolower( $_SERVER['HTTP_CACHE_CONTROL'] );
-					if ( strpos( $cacheControl, 'no-cache' ) !== false ||
-					     strpos( $cacheControl, 'no-store' ) !== false ||
-					     strpos( $cacheControl, 'private' ) !== false ) {
-						return $buffer;
-					}
-				}
+        if (empty($this->options['cache']['ignore-server-control']) || $this->options['cache']['ignore-server-control'] == '0') {
+            $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
+            if (strpos($cacheControl, 'no-cache') !== false ||
+                strpos($cacheControl, 'no-store') !== false ||
+                strpos($cacheControl, 'private') !== false) {
+                return $buffer;
+            }
+        }
 
         $excludes = get_option('wpc-excludes');
         $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
@@ -276,14 +288,35 @@ class wps_cacheHtml
             return $buffer;
         }
 
-        // Disable cache for logged in users
         if (is_user_logged_in()) {
-            return $buffer;
+            if (!$this->cacheLoggedIn()) {
+                return $buffer;
+            }
         }
 
-        // Disable cache for logged in users
-        if (is_user_logged_in()) {
-            return $buffer;
+        //page type checks for cache
+        $purge_rules = get_option('wps_ic_purge_rules', []);
+        $type_lists = [];
+        if (!empty($purge_rules['type-lists'])) {
+            $type_lists = $purge_rules['type-lists'];
+        }
+
+        if (is_archive() || is_category() || is_tag() || is_author() || is_date() || is_post_type_archive() || is_tax()) {
+            if (!isset($type_lists['archive-pages'])) {
+                $type_lists['archive-pages'] = [];
+            }
+            if (!in_array($this->urlKey, $type_lists['archive-pages'])) {
+                $type_lists['archive-pages'][] = $this->urlKey;
+            }
+        }
+
+        if ($this->hasRecentPostsWidget($buffer)) {
+            if (!isset($type_lists['recent-posts-widget'])) {
+                $type_lists['recent-posts-widget'] = [];
+            }
+            if (!in_array($this->urlKey, $type_lists['recent-posts-widget'])) {
+                $type_lists['recent-posts-widget'][] = $this->urlKey;
+            }
         }
 
         if ($this->is_mobile()) {
@@ -302,7 +335,51 @@ class wps_cacheHtml
             $this->saveGzCache($buffer, $prefix);
         }
 
+        $purge_rules['type-lists'] = $type_lists;
+        update_option('wps_ic_purge_rules', $purge_rules);
+
         return $buffer;
+    }
+
+    public function cacheLoggedIn()
+    {
+
+        if (!empty($this->options['cache']['cache-logged-in']) && $this->options['cache']['cache-logged-in'] == '1') {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function hasRecentPostsWidget($buffer)
+    {
+        if (empty($buffer)) {
+            return false;
+        }
+
+        // Primary WordPress recent posts widget identifiers
+        $primary_markers = [
+            'widget_recent_entries',
+            'wp-block-latest-posts',
+            'class="recent-posts'
+        ];
+
+        // Check for definitive recent posts markers first
+        foreach ($primary_markers as $marker) {
+            if (strpos($buffer, $marker) !== false) {
+                return true;
+            }
+        }
+
+        // Check for specific shortcodes that display recent posts
+        if (
+            strpos($buffer, '[recent_posts') !== false ||
+            strpos($buffer, '[display-posts') !== false
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     public function is_mobile()
@@ -375,7 +452,7 @@ class wps_cacheHtml
             $expiresTime = time() + $cacheSeconds;
             header('Expires: ' . gmdate('D, d M Y H:i:s', $expiresTime) . ' GMT');
         } else {
-            header('Cache-Control: public, max-age=' . 60*60); // Ensures that the file is not cached
+            header('Cache-Control: public, max-age=' . 60 * 60); // Ensures that the file is not cached
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
 
@@ -391,23 +468,18 @@ class wps_cacheHtml
         if ($post_id == 'all') {
             self::removeDirectory(WPS_IC_CACHE);
             self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/');
-            $cache_integrations = new wps_ic_cache_integrations();
-            $cache_integrations->purgeVarnish();
-            return;
-        }
 
-        if ($post_id != 0) {
-            $url = get_permalink($post_id);
         } else {
-            $url = home_url();
+            if ($post_id != 0) {
+                $url = get_permalink($post_id);
+            } else {
+                $url = home_url();
+            }
+
+            $urlKey = $this->url_key_class->setup($url);
+            self::removeDirectory(WPS_IC_CACHE . $urlKey);
+            self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $urlKey);
         }
-
-        $urlKey = $this->url_key_class->setup($url);
-        self::removeDirectory(WPS_IC_CACHE . $urlKey);
-        self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $urlKey);
-
-        $cache_integrations = new wps_ic_cache_integrations();
-        $cache_integrations->purgeVarnish($post_id);
     }
 
     public static function removeDirectory($path)
@@ -427,6 +499,12 @@ class wps_cacheHtml
         if (is_dir($path) && empty($files)) {
             rmdir($path);
         }
+    }
+
+    public function removeCacheFilesByKey($urlKey)
+    {
+        self::removeDirectory(WPS_IC_CACHE . $urlKey);
+        self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $urlKey);
     }
 
     public function removeCombinedFiles($post_id)
@@ -478,6 +556,5 @@ class wps_cacheHtml
         // Delete the folder itself
         if (is_dir($folder)) rmdir($folder);
     }
-
 
 }

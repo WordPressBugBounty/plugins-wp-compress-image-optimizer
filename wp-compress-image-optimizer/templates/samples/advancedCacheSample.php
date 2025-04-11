@@ -1,6 +1,11 @@
 <?php
+
 defined('ABSPATH') || exit;
 define('WP_COMPRESS_ADVANCED_CACHE', true);
+
+#WPC_CACHE_LOGGED_IN_START
+define('WPC_CACHE_LOGGED_IN', false);
+#WPC_CACHE_LOGGED_IN_END
 
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';
@@ -22,8 +27,9 @@ include_once $pluginExists . 'addons/cache/advancedCache.php';
 
 $config = new wps_ic_config();
 include_once $config->getConfigPath();
+
 foreach($_COOKIE as $key => $value) {
-  if (strpos($key, 'wordpress_logged_in_') === 0) {
+  if (strpos($key, 'wordpress_logged_in_') === 0 && !WPC_CACHE_LOGGED_IN) {
     return; // Don't cache for logged-in users
   }
 }
