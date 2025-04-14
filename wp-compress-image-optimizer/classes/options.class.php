@@ -86,7 +86,14 @@ class wps_ic_options
             'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
-            'cache' => ['advanced' => 1, 'mobile' => 1, 'minify' => 0, 'expire' => 24, 'ignore-server-control' => 1],
+            'cache' => [ 'advanced'              => 0,
+                         'mobile'                => 0,
+                         'minify'                => 0,
+                         'expire'                => 0,
+                         'ignore-server-control' => 0,
+                         'cache-logged-in'       => 0,
+                         'purge-hooks'           => 1
+            ],
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
@@ -149,7 +156,14 @@ class wps_ic_options
             'inline-js' => '0',
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
-            'cache' => ['advanced' => '0', 'mobile' => '0', 'minify' => '0', 'expire' => 24, 'ignore-server-control' => 0],
+            'cache' => [ 'advanced'              => 0,
+                         'mobile'                => 0,
+                         'minify'                => 0,
+                         'expire'                => 0,
+                         'ignore-server-control' => 0,
+                         'cache-logged-in'       => 0,
+                         'purge-hooks'           => 1
+            ],
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',

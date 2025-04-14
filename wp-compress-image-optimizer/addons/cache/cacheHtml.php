@@ -295,7 +295,11 @@ class wps_cacheHtml
         }
 
         //page type checks for cache
-        $purge_rules = get_option('wps_ic_purge_rules', []);
+        $purge_rules = get_option('wps_ic_purge_rules');
+		    if (!isset($purge_rules['post-publish'])){
+					$options = new wps_ic_options();
+			    $purge_rules = $options->get_preset('purge_rules');
+		    }
         $type_lists = [];
         if (!empty($purge_rules['type-lists'])) {
             $type_lists = $purge_rules['type-lists'];

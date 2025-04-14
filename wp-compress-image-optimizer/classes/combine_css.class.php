@@ -1049,6 +1049,7 @@ class wps_ic_combine_css
             return $tag;
         }
         $src = '';
+	      $media_query = null;
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'before') {
             return print_r([$tag], true);
@@ -1070,6 +1071,13 @@ class wps_ic_combine_css
             return $tag;
         }
 
+				// Extract media query if present
+		    if (preg_match('/media=["\']([^"\']+)["\']/', $tag, $media_match)) {
+			      $media_query = $media_match[1];
+			      if ($this->log_criticalCombine){
+				      $this->logger->log('Media query found: ' . $media_query);
+			      }
+		    }
 
         if (strpos($tag, '<link') !== false) {
             $is_src_set = preg_match('/href=["|\'](.*?)["|\']/', $tag, $src);
@@ -1170,7 +1178,14 @@ class wps_ic_combine_css
         $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
-        $this->current_file .= $content . PHP_EOL;
+		    // Wrap content in media query if it exists
+		    if ($media_query) {
+				    $this->current_file .= "@media " . $media_query . " {" . PHP_EOL;
+				    $this->current_file .= $content . PHP_EOL;
+				    $this->current_file .= "}" . PHP_EOL;
+		    } else {
+			      $this->current_file .= $content . PHP_EOL;
+		    }
 
         #if (mb_strlen($this->current_file, '8bit') >= $this->filesize_cap) {
         $this->write_file_and_next();
@@ -1269,9 +1284,9 @@ class wps_ic_combine_css
         $themePath = get_theme_root();
 
         // $path relative is example: wp-content/plugins/jeg-elementor-kit/assets/css/elements/main.css
-        if (strpos($path, 'plugins/') !== false) {
+        if (strpos($path, 'wp-content/plugins/') !== false) {
             // Plugins DIR: WP_PLUGIN_DIR
-            $pathExploded = explode('plugins/', $path);
+            $pathExploded = explode('wp-content/plugins/', $path);
             $justPath = $pathExploded[1];
             $finalPath = WP_PLUGIN_DIR . '/' . $justPath;
         } else if (strpos($path, 'wp-includes/') !== false) {
@@ -1279,14 +1294,14 @@ class wps_ic_combine_css
             $pathExploded = explode('wp-includes/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $includesPath . '/' . $justPath;
-        } else if (strpos($path, 'uploads/') !== false) {
+        } else if (strpos($path, 'wp-content/uploads/') !== false) {
             // Uploads DIR: wp_upload_dir()
-            $pathExploded = explode('uploads/', $path);
+            $pathExploded = explode('wp-content/uploads/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $uploadDir . '/' . $justPath;
-        } else if (strpos($path, 'themes/') !== false) {
+        } else if (strpos($path, 'wp-content/themes/') !== false) {
             // Themes Dir: TEMPLATEPATH
-            $pathExploded = explode('themes/', $path);
+            $pathExploded = explode('wp-content/themes/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $themePath . '/' . $justPath;
         } else {

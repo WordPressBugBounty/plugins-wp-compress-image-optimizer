@@ -35,9 +35,12 @@ class wps_ic_cron {
 					// Remove any existing scheduled events for this hook
 					wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
 
+					$date = new DateTime('today ' . $time, wp_timezone());
+					$timestamp = $date->getTimestamp();
+
 					// Schedule new event with current time
 					wp_schedule_event(
-						strtotime($time),
+						$timestamp,
 						'daily',
 						'wps_ic_scheduled_purge_hook'
 					);

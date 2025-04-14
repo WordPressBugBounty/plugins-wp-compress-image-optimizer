@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.26';
+        self::$version = '6.30.27';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1612,13 +1612,13 @@ class wps_ic
                         if (!isset($settings[$option_key])) {
                             $settings[$option_key] = [];
                         }
-                        $settings[$option_key][$option_value_k] = '0';
+                        $settings[$option_key][$option_value_k] = $option_value_v;
                         $foundMissing = true;
                     }
                 }
             } else {
                 if (!isset($settings[$option_key])) {
-                    $settings[$option_key] = '0';
+                    $settings[$option_key] = $option_value;
                     $foundMissing = true;
                 }
             }
