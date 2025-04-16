@@ -45,11 +45,11 @@ global $wps_ic;
                                 <a href="#" class="wps-ic-connect-retry">Retry</a>
                             </div>
 
-                            <div class="wps-ic-unable-to-communicate" style="display: none;">
+                            <div class="wps-ic-unable-to-communicate" style="padding:200px;display: none;">
                                 <div class="wps-ic-image"><img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/error.svg" /></div>
                                 <h1>Communication Issue</h1>
                                 <h2>We’re unable to connect to the API.</h2>
-                                <p>t seems something (like a firewall, security plugin, Cloudflare, or server setting) is blocking communication. Don’t worry, this is easy to fix!</p>
+                                <p>It seems something (like a firewall, security plugin, Cloudflare, or server setting) is blocking communication.<br/><br/>Don’t worry, this is easy to fix!</p>
                                 <p>Follow our <a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Guide</a> for step-by-step instructions to restore access.</p>
 
                                 <a href="#" class="wps-ic-connect-retry">Retry</a>

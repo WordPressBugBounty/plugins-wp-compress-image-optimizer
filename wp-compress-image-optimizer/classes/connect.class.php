@@ -88,6 +88,8 @@ class wps_ic_connect extends wps_ic
 
     public function connect()
     {
+        ini_set('max_execution_time', '120');
+
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wpc_live_connect')) {
             wp_send_json_error('Forbidden.');
         }
@@ -158,10 +160,10 @@ class wps_ic_connect extends wps_ic
                 wp_send_json_success(['liveMode' => $call->data->liveMode, 'localMode' => $call->data->localMode]);
             }
 
-            wp_send_json_error(['msg' => 'api-issue', 'url' => $uri]);
+            wp_send_json_error(['msg' => 'api-issue', 'code' => 'not-successful', 'url' => $uri]);
         }
 
-        wp_send_json_error(['msg' => 'api-issue', 'url' => $uri]);
+        wp_send_json_error(['msg' => 'api-issue', 'code' => 'call-empty', 'url' => $uri]);
     }
 
 

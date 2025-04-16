@@ -3233,12 +3233,12 @@ class wps_cdn_rewrite
                 $templates[$templateId] = $content;
 
                 // Check if there's already an id attribute
-                if (preg_match('/\sid\s*=\s*["\'][^"\']*["\']/i', $fullTag)) {
+                if (preg_match('/\swpc_id\s*=\s*["\'][^"\']*["\']/i', $fullTag)) {
                     // Replace existing id
-                    $newTag = preg_replace('/(\sid\s*=\s*["\'])[^"\']*(["\'])/i', '$1' . $templateId . '$2', $fullTag);
+                    $newTag = preg_replace('/(\swpc_id\s*=\s*["\'])[^"\']*(["\'])/i', '$1' . $templateId . '$2', $fullTag);
                 } else {
                     // Add id attribute before the closing >
-                    $newTag = preg_replace('/(<script\b[^>]*)>/i', '$1 id="' . $templateId . '">', $fullTag);
+                    $newTag = preg_replace('/(<script\b[^>]*)>/i', '$1 wpc_id="' . $templateId . '">', $fullTag);
                 }
 
                 // Remove the content
@@ -3586,7 +3586,7 @@ class wps_cdn_rewrite
 
             // Check if this is a template script with an id
             if (preg_match('/type\s*=\s*["\']text\/template["\']/i', $fullTag) &&
-                preg_match('/id\s*=\s*["\']([^"\']+)["\']/i', $fullTag, $idMatch)) {
+                preg_match('/wpc_id\s*=\s*["\']([^"\']+)["\']/i', $fullTag, $idMatch)) {
 
                 $templateId = $idMatch[1];
 

@@ -80,7 +80,7 @@ jQuery(document).ready(function ($) {
                         //action: 'wps_lite_connect',
                         apikey: apikey,
                         nonce: nonce,
-                        timeout: 20000
+                        timeout: 60000
                     }, function (response) {
                         if (response.success) {
                             // Connect
@@ -207,7 +207,7 @@ jQuery(document).ready(function ($) {
                         //action: 'wps_lite_connect',
                         apikey: apikey,
                         nonce: nonce,
-                        timeout: 20000
+                        timeout: 60000
                     }, function (response) {
                         if (response.success) {
                             // Connect

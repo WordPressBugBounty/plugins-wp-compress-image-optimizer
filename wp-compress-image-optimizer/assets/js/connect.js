@@ -180,6 +180,7 @@ jQuery(document).ready(function ($) {
                 var loaderLite = $('.wpc-loading-lite', swal_container);
                 var tests = $('.wps-ic-tests-container', swal_container);
                 var init = $('.wps-ic-init-container', swal_container);
+                var left = $('.wps-lite-connect-left', swal_container);
 
 
                 $('.wps-use-lite').on('click', function (e) {
@@ -235,6 +236,7 @@ jQuery(document).ready(function ($) {
                     $(init, swal_container).hide();
                     $(form_container).hide();
                     $(loader).show();
+                    $(left).show();
                     $(loaderLite).hide();
                     $(tests).hide();
 
@@ -242,7 +244,7 @@ jQuery(document).ready(function ($) {
                         action: 'wps_ic_live_connect',
                         apikey: apikey,
                         nonce: nonce,
-                        timeout: 20000
+                        timeout: 60000
                     }, function (response) {
                         if (response.success) {
                             // Connect
@@ -262,6 +264,8 @@ jQuery(document).ready(function ($) {
                                 $(loader).hide();
                                 $(tests).hide();
                             } else if (response.data.msg == 'api-issue') {
+                                $(left).hide();
+                                $(loader).hide();
                                 $(loaderLite).hide();
                                 $(unableToCommunicate).show();
                             } else {

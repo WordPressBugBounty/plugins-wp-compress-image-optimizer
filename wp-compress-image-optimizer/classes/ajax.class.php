@@ -2136,7 +2136,7 @@ class wps_ic_ajax extends wps_ic
             }
 
             if (empty($error)) {
-                if (!preg_match('/^([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)$/', $cname, $matches) && !preg_match('/^([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)\.([a-zA-z0-9\_\-]+)$/', $cname, $matches)) {
+                if (!preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches) && !preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches)) {
                     // Subdomain is not valid
                     $error = 'This domain is invalid, please link a new domain...';
                     delete_option('ic_custom_cname');
