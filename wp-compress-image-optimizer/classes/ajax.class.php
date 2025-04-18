@@ -2053,28 +2053,9 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        $options = get_option(WPS_IC_OPTIONS);
-        $apikey = $options['api_key'];
-        $site = site_url();
+				$cache = new wps_ic_cache_integrations();
+				$cache->remove_key();
 
-        delete_transient('wpc_test_running');
-        delete_transient('wpc_initial_test');
-        delete_option(WPS_IC_LITE_GPS);
-        delete_option(WPC_WARMUP_LOG_SETTING);
-        delete_option(WPS_IC_TESTS);
-        delete_option('wpsShowAdvanced');
-
-
-        $options['api_key'] = '';
-        $options['response_key'] = '';
-        $options['orp'] = '';
-        $options['regExUrl'] = '';
-        $options['regexpDirectories'] = '';
-
-        // Setup URI
-        $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $apikey . '&site=' . urlencode($site);
-
-        update_option(WPS_IC_OPTIONS, $options);
         wp_send_json_success();
     }
 

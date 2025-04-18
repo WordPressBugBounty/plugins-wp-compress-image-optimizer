@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.28';
+        self::$version = '6.30.29';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -534,6 +534,10 @@ class wps_ic
                 update_option(WPS_IC_OPTIONS, $options);
                 return false;
             }
+        } else if (wp_remote_retrieve_response_code($call) == 401) {
+	        $cache = new wps_ic_cache_integrations();
+            $cache->remove_key();
+            return false;
         } else {
             $data = [];
             $data['account']['allow_local'] = false;

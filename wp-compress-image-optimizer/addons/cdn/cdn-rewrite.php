@@ -1754,6 +1754,9 @@ class wps_cdn_rewrite
         // Raise memory limit
         ini_set('memory_limit', '1024M');
 
+				// Raise backtrack limit for regex
+	      ini_set('pcre.backtrack_limit', '10000000');
+
         global $post;
         self::$options = get_option(WPS_IC_OPTIONS);
 

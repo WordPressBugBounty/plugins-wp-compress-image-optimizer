@@ -225,5 +225,29 @@ class wps_ic_cache_integrations
         return true;
     }
 
+		public function remove_key()
+		{
+				$options = get_option(WPS_IC_OPTIONS);
+
+				delete_transient('wpc_test_running');
+				delete_transient('wpc_initial_test');
+				delete_option(WPS_IC_LITE_GPS);
+				delete_option(WPC_WARMUP_LOG_SETTING);
+				delete_option(WPS_IC_TESTS);
+				delete_option('wpsShowAdvanced');
+
+				$options['api_key'] = '';
+				$options['response_key'] = '';
+				$options['orp'] = '';
+				$options['regExUrl'] = '';
+				$options['regexpDirectories'] = '';
+
+				update_option(WPS_IC_OPTIONS, $options);
+
+				self::purgeCombinedFiles(false);
+				self::purgeAll(false, true);
+				return true;
+		}
+
 
 }

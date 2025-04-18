@@ -42,9 +42,13 @@ class wps_ic_stats
             $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);
             return $body;
+        } else if (wp_remote_retrieve_response_code($call) == 401) {
+		        $cache = new wps_ic_cache_integrations();
+						$cache->remove_key();
+		        return false;
         }
 
-        return false;
+	    return false;
     }
 
 

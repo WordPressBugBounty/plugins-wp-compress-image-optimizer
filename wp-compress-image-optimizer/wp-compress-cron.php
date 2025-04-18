@@ -45,6 +45,16 @@ class wps_ic_cron {
 						'wps_ic_scheduled_purge_hook'
 					);
 				}
+
+		    // Daily apikey check
+		    add_action('wps_ic_check_key_hook', [$this, 'checkKey']);
+		    if (!wp_next_scheduled('wps_ic_check_key_hook')) {
+			    wp_schedule_event(
+				    time(),
+				    'daily',
+				    'wps_ic_check_key_hook'
+			    );
+		    }
     }
 
 
@@ -110,6 +120,26 @@ class wps_ic_cron {
             wp_send_json_success();
         }
     }
+
+		public function checkKey()
+		{
+			$options = get_option(WPS_IC_OPTIONS);
+
+			$url = 'https://apiv3.wpcompress.com/api/site/credits';
+			$call = wp_remote_get($url, [
+				'timeout' => 30,
+				'sslverify' => false,
+				'user-agent' => WPS_IC_API_USERAGENT,
+				'headers' => [
+					'apikey' => $options['api_key'],
+				]
+			]);
+
+			if (wp_remote_retrieve_response_code($call) == 401) {
+				$cache = new wps_ic_cache_integrations();
+				$cache->remove_key();
+			}
+		}
 
 }
 
