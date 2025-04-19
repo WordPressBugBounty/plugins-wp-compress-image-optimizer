@@ -1754,8 +1754,8 @@ class wps_cdn_rewrite
         // Raise memory limit
         ini_set('memory_limit', '1024M');
 
-				// Raise backtrack limit for regex
-	      ini_set('pcre.backtrack_limit', '10000000');
+        // Raise backtrack limit for regex
+        ini_set('pcre.backtrack_limit', '10000000');
 
         global $post;
         self::$options = get_option(WPS_IC_OPTIONS);
@@ -1765,13 +1765,13 @@ class wps_cdn_rewrite
         }
 
         // Was only adding to home page
-        #if ($this->is_home_url()) {
-        if (!self::is_mobile()) {
-            add_action('wp_head', [$this, 'preload_custom_assets'], 1);
-        } else {
-            add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
+        if ($this->is_home_url()) {
+            if (!self::is_mobile()) {
+                add_action('wp_head', [$this, 'preload_custom_assets'], 1);
+            } else {
+                add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
+            }
         }
-        #}
 
         self::$excludes_class = new wps_ic_excludes();
         self::$isAmp = new wps_ic_amp();
@@ -3075,7 +3075,7 @@ class wps_cdn_rewrite
         #return print_r([$html],true);
         #$html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/i', [$this, 'noscript_decode'], $html);
 
-        $html = preg_replace_callback('/\[noscript-wpc\](.*?)\[\/noscript-wpc\]/is', [$this,'noscript_decode'], $html);
+        $html = preg_replace_callback('/\[noscript-wpc\](.*?)\[\/noscript-wpc\]/is', [$this, 'noscript_decode'], $html);
 
         #return print_r([$html],true);
 
