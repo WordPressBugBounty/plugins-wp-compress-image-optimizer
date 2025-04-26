@@ -362,6 +362,7 @@ class wps_advancedCache
 
     public function setupCacheHeaders($cache_filepath, $type = 'gzip')
     {
+
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cache_filepath)) . ' GMT');
 
         if (!empty($this->settings['cache_refresh_time']) && $this->settings['cache_refresh_time'] > 0) {
@@ -373,6 +374,32 @@ class wps_advancedCache
             header('Cache-Control: public, max-age=' . 60*60);
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
+
+		    $headerCacheFile = $this->cachePath . 'headers.json';
+		    // Check if cache file exists
+		    if (file_exists($headerCacheFile)) {
+
+			    $cachedHeadersJson = file_get_contents($headerCacheFile);
+			    $cachedHeaders = json_decode($cachedHeadersJson, true);
+
+			    // Get headers we've already set in this response
+			    $existingHeaders = array();
+			    foreach (headers_list() as $header) {
+				    $parts = explode(':', $header, 2);
+				    if (count($parts) == 2) {
+					    $existingHeaders[trim($parts[0])] = true;
+				    }
+			    }
+
+			    // Apply cached headers that aren't already defined
+			    if (is_array($cachedHeaders)) {
+				    foreach ($cachedHeaders as $name => $value) {
+					    if (!isset($existingHeaders[$name])) {
+						    header($name . ': ' . $value);
+					    }
+				    }
+			    }
+		    }
 
         header('X-Cache-By: WP Compress - ' . $type);
     }

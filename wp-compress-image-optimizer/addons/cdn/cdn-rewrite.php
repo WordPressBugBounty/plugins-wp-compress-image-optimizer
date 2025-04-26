@@ -503,8 +503,11 @@ class wps_cdn_rewrite
             if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
                 if (!empty($_GET['custom_server'])) {
                     $custom_server = sanitize_text_field($_GET['custom_server']);
-                    self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
-                    echo '<link rel="dns-prefetch" href="//' . $custom_server . '" />';
+
+                    if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
+                        self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
+                        echo '<link rel="dns-prefetch" href="//' . $custom_server . '" />';
+                    }
                 }
             } else {
 //				echo '<link rel="dns-prefetch" href="https://cdn.zapwp.net" />';
@@ -2027,7 +2030,10 @@ class wps_cdn_rewrite
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
             if (!empty($_GET['custom_server'])) {
-                self::$zone_name = sanitize_text_field($_GET['custom_server']) . '/key:' . self::$options['api_key'];
+                $custom_server = sanitize_text_field($_GET['custom_server']);
+                if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
+                    self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
+                }
             }
         }
 

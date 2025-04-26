@@ -335,6 +335,20 @@ class wps_cacheHtml
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
         }
 
+				if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1'){
+					$headers = array();
+
+					foreach (headers_list() as $header) {
+						$parts = explode(':', $header, 2);
+						if (count($parts) == 2) {
+							$headers[trim($parts[0])] = trim($parts[1]);
+						}
+					}
+
+					$headersJson = json_encode($headers);
+					file_put_contents($this->cachePath . 'headers.json', $headersJson);
+				}
+
         if (function_exists('gzencode')) {
             $this->saveGzCache($buffer, $prefix);
         }
@@ -560,5 +574,19 @@ class wps_cacheHtml
         // Delete the folder itself
         if (is_dir($folder)) rmdir($folder);
     }
+
+		private function getAllHeaders() {
+				$headers = array();
+				foreach ($_SERVER as $name => $value) {
+						if (substr($name, 0, 5) == 'HTTP_') {
+								$name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))));
+								$headers[$name] = $value;
+						} elseif ($name == 'CONTENT_TYPE' || $name == 'CONTENT_LENGTH') {
+								$name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $name))));
+								$headers[$name] = $value;
+						}
+				}
+				return $headers;
+		}
 
 }

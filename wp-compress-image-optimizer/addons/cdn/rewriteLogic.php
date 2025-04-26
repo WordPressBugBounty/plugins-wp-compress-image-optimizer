@@ -331,7 +331,10 @@ class wps_rewriteLogic
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
             if (!empty($_GET['custom_server'])) {
-                self::$zoneName = sanitize_text_field($_GET['custom_server']) . '/key:' . self::$options['api_key'];
+                $custom_server = sanitize_text_field($_GET['custom_server']);
+                if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
+                    self::$zoneName = $custom_server . '/key:' . self::$options['api_key'];
+                }
             }
         }
 

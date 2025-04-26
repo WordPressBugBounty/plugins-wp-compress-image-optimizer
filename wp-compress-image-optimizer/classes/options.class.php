@@ -92,6 +92,7 @@ class wps_ic_options
                          'expire'                => 0,
                          'ignore-server-control' => 0,
                          'cache-logged-in'       => 0,
+                         'headers'               => 0,
                          'purge-hooks'           => 1
             ],
             'local' => ['media-library' => 0],
@@ -162,6 +163,7 @@ class wps_ic_options
                          'expire'                => 0,
                          'ignore-server-control' => 0,
                          'cache-logged-in'       => 0,
+                         'headers'               => 0,
                          'purge-hooks'           => 1
             ],
             'local' => ['media-library' => '0'],
@@ -227,6 +229,7 @@ class wps_ic_options
                          'expire'                => 24,
                          'ignore-server-control' => '1',
                          'cache-logged-in'       => '1',
+                         'headers'               => 0,
                          'purge-hooks'           => 1
             ],
             'local' => ['media-library' => '0'],

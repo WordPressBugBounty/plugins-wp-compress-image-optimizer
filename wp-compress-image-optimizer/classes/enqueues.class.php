@@ -362,18 +362,18 @@ class wps_ic_enqueues extends wps_ic
         $options = self::$settings;
 
         $lazy = 'false';
-        if (!empty($options['lazy']) || $options['lazy'] == '0') {
+        if (!empty($options['lazy']) && $options['lazy'] == '1') {
             $lazy = 'true';
         }
 
-        $webp = 'true';
-        if (empty($options['generate_webp']) || $options['generate_webp'] == '0') {
-            $webp = 'false';
+        $webp = 'false';
+        if (!empty($options['generate_webp']) && $options['generate_webp'] == '1') {
+            $webp = 'true';
         }
 
-        $adaptive = 'true';
-        if (empty($options['generate_adaptive']) || $options['generate_adaptive'] == '0') {
-            $adaptive = 'false';
+        $adaptive = 'false';
+        if (!($options['generate_adaptive']) && $options['generate_adaptive'] == '1') {
+            $adaptive = 'true';
         }
 
         $background_sizing = 'false';
@@ -381,9 +381,9 @@ class wps_ic_enqueues extends wps_ic
             $background_sizing = 'true';
         }
 
-        $retina = 'true';
-        if (empty($options['retina']) || $options['retina'] == '0') {
-            $retina = 'false';
+        $retina = 'false';
+        if (!empty($options['retina']) && $options['retina'] == '1') {
+            $retina = 'true';
         }
 
         $exif = 'false';

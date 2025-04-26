@@ -893,13 +893,15 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         <div class="wpc-items-list-row mb-0">
 
+                                                <?php
+                                                echo $gui::checkboxDescription_v4('Cache Headers', 'Enable caching of custom headers.', '', '', ['cache', 'headers'], $cacheLocked, '', '');
+                                                ?>
+
 			                                    <?php
 			                                    echo $gui::checkboxDescription_v4('Purge Cache on Update', 'Purge all cache on plugin, theme, core or menu updates. Purge individual posts and pages on edit.', '', '', ['cache', 'purge-hooks'], $cacheLocked, '', 'purge-settings');
 			                                    ?>
 
-			                                    <?php
-			                                    //echo $gui::checkboxDescription_v4('Cache Logged-In Users', 'Enable caching of frontend pages for logged-in users.', '', '', ['cache', 'cache-logged-in'], $cacheLocked, '', '');
-			                                    ?>
+
                                         </div>
 
 

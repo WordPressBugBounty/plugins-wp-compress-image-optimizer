@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.30';
+        self::$version = '6.30.31';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1948,7 +1948,7 @@ class wps_ic
         if ($this->is_home_url()) {
             $page_excludes = isset($wpc_excludes['page_excludes']['home']) ? $wpc_excludes['page_excludes']['home'] : [];
         } else if (!empty(get_queried_object_id())) {
-            $page_excludes = isset($excludes['page_excludes'][get_queried_object_id()]) ? $excludes['page_excludes'][get_queried_object_id()] : [];
+            $page_excludes = isset($wpc_excludes['page_excludes'][get_queried_object_id()]) ? $wpc_excludes['page_excludes'][get_queried_object_id()] : [];
         } elseif (!empty($post->ID)) {
             $page_excludes = isset($wpc_excludes['page_excludes'][$post->ID]) ? $wpc_excludes['page_excludes'][$post->ID] : [];
         } else {
@@ -1959,6 +1959,7 @@ class wps_ic
             if (isset($page_excludes['cdn'])) {
                 self::$settings['css'] = $page_excludes['cdn'];
                 self::$settings['js'] = $page_excludes['cdn'];
+	            self::$settings['fonts'] = $page_excludes['cdn'];
                 self::$settings['serve']['jpg'] = $page_excludes['cdn'];
                 self::$settings['serve']['png'] = $page_excludes['cdn'];
                 self::$settings['serve']['gif'] = $page_excludes['cdn'];

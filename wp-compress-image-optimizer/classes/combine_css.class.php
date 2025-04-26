@@ -1494,7 +1494,7 @@ class wps_ic_combine_css
                 array_pop($directories); // Remove 1 last dir
             }
             $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = substr($matched_url, 3);
+	          $matched_url_trim = preg_replace('/^(\.\.\/)+/', '', $matched_url);
             $relativePath .= $matched_url_trim;
 
             $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;

@@ -630,6 +630,7 @@ class wps_ic_preload_warmup
             echo json_encode('no-apikey');
             die();
         }
+
         if (!empty($_GET['id'])) {
             $id = sanitize_text_field($_GET['id']);
         } else {
@@ -644,8 +645,9 @@ class wps_ic_preload_warmup
             die();
         }
 
-
-        if (get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+        $options = get_option(WPS_IC_OPTIONS);
+        $enteredApiKey = $options['api_key'];
+        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
 
             if ($id == 'home') {
                 $url = home_url();
@@ -692,7 +694,9 @@ class wps_ic_preload_warmup
             die();
         }
 
-        if (get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+        $options = get_option(WPS_IC_OPTIONS);
+        $enteredApiKey = $options['api_key'];
+        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
 
             if ($id == 'home') {
                 $url = home_url();
@@ -732,7 +736,10 @@ class wps_ic_preload_warmup
             die();
         }
 
-        if (get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $enteredApiKey = $options['api_key'];
+        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
 
             //Check for cache or crit errors/blocking
             $oldStatus = get_transient('wpc-page-optimizations-status');
@@ -1038,7 +1045,10 @@ class wps_ic_preload_warmup
             die();
         }
 
-        if (get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $enteredApiKey = $options['api_key'];
+        if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
 
             $this->addError($id, $errorCode, 'skip');
 
@@ -1681,7 +1691,10 @@ class wps_ic_preload_warmup
             die();
         }
 
-        if (!empty($apikey) && get_option(WPS_IC_OPTIONS)['api_key'] == $apikey) {
+        $options = get_option(WPS_IC_OPTIONS);
+        $enteredApiKey = $options['api_key'];
+
+        if (!empty($apikey) && $enteredApiKey == $apikey) {
             if (file_exists($this->logFilePath)) {
                 $logContents = file_get_contents($this->logFilePath);
                 echo $logContents;
