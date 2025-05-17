@@ -115,11 +115,11 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_test_api_connectivity');
                 $this->add_ajax('wps_ic_get_per_page_settings_html');
                 $this->add_ajax('wps_ic_save_per_page_settings');
-	              $this->add_ajax('wps_ic_save_purge_hooks_settings');
-	              $this->add_ajax('wps_ic_get_purge_rules');
-		            $this->add_ajax('wps_ic_export_settings');
-		            $this->add_ajax('wps_ic_import_settings');
-	              $this->add_ajax('wps_ic_set_default_settings');
+                $this->add_ajax('wps_ic_save_purge_hooks_settings');
+                $this->add_ajax('wps_ic_get_purge_rules');
+                $this->add_ajax('wps_ic_export_settings');
+                $this->add_ajax('wps_ic_import_settings');
+                $this->add_ajax('wps_ic_set_default_settings');
 
 
                 // Live Start
@@ -202,7 +202,7 @@ class wps_ic_ajax extends wps_ic
                 $zonesOutput[$zone['id']] = $zone['name'];
             }
 
-            for ($i=2;$i<=20;$i++) {
+            for ($i = 2; $i <= 20; $i++) {
                 $zones = $cfapi->listZones($i);
                 if (!empty($zones['result'])) {
                     foreach ($zones['result'] as $zone) {
@@ -220,7 +220,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success($save);
         }
 
-        wp_send_json_error(print_r($zones,true));
+        wp_send_json_error(print_r($zones, true));
     }
 
     public static function wpc_ic_checkCFToken()
@@ -257,7 +257,7 @@ class wps_ic_ajax extends wps_ic
                     $zonesDropdown .= '<div data-selected-zone="' . $zoneName . '" data-selected-zone-id="' . $zoneID . '">' . $zoneName . '</div>';
                 }
 
-                for ($i=2;$i<=20;$i++) {
+                for ($i = 2; $i <= 20; $i++) {
                     $zones = $cfapi->listZones($i);
                     if (!empty($zones['result'])) {
                         foreach ($zones['result'] as $zone) {
@@ -954,9 +954,9 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_purge_html()
     {
-	    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-		    wp_send_json_error('Forbidden.');
-	    }
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
 
         $options = get_option(WPS_IC_OPTIONS);
 
@@ -1027,7 +1027,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_purge_critical_css()
     {
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-		  wp_send_json_error('Forbidden.');
+            wp_send_json_error('Forbidden.');
         }
 
         $options = get_option(WPS_IC_OPTIONS);
@@ -2053,8 +2053,8 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-				$cache = new wps_ic_cache_integrations();
-				$cache->remove_key();
+        $cache = new wps_ic_cache_integrations();
+        $cache->remove_key();
 
         wp_send_json_success();
     }
@@ -3152,222 +3152,225 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success($results);
     }
 
-	public function wps_ic_save_purge_hooks_settings()
-	{
+    public function wps_ic_save_purge_hooks_settings()
+    {
 
-		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-			wp_send_json_error('Forbidden.');
-		}
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
 
-		$purge_rules = get_option('wps_ic_purge_rules', []);
-		if (!isset($purge_rules['post_publish'])){
-			$purge_rules['post_publish'] = [];
-		}
+        $purge_rules = get_option('wps_ic_purge_rules', []);
+        if (!isset($purge_rules['post_publish'])) {
+            $purge_rules['post_publish'] = [];
+        }
 
-		$all_pages = sanitize_text_field($_POST['all_pages']);
-		$home_page = sanitize_text_field($_POST['home_page']);
-		$recent_posts_widget = sanitize_text_field($_POST['recent_posts_widget']);
-		$archive_pages = sanitize_text_field($_POST['archive_pages']);
-		$purge_rules['post-publish']['all-pages'] = $all_pages;
-		$purge_rules['post-publish']['home-page'] = $home_page;
-		$purge_rules['post-publish']['recent-posts-widget'] = $recent_posts_widget;
-		$purge_rules['post-publish']['archive-pages'] = $archive_pages;
+        $all_pages = sanitize_text_field($_POST['all_pages']);
+        $home_page = sanitize_text_field($_POST['home_page']);
+        $recent_posts_widget = sanitize_text_field($_POST['recent_posts_widget']);
+        $archive_pages = sanitize_text_field($_POST['archive_pages']);
+        $purge_rules['post-publish']['all-pages'] = $all_pages;
+        $purge_rules['post-publish']['home-page'] = $home_page;
+        $purge_rules['post-publish']['recent-posts-widget'] = $recent_posts_widget;
+        $purge_rules['post-publish']['archive-pages'] = $archive_pages;
 
-		$hooks = sanitize_textarea_field($_POST['hooks']);
-		$hooks = rtrim($hooks, "\n");
-		$hooks = explode("\n", $hooks);
-		$purge_rules['hooks'] = $hooks;
+        $hooks = sanitize_textarea_field($_POST['hooks']);
+        $hooks = rtrim($hooks, "\n");
+        $hooks = explode("\n", $hooks);
+        $purge_rules['hooks'] = $hooks;
 
-		$scheduled = sanitize_text_field($_POST['scheduled']);
-		$purge_rules['scheduled'] = $scheduled;
+        $scheduled = sanitize_text_field($_POST['scheduled']);
+        $purge_rules['scheduled'] = $scheduled;
 
-		$updated = update_option('wps_ic_purge_rules', $purge_rules);
+        $updated = update_option('wps_ic_purge_rules', $purge_rules);
 
-		if ($updated) {
-			$cache = new wps_ic_cache_integrations();
-			$cache::purgeAll();
-		}
+        if ($updated) {
+            $cache = new wps_ic_cache_integrations();
+            $cache::purgeAll();
+        }
 
-		wp_send_json_success();
-	}
+        wp_send_json_success();
+    }
 
-	public function wps_ic_get_purge_rules()
-	{
-		// Verify nonce for security
-		if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
-			wp_send_json_error(['message' => 'Invalid nonce'], 403);
-			wp_die();
-		}
+    public function wps_ic_get_purge_rules()
+    {
+        // Verify nonce for security
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
 
-		// Check user capabilities
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(['message' => 'Permission denied'], 403);
-			wp_die();
-		}
+        // Check user capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
 
-		$purge_rules = get_option('wps_ic_purge_rules');
+        $purge_rules = get_option('wps_ic_purge_rules');
 
-		if (empty($purge_rules)){
-			$options = new wps_ic_options();
-			$purge_rules = $options->get_preset('purge_rules');
-      update_option('wps_ic_purge_rules', $purge_rules);
-		}
+        if (empty($purge_rules)) {
+            $options = new wps_ic_options();
+            $purge_rules = $options->get_preset('purge_rules');
+            update_option('wps_ic_purge_rules', $purge_rules);
+        }
 
-		$post_publish = $purge_rules['post-publish'];
+        $post_publish = $purge_rules['post-publish'];
 
-		//Checkboxes for post publish purge
-		$all_pages = 0;
-		$home_page = 0;
-		$recent_posts_widget = 0;
-		$archive_pages = 0;
-		if (!empty($post_publish['all-pages']) && $post_publish['all-pages'] == '1'){
-			$all_pages = 1;
-		}
-		if (!empty($post_publish['home-page']) && $post_publish['home-page'] == '1'){
-			$home_page = 1;
-		}
-		if (!empty($post_publish['recent-posts-widget']) && $post_publish['recent-posts-widget'] == '1'){
-			$recent_posts_widget = 1;
-		}
-		if (!empty($post_publish['archive-pages']) && $post_publish['archive-pages'] == '1'){
-			$archive_pages = 1;
-		}
+        //Checkboxes for post publish purge
+        $all_pages = 0;
+        $home_page = 0;
+        $recent_posts_widget = 0;
+        $archive_pages = 0;
+        if (!empty($post_publish['all-pages']) && $post_publish['all-pages'] == '1') {
+            $all_pages = 1;
+        }
+        if (!empty($post_publish['home-page']) && $post_publish['home-page'] == '1') {
+            $home_page = 1;
+        }
+        if (!empty($post_publish['recent-posts-widget']) && $post_publish['recent-posts-widget'] == '1') {
+            $recent_posts_widget = 1;
+        }
+        if (!empty($post_publish['archive-pages']) && $post_publish['archive-pages'] == '1') {
+            $archive_pages = 1;
+        }
 
 
-		if (empty($purge_rules['hooks'])) {
-			$hooks = '';
-		} else {
-			$hooks = implode("\n", $purge_rules['hooks']);
-		}
+        if (empty($purge_rules['hooks'])) {
+            $hooks = '';
+        } else {
+            $hooks = implode("\n", $purge_rules['hooks']);
+        }
 
-		$scheduled = '';
-		if (!empty($purge_rules['scheduled'])){
-			$scheduled = $purge_rules['scheduled'];
-		}
+        $scheduled = '';
+        if (!empty($purge_rules['scheduled'])) {
+            $scheduled = $purge_rules['scheduled'];
+        }
 
-		wp_send_json_success(['hooks' => $hooks, 'all_pages' => $all_pages, 'home_page' =>
-			$home_page, 'recent_posts_widget' => $recent_posts_widget, 'archive_pages' => $archive_pages, 'scheduled' => $scheduled]);
-	}
+        wp_send_json_success(['hooks' => $hooks, 'all_pages' => $all_pages, 'home_page' =>
+            $home_page, 'recent_posts_widget' => $recent_posts_widget, 'archive_pages' => $archive_pages, 'scheduled' => $scheduled]);
+    }
 
-	public function wps_ic_export_settings(){
-		// Verify nonce for security
-		if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
-			wp_send_json_error(['message' => 'Invalid nonce'], 403);
-			wp_die();
-		}
+    public function wps_ic_export_settings()
+    {
+        // Verify nonce for security
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
 
-		// Check user capabilities
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(['message' => 'Permission denied'], 403);
-			wp_die();
-		}
+        // Check user capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
 
-		$settings = sanitize_text_field($_POST['settings']);
-		$excludes = sanitize_text_field($_POST['excludes']);
-		$cache = sanitize_text_field($_POST['cache']);
+        $settings = sanitize_text_field($_POST['settings']);
+        $excludes = sanitize_text_field($_POST['excludes']);
+        $cache = sanitize_text_field($_POST['cache']);
 
-		$json = [];
-		if(!empty($settings)) {
-			$json['settings'] = get_option( WPS_IC_SETTINGS );
-		}
+        $json = [];
+        if (!empty($settings)) {
+            $json['settings'] = get_option(WPS_IC_SETTINGS);
+        }
 
-		if(!empty($excludes)) {
-			$json['excludes'] = get_option( 'wpc-excludes', [] );
-		}
+        if (!empty($excludes)) {
+            $json['excludes'] = get_option('wpc-excludes', []);
+        }
 
-		if(!empty($cache)) {
-			$json['cache'] = get_option( 'wps_ic_purge_rules', []);
+        if (!empty($cache)) {
+            $json['cache'] = get_option('wps_ic_purge_rules', []);
 
-			//Don't export lists of archive pages
-			unset($json['cache']['type-lists']);
-		}
+            //Don't export lists of archive pages
+            unset($json['cache']['type-lists']);
+        }
 
-		wp_send_json_success($json);
-	}
+        wp_send_json_success($json);
+    }
 
-	public function wps_ic_import_settings() {
-		// Verify nonce for security
-		if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
-			wp_send_json_error(['message' => 'Invalid nonce'], 403);
-			wp_die();
-		}
+    public function wps_ic_import_settings()
+    {
+        // Verify nonce for security
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
 
-		// Check user capabilities
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(['message' => 'Permission denied'], 403);
-			wp_die();
-		}
+        // Check user capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
 
-		// Get  data
-		$import_data = $_POST['importData'];
+        // Get  data
+        $import_data = $_POST['importData'];
 
-		if (empty($import_data)) {
-			wp_send_json_error(['msg' => 'No import data provided']);
-		}
+        if (empty($import_data)) {
+            wp_send_json_error(['msg' => 'No import data provided']);
+        }
 
-		if (is_string($import_data) && !empty($import_data)) {
-			$decoded_data = json_decode($import_data, true);
+        if (is_string($import_data) && !empty($import_data)) {
+            $decoded_data = json_decode($import_data, true);
 
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				wp_send_json_error(['message' => 'JSON decode error: ' . json_last_error_msg()]);
-			}
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                wp_send_json_error(['message' => 'JSON decode error: ' . json_last_error_msg()]);
+            }
 
-			$import_data = $decoded_data;
-		}
+            $import_data = $decoded_data;
+        }
 
-		$options_class = new wps_ic_options();
-		if (empty($import_data)) {
-			wp_send_json_error(['msg' => 'No import data provided']);
-		}
+        $options_class = new wps_ic_options();
+        if (empty($import_data)) {
+            wp_send_json_error(['msg' => 'No import data provided']);
+        }
 
-		if (isset($import_data['settings'])) {
-			$import_data['settings'] = $options_class->setMissingSettings($import_data['settings']);
-			update_option(WPS_IC_SETTINGS, $import_data['settings']);
-		}
+        if (isset($import_data['settings'])) {
+            $import_data['settings'] = $options_class->setMissingSettings($import_data['settings']);
+            update_option(WPS_IC_SETTINGS, $import_data['settings']);
+        }
 
-		if (isset($import_data['excludes'])) {
-			update_option('wpc-excludes', $import_data['excludes']);
-		}
+        if (isset($import_data['excludes'])) {
+            update_option('wpc-excludes', $import_data['excludes']);
+        }
 
-		if (isset($import_data['cache'])) {
-			update_option( 'wps_ic_purge_rules', $import_data['cache'] );
-		}
+        if (isset($import_data['cache'])) {
+            update_option('wps_ic_purge_rules', $import_data['cache']);
+        }
 
-		$cache = new wps_ic_cache_integrations();
-		$cache::purgeCriticalFiles();
-		$cache::purgeAll();
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeCriticalFiles();
+        $cache::purgeAll();
 
-		wp_send_json_success(['msg' => 'Settings imported successfully']);
-	}
+        wp_send_json_success(['msg' => 'Settings imported successfully']);
+    }
 
-	public function wps_ic_set_default_settings(){
-		// Verify nonce for security
-		if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
-			wp_send_json_error(['message' => 'Invalid nonce'], 403);
-			wp_die();
-		}
+    public function wps_ic_set_default_settings()
+    {
+        // Verify nonce for security
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
 
-		// Check user capabilities
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(['message' => 'Permission denied'], 403);
-			wp_die();
-		}
+        // Check user capabilities
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
 
-		$options = new wps_ic_options();
-		$purge_rules = $options->get_preset('purge_rules');
-		update_option('wps_ic_purge_rules', $purge_rules);
+        $options = new wps_ic_options();
+        $purge_rules = $options->get_preset('purge_rules');
+        update_option('wps_ic_purge_rules', $purge_rules);
 
-		$configuration = $options->get_preset('aggressive');
-		update_option(WPS_IC_SETTINGS, $configuration);
-		update_option(WPS_IC_PRESET, 'aggressive');
+        $configuration = $options->get_preset('aggressive');
+        update_option(WPS_IC_SETTINGS, $configuration);
+        update_option(WPS_IC_PRESET, 'aggressive');
 
-		delete_option('wpc-excludes');
+        delete_option('wpc-excludes');
 
-		$cache = new wps_ic_cache_integrations();
-		$cache::purgeCriticalFiles();
-		$cache::purgeAll();
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeCriticalFiles();
+        $cache::purgeAll();
 
-		wp_send_json_success();
-	}
+        wp_send_json_success();
+    }
 
 }

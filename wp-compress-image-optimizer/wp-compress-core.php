@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.30.31';
+        self::$version = '6.30.32';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -736,6 +736,7 @@ class wps_ic
         delete_option(WPC_WARMUP_LOG_SETTING);
 
         if (is_multisite()) {
+            // Nothing
         } else {
             $options = get_option(WPS_IC_OPTIONS);
             $site = site_url();
@@ -1703,7 +1704,7 @@ class wps_ic
 
             if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
                 // Modify HTAccess
-                $htacces->checkHtaccess();
+                #$htacces->checkHtaccess();
             } else {
                 $htacces->removeHtaccessRules();
             }

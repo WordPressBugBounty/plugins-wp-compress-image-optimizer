@@ -1209,7 +1209,16 @@ class wps_ic_combine_css
             $url = 'https:' . $url;
         }
 
-        $data = wp_remote_get($url);
+		    $args = array(
+			    'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+			    'headers' => array(
+				    'Accept' => 'text/css,*/*;q=0.1',
+				    'Accept-Language' => 'en-US,en;q=0.9',
+			    )
+		    );
+
+
+	      $data = wp_remote_get($url, $args);
 
         //todo Check if file is really css
 

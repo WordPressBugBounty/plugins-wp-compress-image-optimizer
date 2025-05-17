@@ -384,10 +384,10 @@ class wps_ic_cache
         // Fix issues with Options
         //'preload-scripts' => '1',
         //'fetchpriority-high' => '1',
-        $options = get_option(WPS_IC_SETTINGS);
-        $options['preload-scripts'] = '1';
-        $options['fetchpriority-high'] = '1';
-        update_option(WPS_IC_SETTINGS, $options);
+//        $options = get_option(WPS_IC_SETTINGS);
+//        $options['preload-scripts'] = '1';
+//        $options['fetchpriority-high'] = '1';
+//        update_option(WPS_IC_SETTINGS, $options);
 
 
         // TODO: Sometimes $post_id is ObjectClass, does this fix it? (occurs on plugin manual zip update)

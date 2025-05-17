@@ -189,6 +189,8 @@ class wps_ic_htaccess extends wps_ic
     public function modifyHtaccess()
     {
 
+        return;
+
         if (!$this->isApache) {
             return;
         }
@@ -543,6 +545,8 @@ HTACCESS;
 
     public function removeHtaccessRules()
     {
+        return true;
+
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 

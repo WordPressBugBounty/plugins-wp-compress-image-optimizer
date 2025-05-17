@@ -109,7 +109,7 @@ if (!empty($_POST)) {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
             // Modify HTAccess
-            $htacces->checkHtaccess();
+            #$htacces->checkHtaccess();
         } else {
             $htacces->removeHtaccessRules();
         }

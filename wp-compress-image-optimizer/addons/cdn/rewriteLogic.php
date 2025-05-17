@@ -200,12 +200,12 @@ class wps_rewriteLogic
             self::$homeUrl = home_url();
         }
 
-		    self::$siteUrl = preg_replace('#^https?://#', '', self::$siteUrl);
-		    self::$homeUrl = preg_replace('#^https?://#', '', self::$homeUrl);
+        self::$siteUrl = preg_replace('#^https?://#', '', self::$siteUrl);
+        self::$homeUrl = preg_replace('#^https?://#', '', self::$homeUrl);
 
 
-		    self::$siteUrl = trim(self::$siteUrl, '/');
-		    self::$homeUrl = trim(self::$homeUrl, '/');
+        self::$siteUrl = trim(self::$siteUrl, '/');
+        self::$homeUrl = trim(self::$homeUrl, '/');
 
         $custom_cname = get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
@@ -900,19 +900,6 @@ class wps_rewriteLogic
         return $html;
     }
 
-
-    public function isWooCartOrCheckout() {
-        // Check if WooCommerce is active
-        if ( class_exists( 'WooCommerce' ) ) {
-            // Check if current page is Cart or Checkout
-            if ( is_cart() || is_checkout() ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
     public function addCriticalAjax($args)
     {
         global $post;
@@ -989,6 +976,18 @@ SCRIPT;
 
         }
         return $script . '</body>';
+    }
+
+    public function isWooCartOrCheckout()
+    {
+        // Check if WooCommerce is active
+        if (class_exists('WooCommerce')) {
+            // Check if current page is Cart or Checkout
+            if (is_cart() || is_checkout()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function addCritical($html)
@@ -1350,11 +1349,11 @@ SCRIPT;
             $image[0] = stripslashes($image[0]);
         }
 
-		    if (strpos($image[0], '//') !== false) {
-				    // Replace any protocol-relative URLs with https: prefix
-				    // Pattern matches //domain.com/path pattern in HTML attributes
-				    $image[0] = preg_replace('/(["\']|\s|=)\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\/[^"\'\s>]*)/', '$1https://$2', $image[0]);
-		    }
+        if (strpos($image[0], '//') !== false) {
+            // Replace any protocol-relative URLs with https: prefix
+            // Pattern matches //domain.com/path pattern in HTML attributes
+            $image[0] = preg_replace('/(["\']|\s|=)\/\/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\/[^"\'\s>]*)/', '$1https://$2', $image[0]);
+        }
 
         if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
             $image[0] = $this->maybe_addslashes($image[0], $addslashes);
@@ -1823,72 +1822,72 @@ SCRIPT;
         return $html;
     }
 
-		public function replaceImageTagsDoSlash($image)
-		{
-			if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
-				return $image[0];
-			}
+    public function replaceImageTagsDoSlash($image)
+    {
+        if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
+            return $image[0];
+        }
 
-			if (!empty($_GET['dbgAjax'])) {
-				return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
-			}
+        if (!empty($_GET['dbgAjax'])) {
+            return print_r([$_SERVER, wp_doing_ajax(), self::$isAjax, $image[0]], true);
+        }
 
-			if ($this->checkIsSlashed($image[0])) {
-				$imageElement = stripslashes($image[0]);
-			} else {
-				$imageElement = $image[0];
-			}
+        if ($this->checkIsSlashed($image[0])) {
+            $imageElement = stripslashes($image[0]);
+        } else {
+            $imageElement = $image[0];
+        }
 
-			$newImageElement = '';
-			$original_img_tag = [];
-			$original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
+        $newImageElement = '';
+        $original_img_tag = [];
+        $original_img_tag['original_tags'] = $this->getAllTags($imageElement, []);
 
-			if (!empty($_GET['ajaxImage'])) {
-				return print_r([$original_img_tag, $imageElement], true);
-			}
+        if (!empty($_GET['ajaxImage'])) {
+            return print_r([$original_img_tag, $imageElement], true);
+        }
 
-			if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
-				$newImageElement = $imageElement;
-			} else {
-				$newImageElement = '<img data-image-el-count="' . self::$imageCounter . '"';
+        if (strpos($original_img_tag['original_tags']['src'], 'data:image') !== false || strpos($original_img_tag['original_tags']['src'], 'blank') !== false) {
+            $newImageElement = $imageElement;
+        } else {
+            $newImageElement = '<img data-image-el-count="' . self::$imageCounter . '"';
 
-				// Check if both src and data-src are defined
-				$preferredSrc = '';
-				if (isset($original_img_tag['original_tags']['src']) && isset($original_img_tag['original_tags']['data-src'])) {
-					// If both are defined, use data-src. Src is probably a palceholder and real src is in data-src
-					$preferredSrc = $original_img_tag['original_tags']['data-src'];
-				}
+            // Check if both src and data-src are defined
+            $preferredSrc = '';
+            if (isset($original_img_tag['original_tags']['src']) && isset($original_img_tag['original_tags']['data-src'])) {
+                // If both are defined, use data-src. Src is probably a palceholder and real src is in data-src
+                $preferredSrc = $original_img_tag['original_tags']['data-src'];
+            }
 
-				// it's placeholder or blank file change something
-				foreach ($original_img_tag['original_tags'] as $tag => $value) {
-					if ($tag == 'src') {
-						$src = ($preferredSrc) ? $preferredSrc : $value;
+            // it's placeholder or blank file change something
+            foreach ($original_img_tag['original_tags'] as $tag => $value) {
+                if ($tag == 'src') {
+                    $src = ($preferredSrc) ? $preferredSrc : $value;
 
-						$webp = '/wp:' . self::$webp;
-						if (self::isExcludedFrom('webp', $src)) {
-							$webp = '/wp:0';
-						}
+                    $webp = '/wp:' . self::$webp;
+                    if (self::isExcludedFrom('webp', $src)) {
+                        $webp = '/wp:0';
+                    }
 
-						$src = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1) . '/u:' . self::reformatUrl($src);
-						$newImageElement .= 'src="' . $src . '" ';
-					} else if ($tag == 'data-src' && $preferredSrc) {
-						// Skip adding data-src as separate attribute if we've already used it for src
-						continue;
-					} else if (!is_null($value)) {
-						$newImageElement .= $tag . '="' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '" ';
-					} else {
-						$newImageElement .= $tag . ' ';
-					}
-				}
-				$newImageElement .= '/>';
-			}
+                    $src = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1) . '/u:' . self::reformatUrl($src);
+                    $newImageElement .= 'src="' . $src . '" ';
+                } else if ($tag == 'data-src' && $preferredSrc) {
+                    // Skip adding data-src as separate attribute if we've already used it for src
+                    continue;
+                } else if (!is_null($value)) {
+                    $newImageElement .= $tag . '="' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '" ';
+                } else {
+                    $newImageElement .= $tag . ' ';
+                }
+            }
+            $newImageElement .= '/>';
+        }
 
-			if ($this->checkIsSlashed($image[0])) {
-				$newImageElement = addslashes($newImageElement);
-			}
+        if ($this->checkIsSlashed($image[0])) {
+            $newImageElement = addslashes($newImageElement);
+        }
 
-			return $newImageElement;
-		}
+        return $newImageElement;
+    }
 
     public function checkIsSlashed($string)
     {
@@ -2433,14 +2432,14 @@ SCRIPT;
          * If image contains logo in filename, then it's a logo probably
          */
         if (strpos(strtolower($original_img_tag['original_tags']['class']), 'rs-lazyload') !== false || strpos(strtolower($original_img_tag['original_tags']['class']), 'rs') !== false || strpos(strtolower($image_source), 'logo') !== false || strpos(strtolower($original_img_tag['class']), 'logo') !== false) {
-	        $logoSrc = $original_img_tag['original_tags']['src'];
+            $logoSrc = $original_img_tag['original_tags']['src'];
 
-	        // Check if it's a protocol-relative URL and convert it to https://
-	        if (strpos($logoSrc, '//') === 0 && strpos($logoSrc, 'https://') !== 0 && strpos($logoSrc, 'http://') !== 0) {
-		        $logoSrc = 'https:' . $logoSrc;
-	        }
+            // Check if it's a protocol-relative URL and convert it to https://
+            if (strpos($logoSrc, '//') === 0 && strpos($logoSrc, 'https://') !== 0 && strpos($logoSrc, 'http://') !== 0) {
+                $logoSrc = 'https:' . $logoSrc;
+            }
 
-	        $build_image_tag .= 'src="' . $logoSrc . '" ';
+            $build_image_tag .= 'src="' . $logoSrc . '" ';
         } else {
             /*
                * if data-src is not empty then we have src as SVG
@@ -2662,7 +2661,7 @@ SCRIPT;
                         if ($srcset_width == '1') {
                             $srcsetWidthExtension = '';
                         } else {
-                            $srcsetWidthExtension = $srcset_width.$extension;
+                            $srcsetWidthExtension = $srcset_width . $extension;
                         }
 
 
@@ -2679,7 +2678,7 @@ SCRIPT;
 
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
-                                $retinaWidth = (int)$width_url*2;
+                                $retinaWidth = (int)$width_url * 2;
                                 $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ' 2x, ';
                             }
                         }

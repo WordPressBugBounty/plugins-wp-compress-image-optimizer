@@ -25,7 +25,7 @@ class wpc_divi {
       $pattern,
       function ($matches) use (&$count) {
         $count++;
-        if ($count > 2) {
+        if ($count > 3) {
           return str_replace($matches[1], $matches[1] . ' wpc-delay-divi', $matches[0]);
         } else {
           return $matches[0];

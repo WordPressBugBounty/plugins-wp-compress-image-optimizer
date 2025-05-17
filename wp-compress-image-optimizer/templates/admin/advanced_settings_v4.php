@@ -145,7 +145,7 @@ if (!empty($_POST['options'])) {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
             // Modify HTAccess
-            $htacces->checkHtaccess();
+            #$htacces->checkHtaccess();
         } else {
             $htacces->removeHtaccessRules();
         }
@@ -195,7 +195,20 @@ $bulkProcess = get_option('wps_ic_bulk_process');
 
 
 $allowLocal = get_option('wps_ic_allow_local');
-$allowLive = get_option('wps_ic_allow_live');
+$allowLive = get_option('wps_ic_allow_live', false);
+
+if (!$allowLive){
+	$settings['live-cdn'] = '0';
+
+    foreach ($settings['serve'] as $key => $value){
+	    $settings['serve'][$key] = '0';
+    }
+	$settings['css'] = '0';
+	$settings['js'] = '0';
+	$settings['fonts'] = '0';
+
+    update_option(WPS_IC_SETTINGS, $settings);
+}
 
 $productsDefined = false;
 if (post_type_exists('product')) {

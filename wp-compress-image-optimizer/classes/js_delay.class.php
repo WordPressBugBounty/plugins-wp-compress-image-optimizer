@@ -8,7 +8,7 @@ class wps_ic_js_delay
     public static $footerScripts;
 
 
-    public static $doNotDelay = ['n489d_vars', 'flatsomeVars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'nekitWidgetData', 'document.write', 'document.documentElement', 'presto', 'cdn-cookieyes.com'];
+    public static $doNotDelay = ['n489d_vars', 'flatsomeVars', 'ngf298gh738qwbdh0s87v_vars', 'optimize.js', 'optimize.dev.js', 'mhcookie', '_happyFormsSettings','wcpay_assets','trust','divi-custom-script-js-extra','jetpack-stats','stats.wp','checkout-js-extra','config-js-extra', 'nekitWidgetData', 'document.write', 'document.documentElement', 'presto', 'cdn-cookieyes.com', 'borlabs-cookie-config-js'];
     public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk','jnews-main','/plugins/wpdatatables/','/plugins/wdt-powerful-filters/'];
 
 

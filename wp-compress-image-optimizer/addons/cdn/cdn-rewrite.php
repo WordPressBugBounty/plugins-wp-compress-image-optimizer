@@ -3964,6 +3964,10 @@ class wps_cdn_rewrite
             return $iframe[0];
         }
 
+        if (strpos($iframe[0], 'data-src-cmplz') !== false) {
+            return $iframe[0];
+        }
+
         preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $iframe[0], $iframeAtts);
 
         if (!empty($iframeAtts[1])) {
