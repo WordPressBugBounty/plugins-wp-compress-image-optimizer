@@ -593,7 +593,8 @@ class wps_ic_media_library_live extends wps_ic
 
     public function debug_log_link($args)
     {
-        if (WPS_IC_DEBUG == 'false') {
+
+        if (empty(WPS_IC_DEBUG) || WPS_IC_DEBUG == 'false') {
             return '';
         }
 

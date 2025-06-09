@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 6.5
 Tested up to: 6.8
-Stable tag: 6.30.32
+Stable tag: 6.50.01
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -222,11 +222,13 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 
 == Changelog ==
 
+= 6.50.01 =
+* Added New DelayJS Setting
+* Fixed Preloads Purge on Settings Change
+* Cleaned up Assets and Warnings from Admin
+
 = 6.30.32 =
 * Patch for CMPLZ Cookie Plugin - Iframe Delay
-* Patch for Google Fonts in CriticalCSS
-* Increased Divi Delay Count
-* Fixed Portal Communication
 
 = 6.30.31 =
 * Added Cache Headers setting

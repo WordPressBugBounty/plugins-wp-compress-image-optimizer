@@ -25,8 +25,10 @@ include_once $pluginExists . 'traits/url_key.php';
 include_once $pluginExists . 'classes/config.class.php';
 include_once $pluginExists . 'addons/cache/advancedCache.php';
 
-$config = new wps_ic_config();
-include_once $config->getConfigPath();
+//Not needed? Removed 2.6.2025
+//$config = new wps_ic_config();
+//include_once $config->getConfigPath();
+
 
 foreach($_COOKIE as $key => $value) {
   if (strpos($key, 'wordpress_logged_in_') === 0 && !WPC_CACHE_LOGGED_IN) {

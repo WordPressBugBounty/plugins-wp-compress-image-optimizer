@@ -163,7 +163,9 @@ class wps_ic_cache
 			        }
 
 			        //Post publish hooks
-			        add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge the page/post
+			        add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge cache
+			        add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1); //always reset hashes
+			        add_action('save_post', ['wps_ic_cache', 'removeCriticalFiles'], 10, 1); //always purge crit
 			        if (!empty(self::$purge_rules['post-publish'])) {
 				        if (!empty(self::$purge_rules['post-publish']['all-pages']) ||
 				            !empty(self::$purge_rules['post-publish']['home-page']) ||

@@ -1557,4 +1557,23 @@ class wps_ic_combine_css
 
         return $relativeUrl;
     }
+
+	public function get_combined_css($html) {
+		// Reset for processing
+		$this->current_file = '';
+		$this->combine_external = false;
+		$this->combine_inline_scripts = true;
+
+		// Process head section
+		if (preg_match('/<head(.*?)<\/head>/si', $html, $head_match)) {
+			$this->combine($head_match);
+		}
+
+		// Process body section
+		if (preg_match('/<\/head>(.*?)<\/body>/si', $html, $body_match)) {
+			$this->combine($body_match);
+		}
+
+		return $this->current_file;
+	}
 }

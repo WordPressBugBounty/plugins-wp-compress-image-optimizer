@@ -138,6 +138,8 @@ if (!empty($_POST['options'])) {
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN();
+	    $cache::purgeCriticalFiles();
+	    $cache::purgePreloads();
     }
 
 	$htacces = new wps_ic_htaccess();
@@ -1004,9 +1006,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         </div>
                                         <div class="wpc-items-list-row mb-20">
+	                                        <?php
+	                                        echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', '', false, '', $delayEnabled); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay', false, '', $delayEnabled); ?>
+                                            echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
 
 
                                             <?php

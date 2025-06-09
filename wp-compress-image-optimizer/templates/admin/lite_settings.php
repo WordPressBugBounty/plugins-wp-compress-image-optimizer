@@ -40,6 +40,11 @@ if (!empty($_POST)) {
 
     if (empty($settings) || !is_array($settings)) {
         $settings = [];
+    } else {
+        if (!empty($settings['delay-js-v2'])){
+            //Make the delay js toggle controll both delays in simple settings
+	        $settings['delay-js'] = $settings['delay-js-v2'];
+        }
     }
 
     foreach ($defaultSettings as $option_key => $option_value) {
@@ -102,6 +107,8 @@ if (!empty($_POST)) {
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN();
+	    $cache::purgeCriticalFiles();
+	    $cache::purgePreloads();
     }
 
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
@@ -326,7 +333,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     <?php echo $gui::simpleCheckbox('CSS', '', false, '0', ['critical', 'css'], false); ?>
                                 </li>
                                 <li>
-                                    <?php echo $gui::simpleCheckbox('JavaScript', '', false, '0', 'delay-js', false); ?>
+                                    <?php echo $gui::simpleCheckbox('JavaScript', '', false, '0', 'delay-js-v2', false); ?>
                                 </li>
                                 <li>
                                     <?php echo $gui::simpleCheckbox('Lazy Loading', '', false, '0', 'nativeLazy', false); ?>

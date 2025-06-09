@@ -321,6 +321,7 @@ class wps_ic_enqueues extends wps_ic
 
         $optimizeRemove = get_option('wps_optimizejs_remove');
         $debugOptimize = get_option('wps_optimizejs_debug');
+
         if (empty($optimizeRemove)) {
             if (empty($debugOptimize) || $debugOptimize == 'false') {
                 echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';

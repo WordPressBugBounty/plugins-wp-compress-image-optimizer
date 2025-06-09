@@ -225,6 +225,12 @@ class wps_ic_cache_integrations
         return true;
     }
 
+		public static function purgePreloads()
+		{
+			delete_option('wps_ic_preloadsMobile');
+			delete_option('wps_ic_preloads');
+		}
+
 		public function remove_key()
 		{
 				$options = get_option(WPS_IC_OPTIONS);

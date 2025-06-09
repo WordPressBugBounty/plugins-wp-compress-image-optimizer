@@ -663,7 +663,7 @@ jQuery(document).ready(function ($) {
                     if (local === false) {
                         pagesHtml += `<li> ${createIndicator(item, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip', locked['css'])}</li>`;
                     }
-                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js', globalSettings['delay-js'], 'delay-js-tooltip', locked['delay-js'])}</li>
+                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js_v2', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
                                                         </ul>
                                                         <div class="per-page-settings-cog"></div>
                                                     </div>
@@ -1014,7 +1014,7 @@ jQuery(document).ready(function ($) {
                         newStatusHtml += `<li> ${createIndicator(newItem, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip', locked['css'])}</li>`;
                     }
                     newStatusHtml += `
-                    <li> ${createIndicator(newItem, 'delay_js', globalSettings['delay-js'], 'delay-js-tooltip', locked['delay-js'])}</li>
+                    <li> ${createIndicator(newItem, 'delay_js_v2', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
                 `;
                     var $statusElement = $row.find('.wpc-dropdown-row-right-side ul');
                     if ($statusElement.html().trim() !== newStatusHtml.trim()) {

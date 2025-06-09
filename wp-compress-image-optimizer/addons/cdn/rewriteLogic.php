@@ -1944,19 +1944,56 @@ SCRIPT;
 
     public function replaceImageTagsDo($image)
     {
+			//check if relative src and replace with full (may not work for folder installs)
+		    if (preg_match('/<img[^>]+src="([^"]+)"[^>]*>/i', $image[0], $matches)) {
+			    $url = $matches[1];
 
-        //check if relative src and replace with full (may not work for folder installs)
-        if (preg_match('/<img[^>]+src="([^"]+)"[^>]*>/i', $image[0], $matches)) {
-            $url = $matches[1];
+			    if (!empty($_GET['dbg_relative'])) {
+				    $debug = [];
+				    $debug['step1_extracted_url'] = $url;
+				    $debug['step2_original_image'] = $image[0];
+			    }
 
-            if (strpos($url, '/') === 0) {
-                $absolute_url = site_url($url);
-                $image_path = ABSPATH . $url;
-                if (file_exists($image_path)) {
-                    $image[0] = str_replace($url, $absolute_url, $image[0]);
-                }
-            }
-        }
+			    if (strpos($url, '/') === 0) {
+				    $absolute_url = site_url($url);
+
+				    if (!empty($_GET['dbg_relative'])) {
+					    $debug['step3_absolute_url'] = $absolute_url;
+					    $debug['step4_site_url'] = site_url();
+				    }
+
+				    $image_path = ABSPATH . $url;
+
+				    if (!empty($_GET['dbg_relative'])) {
+					    $debug['step5_image_path'] = $image_path;
+					    $debug['step6_file_exists'] = file_exists($image_path) ? 'YES' : 'NO';
+				    }
+
+				    if (file_exists($image_path)) {
+					    if (!empty($_GET['dbg_relative'])) {
+						    $debug['step7_before_replacement'] = $image[0];
+					    }
+
+					    // Replace src attribute specifically
+					    $image[0] = preg_replace('/src="' . preg_quote($url, '/') . '"/', 'src="' . $absolute_url . '"', $image[0]);
+
+					    if (!empty($_GET['dbg_relative'])) {
+						    $debug['step8_after_src_replacement'] = $image[0];
+					    }
+
+					    // Only process srcset if it actually contains relative URLs
+					    if (preg_match('/srcset="[^"]*?' . preg_quote($url, '/') . '/', $image[0]) &&
+					        !preg_match('/srcset="[^"]*?https?:\/\/[^"]*?' . preg_quote($url, '/') . '/', $image[0])) {
+						    $image[0] = preg_replace('/srcset="([^"]*?)' . preg_quote($url, '/') . '/', 'srcset="$1' . $absolute_url, $image[0]);
+					    }
+
+					    if (!empty($_GET['dbg_relative'])) {
+						    $debug['step9_after_srcset_replacement'] = $image[0];
+						    return print_r($debug, true);
+					    }
+				    }
+			    }
+		    }
 
         if (strpos($_SERVER['REQUEST_URI'], 'embed') !== false) {
             return $image[0];
@@ -2679,7 +2716,8 @@ SCRIPT;
                             // Retina URL
                             if (self::$settings['retina-in-srcset'] == '1') {
                                 $retinaWidth = (int)$width_url * 2;
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ' 2x, ';
+                                //$newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ' 2x, ';
+	                            $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ', ';
                             }
                         }
                     }
@@ -2696,7 +2734,8 @@ SCRIPT;
 
                     // Retina URL
                     if (self::$settings['retina-in-srcset'] == '1') {
-                        $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
+                        //$newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
+	                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
                     }
                 }
 

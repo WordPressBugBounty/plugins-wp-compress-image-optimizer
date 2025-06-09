@@ -1156,17 +1156,44 @@ class wps_cdn_rewrite
                 $delayActive = false;
             }
 
+	        $delayV2Active = true;
+	        if (isset(self::$page_excludes['delay_js_v2']) && self::$page_excludes['delay_js_v2'] == '0') {
+		        // Disable
+		        $delayV2Active = false;
+	        }
 
-            if ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')) {
-                if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
-                    if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
-                        $html = $js_delay->preload_scripts($html);
-                    }
-                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
-                } else {
-                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
-                }
-            }
+
+	        if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')) {
+		        if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+			        $js_delay = new wps_ic_js_delay_v2();
+
+			        if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+				        $html = $js_delay->process_html( $html );
+			        } else {
+				        $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
+			        }
+		        }
+	        } elseif ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')){
+		        if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+			        $js_delay = new wps_ic_js_delay();
+
+			        if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+				        if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
+					        $html = $js_delay->preload_scripts($html);
+				        }
+				        $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
+			        } else {
+				        $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
+			        }
+		        }
+
+		        if (!empty($_GET['testGtag'])) {
+			        $html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+
+			        return print_r([$html], true);
+		        }
+
+	        }
         }
 
 
@@ -3107,27 +3134,45 @@ class wps_cdn_rewrite
             $delayActive = false;
         }
 
+	    $delayV2Active = true;
+	    if (isset(self::$page_excludes['delay_js_v2']) && self::$page_excludes['delay_js_v2'] == '0') {
+		    // Disable
+		    $delayV2Active = false;
+	    }
 
-        if ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')) {
+
+        if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')) {
             if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-                $js_delay = new wps_ic_js_delay();
+	            $js_delay = new wps_ic_js_delay_v2();
 
-                if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
-                    if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
-                        $html = $js_delay->preload_scripts($html);
-                    }
-                    $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
+                if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+	                $html = $js_delay->process_html( $html );
                 } else {
                     $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
                 }
             }
+        } elseif ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')){
+	        if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+		        $js_delay = new wps_ic_js_delay();
+
+		        if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_options') && !self::$delay_js_override && !self::$preloaderAPI) {
+			        if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
+				        $html = $js_delay->preload_scripts($html);
+			        }
+			        $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'delay_script_replace'], $html);
+		        } else {
+			        $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
+		        }
+	        }
+
+	        if (!empty($_GET['testGtag'])) {
+		        $html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+
+		        return print_r([$html], true);
+	        }
+
         }
 
-        if (!empty($_GET['testGtag'])) {
-            $html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
-
-            return print_r([$html], true);
-        }
 
         if (empty($_GET['disableCritical']) && !empty(self::$settings['scripts-to-footer']) && self::$settings['scripts-to-footer'] == '1') {
             $js_delay = new wps_ic_js_delay();

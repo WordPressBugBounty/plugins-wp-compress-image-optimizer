@@ -53,6 +53,17 @@
     </div>
 </div>
 
+<div class="" id="wpc-tooltip-delay_js_v2" style="display: none;">
+    <div class="wpc-tooltip-html">
+        <div class="wpc-tooltip-title">
+            <span class="wpc-tooltip-icon-js"></span>
+            <span class="title">JavaScript</span>
+            <span class="status active">Active</span>
+        </div>
+        <span class="desc">(Click icon to change)</span>
+    </div>
+</div>
+
 <div class="" id="wpc-tooltip-error" style="display: none;">
     <div class="wpc-tooltip-html">
             Page returned <span class="errorCode"></span>: <span class="errorText"></span>
