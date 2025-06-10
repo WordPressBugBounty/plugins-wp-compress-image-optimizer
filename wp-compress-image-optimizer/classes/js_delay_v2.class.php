@@ -79,7 +79,7 @@ class wps_ic_js_delay_v2 {
 		if (preg_match('/<script\b([^>]*)>/i', $script_tag, $matches)) {
 			$attr_string = $matches[1];
 
-			if (preg_match_all('/(\w+)(?:=(["\'])(.*?)\2|=([^\s>]+))?/i', $attr_string, $attr_matches, PREG_SET_ORDER)) {
+			if (preg_match_all('/([\w-]+)(?:=(["\'])(.*?)\2|=([^\s>]+))?/i', $attr_string, $attr_matches, PREG_SET_ORDER)) {
 				foreach ($attr_matches as $attr_match) {
 					$name = strtolower($attr_match[1]);
 					$value = isset($attr_match[3]) ? $attr_match[3] : (isset($attr_match[4]) ? $attr_match[4] : true);
@@ -100,7 +100,7 @@ class wps_ic_js_delay_v2 {
 			return true;
 		}
 
-		if (!empty($attributes['type']) && $attributes['type'] === 'application/ld+json') {
+		if (!empty($attributes['type']) && in_array($attributes['type'], ['application/ld+json', 'text/template'])) {
 			return true;
 		}
 

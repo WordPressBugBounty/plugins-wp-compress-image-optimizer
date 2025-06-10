@@ -27,6 +27,12 @@ class wps_ic_stats
 
     public function getAPIStats()
     {
+	      $status = get_transient('wps_ic_account_status');
+
+				if (!empty($status)){
+					return $status;
+				}
+
         // Check privileges
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $call = wp_remote_get($url, [
@@ -357,7 +363,11 @@ class wps_ic_stats
     public
     function fetch_live_stats()
     {
-        delete_transient('wps_ic_live_stats');
+	      global $firstLoad;
+				if($firstLoad){
+					delete_transient('wps_ic_live_stats');
+				}
+
         $transient = get_transient('wps_ic_live_stats');
 
         if (!$transient || empty($transient)) {

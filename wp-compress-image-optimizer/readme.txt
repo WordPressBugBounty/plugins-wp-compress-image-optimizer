@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 6.5
 Tested up to: 6.8
-Stable tag: 6.50.01
+Stable tag: 6.50.02
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,13 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.50.02 =
+* Excluded text/template Scripts from DelayJS
+* Fixed JS Scripts Attributes Parsing Bug
+* Removed Redundant API Calls from WP Admin
+* Improved Settings Saving
+* Fixed Error in Media Library
 
 = 6.50.01 =
 * Added New DelayJS Setting

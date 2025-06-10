@@ -67,6 +67,13 @@ class wps_ic_js_delay
                 $fullTag = $matches[0];
                 $src = $matches[1];
                 $id = $matches[2];
+
+		            $tagLower = strtolower($fullTag);
+		            // Is the script excluded from DelayJS?
+		            if (self::$excludes->excludedFromDelay($tagLower)) {
+			            return $fullTag;
+		            }
+
                 if (!empty($src)) {
                     if (strpos($src, 'google') === false && strpos($src, 'tracking') === false && strpos($src, 'optimize.js') === false && strpos($src, 'optimize.dev.js') === false && strpos($src, 'mediaelement') === false && strpos($src, 'stats.wp') === false) {
                         $preloadTags[] = '<link rel="none" href="' . htmlspecialchars($src) . '" as="script" class="wpc-preload-links" id="'.$id.'">';

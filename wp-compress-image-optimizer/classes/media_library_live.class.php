@@ -594,9 +594,9 @@ class wps_ic_media_library_live extends wps_ic
     public function debug_log_link($args)
     {
 
-        if (empty(WPS_IC_DEBUG) || WPS_IC_DEBUG == 'false') {
-            return '';
-        }
+	    if (!defined('WPS_IC_DEBUG') || (defined('WPS_IC_DEBUG') && WPS_IC_DEBUG == 'false')) {
+		    return '';
+	    }
 
         return '<a href="' . admin_url('/options-general.php?page=' . $this::$slug . '&view=debug_tool&debug_img=' . $args) . '" target="_blank" class="wpc-dropdown-btn wps-ic-debug-log wpc-dropdown-item-hidden">Debug Log</a>';
     }

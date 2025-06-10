@@ -14,9 +14,15 @@ class wpc_gui_v4 extends wps_ic
     public static $accountQuota;
     public static $slug;
 
-    public function __construct($options = [])
-    {
-        self::$user_credits = parent::getAccountStatusMemory('true');
+    public function __construct($options = []) {
+		    global $firstLoad;
+		    if ( empty( $firstLoad ) ) {
+			    $firstLoad = true;
+		    } else {
+			    $firstLoad = false;
+		    }
+
+        self::$user_credits = parent::getAccountStatusMemory($firstLoad);
         self::$slug = parent::$slug;
 
         if (is_multisite()) {
