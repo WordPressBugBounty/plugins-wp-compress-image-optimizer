@@ -7,14 +7,20 @@ class wps_ic_js_delay_v2 {
 	private $excludes;
 	private $priority_run;
 
+	private $userExcludes;
+
 	public function __construct() {
 		$this->script_registry = array();
 		$this->script_id = 0;
 		$this->excludes = ['dark-mode', // dark mode switcher
+		                   'wp-compress-image-optimizer',
+		                   'n489D_var',
+		                   'optimize.js'
 		];
 
 		$this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
 
+		$this->userExcludes = new wps_ic_excludes();
 	}
 
 	public function process_html($html) {
@@ -28,12 +34,19 @@ class wps_ic_js_delay_v2 {
 		//Integrations
 		$html = $this->elementor_integration($html);
 
+		$delay_script = '';
 		if (!empty(get_option('wps_ic_delay_v2_debug'))){
-			$html = str_replace('</body>', '<script>var DEBUG = true;</script></body>', $html);
+			$delay_script .= '<script>var DEBUG = true;</script>';
 		}
 
-		$html = str_replace('</body>', '<script>var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script></body>', $html);
-		$html = str_replace('</body>',  '<script src="https://optimize-v2.b-cdn.net/loader.min.js"></script></body>', $html);
+		$delay_script .= '<script>var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
+        if (empty(get_option('wps_ic_delay_v2_debug'))) {
+            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js"></script>';
+        } else {
+            $delay_script .= '<script src="https://frankfurt-cdn.zapwp.net/delay-js-v2/loader.dev.js"></script>';
+        }
+
+		$html = str_replace('<script type="wpc-delay-placeholder"></script>',  $delay_script, $html);
 
 		return $html;
 	}
@@ -47,8 +60,6 @@ class wps_ic_js_delay_v2 {
 		if ($this->should_exclude_script($attributes, $script_content)) {
 			return $full_script;
 		}
-
-
 
 		$script_data = array(
 			'id' => 'delayed-script-' . $this->script_id++,
@@ -100,15 +111,27 @@ class wps_ic_js_delay_v2 {
 			return true;
 		}
 
-		if (!empty($attributes['type']) && in_array($attributes['type'], ['application/ld+json', 'text/template'])) {
+		if (!empty($attributes['type']) && in_array($attributes['type'], ['application/ld+json', 'text/template', 'wpc-delay-placeholder'])) {
 			return true;
 		}
 
-		if (!empty($attributes['src']) && $this->checkKeyword($attributes['src'], $this->excludes)){
-			return true;
+		if (!empty($attributes['src'])){
+			if($this->checkKeyword($attributes['src'], $this->excludes)){
+				return true;
+			}
+
+			// User excludes
+			if ($this->userExcludes->excludedFromDelayV2($attributes['src'])) {
+				return true;
+			}
 		}
 
 		if (!empty($content) && $this->checkKeyword($content, $this->excludes)){
+			return true;
+		}
+
+		// User excludes
+		if ($this->userExcludes->excludedFromDelayV2($content)) {
 			return true;
 		}
 

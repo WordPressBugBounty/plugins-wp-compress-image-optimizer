@@ -27,7 +27,8 @@ class wps_ic_stats
 
     public function getAPIStats()
     {
-	      $status = get_transient('wps_ic_account_status');
+
+	      $status = get_transient('wps_ic_account_status_call');
 
 				if (!empty($status)){
 					return $status;

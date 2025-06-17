@@ -137,7 +137,7 @@ class wps_ic_enqueues extends wps_ic
                 }
             } else {
                 add_action('wp_print_scripts', [$this, 'inline_frontend'], 1);
-
+	            add_action('wp_footer', [$this, 'inline_delay_v2_placeholder'], PHP_INT_MAX);
                 if (!self::$isAmp->isAmp()) {
                     /**
                      * Remove CSS/JS Versioning - required for CDN
@@ -163,6 +163,12 @@ class wps_ic_enqueues extends wps_ic
             add_action('wp_enqueue_scripts', [$this, 'disableCartFragments'], 999);
         }
 
+    }
+
+    public function inline_delay_v2_placeholder() {
+	    if ( ! empty( self::$settings['delay-js-v2'] ) && self::$settings['delay-js-v2'] == '1' ) {
+		    echo '<script type="wpc-delay-placeholder"></script>';
+	    }
     }
 
 

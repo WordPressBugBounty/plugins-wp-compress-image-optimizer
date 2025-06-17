@@ -4,6 +4,7 @@ class wps_ic_excludes extends wps_ic
 {
 
     private static $defaultDelayJSExcludes;
+		private static $defaultDelayJSExcludesV2;
     private static $defaultCombineJSExcludes;
     private static $defaultCombineCSSExcludes;
     private static $defaultCriticalCSSExcludes;
@@ -12,6 +13,7 @@ class wps_ic_excludes extends wps_ic
     private static $defaultWebpExcludes;
     private static $defaultAdaptiveExcludes;
     private static $excludesDelayJSOption;
+		private static $excludesDelayJSOptionV2;
     private static $excludesCombineJSOption;
     private static $excludesCombineCSSOption;
     private static $excludesToFooterOption;
@@ -49,6 +51,7 @@ class wps_ic_excludes extends wps_ic
         if (!empty($id)) {
             self::$pageExcludesFiles = !empty(self::$excludesOption['page_excludes_files'][$id]) ? self::$excludesOption['page_excludes_files'][$id] : [];
             self::$excludesDelayJSOption = !empty(self::$excludesOption['delay_js']) ? self::$excludesOption['delay_js'] : [];
+	          self::$excludesDelayJSOptionV2 = !empty(self::$excludesOption['delay_js_v2']) ? self::$excludesOption['delay_js_v2'] : [];
             self::$excludesCombineJSOption = !empty(self::$excludesOption['combine_js']) ? self::$excludesOption['combine_js'] : [];
             self::$excludesCombineCSSOption = !empty(self::$excludesOption['css_combine']) ? self::$excludesOption['css_combine'] : [];
             self::$excludesCriticalCSSOption = !empty(self::$excludesOption['critical_css']) ? self::$excludesOption['critical_css'] : [];
@@ -106,6 +109,8 @@ class wps_ic_excludes extends wps_ic
             'var jnewsoption',
             'var VPData'
         ];
+
+		    self::$defaultDelayJSExcludesV2 = [];
 
         self::$defaultCombineJSExcludes = [
             'visitor_mode.min.js',
@@ -435,6 +440,21 @@ class wps_ic_excludes extends wps_ic
         return false;
     }
 
+	public function excludedFromDelayV2($tag)
+	{
+		if ($this->strInArray($tag, $this->delayJSExcludesV2())) {
+			return true;
+		}
+
+		/* We should be able to delay everything
+		if (!empty(self::$excludesOption['delay_js_exclude_third']) && self::$excludesOption['delay_js_exclude_third'] == '1' && $this->is_external($tag) === true) {
+			return true;
+		}
+		*/
+
+		return false;
+	}
+
     public function delayJSExcludes()
     {
         self::$defaultDelayJSExcludes = array_merge(
@@ -460,6 +480,33 @@ class wps_ic_excludes extends wps_ic
 
         return self::$defaultDelayJSExcludes;
     }
+
+	public function delayJSExcludesV2()
+	{
+		self::$defaultDelayJSExcludesV2 = array_merge(
+			isset(self::$excludesDelayJSOptionV2) ? self::$excludesDelayJSOptionV2 : [],
+			isset(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []
+		);
+
+		/* Not used
+		if (!empty(self::$excludesOption['delay_js_exclude_themes']) &&
+		    self::$excludesOption['delay_js_exclude_themes'] == '1') {
+			self::$defaultDelayJSExcludes[] = 'wp-content/themes';
+		}
+
+		if (!empty(self::$excludesOption['delay_js_exclude_plugins']) &&
+		    self::$excludesOption['delay_js_exclude_plugins'] == '1') {
+			self::$defaultDelayJSExcludes[] = 'wp-content/plugins';
+		}
+
+		if (!empty(self::$excludesOption['delay_js_exclude_wp']) &&
+		    self::$excludesOption['delay_js_exclude_wp'] == '1') {
+			self::$defaultDelayJSExcludes[] = 'wp-includes';
+		}
+		*/
+
+		return self::$defaultDelayJSExcludesV2;
+	}
 
     public function is_external($tag)
     {

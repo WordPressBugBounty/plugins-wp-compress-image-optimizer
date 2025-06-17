@@ -992,7 +992,7 @@ class wps_cdn_rewrite
         }
 
 
-        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html);
+        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html, 1);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -2822,7 +2822,7 @@ class wps_cdn_rewrite
             $dbg .= $html;
         }
 
-        $html = preg_replace_callback('/<head\b[^>]*>/is', [$this, 'injectPreloadImages'], $html);
+        $html = preg_replace_callback('/<head\b[^>]*>/is', [$this, 'injectPreloadImages'], $html, 1);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';

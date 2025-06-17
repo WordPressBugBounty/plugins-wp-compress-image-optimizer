@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.02';
+        self::$version = '6.50.03';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -389,6 +389,8 @@ class wps_ic
         if (wp_remote_retrieve_response_code($call) == 200) {
             $json = $body = wp_remote_retrieve_body($call);
             $body = json_decode($body);
+
+            set_transient('wps_ic_account_status_call', $body, 5 * 60);
 
             if (!empty($body) && $body !== 'no-site-found') {
                 // Vars

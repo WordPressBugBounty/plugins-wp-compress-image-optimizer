@@ -1007,7 +1007,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         </div>
                                         <div class="wpc-items-list-row mb-20">
 	                                        <?php
-	                                        echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', '', false, '', $delayEnabled); ?>
+	                                        echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
@@ -1569,6 +1569,7 @@ include 'partials/popups/js/exclude-js-combine.php';
 include 'partials/popups/js/exclude-scripts-to-footer.php';
 include 'partials/popups/js/exclude-js-defer.php';
 include 'partials/popups/js/exclude-js-delay.php';
+include 'partials/popups/js/exclude-js-delay-v2.php';
 include 'partials/popups/js/inline-js.php';
 
 // CSS Optimizations

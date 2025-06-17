@@ -1222,18 +1222,25 @@ class wps_ic_combine_css
 
         //todo Check if file is really css
 
-        if (is_wp_error($data)) {
-
-		        if ($this->log_criticalCombine){
-			        $this->logger->log('Failed fetching script content.' , true);
-		        }
-
-            return false;
-        }
-
-		    if ($this->log_criticalCombine){
-			    $this->logger->log('Script content fetched.');
+	    if (is_wp_error($data)) {
+		    if ($this->log_criticalCombine) {
+			    $this->logger->log('Failed fetching script content: WP_Error.', true);
 		    }
+		    return false;
+	    }
+
+	    $response_code = wp_remote_retrieve_response_code($data);
+
+	    if ($response_code !== 200) {
+		    if ($this->log_criticalCombine) {
+			    $this->logger->log('Failed fetching script content. Response code: ' . $response_code, true);
+		    }
+		    return false;
+	    }
+
+	    if ($this->log_criticalCombine) {
+		    $this->logger->log('Script content fetched.');
+	    }
 
         return wp_remote_retrieve_body($data);
     }
