@@ -2200,6 +2200,10 @@ class wps_cdn_rewrite
             }
         }
 
+        if (strpos(self::$zone_name, 'bunny') !== false) {
+            self::$settings['optimization'] = 'lossless';
+        }
+
         if (!empty(self::$exif) && self::$exif == '1') {
             self::$apiUrl = 'https://' . self::$zone_name . '/q:' . self::$settings['optimization'] . '/e:1';
         } else {

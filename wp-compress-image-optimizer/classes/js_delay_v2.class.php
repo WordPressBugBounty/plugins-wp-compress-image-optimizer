@@ -23,6 +23,24 @@ class wps_ic_js_delay_v2 {
 		$this->userExcludes = new wps_ic_excludes();
 	}
 
+
+    public function removeNoDelay($tag)
+    {
+        if (is_array($tag)) {
+            $tag = $tag[0];
+        }
+
+        $tagLower = strtolower($tag);
+
+        // It's excluded
+        if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
+            $tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
+        }
+
+        return $tag;
+    }
+
+
 	public function process_html($html) {
 		$this->script_registry = array();
 		$this->script_id = 0;

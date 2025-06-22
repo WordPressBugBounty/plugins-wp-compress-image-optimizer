@@ -126,6 +126,40 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </thead>
     <tbody>
     <tr>
+        <td>New CDN API Test</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['wps_ic_cdn_mc'])) {
+                    if ($_GET['wps_ic_cdn_mc'] === 'true') {
+                        update_option('wps_ic_cdn_mc', sanitize_text_field($_GET['wps_ic_cdn_mc']));
+
+                        $oldZone = get_option('ic_cdn_zone_name');
+                        update_option('ic_cdn_zone_name_old', $oldZone);
+                        update_option('ic_cdn_zone_name', 'mc-enutpvy18x.bunny.run');
+
+                    } else {
+                        $oldZone = get_option('ic_cdn_zone_name_old');
+                        delete_option('ic_cdn_zone_name_old');
+                        update_option('ic_cdn_zone_name', $oldZone);
+
+                        delete_option('wps_ic_cdn_mc');
+                    }
+                }
+
+                $cdn_mc = get_option('wps_ic_cdn_mc');
+
+                if (empty($cdn_mc) || $cdn_mc == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+                Enable Bunny MC API.
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>New DelayJS DEBUG</td>
         <td colspan="3">
             <p>
