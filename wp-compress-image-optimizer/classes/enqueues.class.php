@@ -315,7 +315,8 @@ class wps_ic_enqueues extends wps_ic
             $delayOn = "true";
         }
 
-        $linkPreload = "true";
+        // Preload links on hover, hardcoded!
+        $linkPreload = "false";
         if (is_user_logged_in()) {
             $linkPreload = "false";
         }
