@@ -224,8 +224,22 @@ class wps_criticalCss
             return false;
         }
 
+        // Use md5() or sha1() for a predictable short hash.
+        $url_key = md5($url);
 
-        $args = ['url' => $url.'?criticalCombine=true&testCompliant=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
+        $critTransient = get_transient($transient_name);
+
+        if (!empty($critTransient)) {
+            // Die, already running!
+            return true;
+        }
+
+        // Make transient expire after 30 mins
+        set_transient($transient_name, true, 60*30);
+
+
+        $args = ['url' => $url.'?criticalCombine=true&testCompliant=true', 'async' => 'false', 'version' => '2.3', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
         $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
