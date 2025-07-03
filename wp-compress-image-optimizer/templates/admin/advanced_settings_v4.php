@@ -62,6 +62,54 @@ if (!empty($_GET['selectModes'])) {
     #echo '<a href="#" class="wpc-select-modes">Select modes</a>';
 }
 
+// Generate Critical CSS
+if (!empty($_GET['generate_crit'])) {
+    $page = sanitize_text_field($_GET['generate_crit']);
+    var_dump($page);
+
+    if ($page == 'home') {
+        $page = site_url();
+    }
+
+    $response = wp_remote_post('https://mc-6463k17ku1.bunny.run/critical', array(
+        'headers' => array(
+            'Content-Type' => 'application/json',
+        ),
+        'body' => json_encode(array(
+            'url' => $page.'?criticalCombine=true&wpc-hash='.time(),
+        )),
+        'method' => 'POST',
+        'timeout' => 15,
+        'blocking' => true,
+    ));
+
+    if (is_wp_error($response)) {
+        $error_message = $response->get_error_message();
+        echo "Something went wrong: $error_message";
+    } else {
+        $body = wp_remote_retrieve_body($response);
+        if (!is_wp_error($body) && !empty($body)) {
+            $bodyDecoded = json_decode($body, true);
+
+            if (!empty($bodyDecoded)) {
+
+                $urlKey = new wps_ic_url_key();
+                $urlKey = $urlKey->setup($page);
+                $criticalCSS = new wps_criticalCss();
+
+                $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['desktop'], 'desktop');
+                $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['mobile'], 'mobile');
+
+            }
+        }
+
+    }
+
+    var_dump($post);
+
+    die();
+}
+
 
 if (!empty($_GET['show_hidden_menus'])) {
     update_option('wpc_show_hidden_menus', $_GET['show_hidden_menus']);
@@ -138,11 +186,11 @@ if (!empty($_POST['options'])) {
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN();
-	    $cache::purgeCriticalFiles();
-	    $cache::purgePreloads();
+        $cache::purgeCriticalFiles();
+        $cache::purgePreloads();
     }
 
-	$htacces = new wps_ic_htaccess();
+    $htacces = new wps_ic_htaccess();
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
@@ -169,13 +217,13 @@ if (!empty($_POST['options'])) {
     }
 
 
-	if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
-		$htacces->removeWebpReplace();
-	} else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
-		$htacces->addWebpReplace();
-	} else {
-		$htacces->removeWebpReplace();
-	}
+    if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
+        $htacces->removeWebpReplace();
+    } else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
+        $htacces->addWebpReplace();
+    } else {
+        $htacces->removeWebpReplace();
+    }
 
 }
 
@@ -199,15 +247,15 @@ $bulkProcess = get_option('wps_ic_bulk_process');
 $allowLocal = get_option('wps_ic_allow_local');
 $allowLive = get_option('wps_ic_allow_live', false);
 
-if (!$allowLive){
-	$settings['live-cdn'] = '0';
+if (!$allowLive) {
+    $settings['live-cdn'] = '0';
 
-    foreach ($settings['serve'] as $key => $value){
-	    $settings['serve'][$key] = '0';
+    foreach ($settings['serve'] as $key => $value) {
+        $settings['serve'][$key] = '0';
     }
-	$settings['css'] = '0';
-	$settings['js'] = '0';
-	$settings['fonts'] = '0';
+    $settings['css'] = '0';
+    $settings['js'] = '0';
+    $settings['fonts'] = '0';
 
     update_option(WPS_IC_SETTINGS, $settings);
 }
@@ -573,17 +621,33 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <span class="wpc-title">Smart Optimization</span>
                                     </a>
                                 </li>
+                                <?php
+                                $cdn_critical_mc = get_option('wps_ic_critical_mc');
+                                if (!empty($cdn_critical_mc) && 1==0) {
+                                    ?>
                                     <li>
-                                        <a href="#" class="" data-tab="integrations">
+                                        <a href="#" class="" data-tab="critical-css-optimization">
+                                <span class="wpc-icon-container">
+                                <span class="wpc-icon">
+                                    <img src="<?php
+                                    echo WPS_IC_ASSETS; ?>/v4/images/menu-icons/star-shooting-duotone.svg"/>
+                                </span>
+                                </span>
+                                            <span class="wpc-title">Critical CSS</span>
+                                        </a>
+                                    </li>
+                                <?php } ?>
+                                <li>
+                                    <a href="#" class="" data-tab="integrations">
                                 <span class="wpc-icon-container">
                                 <span class="wpc-icon">
                                     <img src="<?php
                                     echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
                                 </span>
                                 </span>
-                                            <span class="wpc-title">Integrations</span>
-                                        </a>
-                                    </li>
+                                        <span class="wpc-title">Integrations</span>
+                                    </a>
+                                </li>
                                 <li>
                                     <a href="#" class="" data-tab="export_settings">
                                 <span class="wpc-icon-container">
@@ -908,13 +972,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         <div class="wpc-items-list-row mb-0">
 
-                                                <?php
-                                                echo $gui::checkboxDescription_v4('Cache Headers', 'Enable caching of custom headers.', '', '', ['cache', 'headers'], $cacheLocked, '', '');
-                                                ?>
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Cache Headers', 'Enable caching of custom headers.', '', '', ['cache', 'headers'], $cacheLocked, '', '');
+                                            ?>
 
-			                                    <?php
-			                                    echo $gui::checkboxDescription_v4('Purge Cache on Update', 'Purge all cache on plugin, theme, core or menu updates. Purge individual posts and pages on edit.', '', '', ['cache', 'purge-hooks'], $cacheLocked, '', 'purge-settings');
-			                                    ?>
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Purge Cache on Update', 'Purge all cache on plugin, theme, core or menu updates. Purge individual posts and pages on edit.', '', '', ['cache', 'purge-hooks'], $cacheLocked, '', 'purge-settings');
+                                            ?>
 
 
                                         </div>
@@ -1006,8 +1070,8 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         </div>
                                         <div class="wpc-items-list-row mb-20">
-	                                        <?php
-	                                        echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
@@ -1101,19 +1165,20 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
 
                                             <?php
+                                            /* always forced on, not used in delay-v2
                                             echo $gui::checkboxDescription_v4('Preload Scripts', 'Preload delayed JS scripts for a faster load time.',
                                                 false, false, 'preload-scripts', false, 'right',
-                                                false, false, '', false); ?>
+                                                false, false, '', false);
+                                            */
+                                             ?>
 
-
-                                        </div>
-
-                                        <div class="wpc-items-list-row mb-20">
 
                                             <?php
+                                            /* Always forced on
                                             echo $gui::checkboxDescription_v4('Set \'fetchpriority\'', 'Set \'fetchpriority\' to high for important images', false,
                                                 false, 'fetchpriority-high', false, 'right',
                                                 false, false, ''); ?>
+                                            */ ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Retina in srcset', 'Generate retina links in srcset attribute', false,
@@ -1135,16 +1200,16 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         <div class="wpc-items-list-row mb-20">
 
-			                                    <?php
-			                                    echo $gui::checkboxDescription_v4('Htaccess Webp replace', 'Replace images with webp via .htaccess file when in local mode.', false, false, 'htaccess-webp-replace', false, 'right', false, false, '');
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Htaccess Webp replace', 'Replace images with webp via .htaccess file when in local mode.', false, false, 'htaccess-webp-replace', false, 'right', false, false, '');
 
-			                                     ?>
+                                            ?>
 
-                                                <?php
+                                            <?php
 
-                                                echo $gui::checkboxDescription_v4('Disable Optimizations for logged in users', 'Disable optimizations for logged in users.', false, '0', 'disable-logged-in-opt', false, 'right');
+                                            echo $gui::checkboxDescription_v4('Disable Optimizations for logged in users', 'Disable optimizations for logged in users.', false, '0', 'disable-logged-in-opt', false, 'right');
 
-                                                ?>
+                                            ?>
 
                                         </div>
 
@@ -1303,6 +1368,65 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     </div>
                                 </div>
+                                <div class="wpc-tab-content" id="critical-css-optimization" style="display:none;">
+
+                                    <div class="wpc-tab-content-box">
+
+                                        <div class="wpc-critical-css-status"
+                                             style="display:flex;align-items:center;border:none;">
+
+                                            <div class="d-flex align-items-top gap-3 tab-title-checkbox"
+                                                 style="width:100%; padding-right:20px">
+                                                <div class="wpc-checkbox-icon">
+                                                    <div class="wpc-smart-monitor-img-animated">
+                                                        <div class="pulse-container" style="display:none"></div>
+                                                        <div style="background-image:url(<?php
+                                                        echo WPS_IC_URI . '/assets/v4/images/24monitor.svg' ?>);min-height:100px;min-width:100px;background-repeat:no-repeat;"
+                                                             class="background-image wpc-smart-monitor-img">
+                                                        </div>
+                                                        <div class="shimmer-container" style="display:none"></div>
+                                                    </div>
+                                                </div>
+                                                <div class="wpc-checkbox-description" style="z-index:2">
+                                                    <div style="display:flex">
+                                                        <h4 class="fs-500 text-dark-300 fw-500 p-inline wpc-critical-css-title">
+                                                            Critical CSS</h4>
+                                                        <img src="<?php
+                                                        echo WPS_IC_URI . '/assets/v4/images/24bubble.svg' ?>"
+                                                             style="padding-left: 15px;height: 30px;padding-top: 2px;">
+                                                    </div>
+                                                    <p class="wpc-smart-optimization-text" style="margin: 7px 0px 4px">
+                                                        No need to lift a finger, your website is intelligently
+                                                        optimized around the clock based on demand.</p>
+                                                </div>
+
+                                            </div>
+
+                                            <div class="wpc-optimization-status"
+                                                 style="display:flex;align-items:center;margin-left:10px;padding-left:20px">
+                                                <div class="optimization-image">
+                                                    <img src="<?php
+                                                    echo WPS_IC_URI . '/assets/v4/images/pages_optimized.svg' ?>" alt=""
+                                                         style="margin-top:-5px">
+                                                </div>
+
+                                                <div class="optimization-text">
+                                                    <div class="optimized-pages-text">0</div>
+                                                    <div class="optimized-pages-bottom-text">Preparing</div>
+                                                </div>
+
+
+                                            </div>
+                                        </div>
+
+                                        <div class="wpc-spacer"></div>
+
+                                        <a href="<?php echo admin_url('admin.php?page=wpcompress&generate_crit=home#critical-css-optimization'); ?>">
+                                            Generate Critical CSS for Home Page
+                                        </a>
+
+                                    </div>
+                                </div>
                                 <div class="wpc-tab-content" id="integrations" style="display:none;">
                                     <div class="wpc-tab-content-box" id="cf-connect-options" style="display: block;">
                                         <?php
@@ -1376,172 +1500,174 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     </div>
 
 
-
                                     <?php if (get_option('wpc_show_hidden_menus') == 'true') { ?>
-                                    <div class="wpc-tab-content-box">
-
-                                        <?php
-                                        echo $gui::checkboxTabTitle('Integrations', '', 'other-optimization/tab-icon.svg', ''); ?>
-
-                                        <div class="wpc-spacer"></div>
-
-                                        <div class="wpc-items-list-row mb-20">
+                                        <div class="wpc-tab-content-box">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Disable Elementor Triggers', 'Can fix double animations, but may break menus and other elementor elements.', false, false, 'disable-elementor-triggers', false, 'right',
-                                                false, false, '', true); ?>
+                                            echo $gui::checkboxTabTitle('Integrations', '', 'other-optimization/tab-icon.svg', ''); ?>
+
+                                            <div class="wpc-spacer"></div>
+
+                                            <div class="wpc-items-list-row mb-20">
+
+                                                <?php
+                                                echo $gui::checkboxDescription_v4('Disable Elementor Triggers', 'Can fix double animations, but may break menus and other elementor elements.', false, false, 'disable-elementor-triggers', false, 'right',
+                                                    false, false, '', true); ?>
+
+
+                                            </div>
 
 
                                         </div>
-
-
-                                    </div>
                                     <?php } ?>
                                 </div>
 
                                 <div class="wpc-tab-content" id="export_settings" style="display:none;">
                                     <div class="wpc-tab-content-box">
 
-                                      <?php
-                                      echo $gui::checkboxTabTitle('Export/Import settings', 'Export your settings to a file to easily import to other sites.', 'other-optimization/tab-icon.svg', ''); ?>
-
-                                    <div class="wpc-spacer"></div>
-
-                                        <div class="wpc-settings-export-form">
-                                            <div class="cdn-popup-inner"">
-                                                <div class="wps-default-excludes-enabled-checkbox-container">
-                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked>
-                                                    <p>Export Settings</p>
-                                                </div>
-                                            </div>
-                                            <div class="cdn-popup-inner"">
-                                                <div class="wps-default-excludes-enabled-checkbox-container">
-                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes">
-                                                    <p>Export Excludes</p>
-                                                </div>
-                                            </div>
-                                            <div class="cdn-popup-inner"">
-                                                <div class="wps-default-excludes-enabled-checkbox-container">
-                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache">
-                                                    <p>Export Cache Purge Settings</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="wpc-export-import-buttons">
-                                            <button id="wpc-export-button" class="wps-ic-help-btn" style="border:none">Export</button>
-                                            <button id="wpc-import-button" class="wps-ic-help-btn" style="border:none">Import</button>
-                                            <button id="wpc-set-default-button" class="wps-ic-help-btn" style="border:none;float:right">Reset to default</button>
-                                            <input type="file" id="wpc-import-file" style="display: none;" accept=".json">
-                                        </div>
-                                    </div>
-
-                                </div>
-
-
-                                <div class="wpc-tab-content" id="system-information" style="display:none;">
-                                    <div class="wpc-tab-content-box">
-
                                         <?php
-                                        echo $gui::checkboxTabTitle('System Information', '', 'other-optimization/tab-icon.svg', ''); ?>
+                                        echo $gui::checkboxTabTitle('Export/Import settings', 'Export your settings to a file to easily import to other sites.', 'other-optimization/tab-icon.svg', ''); ?>
 
                                         <div class="wpc-spacer"></div>
 
-                                        <?php
-                                        $location = get_option('wps_ic_geo_locate_v2');
-                                        if (empty($location)) {
-                                            $location = $this->geoLocate();
-                                        }
-
-                                        if (is_object($location)) {
-                                            $location = (array)$location;
-                                        }
-                                        ?>
-
-                                        <div class="wpc-items-list-row mb-20" style="flex-direction:column;">
-                                            <ul class="wpc-list-item-ul">
-                                                <li>WP Version:
-                                                    <strong><?php
-                                                        global $wp_version;
-                                                        echo $wp_version; ?></strong>
-                                                </li>
-                                                <li>PHP Version:
-                                                    <strong><?php
-                                                        echo phpversion() ?></strong>
-                                                </li>
-                                                <li>Site URL:
-                                                    <strong><?php
-                                                        echo site_url() ?></strong>
-                                                </li>
-                                                <li>Home URL:
-                                                    <strong><?php
-                                                        echo home_url() ?></strong>
-                                                </li>
-                                                <li>API Location:
-                                                    <strong><?php
-                                                        echo print_r($location, true); ?></strong>
-                                                </li>
-                                                <li>Bulk Status:
-                                                    <strong><?php
-                                                        echo print_r(get_option('wps_ic_BulkStatus'), true); ?></strong>
-                                                </li>
-                                                <li>Parsed Images:
-                                                    <strong><?php
-                                                        echo print_r(get_option('wps_ic_parsed_images'), true); ?></strong>
-                                                </li>
-                                                <li>Multisite:
-                                                    <strong><?php
-                                                        if (is_multisite()) {
-                                                            echo 'True';
-                                                        } else {
-                                                            echo 'False';
-                                                        } ?></strong>
-                                                </li>
-                                                <li>Maximum upload size:
-                                                    <strong><?php
-                                                        echo size_format(wp_max_upload_size()) ?></strong>
-                                                </li>
-                                                <li>Memory limit:
-                                                    <strong><?php
-                                                        echo ini_get('memory_limit') ?></strong>
-                                                </li>
-
-                                                <li>Thumbnails:
-                                                    <strong><?php
-                                                        echo count(get_intermediate_image_sizes()); ?></strong>
-                                                </li>
-
-                                                <li>
-                                                    <?php
-                                                    if (function_exists('file_get_contents')) {
-                                                        echo "file_get_contents function is available.";
-                                                    } else {
-                                                        echo "file_get_contents function is not available.";
-                                                    }
-                                                    ?>
-                                                </li>
-                                            </ul>
+                                        <div class="wpc-settings-export-form">
+                                            <div class="cdn-popup-inner"
+                                            ">
+                                            <div class="wps-default-excludes-enabled-checkbox-container">
+                                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked>
+                                                <p>Export Settings</p>
+                                            </div>
+                                        </div>
+                                        <div class="cdn-popup-inner"
+                                        ">
+                                        <div class="wps-default-excludes-enabled-checkbox-container">
+                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes">
+                                            <p>Export Excludes</p>
                                         </div>
                                     </div>
-                                </div>
-
-
-                                <div class="wpc-tab-content" id="debug" style="display:none;">
-                                    <?php
-                                    include_once 'debug_tool.php'; ?>
-                                </div>
-
-                                <div class="wpc-tab-content" id="logger" style="display:none;">
-			                            <?php
-			                            include_once 'logger_menu.php'; ?>
+                                    <div class="cdn-popup-inner"
+                                    ">
+                                    <div class="wps-default-excludes-enabled-checkbox-container">
+                                        <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache">
+                                        <p>Export Cache Purge Settings</p>
+                                    </div>
                                 </div>
                             </div>
+
+                            <div class="wpc-export-import-buttons">
+                                <button id="wpc-export-button" class="wps-ic-help-btn" style="border:none">Export</button>
+                                <button id="wpc-import-button" class="wps-ic-help-btn" style="border:none">Import</button>
+                                <button id="wpc-set-default-button" class="wps-ic-help-btn" style="border:none;float:right">Reset to default</button>
+                                <input type="file" id="wpc-import-file" style="display: none;" accept=".json">
+                            </div>
                         </div>
-                        <!-- Tab Content End -->
+
+                    </div>
+
+
+                    <div class="wpc-tab-content" id="system-information" style="display:none;">
+                        <div class="wpc-tab-content-box">
+
+                            <?php
+                            echo $gui::checkboxTabTitle('System Information', '', 'other-optimization/tab-icon.svg', ''); ?>
+
+                            <div class="wpc-spacer"></div>
+
+                            <?php
+                            $location = get_option('wps_ic_geo_locate_v2');
+                            if (empty($location)) {
+                                $location = $this->geoLocate();
+                            }
+
+                            if (is_object($location)) {
+                                $location = (array)$location;
+                            }
+                            ?>
+
+                            <div class="wpc-items-list-row mb-20" style="flex-direction:column;">
+                                <ul class="wpc-list-item-ul">
+                                    <li>WP Version:
+                                        <strong><?php
+                                            global $wp_version;
+                                            echo $wp_version; ?></strong>
+                                    </li>
+                                    <li>PHP Version:
+                                        <strong><?php
+                                            echo phpversion() ?></strong>
+                                    </li>
+                                    <li>Site URL:
+                                        <strong><?php
+                                            echo site_url() ?></strong>
+                                    </li>
+                                    <li>Home URL:
+                                        <strong><?php
+                                            echo home_url() ?></strong>
+                                    </li>
+                                    <li>API Location:
+                                        <strong><?php
+                                            echo print_r($location, true); ?></strong>
+                                    </li>
+                                    <li>Bulk Status:
+                                        <strong><?php
+                                            echo print_r(get_option('wps_ic_BulkStatus'), true); ?></strong>
+                                    </li>
+                                    <li>Parsed Images:
+                                        <strong><?php
+                                            echo print_r(get_option('wps_ic_parsed_images'), true); ?></strong>
+                                    </li>
+                                    <li>Multisite:
+                                        <strong><?php
+                                            if (is_multisite()) {
+                                                echo 'True';
+                                            } else {
+                                                echo 'False';
+                                            } ?></strong>
+                                    </li>
+                                    <li>Maximum upload size:
+                                        <strong><?php
+                                            echo size_format(wp_max_upload_size()) ?></strong>
+                                    </li>
+                                    <li>Memory limit:
+                                        <strong><?php
+                                            echo ini_get('memory_limit') ?></strong>
+                                    </li>
+
+                                    <li>Thumbnails:
+                                        <strong><?php
+                                            echo count(get_intermediate_image_sizes()); ?></strong>
+                                    </li>
+
+                                    <li>
+                                        <?php
+                                        if (function_exists('file_get_contents')) {
+                                            echo "file_get_contents function is available.";
+                                        } else {
+                                            echo "file_get_contents function is not available.";
+                                        }
+                                        ?>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="wpc-tab-content" id="debug" style="display:none;">
+                        <?php
+                        include_once 'debug_tool.php'; ?>
+                    </div>
+
+                    <div class="wpc-tab-content" id="logger" style="display:none;">
+                        <?php
+                        include_once 'logger_menu.php'; ?>
                     </div>
                 </div>
-                <!-- Body End -->
-        </form>
+            </div>
+            <!-- Tab Content End -->
+    </div>
+    </div>
+    <!-- Body End -->
+    </form>
     </div>
 
 <?php

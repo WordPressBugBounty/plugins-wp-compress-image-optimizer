@@ -20,11 +20,11 @@ class wps_ic_logger
 		if (empty($folder)) {
 			$this->folder = '';
 			$this->folderSanitized = '';
-			$this->logFile = WPS_IC_DIR . '/logs/' . $datetime . '.log';
+			$this->logFile = WPS_IC_LOG . $datetime . '.log';
 		} else {
 			$this->folder = $folder;
 			$this->folderSanitized = $this->sanitize($this->folder);
-			$this->logFile = WPS_IC_DIR . '/logs/' . $this->folderSanitized . '/' . $datetime . '.log';
+			$this->logFile = WPS_IC_LOG . $this->folderSanitized . '/' . $datetime . '.log';
 		}
 
 		// Create Dir
@@ -43,11 +43,11 @@ class wps_ic_logger
 
 	public function createDir()
 	{
-		if (!file_exists(WPS_IC_DIR  . '/logs')) {
-			mkdir(WPS_IC_DIR  . '/logs');
+		if (!file_exists(WPS_IC_LOG)) {
+			mkdir(WPS_IC_LOG);
 		}
-		if (!file_exists(WPS_IC_DIR  . '/logs/' . $this->folderSanitized) && !empty($this->folderSanitized)) {
-			mkdir(WPS_IC_DIR  . '/logs/' . $this->folderSanitized);
+		if (!file_exists(WPS_IC_LOG . $this->folderSanitized) && !empty($this->folderSanitized)) {
+			mkdir(WPS_IC_LOG . $this->folderSanitized);
 		}
 
 		return $this;

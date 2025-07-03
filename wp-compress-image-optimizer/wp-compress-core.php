@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.04';
+        self::$version = '6.50.06';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -121,6 +121,44 @@ class wps_ic
 		    echo json_encode( [ 'message' => 'Connectivity Test passed.' ] );
 		    die();
 	    }
+
+        // Critical API
+        if (!empty($_GET['criticalDone'])) {
+            $uuid = sanitize_text_field($_GET['uuid']);
+            $apikey = sanitize_text_field($_GET['apikey']);
+
+            if (!empty($uuid) && !empty($apikey)) {
+                $options = get_option(WPS_IC_OPTIONS);
+                $dbApiKey = $options['api_key'];
+
+                if ($dbApiKey == $apikey) {
+                    $urlKey = new wps_ic_url_key();
+                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
+                    $urlKey = $urlKey->setup($pageUrl);
+
+                    // UUID
+                    $uuidPart = substr($uuid, 0, 4);
+
+                    // Mobile CSS
+                    $mobileCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-mobile.css';
+
+                    // Desktop CSS
+                    $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
+
+                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+                    $criticalCSS = new wps_criticalCss();
+                    $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
+
+                    wp_send_json_success();
+                }
+
+                var_dump($dbApiKey);
+                var_dump($apikey);
+                wp_send_json_error('uuid-apikey-failure');
+            }
+
+            wp_send_json_error('failed');
+        }
 
         //var_dump(get_option('wps_ic_purge_rules'));
 
@@ -170,6 +208,9 @@ class wps_ic
 
     public static function onUpgrade_force_regen()
     {
+        // Update API
+        self::updateAPIEndpoint();
+
         // Remove Tests
         delete_transient('wpc_test_running');
         delete_transient('wpc_initial_test');
@@ -702,6 +743,11 @@ class wps_ic
      */
     public static function activation($networkwide)
     {
+        // Setup origin as MC
+        // https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=3758d614edb33333333393474f87c50804a
+        // https://keys.wpmediacompress.com/?action=setupOriginAsApi&apikey=3758d614edb33333333393474f87c50804a
+
+
         // Load Cache Class
         $cacheLogic = new wps_ic_cache();
 
@@ -728,7 +774,7 @@ class wps_ic
         $cache::purgeAll();
 
         // Preload the home page only
-        $cacheLogic::preloadPage(0);
+        # $cacheLogic::preloadPage(0);
 
         // Remove Tests
         delete_option(WPS_IC_TESTS);
@@ -1364,6 +1410,23 @@ class wps_ic
         do_action('wps_ic_init');
     }
 
+
+    public static function updateAPIEndpoint()
+    {
+        $options = get_option(WPS_IC_OPTIONS);
+        if (empty($options['apiEndpointMC'])) {
+            // Set it to new MC
+            // https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=3758d614edb33333333393474f87c50804a
+            $call = wp_remote_post('https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=' . $options['api_key'], ['method' => 'GET', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+            #var_dump($call);
+
+            // Update Option
+            $options['apiEndpointMC'] = 'MC';
+            update_option(WPS_IC_OPTIONS, $options);
+        }
+    }
+
+
     public function generateHomePageURL()
     {
         return;
@@ -1501,9 +1564,11 @@ class wps_ic
      */
     public static function isCriticalCSS()
     {
-        $useragent = strtolower($_SERVER['HTTP_USER_AGENT']);
-        if (strpos($useragent, 'headless') !== false || strpos($useragent, 'crittr') !== false) {
-            #return true;
+        if (isset($_SERVER['HTTP_USER_AGENT'])) {
+            $useragent = strtolower($_SERVER['HTTP_USER_AGENT']);
+            if (strpos($useragent, 'headless') !== false || strpos($useragent, 'crittr') !== false) {
+                #return true;
+            }
         }
 
         return false;

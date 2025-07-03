@@ -84,7 +84,8 @@
                                             wp_update_nav_menu<br>
                                             permalink_structure_changed<br>
                                             customize_save<br>
-                                            <?php echo 'update_option_theme_mods_' . get_option( 'stylesheet'); ?></p>
+                                            <?php echo 'update_option_theme_mods_' . get_option( 'stylesheet'); ?><br>
+                                            elementor/core/files/clear_cache</p>
                                     </div>
                                 </div>
                             </div>

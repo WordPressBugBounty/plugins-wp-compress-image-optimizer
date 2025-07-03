@@ -2,7 +2,6 @@
 include 'rewriteLogic.php';
 include WPS_IC_DIR . 'addons/minify/html.php';
 include_once WPS_IC_DIR . 'addons/cache/cacheHtml.php';
-include WPS_IC_DIR . 'addons/criticalCss/criticalCss.php';
 
 class wps_cdn_rewrite
 {
@@ -108,6 +107,17 @@ class wps_cdn_rewrite
 
         self::$settings = get_option(WPS_IC_SETTINGS);
         self::$excludes = get_option('wpc-excludes');
+
+//        self::$settings['mcCriticalCSS'] = '';
+//        update_option(WPS_IC_SETTINGS, self::$settings);
+//        self::$settings = get_option(WPS_IC_SETTINGS);
+
+        // Decide to Load new API or Old Api for Critical CSS
+        if (empty(self::$settings['mcCriticalCSS']) || self::$settings['mcCriticalCSS'] == 'mc') {
+            include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+        } else {
+            include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss.php';
+        }
 
         if (empty(self::$settings)) {
             $options = new wps_ic_options();
@@ -1745,6 +1755,13 @@ class wps_cdn_rewrite
             if (!empty($_GET['generateCritical'])) {
                 if (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') {
                     self::$criticalCss->sendCriticalUrl();
+                }
+            }
+
+            // Generate Critical CSS if not exists
+            if (empty(self::$settings['mcCriticalCSS']) || self::$settings['mcCriticalCSS'] == 'mc') {
+                if (!empty($_GET['forceCritical']) || (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1')) {
+                    self::$criticalCss->generateCriticalCSS();
                 }
             }
 
@@ -4027,7 +4044,7 @@ class wps_cdn_rewrite
             $attValues = $iframeAtts[2];
 
             if (!in_array('loading', $attNames)) {
-                $attNames[] = 'loading';
+                #$attNames[] = 'loading';
             }
 
             foreach ($attNames as $i => $attName) {

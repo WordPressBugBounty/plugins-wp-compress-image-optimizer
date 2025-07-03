@@ -33,9 +33,8 @@ class wps_ic_requests
 
 
   public function POST($url, $urlParams, $configParams = ['timeout' => 30]) {
-    $urlParams = ['body' => $urlParams];
+    $urlParams = ['body' => wp_json_encode($urlParams)];
     $params = array_merge($urlParams, $configParams);
-
     $call = wp_remote_post($url, $params);
     return $call;
   }

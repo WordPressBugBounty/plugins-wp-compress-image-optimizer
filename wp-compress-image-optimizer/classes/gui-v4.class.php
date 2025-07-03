@@ -14,13 +14,14 @@ class wpc_gui_v4 extends wps_ic
     public static $accountQuota;
     public static $slug;
 
-    public function __construct($options = []) {
-		    global $firstLoad;
-		    if ( empty( $firstLoad ) ) {
-			    $firstLoad = true;
-		    } else {
-			    $firstLoad = false;
-		    }
+    public function __construct($options = [])
+    {
+        global $firstLoad;
+        if (empty($firstLoad)) {
+            $firstLoad = true;
+        } else {
+            $firstLoad = false;
+        }
 
         self::$user_credits = parent::getAccountStatusMemory($firstLoad);
         self::$slug = parent::$slug;
@@ -698,7 +699,7 @@ class wpc_gui_v4 extends wps_ic
 
         if (!empty($helpBtn)) {
             $html .= '<div class="form-check" style="max-width:120px;">';
-            $html .= '<a href="'.$helpBtn.'" target="_blank" class="wps-ic-help-btn">'.$helpBtnText.'</a>';
+            $html .= '<a href="' . $helpBtn . '" target="_blank" class="wps-ic-help-btn">' . $helpBtnText . '</a>';
             $html .= '</div>';
         }
 
@@ -1237,7 +1238,7 @@ class wpc_gui_v4 extends wps_ic
 
 
     public static function simpleCheckbox($title = 'Demo', $description = 'Demo', $icon = '', $notify = '',
-                                                  $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $beta = false)
+                                          $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $beta = false)
     {
         $html = '';
         $active = false;
@@ -1690,10 +1691,10 @@ class wpc_gui_v4 extends wps_ic
         }
     }
 
-		public static function checkbox($class, $checked){
+    public static function checkbox($class, $checked)
+    {
 
-		}
-
+    }
 
 
 }

@@ -152,6 +152,7 @@ class wps_ic_cache
 				        'switch_theme',
 				        'wp_update_nav_menu',
 				        'update_option_theme_mods_' . get_option('stylesheet'),
+				        'elementor/core/files/clear_cache'
 			        ];
 			        foreach (self::$purge_rules['hooks'] as $hook) {
 				        if (in_array($hook, $full_param_hooks)) {

@@ -36,7 +36,7 @@ global $wps_ic, $wpdb;
             <div class="log-browser">
                 <h3>Log Directory</h3>
               <?php
-              $logs_dir = WPS_IC_DIR . '/logs';
+              $logs_dir = WPS_IC_LOG;
 
               // Create logs directory if it doesn't exist
               if (!file_exists($logs_dir)) {

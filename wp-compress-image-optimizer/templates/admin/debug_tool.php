@@ -126,6 +126,38 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </thead>
     <tbody>
     <tr>
+        <td>Use OLD Critical API</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['wps_ic_critical_mc'])) {
+                    if ($_GET['wps_ic_critical_mc'] === 'true') {
+                        $settings = get_option(WPS_IC_SETTINGS);
+                        $settings['mcCriticalCSS'] = 'mc';
+                        update_option(WPS_IC_SETTINGS, $settings);
+                        #update_option('wps_ic_critical_mc', sanitize_text_field($_GET['wps_ic_critical_mc']));
+                    } else {
+                        $settings = get_option(WPS_IC_SETTINGS);
+                        $settings['mcCriticalCSS'] = 'api';
+                        update_option(WPS_IC_SETTINGS, $settings);
+                        #delete_option('wps_ic_critical_mc');
+                    }
+                }
+
+                $cdn_critical_mc = get_option(WPS_IC_SETTINGS);
+
+
+                if (empty($settings['mcCriticalCSS']) || $settings['mcCriticalCSS'] == 'mc') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=false') . '" class="button-primary" style="margin-right:20px;">Enable Old API</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=true') . '" class="button-primary" style="margin-right:20px;">Enable New API</a>';
+                }
+                ?>
+                Enable Bunny Critical CSS API.
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>New CDN API Test</td>
         <td colspan="3">
             <p>

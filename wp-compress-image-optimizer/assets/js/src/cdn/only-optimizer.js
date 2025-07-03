@@ -1,6 +1,5 @@
 function runLazy() {
     var lazyImages = [].slice.call(document.querySelectorAll("img[data-wpc-loaded='true']"));
-    var LazyIFrames = [].slice.call(document.querySelectorAll("iframe.wpc-iframe-delay"));
     var LazyBackgrounds = [].slice.call(document.querySelectorAll(".wpc-bgLazy"));
 
     if ("IntersectionObserver" in window) {
@@ -14,18 +13,6 @@ function runLazy() {
             });
         }, {rootMargin: "800px"});
 
-        var lazyIframesObserver = new IntersectionObserver(function (entries, observer) {
-            entries.forEach(function (entry) {
-                if (entry.isIntersecting) {
-                    var lazyIframe = entry.target;
-
-                    var src = lazyIframe.dataset.src
-                    lazyIframe.src = src;
-
-                    lazyIframesObserver.unobserve(lazyIframe);
-                }
-            });
-        });
 
         var lazyImageObserver = new IntersectionObserver(function (entries, observer) {
             entries.forEach(function (entry) {
@@ -178,9 +165,6 @@ function runLazy() {
             lazyImageObserver.observe(lazyImage);
         });
 
-        LazyIFrames.forEach(function (lazyIframes) {
-            lazyIframesObserver.observe(lazyIframes);
-        });
     } else {
         // Possibly fall back to event handlers here
     }

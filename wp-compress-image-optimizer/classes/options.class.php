@@ -153,6 +153,7 @@ class wps_ic_options
             'js_minify' => '0',
             'js_defer' => '0',
             'delay-js' => '0',
+            'delay-js-v2' => '0',
             'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',
@@ -338,7 +339,8 @@ class wps_ic_options
 				                                  'wp_update_nav_menu',
 				                                  'permalink_structure_changed',
 				                                  'customize_save',
-				                                  'update_option_theme_mods_' . get_option( 'stylesheet', '')]
+				                                  'update_option_theme_mods_' . get_option( 'stylesheet', ''),
+					                                'elementor/core/files/clear_cache']
 				];
 
         return $this;

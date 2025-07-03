@@ -466,6 +466,60 @@ class wps_criticalCss
         return (json_last_error() === JSON_ERROR_NONE);
     }
 
+
+    public function saveCriticalCssText($urlKey, $cssContent, $device = 'desktop', $type = 'meta')
+    {
+
+        $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
+        $cache = new wps_ic_cache_integrations();
+
+        $criticalCSSPath = 'critical_desktop.css';
+        if ($device == 'mobile') {
+            $criticalCSSPath = 'critical_mobile.css';
+        }
+
+
+        if (!function_exists('download_url')) {
+            require_once(ABSPATH . 'wp-admin/includes/file.php');
+        }
+
+        if (is_wp_error($cssContent) || empty($cssContent)) {
+
+            // Send a JSON response with the error message and code
+            wp_send_json_error([
+                'msg' => 'Error downloading css content - empty API response',
+            ]);
+        }
+
+        mkdir($critical_path, 0777, true);
+
+        $fp = fopen($critical_path . $criticalCSSPath, 'w+');
+        fwrite($fp, $cssContent);
+        fclose($fp);
+
+        //remove criticalCombine temp folder
+        $files = scandir(WPS_IC_COMBINE . $urlKey);
+        foreach ($files as $file) {
+            if ($file != "." && $file != "..") {
+                $subdir = WPS_IC_COMBINE . $urlKey . "/" . $file;
+                if (is_dir($subdir) && strpos($file, "criticalCombine") !== false) {
+                    $this->removeDirectory($subdir);
+                }
+            }
+        }
+
+        if (file_exists($critical_path . $criticalCSSPath) && filesize($critical_path . $criticalCSSPath) > 5) {
+            if ($type == 'meta') {
+                update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
+            } else {
+                update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
+            }
+        }
+
+        $cache::purgeAll($urlKey);
+    }
+
+
     public function saveCriticalCss($urlKey, $CSS, $type = 'meta')
     {
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';

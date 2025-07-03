@@ -13,9 +13,8 @@ class wps_ic_js_delay_v2 {
 		$this->script_registry = array();
 		$this->script_id = 0;
 		$this->excludes = ['dark-mode', // dark mode switcher
-		                   'wp-compress-image-optimizer',
 		                   'n489D_var',
-		                   'optimize.js'
+		                   'trustLogo' // css safety service, uses document.write
 		];
 
 		$this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
@@ -24,21 +23,21 @@ class wps_ic_js_delay_v2 {
 	}
 
 
-    public function removeNoDelay($tag)
-    {
-        if (is_array($tag)) {
-            $tag = $tag[0];
-        }
+	public function removeNoDelay($tag)
+	{
+		if (is_array($tag)) {
+			$tag = $tag[0];
+		}
 
-        $tagLower = strtolower($tag);
+		$tagLower = strtolower($tag);
 
-        // It's excluded
-        if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
-            $tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
-        }
+		// It's excluded
+		if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
+			$tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
+		}
 
-        return $tag;
-    }
+		return $tag;
+	}
 
 
 	public function process_html($html) {
@@ -58,11 +57,11 @@ class wps_ic_js_delay_v2 {
 		}
 
 		$delay_script .= '<script>var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
-        if (empty(get_option('wps_ic_delay_v2_debug'))) {
-            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js"></script>';
-        } else {
-            $delay_script .= '<script src="https://frankfurt-cdn.zapwp.net/delay-js-v2/loader.dev.js"></script>';
-        }
+		if (empty(get_option('wps_ic_delay_v2_debug'))) {
+			$delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js"></script>';
+		} else {
+			$delay_script .= '<script src="https://frankfurt-cdn.zapwp.net/delay-js-v2/loader.dev.js"></script>';
+		}
 
 		$html = str_replace('<script type="wpc-delay-placeholder"></script>',  $delay_script, $html);
 
@@ -81,16 +80,24 @@ class wps_ic_js_delay_v2 {
 
 		$script_data = array(
 			'id' => 'delayed-script-' . $this->script_id++,
-			'src' => isset($attributes['src']) ? $attributes['src'] : '',
-			'content' => !empty($attributes['src']) ? '' : $script_content,
+			'src' => isset($attributes['src']) ? base64_encode($attributes['src']) : '',
+			'content' => !empty($attributes['src']) ? '' : base64_encode($script_content),
 			'type' => isset($attributes['type']) ? $attributes['type'] : 'text/javascript',
+			'encoded' => true,
 			'attributes' => array()
 		);
 
 		foreach ($attributes as $attr => $value) {
-			if (!in_array($attr, array('src', 'type', 'defer', 'async'))) {
+			if (!in_array($attr, array('src', 'type'))) {
 				$script_data['attributes'][$attr] = $value;
 			}
+		}
+
+		if (isset($attributes['async'])) {
+			$script_data['async'] = true;
+		}
+		if (isset($attributes['defer'])) {
+			$script_data['defer'] = true;
 		}
 
 		if ($this->is_priority_run($attributes, $script_content)) {

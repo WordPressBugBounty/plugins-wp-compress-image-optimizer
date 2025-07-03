@@ -24,8 +24,12 @@ define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 // Not required?
 define('WPS_IC_CRITICAL_API_URL_PING', 'https://critical-api.wpcompress.com/post.php');
 
-####define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.wpcompress.com/penthouse.php');
-define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/ajax-call.php');
+// Old Workin Crit CSS
+#define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/ajax-call.php');
+
+#define('WPS_IC_CRITICAL_API_URL', 'https://critical-api-v10-ded.wpcompress.com/generate-critical-css');
+define('WPS_IC_CRITICAL_API_URL', 'https://mc-6463k17ku1.bunny.run/generate-critical-css');
+
 define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
 #define('WPS_IC_CRITICAL_API_URL', 'https://critical-ded4.wpcompress.com/pagespeed.php');
 
@@ -80,8 +84,8 @@ define('WPS_IC_CRITICAL_URL', WP_CONTENT_URL . '/cache/critical/');
 define('WPS_IC_COMBINE', WP_CONTENT_DIR . '/cache/combine/');
 define('WPS_IC_COMBINE_URL', WP_CONTENT_URL . '/cache/combine/');
 
-define('WPS_IC_LOG', WPS_IC_DIR . 'logs/');
-define('WPS_IC_LOG_URL', WPS_IC_URI . 'logs/');
+define('WPS_IC_LOG', WP_CONTENT_DIR . '/cache/logs/');
+define('WPS_IC_LOG_URL', WP_CONTENT_URL . '/cache/logs/');
 define('WPC_WARMUP_LOG_SETTING', 'wps_ic_warmup_log');
 
 if (!file_exists(WP_CONTENT_DIR . '/cache')) {

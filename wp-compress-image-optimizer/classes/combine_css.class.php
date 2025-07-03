@@ -24,8 +24,8 @@ class wps_ic_combine_css
     public $combined_dir;
     public $urlKey;
     public $url_key_class;
-		public $log_criticalCombine;
-		public $logger;
+    public $log_criticalCombine;
+    public $logger;
 
     public function __construct()
     {
@@ -771,10 +771,10 @@ class wps_ic_combine_css
     public function maybe_do_combine($html)
     {
 
-		    if (!empty(get_option('wps_log_critCombine'))){
-			    $this->log_criticalCombine = true;
-			    $this->logger = new wps_ic_logger('criticalCombine');
-		    }
+        if (!empty(get_option('wps_log_critCombine'))) {
+            $this->log_criticalCombine = true;
+            $this->logger = new wps_ic_logger('criticalCombine');
+        }
 
         // Disabled for some reason?!
         if (1 == 0 && $this->combine_exists() && (empty($_GET['forceRecombine']) && !$this->criticalCombine)) {
@@ -842,7 +842,7 @@ class wps_ic_combine_css
         if ($this->criticalCombine) {
             foreach ($combined_files as $file) {
                 $url = $this->combined_url_base . basename($file);
-                $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash='.time().'" type="text/css" media="all">' . PHP_EOL;
+                $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash=' . time() . '" type="text/css" media="all">' . PHP_EOL;
             }
 
             $html = str_replace('<!--WPC_INSERT_COMBINED_CSS-->', $link, $html);
@@ -1030,26 +1030,18 @@ class wps_ic_combine_css
         return $css;
     }
 
-    public function combine($html)
-    {
-        $html = $html[0];
-        #return print_r($html[0], true);
-        $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
-        return $html;
-    }
-
     public function script_combine_and_replace($tag)
     {
-				if ($this->log_criticalCombine){
-					$this->logger->log('Starting new script.');
-				}
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Starting new script.');
+        }
 
         $tag = trim($tag[0]);
         if (empty($tag)) {
             return $tag;
         }
         $src = '';
-	      $media_query = null;
+        $media_query = null;
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'before') {
             return print_r([$tag], true);
@@ -1060,9 +1052,9 @@ class wps_ic_combine_css
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
                 return print_r([$tag, 'excluded'], true);
             }
-		        if ($this->log_criticalCombine){
-			        $this->logger->log('It is excluded.', true);
-		        }
+            if ($this->log_criticalCombine) {
+                $this->logger->log('It is excluded.', true);
+            }
             return $tag;
         }
 
@@ -1071,13 +1063,13 @@ class wps_ic_combine_css
             return $tag;
         }
 
-				// Extract media query if present
-		    if (preg_match('/media=["\']([^"\']+)["\']/', $tag, $media_match)) {
-			      $media_query = $media_match[1];
-			      if ($this->log_criticalCombine){
-				      $this->logger->log('Media query found: ' . $media_query);
-			      }
-		    }
+        // Extract media query if present
+        if (preg_match('/media=["\']([^"\']+)["\']/', $tag, $media_match)) {
+            $media_query = $media_match[1];
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Media query found: ' . $media_query);
+            }
+        }
 
         if (strpos($tag, '<link') !== false) {
             $is_src_set = preg_match('/href=["|\'](.*?)["|\']/', $tag, $src);
@@ -1095,9 +1087,9 @@ class wps_ic_combine_css
             $src = str_replace('"', "", $src);
             $src = $src[0];
 
-		        if ($this->log_criticalCombine){
-			        $this->logger->log('Src: ' . $src);
-		        }
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Src: ' . $src);
+            }
 
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
                 return print_r([$tag, 'file', $this->combine_external, $src], true);
@@ -1107,9 +1099,9 @@ class wps_ic_combine_css
                 if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
                     return print_r([$tag, 'external'], true);
                 }
-		            if ($this->log_criticalCombine){
-			            $this->logger->log('Is External.');
-		            }
+                if ($this->log_criticalCombine) {
+                    $this->logger->log('Is External.');
+                }
                 return $tag;
             } else if ($this->combine_external && $this->url_key_class->is_external($src)) {
                 $content = $this->getRemoteContent($src);
@@ -1135,9 +1127,9 @@ class wps_ic_combine_css
         } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
-		        if ($this->log_criticalCombine){
-			        $this->logger->log('Is inline.');
-		        }
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Is inline.');
+            }
 
             $content = $tag;
             $content = preg_replace('/<style(.*?)>/', '', $content, -1, $count);
@@ -1161,9 +1153,9 @@ class wps_ic_combine_css
             return $tag;
         }
 
-		    if ($this->log_criticalCombine){
-			    $this->logger->log('Fetched.');
-		    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetched.');
+        }
 
 
         //sometimes php injects a zero width space char at the start of a new script, this clears it
@@ -1178,14 +1170,14 @@ class wps_ic_combine_css
         $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
-		    // Wrap content in media query if it exists
-		    if ($media_query) {
-				    $this->current_file .= "@media " . $media_query . " {" . PHP_EOL;
-				    $this->current_file .= $content . PHP_EOL;
-				    $this->current_file .= "}" . PHP_EOL;
-		    } else {
-			      $this->current_file .= $content . PHP_EOL;
-		    }
+        // Wrap content in media query if it exists
+        if ($media_query) {
+            $this->current_file .= "@media " . $media_query . " {" . PHP_EOL;
+            $this->current_file .= $content . PHP_EOL;
+            $this->current_file .= "}" . PHP_EOL;
+        } else {
+            $this->current_file .= $content . PHP_EOL;
+        }
 
         #if (mb_strlen($this->current_file, '8bit') >= $this->filesize_cap) {
         $this->write_file_and_next();
@@ -1201,46 +1193,46 @@ class wps_ic_combine_css
 
     public function getRemoteContent($url)
     {
-		    if ($this->log_criticalCombine){
-			    $this->logger->log('Fetching script content.');
-		    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetching script content.');
+        }
 
         if (strpos($url, '//') === 0) {
             $url = 'https:' . $url;
         }
 
-		    $args = array(
-			    'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-			    'headers' => array(
-				    'Accept' => 'text/css,*/*;q=0.1',
-				    'Accept-Language' => 'en-US,en;q=0.9',
-			    )
-		    );
+        $args = array(
+            'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+            'headers' => array(
+                'Accept' => 'text/css,*/*;q=0.1',
+                'Accept-Language' => 'en-US,en;q=0.9',
+            )
+        );
 
 
-	      $data = wp_remote_get($url, $args);
+        $data = wp_remote_get($url, $args);
 
         //todo Check if file is really css
 
-	    if (is_wp_error($data)) {
-		    if ($this->log_criticalCombine) {
-			    $this->logger->log('Failed fetching script content: WP_Error.', true);
-		    }
-		    return false;
-	    }
+        if (is_wp_error($data)) {
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Failed fetching script content: WP_Error.', true);
+            }
+            return false;
+        }
 
-	    $response_code = wp_remote_retrieve_response_code($data);
+        $response_code = wp_remote_retrieve_response_code($data);
 
-	    if ($response_code !== 200) {
-		    if ($this->log_criticalCombine) {
-			    $this->logger->log('Failed fetching script content. Response code: ' . $response_code, true);
-		    }
-		    return false;
-	    }
+        if ($response_code !== 200) {
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Failed fetching script content. Response code: ' . $response_code, true);
+            }
+            return false;
+        }
 
-	    if ($this->log_criticalCombine) {
-		    $this->logger->log('Script content fetched.');
-	    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Script content fetched.');
+        }
 
         return wp_remote_retrieve_body($data);
     }
@@ -1249,9 +1241,9 @@ class wps_ic_combine_css
     {
         $output = [];
 
-	    if ($this->log_criticalCombine){
-		    $this->logger->log('Fetching script content.');
-	    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetching script content.');
+        }
 
         if ($this->hmwpReplace) {
             //go trougn their replacements and reverse them to get true path to files
@@ -1259,9 +1251,9 @@ class wps_ic_combine_css
                 $replace = $this->hmwp_rewrite->_replace['from'][$key];
                 $url = str_replace($value, $replace, $url);
             }
-	        if ($this->log_criticalCombine){
-		        $this->logger->log('Did hidemywp replacements and got ' . $url);
-	        }
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Did hidemywp replacements and got ' . $url);
+            }
         }
 
         if (!empty($this->zone_name) && strpos($url, $this->zone_name) !== false) {
@@ -1321,7 +1313,7 @@ class wps_ic_combine_css
             $justPath = $pathExploded[1];
             $finalPath = $themePath . '/' . $justPath;
         } else {
-	          $finalPath = ABSPATH . $path;
+            $finalPath = ABSPATH . $path;
         }
 
         if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
@@ -1339,9 +1331,9 @@ class wps_ic_combine_css
             return $output;
         }
 
-		    if ($this->log_criticalCombine){
-			    $this->logger->log('Fetching script content.' . $finalPath);
-		    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetching script content.' . $finalPath);
+        }
 
         if (file_exists($finalPath)) {
             $content = file_get_contents($finalPath);
@@ -1349,20 +1341,19 @@ class wps_ic_combine_css
 
         if (!$content) {
 
-		        if ($this->log_criticalCombine){
-			        $this->logger->log('Fetch failed,', true);
-		        }
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Fetch failed,', true);
+            }
 
             return false;
         }
 
-		    if ($this->log_criticalCombine){
-			    $this->logger->log('Fetched.');
-		    }
+        if ($this->log_criticalCombine) {
+            $this->logger->log('Fetched.');
+        }
 
         return $content;
     }
-
 
     public function changeFontToCDN($html)
     {
@@ -1374,7 +1365,6 @@ class wps_ic_combine_css
 
         return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
     }
-
 
     public function changeBgImageToMobile($html)
     {
@@ -1510,7 +1500,7 @@ class wps_ic_combine_css
                 array_pop($directories); // Remove 1 last dir
             }
             $relativePath = implode('/', $directories) . '/';
-	          $matched_url_trim = preg_replace('/^(\.\.\/)+/', '', $matched_url);
+            $matched_url_trim = preg_replace('/^(\.\.\/)+/', '', $matched_url);
             $relativePath .= $matched_url_trim;
 
             $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
@@ -1565,22 +1555,124 @@ class wps_ic_combine_css
         return $relativeUrl;
     }
 
-	public function get_combined_css($html) {
-		// Reset for processing
-		$this->current_file = '';
-		$this->combine_external = false;
-		$this->combine_inline_scripts = true;
+    public function get_combined_css($html)
+    {
+        // Reset for processing
+        $this->current_file = '';
+        $this->combine_external = false;
+        $this->combine_inline_scripts = true;
 
-		// Process head section
-		if (preg_match('/<head(.*?)<\/head>/si', $html, $head_match)) {
-			$this->combine($head_match);
-		}
+        // Process head section
+        if (preg_match('/<head(.*?)<\/head>/si', $html, $head_match)) {
+            $this->combine($head_match);
+        }
 
-		// Process body section
-		if (preg_match('/<\/head>(.*?)<\/body>/si', $html, $body_match)) {
-			$this->combine($body_match);
-		}
+        // Process body section
+        if (preg_match('/<\/head>(.*?)<\/body>/si', $html, $body_match)) {
+            $this->combine($body_match);
+        }
 
-		return $this->current_file;
-	}
+        return $this->current_file;
+    }
+
+
+    public function cookieCompliantCSS($html)
+    {
+        $pattern = '/<script[^>]*id="cmplz-cookiebanner-js-extra"[^>]*>(.*?)<\/script>/si';
+        if (preg_match($pattern, $html, $matches)) {
+            $script_content = $matches[1];
+
+            if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
+                return print_r(array($matches),true);
+            }
+
+            // 2. Extract the JSON: var complianz = {...};
+            if (preg_match('/var complianz\s*=\s*(\{.*?\});/s', $script_content, $json_match)) {
+                $json_string = $json_match[1];
+
+                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '2') {
+                    return print_r(array($json_match),true);
+                }
+
+                // 3. Decode JSON to PHP array
+                $complianz = json_decode($json_string, true);
+
+                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '3') {
+                    return print_r(array($json_string),true);
+                }
+
+                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '4') {
+                    return print_r(array($complianz, $complianz['css_file']),true);
+                }
+
+
+                if ($complianz && isset($complianz['css_file'])) {
+                    $css_file = $complianz['css_file'];
+                    $banner_id = $complianz['user_banner_id'] ?? '1';
+                    $type = $complianz['consenttype'] ?? 'optin';
+
+                    // 4. Replace placeholders
+                    $css_file_final = str_replace(
+                        ['{banner_id}', '{type}'],
+                        [$banner_id, $type],
+                        $css_file
+                    );
+
+                    // 5. Insert <link> before </head>
+                    #$link_tag = '<link rel="stylesheet" href="' . $css_file_final . '">';
+
+                    if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == 'inject-entities') {
+                        $link_tag = htmlentities("<link rel='stylesheet' id='wpc-cmplz-banner' href='" . $css_file_final . "' type='text/css' media='all' />");
+                    } else {
+                        $link_tag = '<link rel="stylesheet" id="wpc-cmplz-banner" href="' . $css_file_final . '" type="text/css" media="all" />';
+                    }
+
+                    if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '5') {
+                        return print_r(array($link_tag, $css_file_final),true);
+                    }
+
+                    if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '6') {
+                        return 'LT:[' . htmlentities($link_tag) . "] CF:[" . htmlentities($css_file_final) . "]";
+                    }
+
+                    $pattern = '/<script[^>]*id="cmplz-cookiebanner-js-extra"[^>]*>.*?<\/script>/si';
+
+                    if (preg_match($pattern, $html, $matches)) {
+                        $matched_script = $matches[0];
+
+                        // Debug match
+                        if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '8') {
+                            return print_r(['MATCHED_SCRIPT' => $matched_script, 'LinkRaw' => $link_tag, 'linkEnc' => htmlentities($link_tag)], true);
+                        }
+
+                        $html = str_replace($matched_script, $link_tag, $html);
+                    } else {
+                        return 'REGEX DID NOT MATCH';
+                    }
+
+                    return $html;
+                }
+            }
+        }
+
+        if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
+            return print_r(array('not-found', $html),true);
+        }
+
+        return $html;
+    }
+
+
+    public function combine($html)
+    {
+        $html = $html[0];
+
+        // Run for Cookie Compliant CSS
+        if (!empty($_GET['testCompliant'])) {
+            $html = $this->cookieCompliantCSS($html);
+        }
+
+        $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
+        return $html;
+    }
 }
