@@ -228,21 +228,16 @@ class wps_criticalCss
         $url_key = md5($url);
 
         $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
-        $critTotalTransient = get_transient('wpc_critical_workers');
         $critTransient = get_transient($transient_name);
 
-        if (!empty($critTransient) || (!empty($critTotalTransient) && $critTotalTransient >= 5)) {
+        if (!empty($critTransient)) {
             // Die, already running!
             return true;
         }
 
-        if (empty($critTotalTransient)) $critTotalTransient = 0;
-        $critTotalTransient += 1;
-        set_transient('wpc_critical_workers', $critTotalTransient, 60*60);
 
         // Make transient expire after 30 mins
         set_transient($transient_name, true, 60*30);
-
 
         $args = ['url' => $url.'?criticalCombine=true&testCompliant=true', 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
