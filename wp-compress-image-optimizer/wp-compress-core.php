@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.08';
+        self::$version = '6.50.10';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -145,6 +145,11 @@ class wps_ic
                     // Desktop CSS
                     $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
 
+                    $critTotalTransient = get_transient('wpc_critical_workers');
+                    if (empty($critTotalTransient)) $critTotalTransient = 1;
+                    $critTotalTransient -= 1;
+                    set_transient('wpc_critical_workers', $critTotalTransient, 60*60);
+
                     include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
                     $criticalCSS = new wps_criticalCss();
                     $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
@@ -152,8 +157,6 @@ class wps_ic
                     wp_send_json_success();
                 }
 
-                var_dump($dbApiKey);
-                var_dump($apikey);
                 wp_send_json_error('uuid-apikey-failure');
             }
 

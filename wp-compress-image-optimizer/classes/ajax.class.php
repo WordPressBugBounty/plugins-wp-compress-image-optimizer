@@ -1036,6 +1036,21 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
+        // Delete Transient for Critical Lock
+        global $wpdb;
+
+        // Get the correct options table name with prefix
+        $options_table = $wpdb->options;
+
+        // Delete transient values
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s",
+                $wpdb->esc_like('_transient_wpc_critical_key_') . '%',
+                $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'
+            )
+        );
+
         delete_transient('wps_ic_css_cache');
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
