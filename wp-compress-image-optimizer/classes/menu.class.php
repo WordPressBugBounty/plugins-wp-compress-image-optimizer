@@ -15,6 +15,7 @@ class wps_ic_menu extends wps_ic
 
     public function __construct()
     {
+
         self::$options = parent::$options;
         $this::$slug = parent::$slug;
         $option = get_option(WPS_IC_SETTINGS);
@@ -190,6 +191,7 @@ class wps_ic_menu extends wps_ic
     public function plugin_list_link($links)
     {
         $options = get_option(WPS_IC_OPTIONS);
+
         if (!empty($options['api_key'])) {
             $links = array_merge(['<a href="' . admin_url('options-general.php?page=' . $this::$slug) . '">' . 'Settings' . '</a>'], $links);
             $links['wps-ic-reconnect'] = '<a href="#" class="reconnect-wp-compress-image-optimizer">Reconnect</a>';

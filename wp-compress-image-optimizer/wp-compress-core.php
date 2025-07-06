@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.12';
+        self::$version = '6.50.13';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1135,6 +1135,7 @@ class wps_ic
          * TODO: Make Pretty
          */
 
+
         if (!empty($_GET['wpc_optimization_done']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
             //todo set it to done and scheck in js
             delete_transient('wpc-page-optimizations-status');
@@ -1419,7 +1420,7 @@ class wps_ic
             #var_dump($call);
 
             // Update Option
-            $options['apiEndpointMC'] = 'MC';
+            $options['apiEndpointMC'] = 'api';
             update_option(WPS_IC_OPTIONS, $options);
         }
     }
