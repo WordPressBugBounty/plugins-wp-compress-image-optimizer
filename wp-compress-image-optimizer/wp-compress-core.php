@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.13';
+        self::$version = '6.50.14';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2220,26 +2220,32 @@ function wps_ic_format_bytes($bytes, $force_unit = null, $format = null, $si = f
 }
 
 
-function wps_ic_size_format($bytes, $decimals)
-{
-    $quant = ['TB' => 1000 * 1000 * 1000 * 1000, 'GB' => 1000 * 1000 * 1000, 'MB' => 1000 * 1000, 'KB' => 1000, 'B' => 1,];
+function wps_ic_size_format($bytes, $decimals) {
+    $quant = [
+        'TB' => 1000 * 1000 * 1000 * 1000,
+        'GB' => 1000 * 1000 * 1000,
+        'MB' => 1000 * 1000,
+        'KB' => 1000,
+        'B'  => 1,
+    ];
 
     if ($bytes == 0) {
         return '0 MB';
     }
 
-    if (0 === $bytes) {
+    if ($bytes === 0) {
         return number_format_i18n(0, $decimals) . ' B';
     }
 
     foreach ($quant as $unit => $mag) {
-        if (doubleval($bytes) >= $mag) {
+        if ((float)$bytes >= $mag) {
             return number_format_i18n($bytes / $mag, $decimals) . ' ' . $unit;
         }
     }
 
     return false;
 }
+
 
 function isFeatureEnabled($featureName)
 {
@@ -2255,10 +2261,6 @@ function isFeatureEnabled($featureName)
 // TODO: Maybe it's required on some themes?
 // Backend
 $wpsIc = new wps_ic();
-#add_action('wp', [$wpsIc, 'offloaderHooks'], 1);
-
-#add_filter('wp_lazy_loading_enabled', '__return_false', 1);
-
 add_action('init', [$wpsIc, 'init'], 100);
 
 
