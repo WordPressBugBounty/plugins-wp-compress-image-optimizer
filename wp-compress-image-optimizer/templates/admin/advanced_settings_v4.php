@@ -1097,10 +1097,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <div class="wpc-items-list-row mb-20">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Disable Emoji', '', false, '0', 'emoji-remove', false, 'right', ''); ?>
+                                            echo $gui::checkboxDescription_v4('Remove Duplicated FontAwesome', '', false, '0', 'remove-duplicated-fontawesome', false, 'right', ''); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Disable oEmbeds', '', false, '0', 'disable-oembeds', false, 'right', ''); ?>
+                                            echo $gui::checkboxDescription_v4('Disable Emoji', '', false, '0', 'emoji-remove', false, 'right', ''); ?>
 
                                         </div>
                                         <div class="wpc-items-list-row mb-20">
@@ -1115,7 +1115,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <div class="wpc-items-list-row mb-20">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Optimize External URLs', '', false, '0', 'external-url', false, 'right', ''); ?>
+                                            echo $gui::checkboxDescription_v4('Disable oEmbeds', '', false, '0', 'disable-oembeds', false, 'right', ''); ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('WooCommerce Tweaks', '', false, '0', 'disable-cart-fragments', false, 'right', ''); ?>
@@ -1211,6 +1211,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                             ?>
 
+                                        </div>
+
+                                        <div class="wpc-items-list-row mb-20">
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Optimize External URLs', '', false, '0', 'external-url', false, 'right', ''); ?>
                                         </div>
 
                                     </div>

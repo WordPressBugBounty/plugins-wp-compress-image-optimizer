@@ -472,7 +472,7 @@ class wps_rewriteLogic
             $webp = '';
         }
 
-        if (self::isExcludedLink($image_url) || $this->defaultExcluded($image_url)) {
+        if (self::isExcludedLink($image_url) || $this->defaultExcluded($image_url) || empty($image_url)) {
             return $image[0];
         } else {
             $NewSrc = 'https://' . self::$zoneName . '/q:' . self::$settings['optimization'] . '/r:' . self::$isRetina . $webp . '/w:480/u:' . $this->specialChars($image_url);
@@ -862,7 +862,7 @@ class wps_rewriteLogic
         }
 
         if (self::$isMobile) {
-            return 480;
+            return 400;
         }
 
         if ($Width == 'logo') {
@@ -2733,9 +2733,9 @@ SCRIPT;
                 // Inject the previously found 480, if max-width bigger than 480
                 if (!empty($maxWidthMatches[1]) && $maxWidthMatches[1] >= 480) {
                     if (!empty($img480)) {
-                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($img480) . ' 480w, ';
+                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:400/u:' . self::reformatUrl($img480) . ' 480w, ';
                     } else if (!empty($original_img_tag['original_src'])) {
-                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
+                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:400/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
                     }
 
                     // Retina URL

@@ -430,14 +430,6 @@ class wps_criticalCss
         $call = $requests->POST(self::$API_URL, $args, ['timeout' => $timeout]);
         $code = $requests->getResponseCode($call);
 
-        if (!empty($_GET['debugCriticalInit'])) {
-            var_dump(self::$API_URL);
-            var_dump($args);
-            var_dump($call);
-            var_dump($code);
-            die();
-        }
-
         if ($code == 200) {
             $body = $requests->getResponseBody($call);
             $json = json_decode($body, true);

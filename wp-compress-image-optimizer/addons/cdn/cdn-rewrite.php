@@ -535,105 +535,106 @@ class wps_cdn_rewrite
         return $tag;
     }
 
-    public function rewrite_script_tag($tag, $handle, $src)
-    {
+  public function rewrite_script_tag($tag, $handle, $src)
+  {
+    $src = trim($src);
 
-        $src = trim($src);
+    if (!empty($_GET['dbg_src_excludes'])) {
+      return print_r([$tag, $src, self::isExcludedFrom('cdn', $src), self::$excludes]);
+    }
 
-        if (!empty($_GET['dbg_src_excludes'])) {
-            return print_r([$tag, $src, self::isExcludedFrom('cdn', $src), self::$excludes]);
+    if (self::isExcludedFrom('cdn', $src)) {
+      return $tag;
+    }
+
+    if (self::isExcludedFrom('cdn', $tag)) {
+      return $tag;
+    }
+
+    if ($this->defaultExcluded($src)) {
+      return $tag;
+    }
+
+    if (self::is_excluded_link($src)) {
+      return $tag;
+    }
+
+    /**
+     * TODO:
+     * check if external is enabled
+     */
+    if ((self::$externalUrlEnabled == '0' || empty(self::$externalUrlEnabled))) {
+      if (!self::image_url_matching_site_url($src)) {
+        // External not enabled
+        return $tag;
+      }
+    }
+
+    if (self::$externalUrlEnabled == '1' && !self::image_url_matching_site_url($src)) {
+      // External not enabled
+      if (strpos($src, self::$zone_name) === false) {
+        if (strpos($src, 'http') === false) {
+          $src = ltrim($src, '//');
+          $src = 'https://' . $src;
         }
 
-        if (self::isExcludedFrom('cdn', $src)) {
-            return $tag;
+        if (!self::is_excluded_link($src)) {
+          $src = 'https://' . self::$zone_name . '/m:0/a:' . $src;
         }
+      }
+    }
 
-        if (self::isExcludedFrom('cdn', $tag)) {
-            return $tag;
-        }
-
-        if ($this->defaultExcluded($src)) {
-            return $tag;
-        }
-
-        if (self::is_excluded_link($src)) {
-            return $tag;
+    if (self::$cdnEnabled == '1' && self::$js == '1') {
+      if (strpos($src, self::$zone_name) === false) {
+        $fileMinify = self::$js_minify;
+        if (self::isExcluded('js_minify', $src)) {
+          $fileMinify = '0';
         }
 
         /**
-         * TODO:
-         * check if external is enabled
+         * Is script inside Wp-content or Wp-includes
          */
-        if ((self::$externalUrlEnabled == '0' || empty(self::$externalUrlEnabled))) {
-            if (!self::image_url_matching_site_url($src)) {
-                // External not enabled
-                return $tag;
+        if (strpos($src, 'wp-content') !== false || strpos($src, 'wp-includes') !== false) {
+          $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
+        } else {
+          $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
+        }
+      }
+
+      if (!empty(self::$settings['js_defer'])) {
+        if (self::$settings['js_defer'] == '1' && !self::$defer_js_override) {
+          foreach (self::$assets_to_defer as $i => $defer_key) {
+            if (strpos($tag, $defer_key) !== false) {
+              if (!self::isExcluded('defer_js', $src) && !strpos($src, 'slide')) {
+                $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
+              }
             }
+          }
+        } else {
+          // FIXED: Only replace src in the opening script tag, not in any content after
+          $tag = preg_replace('/^(\s*<script[^>]*)\ssrc=["\']([^"\']*)["\']([^>]*>)/i', '$1 src="' . $src . '"$3', $tag);
+        }
+      } else {
+
+        if (strpos($src, 'gtag') !== false) {
+          $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
         }
 
-        if (self::$externalUrlEnabled == '1' && !self::image_url_matching_site_url($src)) {
-            // External not enabled
-            if (strpos($src, self::$zone_name) === false) {
-                if (strpos($src, 'http') === false) {
-                    $src = ltrim($src, '//');
-                    $src = 'https://' . $src;
-                }
+        if (strpos($src, 'fontawesome') !== false) {
+          $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
 
-                if (!self::is_excluded_link($src)) {
-                    $src = 'https://' . self::$zone_name . '/m:0/a:' . $src;
-                }
-            }
+          return $tag;
         }
 
-        if (self::$cdnEnabled == '1' && self::$js == '1') {
-            if (strpos($src, self::$zone_name) === false) {
-                $fileMinify = self::$js_minify;
-                if (self::isExcluded('js_minify', $src)) {
-                    $fileMinify = '0';
-                }
+        // FIXED: Only replace src in the opening script tag, not in any content after
+        $tag = preg_replace('/^(\s*<script[^>]*)\ssrc=["\']([^"\']*)["\']([^>]*>)/i', '$1 src="' . $src . '"$3', $tag);
+      }
 
-                /**
-                 * Is script inside Wp-content or Wp-includes
-                 */
-                if (strpos($src, 'wp-content') !== false || strpos($src, 'wp-includes') !== false) {
-                    $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
-                } else {
-                    $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
-                }
-            }
-
-            if (!empty(self::$settings['js_defer'])) {
-                if (self::$settings['js_defer'] == '1' && !self::$defer_js_override) {
-                    foreach (self::$assets_to_defer as $i => $defer_key) {
-                        if (strpos($tag, $defer_key) !== false) {
-                            if (!self::isExcluded('defer_js', $src) && !strpos($src, 'slide')) {
-                                $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
-                            }
-                        }
-                    }
-                } else {
-                    $tag = preg_replace('/src=["|\'](.*?)["|\']/si', 'src="' . $src . '"', $tag);
-                }
-            } else {
-
-                if (strpos($src, 'gtag') !== false) {
-                    $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
-                }
-
-                if (strpos($src, 'fontawesome') !== false) {
-                    $tag = '<script type="text/javascript" src="' . $src . '" defer></script>';
-
-                    return $tag;
-                }
-
-                $tag = preg_replace('/src=["|\'](.*?)["|\']/si', 'src="' . $src . '"', $tag);
-            }
-
-            return $tag;
-        }
-
-        return $tag;
+      return $tag;
     }
+
+    return $tag;
+  }
 
     public static function isExcludedFrom($setting, $link)
     {
@@ -2122,6 +2123,10 @@ class wps_cdn_rewrite
             self::$settings['emoji-remove'] = 0;
         }
 
+        if (empty(self::$settings['remove-duplicated-fontawesome'])) {
+            self::$settings['remove-duplicated-fontawesome'] = 0;
+        }
+
         if (empty(self::$settings['external-url'])) {
             self::$settings['external-url'] = 0;
         }
@@ -2699,6 +2704,22 @@ class wps_cdn_rewrite
         return false;
     }
 
+
+    public function removeDuplicatedFontawesome($html) {
+        if (preg_match('#<link[^>]+href=["\'][^"\']*font-awesome/css/all\.min\.css[^"\']*["\'][^>]*>#i', $html)) {
+            // If it does, remove the first fontawesome.css link
+            $html = preg_replace(
+                '#<link[^>]+href=["\'][^"\']*fontawesome\.css[^"\']*["\'][^>]*>\s*#i',
+                '',
+                $html,
+                1);
+        }
+
+        return $html;
+    }
+
+
+
     public function cdnRewriter($html)
     {
 
@@ -2749,6 +2770,11 @@ class wps_cdn_rewrite
             return $html;
         }
 
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'wps_ic_amp') {
+            return $html;
+        }
+
+
         self::$isAmp = new wps_ic_amp();
         $combine_css = new wps_ic_combine_css();
 
@@ -2758,6 +2784,10 @@ class wps_cdn_rewrite
             self::$retina_enabled = '0';
             self::$settings['delay-js'] = '0';
             self::$settings['inline-js'] = '0';
+        }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'action') {
+            return $html;
         }
 
 
@@ -2773,6 +2803,10 @@ class wps_cdn_rewrite
             return $html;
         }
 
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'wpc_disableCommentClear') {
+            return $html;
+        }
+
         if (empty($_GET['wpc_disableCommentClear'])) {
             //clear html comments (so combine doesn't pick them up)
             $html = preg_replace("/<!--->/ms", '', $html);
@@ -2784,6 +2818,10 @@ class wps_cdn_rewrite
                     return '';
                 }
             }, $html);
+        }
+
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'scriptContent') {
+            return $html;
         }
 
 
@@ -2869,6 +2907,12 @@ class wps_cdn_rewrite
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'removeTemplates') {
             return $html;
         }
+
+
+        if (!empty(self::$settings['remove-duplicated-fontawesome'])) {
+            $html = $this->removeDuplicatedFontawesome($html);
+        }
+
 
         $removedTemplates = $this->removeTemplates($html);
         $html = $removedTemplates['html'];
@@ -2956,7 +3000,6 @@ class wps_cdn_rewrite
             // TODO: Maybe add something?
             $html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [$this, 'gtagDelay'], $html);
         }
-
 
         if (!self::$isAmp->isAmp() && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {

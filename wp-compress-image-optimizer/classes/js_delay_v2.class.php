@@ -14,7 +14,8 @@ class wps_ic_js_delay_v2 {
 		$this->script_id = 0;
 		$this->excludes = ['dark-mode', // dark mode switcher
 		                   'n489D_var',
-		                   'trustLogo' // css safety service, uses document.write
+		                   'trustLogo', // css safety service, uses document.write
+                       'turnstile' // had delayed loading detection, throws error
 		];
 
 		$this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
@@ -80,7 +81,7 @@ class wps_ic_js_delay_v2 {
 
 		$script_data = array(
 			'id' => 'delayed-script-' . $this->script_id++,
-			'src' => isset($attributes['src']) ? base64_encode($attributes['src']) : '',
+			'src' => isset($attributes['src']) ? base64_encode(html_entity_decode($attributes['src'])) : '',
 			'content' => !empty($attributes['src']) ? '' : base64_encode($script_content),
 			'type' => isset($attributes['type']) ? $attributes['type'] : 'text/javascript',
 			'encoded' => true,

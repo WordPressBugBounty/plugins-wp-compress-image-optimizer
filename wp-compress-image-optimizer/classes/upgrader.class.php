@@ -68,6 +68,7 @@ class wps_ic_upgrader extends wps_ic
             'external-url' => '0',
             'replace-all-link' => '0',
             'emoji-remove' => '0',
+            'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => '0',
             'disable-gutenber' => '0',
             'disable-dashicons' => '0',
