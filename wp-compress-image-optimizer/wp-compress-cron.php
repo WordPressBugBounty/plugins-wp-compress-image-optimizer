@@ -55,6 +55,9 @@ class wps_ic_cron {
 				    'wps_ic_check_key_hook'
 			    );
 		    }
+
+        //Divi scheduled purge
+        add_action('et_core_page_resource_auto_clear', [$this,'purgeCache']);
     }
 
 

@@ -91,7 +91,7 @@ class wps_ic_elementor
             $html
         );
 
-        #$html = str_replace('</head>', '<style>.wpc-delay-elementor{display:none!important;}</style></head>', $html);
+        $html = str_replace('</head>', '<style>.wpc-delay-elementor{display:none!important;}</style></head>', $html);
 
         $html = preg_replace(
             '/(<footer[^>]*class="[^"]*)"/i',
@@ -106,7 +106,7 @@ class wps_ic_elementor
             $html
         );
 
-        #$html = str_replace('</head>', '<style>.wpc-delay-elementor{display:none!important;}</style></head>', $html);
+        $html = str_replace('</head>', '<style>.wpc-delay-elementor{display:none!important;}</style></head>', $html);
 
 
         return $html;

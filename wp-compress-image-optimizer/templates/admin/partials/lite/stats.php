@@ -45,7 +45,10 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 ?>
-<div class="wpc-settings-content-inner">
+<div class="wpc-settings-content-inner" style="overflow: hidden;">
+    <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
+</div>
+<div class="wpc-settings-content-inner" style="display:none;">
     <div class="wpc-rounded-box wpc-rounded-box-half">
         <div class="wpc-box-title circle no-separator">
             <h3>Optimization Stats</h3>

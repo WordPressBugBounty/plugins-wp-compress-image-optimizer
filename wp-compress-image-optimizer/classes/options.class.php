@@ -224,7 +224,7 @@ class wps_ic_options
             'js_combine' => '0',
             'js_minify' => '0',
             'js_defer' => '0',
-            'delay-js' => '1',
+            'delay-js' => '0',
             'font-subsetting' => '0',
             'scripts-to-footer' => '0',
             'inline-js' => '0',

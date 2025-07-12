@@ -465,7 +465,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                             echo $gui::usageLiteGraph(); ?>
                         </div>
                     </div>
-                    <div class="wpc-settings-content-inner">
+
+                    <div class="wpc-settings-content-inner" style="overflow: hidden;">
+                        <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
+                    </div>
+                    <div class="wpc-settings-content-inner" style="display:none;">
                         <div class="wpc-rounded-box wpc-rounded-box-half">
                             <div class="wpc-box-title circle no-separator">
                                 <h3>Optimization Stats</h3>
@@ -807,8 +811,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <div class="wpc-box-content">
                                     <div class="wpc-box-content-inner">
                                         <div class="wpc-box-content-icon">
-                                            <img src="<?php echo WPS_IC_ASSETS . '/v4/images/wpc-logo.svg'; ?>"
-                                                 alt="Go Pro for Portal Access"/>
+                                            <img src="<?php echo WPS_IC_ASSETS . '/v4/images/wpc-logo.svg'; ?>" alt="Go Pro for Portal Access"/>
                                         </div>
                                         <div class="wpc-box-content-text">
                                             <h3>Go PRO for Portal Access</h3>

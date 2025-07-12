@@ -283,6 +283,27 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
+        <td>Enable Critical CSS Debug</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['ccss_debug'])) {
+                    update_option('wps_ccss_debug', sanitize_text_field($_GET['ccss_debug']));
+                }
+
+                $ccss_debug = get_option('ccss_debug');
+
+                if (empty($ccss_debug) || $ccss_debug == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+                If you are having any sort of issues with critical CSS.
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>Enable PHP Debug</td>
         <td colspan="3">
             <p>

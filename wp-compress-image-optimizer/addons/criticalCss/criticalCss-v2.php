@@ -192,23 +192,43 @@ class wps_criticalCss
 
         $return = [];
 
-        if (file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css')) {
+        $desktopFilePath = WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css';
+        $mobileFilePath = WPS_IC_CRITICAL . $this->urlKey . '/critical_mobile.css';
+
+        $desktopFileUrl = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_desktop.css';
+        $mobileFileUrl = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_mobile.css';
+
+        if (file_exists($desktopFilePath) && filesize($desktopFilePath) > 0) {
+            $content = file_get_contents($desktopFilePath);
+            $isHtml = preg_match('/<[^>]+>/', $content); // basic HTML tag detection
+
+            if ($isHtml) {
+                return false;
+            }
+
             if ($returnDir) {
-                $return['desktop'] = WPS_IC_CRITICAL . $this->urlKey . '/critical_desktop.css';
+                $return['desktop'] = $desktopFilePath;
             } else {
-                $return['desktop'] = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_desktop.css';
+                $return['desktop'] = $desktopFileUrl;
             }
         }
 
-        if (file_exists(WPS_IC_CRITICAL . $this->urlKey . '/critical_mobile.css')) {
+        if (file_exists($mobileFilePath) && filesize($mobileFilePath) > 0) {
+            $content = file_get_contents($mobileFilePath);
+            $isHtml = preg_match('/<[^>]+>/', $content); // basic HTML tag detection
+
+            if ($isHtml) {
+                return false;
+            }
+
             if ($returnDir) {
-                $return['mobile'] = WPS_IC_CRITICAL . $this->urlKey . '/critical_mobile.css';
+                $return['mobile'] = $mobileFilePath;
             } else {
-                $return['mobile'] = WPS_IC_CRITICAL_URL . $this->urlKey . '/critical_mobile.css';
+                $return['mobile'] = $mobileFileUrl;
             }
         }
 
-        if (!isset($return['mobile']) || !isset($return['desktop'])) {
+        if (empty($return['desktop']) || empty($return['mobile'])) {
             return false;
         }
 
@@ -230,11 +250,10 @@ class wps_criticalCss
         $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
         $critTransient = get_transient($transient_name);
 
-        if (!empty($critTransient)) {
+        if (!empty($critTransient) && empty($_GET['forceCritical'])) {
             // Die, already running!
             return true;
         }
-
 
         // Make transient expire after 30 mins
         set_transient($transient_name, true, 60*30);
@@ -243,27 +262,7 @@ class wps_criticalCss
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
         $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
-        $code = $requests->getResponseCode($call);
 
-        if ($code == 200) {
-            $body = $requests->getResponseBody($call);
-            $json = json_decode($body, true);
-
-            if (!empty($json) && isset($json['url']['desktop']) && isset($json['url']['mobile'])) {
-                $this->saveCriticalCss($url_key, $body, $type);
-            }
-
-        } else if (is_wp_error($call)) {
-            $error_message = $requests->getErrorMessage($call);
-
-            if (strpos($error_message, 'cURL error 28') !== false) {
-                #wp_send_json_error(['msg' => 'Request timeout, API is likely blocked.', 'error' => $error_message]);
-            }
-
-            #wp_send_json_error(['msg' => 'Error code ' . $code, 'error' => $error_message]);
-        } else {
-            #wp_send_json_error(['code' => $code]);
-        }
     }
 
 
@@ -302,6 +301,7 @@ class wps_criticalCss
             ]
         ]);
 
+        // If fetching remote files is ERROR stop process
         if (is_wp_error($desktop) || is_wp_error($mobile)) {
             // Get the error message
             $error_message = $desktop->get_error_message();
@@ -317,19 +317,23 @@ class wps_criticalCss
             ]);
         }
 
+        // Delete any old files
         unlink($critical_path . 'critical_desktop.css');
         unlink($critical_path . 'critical_mobile.css');
 
-        mkdir($critical_path, 0777, true);
+        // Create path if not exists
+        if (!file_exists($critical_path)) {
+            mkdir($critical_path, 0777, true);
+        }
 
+        sleep(2);
+
+        // Create New Files & Save data
         $fp = fopen($critical_path . 'critical_desktop.css', 'w+');
         fwrite($fp, wp_remote_retrieve_body($desktop));
         fclose($fp);
 
-        if (is_wp_error($mobile)) {
-            wp_send_json_error(['msg' => 'Error downloading css file.', 'url' => $json['mobile']]);
-        }
-
+        // Create New Files & Save data
         $fp = fopen($critical_path . 'critical_mobile.css', 'w+');
         fwrite($fp, wp_remote_retrieve_body($mobile));
         fclose($fp);
@@ -345,15 +349,18 @@ class wps_criticalCss
             }
         }
 
+        // Check if file really exists and file size is bigger than 5
         if (file_exists($critical_path . 'critical_desktop.css') && filesize($critical_path . 'critical_desktop.css') > 5) {
-            if ($type == 'meta') {
-                update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
-            } else {
-                update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
+            if (file_exists($critical_path . 'critical_mobile.css') && filesize($critical_path . 'critical_mobile.css') > 5) {
+                if ($type == 'meta') {
+                    update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
+                } else {
+                    update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
+                }
+
+                $cache::purgeAll($urlKey);
             }
         }
-
-        $cache::purgeAll($urlKey);
     }
 
 

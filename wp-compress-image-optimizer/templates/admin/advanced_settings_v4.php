@@ -1074,7 +1074,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
+                                            #echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
 
 
                                             <?php

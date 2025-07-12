@@ -905,7 +905,7 @@ class wps_rewriteLogic
         global $post;
 
         // NEW API  does not need this code:
-        return '</body>';
+        //return '</body>';
 
         if (!empty($_GET['test_adding_critical_ajax'])) {
             $script = print_r($post, true);

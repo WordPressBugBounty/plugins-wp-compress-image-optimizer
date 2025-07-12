@@ -328,7 +328,7 @@ class wps_ic_ajax extends wps_ic
 
         // Reconstruct the URL
         $realUrl = $parsed_url['host'] . (isset($parsed_url['path']) ? $parsed_url['path'] : '') . '?' . $new_query;
-
+        $realUrl = rtrim($realUrl, '?');
 
         /**
          * Does Critical Already Exist?
@@ -338,17 +338,26 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success(['exists', $realUrl, $criticalCSSExists]);
         }
 
+
         /**
          * Is Critical Ajax Already Running?
          */
-//        $running = get_transient('wpc_critical_ajax_' . $postID);
-//        if (!empty($running) && $running == 'true') {
-//            wp_send_json_success(['already-running', $realUrl]);
-//        }
+        $ccss_debug = get_option('ccss_debug');
+        if (empty($ccss_debug) || $ccss_debug == 'false') {
+            $running = get_transient('wpc_critical_ajax_' . $postID);
+            if (!empty($running) && $running == 'true') {
+                wp_send_json_success(['already-running', $realUrl]);
+            }
+        }
+
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
-        $criticalCSS->sendCriticalUrl($realUrl, $postID, 10);
+        $requests = new wps_ic_requests();
+        $args = ['url' => $realUrl.'?criticalCombine=true&testCompliant=true', 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+
+        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
 
         wp_send_json_success('sent');
     }

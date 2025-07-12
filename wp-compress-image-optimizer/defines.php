@@ -27,8 +27,7 @@ define('WPS_IC_CRITICAL_API_URL_PING', 'https://critical-api.wpcompress.com/post
 // Old Workin Crit CSS
 #define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/ajax-call.php');
 
-#define('WPS_IC_CRITICAL_API_URL', 'https://critical-api-v10-ded.wpcompress.com/generate-critical-css');
-define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-critical-css');
+define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-ccss');
 
 define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
 #define('WPS_IC_CRITICAL_API_URL', 'https://critical-ded4.wpcompress.com/pagespeed.php');

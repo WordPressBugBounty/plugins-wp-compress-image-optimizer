@@ -15,6 +15,7 @@ class wps_ic_cache_integrations
         self::purgeBreeze();
         self::purgeCacheFiles($url_key);
 
+
         // Clear cache.
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
