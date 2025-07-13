@@ -21,22 +21,12 @@ define('WPS_IC_APIURL', 'https://legacy-eu.wpcompress.com/');
 define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 
 // Real URL
-// Not required?
-define('WPS_IC_CRITICAL_API_URL_PING', 'https://critical-api.wpcompress.com/post.php');
-
-// Old Workin Crit CSS
-#define('WPS_IC_CRITICAL_API_URL', 'https://loadbalancer-critical.zapwp.net/ajax-call.php');
-
 define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-ccss');
 
+
 define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
-#define('WPS_IC_CRITICAL_API_URL', 'https://critical-ded4.wpcompress.com/pagespeed.php');
-
 define('WPS_IC_CRITICAL_API_ASSETS_URL', 'https://loadbalancer-critical.zapwp.net/assets.php');
-#define('WPS_IC_CRITICAL_API_ASSETS_URL', 'https://critical-ded4.wpcompress.com/assets.php');
-
 define('WPS_IC_PRELOADER_API_URL', 'https://preloader.wpcompress.com/v2/index.php');
-#define('WPS_IC_PRELOADER_API_URL', 'http://49.13.42.114/v2/index.php');
 
 define('WPS_IC_IN_BULK', 'wps_ic_in_bulk');
 define('WPS_IC_MU_SETTINGS', 'wps_ic_mu_settings');

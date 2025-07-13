@@ -1719,15 +1719,22 @@ class wps_ic_preload_warmup
             return true;
         }
 
-        for ($i = 0; $i < count($warmupLog) - 1; $i++) {
-            $current = $warmupLog[$i];
-            $next = $warmupLog[$i + 1];
+        $keys = array_keys($warmupLog);
+        $count = count($keys);
 
-            if (!isset($current['ended']) && !isset($next['ended'])
-                && $current['started'] < $fiveMinutesAgo
-                && $next['started'] < $fiveMinutesAgo) {
+        for ($i = 0; $i < $count - 1; $i++) {
+            $currentKey = $keys[$i];
+            $nextKey = $keys[$i + 1];
 
-                // Check if there are any successful tests after these two
+            $current = $warmupLog[$currentKey];
+            $next = $warmupLog[$nextKey];
+
+
+            if (isset($current['started'], $next['started']) &&
+                !isset($current['ended']) && !isset($next['ended']) &&
+                $current['started'] < $fiveMinutesAgo &&
+                $next['started'] < $fiveMinutesAgo) {
+
                 $hasSuccessAfter = false;
                 for ($j = $i + 2; $j < count($warmupLog); $j++) {
                     if (isset($warmupLog[$j]['ended'])) {
@@ -1742,6 +1749,7 @@ class wps_ic_preload_warmup
                 }
             }
         }
+
 
         return $warmupFailing;
     }

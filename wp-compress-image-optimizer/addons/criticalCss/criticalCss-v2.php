@@ -8,7 +8,6 @@ class wps_criticalCss
 {
 
     static public $API_URL = WPS_IC_CRITICAL_API_URL;
-    static public $API_URL_PING = WPS_IC_CRITICAL_API_URL_PING;
     static public $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
     public static $url;
     private static $maxRetries = 5;

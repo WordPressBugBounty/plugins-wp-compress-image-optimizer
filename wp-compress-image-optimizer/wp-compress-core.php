@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.20';
+        self::$version = '6.50.21';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -262,6 +262,13 @@ class wps_ic
         if ($data->account->quotaType == 'requests' || $data->account->quotaType == 'requests-combined') {
             // Requests
             $liveCredits = $data->account->leftover . ' Requests Left';
+
+            if (empty($data->liveCredits)) {
+                $data->liveCredits = (object) [
+                    'formatted' => '',
+                    'value' => 0
+                ];
+            }
 
             if (!empty($data->liveCredits->value)) {
                 $liveQuota = $data->liveCredits->value;

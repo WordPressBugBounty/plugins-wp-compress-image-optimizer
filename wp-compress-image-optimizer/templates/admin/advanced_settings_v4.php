@@ -1681,7 +1681,7 @@ include 'partials/tooltips/all.php';
 
 //
 include 'partials/popups/compatibility-popups.php';
-include 'partials/popups/geolocation.php';
+#include 'partials/popups/geolocation.php';
 include 'partials/popups/cname.php';
 include 'partials/popups/exclude-cdn.php';
 include 'partials/popups/exclude-lazy.php';

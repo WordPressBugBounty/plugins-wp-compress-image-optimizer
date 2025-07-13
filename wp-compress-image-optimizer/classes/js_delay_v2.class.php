@@ -61,7 +61,7 @@ class wps_ic_js_delay_v2
 
         $delay_script .= '<script>var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
         if (empty(get_option('wps_ic_delay_v2_debug'))) {
-            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js"></script>';
+            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'"></script>';
         } else {
             $delay_script .= '<script src="https://frankfurt-cdn.zapwp.net/delay-js-v2/loader.dev.js"></script>';
         }

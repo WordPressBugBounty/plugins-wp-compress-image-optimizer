@@ -8,7 +8,6 @@ class wps_criticalCss
 {
 
     static public $API_URL = WPS_IC_CRITICAL_API_URL;
-    static public $API_URL_PING = WPS_IC_CRITICAL_API_URL_PING;
     static public $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
     public static $url;
     private static $maxRetries = 5;
@@ -296,35 +295,6 @@ class wps_criticalCss
         return $pages;
     }
 
-    public function sendCriticalUrlPing()
-    {
-        $urlList = [];
-
-        $homePage = get_option('page_on_front');
-        $blogPage = get_option('page_for_posts');
-
-        if (!$homePage) {
-            $post['post_name'] = 'Home';
-            $post = (object)$post;
-            $urlList[0] = site_url();
-        } else {
-            $post = get_post($homePage);
-            $urlList[$post->ID] = get_permalink($homePage);
-        }
-
-//    $pages = get_posts(array('post_type' => 'page', 'posts_per_page' => 10, 'post_status' => 'publish'));
-//    if (!empty($pages)) {
-//      foreach ($pages as $page) {
-//        $urlList[$page->ID] = get_permalink($page->ID);
-//      }
-//    }
-
-        $args = ['v7' => 'true', 'pages' => json_encode($urlList), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        $call = wp_remote_post(self::$API_URL_PING, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-        $code = wp_remote_retrieve_response_code($call);
-
-        die();
-    }
 
     public function sendCriticalUrl($realUrl = '', $postID = 0, $timeout = 120)
     {
