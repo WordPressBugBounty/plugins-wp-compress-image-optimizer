@@ -549,7 +549,7 @@ class wps_ic_compress {
       $run = 1;
     } #else $run++;
 
-    $log_file = WPS_IC_DIR . 'run_' . $run . '.txt';
+    $log_file = WPS_IC_LOG . 'run_' . $run . '.txt';
 
     if ( ! file_exists($log_file)) {
       fopen($log_file, 'a');

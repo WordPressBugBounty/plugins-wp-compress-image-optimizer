@@ -5,13 +5,9 @@ class wps_ic_elementor
 
     public $delayActive;
 
-    public function __construct($delayActive = '')
+    public function __construct()
     {
-        if (!empty($delayActive)) {
-            $this->delayActive = $delayActive;
-        } else {
-            $this->delayActive = false;
-        }
+
     }
 
     public function is_active()
@@ -63,9 +59,9 @@ class wps_ic_elementor
 
     public function runIntegration($html)
     {
-        if ($this->delayActive) {
-            $html = $this->hideSections($html);
-        }
+
+        $html = $this->hideSections($html);
+
         $html = $this->delayBackgrounds($html);
 
         if (str_contains($html, 'elementor/optimize.js') === false) {

@@ -243,7 +243,6 @@ $options = get_option(WPS_IC_OPTIONS);
 $settings = get_option(WPS_IC_SETTINGS);
 $bulkProcess = get_option('wps_ic_bulk_process');
 
-
 $allowLocal = get_option('wps_ic_allow_local');
 $allowLive = get_option('wps_ic_allow_live', false);
 
@@ -310,17 +309,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 window.location.reload();
                             }, 2000);
                         } else if (response.success == false) {
-                            if (response.data.reset == 'true') {
-                                clearInterval(checkFetch);
-                                setTimeout(function () {
-                                    window.location.reload();
-                                }, 2000);
-                            } else if (response.data.warmupFailing == true) {
-                                clearInterval(checkFetch);
-                                setTimeout(function () {
-                                    window.location.reload();
-                                }, 2000);
-                            }
+                            // Nothing
                         }
                     }
                 });

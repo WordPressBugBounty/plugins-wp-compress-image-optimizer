@@ -53,7 +53,7 @@ class wps_ic_htaccess extends wps_ic
 
         // Did we retrieve the correct htaccess content?
         if (!empty($this->htaccessContent)) {
-            if (strpos($this->htaccessContent, 'IfModule mod_deflate.c') == false) {
+            if (!strpos($this->htaccessContent, 'IfModule mod_deflate.c')) {
 
                 $mimeTypes = array(
                     'text/plain', 'text/css', 'text/javascript', 'application/javascript', 'application/x-javascript',

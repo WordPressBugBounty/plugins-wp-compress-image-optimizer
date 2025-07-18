@@ -87,22 +87,12 @@ class wps_ic_combine_css
 
         $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
 
-        if (!empty($_GET['dbgMobile'])) {
-            $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
-            fwrite($fp, 'UA: ' . $userAgent . "\r\n");
-            fclose($fp);
-        }
 
         // Desktop Detection
         $desktopKeywords = ['windows nt', 'macintosh', 'linux', 'cros', 'x11'];
 
         foreach ($desktopKeywords as $keyword) {
             if (strpos($userAgent, $keyword) !== false) {
-                if (!empty($_GET['dbgMobile'])) {
-                    $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
-                    fwrite($fp, 'Desktop Detected: ' . $keyword . "\r\n");
-                    fclose($fp);
-                }
                 return false; // Detected a desktop identifier, so it's not a mobile device
             }
         }
@@ -114,11 +104,6 @@ class wps_ic_combine_css
             // Check if the user agent contains any of the mobile device keywords
             foreach ($mobileKeywords as $keyword) {
                 if (strpos($userAgent, $keyword) !== false) {
-                    if (!empty($_GET['dbgMobile'])) {
-                        $fp = fopen(ABSPATH . 'dbgMobile.txt', 'a+');
-                        fwrite($fp, 'Mobile Detected: ' . $keyword . "\r\n");
-                        fclose($fp);
-                    }
                     return true; // Found a match, so it's a mobile device
                 }
             }
@@ -160,7 +145,8 @@ class wps_ic_combine_css
         preg_match_all('/<link\s+[^>]*\bhref=(["\'])(.*?)\1[^>]*>/is', $html, $matches);
 
         $AlreadyLoadedLocaLFonts = [];
-        $wpcPreloads = [];
+        $wpcPreloads = '';
+        $wpcPreloadsGenerator = '';
 
         if (!empty($matches[2])) {
             foreach ($matches[2] as $k => $href) {
@@ -223,14 +209,22 @@ class wps_ic_combine_css
                     if (!in_array($href, $AlreadyLoadedLocaLFonts)) {
                         $AlreadyLoadedLocaLFonts[] = $href;
                         $preload = "<link rel='preload' href='" . $href . "' as='style' />";
-                        $wpcPreloads[] = $preload;
+                        $wpcPreloads .= $preload;
                     }
                 }
             }
         }
+        if ($this->is_home_url()) {
+            if (!self::$rewrite->is_mobile()) {
+                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assets('string');
+            } else {
+                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assetsMobile('string');
+            }
+        }
 
-        return $wpcPreloads;
+        return $wpcPreloadsGenerator.$wpcPreloads;
     }
+
 
     public function fixUrlPaths($css)
     {
@@ -1553,6 +1547,20 @@ class wps_ic_combine_css
         }
 
         return $relativeUrl;
+    }
+
+
+    public function is_home_url()
+    {
+        $home_url = rtrim(home_url(), '/');
+        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $current_url = rtrim($current_url, '/');
+        $current_url = explode('?', $current_url);
+        $current_url = $current_url[0];
+        $home_url = rtrim($home_url, '/');
+        $current_url = rtrim($current_url, '/');
+
+        return $home_url === $current_url;
     }
 
     public function get_combined_css($html)

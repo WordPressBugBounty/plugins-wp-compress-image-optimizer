@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.21';
+        self::$version = '6.50.40';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -123,40 +123,8 @@ class wps_ic
 	    }
 
         // Critical API
-        if (!empty($_GET['criticalDone'])) {
-            $uuid = sanitize_text_field($_GET['uuid']);
-            $apikey = sanitize_text_field($_GET['apikey']);
-
-            if (!empty($uuid) && !empty($apikey)) {
-                $options = get_option(WPS_IC_OPTIONS);
-                $dbApiKey = $options['api_key'];
-
-                if ($dbApiKey == $apikey) {
-                    $urlKey = new wps_ic_url_key();
-                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
-                    $urlKey = $urlKey->setup($pageUrl);
-
-                    // UUID
-                    $uuidPart = substr($uuid, 0, 4);
-
-                    // Mobile CSS
-                    $mobileCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-mobile.css';
-
-                    // Desktop CSS
-                    $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
-
-                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
-                    $criticalCSS = new wps_criticalCss();
-                    $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
-
-                    wp_send_json_success();
-                }
-
-                wp_send_json_error('uuid-apikey-failure');
-            }
-
-            wp_send_json_error('failed');
-        }
+        $this->fetchCritical();
+        $this->fetchPageSpeed();
 
         //var_dump(get_option('wps_ic_purge_rules'));
 
@@ -174,6 +142,147 @@ class wps_ic
         //$cache_warmup->add_hooks();
     }
 
+
+    public function fetchPageSpeed() {
+        if (!empty($_GET['pagespeedDone'])) {
+            ini_set('display_errors', 1);
+            error_reporting(E_ALL);
+
+            $jobStatus = [];
+            $uuid = sanitize_text_field($_GET['uuid']);
+            $apikey = sanitize_text_field($_GET['apikey']);
+
+            if (!empty($uuid) && !empty($apikey)) {
+
+                $this->debugPageSpeed('PageSpeed Started');
+
+                $options = get_option(WPS_IC_OPTIONS);
+                $dbApiKey = $options['api_key'];
+
+                if ($dbApiKey == $apikey) {
+                    if (!class_exists('wps_ic_url_key')){
+                        include_once WPS_IC_DIR . 'traits/url_key.php';
+                    }
+
+                    $urlKey = new wps_ic_url_key();
+                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
+                    $urlKey = $urlKey->setup($pageUrl);
+
+                    // UUID
+                    $uuidPart = substr($uuid, 0, 4);
+
+                    // Mobile CSS
+                    $mobileCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-mobile.css';
+
+                    // Desktop CSS
+                    $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
+                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+                    $criticalCSS = new wps_criticalCss();
+                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
+
+                    // Check if LCP Exists
+                    // Mobile LCP
+                    $mobileLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-mobile';
+
+                    // Desktop CSS
+                    $desktopLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-desktop';
+                    $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
+
+                    // Check if benchmark exists
+                    // Mobile LCP
+                    $mobileBenchmarkBefore = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-mobile-before';
+                    $mobileBenchmarkAfter = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-mobile-after';
+
+                    // Desktop CSS
+                    $desktopBenchmarkBefore = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-desktop-before';
+                    $desktopBenchmarkAfter = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-desktop-after';
+
+                    $jobStatus[] = $criticalCSS->saveBenchmark($urlKey, $uuid);
+
+                    $this->debugPageSpeed('Pagespeed Done with uuid ' . $uuid . '!');
+                    wp_send_json_success($jobStatus);
+                }
+
+                $this->debugPageSpeed('Apikey not matching!');
+                wp_send_json_error('uuid-apikey-failure');
+            }
+
+            wp_send_json_error('failed');
+        }
+    }
+
+
+    public function debugPageSpeed($message)
+    {
+        if (get_option('wps_ps_debug') == 'true') {
+            $log_file = WPS_IC_LOG . 'pagespeed-log-' . date('d-m-Y') . '.txt';
+            $time = current_time('mysql');
+
+            if (!touch($log_file)) {
+                error_log("Failed to create log file: $log_file");
+            }
+
+            $log = file_get_contents($log_file);
+            $log .= '[' . $time . '] - ' . $message . "\r\n";
+            file_put_contents($log_file, $log);
+        }
+    }
+
+
+    public function fetchCritical() {
+        if (!empty($_GET['criticalDone'])) {
+            ini_set('display_errors', 1);
+            error_reporting(E_ALL);
+
+            $jobStatus = [];
+            $uuid = sanitize_text_field($_GET['uuid']);
+            $apikey = sanitize_text_field($_GET['apikey']);
+
+            if (!empty($uuid) && !empty($apikey)) {
+                $options = get_option(WPS_IC_OPTIONS);
+                $dbApiKey = $options['api_key'];
+
+                if ($dbApiKey == $apikey) {
+                    if (!class_exists('wps_ic_url_key')){
+                        include_once WPS_IC_DIR . 'traits/url_key.php';
+                    }
+
+                    $urlKey = new wps_ic_url_key();
+                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
+                    $urlKey = $urlKey->setup($pageUrl);
+
+                    // UUID
+                    $uuidPart = substr($uuid, 0, 4);
+
+                    // Mobile CSS
+                    $mobileCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-mobile.css';
+
+                    // Desktop CSS
+                    $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
+                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+                    $criticalCSS = new wps_criticalCss();
+                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
+
+                    // Check if LCP Exists
+                    // Mobile LCP
+                    $mobileLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-mobile';
+
+                    // Desktop CSS
+                    $desktopLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-desktop';
+                    $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
+
+                    wp_send_json_success($jobStatus);
+                }
+
+                wp_send_json_error('uuid-apikey-failure');
+            }
+
+            wp_send_json_error('failed');
+        }
+    }
+
+
+
     /**
      * Write Debug Log
      *
@@ -184,7 +293,7 @@ class wps_ic
     public static function debug_log($message)
     {
         if (get_option('ic_debug') == 'log') {
-            $log_file = WPS_IC_DIR . 'debug-log-' . date('d-m-Y') . '.txt';
+            $log_file = WPS_IC_LOG . 'debug-log-' . date('d-m-Y') . '.txt';
             $time = current_time('mysql');
 
             if (!file_exists($log_file)) {
@@ -204,8 +313,39 @@ class wps_ic
         $criticalCSS->generate_critical_cron();
     }
 
+    public static function checkPluginVersion() {
+        if (is_admin()) {
+            $installed_version = get_option('wpc_core_version');
+
+            if (version_compare($installed_version, self::$version, '<')) {
+                // Remove Tests
+                delete_option(WPS_IC_TESTS);
+                delete_option(WPS_IC_LITE_GPS);
+                delete_transient('wpc_test_running');
+                delete_transient('wpc_initial_test');
+                delete_option(WPC_WARMUP_LOG_SETTING);
+
+                // Test
+                set_transient('wpc_run_initial_test', 'true', 5 * 60);
+
+                // Update the stored version
+                update_option('wpc_core_version', self::$version);
+            }
+        }
+    }
+
     public static function onUpgrade_force_regen()
     {
+        // Remove Tests
+        delete_option(WPS_IC_TESTS);
+        delete_option(WPS_IC_LITE_GPS);
+        delete_transient('wpc_test_running');
+        delete_transient('wpc_initial_test');
+        delete_option(WPC_WARMUP_LOG_SETTING);
+
+        // Test
+        #set_transient('wpc_run_initial_test', 'true', 5 * 60);
+
         // Update API
         self::updateAPIEndpoint();
 
@@ -748,11 +888,6 @@ class wps_ic
      */
     public static function activation($networkwide)
     {
-        // Setup origin as MC
-        // https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=3758d614edb33333333393474f87c50804a
-        // https://keys.wpmediacompress.com/?action=setupOriginAsApi&apikey=3758d614edb33333333393474f87c50804a
-
-
         // Load Cache Class
         $cacheLogic = new wps_ic_cache();
 
@@ -1422,7 +1557,6 @@ class wps_ic
         $options = get_option(WPS_IC_OPTIONS);
         if (empty($options['apiEndpointMC'])) {
             // Set it to new MC
-            // https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=3758d614edb33333333393474f87c50804a
             $call = wp_remote_post('https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=' . $options['api_key'], ['method' => 'GET', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
             #var_dump($call);
 
@@ -1709,12 +1843,53 @@ class wps_ic
         return $settings;
     }
 
+
+    public function runInitialTest()
+    {
+
+        if (!empty($_GET['forceInitial'])) {
+            set_transient('wpc_run_initial_test', 'true', 5 * 60);
+        }
+
+        $initial = get_transient('wpc_run_initial_test');
+        if (!empty($initial) && $initial === 'true') {
+            delete_transient('wpc_run_initial_test');
+
+            // Remove Tests
+            delete_option(WPS_IC_TESTS);
+            delete_option(WPS_IC_LITE_GPS);
+            delete_transient('wpc_test_running');
+            delete_transient('wpc_initial_test');
+            delete_option(WPC_WARMUP_LOG_SETTING);
+
+            // Test
+            $url = add_query_arg([
+                'url' => home_url(),
+                'version' => '2.3',
+                'hash' => time() . mt_rand(100, 9999),
+                'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],
+            ], WPS_IC_PAGESPEED_API_URL);
+
+            $response = wp_remote_get($url, [
+                'timeout' => 10
+            ]);
+
+            if (isset($data['jobId'])) {
+                $job_id = $data['jobId'];
+                set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
+            }
+        }
+    }
+
     /***
      * In Admin Area
      */
     public function inAdmin()
     {
         $this->enqueues = new wps_ic_enqueues();
+
+        $this->runInitialTest();
+
 
         if (get_option('wpc-connectivity-status') === false) {
             $preload_warmup = new wps_ic_preload_warmup();
@@ -2283,6 +2458,8 @@ if ($cdn->isActive()) {
 add_filter('upgrader_post_install', ['wps_ic_cache', 'update_css_hash'], 1);
 add_action('activate_plugin', ['wps_ic_cache', 'update_css_hash'], 1);
 add_action('deactivate_plugin', [$wpsIc, 'deactivation'], 1);
+
+add_action( 'plugins_loaded', [$wpsIc, 'checkPluginVersion'], 1 );
 
 // Remove Critical CSS Generated & Preloaded Tags
 add_filter('upgrader_post_install', [$wpsIc, 'onUpgrade_force_regen'], 1);

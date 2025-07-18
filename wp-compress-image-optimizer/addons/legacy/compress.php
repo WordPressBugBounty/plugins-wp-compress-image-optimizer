@@ -33,7 +33,7 @@ class wps_local_compress
 
         $this->enabledLog = 'true';
 
-        $this->logFilePath = WPS_IC_DIR . 'compress-log.txt';
+        $this->logFilePath = WPS_IC_LOG . 'compress-log.txt';
         $this->logFile = fopen($this->logFilePath, 'a');
 
         $this->get_filesystem();
@@ -660,7 +660,6 @@ class wps_local_compress
         ];
 
         $call = wp_remote_post(self::$apiURL, $params);
-        //file_put_contents( WPS_IC_CACHE . 'test3.txt', print_r( $call, true ) );
         $this->writeLog('Started Image ID ' . $imageID);
 
         if (wp_remote_retrieve_response_code($call) == 200) {

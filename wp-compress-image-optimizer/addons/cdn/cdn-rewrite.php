@@ -292,7 +292,7 @@ class wps_cdn_rewrite
         }
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'log_url_format') {
-            $fp = fopen(WPS_IC_DIR . 'url_Format.txt', 'a+');
+            $fp = fopen(WPS_IC_LOG . 'url_Format.txt', 'a+');
             fwrite($fp, 'URL: ' . $formatted_url . "\r\n");
             fwrite($fp, 'Site URL: ' . self::$site_url . "\r\n");
             fwrite($fp, 'Slashes: ' . addcslashes(self::$site_url, '/') . "\r\n");
@@ -1807,9 +1807,9 @@ class wps_cdn_rewrite
         // Was only adding to home page
         if ($this->is_home_url()) {
             if (!self::is_mobile()) {
-                add_action('wp_head', [$this, 'preload_custom_assets'], 1);
+                #add_action('wp_head', [$this, 'preload_custom_assets'], 1);
             } else {
-                add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
+                #add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
             }
         }
 
@@ -2303,107 +2303,12 @@ class wps_cdn_rewrite
         }
     }
 
-    public function preload_custom_assetsMobile()
+    public function preload_custom_assetsMobile($output = 'array')
     {
         $alreadyPreloaded = [];
         $preloads = get_option('wps_ic_preloadsMobile');
-
-        if (!empty($_GET['dbgPreloadMobile'])) {
-            echo print_r($preloads, true);
-        }
-
-        if (!empty($preloads) && is_array($preloads)) {
-
-            $newPreloads = [];
-
-            // Create a new array
-            if (!empty($preloads['lcp'])) {
-                $newPreloads = ['lcp' => $preloads['lcp']];
-            }
-
-            if (!empty($preloads['custom'])) {
-                foreach ($preloads['custom'] as $index => $value) {
-                    $key = 'custom_' . ($index + 1);
-                    $newPreloads[$key] = $value;
-                }
-            }
-
-            if (!empty($_GET['dbgPreloadMobile'])) {
-                echo print_r('New Preloads', true);
-                echo print_r($newPreloads, true);
-            }
-
-            foreach ($newPreloads as $key => $preload) {
-                $type = '';
-                $extra = '';
-                $ext = pathinfo($preload, PATHINFO_EXTENSION);
-                switch ($ext) {
-                    case 'css':
-                        $as = 'style';
-                        $type = 'text/css';
-                        break;
-                    case 'js':
-                        $as = 'script';
-                        $type = 'text/javascript';
-                        break;
-                    case 'woff':
-                    case 'woff2':
-                    case 'ttf':
-                    case 'otf':
-                        $extra = 'crossorigin';
-                        $as = 'font';
-                        if ($ext == 'woff' || $ext == 'woff2') {
-                            $type = 'font/woff';
-                        } else {
-                            $type = 'font/' . $ext;
-                        }
-                        break;
-                    case 'jpg':
-                    case 'jpeg':
-                    case 'png':
-                    case 'gif':
-                    case 'webp':
-                    case 'svg':
-                        $as = 'image';
-                        if ($ext == 'jpg' || $ext == 'jpeg') {
-                            $type = 'image/jpg';
-                        } else if ($ext == 'gif') {
-                            $type = 'image/gif';
-                        } else if ($ext == 'png') {
-                            $type = 'image/png';
-                        } else if ($ext == 'webp') {
-                            $type = 'image/webp';
-                        } else if ($ext == 'svg') {
-                            $type = 'image/svg+xml';
-                        } else if ($ext == 'avif') {
-                            $type = 'image/avif';
-                        }
-                        break;
-                    default:
-                        $as = '';
-                        break;
-                }
-
-                if (!empty($as)) {
-                    if (!in_array(esc_url($preload), $alreadyPreloaded)) {
-                        $alreadyPreloaded[] = esc_url($preload);
-                        echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
-
-                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                            echo ' fetchpriority="high"';
-                        }
-
-                        echo ' ' . $extra . '>' . "\n";
-                    }
-                }
-            }
-        }
-    }
-
-    public function preload_custom_assets()
-    {
-        $alreadyPreloaded = [];
-        $preloads = get_option('wps_ic_preloads');
+        $preloadOutput = '';
+        $preloadOutputArray = [];
 
         if (!empty($_GET['dbgPreload'])) {
             echo print_r($preloads, true);
@@ -2424,71 +2329,208 @@ class wps_cdn_rewrite
                 }
             }
 
-            foreach ($newPreloads as $key => $preload) {
-                $extra = '';
-                $type = '';
-                $ext = pathinfo($preload, PATHINFO_EXTENSION);
-                switch ($ext) {
-                    case 'css':
-                        $as = 'style';
-                        $type = 'text/css';
-                        break;
-                    case 'js':
-                        $as = 'script';
-                        $type = 'text/javascript';
-                        break;
-                    case 'woff':
-                    case 'woff2':
-                    case 'ttf':
-                    case 'otf':
-                        $extra = 'crossorigin';
-                        $as = 'font';
-                        if ($ext == 'woff' || $ext == 'woff2') {
-                            $type = 'font/woff';
-                        } else {
-                            $type = 'font/' . $ext;
+
+            if (!empty($newPreloads)) {
+                foreach ($newPreloads as $key => $preload) {
+                    if (is_array($preload)) {
+                        foreach ($preload as $i => $preloadItem) {
+                            $extra = '';
+                            $type = '';
+                            $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
+                            switch ($ext) {
+                                case 'css':
+                                    $as = 'style';
+                                    $type = 'text/css';
+                                    break;
+                                case 'js':
+                                    $as = 'script';
+                                    $type = 'text/javascript';
+                                    break;
+                                case 'woff':
+                                case 'woff2':
+                                case 'ttf':
+                                case 'otf':
+                                    $extra = 'crossorigin';
+                                    $as = 'font';
+                                    if ($ext == 'woff' || $ext == 'woff2') {
+                                        $type = 'font/woff';
+                                    } else {
+                                        $type = 'font/' . $ext;
+                                    }
+                                    break;
+                                case 'jpg':
+                                case 'jpeg':
+                                case 'png':
+                                case 'gif':
+                                case 'webp':
+                                case 'svg':
+                                    $as = 'image';
+                                    if ($ext == 'jpg' || $ext == 'jpeg') {
+                                        $type = 'image/jpg';
+                                    } else if ($ext == 'gif') {
+                                        $type = 'image/gif';
+                                    } else if ($ext == 'png') {
+                                        $type = 'image/png';
+                                    } else if ($ext == 'webp') {
+                                        $type = 'image/webp';
+                                    } else if ($ext == 'svg') {
+                                        $type = 'image/svg+xml';
+                                    } else if ($ext == 'avif') {
+                                        $type = 'image/avif';
+                                    }
+                                    break;
+                                default:
+                                    $as = '';
+                                    break;
+                            }
+
+
+                            if (!empty($as)) {
+                                if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
+                                    $alreadyPreloaded[] = esc_url($preloadItem);
+                                    $preloadOutput .= '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+
+                                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                                        $preloadOutput .= ' fetchpriority="high"';
+                                    }
+
+                                    $preloadOutput .= ' ' . $extra . '>' . "\n";
+                                    $preloadOutputArray[] = $preloadOutput;
+
+                                    if ($output == 'array') {
+                                        $preloadOutput = '';
+                                    }
+                                }
+                            }
+
                         }
-                        break;
-                    case 'jpg':
-                    case 'jpeg':
-                    case 'png':
-                    case 'gif':
-                    case 'webp':
-                    case 'svg':
-                        $as = 'image';
-                        if ($ext == 'jpg' || $ext == 'jpeg') {
-                            $type = 'image/jpg';
-                        } else if ($ext == 'gif') {
-                            $type = 'image/gif';
-                        } else if ($ext == 'png') {
-                            $type = 'image/png';
-                        } else if ($ext == 'webp') {
-                            $type = 'image/webp';
-                        } else if ($ext == 'svg') {
-                            $type = 'image/svg+xml';
-                        } else if ($ext == 'avif') {
-                            $type = 'image/avif';
-                        }
-                        break;
-                    default:
-                        $as = '';
-                        break;
-                }
-
-
-                if (!empty($as)) {
-                    if (!in_array(esc_url($preload), $alreadyPreloaded)) {
-                        $alreadyPreloaded[] = esc_url($preload);
-                        echo '<link rel="preload" href="' . esc_url($preload) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
-
-                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                            echo ' fetchpriority="high"';
-                        }
-
-                        echo ' ' . $extra . '>' . "\n";
                     }
                 }
+
             }
+        }
+
+        if ($output == 'array') {
+            return $preloadOutputArray;
+        } else {
+            return $preloadOutput;
+        }
+    }
+
+    public function preload_custom_assets($output = 'array')
+    {
+        $alreadyPreloaded = [];
+        $preloads = get_option('wps_ic_preloads');
+        $preloadOutput = '';
+        $preloadOutputArray = [];
+
+        if (!empty($_GET['dbgPreload'])) {
+            echo print_r($preloads, true);
+        }
+
+        if (!empty($preloads) && is_array($preloads)) {
+            $newPreloads = [];
+
+            // Create a new array
+            if (!empty($preloads['lcp'])) {
+                $newPreloads = ['lcp' => $preloads['lcp']];
+            }
+
+            if (!empty($preloads['custom'])) {
+                foreach ($preloads['custom'] as $index => $value) {
+                    $key = 'custom_' . ($index + 1);
+                    $newPreloads[$key] = $value;
+                }
+            }
+
+            if (!empty($newPreloads)) {
+                foreach ($newPreloads as $key => $preload) {
+                    if (is_array($preload)) {
+                        foreach ($preload as $i => $preloadItem) {
+                            $extra = '';
+                            $type = '';
+                            $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
+                            switch ($ext) {
+                                case 'css':
+                                    $as = 'style';
+                                    $type = 'text/css';
+                                    break;
+                                case 'js':
+                                    $as = 'script';
+                                    $type = 'text/javascript';
+                                    break;
+                                case 'woff':
+                                case 'woff2':
+                                case 'ttf':
+                                case 'otf':
+                                    $extra = 'crossorigin';
+                                    $as = 'font';
+                                    if ($ext == 'woff' || $ext == 'woff2') {
+                                        $type = 'font/woff';
+                                    } else {
+                                        $type = 'font/' . $ext;
+                                    }
+                                    break;
+                                case 'jpg':
+                                case 'jpeg':
+                                case 'png':
+                                case 'gif':
+                                case 'webp':
+                                case 'svg':
+                                    $as = 'image';
+                                    if ($ext == 'jpg' || $ext == 'jpeg') {
+                                        $type = 'image/jpg';
+                                    } else if ($ext == 'gif') {
+                                        $type = 'image/gif';
+                                    } else if ($ext == 'png') {
+                                        $type = 'image/png';
+                                    } else if ($ext == 'webp') {
+                                        $type = 'image/webp';
+                                    } else if ($ext == 'svg') {
+                                        $type = 'image/svg+xml';
+                                    } else if ($ext == 'avif') {
+                                        $type = 'image/avif';
+                                    }
+                                    break;
+                                default:
+                                    $as = '';
+                                    break;
+                            }
+
+
+                            if (!empty($as)) {
+                                if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
+                                    $alreadyPreloaded[] = esc_url($preloadItem);
+                                    $preloadOutput .= '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+
+                                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                                        $preloadOutput .= ' fetchpriority="high"';
+                                    }
+
+                                    $preloadOutput .= ' ' . $extra . '/>';
+
+                                    $preloadOutputArray[] = $preloadOutput;
+                                    $preloadOutput = '';
+                                }
+                            }
+
+                        }
+                    }
+                }
+
+            }
+        }
+
+        if ($output === 'array') {
+            return $preloadOutputArray;
+        } else {
+            $preloadOutput = '';
+            if (!empty($preloadOutputArray)) {
+                foreach ($preloadOutputArray as $i => $link) {
+                    $preloadOutput .= $link;
+                }
+            }
+            return $preloadOutput;
         }
     }
 
@@ -2995,23 +3037,15 @@ class wps_cdn_rewrite
             }
         }
 
+
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-            #if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-            //			  // TODO: Maybe add something?
-            //			  if($criticalActive && !empty($criticalCSSExists)) {
-            //					//critical exists, dont inline
-            //			  } else {
-            //				  $html = $combine_css->doInline($html);
-            //			  }
-            #} else {
             // Find and Preload Fonts!!
             self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
 
             if (!empty(self::$wpcPreloadLinks)) {
-                $preloadFonts = implode('', self::$wpcPreloadLinks);
-                $html = str_replace('<!--WPC_INSERT_PRELOAD-->', $preloadFonts, $html);
+                #$preloadFonts = implode('', self::$wpcPreloadLinks);
+                $html = str_replace('<!--WPC_INSERT_PRELOAD-->', self::$wpcPreloadLinks, $html);
             }
-            #}
         }
 
         if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
@@ -3563,7 +3597,7 @@ class wps_cdn_rewrite
                 return $url;
 
                 if (!empty($_GET['dbg']) && $_GET['dbg'] == 'rewrite_url_to_file') {
-                    $fp = fopen(WPS_IC_DIR . 'rewrite_url_file.txt', 'a+');
+                    $fp = fopen(WPS_IC_LOG . 'rewrite_url_file.txt', 'a+');
                     fwrite($fp, 'URL: ' . $url . "\r\n");
                     fwrite($fp, 'URL: ' . $newUrl . "\r\n");
                     fwrite($fp, '---' . "\r\n");

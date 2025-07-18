@@ -1,7 +1,7 @@
 <?php
 
 ini_set('log_errors', 1);
-ini_set('error_log', WPS_IC_DIR . 'delivery-log.txt');
+ini_set('error_log', WPS_IC_LOG . 'delivery-log.txt');
 error_reporting(E_ALL);
 
 class wpc_ic_delivery
@@ -34,7 +34,7 @@ class wpc_ic_delivery
         $this->getAPIUrl();
 
         $this->enabledLog = 'true';
-        $this->logFilePath = WPS_IC_DIR . 'delivery-log.txt';
+        $this->logFilePath = WPS_IC_LOG . 'delivery-log.txt';
         $this->logFile = fopen($this->logFilePath, 'a');
 
         $this->type = $type;

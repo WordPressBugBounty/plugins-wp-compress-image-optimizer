@@ -7,6 +7,7 @@ class wps_ic_ajax extends wps_ic
 {
 
     public static $API_URL = WPS_IC_CRITICAL_API_URL;
+    public static $PAGESPEED_URL = WPS_IC_PAGESPEED_API_URL;
 
     public static $local;
     public static $options;
@@ -106,7 +107,6 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_get_page_excludes_popup_html');
                 $this->add_ajax('wps_ic_save_page_excludes_popup');
                 $this->add_ajax('wps_ic_resetTest');
-                $this->add_ajax('wps_ic_runTest');
                 $this->add_ajax('wps_ic_run_tests');
                 $this->add_ajax('wps_ic_start_optimizations');
                 $this->add_ajax('wps_ic_stop_optimizations');
@@ -350,89 +350,32 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
+        // is home
+        $home = false;
+        $home_url = rtrim(home_url(), '/');
+        if ($home_url == $realUrl) {
+            $home = true;
+        }
+
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
         $requests = new wps_ic_requests();
-        $args = ['url' => $realUrl.'?criticalCombine=true&testCompliant=true', 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
-        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+        $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
 
         wp_send_json_success('sent');
     }
 
     public function wps_fetchInitialTest()
     {
-        $initialFailed = get_transient('wps_initial_failed');
-        if (empty($initialFailed)) {
-            $initialFailed = 1;
+        $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+        if (!empty($initialPageSpeedScore) && !empty($initialPageSpeedScore['result'])) {
+            wp_send_json_success('done');
         }
 
-        $warmup = new wps_ic_preload_warmup();
-
-        $testPath = self::$apikey . '/home/results.json?random=' . time();
-        $testUrl = $warmup::$apiUrl . 'tests/' . $testPath;
-        $download = wp_remote_get($testUrl, ['timeout' => 10, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-
-        if (!is_wp_error($download)) {
-            $body = wp_remote_retrieve_body($download);
-            if (!empty($body)) {
-                $body = json_decode($body, true);
-
-                // For debugging warmup
-                update_option('wps_ic_last_warmpup', $body);
-
-                #if (json_last_error() === JSON_ERROR_NONE) {
-                if (is_array($body) && !empty($body['desktop']['before'])) {
-                    $tests = get_option(WPS_IC_TESTS);
-                    $tests['home'] = $body;
-                    update_option(WPS_IC_TESTS, $tests);
-
-                    if (!empty($body['desktop']['lcp'])) {
-                        $preloadsLcp = get_option('wps_ic_preloads', []);
-                        $preloadsLcp['lcp'] = $body['desktop']['lcp'];
-                        update_option('wps_ic_preloads', $preloadsLcp);
-                    }
-
-                    if (!empty($body['mobile']['lcp'])) {
-                        $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-                        $preloadsLcp['lcp'] = $body['mobile']['lcp'];
-                        update_option('wps_ic_preloadsMobile', $preloadsLcp);
-                    }
-
-                    update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
-                    delete_transient('wpc_initial_test');
-                    if (!empty($body['testID'])) {
-                        $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
-                        $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
-                        update_option(WPC_WARMUP_LOG_SETTING, $warmupLog);
-                    }
-                    wp_send_json_success();
-                }
-            }
-        }
-
-
-        /*
-        if ($initialFailed >= WPS_IC_TEST_FAILURES) {
-            delete_transient('wps_initial_failed');
-            delete_transient('wpc_initial_test');
-            update_option(WPS_IC_LITE_GPS, ['result' => array(), 'failed' => true, 'lastRun' => time()]);
-            $tests = get_option(WPS_IC_TESTS);
-            unset($tests['home']);
-            update_option(WPS_IC_TESTS, $tests);
-            wp_send_json_error(['reset' => 'true']);
-        }
-        */
-
-        $warmup_class = new wps_ic_preload_warmup();
-        $warmupFailing = $warmup_class->isWarmupFailing();
-
-        $initialFailed += 1;
-        set_transient('wps_initial_failed', $initialFailed, 5 * 60);
-
-        wp_send_json_error(['failed' => $initialFailed, 'warmupFailing' => $warmupFailing, 'url' => $testUrl]);
+        wp_send_json_error('not-done');
     }
 
 
@@ -723,8 +666,7 @@ class wps_ic_ajax extends wps_ic
             $value = implode("\n", $value);
         }
 
-        wp_send_json_success(['value' => $value, 'default_excludes' => $default_excludes, 'exclude_themes' =>
-            $exclude_themes, 'exclude_plugins' => $exclude_plugins, 'exclude_wp' => $exclude_wp, 'exclude_third' => $exclude_third]);
+        wp_send_json_success(['value' => $value, 'default_excludes' => $default_excludes, 'exclude_themes' => $exclude_themes, 'exclude_plugins' => $exclude_plugins, 'exclude_wp' => $exclude_wp, 'exclude_third' => $exclude_third]);
     }
 
     public function wps_ic_save_excludes_settings()
@@ -1052,13 +994,7 @@ class wps_ic_ajax extends wps_ic
         $options_table = $wpdb->options;
 
         // Delete transient values
-        $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s",
-                $wpdb->esc_like('_transient_wpc_critical_key_') . '%',
-                $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'
-            )
-        );
+        $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'));
 
         delete_transient('wps_ic_css_cache');
         delete_option('wps_ic_modified_css_cache');
@@ -1067,6 +1003,7 @@ class wps_ic_ajax extends wps_ic
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
         $cache::purgeCacheFiles();
+        $cache::purgeAll();
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
@@ -2710,11 +2647,7 @@ class wps_ic_ajax extends wps_ic
             $current_excludes = '';
         }
 
-        $setting_name = ['cdn' => 'CDN',
-            'adaptive' => 'Adaptive Images',
-            'advanced_cache' => 'Advanced Cache',
-            'critical_css' => 'Critical CSS',
-            'delay_js' => 'Delay JS'];
+        $setting_name = ['cdn' => 'CDN', 'adaptive' => 'Adaptive Images', 'advanced_cache' => 'Advanced Cache', 'critical_css' => 'Critical CSS', 'delay_js' => 'Delay JS'];
 
         // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
@@ -2854,19 +2787,16 @@ class wps_ic_ajax extends wps_ic
         $warmup_class = new wps_ic_preload_warmup();
         if ($process_all) {
             $pages = $warmup_class->getPagesForFiltering($post_type, $post_status, $page, $offset, $search);
-            $response = ['pages' => $pages['pages'], 'total_pages' => ceil($pages['total'] / 10), 'global_settings' =>
-                self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
+            $response = ['pages' => $pages['pages'], 'total_pages' => ceil($pages['total'] / 10), 'global_settings' => self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
         } else {
             $pages = $warmup_class->getOptimizationsStatus($post_type, $page, $offset, $limit, $search);
 
             wp_reset_postdata();
-            $args = ['post_type' => $post_type, 'limit' => $limit, 'fields' => 'ids', 'post_status' => 'publish', 's'
-            => $search];
+            $args = ['post_type' => $post_type, 'limit' => $limit, 'fields' => 'ids', 'post_status' => 'publish', 's' => $search];
 
             $query = new WP_Query($args);
 
-            $response = ['pages' => $pages, 'total_pages' => $query->max_num_pages, 'global_settings' =>
-                self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
+            $response = ['pages' => $pages, 'total_pages' => $query->max_num_pages, 'global_settings' => self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
         }
 
 
@@ -3029,6 +2959,14 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
+        // Purge Cache
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeAll();
+        $cache::purgeCriticalFiles();
+        $cache::purgeCacheFiles();
+
+        $requests = new wps_ic_requests();
+
         $tests = get_option(WPS_IC_TESTS);
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
@@ -3038,38 +2976,21 @@ class wps_ic_ajax extends wps_ic
         delete_option(WPS_IC_LITE_GPS);
         delete_option(WPC_WARMUP_LOG_SETTING);
 
-        $id = sanitize_text_field($_POST['id']);
-        $retest = sanitize_text_field($_POST['retest']);
-
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        $warmup = new wps_ic_preload_warmup();
-        $warmup->resetTest($id, $retest, false);
+        // Test
+        $args = ['url' => home_url(), 'version' => '2.3', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $response = $requests->POST(self::$PAGESPEED_URL, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
 
-        wp_send_json_success('started');
-    }
-
-
-    public function wps_ic_runTest()
-    {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
-            wp_send_json_error('Forbidden.');
+        if (isset($data['jobId'])) {
+            $job_id = $data['jobId'];
+            set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60*10);
+            wp_send_json_success('started');
         }
 
-        $running = get_transient('wps_icInitialTest');
-        if ($running) {
-            wp_send_json_success('already-running');
-        }
-
-        set_transient('wps_icInitialTest', 'true', 1 * 60);
-
-        $id = sanitize_text_field($_POST['id']);
-        $retest = sanitize_text_field($_POST['retest']);
-
-        $warmup_class = new wps_ic_preload_warmup();
-        $urlKey = $warmup_class->doTestRemote($id, $retest, false);
-
-        wp_send_json_success();
+        wp_send_json_error();
     }
 
 
@@ -3078,6 +2999,8 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
+
+        die();
 
         $id = sanitize_text_field($_POST['id']);
         $retest = sanitize_text_field($_POST['retest']);
@@ -3269,8 +3192,7 @@ class wps_ic_ajax extends wps_ic
             $scheduled = $purge_rules['scheduled'];
         }
 
-        wp_send_json_success(['hooks' => $hooks, 'all_pages' => $all_pages, 'home_page' =>
-            $home_page, 'recent_posts_widget' => $recent_posts_widget, 'archive_pages' => $archive_pages, 'scheduled' => $scheduled]);
+        wp_send_json_success(['hooks' => $hooks, 'all_pages' => $all_pages, 'home_page' => $home_page, 'recent_posts_widget' => $recent_posts_widget, 'archive_pages' => $archive_pages, 'scheduled' => $scheduled]);
     }
 
     public function wps_ic_export_settings()

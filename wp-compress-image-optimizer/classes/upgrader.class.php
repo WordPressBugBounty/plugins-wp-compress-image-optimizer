@@ -10,12 +10,12 @@ class wps_ic_upgrader extends wps_ic
         if (!$this->is_latest() || !empty($_GET['force_update'])) {
             self::$options = get_option(WPS_IC_OPTIONS);
 
-            if (file_exists(WPS_IC_DIR . 'local_script_decode.txt')) {
-                unlink(WPS_IC_DIR . 'local_script_decode.txt');
+            if (file_exists(WPS_IC_LOG . 'local_script_decode.txt')) {
+                unlink(WPS_IC_LOG . 'local_script_decode.txt');
             }
 
-            if (file_exists(WPS_IC_DIR . 'local_script_encode_2.txt')) {
-                unlink(WPS_IC_DIR . 'local_script_encode_2.txt');
+            if (file_exists(WPS_IC_LOG . 'local_script_encode_2.txt')) {
+                unlink(WPS_IC_LOG . 'local_script_encode_2.txt');
             }
 
             // Purge CDN

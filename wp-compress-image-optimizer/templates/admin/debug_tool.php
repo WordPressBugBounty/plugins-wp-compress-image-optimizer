@@ -304,6 +304,28 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
+        <td>Enable PageSpeed & Critical Debug</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['ps_debug'])) {
+                    update_option('wps_ps_debug', sanitize_text_field($_GET['ps_debug']));
+                }
+
+                $debugPhp = get_option('wps_ps_debug');
+
+                if (empty($debugPhp) || $debugPhp == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+                If you are having any sort of issues with our plugin, enabling this option will give you some basic
+                debug output in Console log of your browser.
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>Enable PHP Debug</td>
         <td colspan="3">
             <p>
@@ -347,57 +369,13 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </tr>
 
     <tr>
-        <td>Generate Image JSON</td>
+        <td>Get JobID For Crit</td>
         <td colspan="3">
             <p>
                 <?php
-                if (!empty($_POST['wpc_image_id'])) {
-                    $uncompressedImages = [];
-                    $image_id = sanitize_text_field($_POST['wpc_image_id']);
-
-                    global $_wp_additional_image_sizes;
-
-                    $default_image_sizes = get_intermediate_image_sizes();
-
-                    foreach ($default_image_sizes as $size) {
-                        $image_sizes[$size]['width'] = intval(get_option("{$size}_size_w"));
-                        $image_sizes[$size]['height'] = intval(get_option("{$size}_size_h"));
-                        $image_sizes[$size]['crop'] = get_option("{$size}_crop") ? get_option("{$size}_crop") : false;
-                    }
-
-                    if (isset($_wp_additional_image_sizes) && count($_wp_additional_image_sizes)) {
-                        $image_sizes = array_merge($image_sizes, $_wp_additional_image_sizes);
-                    }
-
-                    $AdditionalSizes = ['full'];
-                    foreach ($AdditionalSizes as $size) {
-                        $image_sizes[$size]['width'] = 'full';
-                    }
-
-                    $image_sizes['original']['width'] = 'original';
-
-                    foreach ($image_sizes as $sizeName => $sizeData) {
-                        if ($sizeName == 'original') {
-                            $fileUrl = wp_get_original_image_url($image_id);
-                        } else {
-                            $fileUrl = wp_get_attachment_image_url($image_id, $sizeName);
-                        }
-
-                        //set_transient('wps_ic_compress_' . $image->ID, 'compressing');
-                        $uncompressedImages[$image_id][$sizeName] = $fileUrl;
-                    }
-
-                    echo '<p style="max-width: 100%;">';
-                    echo json_encode($uncompressedImages);
-                    echo '</p>';
-                }
+                $jobID = get_transient(WPS_IC_JOB_TRANSIENT);
+                var_dump($jobID);
                 ?>
-            <form method="post" action="#">
-                <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <label>Image ID:</label>
-                <input type="text" name="wpc_image_id" value="" placeholder="Image id from Media Library"/>
-                <input type="submit" value="Debug"/>
-            </form>
             </p>
         </td>
     </tr>
@@ -462,7 +440,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td>Paths</td>
         <td colspan="3">
             <?php
-            echo 'Debug Log: ' . WPS_IC_DIR . 'debug-log-' . date('d-m-Y') . '.txt';
+            echo 'Debug Log: ' . WPS_IC_LOG . 'debug-log-' . date('d-m-Y') . '.txt';
             echo '<br/>Debug Log URI: <a href="' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt">' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt' . '</a>';
             ?>
         </td>
@@ -580,15 +558,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td>Settings</td>
         <td colspan="3">
             <button class="wps_copy_button button-primary" data-field="settings" style="float:right">Copy text</button>
-            <form method="post" action="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
-                <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <textarea id="wps_settings_field" name="wps_settings" style="width:100%;height:150px;"><?php
-                    echo json_encode(get_option(WPS_IC_SETTINGS));
-                    ?>
-           </textarea>
-                <input type="submit" value="Save Settings" class="button-primary" style="float:right">
-            </form>
+
         </td>
     </tr>
     <tr>

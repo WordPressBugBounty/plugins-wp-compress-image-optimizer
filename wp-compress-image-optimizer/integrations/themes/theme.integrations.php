@@ -35,10 +35,7 @@ class ThemeIntegrations extends wps_cdn_rewrite
 
     } else if (defined('ELEMENTOR_VERSION')) {
       //todo: elementor class is used in multiple places, can't inherit settings from this class
-
-      $delayActive = ! (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
-
-	    $elementor = new wps_ic_elementor($delayActive);
+	    $elementor = new wps_ic_elementor();
 			return $elementor->runIntegration($html);
     } else {
       return $html;

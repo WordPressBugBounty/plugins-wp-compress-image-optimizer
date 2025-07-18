@@ -45,10 +45,10 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 ?>
-<div class="wpc-settings-content-inner" style="overflow: hidden;">
+<div class="wpc-settings-content-inner" style="display:none;">
     <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
 </div>
-<div class="wpc-settings-content-inner" style="display:none;">
+<div class="wpc-settings-content-inner">
     <div class="wpc-rounded-box wpc-rounded-box-half">
         <div class="wpc-box-title circle no-separator">
             <h3>Optimization Stats</h3>
@@ -72,7 +72,10 @@ $warmupFailing = $warmup_class->isWarmupFailing();
         <div class="wpc-box-title circle no-separator">
             <h3>PageSpeed Score</h3>
             <?php if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) { ?>
-                <span class="wpc-test-in-progress">Running...</span>
+                <span class="wpc-test-in-progress"><a href="#" class="wps-ic-initial-retest">
+                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    </a>
+                    Running...</span>
             <?php } elseif (empty($initialPageSpeedScore) && $warmupFailing){ ?>
                 <span class="wpc-test-in-progress"><a href="#" class="wps-ic-initial-retest">
                         <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
@@ -134,23 +137,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
             $home_page_id = get_option('page_on_front');
             ?>
                 <script type="text/javascript">
-                    jQuery(document).ready(function ($) {
-                        $.ajax({
-                            url: ajaxurl,
-                            type: 'POST',
-                            data: {
-                                action: 'wpsRunQuickTest',
-                                id: 'home',
-                                retest: 'true',
-                                dash: 'true',
-                                nonce: ajaxVar.nonce,
-                            }, success: function (response) {
-                                console.log('Optimized');
-                            }, error: function (response) {
-                                console.log(response);
-                            }
-                        });
-                    });
+
                 </script>
 
                 <div class="wpc-pagespeed-running">

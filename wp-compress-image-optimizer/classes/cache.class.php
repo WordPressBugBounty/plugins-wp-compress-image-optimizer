@@ -384,14 +384,6 @@ class wps_ic_cache
 
     public static function update_css_hash($post_id = 0)
     {
-        // Fix issues with Options
-        //'preload-scripts' => '1',
-        //'fetchpriority-high' => '1',
-//        $options = get_option(WPS_IC_SETTINGS);
-//        $options['preload-scripts'] = '1';
-//        $options['fetchpriority-high'] = '1';
-//        update_option(WPS_IC_SETTINGS, $options);
-
 
         // TODO: Sometimes $post_id is ObjectClass, does this fix it? (occurs on plugin manual zip update)
         if (!is_int($post_id) && !is_string($post_id)) {

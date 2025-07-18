@@ -21,7 +21,7 @@ class wps_ic_cron {
 	      $this->cache->init();
 
         if (!empty($_GET['runPurge'])) {
-            $this->purgeCache(0);
+            $this->purgeCache();
         }
 
 	      add_action('transition_post_status', [$this->cache, 'purge_cache_on_post_changes'], 10, 3);

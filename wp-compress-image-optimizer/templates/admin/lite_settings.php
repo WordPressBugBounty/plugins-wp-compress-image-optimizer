@@ -178,35 +178,6 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
     ?>
     <script type="text/javascript">
         jQuery(document).ready(function ($) {
-            var checkFetch = setInterval(function () {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wps_fetchInitialTest',
-                    },
-                    success: function (response) {
-                        if (response.success) {
-                            clearInterval(checkFetch);
-                            setTimeout(function () {
-                                window.location.reload();
-                            }, 2000);
-                        } else if (response.success == false) {
-                            if (response.data.reset == 'true') {
-                                clearInterval(checkFetch);
-                                setTimeout(function () {
-                                    window.location.reload();
-                                }, 2000);
-                            } else if (response.data.warmupFailing == true){
-                                clearInterval(checkFetch);
-                                setTimeout(function () {
-                                    window.location.reload();
-                                }, 2000);
-                            }
-                        }
-                    }
-                });
-            }, 10000);
         });
     </script>
 <?php } ?>
@@ -466,10 +437,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                         </div>
                     </div>
 
-                    <div class="wpc-settings-content-inner" style="overflow: hidden;">
+                    <div class="wpc-settings-content-inner" style="display:none;">
                         <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
                     </div>
-                    <div class="wpc-settings-content-inner" style="display:none;">
+                    <div class="wpc-settings-content-inner">
                         <div class="wpc-rounded-box wpc-rounded-box-half">
                             <div class="wpc-box-title circle no-separator">
                                 <h3>Optimization Stats</h3>
@@ -578,22 +549,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 $home_page_id = get_option('page_on_front');
                                 ?>
                                     <script type="text/javascript">
-                                        jQuery(document).ready(function ($) {
-                                            $.ajax({
-                                                url: ajaxurl,
-                                                type: 'POST',
-                                                data: {
-                                                    action: 'wpsRunQuickTest',
-                                                    id: 'home',
-                                                    retest: 'true',
-                                                    dash: 'true',
-                                                    nonce: ajaxVar.nonce,
-                                                }, success: function (response) {
-                                                }, error: function (response) {
-                                                    console.log(response);
-                                                }
-                                            });
-                                        });
+
                                     </script>
 
                                     <div class="wpc-pagespeed-running">

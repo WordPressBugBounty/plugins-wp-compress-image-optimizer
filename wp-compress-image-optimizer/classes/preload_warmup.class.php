@@ -11,7 +11,7 @@ class wps_ic_preload_warmup
     {
         self::$warmupVersion = 'v4/';
         $this->getApiUrl();
-        $this->logFilePath = WPS_IC_DIR . 'warmup-log.txt';
+        $this->logFilePath = WPS_IC_LOG . 'warmup-log.txt';
         // TODO: Bug, can't update plugin because of it because file gets created before the plugin is disabled!
         $this->logFile = fopen($this->logFilePath, 'a');
         $this->get_filesystem();

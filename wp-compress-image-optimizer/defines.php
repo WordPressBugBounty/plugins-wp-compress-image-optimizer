@@ -22,6 +22,9 @@ define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 
 // Real URL
 define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-ccss');
+define('WPS_IC_PAGESPEED_API_URL', 'https://critical-api.zapwp.net/run-pagespeed');
+define('WPS_IC_PAGESPEED_RESULTS', 'https://critical-api.zapwp.net/get-results/');
+define('WPS_IC_JOB_TRANSIENT', 'wps_ic_job_transient');
 
 
 define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
