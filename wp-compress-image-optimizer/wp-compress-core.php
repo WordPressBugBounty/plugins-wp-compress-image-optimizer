@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.40';
+        self::$version = '6.50.41';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -126,8 +126,6 @@ class wps_ic
         $this->fetchCritical();
         $this->fetchPageSpeed();
 
-        //var_dump(get_option('wps_ic_purge_rules'));
-
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
 
@@ -145,8 +143,6 @@ class wps_ic
 
     public function fetchPageSpeed() {
         if (!empty($_GET['pagespeedDone'])) {
-            ini_set('display_errors', 1);
-            error_reporting(E_ALL);
 
             $jobStatus = [];
             $uuid = sanitize_text_field($_GET['uuid']);
@@ -188,15 +184,6 @@ class wps_ic
                     $desktopLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-desktop';
                     $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
 
-                    // Check if benchmark exists
-                    // Mobile LCP
-                    $mobileBenchmarkBefore = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-mobile-before';
-                    $mobileBenchmarkAfter = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-mobile-after';
-
-                    // Desktop CSS
-                    $desktopBenchmarkBefore = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-desktop-before';
-                    $desktopBenchmarkAfter = 'https://critical-css.b-cdn.net/'.$uuidPart.'/benchmark-'.$uuid.'-desktop-after';
-
                     $jobStatus[] = $criticalCSS->saveBenchmark($urlKey, $uuid);
 
                     $this->debugPageSpeed('Pagespeed Done with uuid ' . $uuid . '!');
@@ -231,9 +218,6 @@ class wps_ic
 
     public function fetchCritical() {
         if (!empty($_GET['criticalDone'])) {
-            ini_set('display_errors', 1);
-            error_reporting(E_ALL);
-
             $jobStatus = [];
             $uuid = sanitize_text_field($_GET['uuid']);
             $apikey = sanitize_text_field($_GET['apikey']);
@@ -317,7 +301,14 @@ class wps_ic
         if (is_admin()) {
             $installed_version = get_option('wpc_core_version');
 
-            if (version_compare($installed_version, self::$version, '<')) {
+            if (version_compare($installed_version, self::$version, '<') || !empty($_GET['simulateVersionChange'])) {
+
+                // Purge Cache
+                $cache = new wps_ic_cache_integrations();
+                $cache::purgeAll();
+                $cache::purgeCriticalFiles();
+                $cache::purgeCacheFiles();
+
                 // Remove Tests
                 delete_option(WPS_IC_TESTS);
                 delete_option(WPS_IC_LITE_GPS);
@@ -1558,7 +1549,6 @@ class wps_ic
         if (empty($options['apiEndpointMC'])) {
             // Set it to new MC
             $call = wp_remote_post('https://keys.wpmediacompress.com/?action=setupOriginAsMagicContainer&apikey=' . $options['api_key'], ['method' => 'GET', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-            #var_dump($call);
 
             // Update Option
             $options['apiEndpointMC'] = 'api';
@@ -1865,10 +1855,10 @@ class wps_ic
             // Test
             $url = add_query_arg([
                 'url' => home_url(),
-                'version' => '2.3',
+                'version' => '6.50.41',
                 'hash' => time() . mt_rand(100, 9999),
                 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],
-            ], WPS_IC_PAGESPEED_API_URL);
+            ], WPS_IC_PAGESPEED_API_URL_HOME);
 
             $response = wp_remote_get($url, [
                 'timeout' => 10

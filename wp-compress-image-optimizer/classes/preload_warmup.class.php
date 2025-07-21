@@ -1190,8 +1190,6 @@ class wps_ic_preload_warmup
     public function resetTest($id, $retest = false, $return = true)
     {
         $call = wp_remote_post(self::$apiUrl, ['timeout' => 5, 'blocking' => true, 'body' => ['id' => 'home', 'url' => home_url(), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'resetTest'], 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-
-        #var_dump($call);
     }
 
     public function doTestRemote($id, $retest = false, $return = true)

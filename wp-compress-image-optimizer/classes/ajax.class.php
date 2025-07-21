@@ -8,6 +8,7 @@ class wps_ic_ajax extends wps_ic
 
     public static $API_URL = WPS_IC_CRITICAL_API_URL;
     public static $PAGESPEED_URL = WPS_IC_PAGESPEED_API_URL;
+    public static $PAGESPEED_URL_HOME = WPS_IC_PAGESPEED_API_URL_HOME;
 
     public static $local;
     public static $options;
@@ -375,7 +376,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success('done');
         }
 
-        wp_send_json_error('not-done');
+        wp_send_json_error('not-done ' . print_r($initialPageSpeedScore,true));
     }
 
 
@@ -2979,8 +2980,8 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Test
-        $args = ['url' => home_url(), 'version' => '2.3', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        $response = $requests->POST(self::$PAGESPEED_URL, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
+        $args = ['url' => home_url(), 'version' => '6.50.41', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 

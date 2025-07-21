@@ -248,76 +248,114 @@ class wps_criticalCss
 
     public function saveBenchmark($urlKey, $uuid)
     {
+
+        $this->debugPageSpeed('start benchmark inside');
+
         $parsedData = [];
         $jobStatus = [];
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
-
 
         if (!function_exists('download_url')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
 
         $stats = get_option(WPS_IC_TESTS);
+        $attempt = 0;
 
-//        // Fetch results
-//        $jobID = get_transient(WPS_IC_JOB_TRANSIENT);
-//
-//        if (empty($jobID)) { return $jobStatus; }
+        $this->debugPageSpeed(WPS_IC_PAGESPEED_RESULTS_HOME . $uuid);
 
-        $results = wp_remote_get(WPS_IC_PAGESPEED_RESULTS . $uuid,['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
+        do {
+            $results = wp_remote_get(WPS_IC_PAGESPEED_RESULTS_HOME . $uuid, [
+                'headers' => ['user-agent' => WPS_IC_API_USERAGENT]
+            ]);
 
-        // If fetching remote files is ERROR stop process
-        if (is_wp_error($results)) {
-            // No Desktop LCP
-            $jobStatus['benchmark-failed'] = true;
-        } else {
+            $this->debugPageSpeed(print_r($results,true));
+
+            if (is_wp_error($results)) {
+                $jobStatus['benchmark-failed'] = true;
+                break;
+            }
 
             $body = wp_remote_retrieve_body($results);
             $data = json_decode($body, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
+
+            $this->debugPageSpeed('----');
+            $this->debugPageSpeed(print_r($data,true));
+
+            if (json_last_error() !== JSON_ERROR_NONE || empty($data)) {
                 $jobStatus['benchmark-failed'] = true;
-            } else {
-                // Parse Desktop
-                $parsedData['desktop']['before']['performanceScore'] = $data['desktop']['beforeScore'];
-                $parsedData['desktop']['after']['performanceScore'] = $data['desktop']['afterScore'];
-
-                $parsedData['desktop']['before']['pageSize'] = $data['desktop']['beforePageSize'];
-                $parsedData['desktop']['after']['pageSize'] = $data['desktop']['afterPageSize'];
-
-                $parsedData['desktop']['before']['requests'] = $data['desktop']['beforeRequests'];
-                $parsedData['desktop']['after']['requests'] = $data['desktop']['afterRequests'];
-
-                $parsedData['desktop']['before']['ttfb'] = $data['desktop']['beforeTTFB'];
-                $parsedData['desktop']['after']['ttfb'] = $data['desktop']['afterTTFB'];
-
-                // Parse Mobile
-                $parsedData['mobile']['before']['performanceScore'] = $data['mobile']['beforeScore'];
-                $parsedData['mobile']['after']['performanceScore'] = $data['mobile']['afterScore'];
-
-                $parsedData['mobile']['before']['pageSize'] = $data['mobile']['beforePageSize'];
-                $parsedData['mobile']['after']['pageSize'] = $data['mobile']['afterPageSize'];
-
-                $parsedData['mobile']['before']['requests'] = $data['mobile']['beforeRequests'];
-                $parsedData['mobile']['after']['requests'] = $data['mobile']['afterRequests'];
-
-                $parsedData['mobile']['before']['ttfb'] = $data['mobile']['beforeTTFB'];
-                $parsedData['mobile']['after']['ttfb'] = $data['mobile']['afterTTFB'];
+                break;
             }
 
-            $stats['home'] = $parsedData;
+            // Parse Desktop
+            $parsedData['desktop']['before']['performanceScore'] = $data['desktop']['beforeScore'];
+            $parsedData['desktop']['after']['performanceScore'] = $data['desktop']['afterScore'];
 
-            update_option(WPS_IC_TESTS, $stats);
-            $jobStatus['benchmark-success'] = true;
+            $parsedData['desktop']['before']['pageSize'] = $data['desktop']['beforePageSize'];
+            $parsedData['desktop']['after']['pageSize'] = $data['desktop']['afterPageSize'];
 
-            delete_transient('wpc_initial_test');
-        }
+            $parsedData['desktop']['before']['requests'] = $data['desktop']['beforeRequests'];
+            $parsedData['desktop']['after']['requests'] = $data['desktop']['afterRequests'];
 
+            $parsedData['desktop']['before']['ttfb'] = $data['desktop']['beforeTTFB'];
+            $parsedData['desktop']['after']['ttfb'] = $data['desktop']['afterTTFB'];
 
-        update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => false, 'lastRun' => time()]);
+            // Parse Mobile
+            $parsedData['mobile']['before']['performanceScore'] = $data['mobile']['beforeScore'];
+            $parsedData['mobile']['after']['performanceScore'] = $data['mobile']['afterScore'];
+
+            $parsedData['mobile']['before']['pageSize'] = $data['mobile']['beforePageSize'];
+            $parsedData['mobile']['after']['pageSize'] = $data['mobile']['afterPageSize'];
+
+            $parsedData['mobile']['before']['requests'] = $data['mobile']['beforeRequests'];
+            $parsedData['mobile']['after']['requests'] = $data['mobile']['afterRequests'];
+
+            $parsedData['mobile']['before']['ttfb'] = $data['mobile']['beforeTTFB'];
+            $parsedData['mobile']['after']['ttfb'] = $data['mobile']['afterTTFB'];
+
+            $this->debugPageSpeed(print_r($parsedData,true));
+
+            // Check if parsedData was populated
+            if (!empty($parsedData)) {
+                $stats['home'] = $parsedData;
+                update_option(WPS_IC_TESTS, $stats);
+                $jobStatus['benchmark-success'] = true;
+                delete_transient('wpc_initial_test');
+                break;
+            }
+
+            // If parsedData is empty, wait and retry
+            if ($attempt === 0) {
+                sleep(30);
+                $attempt++;
+            } else {
+                $jobStatus['benchmark-failed'] = true;
+                break;
+            }
+
+        } while ($attempt <= 3);
+
+        update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => empty($parsedData), 'lastRun' => time()]);
         return $jobStatus;
     }
 
+
+    public function debugPageSpeed($message)
+    {
+        if (get_option('wps_ps_debug') == 'true') {
+            $log_file = WPS_IC_LOG . 'pagespeed-log-' . date('d-m-Y') . '.txt';
+            $time = current_time('mysql');
+
+            if (!touch($log_file)) {
+                error_log("Failed to create log file: $log_file");
+            }
+
+            $log = file_get_contents($log_file);
+            $log .= '[' . $time . '] - ' . $message . "\r\n";
+            file_put_contents($log_file, $log);
+        }
+    }
 
     public function saveLCP($urlKey, $LCP = array())
     {
