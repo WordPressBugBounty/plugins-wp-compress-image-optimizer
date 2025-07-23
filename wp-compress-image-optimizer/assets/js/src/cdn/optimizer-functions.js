@@ -57,7 +57,7 @@ function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
         newApiURL = newApiURL.replace(/\/e:0/g, '');
     }
 
-    if (isMobile) {
+    if (wpcIsMobile) {
         newApiURL = getSrcset(newApiURL.split(","), mobileWidth, imageElement);
     }
 

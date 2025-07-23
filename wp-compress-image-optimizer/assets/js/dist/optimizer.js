@@ -1,6 +1,6 @@
 // IsMobile
 var mobileWidth = 1;
-var isMobile = false;
+var wpcIsMobile = false;
 var jsDebug = false;
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
@@ -10,7 +10,7 @@ if (ngf298gh738qwbdh0s87v_vars.js_debug == 'true') {
 
 function checkMobile() {
     if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 580) {
-        isMobile = true;
+        wpcIsMobile = true;
         mobileWidth = window.innerWidth;
     }
 }
@@ -135,7 +135,7 @@ function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
         newApiURL = newApiURL.replace(/\/e:0/g, '');
     }
 
-    if (isMobile) {
+    if (wpcIsMobile) {
         newApiURL = getSrcset(newApiURL.split(","), mobileWidth, imageElement);
     }
 

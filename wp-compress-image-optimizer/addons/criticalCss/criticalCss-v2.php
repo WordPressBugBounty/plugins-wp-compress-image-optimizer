@@ -619,6 +619,7 @@ class wps_criticalCss
 
                 $jobStatus['critical-css'] = 'success';
                 $cache::purgeAll($urlKey);
+                $cache::purgeCacheFiles($urlKey);
             }
         }
 
