@@ -30,6 +30,7 @@ class wps_ic_url_key
         $url = str_replace('?remote_generate_critical=true', '', $url);
         $url = str_replace('dbgCache=true', '', $url);
         $url = str_replace('forceCritical=true', '', $url);
+        $url = str_replace('removeCritical=true', '', $url);
         $url = preg_replace('/&?forceRecombine=true.*/', '', $url);
 
         $url = $this->removeTrackingParams($url);

@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.41';
+        self::$version = '6.50.42';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -156,6 +156,12 @@ class wps_ic
                 $dbApiKey = $options['api_key'];
 
                 if ($dbApiKey == $apikey) {
+
+                    if (!empty($_GET['debug'])) {
+                        ini_set('display_errors', 1);
+                        error_reporting(E_ALL);
+                    }
+
                     if (!class_exists('wps_ic_url_key')){
                         include_once WPS_IC_DIR . 'traits/url_key.php';
                     }
@@ -172,16 +178,18 @@ class wps_ic
 
                     // Desktop CSS
                     $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
-                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+
+                    if (!class_exists('wps_criticalCss')) {
+                        include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+                    }
+
                     $criticalCSS = new wps_criticalCss();
-                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
+                    #$jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
 
                     // Check if LCP Exists
-                    // Mobile LCP
                     $mobileLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-mobile';
-
-                    // Desktop CSS
                     $desktopLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-desktop';
+
                     $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
 
                     $jobStatus[] = $criticalCSS->saveBenchmark($urlKey, $uuid);
@@ -227,6 +235,12 @@ class wps_ic
                 $dbApiKey = $options['api_key'];
 
                 if ($dbApiKey == $apikey) {
+
+                    if (!empty($_GET['debug'])) {
+                        ini_set('display_errors', 1);
+                        error_reporting(E_ALL);
+                    }
+
                     if (!class_exists('wps_ic_url_key')){
                         include_once WPS_IC_DIR . 'traits/url_key.php';
                     }
@@ -243,16 +257,18 @@ class wps_ic
 
                     // Desktop CSS
                     $desktopCriticalCSS = 'https://critical-css.b-cdn.net/'.$uuidPart.'/'.$uuid.'-desktop.css';
-                    include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+
+                    if (!class_exists('wps_criticalCss')) {
+                        include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+                    }
+
                     $criticalCSS = new wps_criticalCss();
                     $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
 
                     // Check if LCP Exists
-                    // Mobile LCP
                     $mobileLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-mobile';
-
-                    // Desktop CSS
                     $desktopLCP = 'https://critical-css.b-cdn.net/'.$uuidPart.'/lcp-'.$uuid.'-desktop';
+
                     $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
 
                     wp_send_json_success($jobStatus);

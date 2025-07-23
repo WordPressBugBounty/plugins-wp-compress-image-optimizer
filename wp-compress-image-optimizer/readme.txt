@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 6.5
 Tested up to: 6.8
-Stable tag: 6.50.41
+Stable tag: 6.50.42
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,11 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.50.42 =
+* iFrame Lazy Patch
+* Fixed Purge Cache Function
+* Improved Critical CSS Detection
 
 = 6.50.41 =
 * Updated Critical CSS logic

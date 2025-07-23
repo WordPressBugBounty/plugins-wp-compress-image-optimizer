@@ -1124,8 +1124,8 @@ class wps_cdn_rewrite
 
                 if (!empty($_GET['testCritical'])) {
                     self::$settings['critical']['css'] = '1';
-                    $html = self::$rewriteLogic->lazyCSS($html);
                     $html = self::$rewriteLogic->addCritical($html);
+                    $html = self::$rewriteLogic->lazyCSS($html);
                 }
 
                 if ($criticalActive && !self::$preloaderAPI) {
@@ -1137,8 +1137,8 @@ class wps_cdn_rewrite
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
                         if (!empty($criticalCSSExists)) {
-                            $html = self::$rewriteLogic->lazyCSS($html);
                             $html = self::$rewriteLogic->addCritical($html);
+                            $html = self::$rewriteLogic->lazyCSS($html);
                         } else {
                             //this way should be ok for multisite
                         }
@@ -3098,8 +3098,8 @@ class wps_cdn_rewrite
 
                 if (!empty($_GET['testCritical'])) {
                     self::$settings['critical']['css'] = '1';
-                    $html = self::$rewriteLogic->lazyCSS($html);
                     $html = self::$rewriteLogic->addCritical($html);
+                    $html = self::$rewriteLogic->lazyCSS($html);
                 }
 
                 if ($criticalActive && !self::$preloaderAPI) {
@@ -3110,8 +3110,8 @@ class wps_cdn_rewrite
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
                         if (!empty($criticalCSSExists)) {
-                            $html = self::$rewriteLogic->lazyCSS($html);
                             $html = self::$rewriteLogic->addCritical($html);
+                            $html = self::$rewriteLogic->lazyCSS($html);
                         } else {
                             //this way should be ok for multisite
                         }
@@ -4066,26 +4066,19 @@ class wps_cdn_rewrite
 
     public function replace_iframe_tags($iframe)
     {
-        if (strpos($iframe[0], 'gform') !== false) {
+        if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
             return $iframe[0];
         }
 
-        if (strpos($iframe[0], 'data-src-cmplz') !== false) {
-            return $iframe[0];
-        }
 
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $iframe[0], $iframeAtts);
+        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
 
         if (!empty($iframeAtts[1])) {
             $iFrame = '<iframe';
             $hasClass = false;
 
             $attNames = $iframeAtts[1];
-            $attValues = $iframeAtts[2];
-
-            if (!in_array('loading', $attNames)) {
-                #$attNames[] = 'loading';
-            }
+            $attValues = $iframeAtts[3];
 
             foreach ($attNames as $i => $attName) {
                 if ($attName == 'src') {
@@ -4097,18 +4090,19 @@ class wps_cdn_rewrite
                     $attValues[$i] = 'lazy';
                 }
 
-                $iFrame .= ' ' . $attName . '="' . $attValues[$i] . '" ';
+                $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+                $iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
             }
 
             if (!$hasClass) {
-                $iFrame .= 'class="wpc-iframe-delay"';
+                $iFrame .= ' class="wpc-iframe-delay"';
             }
 
             $iFrame .= '></iframe>';
 
             return $iFrame;
         } else {
-            return $iframe;
+            return $iframe[0]; // Return original if no attributes found
         }
     }
 

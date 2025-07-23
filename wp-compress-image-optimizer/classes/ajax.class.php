@@ -376,7 +376,7 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success('done');
         }
 
-        wp_send_json_error('not-done ' . print_r($initialPageSpeedScore,true));
+        wp_send_json_error('not-done ' . print_r($initialPageSpeedScore, true));
     }
 
 
@@ -944,11 +944,12 @@ class wps_ic_ajax extends wps_ic
         }
 
         $this->wpc_purgeCF(true);
-        sleep(6);
 
         $this->cacheLogic = new wps_ic_cache();
         $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-        $this->cacheLogic::preloadPage(0); // Purge & Preload
+
+        // Taking too long
+        //$this->cacheLogic::preloadPage(0); // Purge & Preload
 
         sleep(3);
         delete_transient('wps_ic_purging_cdn');
@@ -959,10 +960,13 @@ class wps_ic_ajax extends wps_ic
     {
         $cfSettings = get_option(WPS_IC_CF);
 
-        $zone = $cfSettings['zone'];
-        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
-        if ($cfapi) {
-            $cfapi->purgeCache($zone);
+        if (!empty($cfSettings)) {
+            $zone = $cfSettings['zone'];
+            $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+            if ($cfapi) {
+                $cfapi->purgeCache($zone);
+                sleep(6);
+            }
         }
 
         if ($return) {
@@ -2987,7 +2991,7 @@ class wps_ic_ajax extends wps_ic
 
         if (isset($data['jobId'])) {
             $job_id = $data['jobId'];
-            set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60*10);
+            set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
             wp_send_json_success('started');
         }
 

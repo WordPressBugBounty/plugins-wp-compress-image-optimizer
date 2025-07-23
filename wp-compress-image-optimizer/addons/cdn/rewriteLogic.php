@@ -1013,7 +1013,7 @@ SCRIPT;
         $criticalCSSExists = $criticalCSS->criticalExists(true);
 
 
-        if (!empty($criticalCSSExists)) {
+        if (!empty($criticalCSSExists) && empty($_GET['removeCritical'])) {
             if (file_exists($criticalCSSExists['desktop']) && file_exists($criticalCSSExists['mobile'])) {
                 $criticalCSSContent_Desktop = file_get_contents($criticalCSSExists['desktop']);
                 $criticalCSSContent_Mobile = file_get_contents($criticalCSSExists['mobile']);
@@ -1097,11 +1097,13 @@ SCRIPT;
 
     public function lazyCSS($html)
     {
+        // Run only if the marker exists (handles " or ')
+        if (!preg_match('/id=(["\'])wpc-critical-css\1/si', $html)) {
+            return $html;
+        }
+
         $html = preg_replace_callback('/<link(.*?)>/si', [__CLASS__, 'cssLinkLazy'], $html);
         $html = preg_replace_callback('/(?<!<defs>)<style\b(.*?)<\/style>/si', [__CLASS__, 'cssStyleLazy'], $html);
-
-        #$html = preg_replace('/<link(.*?)>/si', '', $html);
-        #$html = preg_replace('/(?<!<defs>)<style\b(.*?)<\/style>/si', '', $html);
 
         return $html;
     }
@@ -1119,6 +1121,10 @@ SCRIPT;
 
         // Not Mobile
         $lazyCss = 'wpc-stylesheet';
+
+        if (strpos($fullTag, 'wpc-critical-css') !== false) {
+            return $fullTag;
+        }
 
         if (strpos($fullTag, 'rs6') !== false) {
             return $fullTag;
@@ -1174,6 +1180,10 @@ SCRIPT;
 
         if (!empty($_GET['dbgLazyCss'])) {
             return print_r([$html], true);
+        }
+
+        if (strpos($fullTag, 'wpc-critical-css') !== false) {
+            return $fullTag;
         }
 
         if (strpos($fullTag, 'rs6') !== false) {
