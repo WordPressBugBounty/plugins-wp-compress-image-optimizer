@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.43';
+        self::$version = '6.50.44';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2465,7 +2465,7 @@ add_filter('upgrader_post_install', ['wps_ic_cache', 'update_css_hash'], 1);
 add_action('activate_plugin', ['wps_ic_cache', 'update_css_hash'], 1);
 add_action('deactivate_plugin', [$wpsIc, 'deactivation'], 1);
 
-add_action( 'plugins_loaded', [$wpsIc, 'checkPluginVersion'], 1 );
+add_action( 'plugins_loaded', [$wpsIc, 'checkPluginVersion'], PHP_INT_MAX );
 
 // Remove Critical CSS Generated & Preloaded Tags
 add_filter('upgrader_post_install', [$wpsIc, 'onUpgrade_force_regen'], 1);
