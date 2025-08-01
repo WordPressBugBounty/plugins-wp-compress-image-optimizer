@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.44';
+        self::$version = '6.50.45';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -589,6 +589,7 @@ class wps_ic
                 // Vars
                 $body = self::createObjectFromJson($json);
                 $account_status = $body->account->status;
+                    
                 $allow_local = $body->account->allowLocal;
                 $allow_live = $body->account->allowLive;
                 $quota_type = $body->account->quotaType;
@@ -643,9 +644,21 @@ class wps_ic
                     // Account Status Transient
                     set_transient('wps_ic_account_status', $body, 5 * 60);
 
+	                if (!empty($body->account->suspended)){
+                        if ($body->account->suspended == 1){
+                            $allow_local = false;
+                            $allow_live = false;
+                        }
+	                }
+
                     // Allow Local
-                    update_option('wps_ic_allow_local', $allow_local);
-                    update_option('wps_ic_allow_live', $allow_live);
+                    $updated_local = update_option('wps_ic_allow_local', $allow_local);
+                    $updated_live = update_option('wps_ic_allow_live', $allow_live);
+
+                    if ($updated_local || $updated_live){
+	                    $cache = new wps_ic_cache_integrations();
+	                    $cache::purgeAll();
+                    }
 
                     // Is account active?
                     if ($account_status != 'active') {
@@ -807,6 +820,7 @@ class wps_ic
         $object->account->quota = $data->credits;
         $object->account->leftover = $data->display->leftover;
         $object->account->displayQuota = $data->display->credits;
+	    $object->account->suspended = $data->suspended;
         //$object->account->localShared = "1";
 
         // Bytes object
@@ -1858,7 +1872,10 @@ class wps_ic
         }
 
         $initial = get_transient('wpc_run_initial_test');
-        if (!empty($initial) && $initial === 'true') {
+	    $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+	    $initialTestRunning = get_transient('wpc_initial_test');
+
+        if ((!empty($initial) && $initial === 'true') || (empty($initialPageSpeedScore) && empty($initialTestRunning))) {
             delete_transient('wpc_run_initial_test');
 
             // Remove Tests
@@ -2520,3 +2537,65 @@ function wpcGetHeader($headerName) {
     $headerKey = 'HTTP_' . str_replace('-', '_', strtoupper($headerName));
     return $_SERVER[$headerKey] ?? null;
 }
+
+function wps_ic_check_api_credits() {
+	$transient_key = 'wps_ic_credits_check';
+	if (get_transient($transient_key)) {
+		return;
+	}
+
+	$options = get_option(WPS_IC_OPTIONS);
+
+	if (empty($options) || empty($options['api_key'])) {
+		return;
+	}
+
+	$url = 'https://apiv3.wpcompress.com/api/site/credits';
+	$call = wp_remote_get($url, [
+		'timeout' => 30,
+		'sslverify' => false,
+		'user-agent' => WPS_IC_API_USERAGENT,
+		'headers' => [
+			'apikey' => $options['api_key'],
+		]
+	]);
+
+	if (is_wp_error($call)) {
+		return;
+	}
+
+	$body = wp_remote_retrieve_body($call);
+	$response_code = wp_remote_retrieve_response_code($call);
+
+	if ($response_code !== 200) {
+		return;
+	}
+
+	$data = json_decode($body);
+
+	if (json_last_error() !== JSON_ERROR_NONE) {
+		return;
+	}
+
+	$allow_local = true;
+	$allow_live = true;
+
+	if (!empty($data->suspended) && $data->suspended == 1) {
+		$allow_local = false;
+		$allow_live = false;
+	}
+
+	$updated_local = update_option('wps_ic_allow_local', $allow_local);
+	$updated_live = update_option('wps_ic_allow_live', $allow_live);
+
+	if ($updated_local || $updated_live) {
+		if (class_exists('wps_ic_cache_integrations')) {
+			$cache = new wps_ic_cache_integrations();
+			$cache::purgeAll();
+		}
+	}
+
+	set_transient($transient_key, true, 43200);
+}
+
+add_action('plugins_loaded', 'wps_ic_check_api_credits', PHP_INT_MAX);

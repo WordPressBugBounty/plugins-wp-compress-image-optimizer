@@ -15,8 +15,11 @@ class wps_ic_js_delay_v2
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode', // dark mode switcher
-            'n489D_var', 'wpcRunningCritical', 'trustLogo', // css safety service, uses document.write
-            'turnstile' // had delayed loading detection, throws error
+          'n489D_var',
+          'wpcRunningCritical',
+          'trustLogo', // css safety service, uses document.write
+          'turnstile', // had delayed loading detection, throws error
+          'document.write'
         ];
 
         $this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
@@ -63,7 +66,7 @@ class wps_ic_js_delay_v2
         if (empty(get_option('wps_ic_delay_v2_debug'))) {
             $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'"></script>';
         } else {
-            $delay_script .= '<script src="https://frankfurt-cdn.zapwp.net/delay-js-v2/loader.dev.js"></script>';
+            $delay_script .= '<script src="https://frankfurt.zapwp.net/delay-js-v2/loader.dev.js"></script>';
         }
 
         $html = str_replace('<script type="wpc-delay-placeholder"></script>', $delay_script, $html);

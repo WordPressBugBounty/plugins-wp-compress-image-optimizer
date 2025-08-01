@@ -761,5 +761,60 @@ class wps_ic_comms extends wps_ic
         $ajax_class->wps_ic_remove_cname();
     }
 
+	public function settingsCheck()
+	{
+		$options = get_option(WPS_IC_OPTIONS);
+
+		if (empty($options) || empty($options['api_key'])) {
+			return;
+		}
+
+		$url = 'https://apiv3.wpcompress.com/api/site/credits';
+		$call = wp_remote_get($url, [
+			'timeout' => 30,
+			'sslverify' => false,
+			'user-agent' => WPS_IC_API_USERAGENT,
+			'headers' => [
+				'apikey' => $options['api_key'],
+			]
+		]);
+
+		if (is_wp_error($call)) {
+			return;
+		}
+
+		$body = wp_remote_retrieve_body($call);
+		$response_code = wp_remote_retrieve_response_code($call);
+
+		if ($response_code !== 200) {
+			return;
+		}
+
+		$data = json_decode($body);
+
+		if (json_last_error() !== JSON_ERROR_NONE) {
+			return;
+		}
+
+		$allow_local = true;
+		$allow_live = true;
+
+		if (!empty($data->suspended) && $data->suspended == 1) {
+			$allow_local = false;
+			$allow_live = false;
+		}
+
+		$updated_local = update_option('wps_ic_allow_local', $allow_local);
+		$updated_live = update_option('wps_ic_allow_live', $allow_live);
+
+		if ($updated_local || $updated_live) {
+			if (class_exists('wps_ic_cache_integrations')) {
+				$cache = new wps_ic_cache_integrations();
+				$cache::purgeAll();
+			}
+		}
+		wp_send_json_success([$updated_local, $updated_live]);
+	}
+
 
 }

@@ -178,6 +178,25 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
     ?>
     <script type="text/javascript">
         jQuery(document).ready(function ($) {
+            var checkFetch = setInterval(function () {
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'wps_fetchInitialTest',
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            clearInterval(checkFetch);
+                            setTimeout(function () {
+                                window.location.reload();
+                            }, 2000);
+                        } else if (response.success == false) {
+                            // Nothing
+                        }
+                    }
+                });
+            }, 10000);
         });
     </script>
 <?php } ?>

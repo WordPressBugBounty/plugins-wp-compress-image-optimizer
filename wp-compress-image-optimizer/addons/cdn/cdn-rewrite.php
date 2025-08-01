@@ -1136,16 +1136,21 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-                        if (!empty($criticalCSSExists)) {
-                            $html = self::$rewriteLogic->addCritical($html);
-                            $html = self::$rewriteLogic->lazyCSS($html);
-                        } else {
-                            //this way should be ok for multisite
-                        }
+	                    if ( ! empty( $criticalCSSExists ) ) {
+		                    $html = self::$rewriteLogic->addCritical( $html );
+		                    if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
+			                    $html = self::$rewriteLogic->lazyCSS( $html );
+		                    }
+	                    } else {
+		                    //this way should be ok for multisite
+	                    }
                     }
                 }
             }
         }
+
+	      // Theme Integrations
+	      $html = self::$themeIntegrations->getIntegration($html);
 
         //Delay JS
         if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
@@ -1204,8 +1209,7 @@ class wps_cdn_rewrite
         // Cache
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
 
-        // Theme Integrations
-        return self::$themeIntegrations->getIntegration($html);
+        return $html;
     }
 
     public static function dontRunif()
@@ -3109,12 +3113,14 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-                        if (!empty($criticalCSSExists)) {
-                            $html = self::$rewriteLogic->addCritical($html);
-                            $html = self::$rewriteLogic->lazyCSS($html);
-                        } else {
-                            //this way should be ok for multisite
-                        }
+	                    if ( ! empty( $criticalCSSExists ) ) {
+		                    $html = self::$rewriteLogic->addCritical( $html );
+		                    if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
+			                    $html = self::$rewriteLogic->lazyCSS( $html );
+		                    }
+	                    } else {
+		                    //this way should be ok for multisite
+	                    }
                     }
                 }
             }
