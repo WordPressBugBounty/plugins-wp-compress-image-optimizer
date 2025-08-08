@@ -132,7 +132,7 @@ class wps_criticalCss
 
         if (file_exists($desktopFilePath) && filesize($desktopFilePath) > 0) {
             $content = file_get_contents($desktopFilePath);
-            $isHtml = preg_match('/<[^>]+>/', $content); // basic HTML tag detection
+            $isHtml = preg_match('/<body\b[^>]*>/', $content); // basic HTML tag detection
 
             if ($isHtml) {
                 return false;
@@ -147,7 +147,7 @@ class wps_criticalCss
 
         if (file_exists($mobileFilePath) && filesize($mobileFilePath) > 0) {
             $content = file_get_contents($mobileFilePath);
-            $isHtml = preg_match('/<[^>]+>/', $content); // basic HTML tag detection
+            $isHtml = preg_match('/<body\b[^>]*>/', $content); // basic HTML tag detection
 
             if ($isHtml) {
                 return false;

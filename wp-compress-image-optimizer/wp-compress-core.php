@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.46';
+        self::$version = '6.50.48';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -332,7 +332,7 @@ class wps_ic
                 delete_transient('wpc_initial_test');
                 delete_option(WPC_WARMUP_LOG_SETTING);
 
-                // Test
+                // Set flag to run the test
                 set_transient('wpc_run_initial_test', 'true', 5 * 60);
 
                 // Update the stored version
@@ -1868,21 +1868,34 @@ class wps_ic
     {
 
         if (!empty($_GET['forceInitial'])) {
+            // Set flag to run the test
             set_transient('wpc_run_initial_test', 'true', 5 * 60);
         }
 
+        if (!empty($_GET['resetTest'])) {
+            delete_transient('wpc_initial_test');
+        }
+
+        // Flag should we force run test?
         $initial = get_transient('wpc_run_initial_test');
-	    $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+
+        // Flag if the test is running
 	    $initialTestRunning = get_transient('wpc_initial_test');
 
+        // Get previous score (if any)
+        $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+
         if ((!empty($initial) && $initial === 'true') || (empty($initialPageSpeedScore) && empty($initialTestRunning))) {
+
+            // Set the flag that test is ran
+            set_transient('wpc_initial_test', 'true', 5*60);
+
+            // Delete flag which forces the run of the test
             delete_transient('wpc_run_initial_test');
 
             // Remove Tests
             delete_option(WPS_IC_TESTS);
             delete_option(WPS_IC_LITE_GPS);
-            delete_transient('wpc_test_running');
-            delete_transient('wpc_initial_test');
             delete_option(WPC_WARMUP_LOG_SETTING);
 
             // Test
