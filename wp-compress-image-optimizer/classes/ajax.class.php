@@ -1062,7 +1062,6 @@ class wps_ic_ajax extends wps_ic
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
-
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key']]);
 
         // Clear cache.
@@ -2984,8 +2983,9 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Test
-        $args = ['url' => home_url(), 'version' => '6.50.41', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => home_url(), 'version' => '6.50.46', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
+
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
@@ -2993,6 +2993,8 @@ class wps_ic_ajax extends wps_ic
             $job_id = $data['jobId'];
             set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
             wp_send_json_success('started');
+        } else {
+            set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
         }
 
         wp_send_json_error();

@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.45';
+        self::$version = '6.50.46';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1888,7 +1888,7 @@ class wps_ic
             // Test
             $url = add_query_arg([
                 'url' => home_url(),
-                'version' => '6.50.41',
+                'version' => '6.50.46',
                 'hash' => time() . mt_rand(100, 9999),
                 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],
             ], WPS_IC_PAGESPEED_API_URL_HOME);
@@ -1897,9 +1897,18 @@ class wps_ic
                 'timeout' => 10
             ]);
 
-            if (isset($data['jobId'])) {
-                $job_id = $data['jobId'];
-                set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
+            if (!is_wp_error($response)) {
+                $body = wp_remote_retrieve_body($response);
+                $data = json_decode($body, true);
+
+                if (isset($data['jobId'])) {
+                    $job_id = $data['jobId'];
+                    set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
+                } else {
+                    set_transient(WPS_IC_JOB_TRANSIENT, 'response-empty', 60 * 10);
+                }
+            } else {
+                set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
             }
         }
     }
