@@ -361,10 +361,7 @@ class wps_ic_ajax extends wps_ic
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
-        $requests = new wps_ic_requests();
-        $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-
-        $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+        $criticalCSS->initCritical('', $realUrl, '', '');
 
         wp_send_json_success('sent');
     }

@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.48';
+        self::$version = '6.50.49';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1246,7 +1246,7 @@ class wps_ic
             self::$local = new wps_local_compress();
         }
 
-        if (is_admin()) {
+        if (is_admin() && current_user_can('manage_options')) {
             if (!empty($_GET['remove_key'])) {
                 $options = get_option(WPS_IC_OPTIONS);
                 $options['api_key'] = '';
