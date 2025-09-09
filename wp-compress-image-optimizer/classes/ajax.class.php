@@ -117,6 +117,8 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_get_per_page_settings_html');
                 $this->add_ajax('wps_ic_save_per_page_settings');
                 $this->add_ajax('wps_ic_save_purge_hooks_settings');
+                $this->add_ajax('wps_ic_save_cache_cookies_settings');
+                $this->add_ajax('wps_ic_get_cache_cookies');
                 $this->add_ajax('wps_ic_get_purge_rules');
                 $this->add_ajax('wps_ic_export_settings');
                 $this->add_ajax('wps_ic_import_settings');
@@ -361,7 +363,11 @@ class wps_ic_ajax extends wps_ic
         // Set as Running
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
-        $criticalCSS->initCritical('', $realUrl, '', '');
+        $requests = new wps_ic_requests();
+        $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.50.46', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+
+
+        $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
 
         wp_send_json_success('sent');
     }
@@ -925,29 +931,6 @@ class wps_ic_ajax extends wps_ic
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-
-        // Lite Speed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-
-        // HummingBird
-        if (defined('WPHB_VERSION')) {
-            do_action('wphb_clear_page_cache');
-        }
-
-        $this->wpc_purgeCF(true);
-
-        $this->cacheLogic = new wps_ic_cache();
-        $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-
-        // Taking too long
-        //$this->cacheLogic::preloadPage(0); // Purge & Preload
-
         sleep(3);
         delete_transient('wps_ic_purging_cdn');
         wp_send_json_success();
@@ -1004,25 +987,9 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
-        $cache::purgeCacheFiles();
         $cache::purgeAll();
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
-
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-
-        // Lite Speed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-
-        // HummingBird
-        if (defined('WPHB_VERSION')) {
-            do_action('wphb_clear_page_cache');
-        }
 
         sleep(3);
         delete_transient('wps_ic_purging_cdn');
@@ -1045,8 +1012,9 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('API Key empty!');
         }
 
-        $cacheHtml = new wps_cacheHtml();
-        $cacheHtml->removeCacheFiles(0);
+	    $cache = new wps_ic_cache_integrations();
+	    $cache::purgeCriticalFiles();
+	    $cache::purgeAll();
 
         $hash = time();
         $options['css_hash'] = $hash;
@@ -1060,21 +1028,6 @@ class wps_ic_ajax extends wps_ic
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key']]);
-
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-
-        // Lite Speed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-
-        // HummingBird
-        if (defined('WPHB_VERSION')) {
-            do_action('wphb_clear_page_cache');
-        }
 
         sleep(3);
         delete_transient('wps_ic_purging_cdn');
@@ -1369,16 +1322,22 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_success($output);
         }
 
-        // Not ready for output, nothing is done yet
-        if (empty($parsedImages)) {
-            wp_send_json_success(['status' => 'parsing']);
-        }
-
         // Total Images in Restore Queue
         $imagesInRestoreQueue = $bulkStatus['foundImageCount'];
         $imagesRestored = $bulkStatus['restoredImageCount'];
 
+
+        // Not ready for output, nothing is done yet
+        if (empty($parsedImages)) {
+            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $imagesInRestoreQueue . ' images to restore...']);
+        }
+
         $progressBar = round(($imagesRestored / $imagesInRestoreQueue) * 100);
+
+        // Visual Patch so that user can see some progress
+        if ($progressBar == 0) {
+            $progressBar = 3;
+        }
 
         // Bugfix, remove total index
         $onlyImages = $parsedImages;
@@ -1389,19 +1348,6 @@ class wps_ic_ajax extends wps_ic
         }
 
         $lastProgress = $_POST['lastProgress'];
-
-        $stuck_check = get_transient('wps_ic_stuck_check');
-        if ($stuck_check['last_image'] == $lastID) {
-            $stuck_check['count']++;
-            if ($stuck_check['count'] > 10) {
-                self::$local->restartRestoreWorker();
-                $stuck_check['count'] = 0;
-            }
-        } else {
-            $stuck_check['last_image'] = $lastID;
-            $stuck_check['count'] = 0;
-        }
-        set_transient('wps_ic_stuck_check', $stuck_check, 120);
 
         $output = [];
         $output['status'] = 'working';
@@ -1478,6 +1424,108 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_bulkCompressHeartbeat()
     {
+        /***
+         * Idea:
+         * on every heartbeat check wps_ic_parsed_images and get the last inserted id
+         * compare every last_inserted_id with last_shown_id (transient), if different,update stats
+         */
+
+        $bulkStatus = get_option('wps_ic_BulkStatus');
+        $parsedImages = get_option('wps_ic_parsed_images');
+
+        // Total Images Found
+        $totalImagesFound = $bulkStatus['foundImageCount'];
+        $totalThumbsFound = $bulkStatus['foundThumbCount'];
+        $compressedImages = $bulkStatus['compressedImageCount'];
+
+        // Bugfix, remove total index
+        $onlyImages = $parsedImages;
+        unset($onlyImages['total']); // remove total
+
+        // Nothing done yet
+        if (empty($onlyImages)) {
+            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $totalImagesFound . ' images to optimize...']);
+        }
+
+        if (!empty($onlyImages)) {
+            $lastID = array_key_last($onlyImages);
+        }
+
+        // Stats for the last optimized image
+        $stats = get_post_meta($lastID, 'ic_stats', true);
+        $original_filesize = $stats['original']['original']['size'];
+        $compressed_filesize = $stats['original']['compressed']['size'];
+
+        // Check if negative savings
+        $savedKB = wps_ic_format_bytes($original_filesize - $compressed_filesize) . ' Saved';
+        if ($original_filesize <= $compressed_filesize) {
+            $savedKB = 'No savings';
+        }
+
+        // HTML for the Last Optimized image
+        $status = '<ul class="wps-icon-list">';
+        $status .= '<li><i class="wps-icon saved"></i>' . $savedKB . '</li>';
+        $status .= '<li><i class="wps-icon quality"></i> ' . ucfirst(self::$settings['optimization']) . ' Mode</li>';
+        if (self::$settings['generate_webp'] == '1') {
+            $status .= '<li><i class="wps-icon webp"></i> WebP Generated</li>';
+        }
+        $status .= '</ul>';
+
+        // ProgressBar for overall Optimization (compressed images / total images to compress)
+        $progressBar = round(($compressedImages / $totalImagesFound) * 100);
+
+        // Full Image Name
+        $full = wp_get_original_image_url($lastID);
+        $imageFileName = basename($full);
+
+        // Savings Calc
+        $originalSize = $parsedImages['total']['original'];
+        $compressedSize = $parsedImages['total']['compressed'];
+        $imagesAndThumbs = $bulkStatus['compressedImageCount'] + $bulkStatus['compressedThumbs'];
+
+        // Avg Savings
+        $avgReduction = (1 - (($compressedSize / $imagesAndThumbs) / ($originalSize / $imagesAndThumbs))) * 100;
+        $avgReduction = number_format($avgReduction, 1);
+        $avgReductionHTML = '<h3>' . $avgReduction . '%</h3><h5>Average Savings</h5>';
+
+        // Total Savings
+        $bulkSavings = wps_ic_format_bytes($originalSize - $compressedSize, null, null, false);
+        $bulkSavingsHTML = '<h3>' . $bulkSavings . '</h3><h5>Total Savings</h5>';
+
+        // Compressed Images
+        $CompressedImagesHTML = '<h3>' . $compressedImages . '/' . $totalImagesFound . '</h3><h5>Original Images</h5>';
+        $CompressedThumbsHTML = '<h3>' . $imagesAndThumbs . '/' . $totalThumbsFound . '</h3><h5>Total Images</h5>';
+
+        $output['html'] = $this->bulkCompressHtml($lastID);
+        $output['status'] = $status;
+        $output['progress'] = $progressBar;
+        $output['parsedImage'] = $parsedImages[$lastID];
+        $output['lastFileName'] = $imageFileName;
+        $output['progressAvgReduction'] = $avgReductionHTML;
+        $output['progressTotalSavings'] = $bulkSavingsHTML;
+        $output['progressCompressedImages'] = $CompressedImagesHTML;
+        $output['progressCompressedThumbs'] = $CompressedThumbsHTML;
+
+        if ($compressedImages >= $totalImagesFound) {
+            delete_option('wps_ic_bulk_process');
+            set_transient('wps_ic_bulk_done', true, 60);
+        }
+
+        $isDone = get_transient('wps_ic_bulk_done');
+        if ($isDone) {
+            $output = [];
+            $output['status'] = 'done';
+            delete_option('wps_ic_bulk_process');
+            delete_transient('wps_ic_stuck_check');
+            delete_option('wps_ic_bulk_counter');
+            wp_send_json_success($output);
+        }
+
+        wp_send_json_success($output);
+
+        // OLD CODE BELOW
+        die();
+
         $isDone = get_transient('wps_ic_bulk_done');
         $parsedImages = get_option('wps_ic_parsed_images');
         $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -1618,11 +1666,18 @@ class wps_ic_ajax extends wps_ic
 
         $original_filesize = wps_ic_format_bytes($stats['original']['original']['size'], null, null, false);
         $compressed_filesize = wps_ic_format_bytes($stats['original']['compressed']['size'], null, null, false);
-        $savings_kb = wps_ic_format_bytes($stats['full']['original']['size'] - $stats['full']['compressed']['size'], null, null, false);
 
         if ($stats['original']['original']['size'] > 0 && $stats['original']['compressed']['size'] > 0) {
             $savings = 1 - ($stats['original']['compressed']['size'] / $stats['original']['original']['size']);
             $savings = round($savings * 100, 1);
+        }
+
+        $savingsHTML = '';
+        // Check if savings are less than 0.9%
+        if ($savings <= 0.9) {
+            $savingsHTML = 'No further savings';
+        } else {
+            $savingsHTML = $savings . '% Savings';
         }
 
         $output .= '<div class="wps-ic-bulk-html-wrapper">';
@@ -1652,7 +1707,7 @@ class wps_ic_ajax extends wps_ic
       </div>';
         $output .= '</div>';
         $output .= '<div class="wps-ic-percent-savings">';
-        $output .= '<h3>' . $savings . '% Savings</h3>';
+        $output .= '<h3>' . $savingsHTML . '</h3>';
         $output .= '</div>';
         $output .= '<div class="wps-ic-bulk-loading">';
         $output .= '';
@@ -1688,7 +1743,8 @@ class wps_ic_ajax extends wps_ic
         global $wpdb;
 
         $local = new wps_ic_local();
-        $send = $local->sendToAPI(['stop'], '', 'stopBulk');
+        $send = $local->sendToAPI('stop');
+
         if ($send) {
             delete_option('wps_ic_parsed_images');
             delete_option('wps_ic_BulkStatus');
@@ -1796,11 +1852,39 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        $send = $local->sendToAPI($imagesToRestore['compressed'], '', 'queueRestoreImages');
+        $send = $local->sendToAPI('restore');
 
         if ($send['status'] == 'success') {
             update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
             set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
+
+
+            // Send restore call
+            $local = new wps_ic_local();
+
+            // Send the call to API
+            $send = $local->sendBulkRestoreToApi();
+
+            if ($send['status'] == 'failed') {
+
+                $reason = $send['reason'];
+
+                if ($reason == 'bad-apikey') {
+                    $reason = 'bulk-process-bad-apikey';
+                }
+
+                wp_send_json_error(['msg' => $reason, 'send' => print_r($send, true)]);
+
+            } elseif ($send['status'] == 'success') {
+
+                update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
+                set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
+                wp_send_json_success($send);
+            } else {
+                wp_send_json_error($send);
+            }
+
+
             wp_send_json_success($send);
         } else {
             wp_send_json_error($send);
@@ -1886,10 +1970,12 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
+
         // Performance Lab - generate webp on upload
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
+
         // Raise the memory and time limit
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '180');
@@ -1901,11 +1987,8 @@ class wps_ic_ajax extends wps_ic
 
         $local = new wps_ic_local();
 
-        // It's required to set the bulk counter
-        $imagesToCompress = $local->getUncompressedImages('compressing', 'bulk');
-
         // Send the call to API
-        $send = $local->sendBulkToApi($imagesToCompress['uncompressed']);
+        $send = $local->sendBulkToApi();
 
         if ($send['status'] == 'failed') {
 
@@ -2378,14 +2461,8 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'file-already-compressed']);
         }
 
-        if (defined('WPS_IC_LOCAL_V') && WPS_IC_LOCAL_V == 3) {
-            self::$local->singleCompressV3($_POST['attachment_id']);
-        } elseif (defined('WPS_IC_LOCAL_V') && WPS_IC_LOCAL_V == 4) {
-            self::$local->singleCompressV4($_POST['attachment_id']);
-        } else {
-            $settings = get_option(WPS_IC_SETTINGS);
-            $return = self::$local->compress_image($_POST['attachment_id'], false, $settings['retina'], $settings['generate_webp']);
-        }
+
+        self::$local->singleCompressV4($_POST['attachment_id']);
 
         sleep(1);
         wp_send_json_success();
@@ -2832,8 +2909,7 @@ class wps_ic_ajax extends wps_ic
                 $url_key = $keys->setup(get_permalink($id));
             }
 
-            $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll($url_key);
+	        $cache = new wps_ic_cache_integrations();
 
             if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
                 $cache::purgeCombinedFiles($url_key);
@@ -2841,6 +2917,11 @@ class wps_ic_ajax extends wps_ic
             if ($setting_name == 'critical_css') {
                 $cache::purgeCriticalFiles($url_key);
             }
+
+	        $cache::purgeAll($url_key);
+        } else if ($setting_action == 'generate' && $setting_name == 'critical_css'){
+			$critical = new wps_criticalCss();
+			$critical->generateCriticalCSS($id, true);
         } else {
 
             $wpc_excludes = get_option('wpc-excludes', []);
@@ -2884,8 +2965,7 @@ class wps_ic_ajax extends wps_ic
                     $url_key = $keys->setup(get_permalink($id));
                 }
 
-                $cache = new wps_ic_cache_integrations();
-                $cache::purgeAll($url_key);
+	            $cache = new wps_ic_cache_integrations();
 
                 if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
                     $cache::purgeCombinedFiles($url_key);
@@ -2894,6 +2974,7 @@ class wps_ic_ajax extends wps_ic
                     $cache::purgeCriticalFiles($url_key);
                 }
 
+	            $cache::purgeAll($url_key);
 
                 // Update the 'wpc-excludes' option with the modified data
                 update_option('wpc-excludes', $wpc_excludes);
@@ -2901,7 +2982,6 @@ class wps_ic_ajax extends wps_ic
         }
 
         wp_send_json_success();
-
     }
 
 
@@ -2960,11 +3040,15 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
+	    $url = home_url();
+		$url_key_class = new wps_ic_url_key();
+		$url_key = $url_key_class->setup($url);
+
         // Purge Cache
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll();
-        $cache::purgeCriticalFiles();
-        $cache::purgeCacheFiles();
+        $cache::purgeAll($url_key);
+        $cache::purgeCriticalFiles($url_key);
+        $cache::purgeCacheFiles($url_key);
 
         $requests = new wps_ic_requests();
 
@@ -2995,6 +3079,51 @@ class wps_ic_ajax extends wps_ic
         }
 
         wp_send_json_error();
+    }
+
+
+    public function wps_ic_save_cache_cookies_settings()
+    {
+
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')){
+            wp_send_json_error('Forbidden.');
+        }
+
+        $cookies_setting = get_option('wps_ic_cache_cookies', []);
+
+        $cookies                    = sanitize_textarea_field($_POST['cookies']);
+        $cookies                    = rtrim($cookies, "\n");
+        $cookies                    = explode("\n", $cookies);
+        $cookies_setting['cookies'] = $cookies;
+
+        $updated = update_option('wps_ic_cache_cookies', $cookies_setting);
+
+        if ($updated){
+            $cache = new wps_ic_cache_integrations();
+            $cache::purgeAll();
+
+            $settings = get_option(WPS_IC_SETTINGS);
+            if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1'){
+                $htaccess = new wps_ic_htaccess();
+                $htaccess->setAdvancedCache();
+            }
+        }
+
+        wp_send_json_success();
+    }
+
+    public function wps_ic_get_cache_cookies()
+    {
+        $cookies_setting = get_option('wps_ic_cache_cookies');
+
+        if ($cookies_setting === false){
+            $options     = new wps_ic_options();
+            $cookies_setting = $options->get_preset('cache_cookies');
+            update_option('wps_ic_cache_cookies', $cookies_setting);
+        }
+
+        $cookies = implode("\n", $cookies_setting['cookies']);
+        wp_send_json_success(['cookies' => $cookies]);
     }
 
 

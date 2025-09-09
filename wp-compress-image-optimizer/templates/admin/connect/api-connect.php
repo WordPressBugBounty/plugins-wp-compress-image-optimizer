@@ -1,5 +1,9 @@
 <?php
 global $wps_ic;
+global $whtlbl;
+$support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
+	? $whtlbl->author_url
+	: 'https://www.wpcompress.com/support';
 ?>
 <div class="wps-ic-connect-form" style="display: none;">
 
@@ -15,7 +19,7 @@ global $wps_ic;
 
         echo '<div class="ic-input-holder">';
         echo '<a class="button button-primary button-half wps-ic-swal-close" href="#">Retry</a>';
-        echo '<a class="button button-primary button-half wps-ic-swal-close" target="_blank" href="https://wpcompress.com/support">Contact support</a>';
+        echo '<a class="button button-primary button-half wps-ic-swal-close" target="_blank" href="'.$support_url.'">Contact support</a>';
         echo '</div>';
 
         echo '</div>';

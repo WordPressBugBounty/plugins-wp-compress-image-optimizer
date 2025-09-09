@@ -51,7 +51,6 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
               $uncompressedImages = count($libraryStatus['uncompressed']);
               $compressedImages = count($libraryStatus['compressed']);
 
-
               $bulkProcess = get_option('wps_ic_bulk_process');
 
               $prepare_compress = 'display:none;';
@@ -151,7 +150,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
                                 </div>
                             </div>
-                            <h3>Preparing to Optimize</h3>
+                            <h3 class="wpc-preparing-message">Preparing to Optimize</h3>
                             <div class="wpc-ic-thin-placeholder" style="width:300px;"></div>
                             <div class="bulk-preparing-placholders" style="margin-top:60px;">
                                 <div class="left-side">
@@ -174,7 +173,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
                                 </div>
                             </div>
-                            <h3>Preparing to Restore</h3>
+                            <h3 class="wpc-preparing-message">Preparing to Restore</h3>
                             <div class="wpc-ic-thin-placeholder" style="width:300px;"></div>
                         </div>
                         <div class="bulk-status" style="display: none;"></div>

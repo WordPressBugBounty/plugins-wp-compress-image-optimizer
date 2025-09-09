@@ -373,6 +373,11 @@ jQuery(document).ready(function ($) {
         } else {
 
             if (showPopup && popupID != '') {
+
+                var support_url = (typeof whtlbl_vars !== 'undefined' && whtlbl_vars.author_url)
+                    ? whtlbl_vars.author_url
+                    : 'https://wpcompress.com/support/';
+
                 WPCSwal.fire({
                     title: '',
                     html: jQuery('#' + popupID + '-popup').html(),
@@ -390,7 +395,7 @@ jQuery(document).ready(function ($) {
                             $('.wpc-popup-cancel').on('click', function(e){
                                 e.preventDefault();
                                 WPCSwal.clickCancel();
-                                window.open('https://wpcompress.com/support/', '_blank');
+                                window.open(support_url, '_blank');
                                 return false;
                             });
 

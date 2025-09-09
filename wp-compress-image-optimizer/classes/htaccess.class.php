@@ -10,10 +10,15 @@ class wps_ic_htaccess extends wps_ic
     public $isApache;
     public $cacheConstant;
 
+    public static $webPMarker;
+
     public function __construct()
     {
 
         if (is_admin()) {
+
+            self::$webPMarker = 'WPC Serve WebP';
+
             $this->cacheConstant = "define('WP_CACHE', VALUE); // WP Compress Cache";
             $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
             if (strpos(strtolower($serverSoftware), 'litespeed') !== false || strpos(strtolower($serverSoftware), 'apache') !== false) {
@@ -600,7 +605,6 @@ HTACCESS;
 
 
         if (!preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', $configContents, $matches)) {
-            #if (!preg_match('/define\(\'WP_CACHE\',\s*(true|false)\);/si', $configContents, $matches)) {
             $fileContents = preg_replace('/(<\?php)/i', "<?php\r\n{$this->cacheConstant}\r\n", $configContents, 1);
         } else {
             if ($cacheStatus === 'true') {
@@ -681,6 +685,30 @@ HTACCESS;
             $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
             $advancedCacheSample = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
 
+            // Set cache logged in const in advanced-cache
+            $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
+            $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
+            $advancedCacheSample = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
+
+            // Set cache cookies constant in advanced-cache
+            $cookiesConstant = 'false';
+
+            if (!empty($settings['cache']['cookies']) && $settings['cache']['cookies'] == 1) {
+                $cookies_setting = get_option('wps_ic_cache_cookies', []);
+
+                if (!empty($cookies_setting) && !empty($cookies_setting['cookies'])) {
+                    $cookiesFormatted = array_map(function($cookie) {
+                        return "'" . addslashes($cookie) . "'";
+                    }, $cookies_setting['cookies']);
+                    $cookiesConstant = 'array(' . implode(', ', $cookiesFormatted) . ')';
+                }
+            }
+
+            $cookiePattern = "#WPC_CACHE_COOKIES_START\r?\n(.+?)\r?\n#WPC_CACHE_COOKIES_END";
+            $cookieReplacement = "#WPC_CACHE_COOKIES_START\ndefine('WPC_CACHE_COOKIES', $cookiesConstant);\n#WPC_CACHE_COOKIES_END";
+            $advancedCacheSample = preg_replace("/$cookiePattern/s", $cookieReplacement, $advancedCacheSample);
+
+
             file_put_contents($this->advancedCachePath, $advancedCacheSample);
         }
     }
@@ -744,34 +772,29 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        // Get Contents
-        $this->htaccessContent = $this->getContents($this->htaccessPath);
-
-        if (!$this->htaccessContent || empty($this->htaccessContent)) return;
-
         // Check if WebP rules already exist
         if ($this->hasWebpReplaceRules()) {
             return;
         }
 
+        if (!function_exists('insert_with_markers')) {
+            require_once ABSPATH . 'wp-admin/includes/misc.php';
+        }
+
         $webpRules = $this->getWebpReplaceRules();
 
-        // Check if WordPress rules exist
-        if (strpos($this->htaccessContent, '# BEGIN WordPress') !== false) {
-            // Insert WebP rules before WordPress rules
-            $newHtaccessContent = preg_replace('/# BEGIN WordPress/i', $webpRules . PHP_EOL . '# BEGIN WordPress', $this->htaccessContent);
-        } else {
-            // If no WordPress rules, add to the beginning of the file
-            $newHtaccessContent = $webpRules . PHP_EOL . $this->htaccessContent;
-        }
-
-        if (!empty($newHtaccessContent)) {
-            if (!defined('FS_CHMOD_FILE')) {
-                define('FS_CHMOD_FILE', 0644);
+        if (!file_exists($this->htaccessPath)) {
+            if (!@touch($this->htaccessPath)) {
+                update_option('wpc_htaccess_error', 'Could not create .htaccess. Add the rules manually or make it writable.');
+                return false;
             }
-
-            $this->fileSystem()->put_contents($this->htaccessPath, $newHtaccessContent);
         }
+        if (!is_writable($this->htaccessPath)) {
+            update_option('wpc_htaccess_error', 'Could not write to .htaccess. Make it writable or add the rules manually.');
+            return false;
+        }
+
+        insert_with_markers($this->htaccessPath, self::$webPMarker, self::getWebpReplaceRules());
     }
 
     private function hasWebpReplaceRules()
@@ -783,26 +806,26 @@ HTACCESS;
         return false;
     }
 
-    private function getWebpReplaceRules()
+    private static function getWebpReplaceRules()
     {
-        $rules = '#StartWPC-WebP-Replace' . PHP_EOL;
-        $rules .= '<IfModule mod_rewrite.c>' . PHP_EOL;
-        $rules .= '    RewriteEngine On' . PHP_EOL;
-        $rules .= '    RewriteBase /' . PHP_EOL;
-        $rules .= '    # Check if browser supports WebP images.' . PHP_EOL;
-        $rules .= '    RewriteCond %{HTTP_ACCEPT} image/webp' . PHP_EOL;
-        $rules .= '    # Check if WebP replacement image exists with REPLACED extension' . PHP_EOL;
-        $rules .= '    RewriteCond %{DOCUMENT_ROOT}/$1.webp -f' . PHP_EOL;
-        $rules .= '    # Serve WebP image instead - replacing extension, not appending' . PHP_EOL;
-        $rules .= '    RewriteRule (.+)\.(jpe?g|png|gif)$ $1.webp [T=image/webp,L]' . PHP_EOL;
-        $rules .= '</IfModule>' . PHP_EOL;
-        $rules .= '<IfModule mod_headers.c>' . PHP_EOL;
-        $rules .= '    # Standard Vary header for WebP' . PHP_EOL;
-        $rules .= '    Header append Vary Accept env=REQUEST_image' . PHP_EOL;
-        $rules .= '</IfModule>' . PHP_EOL;
-        $rules .= '#EndWPC-WebP-Replace' . PHP_EOL;
-
-        return $rules;
+        return [
+            '#StartWPC-WebP-Replace',
+            '<IfModule mod_rewrite.c>',
+            'RewriteEngine On',
+            'Options -MultiViews',
+            '# Serve existing WebP files for matching JPEG/PNG only when client supports WebP',
+            'RewriteCond %{HTTP_ACCEPT} image/webp',
+            'RewriteCond %{REQUEST_FILENAME} -f',
+            'RewriteCond %{REQUEST_FILENAME} (.+)\.(?:jpe?g|png)$ [NC]',
+            'RewriteCond %1.webp -f',
+            'RewriteRule ^(.+)\.(?:jpe?g|png)$ $1.webp [L,T=image/webp,E=servewebp:1]',
+            '</IfModule>',
+            '<IfModule mod_headers.c>',
+            '# Make caches aware that the response varies on the Accept header',
+            'Header append Vary Accept env=servewebp',
+            'Header append Vary Accept env=REDIRECT_servewebp',
+            '</IfModule>',
+        ];
     }
 
     public function removeWebpReplace()
@@ -810,24 +833,12 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        // Get Contents
-        $this->htaccessContent = $this->getContents($this->htaccessPath);
-
-        if (!$this->htaccessContent || empty($this->htaccessContent)) return;
-
-        // Check if WebP rules don't exist
-        if (!$this->hasWebpReplaceRules()) {
-            return;
+        if (!function_exists('insert_with_markers')) {
+            require_once ABSPATH . 'wp-admin/includes/misc.php';
         }
 
-        $cleanedHtaccessContent = preg_replace('/\s*#StartWPC-WebP-Replace.*#EndWPC-WebP-Replace\s*?/isU', PHP_EOL, $this->htaccessContent);
-
-        if (!empty($cleanedHtaccessContent)) {
-            if (!defined('FS_CHMOD_FILE')) {
-                define('FS_CHMOD_FILE', 0644);
-            }
-
-            $this->fileSystem()->put_contents($this->htaccessPath, $cleanedHtaccessContent);
+        if (file_exists($this->htaccessPath) && is_writable($this->htaccessPath)) {
+            insert_with_markers($this->htaccessPath, self::$webPMarker, []); // removes our block
         }
     }
 

@@ -415,7 +415,7 @@ class wps_ic_enqueues extends wps_ic
         if (empty($optimizeRemove)) {
             if ((!empty($options['lazy']) && $options['lazy'] == '1')) {
 
-                if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+                if (self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
 
                     if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
                         wp_register_script($this::$slug . '-aio', '');
@@ -595,10 +595,13 @@ class wps_ic_enqueues extends wps_ic
 
         $screen = get_current_screen();
 
+        //likely not needed anymore
+        /*
         if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
             wp_dequeue_script('swcfpc_sweetalert_js');
             wp_deregister_script('swcfpc_sweetalert_js');
         }
+        */
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js?ver=' . $this::$version, ['jquery'], '1.0.0');
 
@@ -694,10 +697,13 @@ class wps_ic_enqueues extends wps_ic
                 // https://wordpress.org/plugins/wp-cloudflare-page-cache/
                 $screen = get_current_screen();
 
-                if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-                    wp_dequeue_script('swcfpc_sweetalert_js');
-                    wp_deregister_script('swcfpc_sweetalert_js');
-                }
+	            //likely not needed anymore
+	            /*
+				if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
+					wp_dequeue_script('swcfpc_sweetalert_js');
+					wp_deregister_script('swcfpc_sweetalert_js');
+				}
+				*/
 
                 wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
@@ -811,10 +817,13 @@ class wps_ic_enqueues extends wps_ic
 
         $screen = get_current_screen();
 
-        if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-            wp_dequeue_script('swcfpc_sweetalert_js');
-            wp_deregister_script('swcfpc_sweetalert_js');
-        }
+	    //likely not needed anymore
+	    /*
+		if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
+			wp_dequeue_script('swcfpc_sweetalert_js');
+			wp_deregister_script('swcfpc_sweetalert_js');
+		}
+		*/
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
@@ -862,10 +871,13 @@ class wps_ic_enqueues extends wps_ic
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         $screen = get_current_screen();
 
-        if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-            wp_dequeue_script('swcfpc_sweetalert_js');
-            wp_deregister_script('swcfpc_sweetalert_js');
-        }
+	    //likely not needed anymore
+	    /*
+		if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
+			wp_dequeue_script('swcfpc_sweetalert_js');
+			wp_deregister_script('swcfpc_sweetalert_js');
+		}
+		*/
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
@@ -908,10 +920,13 @@ class wps_ic_enqueues extends wps_ic
                 // https://wordpress.org/plugins/wp-cloudflare-page-cache/
                 $screen = get_current_screen();
 
-                if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-                    wp_dequeue_script('swcfpc_sweetalert_js');
-                    wp_deregister_script('swcfpc_sweetalert_js');
-                }
+	            //likely not needed anymore
+	            /*
+				if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
+					wp_dequeue_script('swcfpc_sweetalert_js');
+					wp_deregister_script('swcfpc_sweetalert_js');
+				}
+				*/
 
                 wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 

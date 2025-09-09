@@ -19,6 +19,7 @@ class wps_ic_media_library_live extends wps_ic
     public static $options;
     public static $parent;
     public static $accountStatus;
+    public static $parsedImages;
 
 
     public function __construct()
@@ -63,6 +64,7 @@ class wps_ic_media_library_live extends wps_ic
             self::$exclude_list = [];
         }
 
+        self::$parsedImages = get_option('wps_ic_parsed_images');
         self::$load_spinner = WPS_IC_URI . 'assets/images/legacy/spinner.svg';
         self::$logo_compressed = WPS_IC_URI . 'assets/images/legacy/logo-compressed.svg';
         self::$logo_uncompressed = WPS_IC_URI . 'assets/images/legacy/logo-not-compressed.svg';
@@ -148,9 +150,19 @@ class wps_ic_media_library_live extends wps_ic
         ];
     }
 
-    public static function popups()
-    {
-        echo '<div id="no-credits-popup" style="display: none;">
+	public static function popups()
+	{
+		// Get support URL - check for whitelabel first, fallback to default
+		global $whtlbl;
+		$support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
+			? $whtlbl->author_url
+			: 'https://www.wpcompress.com/';
+
+		$pricing_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
+			? $whtlbl->author_url
+			: 'https://www.wpcompress.com/pricing';
+
+		echo '<div id="no-credits-popup" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -160,13 +172,13 @@ class wps_ic_media_library_live extends wps_ic
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Ooops, you have no quota left.</h3>
           <p>Seems like your account has exhausted all credits and it automatically reverted to "Local" Mode to prevent CDN Issues.</p>
-          <a href="https://www.wpcompress.com/pricing" target="_blank" class="button button-primary">Get Credits</a>
+          <a href="' . $pricing_url . '" target="_blank" class="button button-primary">Get Credits</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="file-already-compressed" style="display: none;">
+		echo '<div id="file-already-compressed" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -181,7 +193,7 @@ class wps_ic_media_library_live extends wps_ic
       </div>
     </div>';
 
-        echo '<div id="file-not-supported" style="display: none;">
+		echo '<div id="file-not-supported" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -195,7 +207,7 @@ class wps_ic_media_library_live extends wps_ic
       </div>
     </div>';
 
-        echo '<div id="file-in-bulk" style="display: none;">
+		echo '<div id="file-in-bulk" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -209,7 +221,7 @@ class wps_ic_media_library_live extends wps_ic
       </div>
     </div>';
 
-        echo '<div id="unable-to-contact-api" style="display: none;">
+		echo '<div id="unable-to-contact-api" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -218,13 +230,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>We were unable to contact WP Compress API!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="failed-to-get-backup" style="display: none;">
+		echo '<div id="failed-to-get-backup" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -233,13 +245,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>We were unable to retrieve your backup file!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="missing-apikey" style="display: none;">
+		echo '<div id="missing-apikey" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -248,13 +260,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API was unable to retrieve your API Key!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="empty-site-url" style="display: none;">
+		echo '<div id="empty-site-url" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -263,13 +275,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API was unable to retrieve Site URL!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="apikey-not-matching" style="display: none;">
+		echo '<div id="apikey-not-matching" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -278,14 +290,14 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API was unable to match your API Key!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
 
-        echo '<div id="api-blocked-by-firewall" style="display: none;">
+		echo '<div id="api-blocked-by-firewall" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -294,13 +306,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API was blocked by some type of firewall!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="api-unable-to-download" style="display: none;">
+		echo '<div id="api-unable-to-download" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -309,13 +321,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API was unable to download the image!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="internal-api-issue" style="display: none;">
+		echo '<div id="internal-api-issue" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -324,13 +336,13 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Our API Experienced an Internal Issue!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
 
-        echo '<div id="failure-to-contact-api" style="display: none;">
+		echo '<div id="failure-to-contact-api" style="display: none;">
       <div id="cdn-popup-inner" class="ic-compress-all-popup">
 
         <div class="cdn-popup-top">
@@ -339,12 +351,12 @@ class wps_ic_media_library_live extends wps_ic
 
         <div class="cdn-popup-content" style="padding-bottom: 50px;">
           <h3>Your site was unable to contact our API!</h3>
-          <a href="https://www.wpcompress.com/" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
+          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
         </div>
 
       </div>
     </div>';
-    }
+	}
 
     public function wpc_custom_media_metabox()
     {
@@ -594,9 +606,9 @@ class wps_ic_media_library_live extends wps_ic
     public function debug_log_link($args)
     {
 
-	    if (!defined('WPS_IC_DEBUG') || (defined('WPS_IC_DEBUG') && WPS_IC_DEBUG == 'false')) {
-		    return '';
-	    }
+        if (!defined('WPS_IC_DEBUG') || (defined('WPS_IC_DEBUG') && WPS_IC_DEBUG == 'false')) {
+            return '';
+        }
 
         return '<a href="' . admin_url('/options-general.php?page=' . $this::$slug . '&view=debug_tool&debug_img=' . $args) . '" target="_blank" class="wpc-dropdown-btn wps-ic-debug-log wpc-dropdown-item-hidden">Debug Log</a>';
     }
@@ -743,13 +755,24 @@ class wps_ic_media_library_live extends wps_ic
     {
         $output = '';
         $stats = get_post_meta($imageID, 'ic_stats', true);
-        $thumbs = get_post_meta($imageID, 'ic_compressed_thumbs', true);
+
+        $isBulkCompressRunning = false;
+        $isBulkRestoreRunning = false;
+        $bulkIsrunning = get_option('wps_ic_bulk_process');
+        if (!empty($bulkIsrunning)) {
+            if (!empty($bulkIsrunning['status'])) {
+                if ($bulkIsrunning['status'] == 'compressing') {
+                    $isBulkCompressRunning = true;
+                } else if ($bulkIsrunning['status'] == 'restoring') {
+                    $isBulkRestoreRunning = true;
+                }
+            }
+        }
 
         $compressing = get_post_meta($imageID, 'ic_compressing', true);
         delete_post_meta($imageID, 'ic_bulk_running');
 
         // Check if the image ID is already in Bulk Process
-        $isInBulk = get_post_meta($imageID, 'ic_bulk_running', true);
         $imageStatus = get_transient('wps_ic_compress_' . $imageID);
 
         if (!empty($_GET['debug_media_library'])) {
@@ -770,7 +793,7 @@ class wps_ic_media_library_live extends wps_ic
             return $output;
         }
 
-        if ($isInBulk) {
+        if ($isBulkCompressRunning && empty($stats)) {
             $output .= '<div class="wps-ic-bulk-preparing-logo-container-media-lib">
                 <div class="wps-ic-bulk-preparing-logo-media-lib">
                   <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
@@ -778,6 +801,16 @@ class wps_ic_media_library_live extends wps_ic
                 </div>
               </div>';
             return $output;
+        } else if ($isBulkRestoreRunning && !empty($stats)) {
+            if (empty(self::$parsedImages[$imageID])) {
+                $output .= '<div class="wps-ic-bulk-preparing-logo-container-media-lib">
+                <div class="wps-ic-bulk-preparing-logo-media-lib">
+                  <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
+                  <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
+                </div>
+              </div>';
+                return $output;
+            }
         }
 
         if ((!empty($compressing['status']) && $compressing['status'] == 'compressed') || !empty($stats)) {
@@ -848,6 +881,10 @@ class wps_ic_media_library_live extends wps_ic
                 #$output .= '<li><div class="wpc-savings-tag">Original: ' . $originalFilesize . '</div></li>';
                 #$output .= '<li><div class="wpc-savings-tag">Compressed: ' . $wpScaledFilesize . '</div></li>';
                 $output .= '<li><div class="wpc-savings-tag">' . $savedFileSize . ' Saved</div></li>';
+                if (!empty($_GET['dbgMediaLibrary'])) {
+                    $output .= '<li><div class="wpc-savings-tag">' . wps_ic_format_bytes($original) . ' Before Compression</div></li>';
+                    $output .= '<li><div class="wpc-savings-tag">' . wps_ic_format_bytes($compressed) . ' After Compression</div></li>';
+                }
 
                 $output .= '<li class="li-dropdown">';
                 $output .= '<a class="wpc-dropdown-btn wps-ic-restore-live ic-tooltip" title="Restore" data-attachment_id="' . $imageID . '"></a>';

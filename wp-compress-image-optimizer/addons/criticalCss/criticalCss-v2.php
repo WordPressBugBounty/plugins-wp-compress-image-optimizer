@@ -45,9 +45,25 @@ class wps_criticalCss
     }
 
 
-    public function criticalRunning()
+    public function criticalRunning($id = false)
     {
-        $running = get_transient('wpc_critical_ajax_' . md5(self::$url));
+		if ($id === false){
+			$url = self::$url;
+		} else {
+			if ($id === 'home' || $id == 0) {
+				$homePage = get_option('page_on_front');
+
+				if (!$homePage) {
+					$url = site_url();
+				} else {
+					$url = get_permalink($homePage);
+				}
+			} else {
+				$url = get_permalink($id);
+			}
+		}
+
+        $running = get_transient('wpc_critical_key_' . md5($url));
         if (empty($running) || !$running) {
             return false;
         } else {
@@ -55,21 +71,10 @@ class wps_criticalCss
         }
     }
 
-    public function generateCriticalCSS($postID = 0)
+    public function generateCriticalCSS($postID = 0, $skipCap = false)
     {
-        global $post;
-        $postID = false;
-
-        if ($this->isHomeURL()) {
-            $postID = 'home';
-        } else if (!empty($post->ID)) {
-            $postID = $post->ID;
-        } else if (!empty(get_queried_object_id())) {
-            $postID = get_queried_object_id();
-        }
 
         if (!empty($postID)) {
-
             if ($postID === 'home' || !$postID || $postID == 0) {
                 $homePage = get_option('page_on_front');
                 $blogPage = get_option('page_for_posts');
@@ -79,17 +84,8 @@ class wps_criticalCss
                 } else {
                     $url = get_permalink($homePage);
                 }
-
-                $pages[$postID] = urldecode($url);
-
-                if ($blogPage !== 0 && $blogPage !== '0' && $blogPage !== $homePage) {
-                    $url = get_permalink($blogPage);
-                }
-
-                $pages[$postID] = urldecode($url);
             } else {
                 $url = get_permalink($postID);
-                $pages[$postID] = urldecode($url);
             }
 
             $url_key = $this->url_key_class->setup($url);
@@ -98,7 +94,7 @@ class wps_criticalCss
                 // Nothing
             } else {
                 $url = rtrim($url, '?');
-                $this->initCritical($postID, $url, $url_key, $type = 'meta');
+                $this->initCritical($postID, $url, $url_key, $type = 'meta','', $skipCap);
             }
         }
     }
@@ -167,7 +163,7 @@ class wps_criticalCss
         return $return;
     }
 
-    public function initCritical($postID, $url, $url_key, $type, $timeout = 120)
+    public function initCritical($postID, $url, $url_key, $type, $timeout = 120, $skipCap = false)
     {
         $requests = new wps_ic_requests();
 
@@ -193,8 +189,12 @@ class wps_criticalCss
         $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.50.46', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
-        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+	    if ($skipCap === true) {
+		    $args['skipCap'] = 'true';
+	    }
 
+        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+	    wp_send_json_success($call);
     }
 
     public function sendCriticalUrl($realUrl = '', $postID = 0, $timeout = 120)

@@ -73,12 +73,24 @@ class wps_ic_elementor
 
     public function hideSections($html)
     {
+	    // Get skip sections configuration with fallback
+	    $skipSections = get_option('wps_ic_elementor_skip_sections');
+	    $defaultSkip = 5;
+
+	    if (empty($skipSections)) {
+		    $skip = $defaultSkip;
+	    } else {
+		    // Determine device type and get appropriate skip value
+		    $deviceType = $this->isMobile() ? 'mobile' : 'desktop';
+		    $skip = isset($skipSections[$deviceType]) ? $skipSections[$deviceType] : $defaultSkip;
+	    }
+
         $count = 0;
         $html = preg_replace_callback(
             '/(<section[^>]*class="[^"]*?)elementor-top-section([^"]*")/i',
-            function ($matches) use (&$count) {
+            function ($matches) use (&$count, $skip) {
                 $count++;
-                if ($count > 5) {
+                if ($count > $skip) {
                     return $matches[1] . 'elementor-top-section wpc-delay-elementor' . $matches[2];
                 } else {
                     return $matches[0];
@@ -126,4 +138,29 @@ class wps_ic_elementor
         }
         return $html;
     }
+
+	public function isMobile()
+	{
+		if (!empty($_GET['simulate_mobile'])) {
+			return true;
+		}
+
+		if (isset($_SERVER['HTTP_USER_AGENT'])) {
+			$userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
+
+			// Define an array of mobile device keywords to check against
+			$mobileKeywords = [
+				'android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'
+			];
+
+			// Check if the user agent contains any of the mobile device keywords
+			foreach ($mobileKeywords as $keyword) {
+				if (strpos($userAgent, $keyword) !== false) {
+					return true; // Found a match, so it's a mobile device
+				}
+			}
+		}
+
+		return false;
+	}
 }

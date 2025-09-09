@@ -108,7 +108,7 @@ class wps_ic_menu extends wps_ic
                 }
             }
 
-            $admin_bar->add_menu(['id' => 'wp-compress-preload-page', 'parent' => 'wp-compress', 'title' => 'Preload Page', 'href' => '#', 'meta' => ['title' => __('Preload Page'), 'target' => '_self', 'class' => 'wp-compress-bar-preload-cache'],]);
+            //$admin_bar->add_menu(['id' => 'wp-compress-preload-page', 'parent' => 'wp-compress', 'title' => 'Preload Page', 'href' => '#', 'meta' => ['title' => __('Preload Page'), 'target' => '_self', 'class' => 'wp-compress-bar-preload-cache'],]);
 
             if (!empty($options['critical']['css']) && $options['critical']['css'] == '1') {
                 $admin_bar->add_menu(['id' => 'wp-compress-generate-critical-css', 'parent' => 'wp-compress', 'title' => 'Generate Critical CSS', 'href' => '#', 'meta' => ['title' => __('Generate Critical CSS'), 'target' => '_self', 'class' => 'wp-compress-bar-generate-critical-css'],]);

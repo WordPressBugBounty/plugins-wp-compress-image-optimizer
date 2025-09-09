@@ -45,9 +45,6 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 ?>
-<div class="wpc-settings-content-inner" style="display:none;">
-    <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
-</div>
 <div class="wpc-settings-content-inner">
     <div class="wpc-rounded-box wpc-rounded-box-half">
         <div class="wpc-box-title circle no-separator">
@@ -72,14 +69,17 @@ $warmupFailing = $warmup_class->isWarmupFailing();
         <div class="wpc-box-title circle no-separator">
             <h3>PageSpeed Score</h3>
             <?php if (empty($initialPageSpeedScore) && !empty($initialTestRunning)) { ?>
-                <span class="wpc-test-in-progress"><a href="#" class="wps-ic-initial-retest">
-                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                    </a>
-                    Running...</span>
+                <span class="wpc-test-in-progress">
+                    Running...</span><a href="#" class="wps-ic-initial-retest">
+                    <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    Retest
+                </a>
             <?php } elseif (empty($initialPageSpeedScore) && $warmupFailing){ ?>
-                <span class="wpc-test-in-progress"><a href="#" class="wps-ic-initial-retest">
-                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                    </a> Error, warmup not going.</span>
+                <span class="wpc-test-in-progress"> Error, warmup not going.</span>
+                <a href="#" class="wps-ic-initial-retest">
+                    <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    Retest
+                </a>
             <?php } else {
                 $date = new DateTime();
 
@@ -111,10 +111,11 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                 }
                 ?>
                 <div class="wpc-box-title-right">
+                    <span><?php echo $lastRun; ?></span>
                     <a href="#" class="wps-ic-initial-retest">
                         <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                        Retest
                     </a>
-                    <span><?php echo $lastRun; ?></span>
                 </div>
             <?php } ?>
         </div>

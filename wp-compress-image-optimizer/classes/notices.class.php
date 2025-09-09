@@ -140,7 +140,11 @@ class wps_ic_admin_notice {
               <div style="margin-left:auto">
                 <?php
                 if (!empty($support)) {
-                  echo '<a href="https://wpcompress.com/support" target="_blank" class="button-secondary wpc-notice-link" style="margin-right:5px;">Contact Support</a>';
+	                global $whtlbl;
+	                $support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
+		                ? $whtlbl->author_url
+		                : 'https://www.wpcompress.com/support';
+                  echo '<a href="'.$support_url.'" target="_blank" class="button-secondary wpc-notice-link" style="margin-right:5px;">Contact Support</a>';
                 }
                 if (!empty($info)) {
                   echo '<a href="#" class="wps-ic-fix-notice button-secondary" style="margin-right:5px;" data-tag="' .

@@ -7,8 +7,13 @@ define('WP_COMPRESS_ADVANCED_CACHE', true);
 define('WPC_CACHE_LOGGED_IN', false);
 #WPC_CACHE_LOGGED_IN_END
 
+#WPC_CACHE_COOKIES_START
+define('WPC_CACHE_COOKIES', false);
+#WPC_CACHE_COOKIES_END
+
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';
+
 
 if (version_compare(phpversion(), '7.2', '<')
   || !file_exists($pluginExists)

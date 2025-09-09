@@ -213,7 +213,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
 
         <form method="POST" class="wpc-lite-form"
-              action="<?php echo admin_url('options-general.php?page=' . $gui::$slug); ?>">
+              action="">
             <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
             <!-- Header Start -->
             <div class="wpc-header">
@@ -456,9 +456,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                         </div>
                     </div>
 
-                    <div class="wpc-settings-content-inner" style="display:none;">
-                        <img src="<?php echo WPS_IC_ASSETS . '/images/upgraded.jpg'; ?>" style="max-width:100%" alt="Upgrade is around the corner!"/>
-                    </div>
+
                     <div class="wpc-settings-content-inner">
                         <div class="wpc-rounded-box wpc-rounded-box-half">
                             <div class="wpc-box-title circle no-separator">
@@ -485,14 +483,20 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <?php
                                 if (empty($initialPageSpeedScore) && !empty(get_transient('wpc_test_running')) && !$warmupFailing) {
                                     ?>
+
                                     <span class="wpc-test-in-progress">Running...</span>
+                                    <a href="#" class="wps-ic-initial-retest">
+                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                        Retest
+                                    </a>
                                 <?php } elseif(empty($initialPageSpeedScore) && $warmupFailing){
                                   ?>
                                     <div class="wpc-box-title-right">
+                                        <span class="wpc-test-not-going">Error, connection to API Failed.</span>
                                         <a href="#" class="wps-ic-initial-retest">
                                             <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                            Retest
                                         </a>
-                                        <span class="wpc-test-not-going">Error, connection to API Failed.</span>
                                     </div>
                                 <?php } else {
                                     $date = new DateTime();
@@ -530,10 +534,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
                                         ?>
                                         <div class="wpc-box-title-right">
+                                            <span><?php echo $lastRun; ?></span>
                                             <a href="#" class="wps-ic-initial-retest">
                                                 <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                                Retest
                                             </a>
-                                            <span><?php echo $lastRun; ?></span>
                                         </div>
                                             <?php
                                     } else {
@@ -541,6 +546,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         ?>
                                         <div class="wpc-box-title-right">
                                             <span class="wpc-test-in-progress">Running...</span>
+                                            <a href="#" class="wps-ic-initial-retest">
+                                                <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                                Retest
+                                            </a>
                                         </div>
                                             <?php
                                     }

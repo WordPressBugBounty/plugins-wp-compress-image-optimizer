@@ -254,6 +254,8 @@ jQuery(document).ready(function ($) {
                     RemoveCustomCname();
                 } else if (popupID == 'purge-settings'){
                     purgeSettingsPopup();
+                } else if (popupID == 'cache-cookies'){
+                    cacheCookiesPopup();
                 }
                 else {
                     var popup = $('.swal2-container .ajax-settings-popup');
@@ -497,6 +499,57 @@ jQuery(document).ready(function ($) {
         });
     }
 
+    function cacheCookiesPopup(){
+        var popup = $('.swal2-container .ajax-settings-popup');
+        var form = $('form', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_get_cache_cookies',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
+            if (response.success) {
+
+                // Set the hooks textarea value
+                $('.cache-cookies-textarea-value', popup).val(response.data.cookies);
+
+            }
+            $(content).show();
+            $(loading).hide();
+        });
+
+        saveCacheCookiesPopup(popup);
+    }
+
+    function saveCacheCookiesPopup(popup) {
+        var save = $('.btn-save', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+        var form = $('.wpc-save-popup-data', popup);
+
+        $(save).on('click', function (e) {
+            e.preventDefault();
+            $(content).hide();
+            $(loading).show();
+
+            var setting_name = $('input[type="text"],textarea', popup).data('setting-subset');
+            var cookies = $('.cache-cookies-textarea-value', popup).val();
+
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_save_cache_cookies_settings',
+                cookies: cookies,
+                setting_name: setting_name,
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, function (response) {
+                if (response.success){
+                    WPCSwal.close();
+                }
+            });
+
+            return false;
+        });
+    }
 
     //Export button
     $('#wpc-export-button').on('click', function(e) {

@@ -34,6 +34,14 @@ if (!empty($_GET['debug_img'])) {
     die();
 }
 
+if (!empty($_POST['elementor_skip_sections'])) {
+	$skipSections = array(
+		'desktop' => intval($_POST['elementor_skip_desktop']),
+		'mobile' => intval($_POST['elementor_skip_mobile'])
+	);
+	update_option('wps_ic_elementor_skip_sections', $skipSections);
+}
+
 //list of api endpoints
 $servers = ['auto' => 'Auto', 'vancouver.zapwp.net' => 'Canada', 'nyc.zapwp.net' => 'New York', 'la2.zapwp.net' => 'LA2', 'singapore.zapwp.net' => 'Singapore', 'dallas.zapwp.net' => 'Dallas', 'sydney.zapwp.net' => 'Sydney', 'india.zapwp.net' => 'India', 'frankfurt.zapwp.net' => 'Germany'];
 
@@ -641,6 +649,30 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $settings['cache_refresh_time']; ?>">
                 <input type="submit" value="Save cache refresh" name="save" class="button-primary"
                        style="float:right">
+            </form>
+        </td>
+    </tr>
+    <tr>
+        <td>Elementor Skip Sections</td>
+        <td colspan="3">
+            <form method="post" action="<?php echo admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool'); ?>">
+			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
+                <p>Configure how many Elementor sections to skip before applying lazy loading/optimization.</p>
+
+			    <?php $skipSections = get_option('wps_ic_elementor_skip_sections', []); ?>
+
+                <label for="elementor_skip_desktop">Desktop Skip Count:</label>
+                <input type="number" id="elementor_skip_desktop" name="elementor_skip_desktop"
+                       value="<?php echo isset($skipSections['desktop']) ? $skipSections['desktop'] : 5; ?>"
+                       min="0" max="20" style="width: 80px;">
+
+
+                <label for="elementor_skip_mobile">Mobile Skip Count:</label>
+                <input type="number" id="elementor_skip_mobile" name="elementor_skip_mobile"
+                       value="<?php echo isset($skipSections['mobile']) ? $skipSections['mobile'] : 5; ?>"
+                       min="0" max="20" style="width: 80px;">
+
+                <input type="submit" name="elementor_skip_sections" value="Save Skip Settings" class="button-primary" style="float:right;">
             </form>
         </td>
     </tr>

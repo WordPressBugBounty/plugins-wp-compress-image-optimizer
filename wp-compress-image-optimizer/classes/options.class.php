@@ -14,8 +14,8 @@ class wps_ic_options
     public static $safeSettings;
     public static $preloadSettings;
     public $purgeList;
-
-		public static $purgeRules;
+    public static $purgeRules;
+    public static $cacheCookies;
 
     public function __construct()
     {
@@ -89,13 +89,13 @@ class wps_ic_options
             'scripts-to-footer' => 0,
             'inline-js' => 0,
             'cache' => [ 'advanced'              => 1,
-                         'mobile'                => 0,
-                         'minify'                => 0,
-                         'expire'                => 0,
-                         'ignore-server-control' => 1,
-                         'cache-logged-in'       => 0,
-                         'headers'               => 0,
-                         'purge-hooks'           => 1
+                'mobile'                => 0,
+                'minify'                => 0,
+                'expire'                => 0,
+                'ignore-server-control' => 1,
+                'cache-logged-in'       => 0,
+                'headers'               => 0,
+                'purge-hooks'           => 1
             ],
             'local' => ['media-library' => 0],
             'status' => [
@@ -162,13 +162,14 @@ class wps_ic_options
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
             'cache' => [ 'advanced'              => 0,
-                         'mobile'                => 0,
-                         'minify'                => 0,
-                         'expire'                => 0,
-                         'ignore-server-control' => 0,
-                         'cache-logged-in'       => 0,
-                         'headers'               => 0,
-                         'purge-hooks'           => 1
+                'mobile'                => 0,
+                'minify'                => 0,
+                'expire'                => 0,
+                'ignore-server-control' => 0,
+                'cache-logged-in'       => 0,
+                'headers'               => 0,
+                'purge-hooks'           => 1,
+                'cookies'               => 0
             ],
             'local' => ['media-library' => '0'],
             'status' => [
@@ -229,13 +230,14 @@ class wps_ic_options
             'scripts-to-footer' => '0',
             'inline-js' => '0',
             'cache' => [ 'advanced'              => '1',
-                         'mobile'                => '1',
-                         'minify'                => '0',
-                         'expire'                => 24,
-                         'ignore-server-control' => '1',
-                         'cache-logged-in'       => '1',
-                         'headers'               => 0,
-                         'purge-hooks'           => 1
+                'mobile'                => '1',
+                'minify'                => '0',
+                'expire'                => 24,
+                'ignore-server-control' => '1',
+                'cache-logged-in'       => '1',
+                'headers'               => 0,
+                'purge-hooks'           => 1,
+                'cookies'               => 1
             ],
             'local' => ['media-library' => '0'],
             'status' => [
@@ -306,13 +308,14 @@ class wps_ic_options
             'lazySkipCount' => '4',
             'disable-trigger-dom-event' => '0',
             'cache' => [ 'advanced'              => 1,
-                         'mobile'                => 0,
-                         'minify'                => 0,
-                         'expire'                => 0,
-                         'ignore-server-control' => 1,
-                         'cache-logged-in'       => 0,
-                         'headers'               => 0,
-                         'purge-hooks'           => 1
+                'mobile'                => 0,
+                'minify'                => 0,
+                'expire'                => 0,
+                'ignore-server-control' => 1,
+                'cache-logged-in'       => 0,
+                'headers'               => 0,
+                'purge-hooks'           => 1,
+                'cookies'               => 1
             ],
             'local' => ['media-library' => 0],
             'status' => [
@@ -324,28 +327,53 @@ class wps_ic_options
             'hide_compress' => '0',
             'preload-scripts' => '1',
             'fetchpriority-high' => '1',
-            'preload-crit-fonts' => '0',
+            'preload-crit-fonts'    => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0'
         ];
 
-				$this::$purgeRules = ['post-publish' => ['all-pages' => 0,
-				                                         'home-page' => 1,
-				                                         'recent-posts-widget' => 1,
-				                                         'archive-pages' => 1],
-				                      'hooks' => ['switch_theme',
-				                                  'add_link',
-				                                  'edit_link',
-				                                  'delete_link',
-				                                  'update_option_sidebars_widgets',
-				                                  'update_option_category_base',
-				                                  'update_option_tag_base',
-				                                  'wp_update_nav_menu',
-				                                  'permalink_structure_changed',
-				                                  'customize_save',
-				                                  'update_option_theme_mods_' . get_option( 'stylesheet', ''),
-					                                'elementor/core/files/clear_cache']
-				];
+        $this::$purgeRules = [
+            'post-publish' => [
+                'all-pages'           => 0,
+                'home-page'           => 1,
+                'recent-posts-widget' => 1,
+                'archive-pages'       => 1
+            ],
+            'hooks'        => [
+                'switch_theme',
+                'add_link',
+                'edit_link',
+                'delete_link',
+                'update_option_sidebars_widgets',
+                'update_option_category_base',
+                'update_option_tag_base',
+                'wp_update_nav_menu',
+                'permalink_structure_changed',
+                'customize_save',
+                'update_option_theme_mods_' . get_option('stylesheet', ''),
+                'elementor/core/files/clear_cache'
+            ]
+        ];
+
+        $this::$cacheCookies = [
+            'cookies' => [
+                'cookie_notice_accepted',
+                'allowed_cookies',
+                'consent_types',
+                'catAccCookies',
+                'aelia_cs_recalculate_cart_totals',
+                'aelia_cs_selected_currency',
+                'aelia_customer_country',
+                'aelia_customer_state',
+                'aelia_tax_exempt',
+                'wcml_client_currency',
+                'wcml_client_currency_language',
+                'wcml_client_country',
+                'geot_rocket_',
+                'pll_language',
+                'yith_wcmcs_currency'
+            ]
+        ];
 
         return $this;
     }
@@ -371,9 +399,12 @@ class wps_ic_options
             case 'preload':
                 $settings = $this->getPreloadSettings();
                 break;
-		        case 'purge_rules':
-								$settings = self::$purgeRules;
-								break;
+            case 'purge_rules':
+                $settings = self::$purgeRules;
+                break;
+            case 'cache_cookies':
+                $settings = self::$cacheCookies;
+                break;
         }
 
         return $settings;
@@ -389,7 +420,7 @@ class wps_ic_options
         $preloadSettings['css_combine'] = 0;
         $preloadSettings['inline-css'] = 0;
         $preloadSettings['delay-js'] = 0;
-	      $preloadSettings['delay-js-v2'] = 0;
+        $preloadSettings['delay-js-v2'] = 0;
         $preloadSettings['inline-js'] = 0;
 
         if (!empty($connectivityStatus) && $connectivityStatus == 'failed') {

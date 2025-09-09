@@ -26,6 +26,8 @@ class wpc_ic_delivery
         }
 
         if (empty($_GET['imageID']) && empty($_POST['imageID']) && empty($_POST['images']) && empty($_GET['images']) && empty($_POST['getImageByID']) && empty($_GET['getImageByID']) && empty($_GET['getAllImages'])) {
+            var_dump($_POST);
+            var_dump($_GET);
             wp_send_json_error('images-array-empty');
         }
 

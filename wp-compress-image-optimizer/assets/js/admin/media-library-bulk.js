@@ -148,6 +148,7 @@ jQuery(document).ready(function ($) {
 
                     if (response.data.status == 'parsing') {
                         // Nothing...
+                        $('.wpc-preparing-message').html(response.data.message);
                     } else if (response.data.status == 'done') {
                         $('.wps-ic-stop-bulk-restore').hide();
                         $('.wps-ic-stop-bulk-compress').hide();
@@ -244,11 +245,13 @@ jQuery(document).ready(function ($) {
 
                     if (response.data.status == 'parsing') {
                         // Nothing...
+
+                        $('.wpc-preparing-message').html(response.data.message);
+
                     } else if (response.data.status != 'done') {
                         $('.bulk-compress-status-progress-prepare').hide();
                         $('.bulk-preparing-placholders').hide();
                         $('.bulk-preparing-optimize').hide();
-                        $('.bulk-compress-status-progress-prepare').hide();
                         $('.bulk-status-settings').html(response.data.status).fadeIn(300);
                         $('.bulk-status').html(response.data.html);
                         $('.bulk-process-file-name').html(response.data.lastFileName);
@@ -273,6 +276,9 @@ jQuery(document).ready(function ($) {
                                     type: 'compress'
                                 },
                                 success: function (response) {
+                                    $('.bulk-preparing-optimize').hide();
+                                    $('.bulk-compress-status-progress-prepare').hide();
+                                    $('.bulk-compress-status-progress').hide();
                                     $('.bulk-status-progress-bar').hide();
                                     $('.wps-ic-stop-bulk-compress').hide();
                                     $('.bulk-status-settings').hide();

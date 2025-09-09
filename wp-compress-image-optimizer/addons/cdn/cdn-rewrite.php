@@ -312,7 +312,7 @@ class wps_cdn_rewrite
             return print_r([$url, $formatted_url], true);
         }
 
-        if (!empty(self::$cdnEnabled) && self::$cdnEnabled == '1') {
+        //if (!empty(self::$cdnEnabled) && self::$cdnEnabled == '1') {
             if (self::$randomHash == 0 && strpos($formatted_url, '.css') !== false) {
                 $formatted_url .= '?icv=' . WPS_IC_HASH;
             }
@@ -324,7 +324,7 @@ class wps_cdn_rewrite
             if (self::$randomHash != 0) {
                 return $formatted_url . '?icv_random=' . self::$randomHash;
             }
-        }
+        //}
 
         return $formatted_url;
     }
@@ -1136,21 +1136,21 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-	                    if ( ! empty( $criticalCSSExists ) ) {
-		                    $html = self::$rewriteLogic->addCritical( $html );
-		                    if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
-			                    $html = self::$rewriteLogic->lazyCSS( $html );
-		                    }
-	                    } else {
-		                    //this way should be ok for multisite
-	                    }
+                        if ( ! empty( $criticalCSSExists ) ) {
+                            $html = self::$rewriteLogic->addCritical( $html );
+                            if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
+                                $html = self::$rewriteLogic->lazyCSS( $html );
+                            }
+                        } else {
+                            //this way should be ok for multisite
+                        }
                     }
                 }
             }
         }
 
-	      // Theme Integrations
-	      $html = self::$themeIntegrations->getIntegration($html);
+        // Theme Integrations
+        $html = self::$themeIntegrations->getIntegration($html);
 
         //Delay JS
         if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
@@ -1971,6 +1971,7 @@ class wps_cdn_rewrite
 
         $allowLive = get_option('wps_ic_allow_live');
 
+
         self::$cdnEnabled = self::$settings['live-cdn'];
         if ((isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '0') || !$allowLive) {
             self::$cdnEnabled = 0;
@@ -2264,6 +2265,7 @@ class wps_cdn_rewrite
             self::$cdnEnabled = 0;
         }
 
+
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
 
@@ -2285,6 +2287,7 @@ class wps_cdn_rewrite
 
             add_action("wp_head", [$this, 'dnsPrefetch'], 0);
         } else {
+
             // Local Mode
             if (self::dontRunif()) {
 //                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine')))) {
@@ -2297,7 +2300,7 @@ class wps_cdn_rewrite
                 }
 
                 if (self::$js == "1") {
-                    add_filter('script_loader_src', [$this, 'adjust_src_url'], 10, 2);
+                    add_filter('script_loader_src', [$this, 'adjust_src_url'], 10, 3);
                 }
             }
 
@@ -2319,105 +2322,98 @@ class wps_cdn_rewrite
         }
 
         if (!empty($preloads) && is_array($preloads)) {
-            $newPreloads = [];
+            $allPreloadUrls = [];
 
-            // Create a new array
-            if (!empty($preloads['lcp'])) {
-                $newPreloads = ['lcp' => $preloads['lcp']];
+            // Collect all URLs from both lcp and custom arrays
+            if (!empty($preloads['lcp']) && is_array($preloads['lcp'])) {
+                $allPreloadUrls = array_merge($allPreloadUrls, $preloads['lcp']);
             }
 
-            if (!empty($preloads['custom'])) {
-                foreach ($preloads['custom'] as $index => $value) {
-                    $key = 'custom_' . ($index + 1);
-                    $newPreloads[$key] = $value;
-                }
+            if (!empty($preloads['custom']) && is_array($preloads['custom'])) {
+                $allPreloadUrls = array_merge($allPreloadUrls, $preloads['custom']);
             }
 
+            // Process each URL
+            foreach ($allPreloadUrls as $preloadItem) {
+                if (empty($preloadItem)) continue; // Skip empty URLs
 
-            if (!empty($newPreloads)) {
-                foreach ($newPreloads as $key => $preload) {
-                    if (is_array($preload)) {
-                        foreach ($preload as $i => $preloadItem) {
-                            $extra = '';
-                            $type = '';
-                            $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
-                            switch ($ext) {
-                                case 'css':
-                                    $as = 'style';
-                                    $type = 'text/css';
-                                    break;
-                                case 'js':
-                                    $as = 'script';
-                                    $type = 'text/javascript';
-                                    break;
-                                case 'woff':
-                                case 'woff2':
-                                case 'ttf':
-                                case 'otf':
-                                    $extra = 'crossorigin';
-                                    $as = 'font';
-                                    if ($ext == 'woff' || $ext == 'woff2') {
-                                        $type = 'font/woff';
-                                    } else {
-                                        $type = 'font/' . $ext;
-                                    }
-                                    break;
-                                case 'jpg':
-                                case 'jpeg':
-                                case 'png':
-                                case 'gif':
-                                case 'webp':
-                                case 'svg':
-                                    $as = 'image';
-                                    if ($ext == 'jpg' || $ext == 'jpeg') {
-                                        $type = 'image/jpg';
-                                    } else if ($ext == 'gif') {
-                                        $type = 'image/gif';
-                                    } else if ($ext == 'png') {
-                                        $type = 'image/png';
-                                    } else if ($ext == 'webp') {
-                                        $type = 'image/webp';
-                                    } else if ($ext == 'svg') {
-                                        $type = 'image/svg+xml';
-                                    } else if ($ext == 'avif') {
-                                        $type = 'image/avif';
-                                    }
-                                    break;
-                                default:
-                                    $as = '';
-                                    break;
-                            }
+                $extra = '';
+                $type = '';
+                $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
 
-
-                            if (!empty($as)) {
-                                if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
-                                    $alreadyPreloaded[] = esc_url($preloadItem);
-                                    $preloadOutput .= '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
-
-                                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                                        $preloadOutput .= ' fetchpriority="high"';
-                                    }
-
-                                    $preloadOutput .= ' ' . $extra . '>' . "\n";
-                                    $preloadOutputArray[] = $preloadOutput;
-
-                                    if ($output == 'array') {
-                                        $preloadOutput = '';
-                                    }
-                                }
-                            }
-
+                switch ($ext) {
+                    case 'css':
+                        $as = 'style';
+                        $type = 'text/css';
+                        break;
+                    case 'js':
+                        $as = 'script';
+                        $type = 'text/javascript';
+                        break;
+                    case 'woff':
+                    case 'woff2':
+                    case 'ttf':
+                    case 'otf':
+                        $extra = 'crossorigin';
+                        $as = 'font';
+                        if ($ext == 'woff' || $ext == 'woff2') {
+                            $type = 'font/woff';
+                        } else {
+                            $type = 'font/' . $ext;
                         }
+                        break;
+                    case 'jpg':
+                    case 'jpeg':
+                    case 'png':
+                    case 'gif':
+                    case 'webp':
+                    case 'svg':
+                        $as = 'image';
+                        if ($ext == 'jpg' || $ext == 'jpeg') {
+                            $type = 'image/jpeg'; // Fixed: was image/jpg
+                        } else if ($ext == 'gif') {
+                            $type = 'image/gif';
+                        } else if ($ext == 'png') {
+                            $type = 'image/png';
+                        } else if ($ext == 'webp') {
+                            $type = 'image/webp';
+                        } else if ($ext == 'svg') {
+                            $type = 'image/svg+xml';
+                        } else if ($ext == 'avif') {
+                            $type = 'image/avif';
+                        }
+                        break;
+                    default:
+                        $as = '';
+                        break;
+                }
+
+                if (!empty($as)) {
+                    if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
+                        $alreadyPreloaded[] = esc_url($preloadItem);
+                        $preloadOutput = '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+
+                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                            $preloadOutput .= ' fetchpriority="high"';
+                        }
+
+                        $preloadOutput .= ' ' . $extra . '/>' . "\n"; // Fixed: was '>' should be '/>'
+                        $preloadOutputArray[] = $preloadOutput;
                     }
                 }
-
             }
         }
 
         if ($output == 'array') {
             return $preloadOutputArray;
         } else {
-            return $preloadOutput;
+            $finalOutput = '';
+            if (!empty($preloadOutputArray)) {
+                foreach ($preloadOutputArray as $link) {
+                    $finalOutput .= $link;
+                }
+            }
+            return $finalOutput;
         }
     }
 
@@ -2433,108 +2429,98 @@ class wps_cdn_rewrite
         }
 
         if (!empty($preloads) && is_array($preloads)) {
-            $newPreloads = [];
+            $allPreloadUrls = [];
 
-            // Create a new array
-            if (!empty($preloads['lcp'])) {
-                $newPreloads = ['lcp' => $preloads['lcp']];
+            // Collect all URLs from both lcp and custom arrays
+            if (!empty($preloads['lcp']) && is_array($preloads['lcp'])) {
+                $allPreloadUrls = array_merge($allPreloadUrls, $preloads['lcp']);
             }
 
-            if (!empty($preloads['custom'])) {
-                foreach ($preloads['custom'] as $index => $value) {
-                    $key = 'custom_' . ($index + 1);
-                    $newPreloads[$key] = $value;
-                }
+            if (!empty($preloads['custom']) && is_array($preloads['custom'])) {
+                $allPreloadUrls = array_merge($allPreloadUrls, $preloads['custom']);
             }
 
-            if (!empty($newPreloads)) {
-                foreach ($newPreloads as $key => $preload) {
-                    if (is_array($preload)) {
-                        foreach ($preload as $i => $preloadItem) {
-                            $extra = '';
-                            $type = '';
-                            $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
-                            switch ($ext) {
-                                case 'css':
-                                    $as = 'style';
-                                    $type = 'text/css';
-                                    break;
-                                case 'js':
-                                    $as = 'script';
-                                    $type = 'text/javascript';
-                                    break;
-                                case 'woff':
-                                case 'woff2':
-                                case 'ttf':
-                                case 'otf':
-                                    $extra = 'crossorigin';
-                                    $as = 'font';
-                                    if ($ext == 'woff' || $ext == 'woff2') {
-                                        $type = 'font/woff';
-                                    } else {
-                                        $type = 'font/' . $ext;
-                                    }
-                                    break;
-                                case 'jpg':
-                                case 'jpeg':
-                                case 'png':
-                                case 'gif':
-                                case 'webp':
-                                case 'svg':
-                                    $as = 'image';
-                                    if ($ext == 'jpg' || $ext == 'jpeg') {
-                                        $type = 'image/jpg';
-                                    } else if ($ext == 'gif') {
-                                        $type = 'image/gif';
-                                    } else if ($ext == 'png') {
-                                        $type = 'image/png';
-                                    } else if ($ext == 'webp') {
-                                        $type = 'image/webp';
-                                    } else if ($ext == 'svg') {
-                                        $type = 'image/svg+xml';
-                                    } else if ($ext == 'avif') {
-                                        $type = 'image/avif';
-                                    }
-                                    break;
-                                default:
-                                    $as = '';
-                                    break;
-                            }
+            // Process each URL
+            foreach ($allPreloadUrls as $preloadItem) {
+                if (empty($preloadItem)) continue; // Skip empty URLs
 
+                $extra = '';
+                $type = '';
+                $ext = pathinfo($preloadItem, PATHINFO_EXTENSION);
 
-                            if (!empty($as)) {
-                                if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
-                                    $alreadyPreloaded[] = esc_url($preloadItem);
-                                    $preloadOutput .= '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
-
-                                    if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-                                        $preloadOutput .= ' fetchpriority="high"';
-                                    }
-
-                                    $preloadOutput .= ' ' . $extra . '/>';
-
-                                    $preloadOutputArray[] = $preloadOutput;
-                                    $preloadOutput = '';
-                                }
-                            }
-
+                switch ($ext) {
+                    case 'css':
+                        $as = 'style';
+                        $type = 'text/css';
+                        break;
+                    case 'js':
+                        $as = 'script';
+                        $type = 'text/javascript';
+                        break;
+                    case 'woff':
+                    case 'woff2':
+                    case 'ttf':
+                    case 'otf':
+                        $extra = 'crossorigin';
+                        $as = 'font';
+                        if ($ext == 'woff' || $ext == 'woff2') {
+                            $type = 'font/woff';
+                        } else {
+                            $type = 'font/' . $ext;
                         }
+                        break;
+                    case 'jpg':
+                    case 'jpeg':
+                    case 'png':
+                    case 'gif':
+                    case 'webp':
+                    case 'svg':
+                        $as = 'image';
+                        if ($ext == 'jpg' || $ext == 'jpeg') {
+                            $type = 'image/jpeg'; // Fixed: was image/jpg
+                        } else if ($ext == 'gif') {
+                            $type = 'image/gif';
+                        } else if ($ext == 'png') {
+                            $type = 'image/png';
+                        } else if ($ext == 'webp') {
+                            $type = 'image/webp';
+                        } else if ($ext == 'svg') {
+                            $type = 'image/svg+xml';
+                        } else if ($ext == 'avif') {
+                            $type = 'image/avif';
+                        }
+                        break;
+                    default:
+                        $as = '';
+                        break;
+                }
+
+                if (!empty($as)) {
+                    if (!in_array(esc_url($preloadItem), $alreadyPreloaded)) {
+                        $alreadyPreloaded[] = esc_url($preloadItem);
+                        $preloadOutput = '<link rel="preload" href="' . esc_url($preloadItem) . '" as="' . esc_attr($as) . '" type="' . $type . '"';
+
+                        if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
+                            $preloadOutput .= ' fetchpriority="high"';
+                        }
+
+                        $preloadOutput .= ' ' . $extra . '/>';
+                        $preloadOutputArray[] = $preloadOutput;
                     }
                 }
-
             }
         }
 
         if ($output === 'array') {
             return $preloadOutputArray;
         } else {
-            $preloadOutput = '';
+            $finalOutput = '';
             if (!empty($preloadOutputArray)) {
-                foreach ($preloadOutputArray as $i => $link) {
-                    $preloadOutput .= $link;
+                foreach ($preloadOutputArray as $link) {
+                    $finalOutput .= $link;
                 }
             }
-            return $preloadOutput;
+            return $finalOutput;
         }
     }
 
@@ -2736,7 +2722,7 @@ class wps_cdn_rewrite
             $postID = get_queried_object_id();
             $url = get_permalink($postID);
             $url_key = $urlKey->setup($url);
-            $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '2.3', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.50.46', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
             #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
             $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
@@ -3113,14 +3099,14 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-	                    if ( ! empty( $criticalCSSExists ) ) {
-		                    $html = self::$rewriteLogic->addCritical( $html );
-		                    if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
-			                    $html = self::$rewriteLogic->lazyCSS( $html );
-		                    }
-	                    } else {
-		                    //this way should be ok for multisite
-	                    }
+                        if ( ! empty( $criticalCSSExists ) ) {
+                            $html = self::$rewriteLogic->addCritical( $html );
+                            if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
+                                $html = self::$rewriteLogic->lazyCSS( $html );
+                            }
+                        } else {
+                            //this way should be ok for multisite
+                        }
                     }
                 }
             }
@@ -4033,6 +4019,7 @@ class wps_cdn_rewrite
 
     public function replace_source_tags($source)
     {
+		//if any problems with escaping characters, see replace_iframe_tags() and implement the same
         preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
         if (!empty($sourceAtts[1])) {
             $iFrame = '<source';
@@ -4070,47 +4057,83 @@ class wps_cdn_rewrite
         }
     }
 
-    public function replace_iframe_tags($iframe)
-    {
-        if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
-            return $iframe[0];
-        }
+	public function replace_iframe_tags($iframe)
+	{
+		if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
+			return $iframe[0];
+		}
 
+		preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
 
-        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
+		if (!empty($iframeAtts[1])) {
+			$iFrame = '<iframe';
+			$hasClass = false;
 
-        if (!empty($iframeAtts[1])) {
-            $iFrame = '<iframe';
-            $hasClass = false;
+			$attNames = $iframeAtts[1];
+			$attValues = $iframeAtts[3];
 
-            $attNames = $iframeAtts[1];
-            $attValues = $iframeAtts[3];
+			foreach ($attNames as $i => $attName) {
+				if ($attName == 'src') {
+					$attName = 'data-wpc-src';
+					$escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
+				} elseif ($attName == 'class') {
+					$hasClass = true;
+					$attValues[$i] .= ' wpc-iframe-delay';
+					$escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+				} elseif ($attName == 'loading') {
+					$attValues[$i] = 'lazy';
+					$escapedValue = $attValues[$i];
+				} else {
+					$escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+				}
 
-            foreach ($attNames as $i => $attName) {
-                if ($attName == 'src') {
-                    $attName = 'data-wpc-src';
-                } elseif ($attName == 'class') {
-                    $hasClass = true;
-                    $attValues[$i] .= ' wpc-iframe-delay';
-                } elseif ($attName == 'loading') {
-                    $attValues[$i] = 'lazy';
-                }
+				$iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
+			}
 
-                $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
-                $iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
-            }
+			if (!$hasClass) {
+				$iFrame .= ' class="wpc-iframe-delay"';
+			}
 
-            if (!$hasClass) {
-                $iFrame .= ' class="wpc-iframe-delay"';
-            }
+			$iFrame .= '></iframe>';
 
-            $iFrame .= '></iframe>';
+			return $iFrame;
+		} else {
+			return $iframe[0]; // Return original if no attributes found
+		}
+	}
 
-            return $iFrame;
-        } else {
-            return $iframe[0]; // Return original if no attributes found
-        }
-    }
+	private function conditionallyEscapeUrl($url)
+	{
+		// Common patterns that indicate the URL is already encoded
+		$encodedPatterns = [
+			'&amp;',     // & encoded
+			'&#038;',    // WordPress-style & encoding
+			'%20',       // Space encoded
+			'%2C',       // Comma encoded
+			'&quot;',    // Quote encoded
+			'&lt;',      // < encoded
+			'&gt;'       // > encoded
+		];
+
+		foreach ($encodedPatterns as $pattern) {
+			if (strpos($url, $pattern) !== false) {
+				return $url; // Already encoded
+			}
+		}
+
+		// Check for any HTML entity pattern
+		if (preg_match('/&[a-zA-Z0-9#]+;/', $url)) {
+			return $url; // Already encoded
+		}
+
+		// Not encoded, apply escaping only if needed
+		if (strpos($url, '&') !== false || strpos($url, '"') !== false ||
+		    strpos($url, '<') !== false || strpos($url, '>') !== false) {
+			return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+		}
+
+		return $url; // Safe as-is
+	}
 
     public function maybe_addslashes($image, $addslashes = false)
     {
@@ -4248,13 +4271,19 @@ class wps_cdn_rewrite
 
                 $image_tag .= ' data-src="' . $image_source . '"';
 
+
+                $lazyClass = 'wps-ic-local-lazy';
+                if (self::$settings['js'] == 1) {
+                    $lazyClass = 'wps-ic-lazy-image';
+                }
+
                 // If Logo remove wps-ic-lazy-image
                 if (strpos($image_source, 'logo') !== false) {
                     // Image is for logo
-                    $class_Addon .= 'wps-ic-local-lazy wps-ic-logo';
+                    $class_Addon .= $lazyClass . ' wps-ic-logo';
                 } else {
                     // Image is not for logo
-                    $class_Addon .= 'wps-ic-local-lazy wps-ic-lazy-image ';
+                    $class_Addon .= $lazyClass . ' ';
                 }
 
             } else {

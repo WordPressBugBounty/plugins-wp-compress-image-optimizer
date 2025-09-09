@@ -21,6 +21,8 @@ class wps_ic_cache_integrations
             rocket_clean_domain();
         }
 
+		self::wpc_purgeCF(true);
+
         // WP Optimize
         if (class_exists('WP_Optimize')) {
             WP_Optimize()->get_page_cache()->purge();
@@ -103,6 +105,15 @@ class wps_ic_cache_integrations
           $nginx_purger->purge_all();
         }
 
+	    if ( is_plugin_active( 'wp-cloudflare-page-cache/wp-cloudflare-super-page-cache.php' ) ) {
+			if (!empty($url_key)){
+				$key_class = new wps_ic_url_key();
+				$url = $key_class->getUrlFromKey($url_key);
+				do_action('swcfpc_purge_cache', [$url]);
+			} else {
+				do_action('swcfpc_purge_cache');
+			}
+	    }
     }
 
     public static function purgeBreeze()
@@ -255,6 +266,26 @@ class wps_ic_cache_integrations
 				self::purgeAll(false, true);
 				return true;
 		}
+
+	public static function wpc_purgeCF($return = false)
+	{
+		$cfSettings = get_option(WPS_IC_CF);
+
+		if (!empty($cfSettings)) {
+			$zone = $cfSettings['zone'];
+			$cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+			if ($cfapi) {
+				$cfapi->purgeCache($zone);
+				sleep(6);
+			}
+		}
+
+		if ($return) {
+			return true;
+		} else {
+			wp_send_json_success();
+		}
+	}
 
 
 }

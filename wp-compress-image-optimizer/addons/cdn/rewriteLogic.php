@@ -497,6 +497,13 @@ class wps_rewriteLogic
             }
         }
 
+        if ($setting == 'cdn'){
+            // Fast string position check first, then regex if needed
+            // Fix for i0.wp.com etc. image hosting
+            if (strpos($link, '.wp.com') !== false && preg_match('/\bi[0-9a-zA-Z]{1,3}\.wp\.com\b/', $link)) {
+                return true;
+            }
+        }
 
         return false;
     }
@@ -1960,6 +1967,10 @@ SCRIPT;
 
     public function replaceImageTagsDo($image)
     {
+        // Set up local variables at the beginning - don't modify self:: directly
+        $lazyEnabled = self::$lazyEnabled;
+        $adaptiveEnabled = self::$adaptiveEnabled;
+
         //check if relative src and replace with full (may not work for folder installs)
         if (preg_match('/<img[^>]+src="([^"]+)"[^>]*>/i', $image[0], $matches)) {
             $url = $matches[1];
@@ -2032,12 +2043,13 @@ SCRIPT;
 
         //fixes images not loading in shop pagination on some woo themes
         if (strpos($_SERVER['REQUEST_URI'], 'pjax=') !== false) {
-            self::$adaptiveEnabled = '0';
+            $adaptiveEnabled = '0';
         }
 
+        // Update LOCAL variables instead of self::
         if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false || strpos($image[0], 'notlazy') !== false || strpos($image[0], 'nolazy') !== false || strpos($image[0], 'jet-image') !== false) {
-            self::$lazyEnabled = '0';
-            self::$adaptiveEnabled = '0';
+            $lazyEnabled = '0';
+            $adaptiveEnabled = '0';
         }
 
         if (strpos($image[0], 'data:image') !== false || strpos($image[0], 'blank') !== false || strpos($image[0], 'gform_ajax_spinner') !== false || strpos($image[0], 'spinner.svg') !== false) {
@@ -2171,21 +2183,21 @@ SCRIPT;
 
         if (self::$isAmp->isAmp()) {
             $source_svg = $image_source;
-            self::$lazyEnabled = '0';
-            self::$adaptiveEnabled = '0';
+            $lazyEnabled = '0';
+            $adaptiveEnabled = '0';
         }
 
         if (isset($_GET['preload']) && !empty($_GET['preload'])) {
             $source_svg = $image_source;
-            self::$lazyEnabled = '0';
-            self::$adaptiveEnabled = '0';
+            $lazyEnabled = '0';
+            $adaptiveEnabled = '0';
         }
 
         if (!empty($_GET['rl_gallery_no'])) {
             //fix for Responsive Lightbox & Gallery
             $source_svg = $image_source;
-            self::$lazyEnabled = '0';
-            self::$adaptiveEnabled = '0';
+            $lazyEnabled = '0';
+            $adaptiveEnabled = '0';
         }
 
         if (empty($original_img_tag['original_tags']['class']) || !isset($original_img_tag['original_tags']['class'])) {
@@ -2243,7 +2255,7 @@ SCRIPT;
 
 
         // Is LazyLoading enabled in the plugin?
-        if (!$isSlider && !empty(self::$lazyEnabled) && self::$lazyEnabled == '1' && !self::$lazyOverride) {
+        if (!$isSlider && !empty($lazyEnabled) && $lazyEnabled == '1' && !self::$lazyOverride) {
             // if image is logo, then force image url - no lazy loading
             if ($isLogo) {
                 // TODO: This is a fix for logo not being on CDN
@@ -2286,7 +2298,7 @@ SCRIPT;
             }
         } else {
             // We enter this if "isLOGO" == true because of lazy disabled
-            if (!$isSlider && !empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') {
+            if (!$isSlider && !empty($adaptiveEnabled) && $adaptiveEnabled == '1') {
                 $original_img_tag['src'] = $source_svg;
                 $original_img_tag['additional_tags']['class'] = 'wps-ic-cdn';
 
@@ -2351,14 +2363,14 @@ SCRIPT;
         }
 
 
-        if (self::$adaptiveEnabled == '0') {
+        if ($adaptiveEnabled == '0') {
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
         }
 
 
         if (!empty($_GET['dbg_tag'])) {
-            return print_r(['$isLogo' => $isLogo, 'skipLazy' => $skipLazy, 'adaptiveEnabled' => self::$adaptiveEnabled, '$lazyLoadedImages' => self::$lazyLoadedImages, '$lazyLoadedImagesLimit' => self::$lazyLoadedImagesLimit, '$lazyEnabled' => self::$lazyEnabled, '$nativeLazyEnabled' => self::$nativeLazyEnabled, '$isSlider' => $isSlider, '$original_img_tag' => $original_img_tag], true);
+            return print_r(['$isLogo' => $isLogo, 'skipLazy' => $skipLazy, 'adaptiveEnabled' => $adaptiveEnabled, '$lazyLoadedImages' => self::$lazyLoadedImages, '$lazyLoadedImagesLimit' => self::$lazyLoadedImagesLimit, '$lazyEnabled' => $lazyEnabled, '$nativeLazyEnabled' => self::$nativeLazyEnabled, '$isSlider' => $isSlider, '$original_img_tag' => $original_img_tag], true);
         }
 
         // PerfMatters Fix for lazy loading
@@ -2386,6 +2398,8 @@ SCRIPT;
 
         // Patch, remove things
         unset($original_img_tag['original_tags']['fetchpriority'], $original_img_tag['original_tags']['decoding']);
+        // Unset bricks attribute
+        unset($original_img_tag['original_tags']['data-bricks-logo']);
 
 
         //Is native lazy enabled?
@@ -2430,7 +2444,7 @@ SCRIPT;
          * Is this image lazy excluded?
          */
 
-        if (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1') {
+        if (!empty($lazyEnabled) && $lazyEnabled == '1') {
             if (self::$excludes_class->isLazyExcluded($image_source, $original_img_tag['original_tags']['class'])) {
                 //Don't add anything if lazy load is off
                 $original_img_tag['src'] = $image_source;
@@ -2439,7 +2453,7 @@ SCRIPT;
 
         if ($isLogo || !empty(self::$removeSrcset) && self::$removeSrcset == '1') {
             unset($original_img_tag['original_tags']['srcset'], $original_img_tag['original_tags']['data-srcset']);
-        } elseif (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1' && !$skipLazy) {
+        } elseif (!empty($lazyEnabled) && $lazyEnabled == '1' && !$skipLazy) {
             if (!empty($original_img_tag['original_tags']['srcset']) && strpos($original_img_tag['original_tags']['srcset'], 'lazy') === false && strpos($original_img_tag['original_tags']['srcset'], 'placeholder') === false) {
                 $build_image_tag .= 'data-srcset="' . $original_img_tag['original_tags']['srcset'] . '" ';
             } else if (!empty($original_img_tag['original_tags']['data-srcset'])) {
@@ -2453,7 +2467,7 @@ SCRIPT;
         }
 
         if (!empty($_GET['test_adaptive'])) {
-            if (!empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') {
+            if (!empty($adaptiveEnabled) && $adaptiveEnabled == '1') {
                 $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
                 $original_img_tag['original_tags']['data-src'] = $source_svg;
             }
@@ -2463,7 +2477,7 @@ SCRIPT;
         if (empty(self::$removeSrcset)) {
             $srcSetTag = 'srcset';
 
-            if ((!empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') || (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1')) {
+            if ((!empty($adaptiveEnabled) && $adaptiveEnabled == '1') || (!empty($lazyEnabled) && $lazyEnabled == '1')) {
                 if (!$skipLazy) {
                     $srcSetTag = 'data-srcset';
                 }
@@ -2495,16 +2509,16 @@ SCRIPT;
             $build_image_tag .= 'src="' . $logoSrc . '" ';
         } else {
             /*
-               * if data-src is not empty then we have src as SVG
-               */
-            if (!empty(self::$lazyEnabled) && self::$lazyEnabled == '1') {
+                 * if data-src is not empty then we have src as SVG
+                 */
+            if (!empty($lazyEnabled) && $lazyEnabled == '1') {
                 $build_image_tag .= 'src="' . $original_img_tag['src'] . '" ';
 
                 if (!empty($original_img_tag['data-src'])) {
                     $build_image_tag .= 'data-src="' . $original_img_tag['data-src'] . '" ';
                 }
 
-            } elseif (!empty(self::$adaptiveEnabled) && self::$adaptiveEnabled == '1') {
+            } elseif (!empty($adaptiveEnabled) && $adaptiveEnabled == '1') {
                 $build_image_tag .= 'src="' . $original_img_tag['src'] . '" ';
 
                 if (!empty($original_img_tag['data-src'])) {
@@ -2742,6 +2756,11 @@ SCRIPT;
 
                 // Inject the previously found 480, if max-width bigger than 480
                 if (!empty($maxWidthMatches[1]) && $maxWidthMatches[1] >= 480) {
+                    $webp = '/wp:' . self::$webp;
+                    if (self::isExcludedFrom('webp', $srcset_url)) {
+                        $webp = '';
+                    }
+
                     if (!empty($img480)) {
                         $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:400/u:' . self::reformatUrl($img480) . ' 480w, ';
                     } else if (!empty($original_img_tag['original_src'])) {

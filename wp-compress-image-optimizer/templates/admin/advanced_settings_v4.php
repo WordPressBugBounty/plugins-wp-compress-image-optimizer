@@ -959,7 +959,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             ?>
                                         </div>
 
-                                        <div class="wpc-items-list-row mb-0">
+                                        <div class="wpc-items-list-row mb-20">
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Cache Headers', 'Enable caching of custom headers.', '', '', ['cache', 'headers'], $cacheLocked, '', '');
@@ -969,6 +969,14 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4('Purge Cache on Update', 'Purge all cache on plugin, theme, core or menu updates. Purge individual posts and pages on edit.', '', '', ['cache', 'purge-hooks'], $cacheLocked, '', 'purge-settings');
                                             ?>
 
+
+                                        </div>
+
+                                        <div class="wpc-items-list-row mb-0">
+
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Cache Cookies', 'Serve different cache based on cookie values.', '', '', ['cache', 'cookies'], $cacheLocked, '', 'cache-cookies');
+                                            ?>
 
                                         </div>
 
@@ -1159,7 +1167,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                 false, false, 'preload-scripts', false, 'right',
                                                 false, false, '', false);
                                             */
-                                             ?>
+                                            ?>
 
 
                                             <?php
@@ -1702,5 +1710,6 @@ include 'partials/popups/css/inline-css.php';
 include 'partials/popups/exclude-simple-caching.php';
 include 'partials/popups/exclude-advanced-caching.php';
 include 'partials/popups/purge-settings.php';
+include 'partials/popups/cache-cookies.php';
 
 include 'partials/popups/import-export.php';

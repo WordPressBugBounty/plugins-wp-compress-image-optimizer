@@ -37,7 +37,25 @@ class wps_cacheHtml
 
         }
 
-        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . '/';
+        $cookie_string = '';
+        if (!empty($this->options['cache']['cookies']) && $this->options['cache']['cookies'] == 1){
+            $cookies_setting = get_option('wps_ic_cache_cookies', []);
+            if (!empty($cookies_setting) && !empty($cookies_setting['cookies'])){
+                $cookie_values = [];
+
+                foreach ($cookies_setting['cookies'] as $cookie_name) {
+                    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
+                        $cookie_values[] = $_COOKIE[$cookie_name];
+                    }
+                }
+
+                if (!empty($cookie_values)) {
+                    $cookie_string = '_' . implode('_', $cookie_values);
+                }
+            }
+        }
+
+        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string .'/';
     }
 
     /**
@@ -296,10 +314,10 @@ class wps_cacheHtml
 
         //page type checks for cache
         $purge_rules = get_option('wps_ic_purge_rules');
-		    if (!isset($purge_rules['post-publish'])){
-					$options = new wps_ic_options();
-			    $purge_rules = $options->get_preset('purge_rules');
-		    }
+        if (!isset($purge_rules['post-publish'])){
+            $options = new wps_ic_options();
+            $purge_rules = $options->get_preset('purge_rules');
+        }
         $type_lists = [];
         if (!empty($purge_rules['type-lists'])) {
             $type_lists = $purge_rules['type-lists'];
@@ -335,19 +353,19 @@ class wps_cacheHtml
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
         }
 
-				if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1'){
-					$headers = array();
+        if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1'){
+            $headers = array();
 
-					foreach (headers_list() as $header) {
-						$parts = explode(':', $header, 2);
-						if (count($parts) == 2) {
-							$headers[trim($parts[0])] = trim($parts[1]);
-						}
-					}
+            foreach (headers_list() as $header) {
+                $parts = explode(':', $header, 2);
+                if (count($parts) == 2) {
+                    $headers[trim($parts[0])] = trim($parts[1]);
+                }
+            }
 
-					$headersJson = json_encode($headers);
-					file_put_contents($this->cachePath . 'headers.json', $headersJson);
-				}
+            $headersJson = json_encode($headers);
+            file_put_contents($this->cachePath . 'headers.json', $headersJson);
+        }
 
         if (function_exists('gzencode')) {
             $this->saveGzCache($buffer, $prefix);
@@ -575,18 +593,18 @@ class wps_cacheHtml
         if (is_dir($folder)) rmdir($folder);
     }
 
-		private function getAllHeaders() {
-				$headers = array();
-				foreach ($_SERVER as $name => $value) {
-						if (substr($name, 0, 5) == 'HTTP_') {
-								$name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))));
-								$headers[$name] = $value;
-						} elseif ($name == 'CONTENT_TYPE' || $name == 'CONTENT_LENGTH') {
-								$name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $name))));
-								$headers[$name] = $value;
-						}
-				}
-				return $headers;
-		}
+    private function getAllHeaders() {
+        $headers = array();
+        foreach ($_SERVER as $name => $value) {
+            if (substr($name, 0, 5) == 'HTTP_') {
+                $name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))));
+                $headers[$name] = $value;
+            } elseif ($name == 'CONTENT_TYPE' || $name == 'CONTENT_LENGTH') {
+                $name = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $name))));
+                $headers[$name] = $value;
+            }
+        }
+        return $headers;
+    }
 
 }

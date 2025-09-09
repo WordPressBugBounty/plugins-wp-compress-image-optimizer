@@ -6,6 +6,7 @@ class wps_ic_url_key
     public $url;
     public $trp_active;
     public $trp_settings;
+	private static $url_mappings = [];
 
     public function __construct()
     {
@@ -22,6 +23,8 @@ class wps_ic_url_key
         if ($url == '') {
             $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
         }
+
+	    $original_url = $url;
 
         $url = str_replace(['https://', 'http://'], '', $url);
         $url = rtrim($url, '?');
@@ -43,6 +46,9 @@ class wps_ic_url_key
         $url = str_replace(['&'], '_', $url);
 
         $this->urlKey = $this->createUrlKey($url);
+
+	    // Store the mapping
+	    self::$url_mappings[$this->urlKey] = $original_url;
 
         return $this->urlKey;
     }
@@ -359,4 +365,9 @@ class wps_ic_url_key
     {
         return ['lang', 'wpc_visitor_mode'];
     }
+
+	public static function getUrlFromKey($url_key)
+	{
+		return isset(self::$url_mappings[$url_key]) ? self::$url_mappings[$url_key] : '';
+	}
 }

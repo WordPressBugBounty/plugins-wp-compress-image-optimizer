@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.49';
+        self::$version = '6.50.53';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -121,10 +121,6 @@ class wps_ic
 		    echo json_encode( [ 'message' => 'Connectivity Test passed.' ] );
 		    die();
 	    }
-
-        // Critical API
-        $this->fetchCritical();
-        $this->fetchPageSpeed();
 
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
@@ -969,6 +965,13 @@ class wps_ic
                     update_option('wps_ic_purge_rules', $purge_rules);
                 }
 
+                $cache_cookies = get_option('wps_ic_cache_cookies');
+
+                if ($cache_cookies === false){
+                    $cache_cookies = $options->get_preset('cache_cookies');
+                    update_option('wps_ic_cache_cookies', $cache_cookies);
+                }
+
                 if (!file_exists(WPS_IC_DIR . 'cache')) {
                     // Folder does not exist
                     mkdir(WPS_IC_DIR . 'cache', 0755);
@@ -1185,11 +1188,14 @@ class wps_ic
      */
     public function init()
     {
-
         if (!is_admin()) {
             // Raise memory limit
             ini_set('memory_limit', '1024M');
         }
+
+	    // Critical API
+	    $this->fetchCritical();
+	    $this->fetchPageSpeed();
 
         /**
          * Force Show WP Compress
@@ -1246,7 +1252,7 @@ class wps_ic
             self::$local = new wps_local_compress();
         }
 
-        if (is_admin() && current_user_can('manage_options')) {
+        if (is_admin()) {
             if (!empty($_GET['remove_key'])) {
                 $options = get_option(WPS_IC_OPTIONS);
                 $options['api_key'] = '';
@@ -1356,69 +1362,8 @@ class wps_ic
             die('Test done?');
         }
 
-        if (!empty($_GET['getAllImages'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery();
-            wp_send_json_success($delivery->getImageList());
-            die();
-        }
-
-        if (!empty($_POST['getImageByID']) || !empty($_GET['getImageByID'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery();
-            $delivery->getImageByID();
-            die();
-        }
 
 
-        if (!empty($_POST['deliverSingleImage']) || !empty($_GET['deliverSingleImage'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery('single');
-            $delivery->compress();
-            die();
-        }
-
-        if (!empty($_GET['deliverBulk']) && $_GET['deliverBulk'] == 'true') {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery('multi');
-            $delivery->compress();
-            die();
-        }
-
-        if (!empty($_GET['deliverBulk']) && $_GET['deliverBulk'] == 'false') {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery('single');
-            $delivery->compress();
-            die();
-        }
-
-        if (!empty($_GET['restoreImage'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery();
-            $delivery->restoreImage();
-            die();
-        }
-
-        if (!empty($_GET['endBulk'])) {
-            set_transient('wps_ic_bulk_done', true, 60);
-            delete_option('wps_ic_bulk_process');
-            delete_transient('wps_ic_stuck_check');
-            die();
-        }
-
-        if (!empty($_POST['deliverImages']) || !empty($_GET['deliverImages'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery();
-            $delivery->compress();
-            die();
-        }
-
-        if (!empty($_POST['restoreImages']) || !empty($_GET['restoreImages'])) {
-            include_once 'addons/local/delivery.php';
-            $delivery = new wpc_ic_delivery();
-            $delivery->restore();
-            die();
-        }
         /***
          * End Local Remote Hooks
          */
@@ -2002,6 +1947,12 @@ class wps_ic
                 $htacces->removeHtaccessRules();
             }
 
+            if (!empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
+                $htacces->addWebpReplace();
+            } else {
+                $htacces->removeWebpReplace();
+            }
+
             // Add WP_CACHE to wp-config.php
             $htacces->setWPCache(true);
             $htacces->setAdvancedCache();
@@ -2114,6 +2065,9 @@ class wps_ic
     public function inFrontEnd()
     {
         add_action('wp', [$this, 'do_enqueues']);
+
+        $local = new wps_local_compress();
+        $local->routes();
 
 
         /**
@@ -2621,3 +2575,9 @@ function wps_ic_check_api_credits() {
 }
 
 add_action('plugins_loaded', 'wps_ic_check_api_credits', PHP_INT_MAX);
+
+add_action('rest_api_init', function () {
+    // Rest API
+    $local = new wps_local_compress();
+    $local->registerEndpoints();
+});

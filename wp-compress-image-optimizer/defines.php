@@ -9,6 +9,28 @@ if (empty($_GET['min_debug'])) {
   define('WPS_IC_MIN', ''); // .min => script.min.js
 }
 
+// Local API
+$dev = false;
+if ($dev) {
+    define('WPC_IC_LOCAL_BULK_START', 'https://local-dev.zapwp.net/bulk-start');
+    define('WPC_IC_LOCAL_BULK_RUN', 'https://local-dev.zapwp.net/process');
+    define('WPC_IC_LOCAL_BULK_STOP', 'https://local-dev.zapwp.net/stop');
+    define('WPC_IC_LOCAL_BULK_RESTORE_START', 'https://local-dev.zapwp.net/bulk-restore-start');
+    define('WPC_IC_LOCAL_BULK_RESTORE_RUN', 'https://local-dev.zapwp.net/bulk-restore-process');
+    define('WPC_IC_LOCAL_OPTIMIZE', 'https://local-dev.zapwp.net/optimize');
+    define('WPC_IC_LOCAL_RESTORE', 'https://local-dev.zapwp.net/restore');
+    define('WPC_IC_LOCAL_DOWNLOAD', 'https://local-dev.zapwp.net/download');
+} else {
+    define('WPC_IC_LOCAL_BULK_START', 'https://local-api.zapwp.net/bulk-start');
+    define('WPC_IC_LOCAL_BULK_RUN', 'https://local-api.zapwp.net/process');
+    define('WPC_IC_LOCAL_BULK_STOP', 'https://local-api.zapwp.net/stop');
+    define('WPC_IC_LOCAL_BULK_RESTORE_START', 'https://local-api.zapwp.net/bulk-restore-start');
+    define('WPC_IC_LOCAL_BULK_RESTORE_RUN', 'https://local-api.zapwp.net/bulk-restore-process');
+    define('WPC_IC_LOCAL_OPTIMIZE', 'https://local-api.zapwp.net/optimize');
+    define('WPC_IC_LOCAL_RESTORE', 'https://local-api.zapwp.net/restore');
+    define('WPC_IC_LOCAL_DOWNLOAD', 'https://local-api.zapwp.net/download');
+}
+
 define('WPS_IC_CF', 'wps-ic-cf');
 define('WPS_IC_GB', 1000000000);
 define('WPC_IC_CACHE_EXPIRE', 86400); // 24 hours

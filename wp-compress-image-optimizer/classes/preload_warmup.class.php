@@ -6,6 +6,7 @@ class wps_ic_preload_warmup
     public static $standaloneWarmup;
     public static $apiUrl;
     public static $warmupVersion;
+	public static $criticalCss;
 
     public function __construct()
     {
@@ -135,6 +136,7 @@ class wps_ic_preload_warmup
         $filtered_pages = [];
         $start_index = ($page_number - 1) * 10;
         $end_index = $start_index + 10;
+	    $criticalCss = new wps_criticalCss();
 
         //local addition
         $local = get_option('wpc-connectivity-status');
@@ -200,6 +202,7 @@ class wps_ic_preload_warmup
             $page['preloaded'] = $preloaded;
             $page['critGenerated'] = $critGenerated;
             $page['cacheGenerated'] = $cacheGenerated;
+	        $page['critGenerating'] = $criticalCss->criticalRunning($page['id']) ? '1' : '0';
 
             $optimized = $preloaded === '1';
             $skipped = isset($hasErrorCode) && $hasErrorCode;
@@ -356,7 +359,7 @@ class wps_ic_preload_warmup
     public function getOptimizationsStatus($post_type = ['page', 'post'], $page = 1, $offset = 0, $limit = 10, $search
     = '',                                  $id = 'false')
     {
-
+	    $criticalCss = new wps_criticalCss();
         $runningOther = '0';
 
         if ($id != 'false') {
@@ -464,8 +467,10 @@ class wps_ic_preload_warmup
                 }
             }
 
+	        $critGenerating = $criticalCss->criticalRunning($page['id']) ? '1' : '0';
 
-            $page = array_merge($page, ['cacheGenerated' => $cacheGenerated, 'critGenerated' => $critGenerated, 'preloaded' => $preloaded, 'test' => $test, 'running' => $running, 'runningOther' => $runningOther,], $exclude_array);
+
+            $page = array_merge($page, ['cacheGenerated' => $cacheGenerated, 'critGenerated' => $critGenerated, 'critGenerating' => $critGenerating, 'preloaded' => $preloaded, 'test' => $test, 'running' => $running, 'runningOther' => $runningOther,], $exclude_array);
         }
 
         return $pages;

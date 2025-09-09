@@ -215,6 +215,7 @@ jQuery(document).ready(function ($) {
 
 
     $('#optimizationTable').on('click', '.wpc-dropdown-row-header', function (e) {
+        return;
         if (local === false) {
             // Check if the clicked element or any of its parents has the class .dropdown-item
             if ($(e.target).closest('.dropdown-item').length === 0 && $(e.target).closest('.wpc-test-redo').length === 0 && $(e.target).closest('.per-page-settings-cog').length === 0) {
@@ -647,10 +648,12 @@ jQuery(document).ready(function ($) {
                                                         ${item.title}    
                                                         ${createPreloadStatus(item)}`;
                     if (local === false) {
+                        /*
                         pagesHtml += `<div class="wpc-dropdown-row-arrow">
                                                             <i class="icon-down-open"></i>
                                                     </div>`;
                         pagesHtml += `${createRetestButton(item)}`;
+                        */
                     }
                     pagesHtml += `</div>
                                                     <div class="wpc-dropdown-row-right-side">
@@ -678,7 +681,7 @@ jQuery(document).ready(function ($) {
 
                     if (local === false) {
                         console.log('644');
-                        pagesHtml += insertResultsRow(item)
+                        //pagesHtml += insertResultsRow(item)
                     }
                     pagesHtml += '</div></div>';
                 });
@@ -947,6 +950,9 @@ jQuery(document).ready(function ($) {
             }
         }
         if (settingName === 'critical_css') {
+            if (pageItem.critGenerating == '1'){
+                return 'page_not_generated page_generating';
+            }
             if (pageSetting == '1' && pageItem.critGenerated == '0') {
                 return 'page_not_generated';
             }
@@ -1109,8 +1115,18 @@ jQuery(document).ready(function ($) {
                 <a href="#" class="dropdown-item" data-action="global"><span class="icon global-icon"></span>Global</a>
                 <a href="#" class="dropdown-item wps-ic-exclude-on-pages" data-action="excludes"><span class="icon exclude-icon"></span>Excludes</a>`;
 
-        if ($(this).data('setting_name') === 'critical_css' || $(this).data('setting_name') === 'advanced_cache') {
+        if ($(this).data('setting_name') === 'advanced_cache') {
             dropdownHtml += `<a href="#" class="dropdown-item" data-action="purge"><span class="icon purge-icon"></span>Purge</a>`;
+        }
+
+        if ($(this).data('setting_name') === 'critical_css') {
+            if ($(this).hasClass('page_generating')) {
+                dropdownHtml += `<a href="#" class="dropdown-item" style="pointer-events: none;" data-action="generate"><span class="icon purge-icon"></span>Generating...</a>`;
+            } else if ($(this).data('setting_name') === 'critical_css' && $(this).hasClass('page_not_generated')) {
+                dropdownHtml += `<a href="#" class="dropdown-item" data-action="generate"><span class="icon purge-icon"></span>Generate</a>`;
+            } else {
+                dropdownHtml += `<a href="#" class="dropdown-item" data-action="purge"><span class="icon purge-icon"></span>Purge</a>`;
+            }
         }
 
         dropdownHtml += `</div>`;
