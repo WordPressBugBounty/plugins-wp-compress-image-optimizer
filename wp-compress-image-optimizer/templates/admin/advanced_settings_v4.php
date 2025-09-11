@@ -220,7 +220,7 @@ if (!empty($_POST['options'])) {
     if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
         $htacces->removeWebpReplace();
     } else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
-        $htacces->addWebpReplace();
+        $htacces->removeWebpReplace(); // Should be add webp
     } else {
         $htacces->removeWebpReplace();
     }

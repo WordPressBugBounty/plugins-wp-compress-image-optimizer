@@ -578,8 +578,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     <tr>
         <td>Local server API</td>
         <td colspan="3">
-            <form method="post" action="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
+            <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <label for="server">Server:</label>
                 <select id="server" name="local_server">
@@ -606,8 +605,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     <tr>
         <td>Preloads Desktop</td>
         <td colspan="3">
-            <form method="post" action="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
+            <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <h3>Automatic Preloads found by API (can edit)</h3>
                 <textarea name="preloads_lcp" style="width:100%;height:150px;"><?php
@@ -642,8 +640,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     <tr>
         <td>Cache refresh time (minutes)</td>
         <td colspan="3">
-            <form method="post" action="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool') ?>">
+            <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <input type="text" name="cache_refresh_time" value="<?php echo
                 $settings['cache_refresh_time']; ?>">
@@ -655,7 +652,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     <tr>
         <td>Elementor Skip Sections</td>
         <td colspan="3">
-            <form method="post" action="<?php echo admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool'); ?>">
+            <form method="post" action="">
 			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <p>Configure how many Elementor sections to skip before applying lazy loading/optimization.</p>
 

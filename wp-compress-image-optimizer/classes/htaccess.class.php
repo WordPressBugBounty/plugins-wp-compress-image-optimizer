@@ -781,8 +781,6 @@ HTACCESS;
             require_once ABSPATH . 'wp-admin/includes/misc.php';
         }
 
-        $webpRules = $this->getWebpReplaceRules();
-
         if (!file_exists($this->htaccessPath)) {
             if (!@touch($this->htaccessPath)) {
                 update_option('wpc_htaccess_error', 'Could not create .htaccess. Add the rules manually or make it writable.');
@@ -812,12 +810,10 @@ HTACCESS;
             '#StartWPC-WebP-Replace',
             '<IfModule mod_rewrite.c>',
             'RewriteEngine On',
-            'Options -MultiViews',
             '# Serve existing WebP files for matching JPEG/PNG only when client supports WebP',
             'RewriteCond %{HTTP_ACCEPT} image/webp',
             'RewriteCond %{REQUEST_FILENAME} -f',
-            'RewriteCond %{REQUEST_FILENAME} (.+)\.(?:jpe?g|png)$ [NC]',
-            'RewriteCond %1.webp -f',
+            'RewriteCond %{REQUEST_FILENAME}\.webp -f',
             'RewriteRule ^(.+)\.(?:jpe?g|png)$ $1.webp [L,T=image/webp,E=servewebp:1]',
             '</IfModule>',
             '<IfModule mod_headers.c>',

@@ -12,6 +12,7 @@ class wps_ic_js_delay_v2
 
     public function __construct()
     {
+		$settings = get_option(WPS_IC_SETTINGS);
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode', // dark mode switcher
@@ -21,6 +22,11 @@ class wps_ic_js_delay_v2
           'turnstile', // had delayed loading detection, throws error
           'document.write'
         ];
+
+	    if (isset($settings['gtag-lazy']) && $settings['gtag-lazy'] == '0') {
+		    $this->excludes[] = 'gtag';
+		    $this->excludes[] = 'googletag';
+	    }
 
         $this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
 

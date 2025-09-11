@@ -1197,7 +1197,7 @@ class wps_cdn_rewrite
                 }
 
                 if (!empty($_GET['testGtag'])) {
-                    $html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+                    //$html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
 
                     return print_r([$html], true);
                 }
@@ -3002,7 +3002,7 @@ class wps_cdn_rewrite
 
         if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '1') {
             // TODO: Maybe add something?
-            $html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [$this, 'gtagDelay'], $html);
+            //$html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [$this, 'gtagDelay'], $html);
         }
 
         if (!self::$isAmp->isAmp() && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
@@ -3222,7 +3222,7 @@ class wps_cdn_rewrite
             }
 
             if (!empty($_GET['testGtag'])) {
-                $html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+                //$html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
 
                 return print_r([$html], true);
             }
@@ -3882,6 +3882,9 @@ class wps_cdn_rewrite
         // TODO: We have already delayed things, but speed tests don't recognize it
         $tag = trim($src[0]);
         $srcToLower = strtolower($tag);
+
+	    //This is now done in delayJS class
+	    return $tag;
 
         if (self::$isAmp->isAmp()) {
             return $tag;

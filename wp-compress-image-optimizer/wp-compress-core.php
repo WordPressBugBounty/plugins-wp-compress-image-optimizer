@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.53';
+        self::$version = '6.50.54';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1948,7 +1948,7 @@ class wps_ic
             }
 
             if (!empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
-                $htacces->addWebpReplace();
+                $htacces->removeWebpReplace(); // SHould be addWebP
             } else {
                 $htacces->removeWebpReplace();
             }
