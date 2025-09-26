@@ -302,6 +302,10 @@ jQuery(document).ready(function ($) {
                             } else {
                                 $('.wps-exclude-wp', form).prop("checked", false);
                             }
+
+                            if (response.data.min_mobile_width) {
+                                $('.wps-min-mobile-width', form).val(response.data.min_mobile_width);
+                            }
                         });
 
                     });
@@ -343,7 +347,7 @@ jQuery(document).ready(function ($) {
             var exclude_themes = '0';
             var exclude_plugins = '0';
             var exclude_wp = '0';
-            var exclude_third = '0';
+            var exclude_third = '0'
 
             if( $('.wps-exclude-third', popup).is(':checked') ){
                 exclude_third = 1;
@@ -374,6 +378,9 @@ jQuery(document).ready(function ($) {
                 deferScripts = $('.exclude-list-textarea-value-defer', popup).val();
             }
 
+            var min_mobile_width = $('.wps-min-mobile-width', popup).length > 0 ? $('.wps-min-mobile-width', popup).val() : false;
+
+
             console.log($('.exclude-list-textarea-value', popup).val());
 
             $.post(wpc_ajaxVar.ajaxurl, {
@@ -388,6 +395,7 @@ jQuery(document).ready(function ($) {
                 exclude_plugins: exclude_plugins,
                 exclude_wp: exclude_wp,
                 exclude_third: exclude_third,
+                min_mobile_width: min_mobile_width
             }, function(response) {
                 if (response.success) {
                     WPCSwal.close();

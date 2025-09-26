@@ -220,7 +220,7 @@ if (!empty($_POST['options'])) {
     if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
         $htacces->removeWebpReplace();
     } else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
-        $htacces->removeWebpReplace(); // Should be add webp
+        $htacces->addWebpReplace(); // Should be add webp
     } else {
         $htacces->removeWebpReplace();
     }
@@ -1213,6 +1213,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <div class="wpc-items-list-row mb-20">
                                             <?php
                                             echo $gui::checkboxDescription_v4('Optimize External URLs', '', false, '0', 'external-url', false, 'right', ''); ?>
+
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Optimize metadata images (OG/Twitter/JSON-LD)', '', false, '0', 'optimize_meta_images', false, 'right', ''); ?>
                                         </div>
 
                                     </div>
@@ -1352,6 +1355,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                          data-value="post">Posts
                                                     </div>
                                                     <?php
+                                                    /*
                                                     if ($productsDefined) { ?>
                                                         <div class="dropdown-item icon-products <?php
                                                         if (is_array($optimize) && in_array('product', $optimize)) {
@@ -1359,8 +1363,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                         } ?>"
                                                              data-value="product">Products
                                                         </div>
+
                                                         <?php
-                                                    } ?>
+                                                    } */?>
                                                 </div>
                                             </div>
                                         </div>
@@ -1478,6 +1483,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     <div class="wpc-cf-loader-disconnecting" style="display: none;">
                                                         <span><div class="wpcLoader"></div> Disconnecting, this might take up to 60 seconds....</span>
                                                     </div>
+                                                    <div class="wpc-cf-loader-refreshing" style="display: none;">
+                                                        <span><div class="wpcLoader"></div> Refreshing IP Whitelist, this might take up to 60 seconds....</span>
+                                                    </div>
                                                     <div class="wpc-input-holder-no-change wpc-cf-token-connected">
                                                         <div style="display:flex;align-items: center">
                                                             <label for="wpc-cf-token" style="flex:1;max-width:100px;padding:0;">
@@ -1490,6 +1498,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                     ?>
                                                                 </div>
                                                                 <div class="wpc-cf-token-connected-info-right">
+                                                                    <input type="button" class="wpc-cf-token-refresh-whitelist wpc-cf-button" value="Refresh Whitelist"/>
                                                                     <input type="button" class="wpc-cf-token-disconnect wpc-cf-button" value="Disconnect"/>
                                                                 </div>
                                                             </div>

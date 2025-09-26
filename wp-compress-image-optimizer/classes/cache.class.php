@@ -159,9 +159,10 @@ class wps_ic_cache
                     }
 
                     //Post publish hooks
-                    add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge cache
-                    add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1); //always reset hashes
                     add_action('save_post', ['wps_ic_cache', 'removeCriticalFiles'], 10, 1); //always purge crit
+                    add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1); //always reset hashes
+                    add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge cache
+
                     if (!empty(self::$purge_rules['post-publish'])) {
                         if (!empty(self::$purge_rules['post-publish']['all-pages']) || !empty(self::$purge_rules['post-publish']['home-page']) || !empty(self::$purge_rules['post-publish']['recent-posts-widget']) || !empty(self::$purge_rules['post-publish']['archive-pages'])) {
                             add_action('transition_post_status', ['wps_ic_cache', 'purge_cache_on_post_changes'], 10, 3);

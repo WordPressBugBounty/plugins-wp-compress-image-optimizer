@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.0
 Requires at least: 6.5
 Tested up to: 6.8
-Stable tag: 6.50.54
+Stable tag: 6.50.55
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,17 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.50.55 =
+* Added Purge All for Elementor
+* Force HTTPS for Critical CSS Combined
+* Optimize Metadata on Images Added
+* Added Spectra Purge Hooks
+* Added Min Mobile Image Width Setting
+* GTag Delay Patch
+* Fix for Integration Purging
+* Improved UI
+* Added Additional Settings
 
 = 6.50.54 =
 * Patch for Critical CSS

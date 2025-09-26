@@ -133,6 +133,25 @@ jQuery(document).ready(function ($) {
     });
 
 
+    $('.wpc-cf-token-refresh-whitelist').on('click', function(e){
+        $('.wpc-cf-token-hide-on-load').hide();
+        $('.wpc-cf-token-connected').hide();
+        $('.wpc-cf-loader-disconnecting').hidden();
+        $('.wpc-cf-loader-refreshing').show();
+        $('.wpc-cf-loader-error').hide();
+
+        e.preventDefault();
+        $.post(ajaxurl, {
+            action: 'wpc_ic_refreshCFWhitelist',
+            wps_ic_nonce: ajaxVar.nonce,
+            _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
+        }, function (response) {
+            window.location.reload();
+        });
+        return false;
+    });
+
+
     $('.wpc-save-button').on('click', function (e) {
         $('.save-button').hide();
         $('.wpc-loading-spinner').show();

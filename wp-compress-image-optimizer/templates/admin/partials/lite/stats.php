@@ -126,7 +126,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
 
                 <div class="wpc-pagespeed-running">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                    <span>Usually takes about 2 minutes...</span>
+                    <span>Usually takes about 10 minutes...</span>
                 </div>
             <?php
             } elseif ($warmupFailing){
@@ -143,7 +143,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
 
                 <div class="wpc-pagespeed-running">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                    <span>Usually takes about 2 minutes...</span>
+                    <span>Usually takes about 10 minutes...</span>
                 </div>
             <?php } else {
             /**

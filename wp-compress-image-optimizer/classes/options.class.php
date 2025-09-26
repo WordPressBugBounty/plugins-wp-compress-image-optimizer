@@ -211,7 +211,7 @@ class wps_ic_options
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
-            'disable-dashicons' => 1,
+            'disable-dashicons' => 0,
             'disable-gutenberg' => 0,
             'external-url' => 0,
             'disable-cart-fragments' => 1,
@@ -286,7 +286,7 @@ class wps_ic_options
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
-            'disable-dashicons' => 1,
+            'disable-dashicons' => 0,
             'disable-gutenberg' => 0,
             'external-url' => 0,
             'disable-cart-fragments' => 1,
@@ -351,7 +351,9 @@ class wps_ic_options
                 'permalink_structure_changed',
                 'customize_save',
                 'update_option_theme_mods_' . get_option('stylesheet', ''),
-                'elementor/core/files/clear_cache'
+                'elementor/core/files/clear_cache',
+                'uagb_delete_uag_asset_dir',
+				'uagb_delete_page_assets'
             ]
         ];
 

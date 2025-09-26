@@ -637,23 +637,25 @@ class wps_ic_comms extends wps_ic
     }
 
 
-    public function cnameAdd()
-    {
-        $ajax_class = new wps_ic_ajax();
-        $ajax_class->wps_ic_cname_add();
-    }
+	public function cnameAdd()
+	{
+		$cname_input = !empty($_GET['cname']) ? $_GET['cname'] : null;
 
-    public function cnameRetry()
-    {
-        $ajax_class = new wps_ic_ajax();
-        $ajax_class->wps_ic_cname_retry();
-    }
+		$cname_class = new wps_ic_cname();
+		$cname_class->add($cname_input);
+	}
 
-    public function cnameRemove()
-    {
-        $ajax_class = new wps_ic_ajax();
-        $ajax_class->wps_ic_remove_cname();
-    }
+	public function cnameRetry()
+	{
+		$cname_class = new wps_ic_cname();
+		$cname_class->retry();
+	}
+
+	public function cnameRemove()
+	{
+		$cname_class = new wps_ic_cname();
+		$cname_class->remove();
+	}
 
 	public function settingsCheck()
 	{

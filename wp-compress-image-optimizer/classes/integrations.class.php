@@ -111,7 +111,7 @@ class wps_ic_integrations extends wps_ic
 
     public function getConflicts()
     {
-        return get_option('wps_ic_conflicts', []);;
+        return get_option('wps_ic_conflicts', []);
     }
 
     public function apply_frontend_filters()

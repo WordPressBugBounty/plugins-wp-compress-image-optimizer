@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.54';
+        self::$version = '6.50.55';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1252,18 +1252,6 @@ class wps_ic
             self::$local = new wps_local_compress();
         }
 
-        if (is_admin()) {
-            if (!empty($_GET['remove_key'])) {
-                $options = get_option(WPS_IC_OPTIONS);
-                $options['api_key'] = '';
-                $options['response_key'] = '';
-                $options['orp'] = '';
-                $options['regExUrl'] = '';
-                $options['regexpDirectories'] = '';
-                update_option(WPS_IC_OPTIONS, $options);
-            }
-        }
-
         // Get Options
         $this::$js_debug = get_option('wps_ic_js_debug');
         $this::$settings = get_option(WPS_IC_SETTINGS);
@@ -1948,7 +1936,7 @@ class wps_ic
             }
 
             if (!empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
-                $htacces->removeWebpReplace(); // SHould be addWebP
+                $htacces->addWebpReplace(); // SHould be addWebP
             } else {
                 $htacces->removeWebpReplace();
             }

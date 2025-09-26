@@ -37,25 +37,41 @@ class wps_cacheHtml
 
         }
 
-        $cookie_string = '';
-        if (!empty($this->options['cache']['cookies']) && $this->options['cache']['cookies'] == 1){
-            $cookies_setting = get_option('wps_ic_cache_cookies', []);
-            if (!empty($cookies_setting) && !empty($cookies_setting['cookies'])){
-                $cookie_values = [];
+	    // Add cookie variation to cache path
+	    $cookie_string = '';
+	    if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
+		    $cookie_values = [];
+		    $cache_cookies = WPC_CACHE_COOKIES;
 
-                foreach ($cookies_setting['cookies'] as $cookie_name) {
-                    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
-                        $cookie_values[] = $_COOKIE[$cookie_name];
-                    }
-                }
+		    foreach ($cache_cookies as $cookie_name) {
+			    // Check if this is a prefix cookie (ends with _)
+			    if (substr($cookie_name, -1) === '_') {
+				    // This is a prefix - find all cookies that start with this prefix
+				    $prefix = $cookie_name; // Keep the underscore for matching
+				    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
+					    if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
+						    // Get the suffix (part after the prefix)
+						    $suffix = substr($actual_cookie_name, strlen($prefix));
 
-                if (!empty($cookie_values)) {
-                    $cookie_string = '_' . implode('_', $cookie_values);
-                }
-            }
-        }
+						    // Create a 7-character hash of the suffix and append to cookie value
+						    $suffix_hash = substr(hash('md5', $suffix), 0, 7);
+						    $cookie_values[] = $cookie_value . '_' . $suffix_hash;
+					    }
+				    }
+			    } else {
+				    // Regular cookie - exact match
+				    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
+					    $cookie_values[] = $_COOKIE[$cookie_name];
+				    }
+			    }
+		    }
 
-        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string .'/';
+		    if (!empty($cookie_values)) {
+			    $cookie_string = '_' . implode('_', $cookie_values);
+		    }
+	    }
+
+	    $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
     }
 
     /**
@@ -286,7 +302,7 @@ class wps_cacheHtml
         }
 
         $excludes = get_option('wpc-excludes');
-        $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+	    $url = rtrim($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], '/');
         if (!empty($excludes) && !empty($excludes['cache'])) {
             if (in_array($url, $excludes['cache'])) {
                 return $buffer;

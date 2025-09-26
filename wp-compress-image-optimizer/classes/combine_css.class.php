@@ -835,7 +835,11 @@ class wps_ic_combine_css
 
         if ($this->criticalCombine) {
             foreach ($combined_files as $file) {
-                $url = $this->combined_url_base . basename($file);
+              $url = $this->combined_url_base . basename($file);
+              if (strpos($url, 'http://') !== false) {
+                //force https
+                $url = str_replace('http://', 'https://', $url);
+              }
                 $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash=' . time() . '" type="text/css" media="all">' . PHP_EOL;
             }
 

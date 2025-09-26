@@ -47,6 +47,18 @@
                         </div>
                     </div>
                 </div>
+
+
+            <div class="wps-empty-row">&nbsp;</div>
+
+            <div class="wps-default-excludes-container">
+                Minimum mobile image width <input type="number" value="<?php
+	            $mobile_width = get_option('wpc-min-mobile-width');
+	            echo $mobile_width ? $mobile_width : 400;
+	            ?>" name="min-mobile-width" class="wps-min-mobile-width" style="max-height:30px;margin-left:5px;margin-right:5px;max-width:80px;"> px
+            </div>
+
+             <div class="wps-empty-row">&nbsp;</div>
                 <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
             </form>
         </div>

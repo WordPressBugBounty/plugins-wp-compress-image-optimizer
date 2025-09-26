@@ -12,6 +12,12 @@ class wps_ic_cache_integrations
 
     public static function purgeAll($url_key = false, $varnish = false)
     {
+        //purge all when elementor
+        if (defined('ELEMENTOR_VERSION')){
+            $url_key = false;
+            self::purgeCriticalFiles();
+        }
+
         self::purgeBreeze();
         self::purgeCacheFiles($url_key);
 
@@ -21,7 +27,7 @@ class wps_ic_cache_integrations
             rocket_clean_domain();
         }
 
-		self::wpc_purgeCF(true);
+		    self::wpc_purgeCF(true);
 
         // WP Optimize
         if (class_exists('WP_Optimize')) {

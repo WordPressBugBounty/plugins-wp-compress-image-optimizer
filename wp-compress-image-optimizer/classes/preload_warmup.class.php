@@ -356,8 +356,7 @@ class wps_ic_preload_warmup
         return $search;
     }
 
-    public function getOptimizationsStatus($post_type = ['page', 'post'], $page = 1, $offset = 0, $limit = 10, $search
-    = '',                                  $id = 'false')
+    public function getOptimizationsStatus($post_type = ['page', 'post'], $page = 1, $offset = 0, $limit = 10, $search = '', $id = 'false')
     {
 	    $criticalCss = new wps_criticalCss();
         $runningOther = '0';
@@ -526,6 +525,7 @@ class wps_ic_preload_warmup
         } elseif ($optimize === 'do-not-optimize') {
             return [];
         }
+
         $pages = $this->getPages($optimize, 1, 0, -1);
         $wpc_excludes = get_option('wpc-excludes');
         $url_key_class = new wps_ic_url_key();
@@ -545,19 +545,24 @@ class wps_ic_preload_warmup
             $cacheActive = (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1' && !isset($page_excludes['advanced_cache'])) || (isset($page_excludes['advanced_cache']) && $page_excludes['advanced_cache'] == '1');
 
             if (!empty($page['errors'])) {
-                $hasErrorCode = false;
-                foreach ($page['errors'] as $errorCode) {
-                    if (is_numeric($errorCode) && (int)$errorCode >= 300 && (int)$errorCode <= 600) {
-                        $hasErrorCode = true;
-                        break;
-                    }
+              $hasErrorCode = false;
+              foreach ($page['errors'] as $errorType => $errorCode) {
+                if (is_numeric($errorCode) && (int)$errorCode >= 300 && (int)$errorCode <= 600) {
+                  $hasErrorCode = true;
+                  break;
+                } else if ($errorType == 'notice' && is_array($errorCode)) {
+                  if (in_array('skip', $errorCode)) {  // Changed 'skipped' to 'skip'
+                    $hasErrorCode = true;
+                    break;
+                  }
                 }
+              }
 
-                if ($hasErrorCode) {
-                    $return['total'] = $return['total'] - 1;
-                    unset($pages[$key]);
-                    continue;
-                }
+              if ($hasErrorCode) {
+                $return['total'] = $return['total'] - 1;
+                unset($pages[$key]);
+                continue;
+              }
             }
 
             $cacheGenerated = '0';
@@ -1001,6 +1006,11 @@ class wps_ic_preload_warmup
 
     public function stopOptimizations()
     {
+
+      delete_transient('wpc-page-optimizations-status');
+      wp_send_json_success();
+
+      /*
         $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'stopOptimization', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 10]);
 
 
@@ -1020,6 +1030,7 @@ class wps_ic_preload_warmup
         } else {
             wp_send_json_error(print_r($call, true));
         }
+      */
     }
 
     public function deliverError()
@@ -1562,6 +1573,9 @@ class wps_ic_preload_warmup
           }
         */
 
+      set_transient('wpc-page-optimizations-status', ['id' => '', 'status' => 'started', 'mode' => 'local'], 60 * 3);
+      wp_send_json_success('failed-connectivity');
+/*
         $this->simpleConnectivityTest();
         $connectivity = get_option('wpc-connectivity-status');
         if (!empty($connectivity) && $connectivity == 'failed') {
@@ -1591,6 +1605,7 @@ class wps_ic_preload_warmup
         } else {
             wp_send_json_error(print_r($call, true));
         }
+*/
     }
 
     public function simpleConnectivityTest()

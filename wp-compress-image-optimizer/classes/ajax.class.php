@@ -52,6 +52,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
                 $this->add_ajax('wpc_ic_checkCFDisconnect');
+                $this->add_ajax('wpc_ic_refreshCFWhitelist');
                 $this->add_ajax('wpc_ic_setupCF');
 
                 // Critical CSS
@@ -286,6 +287,25 @@ class wps_ic_ajax extends wps_ic
         }
 
         return true;
+    }
+
+
+    public function wpc_ic_refreshCFWhitelist()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $cfSettings = get_option(WPS_IC_CF);
+
+        $zone = $cfSettings['zone'];
+        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
+        $whitelist = $cfapi->whitelistIPs($zone);
+        if (is_wp_error($whitelist)) {
+            wp_send_json_error($whitelist->get_error_message());
+        }
+
+        wp_send_json_success('whitelisted-successfully');
     }
 
     public function wpc_ic_setupCF()
@@ -663,6 +683,7 @@ class wps_ic_ajax extends wps_ic
         $exclude_plugins = $option[$option_subset . '_exclude_plugins'];
         $exclude_wp = $option[$option_subset . '_exclude_wp'];
         $exclude_third = $option[$option_subset . '_exclude_third'];
+	    $min_mobile_width = get_option('wpc-min-mobile-width');
 
         if (empty($value)) {
             $value = '';
@@ -670,7 +691,7 @@ class wps_ic_ajax extends wps_ic
             $value = implode("\n", $value);
         }
 
-        wp_send_json_success(['value' => $value, 'default_excludes' => $default_excludes, 'exclude_themes' => $exclude_themes, 'exclude_plugins' => $exclude_plugins, 'exclude_wp' => $exclude_wp, 'exclude_third' => $exclude_third]);
+        wp_send_json_success(['value' => $value, 'default_excludes' => $default_excludes, 'exclude_themes' => $exclude_themes, 'exclude_plugins' => $exclude_plugins, 'exclude_wp' => $exclude_wp, 'exclude_third' => $exclude_third, 'min_mobile_width' => $min_mobile_width]);
     }
 
     public function wps_ic_save_excludes_settings()
@@ -705,6 +726,7 @@ class wps_ic_ajax extends wps_ic
             $exclude_plugins = sanitize_text_field($_POST['exclude_plugins']);
             $exclude_wp = sanitize_text_field($_POST['exclude_wp']);
             $exclude_third = sanitize_text_field($_POST['exclude_third']);
+	        $min_mobile_width = sanitize_text_field($_POST['min_mobile_width']);
 
 
             $wpc_excludes = get_option($setting_group);
@@ -724,7 +746,13 @@ class wps_ic_ajax extends wps_ic
                 $wpc_excludes['deferScript'] = $defer;
             }
 
-            $updated = update_option($setting_group, $wpc_excludes);
+			if ($min_mobile_width !== 'false'){
+				$updated1 = update_option('wpc-min-mobile-width', $min_mobile_width);
+			}
+
+            $updated2 = update_option($setting_group, $wpc_excludes);
+
+			$updated = $updated1 || $updated2;
         } else {
             wp_send_json_error('Forbidden.');
         }
@@ -2009,88 +2037,25 @@ class wps_ic_ajax extends wps_ic
         }
     }
 
-    public function wps_ic_remove_cname()
-    {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-            wp_send_json_error('Forbidden.');
-        }
+	public function wps_ic_remove_cname()
+	{
+		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+			wp_send_json_error('Forbidden.');
+		}
 
-        $cname = get_option('ic_custom_cname');
-        $zone_name = get_option('ic_cdn_zone_name');
-        $options = get_option(WPS_IC_OPTIONS);
-        $apikey = $options['api_key'];
+		$cname_class = new wps_ic_cname();
+		$cname_class->remove();
+	}
 
-        delete_option('ic_cname_retry_count');
+	public function wps_ic_cname_retry()
+	{
+		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+			wp_send_json_error('Forbidden.');
+		}
 
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_removecname', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => time(), 'no_cache' => md5(time())]);
-
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_removecname_v6', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => time(), 'no_cache' => md5(time())]);
-
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'domain' => site_url(), 'apikey' => $options['api_key']]);
-
-        delete_option('ic_custom_cname');
-
-        $settings = get_option(WPS_IC_SETTINGS);
-        $settings['cname'] = '';
-        $settings['fonts'] = '';
-        update_option(WPS_IC_SETTINGS, $settings);
-
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-
-        // Lite Speed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-
-        // HummingBird
-        if (defined('WPHB_VERSION')) {
-            do_action('wphb_clear_page_cache');
-        }
-
-        if (defined('BREEZE_VERSION')) {
-            global $wp_filesystem;
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-
-            WP_Filesystem();
-
-            $cache_path = breeze_get_cache_base_path(is_network_admin(), true);
-            $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
-
-            if (function_exists('wp_cache_flush')) {
-                wp_cache_flush();
-            }
-        }
-
-        wp_send_json_success();
-    }
-
-    public function wps_ic_cname_retry()
-    {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-            wp_send_json_error('Forbidden.');
-        }
-
-        $cname = get_option('ic_custom_cname');
-        $retry_count = get_option('ic_cname_retry_count');
-
-        if (!$retry_count) {
-            update_option('ic_cname_retry_count', 1);
-        } else {
-            update_option('ic_cname_retry_count', $retry_count + 1);
-        }
-
-        if ($retry_count >= 3) {
-            wp_send_json_error();
-        }
-
-        // Wait for SSL?
-        sleep(10);
-
-        wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
-    }
+		$cname_class = new wps_ic_cname();
+		$cname_class->retry();
+	}
 
     public function wps_ic_remove_key()
     {
@@ -2129,100 +2094,18 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success($configuration);
     }
 
-    public function wps_ic_cname_add()
-    {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-            wp_send_json_error('Forbidden.');
-        }
+	public function wps_ic_cname_add()
+	{
+		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+			wp_send_json_error('Forbidden.');
+		}
 
-        $zone_name = get_option('ic_cdn_zone_name');
-        $options = get_option(WPS_IC_OPTIONS);
-        $apikey = $options['api_key'];
+		$cname_input = !empty($_POST['cname']) ? $_POST['cname'] : null;
 
-        delete_option('ic_cname_retry_count');
+		$cname_class = new wps_ic_cname();
+		$cname_class->add($cname_input);
+	}
 
-        if (!empty($_POST['cname'])) {
-            $error = '';
-            $options = get_option(WPS_IC_OPTIONS);
-            $apikey = $options['api_key'];
-
-            // TODO is cname valid?
-            $cname = sanitize_text_field($_POST['cname']);
-            $cname = str_replace(['http://', 'https://'], '', $cname);
-            $cname = rtrim($cname, '/');
-
-            if ($zone_name == $cname) {
-                $error = 'This domain is invalid, please link a new domain...';
-                wp_send_json_error('invalid-domain');
-            }
-
-            if (strpos($cname, 'zapwp.com') !== false || strpos($cname, 'zapwp.net') !== false) {
-                $error = 'This domain is invalid, please link a new domain...';
-                wp_send_json_error('invalid-domain');
-            }
-
-            if (empty($error)) {
-                if (!preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches) && !preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches)) {
-                    // Subdomain is not valid
-                    $error = 'This domain is invalid, please link a new domain...';
-                    delete_option('ic_custom_cname');
-                    $settings = get_option(WPS_IC_SETTINGS);
-                    unset($settings['cname']);
-                    update_option(WPS_IC_SETTINGS, $settings);
-                    wp_send_json_error('invalid-domain');
-                } else {
-                    // Verify CNAME DNS
-                    $body = self::$Requests->GET('https://frankfurt.zapwp.net/', ['dnsCheck' => 'true', 'host' => $cname, 'zoneName' => $zone_name, 'hash' => microtime(true)], ['timeout' => 60]);
-
-                    if (!empty($body)) {
-                        $data = (array)$body->data;
-
-                        if (empty($data)) {
-                            wp_send_json_error('invalid-dns-prop');
-                        }
-
-                        $recordsType = $data['records']->type;
-                        $recordsTarget = $data['records']->target;
-
-                        if ($recordsType == 'CNAME') {
-                            if ($recordsTarget == $zone_name) {
-                                update_option('ic_custom_cname', sanitize_text_field($cname));
-
-                                self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_setcname', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => microtime(true)]);
-                                sleep(10);
-
-                                //v6 call:
-                                #self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_setcname_v6', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => microtime(true)]);
-                                #sleep(5);
-
-                                self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $apikey, 'domain' => site_url(), 'zone_name' => $zone_name, 'time' => microtime(true)]);
-
-                                // Wait for SSL?
-                                sleep(6);
-
-                                wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
-                            }
-                        }
-
-                        wp_send_json_error('invalid-dns-prop');
-                    } else {
-                        wp_send_json_error('dns-api-not-working');
-                    }
-                }
-            }
-
-            $custom_cname = get_option('ic_custom_cname');
-            if (!$custom_cname) {
-                $custom_cname = '';
-            }
-
-            wp_send_json_success($custom_cname);
-        } else {
-            $custom_cname = delete_option('ic_custom_cname');
-
-            wp_send_json_success();
-        }
-    }
 
     public function wps_ic_exclude_list()
     {
@@ -3164,6 +3047,8 @@ class wps_ic_ajax extends wps_ic
             //we are not on our settings page
         } elseif (isset($_POST['optimize']) && $_POST['optimize'] == 'do-not-optimize') {
             update_option('wpc-warmup-selector', 'do-not-optimize');
+        } else {
+          delete_option('wpc-warmup-selector');
         }
 
         $warmup_class = new wps_ic_preload_warmup();
@@ -3174,6 +3059,16 @@ class wps_ic_ajax extends wps_ic
         if (!empty($status['mode']) && $status['mode'] == 'local') {
             $next_page = reset($pages['pages']);
             if ($next_page !== false) {
+                $transient = get_transient('wpc_last_optimised_page');
+                if (!empty($transient)){
+                  if ($transient['id'] == $next_page['id'] && $transient['count'] == 2) {
+                    $warmup_class->addError($next_page['id'], 'skip');
+                  } else if ($transient['id'] == $next_page['id'] && $transient['count'] == 1){
+                    $count = 2;
+                  } else {
+                    $count = 1;
+                  }
+                }
                 if ($warmup_class->isRedirected($next_page['link'])) {
                     $warmup_class->addError($next_page['id'], 'redirect');
                 }
@@ -3181,6 +3076,7 @@ class wps_ic_ajax extends wps_ic
                 $status['id'] = $next_page['id'];
                 $status['pageTitle'] = ($status['id'] === 'home') ? 'Home Page' : get_the_title($status['id']);
                 $status['status'] = 'warmup';
+                set_transient('wpc_last_optimised_page',['id' => $next_page['id'], 'count' => $count]);
             }
         }
         //end local addition
@@ -3195,7 +3091,7 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => get_option('wpc-connectivity-status')];
+        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => get_option('wpc-connectivity-status'), $next_page, $pages['pages']];
         wp_send_json_success($response);
     }
 

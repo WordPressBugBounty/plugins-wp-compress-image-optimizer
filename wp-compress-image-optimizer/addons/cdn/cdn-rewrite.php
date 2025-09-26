@@ -3116,16 +3116,25 @@ class wps_cdn_rewrite
             return $html;
         }
 
+        // encode meta and json tags so we dont replace urls
+      if (empty(self::$settings['optimize_meta_images']) || self::$settings['optimize_meta_images'] == '0') {
+        $metaData = $this->encodeMeta($html);
+        $html = $metaData['html'];
+        }
+
         // Find all URLs on page that have not been replaced
         $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
         //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
-        $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
-        $html = preg_replace_callback($regEx, function ($matches) {
-            $url = str_replace('&#039;', '', $matches[2]);
-            return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
-        }, $html);
+	    if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == 1){
+		    $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
+		    $html  = preg_replace_callback($regEx, function($matches){
+			    $url = str_replace('&#039;', '', $matches[2]);
+
+			    return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
+		    }, $html);
+	    }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'externalUrls') {
             return $html;
@@ -3137,6 +3146,11 @@ class wps_cdn_rewrite
             if (!empty(self::$replaceAllLinks) && self::$replaceAllLinks == '1') {
                 $html = self::$rewriteLogic->allLinks($html);
             }
+        }
+
+        // decode meta and json tags
+        if(!empty($metaData)) {
+          $html = $this->decodeMeta($html, $metaData['store']);
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'fonts') {
@@ -3577,7 +3591,7 @@ class wps_cdn_rewrite
                         }
 
                         if (!self::is_excluded($url, $url)) {
-                            $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:' . self::$rewriteLogic->getCurrentMaxWidth(1) . '/u:' . self::reformat_url($url);
+                            $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:' . self::$rewriteLogic->getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $url)) . '/u:' . self::reformat_url($url);
                         }
                     } else {
                         $newUrl = self::reformat_url($url, false);
@@ -4395,58 +4409,70 @@ class wps_cdn_rewrite
         return '<img ' . $image_tag . ' />';
     }
 
-    public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])
-    {
-        $found_tags = [];
+	public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])
+	{
+		$found_tags = [];
 
-        $image = html_entity_decode($image);
+		// This pattern accounts for HTML entities like &quot; within attribute values
+		preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"((?:[^"\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)"|\'((?:[^\'\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
 
-        //fix for empty tags
-        preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
+		if (!empty($_GET['dbg_img1'])) {
+			return [$image, $matches];
+		}
 
-        if (!empty($_GET['dbg_img1'])) {
-            return [$image, $matches];
-        }
+		$attributes = [];
+		unset($matches[0]);
 
-        $attributes = [];
-        unset ($matches[0]);
+		foreach ($matches as $match) {
+			$attrName = $match[1];
+			$attrValue = null;
 
-        foreach ($matches as $match) {
-            $attrName = $match[1]; // The attribute name
-            // Determine the attribute value based on the capturing group that caught it
-            $attrValue = null;
-            // Iterate through potential groups and assign the first non-empty value
-            foreach ([2, 3, 4] as $index) {
-                if (!empty($match[$index])) {
-                    $attrValue = $match[$index];
-                    break; // Stop at the first non-empty value
-                }
-            }
+			// Determine the attribute value based on the capturing group that caught it
+			foreach ([2, 3, 4] as $index) {
+				if (!empty($match[$index])) {
+					$attrValue = $match[$index];
+					break;
+				}
+			}
 
-            // Save the attribute and its value (if any) as key => value pairs in the array
-            $attributes[$attrName] = $attrValue;
-        }
+			// Only decode HTML entities for non-JSON attributes
+			// Check if this looks like JSON data (starts with [ or { and contains &quot;)
+			if ($attrValue !== null &&
+			    (strpos($attrName, 'data-') === 0) &&
+			    (strpos($attrValue, '[{') !== false || strpos($attrValue, '{') !== false) &&
+			    strpos($attrValue, '&quot;') !== false) {
+				// This looks like JSON data - keep HTML entities encoded
+				// but clean up any potential corruption from the original regex
+				$attributes[$attrName] = $attrValue;
+			} else {
+				// For regular attributes, decode HTML entities as before
+				$attributes[$attrName] = $attrValue ? html_entity_decode($attrValue) : $attrValue;
+			}
+		}
 
-        if (!empty($_GET['dbg_img2'])) {
-            return [$image, $attributes];
-        }
+		if (!empty($_GET['dbg_img2'])) {
+			return [$image, $attributes];
+		}
 
-        foreach ($attributes as $tag => $value) {
-            if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
-                continue;
-            }
+		// Process the attributes
+		foreach ($attributes as $tag => $value) {
+			if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
+				continue;
+			}
 
-            if ($tag == 'data-mk-image-src-set') {
-                $value = htmlspecialchars_decode($value);
-                $value = json_decode($value, true);
-                $value = $value['default'];
-            }
+			if ($tag == 'data-mk-image-src-set') {
+				$value = htmlspecialchars_decode($value);
+				$decoded = json_decode($value, true);
+				if ($decoded && isset($decoded['default'])) {
+					$value = $decoded['default'];
+				}
+			}
 
-            $found_tags[$tag] = $value;
-        }
+			$found_tags[$tag] = $value;
+		}
 
-        return $found_tags;
-    }
+		return $found_tags;
+	}
 
     public static function get_image_size($url)
     {
@@ -4460,5 +4486,67 @@ class wps_cdn_rewrite
 
         return $sizes;
     }
+
+  /**
+   * Encode meta tags to protect them from URL rewriting
+   * @param string $html
+   * @return array ['html' => modified_html, 'store' => meta_tags_store]
+   */
+  public function encodeMeta($html) {
+    $metaTagsStore = [];
+    $metaCounter = 0;
+
+    // Find and encode all meta tags with image content
+    $html = preg_replace_callback(
+      '#<meta\s+(?:property=["\'](?:og:image|twitter:image)["\']|name=["\']twitter:image["\'])[^>]*>#i',
+      function($matches) use (&$metaTagsStore, &$metaCounter) {
+        $placeholder = '<!--META_PLACEHOLDER_' . $metaCounter . '-->';
+        $metaTagsStore[$metaCounter] = $matches[0];
+        $metaCounter++;
+        return $placeholder;
+      },
+      $html
+    );
+
+    // Also handle JSON-LD scripts
+    $html = preg_replace_callback(
+      '#<script\s+type=["\']application/ld\+json["\'][^>]*>.*?</script>#si',
+      function($matches) use (&$metaTagsStore, &$metaCounter) {
+        $placeholder = '<!--JSONLD_PLACEHOLDER_' . $metaCounter . '-->';
+        $metaTagsStore[$metaCounter] = $matches[0];
+        $metaCounter++;
+        return $placeholder;
+      },
+      $html
+    );
+
+    return ['html' => $html, 'store' => $metaTagsStore];
+  }
+
+  /**
+   * Decode meta tags back to their original form
+   * @param string $html
+   * @param array $metaTagsStore
+   * @return string
+   */
+  public function decodeMeta($html, $metaTagsStore) {
+    if (empty($metaTagsStore)) {
+      return $html;
+    }
+
+    foreach ($metaTagsStore as $index => $originalTag) {
+      $metaPlaceholder = '<!--META_PLACEHOLDER_' . $index . '-->';
+      $jsonldPlaceholder = '<!--JSONLD_PLACEHOLDER_' . $index . '-->';
+
+      // Try meta placeholder first, then JSON-LD placeholder
+      if (strpos($html, $metaPlaceholder) !== false) {
+        $html = str_replace($metaPlaceholder, $originalTag, $html);
+      } elseif (strpos($html, $jsonldPlaceholder) !== false) {
+        $html = str_replace($jsonldPlaceholder, $originalTag, $html);
+      }
+    }
+
+    return $html;
+  }
 
 }

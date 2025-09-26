@@ -47,6 +47,11 @@ class wps_ic_elementor
                 'callback' => 'clear_cache',
                 'priority' => 10,
                 'args' => 1
+            ],
+            'save_post' => [
+              'callback' => 'clear_cache',
+              'priority' => 10,
+              'args' => 1
             ]
         ];
     }

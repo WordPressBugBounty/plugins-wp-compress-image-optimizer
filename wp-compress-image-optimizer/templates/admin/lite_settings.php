@@ -563,7 +563,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     <div class="wpc-pagespeed-running">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                                        <span>Usually takes about 2 minutes...</span>
+                                        <span>Usually takes about 10 minutes...</span>
                                     </div>
                                 <?php
                                 } elseif (empty($initialPageSpeedScore) && $warmupFailing){
@@ -582,7 +582,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     <div class="wpc-pagespeed-running">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                                        <span>Usually takes about 2 minutes...</span>
+                                        <span>Usually takes about 10 minutes...</span>
                                     </div>
                                 <?php } else {
                                 /**

@@ -37,8 +37,9 @@
         <div>
             <h3>Examples:</h3>
             <div>
-                <p>www.siteurl.com/page to exclude just the page</p>
-                <p>www.siteurl.com/page/subpage to exclude just the subpage</p>
+                <p>siteurl.com/page would exclude everything using that path</p>
+                <p>siteurl.com/page/subpage would exclude just the subpage</p>
+                <p>pagephrase would exclude any page with this phrase in url</p>
             </div>
         </div>
       </div>
