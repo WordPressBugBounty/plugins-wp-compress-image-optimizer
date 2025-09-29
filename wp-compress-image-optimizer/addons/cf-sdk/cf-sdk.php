@@ -96,6 +96,45 @@ class WPC_CloudflareAPI {
         return $data;
     }
 
+
+    /**
+     * Check Rocket Loader Status
+     *
+     * @return array|WP_Error List of zones or WP_Error
+     */
+    public function checkRocketLoader($zoneId) {
+        $rlResp = $this->getRequest("zones/$zoneId/settings/rocket_loader");
+
+        if (is_wp_error($rlResp)) {
+            // Store per-zone error but keep going for other zones
+            $results[$zoneId] = new WP_Error(
+                'cloudflare_api_error',
+                "Failed to fetch Rocket Loader " . $rlResp->get_error_message()
+            );
+
+            return 'failed to fetch rocket loader';
+        }
+
+        // Cloudflare returns: { result: { id, value, editable, modified_on, ... } }
+        if (!empty($rlResp['result']) && isset($rlResp['result']['value'])) {
+            $results[$zoneId] = [
+                'value'       => $rlResp['result']['value'],       // 'on' | 'off'
+                'modified_on' => $rlResp['result']['modified_on'] ?? null,
+                'editable'    => $rlResp['result']['editable'] ?? null,
+            ];
+
+            return $results;
+        } else {
+            $results[$zoneId] = new WP_Error(
+                'cloudflare_api_error',
+                "Unexpected response while fetching Rocket Loader"
+            );
+
+            return false;
+        }
+    }
+
+
     /**
      * Retrieve the list of zones
      *

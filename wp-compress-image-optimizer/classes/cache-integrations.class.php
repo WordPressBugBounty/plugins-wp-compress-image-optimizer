@@ -10,10 +10,10 @@ class wps_ic_cache_integrations
     }
 
 
-    public static function purgeAll($url_key = false, $varnish = false)
+    public static function purgeAll($url_key = false, $varnish = false, $critSave = false)
     {
         //purge all when elementor
-        if (defined('ELEMENTOR_VERSION')){
+        if (defined('ELEMENTOR_VERSION') && !$critSave){
             $url_key = false;
             self::purgeCriticalFiles();
         }

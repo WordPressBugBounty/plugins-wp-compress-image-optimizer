@@ -1497,6 +1497,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                     echo '<strong>' . $cf['zoneName'] . '</strong> on ID: <strong>' . $cf['zone'] . '</strong>';
                                                                     ?>
                                                                 </div>
+
+                                                                <?php
+                                                                #var_dump($cf);
+                                                                require_once WPS_IC_DIR.'/addons/cf-sdk/cf-sdk.php';
+                                                                $cfsdk = new WPC_CloudflareAPI($cf['token']);
+                                                                var_dump('Rocket Loader: ');
+                                                                $rocketSettings = $cfsdk->checkRocketLoader($cf['zone']);
+                                                                $rocketSettings = $rocketSettings[$cf['zone']];
+                                                                var_dump($rocketSettings['value']);
+                                                                ?>
+
                                                                 <div class="wpc-cf-token-connected-info-right">
                                                                     <input type="button" class="wpc-cf-token-refresh-whitelist wpc-cf-button" value="Refresh Whitelist"/>
                                                                     <input type="button" class="wpc-cf-token-disconnect wpc-cf-button" value="Disconnect"/>

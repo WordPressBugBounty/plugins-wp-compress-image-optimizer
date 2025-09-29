@@ -1923,6 +1923,13 @@ SCRIPT;
     {
         // Get just the inside of <picture> tag
         //$insideElements = $html[1];
+
+        if (self::$isMobile) {
+          // On mobile it can break layouts since we force an image size.
+          // w: in cdn url has to match w in srcset attribute if this is removed.
+          $html[0] = preg_replace('/(<(?:source|img)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+        }
+
         $html = preg_replace_callback('/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i', [__CLASS__, 'replaceSourceSrcset'], $html);
         return $html[0];
     }
@@ -1937,16 +1944,18 @@ SCRIPT;
             return $html[0];
         }
 
-        if (!strpos($url, self::$zoneName)) {
-            // File has already been replaced
-            if ($this->defaultExcluded($url)) {
-                return $url;
-            }
+        if (strpos($url, self::$zoneName) !== false) {
+          // File has already been replaced
+          return $url;
+        }
 
-            // File is not an image
-            if (!self::isImage($url)) {
-                return $url;
-            }
+        if ($this->defaultExcluded($url)) {
+          return $url;
+        }
+
+        // File is not an image
+        if (!self::isImage($url)) {
+          return $url;
         }
 
         if (self::isExcluded($url)) {
@@ -2279,8 +2288,9 @@ SCRIPT;
             } else {
                 if (self::$lazyLoadedImages > self::$lazyLoadedImagesLimit) {
                     // We are over lazy limit, load placeholder
+                    $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
                     $original_img_tag['src'] = $source_svg;
-                    $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+                    $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
                     $original_img_tag['additional_tags']['class'] = 'wps-ic-live-cdn wps-ic-lazy-image';
                     $original_img_tag['additional_tags']['loading'] = 'lazy';
                 } else {
@@ -2308,11 +2318,13 @@ SCRIPT;
                  */
                 if ($isLogo || strpos($lowerImageUrl, 'logo') !== false) {
                     // TODO: Fix for logos not on CDN
-                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+                    $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
+                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
                     $original_img_tag['original_tags']['src'] = $original_img_tag['src'];
                 } else {
+                    $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
                     $original_img_tag['src'] = $source_svg;
-                    $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+                    $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
 
                     // Data cp-src
                     if (!empty($original_img_tag['original_tags']['data-cp-src'])) {
@@ -2325,9 +2337,11 @@ SCRIPT;
 
                 if (strpos($lowerClass, 'lazy') !== false) {
                     if (!empty($original_img_tag['original_tags']['data-src'])) {
-                        $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $original_img_tag['original_tags']['data-src'])) . '/u:' . self::reformatUrl($original_img_tag['original_tags']['data-src']);
+                        $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $original_img_tag['original_tags']['data-src']));
+                        $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($original_img_tag['original_tags']['data-src']);
                     } else {
-                        $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+                        $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
+                        $original_img_tag['data-src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
                     }
 
                     $original_img_tag['original_tags']['src'] = $original_img_tag['data-src'];
@@ -2339,7 +2353,8 @@ SCRIPT;
                         $original_img_tag['original_tags']['data-cp-src'] = $original_img_tag['data-src'];
                     }
                 } else {
-                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+                    $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
+                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
 
                     // Data cp-src
                     if (!empty($original_img_tag['original_tags']['data-cp-src'])) {
@@ -2353,7 +2368,8 @@ SCRIPT;
         // Lazy Loading - Fix for LCP Lazy Issues
         if (self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
             $skipLazy = true;
-            $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source)) . '/u:' . self::reformatUrl($image_source);
+            $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
+            $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
             $original_img_tag['data-count'] = self::$lazyLoadedImages;
             if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
                 $original_img_tag['additional_tags']['fetchpriority'] = 'high';
@@ -2361,6 +2377,15 @@ SCRIPT;
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped3';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
             unset($original_img_tag['additional_tags']['data-wpc-loaded'], $original_img_tag['original_tags']['data-src'], $original_img_tag['data-src']);
+        }
+
+
+        // Recalculate dimensions once after all conditions
+        if (isset($maxWidth) && $maxWidth > 1 && !empty($original_img_tag['original_tags']['width']) && !empty($original_img_tag['original_tags']['height'])) {
+            $originalWidth = $original_img_tag['original_tags']['width'];
+            $originalHeight = $original_img_tag['original_tags']['height'];
+            $original_img_tag['original_tags']['width'] = $maxWidth;
+            $original_img_tag['original_tags']['height'] = round(($originalHeight / $originalWidth) * $maxWidth);
         }
 
 
@@ -2668,6 +2693,13 @@ SCRIPT;
     {
 
         if (!empty($srcset)) {
+
+            if (self::$isMobile){
+              // We are forcing all widths on mobile, no srcset is needed.
+              // the w: param has to match the w param from the srcset url or it can break mobile layouts.
+              return '';
+            }
+
             $newSrcSet = '';
             preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/si', $srcset, $srcset_links);
 
