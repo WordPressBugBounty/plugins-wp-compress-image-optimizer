@@ -55,7 +55,7 @@ class wps_ic_integrations extends wps_ic
     public function init()
     {
         $list = [];
-        
+
         //This should only be done in admin, it saves all needed fixes, notices, filters and hooks to option
         $this->int_option['overrides'] = [];
         $this->int_option['front_filters'] = [];
@@ -73,8 +73,6 @@ class wps_ic_integrations extends wps_ic
 
         foreach ($this->plugin_checks as $plugin_check) {
             if ($plugin_check->is_active()) {
-                $plugin_check->do_checks();
-
                 if (method_exists($plugin_check, 'getConflictsList')) {
                     $list[get_class($plugin_check)] = $plugin_check->getConflictsList();
                 }
@@ -93,6 +91,33 @@ class wps_ic_integrations extends wps_ic
 
         //at this point all overrides, filters and hooks are included, so save to option
         update_option('wps_ic_integrations', $this->int_option);
+
+        //These are conflicted settings checks that dont have to run on every load
+        $checked = get_transient('wps_ic_conflicts_check');
+        if ($checked){
+          return;
+        }
+
+        foreach ($this->plugin_checks as $plugin_check) {
+            if ($plugin_check->is_active()) {
+                $plugin_check->do_checks();
+            }
+        }
+
+        //CF checks
+        $cf = get_option(WPS_IC_CF);
+        if (!empty($cf) && !empty($cf['token'])){
+            require_once WPS_IC_DIR.'/addons/cf-sdk/cf-sdk.php';
+            $cfsdk = new WPC_CloudflareAPI($cf['token']);
+            $rocketSettings = $cfsdk->checkRocketLoader($cf['zone']);
+            if (isset($rocketSettings[$cf['zone']]['value']) && $rocketSettings[$cf['zone']]['value'] == 'on') {
+                $cfsdk->setRocketLoader($cf['zone'], 'off');
+                $cache = new wps_ic_cache_integrations();
+                $cache->purgeAll();
+            }
+        }
+
+        set_transient('wps_ic_conflicts_check', true, 15 * MINUTE_IN_SECONDS);
     }
 
     public function add_admin_hooks()

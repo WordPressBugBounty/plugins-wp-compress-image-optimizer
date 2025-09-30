@@ -1498,14 +1498,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                     ?>
                                                                 </div>
 
+
                                                                 <?php
                                                                 #var_dump($cf);
-                                                                require_once WPS_IC_DIR.'/addons/cf-sdk/cf-sdk.php';
-                                                                $cfsdk = new WPC_CloudflareAPI($cf['token']);
-                                                                var_dump('Rocket Loader: ');
-                                                                $rocketSettings = $cfsdk->checkRocketLoader($cf['zone']);
-                                                                $rocketSettings = $rocketSettings[$cf['zone']];
-                                                                var_dump($rocketSettings['value']);
+                                                                if (!empty($_GET['dbgRocket'])) {
+                                                                    require_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
+                                                                    $cfsdk = new WPC_CloudflareAPI($cf['token']);
+                                                                    var_dump('Rocket Loader: ');
+                                                                    $rocketSettings = $cfsdk->checkRocketLoader($cf['zone']);
+                                                                    $rocketSettings = $rocketSettings[$cf['zone']];
+                                                                    var_dump($rocketSettings['value']);
+                                                                }
                                                                 ?>
 
                                                                 <div class="wpc-cf-token-connected-info-right">

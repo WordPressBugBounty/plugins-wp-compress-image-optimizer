@@ -177,6 +177,15 @@ class wps_ic_cache
         add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('wp_trash_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
+
+        add_action('comment_post', ['wps_ic_cache', 'purgeOnCommentPost'], 10, 2);
+        add_action('edit_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+        add_action('transition_comment_status', ['wps_ic_cache', 'purgeOnCommentStatusChange'], 10, 3);
+        add_action('deleted_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+        add_action('trashed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+        add_action('untrashed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+        add_action('spammed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+        add_action('unspammed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
     }
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
@@ -629,5 +638,41 @@ class wps_ic_cache
         }
     }
 
+    /**
+     * Purge cache when comment is posted (only if approved)
+     */
+    public static function purgeOnCommentPost($comment_id, $approved)
+    {
+      if ($approved === 1 || $approved === 'approve') {
+        $comment = get_comment($comment_id);
+        if ($comment) {
+          self::removeHtmlCacheFiles($comment->comment_post_ID);
+        }
+      }
+    }
+
+    /**
+     * Purge cache for any comment action (edit, delete, trash, spam, etc.)
+     * Only purges if comment is/was approved
+     */
+    public static function purgeOnCommentAction($comment_id)
+    {
+      $comment = get_comment($comment_id);
+      if ($comment && $comment->comment_approved == '1') {
+        self::removeHtmlCacheFiles($comment->comment_post_ID);
+      }
+    }
+
+    /**
+     * Purge cache when comment status changes
+     */
+    public static function purgeOnCommentStatusChange($new_status, $old_status, $comment)
+    {
+      if ($new_status !== $old_status) {
+        if ($new_status === 'approved' || $old_status === 'approved') {
+          self::removeHtmlCacheFiles($comment->comment_post_ID);
+        }
+      }
+    }
 
 }

@@ -409,4 +409,40 @@ class WPC_CloudflareAPI {
         return $this->processResponse($response);
     }
 
+    /**
+     * Set Rocket Loader Status
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @param string $value 'on' or 'off'
+     * @return array|WP_Error The API response or WP_Error
+     */
+    public function setRocketLoader($zoneId, $value) {
+        if (!in_array($value, ['on', 'off'])) {
+            return new WP_Error('invalid_value', 'Value must be "on" or "off"');
+        }
+
+        return $this->patchRequest("zones/$zoneId/settings/rocket_loader", [
+            'value' => $value
+        ]);
+    }
+
+    /**
+     * Send a PATCH request to the Cloudflare API
+     *
+     * @param string $endpoint API endpoint
+     * @param array $body Request body
+     * @return array|WP_Error The API response or WP_Error
+     */
+    private function patchRequest($endpoint, $body = []) {
+        $url = $this->apiBase . $endpoint;
+
+        $response = wp_remote_request($url, [
+            'method'  => 'PATCH',
+            'headers' => $this->getHeaders(),
+            'body'    => json_encode($body),
+        ]);
+
+        return $this->processResponse($response);
+    }
+
 }

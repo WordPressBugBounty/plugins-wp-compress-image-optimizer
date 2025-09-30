@@ -1320,6 +1320,11 @@ class wps_cdn_rewrite
             return false;
         }
 
+        //GiveWP routes
+        if (isset($_GET['givewp-route'])){
+          return false;
+        }
+
         return true;
     }
 

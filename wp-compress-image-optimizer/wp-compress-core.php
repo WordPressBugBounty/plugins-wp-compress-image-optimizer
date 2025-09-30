@@ -80,7 +80,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.50.56';
+        self::$version = '6.50.57';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1598,6 +1598,11 @@ class wps_ic
         }
 
         if (!empty($_GET['pagelayer-live'])) {
+            return true;
+        }
+
+        //GiveWP routes
+        if (isset($_GET['givewp-route'])){
             return true;
         }
 
