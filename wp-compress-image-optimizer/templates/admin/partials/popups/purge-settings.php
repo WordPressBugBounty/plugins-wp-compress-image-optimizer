@@ -87,7 +87,8 @@
                                             <?php echo 'update_option_theme_mods_' . get_option( 'stylesheet'); ?><br>
                                             elementor/core/files/clear_cache<br>
                                             uagb_delete_uag_asset_dir<br>
-                                            uagb_delete_page_assets</p>
+                                            uagb_delete_page_assets<br>
+                                            et_core_static_resources_removed</p>
                                     </div>
                                 </div>
                             </div>

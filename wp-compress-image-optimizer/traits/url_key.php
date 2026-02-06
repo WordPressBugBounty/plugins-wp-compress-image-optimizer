@@ -20,9 +20,11 @@ class wps_ic_url_key
 
     public function setup($url = '')
     {
-        if ($url == '') {
-            $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        }
+      if (empty($url)) {
+          $host = $_SERVER['HTTP_HOST'] ?? '';
+          $uri  = $_SERVER['REQUEST_URI'] ?? '';
+          $url = $host . $uri;
+      }
 
 	    $original_url = $url;
 
@@ -55,6 +57,8 @@ class wps_ic_url_key
 
     public function removeTrackingParams($url)
     {
+        if (empty($url) || !$url) return;
+
         $trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id'];
 
         $parts = parse_url($url);
@@ -324,6 +328,7 @@ class wps_ic_url_key
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
+            // Absolute
             return false;
         } elseif (strpos($url, $site_url) === false || strpos($url, '//') === 0) {
             return true;

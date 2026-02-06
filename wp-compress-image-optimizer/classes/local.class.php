@@ -121,14 +121,24 @@ class wps_ic_local
 
     public function getAllThumbSizes()
     {
+        $cache_key = 'wps_ic_image_sizes';
+
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            return $cached;
+        }
+
         global $_wp_additional_image_sizes;
 
         $default_image_sizes = get_intermediate_image_sizes();
+        $image_sizes = [];
 
         foreach ($default_image_sizes as $size) {
-            $image_sizes[$size]['width'] = intval(get_option("{$size}_size_w"));
+            $crop = get_option("{$size}_crop");
+
+            $image_sizes[$size]['width']  = intval(get_option("{$size}_size_w"));
             $image_sizes[$size]['height'] = intval(get_option("{$size}_size_h"));
-            $image_sizes[$size]['crop'] = get_option("{$size}_crop") ? get_option("{$size}_crop") : false;
+            $image_sizes[$size]['crop']   = $crop ? $crop : false;
         }
 
         if (isset($_wp_additional_image_sizes) && count($_wp_additional_image_sizes)) {
@@ -141,6 +151,8 @@ class wps_ic_local
         }
 
         $image_sizes['original']['width'] = 'original';
+
+        set_transient($cache_key, $image_sizes, 1 * HOUR_IN_SECONDS);
 
         return $image_sizes;
     }
@@ -243,7 +255,7 @@ class wps_ic_local
         $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_START);
 
         // Make the GET request
-        $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
+        $response = wp_remote_get($request_url, array('timeout' => 80, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
             $body = wp_remote_retrieve_body($response);
@@ -253,7 +265,7 @@ class wps_ic_local
                 $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RUN);
 
                 // Make the GET request
-                $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
+                $response = wp_remote_get($request_url, array('timeout' => 60, 'sslverify' => false));
 
                 if (!is_wp_error($response)) {
                     $body = wp_remote_retrieve_body($response);
@@ -310,9 +322,54 @@ class wps_ic_local
         $bulkStatus = get_option('wps_ic_BulkStatus');
         if (!$bulkStatus) $bulkStatus = [];
 
-        $queryUncompressed = $wpdb->get_results("SELECT * FROM " . $wpdb->posts . " posts WHERE posts.post_type='attachment' AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif') AND NOT EXISTS (SELECT meta_value FROM " . $wpdb->postmeta . " meta WHERE meta.post_id=posts.ID and meta.meta_key='ic_stats')");
+        // Values to prepare
+        $post_type = 'attachment';
+        $mime1 = 'image/jpeg';
+        $mime2 = 'image/png';
+        $mime3 = 'image/gif';
+        $meta_key = 'ic_stats';
 
-        $queryCompressed = $wpdb->get_results("SELECT * FROM " . $wpdb->posts . " posts WHERE posts.post_type='attachment' AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif') AND EXISTS (SELECT meta_value FROM " . $wpdb->postmeta . " meta WHERE meta.post_id=posts.ID and meta.meta_key='ic_stats')");
+        // UNCOMPRESSED
+        $queryUncompressed = $wpdb->get_results(
+            $wpdb->prepare(
+                "
+        SELECT *
+        FROM {$wpdb->posts} posts
+        WHERE posts.post_type = %s
+        AND posts.post_mime_type IN (%s, %s, %s)
+        AND NOT EXISTS (
+            SELECT meta_value
+            FROM {$wpdb->postmeta} meta
+            WHERE meta.post_id = posts.ID
+            AND meta.meta_key = %s
+        )
+        ",
+                $post_type,
+                $mime1, $mime2, $mime3,
+                $meta_key
+            )
+        );
+
+        // COMPRESSED
+        $queryCompressed = $wpdb->get_results(
+            $wpdb->prepare(
+                "
+        SELECT *
+        FROM {$wpdb->posts} posts
+        WHERE posts.post_type = %s
+        AND posts.post_mime_type IN (%s, %s, %s)
+        AND EXISTS (
+            SELECT meta_value
+            FROM {$wpdb->postmeta} meta
+            WHERE meta.post_id = posts.ID
+            AND meta.meta_key = %s
+        )
+        ",
+                $post_type,
+                $mime1, $mime2, $mime3,
+                $meta_key
+            )
+        );
 
 
         $bulkStatus['foundImageCount'] = 0;
@@ -352,33 +409,32 @@ class wps_ic_local
         self::$uncompressedImages = [];
         self::$compressedImages = [];
 
-        if (!empty($_GET['dbgBulk'])) {
-            ini_set('display_errors', 1);
-            error_reporting(E_ALL);
-        }
-
         $batch_size = 1000;
         $offset = 0;
         $bulkStatus = ['foundImageCount' => 0, 'foundThumbCount' => 0,];
 
-        // --- Process UNCOMPRESSED images in batches
         while (true) {
             $uncompressed_ids = $wpdb->get_col($wpdb->prepare("
-            SELECT posts.ID
-            FROM {$wpdb->posts} posts
-            WHERE posts.post_type = 'attachment'
-              AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
-              AND NOT EXISTS (
-                  SELECT 1 FROM {$wpdb->postmeta} meta
-                  WHERE meta.post_id = posts.ID AND meta.meta_key = 'ic_stats'
-              )
-            LIMIT %d OFFSET %d", $batch_size, $offset));
+        SELECT MIN(p.ID) AS id
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} f
+            ON f.post_id = p.ID
+           AND f.meta_key = '_wp_attached_file'
+        LEFT JOIN {$wpdb->postmeta} s
+            ON s.post_id = p.ID
+           AND s.meta_key = 'ic_stats'
+        WHERE p.post_type = 'attachment'
+          AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+        GROUP BY f.meta_value
+        HAVING SUM(CASE WHEN s.meta_id IS NULL THEN 0 ELSE 1 END) = 0
+        ORDER BY id ASC
+        LIMIT %d OFFSET %d
+    ", $batch_size, $offset));
 
             if (empty($uncompressed_ids)) break;
 
             foreach ($uncompressed_ids as $imageID) {
                 $bulkStatus['foundImageCount']++;
-
                 foreach (self::$imageSizes as $sizeName => $sizeData) {
                     self::$uncompressedImages[$imageID][$sizeName] = 'unknown';
                     $bulkStatus['foundThumbCount']++;

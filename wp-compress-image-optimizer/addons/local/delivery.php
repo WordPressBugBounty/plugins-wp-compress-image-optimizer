@@ -18,6 +18,9 @@ class wpc_ic_delivery
     private $apiKey;
     private $images;
     private $imagesToRequest;
+    private $enabledLog;
+    private $logFilePath;
+    private $logFile;
 
     public function __construct($type = 'multi')
     {
@@ -123,14 +126,24 @@ class wpc_ic_delivery
 
     public function getAllThumbSizes()
     {
+        $cache_key = 'wps_ic_image_sizes';
+
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            return $cached;
+        }
+
         global $_wp_additional_image_sizes;
 
         $default_image_sizes = get_intermediate_image_sizes();
+        $image_sizes = [];
 
         foreach ($default_image_sizes as $size) {
-            $image_sizes[$size]['width'] = intval(get_option("{$size}_size_w"));
+            $crop = get_option("{$size}_crop");
+
+            $image_sizes[$size]['width']  = intval(get_option("{$size}_size_w"));
             $image_sizes[$size]['height'] = intval(get_option("{$size}_size_h"));
-            $image_sizes[$size]['crop'] = get_option("{$size}_crop") ? get_option("{$size}_crop") : false;
+            $image_sizes[$size]['crop']   = $crop ? $crop : false;
         }
 
         if (isset($_wp_additional_image_sizes) && count($_wp_additional_image_sizes)) {
@@ -144,6 +157,7 @@ class wpc_ic_delivery
 
         $image_sizes['original']['width'] = 'original';
 
+        set_transient($cache_key, $image_sizes, 1 * HOUR_IN_SECONDS);
 
         return $image_sizes;
     }
@@ -170,7 +184,21 @@ class wpc_ic_delivery
 
         $imageSizes = $this->getAllThumbSizes();
 
-        $queryUncompressed = $wpdb->get_results("SELECT * FROM " . $wpdb->posts . " posts WHERE posts.post_type='attachment' AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif') AND NOT EXISTS (SELECT meta_value FROM " . $wpdb->postmeta . " meta WHERE meta.post_id=posts.ID and meta.meta_key='ic_stats')");
+        $queryUncompressed = $wpdb->get_results($wpdb->prepare("SELECT *
+        FROM {$wpdb->posts} posts
+        WHERE posts.post_type = %s
+        AND posts.post_mime_type IN (%s, %s, %s)
+        AND NOT EXISTS (
+            SELECT meta_value
+            FROM {$wpdb->postmeta} meta
+            WHERE meta.post_id = posts.ID
+            AND meta.meta_key = %s
+        )", 'attachment',           // post_type
+            'image/jpeg',           // mime 1
+            'image/png',            // mime 2
+            'image/gif',            // mime 3
+            'ic_stats'              // meta_key
+        ));
 
         $bulkStatus['foundImageCount'] = 0;
         $bulkStatus['foundThumbCount'] = 0;
@@ -220,7 +248,7 @@ class wpc_ic_delivery
     public function getImageUrls($imageID)
     {
         while (ob_get_level()) {
-          ob_end_clean();
+            ob_end_clean();
         }
         ob_start();
 
@@ -527,250 +555,247 @@ class wpc_ic_delivery
     }
 
     public function writeImage($imageID, $imageSize, $imageData)
-  {
-    $fileTypeError = false;
-    $this->writeLog('Write Image Started ' . $imageID);
-    if (!function_exists('download_url')) {
-      require_once(ABSPATH . "wp-admin" . '/includes/image.php');
-      require_once(ABSPATH . "wp-admin" . '/includes/file.php');
-      require_once(ABSPATH . "wp-admin" . '/includes/media.php');
-    }
+    {
+        $fileTypeError = false;
+        $this->writeLog('Write Image Started ' . $imageID);
+        if (!function_exists('download_url')) {
+            require_once(ABSPATH . "wp-admin" . '/includes/image.php');
+            require_once(ABSPATH . "wp-admin" . '/includes/file.php');
+            require_once(ABSPATH . "wp-admin" . '/includes/media.php');
+        }
 
-    $stats = array();
+        $stats = array();
 
-    // Get Image Path
-    if ($imageSize == 'original') {
-      $fileName = wp_get_original_image_path($imageID);
-      $fileName = basename($fileName);
-    } else {
-      $fileName = wp_get_attachment_image_src($imageID, $imageSize);
-      $fileName = basename($fileName[0]);
-    }
-
-    $this->writeLog('Write Image #398 ' . $imageID);
-
-    // Path to the imagesize
-    $imagePath = $this->pathToDir . $fileName;
-
-    // TODO: Remove
-    //delete_post_meta($imageID,'wpc_images_compressed');
-
-    $imagesCompressed = get_post_meta($imageID, 'wpc_images_compressed', true);
-    $sanitizedURL = sanitize_title($imageData['url']);
-
-    $this->writeLog('Write Image #409 ' . $imageID);
-    $this->writeLog('Write Image #410 ' . print_r($this->didImages, true));
-
-    if (!$imagesCompressed) $imagesCompressed = array();
-
-    // TODO: Singapore je vraćao 0 savings zbog ovoga?
-
-    if (!empty($this->didImages[$imageID][$sanitizedURL])) {
-
-      // Is original smaller than compressed?
-      if ($imagesCompressed[$sanitizedURL]['original'] < $imagesCompressed[$sanitizedURL]['compressed']) {
-        // Compressed bigger than original
-        $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
-        $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['original'];
-        $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
-        $stats['total']['compressed']['size'] += $stats[$imageSize]['original']['size'];
-      } else {
-        // Original is bigger than compressed
-        // Get Original Size
-        $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
-        $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['compressed'];
-        $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
-        $stats['total']['compressed']['size'] += $stats[$imageSize]['compressed']['size'];
-      }
-
-      $this->writeLog('Already done this image: ' . $imageSize);
-      $this->writeLog('Sanitized url: ' . $sanitizedURL);
-      $this->writeLog('Array: ' . print_r($imagesCompressed, true));
-      $this->writeLog('$imagesCompressed[$sanitizedURL][url]: ' . print_r($imagesCompressed[$sanitizedURL]['url'], true));
-      $this->writeLog('$imageData[url]: ' . print_r($imageData['url'], true));
-    } else {
-      // Did we already do the image?
-      $this->didImages[$imageID][$sanitizedURL] = $imagePath;
-
-      if (!file_exists($imagePath)) {
-        $this->writeLog('File not found: ' . $imagePath);
-        return 'file-not-exists';
-      }
-
-      $this->writeLog('Write Image #437 ' . $imageID);
-
-      // Get Original Size
-      $stats[$imageSize]['original']['size'] = filesize($imagePath);
-      $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
-
-      // Compare to compressed - FAILSAFE
-      if ($imageData['original'] <= $imageData['compressed']) {
-        $this->writeLog('Compressed is bigger than original.');
-        //return 'compressed-bigger';
-      } else {
-        $this->writeLog('Write Image Before Download ' . $imageID);
-        $this->writeLog($imageData['url']);
-
-        // It's an URL
-        $imageDownload = download_url($imageData['url']);
-
-        $this->writeLog('Write Image After Download ' . $imageID);
-        $this->writeLog(print_r($imageDownload, true));
-
-        if (!$imageDownload) {
-          $this->writeLog('Failed to download.');
-          $this->writeLog(print_r($imageDownload, true));
+        // Get Image Path
+        if ($imageSize == 'original') {
+            $fileName = wp_get_original_image_path($imageID);
+            $fileName = basename($fileName);
         } else {
+            $fileName = wp_get_attachment_image_src($imageID, $imageSize);
+            $fileName = basename($fileName[0]);
+        }
 
-          // Verify if the downloaded file is an image
-          if (function_exists('mime_content_type')){
-            $mime_type = mime_content_type($imageDownload);
-          } else if (function_exists('finfo_open')) {
-            $file_info = finfo_open(FILEINFO_MIME_TYPE);
-            $mime_type = finfo_file($file_info, $imageDownload);
-            finfo_close($file_info);
-          } else {
-            $mime_type = wp_get_image_mime($imageDownload);
-          }
+        $this->writeLog('Write Image #398 ' . $imageID);
 
-          if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
-            $image_size = getimagesize($imageDownload);
-            if ($image_size !== false) {
-              // File is an image, proceed with your logic
+        // Path to the imagesize
+        $imagePath = $this->pathToDir . $fileName;
+
+        $imagesCompressed = get_post_meta($imageID, 'wpc_images_compressed', true);
+        $sanitizedURL = sanitize_title($imageData['url']);
+
+        $this->writeLog('Write Image #409 ' . $imageID);
+        $this->writeLog('Write Image #410 ' . print_r($this->didImages, true));
+
+        if (!$imagesCompressed) $imagesCompressed = array();
+
+        // TODO: Singapore je vraćao 0 savings zbog ovoga?
+
+        if (!empty($this->didImages[$imageID][$sanitizedURL])) {
+
+            // Is original smaller than compressed?
+            if ($imagesCompressed[$sanitizedURL]['original'] < $imagesCompressed[$sanitizedURL]['compressed']) {
+                // Compressed bigger than original
+                $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
+                $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['original'];
+                $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
+                $stats['total']['compressed']['size'] += $stats[$imageSize]['original']['size'];
             } else {
-              // File is not a valid image, handle the error
-              $this->writeLog('Downloaded file is not a valid image.');
-              return false;
+                // Original is bigger than compressed
+                // Get Original Size
+                $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
+                $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['compressed'];
+                $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
+                $stats['total']['compressed']['size'] += $stats[$imageSize]['compressed']['size'];
             }
-          } else {
-            // File MIME type is not an image, handle the error
-            $this->writeLog('Downloaded file MIME type is not an image.');
-            return false;
-          }
 
-          $exif = 'image/jpeg';
-          $mime = 'image/jpeg';
+            $this->writeLog('Already done this image: ' . $imageSize);
+            $this->writeLog('Sanitized url: ' . $sanitizedURL);
+            $this->writeLog('Array: ' . print_r($imagesCompressed, true));
+            $this->writeLog('$imagesCompressed[$sanitizedURL][url]: ' . print_r($imagesCompressed[$sanitizedURL]['url'], true));
+            $this->writeLog('$imageData[url]: ' . print_r($imageData['url'], true));
+        } else {
+            // Did we already do the image?
+            $this->didImages[$imageID][$sanitizedURL] = $imagePath;
 
-          // Allowed
-          $allowed_file_types = array('image/png', 'image/jpeg', 'image/jpg', 'image/webp');
-          $this->writeLog('Allowed types');
-          $this->writeLog(print_r($allowed_file_types, true));
-          $this->writeLog('Mime');
-          $this->writeLog(print_r($mime, true));
-          $this->writeLog('In array');
-          $this->writeLog(print_r(in_array($mime, $allowed_file_types), true));
+            if (!file_exists($imagePath)) {
+                $this->writeLog('File not found: ' . $imagePath);
+                return 'file-not-exists';
+            }
 
-          if (!in_array($mime, $allowed_file_types)) {
-            $fileTypeError = true;
-            $this->writeLog('Not allowed file type.');
-            $this->writeLog($imageData['url']);
-            $this->writeLog(print_r($imageDownload, true));
-            $this->writeLog(print_r($exif, true));
-            $this->writeLog(print_r($mime, true));
-            $this->writeLog(in_array($mime, $allowed_file_types));
-          } else {
+            $this->writeLog('Write Image #437 ' . $imageID);
 
-            // Check if original is bigger than compressed, failsafe
-            if ($stats[$imageSize]['original']['size'] > filesize($imageDownload)) {
-              if (file_exists($imagePath)) {
-                unlink($imagePath);
-              }
+            // Get Original Size
+            $stats[$imageSize]['original']['size'] = filesize($imagePath);
+            $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
 
-              $c = copy($imageDownload, $imagePath);
-              $this->writeLog(print_r($c, true));
+            // Compare to compressed - FAILSAFE
+            if ($imageData['original'] <= $imageData['compressed']) {
+                $this->writeLog('Compressed is bigger than original.');
+                //return 'compressed-bigger';
             } else {
-              $this->writeLog('Filesize bad?.');
-              $this->writeLog($stats[$imageSize]['original']['size']);
-              $this->writeLog(filesize($imageDownload));
+                $this->writeLog('Write Image Before Download ' . $imageID);
+                $this->writeLog($imageData['url']);
+
+                // It's an URL
+                $imageDownload = download_url($imageData['url']);
+
+                $this->writeLog('Write Image After Download ' . $imageID);
+                $this->writeLog(print_r($imageDownload, true));
+
+                if (!$imageDownload) {
+                    $this->writeLog('Failed to download.');
+                    $this->writeLog(print_r($imageDownload, true));
+                } else {
+
+                    // Verify if the downloaded file is an image
+                    if (function_exists('mime_content_type')) {
+                        $mime_type = mime_content_type($imageDownload);
+                    } else if (function_exists('finfo_open')) {
+                        $file_info = finfo_open(FILEINFO_MIME_TYPE);
+                        $mime_type = finfo_file($file_info, $imageDownload);
+                        finfo_close($file_info);
+                    } else {
+                        $mime_type = wp_get_image_mime($imageDownload);
+                    }
+
+                    if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
+                        $image_size = getimagesize($imageDownload);
+                        if ($image_size !== false) {
+                            // File is an image, proceed with your logic
+                        } else {
+                            // File is not a valid image, handle the error
+                            $this->writeLog('Downloaded file is not a valid image.');
+                            return false;
+                        }
+                    } else {
+                        // File MIME type is not an image, handle the error
+                        $this->writeLog('Downloaded file MIME type is not an image.');
+                        return false;
+                    }
+
+                    $exif = 'image/jpeg';
+                    $mime = 'image/jpeg';
+
+                    // Allowed
+                    $allowed_file_types = array('image/png', 'image/jpeg', 'image/jpg', 'image/webp');
+                    $this->writeLog('Allowed types');
+                    $this->writeLog(print_r($allowed_file_types, true));
+                    $this->writeLog('Mime');
+                    $this->writeLog(print_r($mime, true));
+                    $this->writeLog('In array');
+                    $this->writeLog(print_r(in_array($mime, $allowed_file_types), true));
+
+                    if (!in_array($mime, $allowed_file_types)) {
+                        $fileTypeError = true;
+                        $this->writeLog('Not allowed file type.');
+                        $this->writeLog($imageData['url']);
+                        $this->writeLog(print_r($imageDownload, true));
+                        $this->writeLog(print_r($exif, true));
+                        $this->writeLog(print_r($mime, true));
+                        $this->writeLog(in_array($mime, $allowed_file_types));
+                    } else {
+
+                        // Check if original is bigger than compressed, failsafe
+                        if ($stats[$imageSize]['original']['size'] > filesize($imageDownload)) {
+                            if (file_exists($imagePath)) {
+                                unlink($imagePath);
+                            }
+
+                            $c = copy($imageDownload, $imagePath);
+                            $this->writeLog(print_r($c, true));
+                        } else {
+                            $this->writeLog('Filesize bad?.');
+                            $this->writeLog($stats[$imageSize]['original']['size']);
+                            $this->writeLog(filesize($imageDownload));
+                        }
+
+                    }
+
+                }
             }
 
-          }
+            $this->writeLog('Copied image ' . $imagePath);
 
-        }
-      }
+            $settings = get_option(WPS_IC_SETTINGS);
 
-      $this->writeLog('Copied image ' . $imagePath);
+            if (!empty($settings['generate_webp']) && $settings['generate_webp'] == '1' && !empty($imageData['url_webp'])) {
+                $webpPath = str_replace(['.png', '.jpg', '.jpeg'], '.webp', $imagePath);
 
-      $settings = get_option(WPS_IC_SETTINGS);
+                // It's an URL
+                $imageWebpDownload = download_url($imageData['url_webp']);
 
-      if (!empty($settings['generate_webp']) && $settings['generate_webp'] == '1'  && !empty($imageData['url_webp'])) {
-        $webpPath = str_replace(['.png', '.jpg', '.jpeg'], '.webp', $imagePath);
+                // Verify if the downloaded file is an image
+                //	      $file_info = finfo_open(FILEINFO_MIME_TYPE);
+                //	      $mime_type = finfo_file($file_info, $imageWebpDownload);
+                //	      finfo_close($file_info);
 
-        // It's an URL
-        $imageWebpDownload = download_url($imageData['url_webp']);
+                if (function_exists('mime_content_type')) {
+                    $mime_type = mime_content_type($imageWebpDownload);
+                } else if (function_exists('finfo_open')) {
+                    $file_info = finfo_open(FILEINFO_MIME_TYPE);
+                    $mime_type = finfo_file($file_info, $imageWebpDownload);
+                    finfo_close($file_info);
+                } else {
+                    $mime_type = wp_get_image_mime($imageWebpDownload);
+                }
 
-        // Verify if the downloaded file is an image
-        //	      $file_info = finfo_open(FILEINFO_MIME_TYPE);
-        //	      $mime_type = finfo_file($file_info, $imageWebpDownload);
-        //	      finfo_close($file_info);
+                if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'])) {
+                    $image_size = getimagesize($imageWebpDownload);
+                    if ($image_size !== false) {
+                        // File is an image, proceed with your logic
+                    } else {
+                        // File is not a valid image, handle the error
+                        $this->writeLog('Downloaded file is not a valid image.');
+                        return false;
+                    }
+                } else {
+                    // File MIME type is not an image, handle the error
+                    $this->writeLog('Downloaded file MIME type is not an image.');
+                    return false;
+                }
 
-        if (function_exists('mime_content_type')){
-          $mime_type = mime_content_type($imageWebpDownload);
-        } else if (function_exists('finfo_open')) {
-          $file_info = finfo_open(FILEINFO_MIME_TYPE);
-          $mime_type = finfo_file($file_info, $imageWebpDownload);
-          finfo_close($file_info);
-        } else {
-          $mime_type = wp_get_image_mime($imageWebpDownload);
-        }
+                $mime = 'image/jpeg';
+                $stats[$imageSize]['webp_path'] = '';
+                // Allowed
+                $allowed_file_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+                if (!in_array($mime, $allowed_file_types)) {
+                    $fileTypeError = true;
+                } else {
+                    // Check if original is bigger than compressed, failsafe
+                    if ($stats[$imageSize]['original']['size'] > filesize($imageWebpDownload)) {
+                        if (file_exists($webpPath)) {
+                            unlink($webpPath);
+                        }
+                        copy($imageWebpDownload, $webpPath);
+                        $stats[$imageSize]['webp_path'] = $webpPath;
+                    }
 
-        if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'])) {
-          $image_size = getimagesize($imageWebpDownload);
-          if ($image_size !== false) {
-            // File is an image, proceed with your logic
-          } else {
-            // File is not a valid image, handle the error
-            $this->writeLog('Downloaded file is not a valid image.');
-            return false;
-          }
-        } else {
-          // File MIME type is not an image, handle the error
-          $this->writeLog('Downloaded file MIME type is not an image.');
-          return false;
-        }
+                }
 
-        $mime = 'image/jpeg';
-        $stats[$imageSize]['webp_path'] = '';
-        // Allowed
-        $allowed_file_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-        if (!in_array($mime, $allowed_file_types)) {
-          $fileTypeError = true;
-        } else {
-          // Check if original is bigger than compressed, failsafe
-          if ($stats[$imageSize]['original']['size'] > filesize($imageWebpDownload)) {
-            if (file_exists($webpPath)) {
-              unlink($webpPath);
+
             }
-            copy($imageWebpDownload, $webpPath);
-            $stats[$imageSize]['webp_path'] = $webpPath;
-          }
 
+
+            if (!$fileTypeError) {
+                // Get Compressed Size
+                $stats[$imageSize]['compressed']['size'] = filesize($imagePath);
+                $stats['total']['compressed']['size'] += $stats[$imageSize]['compressed']['size'];
+
+                $imagesCompressed[$sanitizedURL] = array('url' => $imageData['url'], 'original' => $stats[$imageSize]['original']['size'], 'compressed' => $stats[$imageSize]['compressed']['size'], 'webp_path' => $stats[$imageSize]['webp_path']);
+
+                update_post_meta($imageID, 'wpc_images_compressed', $imagesCompressed);
+            } else {
+                $this->writeLog('File Type error');
+                $this->writeLog(print_r($fileTypeError, true));
+                update_post_meta($imageID, 'ic_compressing', array('status' => 'no-further'));
+            }
+
+            unset($imageDownload, $imagePath, $imagesCompressed, $imagesCompressed);
         }
-
-
-      }
-
-
-      if (!$fileTypeError) {
-        // Get Compressed Size
-        $stats[$imageSize]['compressed']['size'] = filesize($imagePath);
-        $stats['total']['compressed']['size'] += $stats[$imageSize]['compressed']['size'];
-
-        $imagesCompressed[$sanitizedURL] = array('url' => $imageData['url'], 'original' => $stats[$imageSize]['original']['size'], 'compressed' => $stats[$imageSize]['compressed']['size'], 'webp_path' => $stats[$imageSize]['webp_path']);
-
-        update_post_meta($imageID, 'wpc_images_compressed', $imagesCompressed);
-      } else {
-        $this->writeLog('File Type error');
-        $this->writeLog(print_r($fileTypeError, true));
-        update_post_meta($imageID, 'ic_compressing', array('status' => 'no-further'));
-      }
-
-      unset($imageDownload, $imagePath, $imagesCompressed, $imagesCompressed);
+        $this->writeLog('Write Image Ended ' . $imageID);
+        $this->writeLog('Write Image Stats ' . print_r($stats, true));
+        return $stats;
     }
-    $this->writeLog('Write Image Ended ' . $imageID);
-    $this->writeLog('Write Image Stats ' . print_r($stats, true));
-    return $stats;
-  }
 
     public function disable_scaling()
     {
@@ -814,20 +839,15 @@ class wpc_ic_delivery
 
         $downloadImage = download_url($imageURL);
 
-	  if (is_wp_error($downloadImage)) {
-		  // Log and handle the error
-		  $this->writeLog('Unable to download Image');
-		  $this->writeLog($imageURL);
-		  $this->writeLog(print_r($downloadImage, true));
-		  $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
+        if (is_wp_error($downloadImage)) {
+            // Log and handle the error
+            $this->writeLog('Unable to download Image');
+            $this->writeLog($imageURL);
+            $this->writeLog(print_r($downloadImage, true));
+            $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
 
             if ($output == 'json') {
-                wp_send_json_error([
-                    'msg' => 'failed-to-get-backup',
-                    'apiUrl' => self::$apiURL,
-                    'imageID' => $imageID,
-                    'url' => $downloadImage
-                ]);
+                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'imageID' => $imageID, 'url' => $downloadImage]);
             }
 
             return false;
@@ -837,37 +857,37 @@ class wpc_ic_delivery
 //		  $mime_type = finfo_file($file_info, $downloadImage);
 //		  finfo_close($file_info);
 
-      // Verify if the downloaded file is an image
-      if (function_exists('mime_content_type')){
-        $mime_type = mime_content_type($downloadImage);
-      } else if (function_exists('finfo_open')) {
-        $file_info = finfo_open(FILEINFO_MIME_TYPE);
-        $mime_type = finfo_file($file_info, $downloadImage);
-        finfo_close($file_info);
-      } else {
-        $mime_type = wp_get_image_mime($downloadImage);
-      }
+            // Verify if the downloaded file is an image
+            if (function_exists('mime_content_type')) {
+                $mime_type = mime_content_type($downloadImage);
+            } else if (function_exists('finfo_open')) {
+                $file_info = finfo_open(FILEINFO_MIME_TYPE);
+                $mime_type = finfo_file($file_info, $downloadImage);
+                finfo_close($file_info);
+            } else {
+                $mime_type = wp_get_image_mime($downloadImage);
+            }
 
-		  if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
-			  $imageSize = getimagesize($downloadImage);
-			  if ($imageSize !== false) {
-				  // File is an image, proceed with your logic
-			  } else {
-				  // File is not a valid image, handle the error
-				  $this->writeLog('Downloaded file is not a valid image.');
-				  return false;
-			  }
-		  } else {
-			  // File MIME type is not an image, handle the error
-			  $this->writeLog('Downloaded file MIME type is not an image.');
-			  return false;
-		  }
-	  }
+            if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
+                $imageSize = getimagesize($downloadImage);
+                if ($imageSize !== false) {
+                    // File is an image, proceed with your logic
+                } else {
+                    // File is not a valid image, handle the error
+                    $this->writeLog('Downloaded file is not a valid image.');
+                    return false;
+                }
+            } else {
+                // File MIME type is not an image, handle the error
+                $this->writeLog('Downloaded file MIME type is not an image.');
+                return false;
+            }
+        }
 
 
-	  if (file_exists($imagePath)) {
-      unlink($imagePath);
-    }
+        if (file_exists($imagePath)) {
+            unlink($imagePath);
+        }
 
 
         if (file_exists($imagePath)) {

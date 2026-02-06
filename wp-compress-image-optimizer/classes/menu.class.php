@@ -74,11 +74,11 @@ class wps_ic_menu extends wps_ic
             return;
         }
 
-        if (current_user_can('manage_options')) {
+        if (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge')) {
             $admin_bar->add_menu(['id' => 'wp-compress', 'title' => '<div id="wpc-ic-icon-admin-menu" class="ab-item wpc-ic-logo svg"><span class="screen-reader-text"></span></div>', 'href' => admin_url('options-general.php?page=' . $this::$slug), 'meta' => ['title' => __(''), 'html' => '<div class="wp-compress-admin-bar-icon"></div>'],]);
         }
 
-        if (!is_admin() && current_user_can('manage_options')) {
+        if (!is_admin() && current_user_can('manage_wpc_purge')) {
             // Show options in frontend
 
             $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress', 'title' => 'Purge & Preload HTML Cache', 'href' => '#', 'meta' => ['title' => __('Purge & Preload HTML Cache'), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
@@ -116,7 +116,7 @@ class wps_ic_menu extends wps_ic
 
             $admin_bar->add_menu(['id' => 'wp-compress-view-as-visitor', 'parent' => 'wp-compress', 'title' => 'View as Visitor', 'href' => '#', 'meta' => ['title' => __('View as Visitor'), 'target' => '_self', 'class' => 'wp-compress-view-as-visitor'],]);
 
-        } elseif (current_user_can('manage_options')) {
+        } elseif (current_user_can('manage_wpc_settings') ||current_user_can('manage_wpc_purge')) {
             // Shows if user is logged in!
 
             $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress', 'title' => 'Purge & Preload HTML Cache', 'href' => '#', 'meta' => ['title' => __('Purge & Preload HTML Cache'), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
@@ -150,7 +150,7 @@ class wps_ic_menu extends wps_ic
 
         }
 
-        if (current_user_can('manage_options')) {
+        if (current_user_can('manage_wpc_settings')) {
             $admin_bar->add_menu(['id' => 'wp-compress-settings', 'parent' => 'wp-compress', 'title' => 'Settings', 'href' => admin_url('options-general.php?page=' . $this::$slug), 'meta' => ['title' => __('Settings'), 'target' => '_self', 'class' => 'wp-compress-bar-settings'],]);
         }
 
@@ -167,7 +167,7 @@ class wps_ic_menu extends wps_ic
                         //$status = 'Not Generated';
                         $status = '<span class="wp-compress-admin-bar-fail"></span>';
                     }
-                    $admin_bar->add_menu(['id' => 'wp-compress-critical-status', 'title' => '<div class="wp-compress-critical-status">Critical Css: ' . $status . '</div>', 'href' => '', 'meta' => ['title' => __(''), 'html' => ''],]);
+                    #$admin_bar->add_menu(['id' => 'wp-compress-critical-status', 'title' => '<div class="wp-compress-critical-status">Critical Css: ' . $status . '</div>', 'href' => '', 'meta' => ['title' => __(''), 'html' => ''],]);
                 }
             }
 
@@ -179,7 +179,7 @@ class wps_ic_menu extends wps_ic
                     } else {
                         $status = '<span class="wp-compress-admin-bar-fail"></span>';
                     }
-                    $admin_bar->add_menu(['id' => 'wp-compress-cache-status', 'title' => '<div class="wp-compress-cache-status">Cache: ' . $status . '</div>', 'href' => '', 'meta' => ['title' => __(''), 'html' => ''],]);
+                    #$admin_bar->add_menu(['id' => 'wp-compress-cache-status', 'title' => '<div class="wp-compress-cache-status">Cache: ' . $status . '</div>', 'href' => '', 'meta' => ['title' => __(''), 'html' => ''],]);
                 }
             }
 
@@ -214,13 +214,13 @@ class wps_ic_menu extends wps_ic
 
     public function mu_menu_init()
     {
-        add_menu_page('WP Compress', 'WP Compress', 'manage_options', $this::$slug . '-mu', [$this, 'render_mu_admin_page']);
+        add_menu_page('WP Compress', 'WP Compress', 'manage_wpc_settings', $this::$slug . '-mu', [$this, 'render_mu_admin_page']);
     }
 
 
     public function menu_init()
     {
-        add_submenu_page('options-general.php', 'WP Compress', 'WP Compress', 'manage_options', $this::$slug, [$this, 'render_admin_page_v4']);
+        add_submenu_page('options-general.php', 'WP Compress', 'WP Compress', 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
     }
 
 
@@ -285,15 +285,17 @@ class wps_ic_menu extends wps_ic
         }
 
         if (empty($apikey) || !$apikey) {
-            // Old Version
-            #$this->templates->get_admin_page('connect/api-connect');
-            #$this->templates->get_admin_page('advanced_settings_v4');
 
             if (!empty($_GET['showAdvanced'])) {
                 $this->templates->get_admin_page('advanced_settings_v4');
             } else {
                 // Lite Version
-                $this->templates->get_admin_page('connect/lite-api-connect');
+                if(get_option('wps_ic_url_changed')){
+                    $this->templates->get_admin_page('connect/lite-url-changed');
+                } else {
+                    $this->templates->get_admin_page('connect/lite-api-connect');
+                }
+
                 $this->templates->get_admin_page('lite_settings');
             }
 

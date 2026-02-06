@@ -1,4 +1,7 @@
 <?php
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 class wps_ic_litespeed extends wps_ic_integrations {
 
@@ -45,6 +48,25 @@ class wps_ic_litespeed extends wps_ic_integrations {
 
 	public function fix_setting( $setting ) {
 
+	}
+
+	public function add_admin_hooks() {
+		return [
+			'wps_ic_purge_all_cache' => [
+				'callback' => 'purge_cache',
+				'priority' => 10,
+				'args' => 1
+			]
+		];
+	}
+
+	public function purge_cache($url_key = false) {
+		if (defined('LSCWP_V')) {
+			do_action('litespeed_purge_all');
+			if (is_callable(['LiteSpeed_Cache_Tags', 'add_purge_tag'])) {
+				LiteSpeed_Cache_Tags::add_purge_tag('*');
+			}
+		}
 	}
 
 }

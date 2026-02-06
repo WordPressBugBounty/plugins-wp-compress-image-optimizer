@@ -80,7 +80,22 @@ class wps_ic_comms extends wps_ic
         }
 
         // Get attachment
-        $attachments = $wpdb->get_results("SELECT ID FROM " . $wpdb->prefix . "posts WHERE post_type='attachment' AND post_status='inherit' AND post_mime_type='image/jpeg' ORDER BY post_date DESC LIMIT 1");
+        $attachments = $wpdb->get_results(
+            $wpdb->prepare(
+                "
+        SELECT ID
+        FROM {$wpdb->prefix}posts
+        WHERE post_type = %s
+          AND post_status = %s
+          AND post_mime_type = %s
+        ORDER BY post_date DESC
+        LIMIT 1
+        ",
+                'attachment',   // post_type
+                'inherit',      // post_status
+                'image/jpeg'    // post_mime_type
+            )
+        );
 
         if ($attachments) {
 
@@ -187,24 +202,70 @@ class wps_ic_comms extends wps_ic
             $month_start = strtotime('first day of this month', time());
             $month_end = strtotime('last day of this month', time());
 
-            $stats = $wpdb->get_results("SELECT COUNT(ID) as count, created, original, compressed, saved FROM " . $wpdb->prefix . "ic_stats WHERE created>='" . date('Y-m-d', $month_start) . "' AND created<='" . date('Y-m-d', $month_end) . "' GROUP BY attachment_ID ORDER BY created DESC");
-        } else if ($range == 'last_month') {
+            $start_date = date('Y-m-d', $month_start);
+            $end_date = date('Y-m-d', $month_end);
+
+            $stats = $wpdb->get_results($wpdb->prepare("SELECT COUNT(ID) AS count,
+               created,
+               original,
+               compressed,
+               saved
+        FROM {$wpdb->prefix}ic_stats
+        WHERE created >= %s
+          AND created <= %s
+        GROUP BY attachment_ID
+        ORDER BY created DESC
+        ", $start_date, $end_date));
+
+        } elseif ($range == 'last_month') {
 
             $month_start = strtotime('first day of last month', time());
             $month_end = strtotime('last day of last month', time());
 
-            $stats = $wpdb->get_results("SELECT COUNT(ID) as count, created, original, compressed, saved FROM " . $wpdb->prefix . "ic_stats WHERE created>='" . date('Y-m-d', $month_start) . "' AND created<='" . date('Y-m-d', $month_end) . "' GROUP BY attachment_ID ORDER BY created DESC");
+            $start_date = date('Y-m-d', $month_start);
+            $end_date = date('Y-m-d', $month_end);
 
-        } else if ($range == 'get_month') {
+            $stats = $wpdb->get_results($wpdb->prepare("SELECT COUNT(ID) AS count,
+               created,
+               original,
+               compressed,
+               saved
+        FROM {$wpdb->prefix}ic_stats
+        WHERE created >= %s
+          AND created <= %s
+        GROUP BY attachment_ID
+        ORDER BY created DESC", $start_date, $end_date));
+
+        } elseif ($range == 'get_month') {
 
             $month = sanitize_text_field($_GET['month']);
+
             $month_start = strtotime('first day of this month', strtotime($month));
             $month_end = strtotime('last day of this month', strtotime($month));
 
-            $stats = $wpdb->get_results("SELECT COUNT(ID) as count, created, original, compressed, saved FROM " . $wpdb->prefix . "ic_stats WHERE created>='" . date('Y-m-d', $month_start) . "' AND created<='" . date('Y-m-d', $month_end) . "' GROUP BY attachment_ID ORDER BY created DESC");
+            $start_date = date('Y-m-d', $month_start);
+            $end_date = date('Y-m-d', $month_end);
+
+            $stats = $wpdb->get_results($wpdb->prepare("SELECT COUNT(ID) AS count,
+               created,
+               original,
+               compressed,
+               saved
+        FROM {$wpdb->prefix}ic_stats
+        WHERE created >= %s
+          AND created <= %s
+        GROUP BY attachment_ID
+        ORDER BY created DESC", $start_date, $end_date));
 
         } else {
-            $stats = $wpdb->get_results("SELECT COUNT(ID) as count, created, original, compressed, saved FROM " . $wpdb->prefix . "ic_stats GROUP BY attachment_ID ORDER BY created DESC");
+            $stats = $wpdb->get_results("SELECT COUNT(ID) AS count,
+           created,
+           original,
+           compressed,
+           saved
+    FROM {$wpdb->prefix}ic_stats
+    GROUP BY attachment_ID
+    ORDER BY created DESC");
         }
 
         $output = [];
@@ -279,10 +340,10 @@ class wps_ic_comms extends wps_ic
     {
         global $wpdb, $wps_ic;
 
-      while (ob_get_level()) {
-        ob_end_clean();
-      }
-      ob_start();
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        ob_start();
 
         $wps_ic = new wps_ic();
         $output = [];
@@ -324,7 +385,6 @@ class wps_ic_comms extends wps_ic
             wp_send_json_success($remote_action);
         }
     }
-
 
 
     public function isActive()
@@ -449,15 +509,7 @@ class wps_ic_comms extends wps_ic
 
         if ($cdn == 'true') {
             $settings['live-cdn'] = '1';
-            $settings['serve'] = [
-                'jpg' => '1',
-                'png' => '1',
-                'gif' => '1',
-                'svg' => '1',
-                'css' => '1',
-                'js' => '1',
-                'fonts' => '0'
-            ];
+            $settings['serve'] = ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1', 'css' => '1', 'js' => '1', 'fonts' => '0'];
             $settings['css'] = 1;
             $settings['js'] = 1;
             $settings['fonts'] = 0;
@@ -466,15 +518,7 @@ class wps_ic_comms extends wps_ic
             $settings['retina'] = 1;
         } else {
             $settings['live-cdn'] = '0';
-            $settings['serve'] = [
-                'jpg' => '0',
-                'png' => '0',
-                'gif' => '0',
-                'svg' => '0',
-                'css' => '0',
-                'js' => '0',
-                'fonts' => '0'
-            ];
+            $settings['serve'] = ['jpg' => '0', 'png' => '0', 'gif' => '0', 'svg' => '0', 'css' => '0', 'js' => '0', 'fonts' => '0'];
             $settings['css'] = 0;
             $settings['js'] = 0;
             $settings['fonts'] = 0;
@@ -502,16 +546,19 @@ class wps_ic_comms extends wps_ic
         // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
 
+        if (!class_exists('wps_ic_htaccess')) {
+            include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+        }
+
+        $htaccess = new wps_ic_htaccess();
+
         if ($preset == 'safe') {
-            // TODO: MAYBE WP CACHE?!
             // Setup Advanced Caching
-            $htaccess = new wps_ic_htaccess();
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
         } else {
             // Setup Advanced Caching
-            $htaccess = new wps_ic_htaccess();
             // Add WP_CACHE to wp-config.php
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
@@ -595,7 +642,7 @@ class wps_ic_comms extends wps_ic
             }
 
             if (!method_exists($this, $action)) {
-                wp_send_json_error('Function does not existt');
+                wp_send_json_error('Function does not exist');
             }
 
             self::$action();
@@ -637,80 +684,73 @@ class wps_ic_comms extends wps_ic
     }
 
 
-	public function cnameAdd()
-	{
-		$cname_input = !empty($_GET['cname']) ? $_GET['cname'] : null;
+    public function cnameAdd()
+    {
+        $cname_input = !empty($_GET['cname']) ? $_GET['cname'] : null;
 
-		$cname_class = new wps_ic_cname();
-		$cname_class->add($cname_input);
-	}
+        $cname_class = new wps_ic_cname();
+        $cname_class->add($cname_input);
+    }
 
-	public function cnameRetry()
-	{
-		$cname_class = new wps_ic_cname();
-		$cname_class->retry();
-	}
+    public function cnameRetry()
+    {
+        $cname_class = new wps_ic_cname();
+        $cname_class->retry();
+    }
 
-	public function cnameRemove()
-	{
-		$cname_class = new wps_ic_cname();
-		$cname_class->remove();
-	}
+    public function cnameRemove()
+    {
+        $cname_class = new wps_ic_cname();
+        $cname_class->remove();
+    }
 
-	public function settingsCheck()
-	{
-		$options = get_option(WPS_IC_OPTIONS);
+    public function settingsCheck()
+    {
+        $options = get_option(WPS_IC_OPTIONS);
 
-		if (empty($options) || empty($options['api_key'])) {
-			return;
-		}
+        if (empty($options) || empty($options['api_key'])) {
+            return;
+        }
 
-		$url = 'https://apiv3.wpcompress.com/api/site/credits';
-		$call = wp_remote_get($url, [
-			'timeout' => 30,
-			'sslverify' => false,
-			'user-agent' => WPS_IC_API_USERAGENT,
-			'headers' => [
-				'apikey' => $options['api_key'],
-			]
-		]);
+        $url = 'https://apiv3.wpcompress.com/api/site/credits';
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
 
-		if (is_wp_error($call)) {
-			return;
-		}
+        if (is_wp_error($call)) {
+            return;
+        }
 
-		$body = wp_remote_retrieve_body($call);
-		$response_code = wp_remote_retrieve_response_code($call);
+        $body = wp_remote_retrieve_body($call);
+        $response_code = wp_remote_retrieve_response_code($call);
 
-		if ($response_code !== 200) {
-			return;
-		}
+        if ($response_code !== 200) {
+            return;
+        }
 
-		$data = json_decode($body);
+        $data = json_decode($body);
 
-		if (json_last_error() !== JSON_ERROR_NONE) {
-			return;
-		}
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return;
+        }
 
-		$allow_local = true;
-		$allow_live = true;
+        $allow_local = true;
+        $allow_live = true;
 
-		if (!empty($data->suspended) && $data->suspended == 1) {
-			$allow_local = false;
-			$allow_live = false;
-		}
+        if (!empty($data->suspended) && $data->suspended == 1) {
+            $allow_local = false;
+            $allow_live = false;
+        }
 
-		$updated_local = update_option('wps_ic_allow_local', $allow_local);
-		$updated_live = update_option('wps_ic_allow_live', $allow_live);
+        $updated_local = update_option('wps_ic_allow_local', $allow_local);
+        $updated_live = update_option('wps_ic_allow_live', $allow_live);
 
-		if ($updated_local || $updated_live) {
-			if (class_exists('wps_ic_cache_integrations')) {
-				$cache = new wps_ic_cache_integrations();
-				$cache::purgeAll();
-			}
-		}
-		wp_send_json_success([$updated_local, $updated_live]);
-	}
+        if ($updated_local || $updated_live) {
+            if (class_exists('wps_ic_cache_integrations')) {
+                $cache = new wps_ic_cache_integrations();
+                $cache::purgeAll();
+            }
+        }
+        wp_send_json_success([$updated_local, $updated_live]);
+    }
 
 
 }

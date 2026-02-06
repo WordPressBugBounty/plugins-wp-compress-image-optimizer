@@ -1,8 +1,11 @@
 <?php
 global $wps_ic, $wpdb;
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
+    if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
         die('Forbidden.');
     }
 }
@@ -18,7 +21,7 @@ $cache = new wps_ic_cache_integrations();
 
 if (!empty($_GET['stopBulk'])) {
     $local = new wps_ic_local();
-    $send = $local->sendToAPI(['stop'], '', 'stopBulk');
+    $send = $local->sendToAPI(['stop']);
     if ($send) {
         delete_option('wps_ic_parsed_images');
         delete_option('wps_ic_BulkStatus');
@@ -26,7 +29,12 @@ if (!empty($_GET['stopBulk'])) {
         set_transient('wps_ic_bulk_done', true, 60);
 
         // Delete all transients
-        $query = $wpdb->query("DELETE FROM " . $wpdb->options . " WHERE option_name LIKE '%wps_ic_compress_%'");
+        $wpdb->query(
+                $wpdb->prepare(
+                        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+                        $wpdb->esc_like( 'wps_ic_compress_' ) . '%'
+                )
+        );
         wp_send_json_success();
     }
 }
@@ -65,7 +73,6 @@ if (!empty($_GET['selectModes'])) {
 // Generate Critical CSS
 if (!empty($_GET['generate_crit'])) {
     $page = sanitize_text_field($_GET['generate_crit']);
-    var_dump($page);
 
     if ($page == 'home') {
         $page = site_url();
@@ -105,7 +112,6 @@ if (!empty($_GET['generate_crit'])) {
 
     }
 
-    var_dump($post);
 
     die();
 }
@@ -116,9 +122,15 @@ if (!empty($_GET['show_hidden_menus'])) {
 }
 
 // Save Settings
-if (!empty($_POST['options'])) {
+if (!empty($_POST['options']['font-display'])) {
+  //todo: remove this clause if moving fonts to main settings
+  $options = get_option(WPS_IC_SETTINGS);
+  $options['font-display'] = sanitize_text_field($_POST['options']['font-display']);
+  update_option(WPS_IC_SETTINGS, $options);
+  $cache::purgeAll(false, false, false, false);
+} else if (!empty($_POST['options'])) {
 
-    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
+    if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
         die('No privileges to save options!');
     }
 
@@ -126,6 +138,10 @@ if (!empty($_POST['options'])) {
 
     $submittedOptions = $_POST['options'];
     $optimizatonQuality = 'lossless';
+
+    //todo remove when moving
+    $options = get_option(WPS_IC_SETTINGS);
+    $submittedOptions['font-display'] = $options['font-display'] ?? 'off';
 
     if (isset($submittedOptions['qualityLevel'])) {
         switch ($submittedOptions['qualityLevel']):
@@ -172,7 +188,7 @@ if (!empty($_POST['options'])) {
     }
 
     update_option(WPS_IC_SETTINGS, $options);
-    $cache::purgeAll(); //this only clears cache files
+    $cache::purgeAll(false, false, false, false);
 
     //To edit what setting purges what, go to wps_ic_options->__construct()
     if (in_array('combine', $purgeList)) {
@@ -185,12 +201,17 @@ if (!empty($_POST['options'])) {
 
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
-        $cacheLogic->purgeCDN();
+        $cacheLogic->purgeCDN(false);
         $cache::purgeCriticalFiles();
-        $cache::purgePreloads();
+        //$cache::purgePreloads();
+    }
+
+    if (!class_exists('wps_ic_htaccess')) {
+        include_once WPS_IC_DIR . 'classes/htaccess.class.php';
     }
 
     $htacces = new wps_ic_htaccess();
+
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
@@ -290,6 +311,156 @@ $option = get_option(WPS_IC_OPTIONS);
 
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
+
+///CF integration
+$cf = get_option(WPS_IC_CF);
+if (!empty($_GET['debugCF'])) {
+    #var_dump($cf);
+}
+
+if (!empty($cf)){
+	$cfsdk = new WPC_CloudflareAPI($cf['token']);
+
+	// Initialize settings with defaults if not set
+	if (!isset($cf['settings'])){
+		$cf['settings'] = [
+			'assets'     => '1',
+			'edge-cache' => 'all',
+			'cdn'        => '1'
+		];
+		update_option(WPS_IC_CF, $cf);
+	}
+
+	if ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0'){
+		$allowLive = false;
+
+        $settings['live-cdn'] = '0';
+
+        foreach ($settings['serve'] as $key => $value) {
+            $settings['serve'][$key] = '0';
+        }
+        $settings['css'] = '0';
+        $settings['js'] = '0';
+        $settings['fonts'] = '0';
+
+        update_option(WPS_IC_SETTINGS, $settings);
+	}
+
+
+	// Check if this is a form submission and CF settings changed
+	if (!empty($_POST['options'])){
+		$submittedOptions = $_POST['options'];
+
+		// Get new CF settings from submitted options
+		$new_assets = isset($submittedOptions['cf']['assets']) && $submittedOptions['cf']['assets'] == '1' ? '1' : '0';
+		$new_edge_cache = isset($submittedOptions['cf']['edge-cache']) ? $submittedOptions['cf']['edge-cache'] : 'home';
+		$new_cdn = isset($submittedOptions['cf']['cdn']) && $submittedOptions['cf']['cdn'] == '1' ? '1' : '0';
+
+		// Check if settings changed
+		$cf_settings_changed = (
+			$cf['settings']['assets'] != $new_assets ||
+			$cf['settings']['edge-cache'] != $new_edge_cache ||
+			$cf['settings']['cdn'] != $new_cdn
+		);
+
+		if ($cf_settings_changed){
+			// Initialize error collection
+			$error_messages = [];
+			$new_cf_settings = $cf['settings'];
+
+			// Handle CDN DNS record first
+			if ($new_cdn == '1' && $cf['settings']['cdn'] != '1') {
+				//DNS nameserver check
+				$url = add_query_arg([
+					'cfDNSCheck' => 'true',
+					'host' => $cf['zoneName'],
+				], 'https://frankfurt.zapwp.net/');
+
+				$response = wp_remote_get($url, ['timeout' => 15]);
+				$hasCloudflare = false;
+
+				if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+					$data = json_decode(wp_remote_retrieve_body($response), true);
+
+					if (isset($data['data']['records']['result'])) {
+						foreach ($data['data']['records']['result'] as $ns) {
+							if (stripos($ns, 'cloudflare') !== false) {
+								$hasCloudflare = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if ($hasCloudflare) {
+                    $new_cf_settings['cdn'] = $new_cdn;
+				} else {
+					$error_messages[] = 'CDN DNS: Domain DNS is not managed by Cloudflare';
+				}
+			} elseif ($new_cdn == '0' && $cf['settings']['cdn'] == '1') {
+                $new_cf_settings['cdn'] = $new_cdn;
+			}
+
+			// Test the cache config update
+			$staticAssetsEnabled = $new_assets == '1';
+			$htmlCacheMode       = $new_edge_cache;
+
+            $result = $cfsdk->configureCF($htmlCacheMode, $staticAssetsEnabled);
+
+			// Check for errors in the result
+			if (isset($result['static']) && is_wp_error($result['static'])) {
+				$formatted_error = $cfsdk->formatError($result['static'], 'Static Assets', 'Zone - Cache Rules - Edit');
+				if ($formatted_error) {
+					$error_messages[] = $formatted_error;
+				}
+			} else {
+				$new_cf_settings['assets'] = $new_assets;
+			}
+
+			if (isset($result['homepage']) && is_wp_error($result['homepage'])) {
+				$formatted_error = $cfsdk->formatError($result['homepage'], 'Homepage Cache', 'Zone - Cache Rules - Edit');
+				if ($formatted_error) {
+					$error_messages[] = $formatted_error;
+				}
+			} else {
+				$new_cf_settings['edge-cache'] = $new_edge_cache;
+			}
+
+			if (isset($result['fullhtml']) && is_wp_error($result['fullhtml'])) {
+				$formatted_error = $cfsdk->formatError($result['fullhtml'], 'Full HTML Cache', 'Zone - Cache Rules - Edit');
+				if ($formatted_error) {
+					$error_messages[] = $formatted_error;
+				}
+			} else {
+				$new_cf_settings['edge-cache'] = $new_edge_cache;
+			}
+
+			if (isset($result['tiered_cache']) && is_wp_error($result['tiered_cache'])) {
+				$formatted_error = $cfsdk->formatError($result['tiered_cache'], 'Tiered Cache', 'Zone - Zone Settings - Edit');
+				if ($formatted_error) {
+					$error_messages[] = $formatted_error;
+				}
+			}
+
+			// Combine all errors with line breaks
+			if (!empty($error_messages)) {
+				$cf_error_message = implode('<br><br>', $error_messages);
+				$cf_has_error = true;
+			}
+
+			// Update settings with successful changes
+			$cf = get_option(WPS_IC_CF);
+			$cf['settings'] = $new_cf_settings;
+			update_option(WPS_IC_CF, $cf);
+
+			$cache::purgeAll(false, false, false, false);
+
+			if (!empty($_GET['dbgCF'])) {
+				print_r($result);
+			}
+		}
+	}
+}
 
 if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
     ?>
@@ -706,14 +877,19 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <div class="wpc-settings-content-inner">
                                                 <div class="wpc-rounded-box wpc-rounded-box-full">
                                                     <?php
-                                                    echo $gui::usageGraph(); ?>
+                                                    if ($cf){
+                                                        echo $gui::CFGraph();
+                                                    } else {
+                                                        echo $gui::usageGraph();
+                                                    }
+                                                    ?>
                                                 </div>
                                             </div>
 
                                             <?php
-                                            if (($localEnabled || $cdnEnabled) && ($allowLive || $allowLocal)) {
-                                                echo $gui::usageStats();
-                                            }
+
+                                            echo $gui::usageStats();
+
 
                                             include WPS_IC_DIR . 'templates/admin/partials/v4/footer-scripts.php';
                                             ?>
@@ -910,11 +1086,33 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4('Hide Preloading Status', 'Display Preloading status in admin bar for the page.', false, '0', ['status', 'hide_preload_status'], false, 'right'); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Hide from WordPress', 'Totally hide
-                                      // the plugin from the Admin Area.', false, 'hide_compress', 'hide_compress', false, 'right'); ?>
+                                            echo $gui::checkboxDescription_v4('Hide from WordPress', 'Totally hide the plugin from the Admin Area.', false, 'hide_compress', 'hide_compress', false, 'right'); ?>
 
                                         </div>
 
+                                    </div>
+                                    <div class="wpc-tab-content-box" id="ux-settings">
+                                        <?php
+                                        echo $gui::checkboxTabTitle('User Permissions', 'Tailor which users can use features of the plugin.', 'tab-icons/ux-settings.svg', '', ''); ?>
+
+                                        <div class="wpc-spacer"></div>
+
+                                        <?php
+                                        $users = new wps_ic_users();
+                                        $roles = $users->getRoles(['skip_admin' => true]);
+                                        if (!empty($roles)) {
+                                            foreach ($roles as $key => $role) {
+                                                echo '<h3>' . $role . '</h3>';
+                                                echo '<div class="wpc-items-list-row mb-20">';
+
+                                                echo $gui::checkboxDescription_v4('Purge Options', 'User will have capability to Purge CDN, HTML, Critical CSS and CloudFlare.', false, '0', ['permissions', $key.'_purge'], false, 'right');
+
+                                                echo $gui::checkboxDescription_v4('Manage Settings', 'User will have capability to control all the functions/settings of plugin.', false, '0', ['permissions', $key.'_manage_wpc'], false, 'right');
+
+                                                echo '</div>';
+                                            }
+                                        }
+                                        ?>
                                     </div>
                                 </div>
                                 <div class="wpc-tab-content" id="performance-tweaks-options" style="display:none;">
@@ -1162,22 +1360,6 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
 
                                             <?php
-                                            /* always forced on, not used in delay-v2
-                                            echo $gui::checkboxDescription_v4('Preload Scripts', 'Preload delayed JS scripts for a faster load time.',
-                                                false, false, 'preload-scripts', false, 'right',
-                                                false, false, '', false);
-                                            */
-                                            ?>
-
-
-                                            <?php
-                                            /* Always forced on
-                                            echo $gui::checkboxDescription_v4('Set \'fetchpriority\'', 'Set \'fetchpriority\' to high for important images', false,
-                                                false, 'fetchpriority-high', false, 'right',
-                                                false, false, ''); ?>
-                                            */ ?>
-
-                                            <?php
                                             echo $gui::checkboxDescription_v4('Retina in srcset', 'Generate retina links in srcset attribute', false,
                                                 false, 'retina-in-srcset', false, 'right',
                                                 false, false, ''); ?>
@@ -1216,6 +1398,16 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Optimize metadata images (OG/Twitter/JSON-LD)', '', false, '0', 'optimize_meta_images', false, 'right', ''); ?>
+                                        </div>
+
+                                        <div class="wpc-items-list-row mb-20">
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Filter Bot Traffic', '', false, '0', 'ga-bot-shield', false, 'right', ''); ?>
+
+                                            <?php
+                                            echo $gui::checkboxDescription_v4('Set \'fetchpriority\'', 'Set \'fetchpriority\' to high for important images', false,
+                                                    false, 'fetchpriority-high', false, 'right', false, false, ''); ?>
+
                                         </div>
 
                                     </div>
@@ -1437,22 +1629,21 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <div class="wpc-tab-content" id="integrations" style="display:none;">
                                     <div class="wpc-tab-content-box" id="cf-connect-options" style="display: block;">
                                         <?php
-                                        echo $gui::checkboxTabTitle('CloudFlare Integration', "Seamlessly connect with Cloudflare for automated cache purging and uninterrupted access.", 'cf-logo.png', '', '', '', '', '', '', '', '', 'https://help.wpcompress.com/en-us/article/cloudflare-integration-setup-guide-for-automated-cache-purging-17ger3i/?bust=1739284717272 ', 'How to?'); ?>
+                                        echo $gui::checkboxTabTitle('Cloudflare Integration', "Connect with Cloudflare for automated cache purging, edge caching and uninterrupted access.", 'cf-logo.png', '', '', '', '', '', '', '', '', 'https://help.wpcompress.com/en-us/article/cloudflare-integration-setup-guide-for-automated-cache-purging-17ger3i/?bust=1739284717272 ', 'How to?'); ?>
 
                                         <div class="wpc-spacer"></div>
 
-                                        <div class="wpc-items-list-row mb-0">
+                                        <div class="wpc-items-list-row mb-20">
 
                                             <div class="wpc-cf-connect-form">
                                                 <?php
-                                                $cf = get_option(WPS_IC_CF);
                                                 if (empty($cf)) {
                                                     ?>
                                                     <div class="wpc-cf-loader" style="display: none;">
                                                         <span><div class="wpcLoader"></div> Connecting....</span>
                                                     </div>
                                                     <div class="wpc-cf-loader-zone" style="display: none;">
-                                                        <span><div class="wpcLoader"></div> Connecting, this might take up to 60 seconds....</span>
+                                                        <span><div class="wpcLoader"></div> Connecting, this can take up to 1-2 minutes to verify communication with Cloudflare...</span>
                                                     </div>
                                                     <div class="wpc-input-holder-no-change wpc-cf-token-hide-on-load wpc-cf-insert-token-step">
                                                         <label for="wpc-cf-token">
@@ -1461,6 +1652,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                         <input type="text" name="wpc-cf-token" id="wpc-cf-token"/>
                                                         <input type="button" class="wpc-cf-token-check wpc-cf-button" value="Connect"/>
                                                     </div>
+
                                                     <div class="wpc-select-holder-no-change" id="wpc-cf-zone-list-holder" style="display: none;">
                                                         <input type="hidden" name="wpc-cf-zone" value=""/>
                                                         <label for="wpc-cf-zone-list">
@@ -1481,10 +1673,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                 <?php } else {
                                                     ?>
                                                     <div class="wpc-cf-loader-disconnecting" style="display: none;">
-                                                        <span><div class="wpcLoader"></div> Disconnecting, this might take up to 60 seconds....</span>
+                                                        <span><div class="wpcLoader"></div> Disconnecting, this can take up to 1-2 minutes to verify communication with Cloudflare...</span>
                                                     </div>
                                                     <div class="wpc-cf-loader-refreshing" style="display: none;">
-                                                        <span><div class="wpcLoader"></div> Refreshing IP Whitelist, this might take up to 60 seconds....</span>
+                                                        <span><div class="wpcLoader"></div> Refreshing your connection, this can take up to 1-2 minutes to verify communication with Cloudflare...</span>
                                                     </div>
                                                     <div class="wpc-input-holder-no-change wpc-cf-token-connected">
                                                         <div style="display:flex;align-items: center">
@@ -1494,13 +1686,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                             <div class="wpc-cf-token-connected-info" style="flex: 2;">
                                                                 <div class="wpc-cf-token-connected-info-left">
                                                                     <?php
-                                                                    echo '<strong>' . $cf['zoneName'] . '</strong> on ID: <strong>' . $cf['zone'] . '</strong>';
+                                                                    echo '<strong>' . $cf['zoneName'] . '</strong>';
                                                                     ?>
                                                                 </div>
 
 
                                                                 <?php
-                                                                #var_dump($cf);
                                                                 if (!empty($_GET['dbgRocket'])) {
                                                                     require_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
                                                                     $cfsdk = new WPC_CloudflareAPI($cf['token']);
@@ -1512,7 +1703,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 ?>
 
                                                                 <div class="wpc-cf-token-connected-info-right">
-                                                                    <input type="button" class="wpc-cf-token-refresh-whitelist wpc-cf-button" value="Refresh Whitelist"/>
+                                                                    <input type="button" class="wpc-cf-token-verify wpc-cf-button" value="Refresh Connection"/>
                                                                     <input type="button" class="wpc-cf-token-disconnect wpc-cf-button" value="Disconnect"/>
                                                                 </div>
                                                             </div>
@@ -1520,8 +1711,68 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     </div>
                                                 <?php } ?>
                                             </div>
-
                                         </div>
+	                                    <?php if (!empty($cf)){
+		                                    if (!empty($cf_error_message)){
+			                                    ?>
+                                                <div class="wpc-cf-loader-error" style="display: block;">
+                                                    <span><?php echo $cf_error_message; ?></span>
+                                                </div>
+			                                    <?php
+		                                    }
+		                                    ?>
+                                            <div class="wpc-items-list-row mb-20">
+
+                                                <?php
+
+                                                echo $gui::cf_dropdown('HTML Edge Caching', 'Cache homepage or full site for faster TTFB.');
+
+                                                echo $gui::cf_checkboxDescription('Static Assets Cache', 'Caches CSS, JS, images, fonts and more for fast global delivery.', ['cf', 'assets']);
+
+                                                ?>
+                                            </div>
+                                            <div class="wpc-items-list-row mb-20">
+                                                <?php
+                                                echo $gui::cf_checkboxDescription('Real-Time Adaptive Optimization', 'Resize images on the fly, auto-convert to WebP, and optimize scripts (based on your plugin settings)', ['cf', 'cdn'], 'cf-cdn');
+                                                ?>
+                                            </div>
+                                            <details class="setup-accordion" id="cloudflare-permissions-accordion" open>
+                                                <summary>Please make sure your permissions are updated to use the latest integration:</summary>
+                                                <div class="accordion-body">
+                                                    <img src="<?php echo WPS_IC_URI; ?>assets/v4/images/configure-api-token.png" alt="Configure API Token" style="max-width:100%;"/>
+                                                </div>
+                                            </details>
+                                            <details class="setup-accordion" id="cloudflare-setup-accordion">
+                                                <summary>How To Get Your Cloudflare API Key</summary>
+                                                <div class="accordion-body">
+                                                    <div class="iframe-wrap">
+                                                        <iframe
+                                                                src="https://help.wpcompress.com/en-us/article/cloudflare-integration-setup-wl-sgtph4/reader/compact/"
+                                                                title="Cloudflare Integration Setup Guide"
+                                                                loading="lazy"
+                                                                referrerpolicy="no-referrer-when-downgrade"
+                                                        ></iframe>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        <?php } else{
+                                            ?>
+                                            <details class="setup-accordion" id="cloudflare-setup-accordion">
+                                                <summary>How To Get Your Cloudflare API Key</summary>
+                                                <div class="accordion-body">
+                                                    <div class="iframe-wrap">
+                                                        <iframe
+                                                                src="https://help.wpcompress.com/en-us/article/cloudflare-integration-setup-wl-sgtph4/reader/compact/"
+                                                                title="Cloudflare Integration Setup Guide"
+                                                                loading="lazy"
+                                                                referrerpolicy="no-referrer-when-downgrade"
+                                                        ></iframe>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                            <?php
+                                        } ?>
+
                                     </div>
 
 
@@ -1547,6 +1798,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     <?php } ?>
                                 </div>
 
+
+                                <div class="wpc-tab-content" id="permissions" style="display: none;">
+                                    <div class="wpc-tab-content-box">
+                                    </div>
+                                </div>
+
                                 <div class="wpc-tab-content" id="export_settings" style="display:none;">
                                     <div class="wpc-tab-content-box">
 
@@ -1556,26 +1813,29 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <div class="wpc-spacer"></div>
 
                                         <div class="wpc-settings-export-form">
-                                            <div class="cdn-popup-inner"
-                                            ">
+                                            <div class="cdn-popup-inner">
                                             <div class="wps-default-excludes-enabled-checkbox-container">
-                                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked>
-                                                <p>Export Settings</p>
+                                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked  style="min-width:24px">
+                                                <p>Settings</p>
                                             </div>
                                         </div>
-                                        <div class="cdn-popup-inner"
-                                        ">
+                                        <div class="cdn-popup-inner">
                                         <div class="wps-default-excludes-enabled-checkbox-container">
-                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes">
-                                            <p>Export Excludes</p>
+                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes"  style="min-width:24px">
+                                            <p>Excludes</p>
                                         </div>
                                     </div>
-                                    <div class="cdn-popup-inner"
-                                    ">
-                                    <div class="wps-default-excludes-enabled-checkbox-container">
-                                        <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache">
-                                        <p>Export Cache Purge Settings</p>
+                                    <div class="cdn-popup-inner">
+                                        <div class="wps-default-excludes-enabled-checkbox-container">
+                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache"  style="min-width:24px">
+                                            <p>Cache Purge Settings</p>
+                                        </div>
                                     </div>
+                                    <div class="cdn-popup-inner">
+                                        <div class="wps-default-excludes-enabled-checkbox-container">
+                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache-cookies"  style="min-width:24px">
+                                            <p>Cache Cookies Settings</p>
+                                        </div>
                                 </div>
                             </div>
 
@@ -1671,6 +1931,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         }
                                         ?>
                                     </li>
+
+                                    <li>Url changes:
+                                        <?php
+                                        echo print_r(get_option('wps_ic_url_changed_log', true)); ?>
+                                    </li>
                                 </ul>
                             </div>
                         </div>
@@ -1697,42 +1962,43 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
 <?php
 // Tooltips
-include 'partials/tooltips/all.php';
+include WPS_IC_DIR . 'templates/admin/partials/tooltips/all.php';
 
 //
-include 'partials/popups/compatibility-popups.php';
-#include 'partials/popups/geolocation.php';
-include 'partials/popups/cname.php';
-include 'partials/popups/exclude-cdn.php';
-include 'partials/popups/exclude-lazy.php';
-include 'partials/popups/exclude-webp.php';
-include 'partials/popups/exclude-adaptive.php';
-include 'partials/popups/exclude-critical-css.php';
-include 'partials/popups/exclude-inline-css.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/compatibility-popups.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/cname.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-cdn.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-lazy.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-webp.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-adaptive.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-critical-css.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-inline-css.php';
 
 // HTML Optimizations
-include 'partials/popups/exclude-minify-html.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-minify-html.php';
 
 // JS Optimizations
-include 'partials/popups/js/delay-js-configuration.php';
-include 'partials/popups/js/exclude-js-minify.php';
-include 'partials/popups/js/exclude-js-combine.php';
-include 'partials/popups/js/exclude-scripts-to-footer.php';
-include 'partials/popups/js/exclude-js-defer.php';
-include 'partials/popups/js/exclude-js-delay.php';
-include 'partials/popups/js/exclude-js-delay-v2.php';
-include 'partials/popups/js/inline-js.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/delay-js-configuration.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-minify.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-combine.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-scripts-to-footer.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-defer.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-delay.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-delay-v2.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/js/inline-js.php';
 
 // CSS Optimizations
-include 'partials/popups/css/exclude-css-combine.php';
-include 'partials/popups/css/exclude-css-minify.php';
-include 'partials/popups/css/exclude-css-render-blocking.php';
-include 'partials/popups/css/inline-css.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-combine.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-minify.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-render-blocking.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/css/inline-css.php';
 
 //Cache
-include 'partials/popups/exclude-simple-caching.php';
-include 'partials/popups/exclude-advanced-caching.php';
-include 'partials/popups/purge-settings.php';
-include 'partials/popups/cache-cookies.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-simple-caching.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-advanced-caching.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/purge-settings.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/cache-cookies.php';
 
-include 'partials/popups/import-export.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/import-export.php';
+
+include WPS_IC_DIR . 'templates/admin/partials/popups/cf-cdn.php';

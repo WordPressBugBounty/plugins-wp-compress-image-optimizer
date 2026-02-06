@@ -17,7 +17,7 @@ class wps_ic_connect extends wps_ic
 
     public function connectLite($return = false)
     {
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             if ($return) {
                 return false;
             } else {
@@ -90,7 +90,7 @@ class wps_ic_connect extends wps_ic
     {
         ini_set('max_execution_time', '120');
 
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wpc_live_connect')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wpc_live_connect')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -119,7 +119,7 @@ class wps_ic_connect extends wps_ic
             }
 
 
-            if ($call->success && $call->data->apikey != '' && $call->data->response_key != '') {
+            if ($call->success && $call->data->apikey !== '' && $call->data->response_key !== '') {
                 $options = new wps_ic_options();
                 $options->set_option('api_key', $call->data->apikey);
                 $options->set_option('response_key', $call->data->response_key);
@@ -156,6 +156,7 @@ class wps_ic_connect extends wps_ic
 
                 $cache = new wps_ic_cache_integrations();
                 $cache::purgeAll();
+                delete_option('wps_ic_url_changed');
 
                 wp_send_json_success(['liveMode' => $call->data->liveMode, 'localMode' => $call->data->localMode]);
             }

@@ -2,10 +2,10 @@
 Contributors: aresit
 Donate link:
 Tags:  wpcompress, performance, image optimization, cache, speed
-Requires PHP: 7.0
+Requires PHP: 7.4
 Requires at least: 6.5
-Tested up to: 6.8
-Stable tag: 6.50.57
+Tested up to: 6.9
+Stable tag: 6.60.33
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,156 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 6.60.33 =
+* Backend Optimizations
+* GroundHogg Integration
+* Modified Cache Headers
+* Exclude Iframes
+* Added CF UI Improvements
+
+= 6.60.31 =
+* Patch for missing PHP constant "WPC_EXCLUDE_COOKIES"
+* Patch for CF CDN Disabled
+* Patch for Critical CSS Combine
+
+= 6.60.30 =
+* Patch for Local Image API
+* Patch for White Label
+
+= 6.60.29 =
+* Patch for Adaptive
+* UI Improvements
+* Google Page Speed Patch
+* Excluded from Adaptive Patch
+
+= 6.60.28 =
+* Critical CSS Patch for Background Images
+
+= 6.60.27 =
+* UI Patches
+* Critical CSS Patch for Theme Integrations
+* Purge Varnish Fixes
+* Additional Integrations for Themes/Plugins
+* Adaptive Bug Fix
+* Added Cookies to Import/Export
+
+= 6.60.26 =
+* Patch for Reconnect Notice
+
+= 6.60.25 =
+* Patch for Adaptive Images
+
+= 6.60.24 =
+* Lazy Load Patch
+
+= 6.60.23 =
+* Bulk Image Compress Patch
+* Added Multiple Checks for Account Status
+* Removed Duplicate DelayJS Inserts
+* Image Lazy BugFix
+* Adaptive Sliders Fix
+* Added Staging Site Integration
+* Added "data-lazy" to Default Lazy Excludes
+
+= 6.60.22 =
+* Patch for CSS Combine
+* Bulk Compress Patch
+* Media Library UI Fix
+* CSS Combine Patch
+
+= 6.60.21 =
+* Patch for Cron Errors
+
+= 6.60.20 =
+* Missing Popups Patch
+
+= 6.60.19 =
+* UI Updates
+* SrcSet Replace Patch
+* Added SourceBuster to Default Excludes
+* Script Registry Patch
+
+= 6.60.18 =
+* Compatibility Improvements
+* Adjusted Labling of Settings
+* Patch for File Includes
+
+= 6.60.17 =
+* Patch for Query Monitor
+
+= 6.60.16 =
+* Patch for Hosting Compatibility
+* Exclude Cookies from Cache
+* Added Cache Purge for Divi
+* Bot Compatibility Patches
+
+= 6.60.15 =
+* Patch for Initial Speed Test
+
+= 6.60.14 =
+* CF Settings Update - Bug Fix
+* Removed Purging of Custom Preloads on Settings Save
+
+= 6.60.13 =
+* Cloudflare CNAME Patch
+* Temporary Deactivation Patch
+* Settings Save Bug Fix
+* Media Library Status Stuck Patched
+* Patch for Adaptive 480w Resize
+* Patch for JSON Response on Activation
+
+= 6.60.12 =
+* Updated Cloudflare Integration Logic
+* Fixed Missing Admin Bar Icons / Options
+* Improved GPS Benchmark Logic
+
+= 6.60.10 =
+* Patch for Benchmarks API
+
+= 6.60.09 =
+* Added Elementor Integration for CSS Regenerate
+* Patch for CF Disconnect on Deactivation
+* Patch for WhiteLabel Deactivation
+* Patch for Purge Varnish
+
+= 6.60.08 =
+* Patch for Caching System
+
+= 6.60.07 =
+* Added Object Cache Purging
+* Improvements to Elementor Cache Control
+* Admin Backend Performance Improvements
+
+= 6.60.06 =
+* Added UI for Controlling Permissions
+
+= 6.60.05 =
+* Patch for CF Debug Info
+
+= 6.60.04 =
+* Patch for Image Sizing Calculations
+
+= 6.60.03 =
+* UI Patch for Locked Settings
+* CloudFlare Integration Patch
+
+= 6.60.02 =
+* Improved API Calls Speed
+* Improved Search & Replace Logic
+* UI Improvements
+
+= 6.60.01 =
+* Introduction of Full Cloudflare Integration
+* Improved Critical CSS Logic
+* Improved CDN Search & Replace
+
+= 6.50.58 =
+* Critical CSS Patches
+* Bug Fix for CF CName
+* JS Error Fix
+* Home Page Critical CSS Patch
+* Added Whitelist IPs
 
 = 6.50.57 =
 * Patch for Plugin Conflicts

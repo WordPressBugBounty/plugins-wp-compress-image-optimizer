@@ -7,6 +7,22 @@ class wps_ic_combine_js
 
     public static $excludes;
     public static $rewrite;
+    public $url_key_class;
+    public $urlKey;
+    public $combined_dir;
+    public $combined_url_base;
+    public $settings;
+    public $filesize_cap;
+    public $combine_inline_scripts;
+    public $combine_external;
+    public $all_excludes;
+    public $zone_name;
+    public $hmwpReplace;
+    public $hmwp_rewrite;
+    public $current_file;
+    public $no_content_excludes;
+    public $file_count;
+    public $current_section;
 
     /**
      * @var void
@@ -33,7 +49,8 @@ class wps_ic_combine_js
             $this->all_excludes = array_merge($this->all_excludes, self::$excludes->delayJSExcludes());
         }
 
-        $custom_cname = get_option('ic_custom_cname');
+	    $cfCname = get_option(WPS_IC_CF);
+	    $custom_cname = !empty($cfCname) ? $cfCname : get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {
@@ -116,7 +133,7 @@ class wps_ic_combine_js
         $tag = $tag[0];
         $src = '';
 
-        if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_options')) {
+        if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
             return $tag;
             #return print_r(array($tag),true);
         }
@@ -196,12 +213,12 @@ class wps_ic_combine_js
         $tag = $tag[0];
         $src = '';
 
-        if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_options')) {
+        if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
             #return $tag;
             #return print_r(array($tag),true);
         }
 
-        if (self::$excludes->strInArray($tag, $this->no_content_excludes) || current_user_can('manage_options')) {
+        if (self::$excludes->strInArray($tag, $this->no_content_excludes) || current_user_can('manage_wpc_settings')) {
             //These are tags that we couldn't get content for
             return $tag;
         }

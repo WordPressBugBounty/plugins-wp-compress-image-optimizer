@@ -24,6 +24,7 @@ class wps_local_compress
     public $enabledLog;
     public $logFile;
     public $logFilePath;
+    public $pathToDir;
 
 
     public function __construct()
@@ -167,14 +168,24 @@ class wps_local_compress
 
     public function getAllThumbSizes()
     {
+        $cache_key = 'wps_ic_image_sizes';
+
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            return $cached;
+        }
+
         global $_wp_additional_image_sizes;
 
         $default_image_sizes = get_intermediate_image_sizes();
+        $image_sizes = [];
 
         foreach ($default_image_sizes as $size) {
-            $image_sizes[$size]['width'] = intval(get_option("{$size}_size_w"));
+            $crop = get_option("{$size}_crop");
+
+            $image_sizes[$size]['width']  = intval(get_option("{$size}_size_w"));
             $image_sizes[$size]['height'] = intval(get_option("{$size}_size_h"));
-            $image_sizes[$size]['crop'] = get_option("{$size}_crop") ? get_option("{$size}_crop") : false;
+            $image_sizes[$size]['crop']   = $crop ? $crop : false;
         }
 
         if (isset($_wp_additional_image_sizes) && count($_wp_additional_image_sizes)) {
@@ -188,9 +199,11 @@ class wps_local_compress
 
         $image_sizes['original']['width'] = 'original';
 
+        set_transient($cache_key, $image_sizes, 1 * HOUR_IN_SECONDS);
 
         return $image_sizes;
     }
+
 
     public function geoLocate()
     {
@@ -230,35 +243,14 @@ class wps_local_compress
     }
 
 
+
+
+
     public function registerEndpoints() {
         register_rest_route('wpc/v1', '/fetch', [
-            'methods'             => \WP_REST_Server::READABLE, // GET
+            'methods'             => [\WP_REST_Server::READABLE, \WP_REST_Server::CREATABLE],
             'callback'            => [$this, 'wpc_handle_fetch_image'],
             'permission_callback' => [$this, 'wpc_permission_api_key'],
-            'args'                => [
-                'image_id' => [
-                    'type'              => 'integer',
-                    'required'          => true,
-                    'sanitize_callback' => 'absint',
-                    'validate_callback' => function ($param) {
-                        return is_numeric($param) && (int) $param > 0;
-                    },
-                ],
-            ],
-        ]);
-
-        // Optional POST variant (send {"image_id": 123} in JSON body)
-        register_rest_route('wpc/v1', '/fetch', [
-            'methods'             => \WP_REST_Server::CREATABLE, // POST
-            'callback'            => [$this, 'wpc_handle_fetch_image'],
-            'permission_callback' => [$this, 'wpc_permission_api_key'],
-            'args'                => [
-                'image_id' => [
-                    'type'              => 'integer',
-                    'required'          => true,
-                    'sanitize_callback' => 'absint',
-                ],
-            ],
         ]);
     }
 
@@ -296,7 +288,7 @@ class wps_local_compress
          $expected_token = $options['api_key'];
 
         if (empty($apikey) || $apikey !== $expected_token) {
-            wp_send_json_error('Unauthorized expected: '  .$expected_token  . ' got ' . $apikey, 403);
+            wp_send_json_error('Unauthorized: apikey ' . $apikey, 403);
         }
 
         // if API Key is Valid Setup the PHP Limits
@@ -309,13 +301,18 @@ class wps_local_compress
      */
     public function wpc_handle_fetch_image(\WP_REST_Request $request) {
         $image_id = (int) $request->get_param('image_id');
+
+        if ( ! $image_id ) {
+            $image_id = $request->get_header('x-image-id');
+        }
+
         if (!$image_id) {
-            return new \WP_Error('wpc_bad_request', 'Invalid image ID', ['status' => 400]);
+            return new \WP_Error('wpc_bad_request', 'Invalid image ID', ['status' => 401]);
         }
 
         $post = get_post($image_id);
         if (!$post || get_post_type($image_id) !== 'attachment') {
-            return new \WP_Error('wpc_bad_request', 'Invalid image ID', ['status' => 400]);
+            return new \WP_Error('wpc_bad_request', 'Invalid image ID', ['status' => 402]);
         }
 
         // Save OLD post meta for restore usage (once)
@@ -634,6 +631,7 @@ class wps_local_compress
 
             require_once ABSPATH . 'wp-admin/includes/image.php';
 
+            $apiStatus = sanitize_text_field($_GET['status']);
             $isBulk = sanitize_text_field($_GET['bulk']) ?? false;
             $imageID = absint($_GET['downloadImage']);
             if (!$imageID) {
@@ -648,6 +646,78 @@ class wps_local_compress
             }
 
             $basename = basename($original_url);
+
+            // Skip the image, some error on API Side Occured
+            if (!empty($apiStatus) && $apiStatus == 'skip') {
+                // Stats
+                $stats = [];
+                $stats['original']['original']['size'] = 0;
+                $stats['original']['compressed']['size'] = 0;
+                $stats['original']['compressed']['thumbs'] = 0;
+
+                // Parsed Images Array
+                $parsedImages = get_option('wps_ic_parsed_images');
+
+                if (!$parsedImages) {
+                    $parsedImages = [];
+                    $parsedImages['total']['original'] = 0;
+                    $parsedImages['total']['compressed'] = 0;
+                }
+
+                // Flag for Bulk Memory
+                if ($isBulk) {
+                    $thumbCount = $this->getAllThumbSizes();
+                    $bulkStatus = get_option('wps_ic_BulkStatus');
+
+                    $parsedImages['total']['original'] += $stats['original']['original']['size'];
+                    $parsedImages['total']['compressed'] += $stats['original']['compressed']['size'];
+
+                    $parsedImages[$imageID]['total']['original'] = $parsedImages['total']['original'];
+                    $parsedImages[$imageID]['total']['compressed'] = $parsedImages['total']['compressed'];
+
+                    // Write down last compressed before-after
+                    update_option('wps_ic_parsed_images', $parsedImages);
+
+                    if (!$bulkStatus) {
+                        $bulkStatus = [];
+                        $bulkStatus['compressedImageCount'] = 0;
+                        $bulkStatus['compressedThumbs'] = 0;
+                        $bulkStatus['total']['original']['size'] = 0;
+                        $bulkStatus['total']['compressed']['size'] = 0;
+                    }
+
+                    $bulkStatus['compressedImageCount'] += 1;
+                    $bulkStatus['compressedThumbs'] += count($thumbCount);
+                    $bulkStatus['total']['original']['size'] += $stats['original']['original']['size'];
+                    $bulkStatus['total']['compressed']['size'] += $stats['original']['compressed']['size'];
+
+                    update_option('wps_ic_BulkStatus', $bulkStatus);
+
+                    // Write counter for bulk UI
+                    $counter = [];
+                    $counter['images'] = $bulkStatus['compressedImageCount'];
+                    $counter['imagesAndThumbs'] = $bulkStatus['compressedThumbs'];
+                    update_option('wps_ic_bulk_counter', $counter);
+                }
+
+                // Compressing status
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_queue_' . $imageID);
+
+                $imageStats = get_post_meta($imageID, 'ic_stats', true);
+                $compressing = get_post_meta($imageID, 'ic_compressing', true);
+
+                // if Image is skipped, on restore do nothing just delete meta
+                update_post_meta($imageID, 'ic_skipped', 'true');
+
+                update_post_meta($imageID, 'wpc_images_compressed', 'true');
+                update_post_meta($imageID, 'ic_status', 'compressed');
+                update_post_meta($imageID, 'ic_compressing', array('status' => 'compressed'));
+                update_post_meta($imageID, 'ic_stats', $stats);
+                set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
+                die('skipped');
+            }
+
 
             $api_url = WPC_IC_LOCAL_DOWNLOAD . '?imageID=' . $imageID . '&apikey=' . $expected_token;
 
@@ -741,7 +811,6 @@ class wps_local_compress
 
                         }
 
-                        #var_dump($body->files[$key]);
                     }
 
                     if (!$errors && $done) {
@@ -792,7 +861,7 @@ class wps_local_compress
                         update_post_meta($imageID, 'ic_status', 'compressed');
                         update_post_meta($imageID, 'ic_compressing', array('status' => 'compressed'));
                         update_post_meta($imageID, 'ic_stats', $stats);
-
+                        set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
 
                         // Ovo je radilo probleme jer generira thumbove iz -scaled verzije slike, i onda generira nove thumbove koji su scaled
                         // Get full image path
@@ -1141,8 +1210,6 @@ class wps_local_compress
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
-        set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
-
         if ($output == 'json') {
             wp_send_json_success();
         }
@@ -1282,6 +1349,19 @@ class wps_local_compress
         $olderVersionBackup = $this->olderBackup($imageID);
         if ($olderVersionBackup) {
             return true;
+        }
+
+        // Check if image was skipped?
+        $skipped = get_post_meta($imageID, 'ic_skipped', true);
+        if (!empty($skipped) && $skipped == 'true') {
+            // Optional status flag
+            delete_post_meta($imageID, 'ic_bulk_running');
+            delete_post_meta($imageID, 'ic_compressing');
+            delete_post_meta($imageID, 'wpc_images_compressed');
+            delete_post_meta($imageID, 'ic_stats');
+            update_post_meta($imageID, 'ic_status', 'restored');
+            set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
+            die();
         }
 
         // Site URL where this plugin runs

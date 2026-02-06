@@ -3,9 +3,12 @@
 class wps_ic_preload_warmup
 {
 
+
     public static $standaloneWarmup;
     public static $apiUrl;
     public static $warmupVersion;
+    public $logFilePath;
+    public $logFile;
 	public static $criticalCss;
 
     public function __construct()
@@ -1075,51 +1078,6 @@ class wps_ic_preload_warmup
         }
     }
 
-    public function optimizeSingleQuick($id, $test = true, $dash = false)
-    {
-        if ($id == 'home') {
-            $url = home_url();
-            $is_home = 'true';
-        } else {
-            $url = get_permalink($id);
-
-            $normalized_url = preg_replace('#^https?://(www\.)?#', '', rtrim($url, '/'));
-            $normalized_home_url = preg_replace('#^https?://(www\.)?#', '', rtrim(home_url(), '/'));
-
-            if ($normalized_url == $normalized_home_url) {
-                $is_home = 'true';
-            } else {
-                $is_home = 'false';
-            }
-        }
-
-        $action = 'runQuickTest';
-
-        $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => $action, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']], 'timeout' => 30]);
-
-
-        var_dump($call);
-        die();
-
-        if (is_wp_error($call)) {
-            wp_send_json_error($call->get_error_message());
-        }
-
-        if (wp_remote_retrieve_response_code($call) == 200) {
-            $response_body = wp_remote_retrieve_body($call);
-            $response_body = json_decode($response_body, true);
-            if ($response_body['success'] == 'true') {
-                //added
-                set_transient('wpc_initial_test', 'running', 5 * 60);
-            } else {
-                wp_send_json_error(print_r($response_body['data'], true));
-            }
-        } else {
-            wp_send_json_error(print_r($call, true));
-        }
-
-        wp_send_json_success(true);
-    }
 
     public function optimizeSingle($id, $test = true, $dash = false)
     {

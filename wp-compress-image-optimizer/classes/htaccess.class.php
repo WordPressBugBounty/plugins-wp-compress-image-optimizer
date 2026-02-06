@@ -3,14 +3,13 @@
 class wps_ic_htaccess extends wps_ic
 {
 
+    public static $webPMarker;
     public $htaccessPath;
     public $configPath;
     public $advancedCachePath;
     public $htaccessContent;
     public $isApache;
     public $cacheConstant;
-
-    public static $webPMarker;
 
     public function __construct()
     {
@@ -55,27 +54,35 @@ class wps_ic_htaccess extends wps_ic
         // Get Contents
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-
         // Did we retrieve the correct htaccess content?
         if (!empty($this->htaccessContent)) {
-            if (!strpos($this->htaccessContent, 'IfModule mod_deflate.c')) {
+
+            // Check if gzip rules already exist
+            if (strpos($this->htaccessContent, 'IfModule mod_deflate.c') === false) {
 
                 $mimeTypes = array(
-                    'text/plain', 'text/css', 'text/javascript', 'application/javascript', 'application/x-javascript',
-                    'application/json', 'text/html', 'text/xml', 'application/atom+xml', 'application/rss+xml',
-                    'application/xhtml+xml', 'application/xml', 'text/x-component', 'application/vnd.ms-fontobject',
-                    'application/x-font-ttf', 'font/eot', 'font/opentype', 'image/bmp', 'image/svg+xml',
-                    'image/vnd.microsoft.icon', 'image/x-icon',
+                    'text/plain', 'text/css', 'text/javascript', 'application/javascript',
+                    'application/x-javascript', 'application/json', 'text/html', 'text/xml',
+                    'application/atom+xml', 'application/rss+xml', 'application/xhtml+xml',
+                    'application/xml', 'text/x-component', 'application/vnd.ms-fontobject',
+                    'application/x-font-ttf', 'font/eot', 'font/opentype', 'image/bmp',
+                    'image/svg+xml', 'image/vnd.microsoft.icon', 'image/x-icon',
                 );
 
+                // Build rules
                 $rules = "<IfModule mod_deflate.c>\n";
                 foreach ($mimeTypes as $type) {
                     $rules .= "    AddOutputFilterByType DEFLATE {$type}\n";
                 }
                 $rules .= "</IfModule>\n";
 
-                // Append GZIP rules
-                file_put_contents($this->htaccessPath, "\n\n" . $rules, FILE_APPEND);
+                // Prepare new content (append)
+                $newHtaccessContent = rtrim($this->htaccessContent) . "\n\n" . $rules;
+
+                // Only write if content actually changed
+                if ($newHtaccessContent !== $this->htaccessContent) {
+                    file_put_contents($this->htaccessPath, $newHtaccessContent);
+                }
             }
         }
 
@@ -599,26 +606,27 @@ HTACCESS;
         // Get Contents
         $configContents = $this->getContents($this->configPath);
 
-
+        // Cache Status
         $cacheStatus = $status ? 'true' : 'false';
         $this->cacheConstant = str_replace('VALUE', $cacheStatus, $this->cacheConstant);
 
-
-        if (!preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', $configContents, $matches)) {
-            $fileContents = preg_replace('/(<\?php)/i', "<?php\r\n{$this->cacheConstant}\r\n", $configContents, 1);
+        // Check if WP_CACHE is defined
+        if (!preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', $configContents)) {
+            // Add definition if missing
+            $newContents = preg_replace('/(<\?php)/i', "<?php\r\n{$this->cacheConstant}\r\n", $configContents, 1);
         } else {
+            // Update or remove based on $cacheStatus
             if ($cacheStatus === 'true') {
-                $fileContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', 'define(\'WP_CACHE\', true);', $configContents);
+                $newContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', "define('WP_CACHE', true);", $configContents);
             } else {
-                $fileContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', '', $configContents);
-                $fileContents = str_replace('// WP Compress Cache', '', $configContents);
+                $newContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', '', $configContents);
+                $newContents = str_replace('// WP Compress Cache', '', $newContents);
             }
         }
 
-        if (!empty($fileContents)) {
-            //this was generating a fatal error on activation
-            //$this->fileSystem()->put_contents($this->configPath, $fileContents);
-            file_put_contents($this->configPath, $fileContents);
+        // Check if content changed
+        if (isset($newContents) && $newContents !== $configContents) {
+            file_put_contents($this->configPath, $newContents);
         }
     }
 
@@ -629,20 +637,45 @@ HTACCESS;
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
 
+        // Remove legacy insecure backup
+        $legacy_backup = ABSPATH . 'wp-config-backup.php';
+        if (file_exists($legacy_backup)) {
+            @unlink($legacy_backup);
+        }
+
         $config_file = ABSPATH . 'wp-config.php';
 
-        if (empty($config_file) || !file_exists($config_file)) {
+        if (!file_exists($config_file) || !is_readable($config_file)) {
             return false;
         }
 
-        // Create Backup
-        $backupNamed = ABSPATH . 'wp-config-backup.php';
-        if (!file_exists($backupNamed)) {
-            copy($config_file, $backupNamed);
+        $backup_dir  = WP_CONTENT_DIR . '/.wp-compress-backups';
+        $backup_file = $backup_dir . '/wp-config.php';
+
+        // Ensure backup directory exists
+        if (!is_dir($backup_dir)) {
+            wp_mkdir_p($backup_dir);
+            @chmod($backup_dir, 0700);
+        }
+
+        // Ensure .htaccess exists to block web access (Apache)
+        $htaccess = $backup_dir . '/.htaccess';
+        if (!file_exists($htaccess)) {
+            file_put_contents($htaccess, "Require all denied\n");
+            @chmod($htaccess, 0644);
+        }
+
+        // Create backup
+        if (!file_exists($backup_file)) {
+            if (@copy($config_file, $backup_file)) {
+                @chmod($backup_file, 0600);
+            }
         }
 
         return $config_file;
     }
+
+
 
     public function setAdvancedCache()
     {
@@ -670,9 +703,13 @@ HTACCESS;
         // Get Contents
         $advancedCacheSample = $this->getContents(WPS_IC_DIR . 'templates/samples/advancedCacheSample.php');
 
+        // Only write if changed
+        $currentAdvancedCache = '';
+        if (file_exists($this->advancedCachePath)) {
+            $currentAdvancedCache = file_get_contents($this->advancedCachePath);
+        }
+
         if (!empty($advancedCacheSample)) {
-            //this was generating a fatal error on activation
-            //$this->fileSystem()->put_contents($this->advancedCachePath, $advancedCacheSample);
             $settings = get_option(WPS_IC_SETTINGS);
 
             $cacheLoggedIn = 'false';
@@ -683,33 +720,45 @@ HTACCESS;
             // Set cache logged in const in advanced-cache
             $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
             $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
-            $advancedCacheSample = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
-
-            // Set cache logged in const in advanced-cache
-            $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
-            $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
-            $advancedCacheSample = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
+            $newContents = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
 
             // Set cache cookies constant in advanced-cache
             $cookiesConstant = 'false';
+            $excludeCookiesConstant = 'false';
 
             if (!empty($settings['cache']['cookies']) && $settings['cache']['cookies'] == 1) {
                 $cookies_setting = get_option('wps_ic_cache_cookies', []);
 
-                if (!empty($cookies_setting) && !empty($cookies_setting['cookies'])) {
-                    $cookiesFormatted = array_map(function($cookie) {
+                // Handle cache_cookies
+                if (!empty($cookies_setting['cookies'])) {
+                    $cookiesFormatted = array_map(function ($cookie) {
                         return "'" . addslashes($cookie) . "'";
                     }, $cookies_setting['cookies']);
                     $cookiesConstant = 'array(' . implode(', ', $cookiesFormatted) . ')';
                 }
+
+                // Handle exclude_cookies
+                if (!empty($cookies_setting['exclude_cookies'])) {
+                    $excludeCookiesFormatted = array_map(function ($cookie) {
+                        return "'" . addslashes($cookie) . "'";
+                    }, $cookies_setting['exclude_cookies']);
+                    $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
+                }
             }
 
+            // Replace cache cookies
             $cookiePattern = "#WPC_CACHE_COOKIES_START\r?\n(.+?)\r?\n#WPC_CACHE_COOKIES_END";
             $cookieReplacement = "#WPC_CACHE_COOKIES_START\ndefine('WPC_CACHE_COOKIES', $cookiesConstant);\n#WPC_CACHE_COOKIES_END";
-            $advancedCacheSample = preg_replace("/$cookiePattern/s", $cookieReplacement, $advancedCacheSample);
+            $newContents = preg_replace("/$cookiePattern/s", $cookieReplacement, $newContents);
 
+            // Replace exclude cookies
+            $excludeCookiePattern = "#WPC_EXCLUDE_COOKIES_START\r?\n(.+?)\r?\n#WPC_EXCLUDE_COOKIES_END";
+            $excludeCookieReplacement = "#WPC_EXCLUDE_COOKIES_START\ndefine('WPC_EXCLUDE_COOKIES', $excludeCookiesConstant);\n#WPC_EXCLUDE_COOKIES_END";
+            $newContents = preg_replace("/$excludeCookiePattern/s", $excludeCookieReplacement, $newContents);
 
-            file_put_contents($this->advancedCachePath, $advancedCacheSample);
+            if ($newContents !== $currentAdvancedCache) {
+                file_put_contents($this->advancedCachePath, $newContents);
+            }
         }
     }
 
@@ -797,7 +846,7 @@ HTACCESS;
 
     private function hasWebpReplaceRules()
     {
-        if (strpos($this->htaccessContent, '#StartWPC-WebP-Replace') !== false) {
+        if (!empty($this->htaccessContent) && strpos($this->htaccessContent, '#StartWPC-WebP-Replace') !== false) {
             return true;
         }
 
@@ -845,22 +894,7 @@ HTACCESS;
 
         return $webp_rules;
 
-        return [
-            '#StartWPC-WebP-Replace',
-            '<IfModule mod_rewrite.c>',
-            'RewriteEngine On',
-            '# Serve existing WebP files for matching JPEG/PNG only when client supports WebP',
-            'RewriteCond %{HTTP_ACCEPT} image/webp',
-            'RewriteCond %{REQUEST_FILENAME} -f',
-            'RewriteCond %{REQUEST_FILENAME}\.webp -f',
-            'RewriteRule ^(.+)\.(?:jpe?g|png)$ $1.webp [L,T=image/webp,E=servewebp:1]',
-            '</IfModule>',
-            '<IfModule mod_headers.c>',
-            '# Make caches aware that the response varies on the Accept header',
-            'Header append Vary Accept env=servewebp',
-            'Header append Vary Accept env=REDIRECT_servewebp',
-            '</IfModule>',
-        ];
+        return ['#StartWPC-WebP-Replace', '<IfModule mod_rewrite.c>', 'RewriteEngine On', '# Serve existing WebP files for matching JPEG/PNG only when client supports WebP', 'RewriteCond %{HTTP_ACCEPT} image/webp', 'RewriteCond %{REQUEST_FILENAME} -f', 'RewriteCond %{REQUEST_FILENAME}\.webp -f', 'RewriteRule ^(.+)\.(?:jpe?g|png)$ $1.webp [L,T=image/webp,E=servewebp:1]', '</IfModule>', '<IfModule mod_headers.c>', '# Make caches aware that the response varies on the Accept header', 'Header append Vary Accept env=servewebp', 'Header append Vary Accept env=REDIRECT_servewebp', '</IfModule>',];
     }
 
     public function removeWebpReplace()

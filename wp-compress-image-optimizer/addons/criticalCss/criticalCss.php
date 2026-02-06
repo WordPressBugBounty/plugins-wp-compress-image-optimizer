@@ -105,7 +105,7 @@ class wps_criticalCss
         fwrite($fp, wp_remote_retrieve_body($CSS));
         fclose($fp);
 
-        $cache::purgeAll($urlKey);
+        $cache::purgeAll($urlKey, false, false, false);
 
         //remove criticalCombine temp folder
         $files = scandir(WPS_IC_COMBINE . $urlKey);
@@ -485,7 +485,7 @@ class wps_criticalCss
             }
         }
 
-        $cache::purgeAll($urlKey);
+        $cache::purgeAll($urlKey, false, false, false);
     }
 
 
@@ -571,7 +571,7 @@ class wps_criticalCss
             }
         }
 
-        $cache::purgeAll($urlKey);
+        $cache::purgeAll($urlKey, false, false, false);
 
     }
 
@@ -599,110 +599,6 @@ class wps_criticalCss
         }
     }
 
-    public function saveCriticalCss_fromBackground($urlKey, $desktop, $mobile, $type = 'meta')
-    {
-        $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
-
-        if (!function_exists('download_url')) {
-            require_once(ABSPATH . "wp-admin" . '/includes/image.php');
-            require_once(ABSPATH . "wp-admin" . '/includes/file.php');
-            require_once(ABSPATH . "wp-admin" . '/includes/media.php');
-        }
-
-        $desktop = download_url($desktop);
-        if (!$desktop) {
-            // Error
-        }
-
-        $mobile = download_url($mobile);
-        if (!$mobile) {
-            // Error
-        }
-
-        if ($desktop) {
-            copy($desktop, $critical_path . 'critical_desktop.css');
-        }
-
-        if ($mobile) {
-            copy($mobile, $critical_path . 'critical_mobile.css');
-        }
-
-        $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll($urlKey);
-
-        //remove criticalCombine temp folder
-        $files = scandir($critical_path);
-        foreach ($files as $file) {
-            if ($file != "." && $file != "..") {
-                $subdir = $critical_path . "/" . $file;
-                if (is_dir($subdir) && strpos($file, "criticalCombine") !== false) {
-                    $this->removeDirectory($subdir);
-                }
-            }
-        }
-
-        if (file_exists($critical_path . 'critical_desktop.css') && filesize($critical_path . 'critical_desktop.css') > 5) {
-            if ($type == 'meta') {
-                update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
-            } else {
-                update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
-            }
-        }
-    }
-
-    public function sendCriticalUrlNonBlocking($url = '', $postID = 0)
-    {
-        $type = 'meta';
-
-        if (!empty($url)) {
-            $key = $this->url_key_class->setup($url);
-            $pages[$key] = $url;
-        } else {
-            if ($postID === 'home') {
-                $url = home_url();
-                $type = 'option';
-            } elseif (!$postID || $postID == 0) {
-
-                $homePage = get_option('page_on_front');
-                $blogPage = get_option('page_for_posts');
-
-                if (!$homePage) {
-                    $post['post_name'] = 'Home';
-                    $post = (object)$post;
-                    $url = site_url();
-                } else {
-                    $post = get_post($homePage);
-                    $url = get_permalink($homePage);
-                }
-
-                $pages[$post->post_name] = $url;
-
-                if ($blogPage !== 0 && $blogPage !== '0' && $blogPage !== $homePage) {
-                    $post = get_post($blogPage);
-                    $url = get_permalink($blogPage);
-                }
-
-                $pages[$post->post_name] = $url;
-            } else {
-                $post = get_post($postID);
-                $url = get_permalink($postID);
-                $pages[$post->post_name] = $url;
-            }
-        }
-
-
-//		if ( ! $force ) {
-//			$exists = $this->criticalExists( $key );
-//			if ( ! empty( $exists ) ) {
-//				return;
-//			}
-//		}
-
-        $args = ['pages' => json_encode($pages), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'background' => 'true'];
-        $call = wp_remote_post(self::$API_URL, ['timeout' => 2, 'blocking' => false, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-        $body = wp_remote_retrieve_body($call);
-
-    }
 
     public function criticalExistsAjax($url = '')
     {

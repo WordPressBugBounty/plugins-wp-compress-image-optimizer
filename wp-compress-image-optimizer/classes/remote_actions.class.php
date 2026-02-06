@@ -28,7 +28,25 @@ class wps_ic_remote_actions extends wps_ic {
     }
 
     // Get COMPRESSED attachment
-    $compressed_attachments = $wpdb->get_results("SELECT ID FROM " . $wpdb->prefix . "posts p LEFT JOIN " . $wpdb->prefix . "postmeta pm ON ( pm.post_id = p.ID) WHERE p.post_type='attachment' AND p.post_status='inherit' AND ((pm.post_id = p.ID AND pm.meta_key='wps_ic_compressed' AND pm.meta_value='true')) ORDER BY post_date DESC");
+      $compressed_attachments = $wpdb->get_results(
+          $wpdb->prepare(
+              "
+        SELECT p.ID
+        FROM {$wpdb->prefix}posts p
+        LEFT JOIN {$wpdb->prefix}postmeta pm
+            ON pm.post_id = p.ID
+        WHERE p.post_type = %s
+          AND p.post_status = %s
+          AND pm.meta_key = %s
+          AND pm.meta_value = %s
+        ORDER BY p.post_date DESC
+        ",
+              'attachment',        // p.post_type
+              'inherit',           // p.post_status
+              'wps_ic_compressed', // meta_key
+              'true'               // meta_value
+          )
+      );
 
     if ($compressed_attachments) {
       foreach ($compressed_attachments as $attachment) {

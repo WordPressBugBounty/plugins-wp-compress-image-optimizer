@@ -1,6 +1,7 @@
 <?php
-
-define('WPS_IC_DEBUG_LOG', false);
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 if (get_option('wps_ic_debug') == 'true') {
 	ini_set('display_errors', 1);
@@ -12,4 +13,10 @@ if (get_option('wps_ic_debug') == 'true') {
 
 if (get_option('wps_ic_debug') == 'log') {
     define('WPS_IC_DEBUG', 'true');
+}
+
+if (get_option('wps_ic_debug_log') == 'true') {
+    define('WPS_IC_DEBUG_LOG', true);
+} else {
+    define('WPS_IC_DEBUG_LOG', false);
 }

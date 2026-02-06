@@ -31,6 +31,33 @@ class wps_ic_cache
         }
     }
 
+
+    /**
+     * Purge OPCache and other caches
+     */
+    public function purgeObjectCache() {
+        // (1) PHP OPcache reset — invalidates all cached scripts for this PHP-FPM pool
+        if (function_exists('opcache_reset')) {
+            @opcache_reset();
+        }
+
+        // (2) APCu (if used)
+        if (function_exists('apcu_clear_cache')) {
+            @apcu_clear_cache();
+        }
+
+        // (3) WordPress object cache (e.g., Redis or Memcached)
+        if (function_exists('wp_cache_flush')) {
+            @wp_cache_flush();
+        }
+
+        // (4) Transients
+        if (function_exists('delete_expired_transients')) {
+            @delete_expired_transients();
+        }
+    }
+
+
     public static function purge_actions()
     {
         if (!empty($_GET['wpc_action']) && empty($_GET['apikey'])) {
@@ -44,8 +71,21 @@ class wps_ic_cache
             }
 
             if ($_GET['wpc_action'] == 'purge_other_cache') {
-                $options = get_option(WPS_IC_OPTIONS);
-                $options['css_hash'] = mt_rand(1000, 9999);
+                $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+
+                $CSSHash = substr(md5(microtime(true)), 0, 6);
+                $JSHash = strrev($CSSHash);
+
+                $options['css_hash'] = $CSSHash;
+                $options['js_hash'] = $JSHash;
+
+                if (!class_exists('wps_ic_log')) {
+                    include_once WPS_IC_DIR . 'classes/log.class.php';
+                }
+
+                $log = new wps_ic_log();
+                $log->logCachePurging($oldOptions, $options, 'purge_actions');
+
                 update_option(WPS_IC_OPTIONS, $options);
 
                 self::purgeOtherCache();
@@ -248,12 +288,13 @@ class wps_ic_cache
             $cache_integrations->purgeVarnish(0);
         }
 
-        if (!self::is_cf_cache_cleared()) {
-            //since it clears all cache, we dont have to call it multiple times in a request
-            //can add other cache clears here
-            self::wpc_purgeCF(true);
-            self::mark_cf_cache_cleared();
-        }
+        // Was causing problems with save_post function? because we call there wpc_purgecf?
+//        if (!self::is_cf_cache_cleared()) {
+//            //since it clears all cache, we dont have to call it multiple times in a request
+//            //can add other cache clears here
+//            self::wpc_purgeCF(true);
+//            self::mark_cf_cache_cleared();
+//        }
 
         if ($post_id === 'all') {
             self::mark_cache_cleared();
@@ -274,6 +315,7 @@ class wps_ic_cache
 
     public static function wpc_purgeCF($return = false)
     {
+
         $cfSettings = get_option(WPS_IC_CF);
 
         if (!empty($cfSettings)) {
@@ -294,11 +336,9 @@ class wps_ic_cache
 
     public static function purgeCache()
     {
+
         self::$options = get_option(WPS_IC_OPTIONS);
         set_transient('wps_ic_purging_cdn', 'true', 10);
-
-        #$url = WPS_IC_KEYSURL . '?action=cdn_purge&apikey=' . self::$options['api_key'] . '&callback=' . site_url() . '&hash=' . md5(microtime());
-        #$call = wp_remote_get($url, array('timeout' => 4, 'blocking' => false));
 
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => self::$options['api_key'], 'callback' => site_url(), 'hash' => md5(microtime())]);
 
@@ -335,21 +375,35 @@ class wps_ic_cache
 
     public static function purgeCDNUpdate()
     {
+        // Add User Capabilities
+        $users = new wps_ic_users();
         $cacheLogic = new wps_ic_cache();
         $cache = new wps_ic_cache_integrations();
 
-        $options = get_option(WPS_IC_OPTIONS);
+        $oldOptions= $options = get_option(WPS_IC_OPTIONS);
 
-        $cache::purgeAll(false, true);
+        $cacheLogic->purgeObjectCache();
+
+        $cache::purgeAll(false, true, false, false);
         $cache::purgeCombinedFiles();
 
         // Purge HTML Cache
         $cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
         $cacheLogic::preloadPage(0); // Purge & Preload
 
-        $hash = time();
-        $options['css_hash'] = $hash;
-        $options['js_hash'] = $hash;
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
+
+        $options['css_hash'] = $CSSHash;
+        $options['js_hash'] = $JSHash;
+
+        if (!class_exists('wps_ic_log')) {
+            include_once WPS_IC_DIR . 'classes/log.class.php';
+        }
+
+        $log = new wps_ic_log();
+        $log->logCachePurging($oldOptions, $options, 'purgeCdnUpdate');
+
         $options['updated_hash'] = time();
         update_option(WPS_IC_OPTIONS, $options);
 
@@ -390,12 +444,11 @@ class wps_ic_cache
 
         #$call = wp_remote_post(WPS_IC_PRELOADER_API_URL, ['body' => ['single_url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']]]);
         $warmup_class = new wps_ic_preload_warmup();
-        $warmup_class->preloadPage($url);
+        $warmup_class->cacheLocally($post_id);
     }
 
-    public static function update_css_hash($post_id = 0)
+    public static function updateCSSHash($post_id = 0)
     {
-
         // TODO: Sometimes $post_id is ObjectClass, does this fix it? (occurs on plugin manual zip update)
         if (!is_int($post_id) && !is_string($post_id)) {
             $post_id = 0;
@@ -405,13 +458,26 @@ class wps_ic_cache
             require_once ABSPATH . 'wp-admin/includes/option.php';
         }
 
-        $hash = substr(md5(microtime(true)), 0, 6);
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
 
         if (is_multisite()) {
             $current_blog_id = get_current_blog_id();
             switch_to_blog($current_blog_id);
-            $options = get_option(WPS_IC_OPTIONS);
-            $options['css_hash'] = $hash;
+            $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+
+            // Update CSS / JS Hash
+            $options['css_hash'] = $CSSHash;
+            $options['js_hash'] = $JSHash;
+
+
+            if (!class_exists('wps_ic_log')) {
+                include_once WPS_IC_DIR . 'classes/log.class.php';
+            }
+
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'updateCSSHash-MU');
+
             update_option(WPS_IC_OPTIONS, $options);
         } else {
             // Reset Cache
@@ -424,14 +490,23 @@ class wps_ic_cache
                 $cacheLogic::preloadPage($post_id); // Purge & Preload => Causing Issue with memory
             }
 
-            $options = get_option(WPS_IC_OPTIONS);
-            $options['css_hash'] = $hash;
+            $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
-            //update js hash
-            $options['js_hash'] = substr(md5(microtime(true)), 0, 6);
+            // Update CSS / JS Hash
+            $options['css_hash'] = $CSSHash;
+            $options['js_hash'] = $JSHash;
+
+            if (!class_exists('wps_ic_log')) {
+                include_once WPS_IC_DIR . 'classes/log.class.php';
+            }
+
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'updateCSSHash');
+
             update_option(WPS_IC_OPTIONS, $options);
         }
     }
+
 
     public static function deleteFolder($folderPath)
     {
@@ -528,19 +603,38 @@ class wps_ic_cache
             require_once ABSPATH . 'wp-admin/includes/option.php';
         }
 
-        $hash = substr(md5(microtime(true)), 0, 6);
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
 
         if (is_multisite()) {
             $current_blog_id = get_current_blog_id();
             switch_to_blog($current_blog_id);
-            $options = get_option(WPS_IC_OPTIONS);
-            $options['css_hash'] = $hash;
-            $options['js_hash'] = substr(md5(microtime(true)), 0, 6);
+            $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+
+            $options['css_hash'] = $CSSHash;
+            $options['js_hash'] = $JSHash;
+
+            if (!class_exists('wps_ic_log')) {
+                include_once WPS_IC_DIR . 'classes/log.class.php';
+            }
+
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'resetHashes');
+
             update_option(WPS_IC_OPTIONS, $options);
         } else {
-            $options = get_option(WPS_IC_OPTIONS);
-            $options['css_hash'] = $hash;
-            $options['js_hash'] = substr(md5(microtime(true)), 0, 6);
+            $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+
+            $options['css_hash'] = $CSSHash;
+            $options['js_hash'] = $JSHash;
+
+            if (!class_exists('wps_ic_log')) {
+                include_once WPS_IC_DIR . 'classes/log.class.php';
+            }
+
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'resetHashes');
+
             update_option(WPS_IC_OPTIONS, $options);
         }
     }
@@ -569,17 +663,30 @@ class wps_ic_cache
 
     // Check if cf cache was cleared already
 
-    public function purgeCDN()
+    public function purgeCDN($purgeJS = true)
     {
-        $options = get_option(WPS_IC_OPTIONS);
+        $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
         if (empty($options['api_key'])) {
             wp_send_json_error('API Key empty!');
         }
 
-        $hash = time();
-        $options['css_hash'] = $hash;
-        $options['js_hash'] = $hash;
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
+
+        $options['css_hash'] = $CSSHash;
+
+        if ($purgeJS) {
+            $options['js_hash'] = $JSHash;
+        }
+
+        if (!class_exists('wps_ic_log')) {
+            include_once WPS_IC_DIR . 'classes/log.class.php';
+        }
+
+        $log = new wps_ic_log();
+        $log->logCachePurging($oldOptions, $options, 'purgeCDN');
+
         $options['updated_hash'] = time();
         update_option(WPS_IC_OPTIONS, $options);
 

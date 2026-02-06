@@ -59,7 +59,7 @@ class wps_ic_options
             'generate_webp' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
-            'lazy' => 1,
+            'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 0,
@@ -276,7 +276,7 @@ class wps_ic_options
             'generate_webp' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
-            'lazy' => 1,
+            'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 1,
@@ -353,7 +353,8 @@ class wps_ic_options
                 'update_option_theme_mods_' . get_option('stylesheet', ''),
                 'elementor/core/files/clear_cache',
                 'uagb_delete_uag_asset_dir',
-				'uagb_delete_page_assets'
+				        'uagb_delete_page_assets',
+                'et_core_static_resources_removed'
             ]
         ];
 
@@ -374,7 +375,8 @@ class wps_ic_options
                 'geot_rocket_',
                 'pll_language',
                 'yith_wcmcs_currency'
-            ]
+            ],
+            'exclude_cookies' => []
         ];
 
         return $this;

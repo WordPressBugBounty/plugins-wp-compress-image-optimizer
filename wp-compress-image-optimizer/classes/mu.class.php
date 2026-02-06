@@ -46,7 +46,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_cname_retry()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -72,7 +72,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_autoconnect_setting()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -92,7 +92,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_connect_bulk_prepare()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -114,7 +114,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_connect_sites()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -220,7 +220,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_remove_cname()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -276,7 +276,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_cname_add()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -375,7 +375,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_geolocation_force()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -413,7 +413,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_geolocation()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -425,7 +425,7 @@ class wps_ic_mu extends wps_ic
 
     public function wps_ic_exclude_list()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -454,7 +454,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_save_default_settings()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -485,7 +485,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_reconfigure_sites()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -538,7 +538,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_save_site_settings()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -629,7 +629,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_autoconnect_site($siteID)
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -748,7 +748,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_disconnect_single_site()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -794,7 +794,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_connect_single_site()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -970,7 +970,7 @@ class wps_ic_mu extends wps_ic
 
     public function mu_connect()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 

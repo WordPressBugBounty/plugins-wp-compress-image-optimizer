@@ -245,6 +245,7 @@ jQuery(document).ready(function ($) {
         WPCSwal.fire({
             title: '', html: jQuery('#' + popupID).html(), width: popupWidth, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
                 container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+                content: ' popup-' + popupID,
             }, onOpen: function () {
 
                 if (popupID == 'custom-cdn') {
@@ -256,6 +257,8 @@ jQuery(document).ready(function ($) {
                     purgeSettingsPopup();
                 } else if (popupID == 'cache-cookies'){
                     cacheCookiesPopup();
+                } else if (popupID == 'cf-cdn'){
+                    cfCdnPopup();
                 }
                 else {
                     var popup = $('.swal2-container .ajax-settings-popup');
@@ -507,6 +510,74 @@ jQuery(document).ready(function ($) {
         });
     }
 
+    $('.wpc-cf-cname-popup').on('click',function(){
+        WPCSwal.fire({
+            title: '',
+            html: jQuery('#cf-cdn').html(),
+            width: 750,
+            showCloseButton: true,
+            showCancelButton: false,
+            showConfirmButton: false,
+            allowOutsideClick: false,
+            customClass: {
+                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+            },
+            onOpen: function () {
+                cfCdnPopup();
+            }
+        });
+
+    });
+    
+    function cfCdnPopup(){
+        var popup = $('.swal2-container .ajax-settings-popup');
+        var form = $('form', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+
+        $.post(wpc_ajaxVar.ajaxurl, {
+            action: 'wps_ic_get_cf_cdn',
+            wps_ic_nonce: wpc_ajaxVar.nonce
+        }, function (response) {
+            if (response.success) {
+
+                $('#wpc-custom-cdn', popup).val(response.data.cname);
+
+            }
+            $(content).show();
+            $(loading).hide();
+        });
+        
+        saveCfCdnPopup(popup);
+    }
+
+    function saveCfCdnPopup(popup) {
+        var save = $('.btn-save', popup);
+        var loading = $('.cdn-popup-loading', popup);
+        var content = $('.cdn-popup-content', popup);
+        var form = $('.wpc-save-popup-data', popup);
+
+        $(save).on('click', function (e) {
+            e.preventDefault();
+            $(content).hide();
+            $(loading).show();
+
+            var cname = $('input[type="text"],textarea', popup).val();
+
+            $.post(wpc_ajaxVar.ajaxurl, {
+                action: 'wps_ic_save_cf_cdn',
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                cname: cname
+            }, function (response) {
+                if (response.success){
+                    WPCSwal.close();
+                }
+            });
+
+            return false;
+        });
+    }
+
     function cacheCookiesPopup(){
         var popup = $('.swal2-container .ajax-settings-popup');
         var form = $('form', popup);
@@ -520,7 +591,8 @@ jQuery(document).ready(function ($) {
             if (response.success) {
 
                 // Set the hooks textarea value
-                $('.cache-cookies-textarea-value', popup).val(response.data.cookies);
+                $('.cache-cookies-textarea-value', popup).val(response.data.cache_cookies);
+                $('.exclude-cookies-textarea-value', popup).val(response.data.exclude_cookies);
 
             }
             $(content).show();
@@ -542,11 +614,13 @@ jQuery(document).ready(function ($) {
             $(loading).show();
 
             var setting_name = $('input[type="text"],textarea', popup).data('setting-subset');
-            var cookies = $('.cache-cookies-textarea-value', popup).val();
+            var cache_cookies = $('.cache-cookies-textarea-value', popup).val();
+            var exclude_cookies = $('.exclude-cookies-textarea-value', popup).val();
 
             $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_cache_cookies_settings',
-                cookies: cookies,
+                exclude_cookies: exclude_cookies,
+                cache_cookies: cache_cookies,
                 setting_name: setting_name,
                 wps_ic_nonce: wpc_ajaxVar.nonce
             }, function (response) {
@@ -565,6 +639,7 @@ jQuery(document).ready(function ($) {
         const exportSettings = $('.wps-export-settings').prop('checked');
         const exportExcludes = $('.wps-export-excludes').prop('checked');
         const exportCache = $('.wps-export-cache').prop('checked');
+        const exportCookies = $('.wps-export-cache-cookies').prop('checked');
 
         $.ajax({
             url: ajaxurl,
@@ -574,6 +649,7 @@ jQuery(document).ready(function ($) {
                 settings: exportSettings,
                 excludes: exportExcludes,
                 cache: exportCache,
+                cookies: exportCookies,
                 wps_ic_nonce: wpc_ajaxVar.nonce
             },
             success: function(response) {

@@ -1,4 +1,7 @@
 <?php
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 class wps_ic_rocket extends wps_ic_integrations
 {
@@ -62,7 +65,7 @@ class wps_ic_rocket extends wps_ic_integrations
     if ($updated) {
       update_option('wp_rocket_settings', $rocket_settings);
       $cache = new wps_ic_cache_integrations();
-      $cache->purgeAll();
+      $cache->purgeAll(false, false, false, false);
     }
   }
 
@@ -77,6 +80,24 @@ class wps_ic_rocket extends wps_ic_integrations
     }
 
     return update_option('wp_rocket_settings', $rocket_settings);
+  }
+
+  public function add_admin_hooks()
+  {
+    return [
+      'wps_ic_purge_all_cache' => [
+        'callback' => 'purge_cache',
+        'priority' => 10,
+        'args' => 1
+      ]
+    ];
+  }
+
+  public function purge_cache($url_key = false)
+  {
+    if (function_exists('rocket_clean_domain')) {
+      rocket_clean_domain();
+    }
   }
 
 

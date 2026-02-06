@@ -1,4 +1,7 @@
 <?php
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 class wps_ic_optimizepress extends wps_ic_integrations {
 
@@ -46,7 +49,7 @@ class wps_ic_optimizepress extends wps_ic_integrations {
 
 	public function clear_cache(){
 		$cache = new wps_ic_cache_integrations();
-		$cache::purgeAll();
+		$cache::purgeAll(false, false, false, false);
 	}
 
 }

@@ -10,7 +10,7 @@ if (empty($_GET['min_debug'])) {
 }
 
 // Local API
-$dev = false;
+$dev = true;
 if ($dev) {
     define('WPC_IC_LOCAL_BULK_START', 'https://local-dev.zapwp.net/bulk-start');
     define('WPC_IC_LOCAL_BULK_RUN', 'https://local-dev.zapwp.net/process');
@@ -32,8 +32,10 @@ if ($dev) {
 }
 
 define('WPS_IC_CF', 'wps-ic-cf');
+define('WPS_IC_CF_CNAME', 'wps-ic-cf-cname');
 define('WPS_IC_GB', 1000000000);
 define('WPC_IC_CACHE_EXPIRE', 86400); // 24 hours
+define('WPS_IC_ACCOUNT_STATUS_MEMORY', 60*60); // 1 hour
 
 // Local API
 define('WPS_IC_LOCAL_API', 'https://frankfurt.zapwp.net/local/v3/index.php');
@@ -44,8 +46,10 @@ define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 
 // Real URL
 define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-ccss');
+define('WPS_IC_CRITICAL_API_URL_HOME', 'https://critical-hp-crit.zapwp.net/generate-ccss');
 define('WPS_IC_PAGESPEED_API_URL_HOME', 'https://critical-api-home.zapwp.net/run-pagespeed');
 define('WPS_IC_PAGESPEED_RESULTS_HOME', 'https://critical-api-home.zapwp.net/get-results/');
+
 // Others
 define('WPS_IC_PAGESPEED_API_URL', 'https://critical-api.zapwp.net/run-pagespeed');
 define('WPS_IC_PAGESPEED_RESULTS', 'https://critical-api.zapwp.net/get-results/');
@@ -65,12 +69,17 @@ define('WPS_IC_TEST_FAILURES', 80);
 
 
 define('WPS_IC_TESTS', 'wpc-tests');
+define('WPS_IC_LITE_GPS_HISTORY', 'wps_ic_initial_gps_history');
 define('WPS_IC_LITE_GPS', 'wps_ic_initial_gps');
 define('WPS_IC_GUI', 'wps_ic_gui');
 define('WPS_IC_SETTINGS', 'wps_ic_settings');
 if (!defined('WPS_IC_CACHE')) {
 	define('WPS_IC_CACHE', WP_CONTENT_DIR . '/cache/wp-cio/');
 }
+
+define('WPS_IC_CSS', WP_CONTENT_DIR . '/cache/wp-cio/css');
+define('WPS_IC_CSS_URL', WP_CONTENT_URL . '/cache/wp-cio/css');
+
 
 define('WPS_IC_CACHE_URL', WP_CONTENT_URL . '/cache/wp-cio/');
 
@@ -84,7 +93,7 @@ $plugin_dir = str_replace(site_url('/', 'https'), '', WP_PLUGIN_URL);
 $plugin_dir = str_replace(site_url('/', 'http'), '', $plugin_dir);
 
 define('WPS_IC_URI', plugin_dir_url(__FILE__));
-define('WPS_IC_DIR', plugin_dir_path(__FILE__));
+define('WPS_IC_DIR', realpath(plugin_dir_path(__FILE__)) . '/');
 define('WPS_IC_ASSETS', WPS_IC_URI . 'assets');
 
 // IP Whitelisting
@@ -109,15 +118,15 @@ if (!file_exists(WP_CONTENT_DIR . '/cache')) {
   mkdir(WP_CONTENT_DIR . '/cache');
 }
 
-if (!file_exists(WPS_IC_CACHE)) {
+if (!file_exists(rtrim(WPS_IC_CACHE, '/'))) {
   mkdir(rtrim(WPS_IC_CACHE, '/'));
 }
 
-if (!file_exists(WPS_IC_CRITICAL)) {
+if (!file_exists(rtrim(WPS_IC_CRITICAL, '/'))) {
   mkdir(rtrim(WPS_IC_CRITICAL, '/'));
 }
 
-if (!file_exists(WPS_IC_LOG)) {
+if (!file_exists(rtrim(WPS_IC_LOG, '/'))) {
   mkdir(rtrim(WPS_IC_LOG, '/'));
 }
 

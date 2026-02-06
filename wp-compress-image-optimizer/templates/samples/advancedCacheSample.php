@@ -11,6 +11,10 @@ define('WPC_CACHE_LOGGED_IN', false);
 define('WPC_CACHE_COOKIES', false);
 #WPC_CACHE_COOKIES_END
 
+#WPC_EXCLUDE_COOKIES_START
+define('WPC_EXCLUDE_COOKIES', false);
+#WPC_EXCLUDE_COOKIES_END
+
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';
 
@@ -41,9 +45,35 @@ foreach($_COOKIE as $key => $value) {
   }
 }
 
+// Check for excluded cookies
+if (defined('WPC_EXCLUDE_COOKIES')) {
+    if (WPC_EXCLUDE_COOKIES !== false && is_array(WPC_EXCLUDE_COOKIES)) {
+        foreach ($_COOKIE as $cookieName => $cookieValue) {
+            foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
+
+                // Trailing "_" means: treat as wildcard prefix (e.g. "wp-postpass_")
+                if (substr($excludedCookie, -1) === '_') {
+                    if (stripos($cookieName, $excludedCookie) === 0) {
+                        define('DONOTCACHEPAGE', true);
+                        return; // Don't cache if excluded cookie prefix is detected
+                    }
+                } else {
+                    // Exact match (case-insensitive)
+                    if (strcasecmp($cookieName, $excludedCookie) === 0) {
+                        define('DONOTCACHEPAGE', true);
+                        return; // Don't cache if exact excluded cookie is detected
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Don't cache for POST requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'HEAD') {
-    return;
+if (!empty($_SERVER['REQUEST_METHOD'])) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' || $_SERVER['REQUEST_METHOD'] === 'HEAD') {
+        return;
+    }
 }
 
 // Don't cache if critical combine or cache disable headers are present

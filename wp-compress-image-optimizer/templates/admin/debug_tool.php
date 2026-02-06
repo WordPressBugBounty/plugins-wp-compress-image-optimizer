@@ -84,32 +84,37 @@ if (isset($_POST['savePreloads'])) {
 }
 
 if (!empty($_POST['preloads_lcp'])) {
-    $preloadsLcp = get_option('wps_ic_preloads', []);
-    $preloadsLcp['lcp'] = $_POST['preloads_lcp'];
-    update_option('wps_ic_preloads', $preloadsLcp);
+	$preloadsLcp = get_option('wps_ic_preloads', []);
+	$preloadsLcp['lcp'] = [$_POST['preloads_lcp']]; // Wrap in array
+	update_option('wps_ic_preloads', $preloadsLcp);
 }
 
 if (!empty($_POST['preloadsMobile_lcp'])) {
-    $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-    $preloadsLcp['lcp'] = $_POST['preloadsMobile_lcp'];
-    update_option('wps_ic_preloadsMobile', $preloadsLcp);
+	$preloadsLcp = get_option('wps_ic_preloadsMobile', []);
+	$preloadsLcp['lcp'] = [$_POST['preloadsMobile_lcp']]; // Wrap in array
+	update_option('wps_ic_preloadsMobile', $preloadsLcp);
 }
 
 if (!empty($_POST['preloads'])) {
-    $preloadsLcp = get_option('wps_ic_preloads', []);
-    $preloadsArray = explode("\n", $_POST['preloads']);
-    $preloadsArray = array_map('trim', $preloadsArray);
-    $preloadsLcp['custom'] = $preloadsArray;
-    update_option('wps_ic_preloads', $preloadsLcp);
+	$preloadsLcp = get_option('wps_ic_preloads', []);
+	$preloadsArray = explode("\n", $_POST['preloads']);
+	$preloadsArray = array_map('trim', $preloadsArray);
+	$preloadsLcp['custom'] = $preloadsArray;
+	update_option('wps_ic_preloads', $preloadsLcp);
 }
 
 $preloads = get_option('wps_ic_preloads');
 if (!empty($_POST['preloadsMobile'])) {
-    $preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-    $preloadsArray = explode("\n", $_POST['preloadsMobile']);
-    $preloadsArray = array_map('trim', $preloadsArray);
-    $preloadsLcp['custom'] = $preloadsArray;
-    update_option('wps_ic_preloadsMobile', $preloadsLcp);
+	$preloadsLcp = get_option('wps_ic_preloadsMobile', []);
+	$preloadsArray = explode("\n", $_POST['preloadsMobile']);
+	$preloadsArray = array_map('trim', $preloadsArray);
+	$preloadsLcp['custom'] = $preloadsArray;
+	update_option('wps_ic_preloadsMobile', $preloadsLcp);
+}
+
+if (!empty($_POST['remove_fonts'])) {
+    $removeFonts = [$_POST['remove_fonts']]; // Wrap in array
+    update_option('wps_ic_remove_fonts', $removeFonts);
 }
 
 $preloadsMobile = get_option('wps_ic_preloadsMobile');
@@ -271,6 +276,26 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
+        <td>Debug Log</td>
+        <td colspan="3">
+            <p>
+                <?php
+                if (!empty($_GET['wps_ic_debug_log'])) {
+                    update_option('wps_ic_debug_log', sanitize_text_field($_GET['wps_ic_debug_log']));
+                }
+
+                $development = get_option('wps_ic_debug_log');
+
+                if (empty($development) || $development == 'false') {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                } else {
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                }
+                ?>
+            </p>
+        </td>
+    </tr>
+    <tr>
         <td>Plugin Development Mode</td>
         <td colspan="3">
             <p>
@@ -372,6 +397,38 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 ?>
                 If you are having any sort of issues with our plugin, enabling this option will give you some basic
                 debug output in Console log of your browser.
+            </p>
+        </td>
+    </tr>
+
+
+    <tr>
+        <td>Site Url</td>
+        <td colspan="3">
+            <p>
+                <?php
+                echo 'Site URL: ' . site_url();
+                ?>
+            </p>
+            <p>
+                <?php
+                echo 'Get site url: ' . get_site_url();
+                ?>
+            </p>
+        </td>
+    </tr>
+
+    <tr>
+        <td>Plugin Configuration</td>
+        <td colspan="3">
+            <p>
+                <?php
+                $allowLive = get_option('wps_ic_allow_live');
+                $allowLocal = get_option('wps_ic_allow_local');
+                echo '<h3>Allow live:</h3>' .$allowLive;
+                echo '<h3>Allow local:</h3>' .$allowLocal;
+                echo '<h3>Account Status:</h3>' . var_dump(get_transient('wps_ic_account_status'));
+                ?>
             </p>
         </td>
     </tr>
@@ -610,7 +667,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 <h3>Automatic Preloads found by API (can edit)</h3>
                 <textarea name="preloads_lcp" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['lcp'])) {
-                        echo $preloads['lcp'];
+                        echo implode("\n", $preloads['lcp']);
                     }
                     ?></textarea>
                 <h3>Manual Desktop Preloads (can edit)</h3>
@@ -623,7 +680,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 <h3>Automatic Mobile Preloads found by API (can edit)</h3>
                 <textarea name="preloadsMobile_lcp" style="width:100%;height:150px;"><?php
                 if (!empty($preloadsMobile['lcp'])) {
-                    echo $preloadsMobile['lcp'];
+                    echo implode("\n", $preloadsMobile['lcp']);
                 }
                     ?></textarea>
                 <h3>Manual Mobile Preloads (can edit)</h3>
@@ -670,6 +727,33 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                        min="0" max="20" style="width: 80px;">
 
                 <input type="submit" name="elementor_skip_sections" value="Save Skip Settings" class="button-primary" style="float:right;">
+            </form>
+        </td>
+    </tr>
+    <tr>
+        <td>Fonts</td>
+        <td colspan="3">
+            <form method="post" action="">
+			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce');
+                $gui = new wpc_gui_v4();
+                echo $gui->font_dropdown('Fonts', 'Description');
+                ?>
+                <input type="submit" name="fonts" value="Save Fonts" class="button-primary" style="float:right;">
+            </form>
+        </td>
+    </tr>
+    <tr>
+    <tr>
+        <td>Remove fonts from critical</td>
+        <td colspan="3">
+            <form method="post" action="">
+                <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
+                <textarea name="remove_fonts" style="width:100%;height:150px;"><?php
+                    $removeFonts = get_option('wps_ic_remove_fonts', []);
+                    echo implode("\n", $removeFonts);
+                    ?></textarea>
+                <input type="submit" value="Save" class="button-primary"
+                       style="float:right">
             </form>
         </td>
     </tr>

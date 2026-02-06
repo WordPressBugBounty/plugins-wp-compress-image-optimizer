@@ -26,6 +26,14 @@ class wps_ic_combine_css
     public $url_key_class;
     public $log_criticalCombine;
     public $logger;
+    public $criticalCombine;
+    public $hmwp_rewrite;
+    public $no_content_excludes;
+    public $current_file;
+    public $file_count;
+    public $current_section;
+    public $asset_url;
+    public $enabledCDN;
 
     public function __construct()
     {
@@ -34,6 +42,7 @@ class wps_ic_combine_css
         $this->urlKey = $this->url_key_class->setup();
         $this->combined_dir = WPS_IC_COMBINE . $this->urlKey . '/css/';
         $this->combined_url_base = WPS_IC_COMBINE_URL . $this->urlKey . '/css/';
+        $this->enabledCDN = false;
 
         $this::$isMobile = $this->isMobile();
 
@@ -43,11 +52,18 @@ class wps_ic_combine_css
         self::$rewrite = new wps_cdn_rewrite();
         self::$site_url = site_url();
         $this->settings = get_option(WPS_IC_SETTINGS);
-        #$this->filesize_cap           = '500000'; //in bytes
         $this->filesize_cap = '100000000000'; //in bytes
         $this->combine_inline_scripts = true;
         $this->combine_external = false;
         $this->allExcludes = self::$excludes->combineCSSExcludes();
+
+        if (!empty($this->settings['serve']['jpg']) && !empty($this->settings['serve']['png']) && !empty($this->settings['serve']['gif']) && !empty($this->settings['serve']['svg'])) {
+            $this->enabledCDN = true;
+            $cf = get_option(WPS_IC_CF);
+            if (!empty($cf['settings']['cdn']) && $cf['settings']['cdn'] == '0') {
+                $this->enabledCDN = false;
+            }
+        }
 
         if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
             $this->settings['inline-css'] = '0';
@@ -60,7 +76,8 @@ class wps_ic_combine_css
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';
 
-        $custom_cname = get_option('ic_custom_cname');
+        $cf = get_option(WPS_IC_CF);
+        $custom_cname = !empty($cf['cname']) ? $cf['cname'] : get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {
@@ -85,8 +102,10 @@ class wps_ic_combine_css
             return true;
         }
 
-        $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
-
+        $userAgent = '';
+        if (!empty($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false) {
+            $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
+        }
 
         // Desktop Detection
         $desktopKeywords = ['windows nt', 'macintosh', 'linux', 'cros', 'x11'];
@@ -160,11 +179,15 @@ class wps_ic_combine_css
                 $cleanHref = trim($cleanHref[0]);
 
                 if (strpos($cleanHref, self::$site_url) !== false) {
-                    $path = str_replace(self::$site_url, '', $cleanHref);
+                    $path = str_replace([self::$site_url, $this->zone_name, 'https:///m:0/a:', 'https://' . $this->zone_name . '/m:0/a:'], '', $cleanHref);
                     $path = ltrim($path, '/');
-                    $relativePath = ABSPATH . '/' . $path;
+                    $relativePath = ABSPATH . $path;
 
-                    $content = file_get_contents($relativePath);
+                    try {
+                        $content = file_get_contents($relativePath);
+                    } catch (Exception $e) {
+                        //suppress the warning
+                    }
 
                     if (!empty($content)) {
                         // Get the filename
@@ -216,13 +239,13 @@ class wps_ic_combine_css
         }
         if ($this->is_home_url()) {
             if (!self::$rewrite->is_mobile()) {
-                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assets('string');
+                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assets('string', $html);
             } else {
-                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assetsMobile('string');
+                $wpcPreloadsGenerator = self::$rewrite->preload_custom_assetsMobile('string', $html);
             }
         }
 
-        return $wpcPreloadsGenerator.$wpcPreloads;
+        return $wpcPreloadsGenerator . $wpcPreloads;
     }
 
 
@@ -262,6 +285,19 @@ class wps_ic_combine_css
         }
 
         return false;
+    }
+
+    public function is_home_url()
+    {
+        $home_url = rtrim(home_url(), '/');
+        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $current_url = rtrim($current_url, '/');
+        $current_url = explode('?', $current_url);
+        $current_url = $current_url[0];
+        $home_url = rtrim($home_url, '/');
+        $current_url = rtrim($current_url, '/');
+
+        return $home_url === $current_url;
     }
 
     public function fixImportPaths($matches)
@@ -335,20 +371,6 @@ class wps_ic_combine_css
         return $resultUrl . '/';
     }
 
-    public function preloadFontFace($css)
-    {
-        $preloadFonts = [];
-        preg_match_all('/@font-face\s*{([^}]+)}/', $css, $matches);
-        if ($matches) {
-            foreach ($matches as $fontface) {
-                preg_match('/url\("([^"]*woff2[^"]*)"\)/si', $fontface[0], $matchesWoff2);
-                $preloadFonts[] = $matchesWoff2[1];
-            }
-        }
-
-        return $preloadFonts;
-    }
-
     public function isHtml($string)
     {
         return preg_match("/<[^<]+>/", $string) === 1;
@@ -359,21 +381,12 @@ class wps_ic_combine_css
         $wpcPreloads = [];
         preg_match_all('/<link\s+[^>]*\bhref=(["\'])(.*?)\1[^>]*>/is', $html, $matches);
 
-        if (!empty($_GET['dbgStyleInline'])) {
-            return print_r([$matches, $html], true);
-        }
-
         $excludes_class = new wps_ic_excludes();
 
         if (!empty($matches[2])) {
             foreach ($matches[2] as $k => $href) {
 
                 if ($excludes_class->strInArray($matches[0][$k], $excludes_class->inlineCSSExcludes())) {
-                    continue;
-                }
-
-                if (!empty($_GET['dbgStyleInline2'])) {
-                    $html .= print_r(['asd2', $href, self::$site_url, $matches[0][$k]], true);
                     continue;
                 }
 
@@ -385,12 +398,6 @@ class wps_ic_combine_css
                 $cleanHref = explode('?', trim($href));
                 $cleanHref = trim($cleanHref[0]);
 
-                if (!empty($_GET['dbgStyleInline3'])) {
-                    $html .= print_r(['asd3', $href, self::$site_url, strpos($cleanHref, self::$site_url) !== false], true);
-                    continue;
-                }
-
-                #if (strpos($cleanHref, self::$site_url) !== false && strpos(strtolower($cleanHref), 'divi') === false) {
                 if (strpos($cleanHref, self::$site_url) !== false) {
                     $path = str_replace(self::$site_url, '', $cleanHref);
                     $path = ltrim($path, '/');
@@ -404,18 +411,11 @@ class wps_ic_combine_css
                     // get the file content
                     $content = file_get_contents($relativePath);
 
-                    if (!empty($_GET['dbgStyleInline4'])) {
-                        $html .= print_r(['asd4', $cleanHref, strlen($content)], true);
-                        continue;
-                    }
-
                     if (!empty($content)) {
                         // Check if it's valid CSS
                         // Get the filename
                         $cssFilename = basename($href);
                         $cssUrlPath = str_replace($cssFilename, '', $href);
-
-                        #return print_r(array($cssFilename,$cssUrlPath),true);
 
                         // Remove the site URL from the Path to retrieve just the path
                         $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
@@ -828,18 +828,17 @@ class wps_ic_combine_css
         return $html;
     }
 
-
     public function insert_combined_scripts($html)
     {
         $combined_files = new \FilesystemIterator($this->combined_dir);
 
         if ($this->criticalCombine) {
             foreach ($combined_files as $file) {
-              $url = $this->combined_url_base . basename($file);
-              if (strpos($url, 'http://') !== false) {
-                //force https
-                $url = str_replace('http://', 'https://', $url);
-              }
+                $url = $this->combined_url_base . basename($file);
+                if (strpos($url, 'http://') !== false) {
+                    //force https
+                    $url = str_replace('http://', 'https://', $url);
+                }
                 $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash=' . time() . '" type="text/css" media="all">' . PHP_EOL;
             }
 
@@ -1119,9 +1118,42 @@ class wps_ic_combine_css
                 return print_r(['no-content', $content], true);
             }
 
+            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile1') {
+                return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
+            }
+
             //replace relative urls
             $this->asset_url = $src;
-            $content = preg_replace_callback("/url(\(((?:[^()])+)\))/i", [$this, 'rewrite_relative_url'], $content);
+
+            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'oldrewrite') {
+                $content = preg_replace_callback("/url(\(((?:[^()])+)\))/i", [$this, 'rewrite_relative_url'], $content);
+            } else {
+                if ($this->enabledCDN) {
+                    $re = '~url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)~i';
+
+                    $content = preg_replace_callback($re, function ($m) {
+                        $url = $m[1] ?? $m[2] ?? $m[3] ?? '';
+                        if ($url === '') return $m[0];
+
+                        $new = $this->rewrite_relative_url($url);
+                        if ($new === '' || $new === null) return $m[0];
+
+                        // Unwrap if rewrite_relative_url mistakenly returned url(...)
+                        if (is_string($new) && preg_match('~^\s*url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)\s*$~i', $new, $mm)) {
+                            $new = $mm[1] ?? $mm[2] ?? $mm[3] ?? $new;
+                        }
+
+                        if (!empty($m[1])) return 'url("' . $new . '")';
+                        if (!empty($m[2])) return "url('" . $new . "')";
+                        return 'url(' . $new . ')';
+                    }, $content);
+                }
+            }
+
+
+            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile2') {
+                return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
+            }
         } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
@@ -1149,6 +1181,10 @@ class wps_ic_combine_css
                 return print_r([$tag, 'unknown'], true);
             }
             return $tag;
+        }
+
+        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile3') {
+            return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
         }
 
         if ($this->log_criticalCombine) {
@@ -1199,13 +1235,7 @@ class wps_ic_combine_css
             $url = 'https:' . $url;
         }
 
-        $args = array(
-            'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-            'headers' => array(
-                'Accept' => 'text/css,*/*;q=0.1',
-                'Accept-Language' => 'en-US,en;q=0.9',
-            )
-        );
+        $args = array('user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36', 'headers' => array('Accept' => 'text/css,*/*;q=0.1', 'Accept-Language' => 'en-US,en;q=0.9',));
 
 
         $data = wp_remote_get($url, $args);
@@ -1323,7 +1353,21 @@ class wps_ic_combine_css
             $output['justPath'] = $justPath;
             $output['finalPath'] = $finalPath;
             $output['file_exists'] = file_exists($finalPath);
+            $output['content'] = file_get_contents($finalPath);
             #$output['read'] = file_get_contents($justPath);
+
+            /** Workaround if file_get_contents failed */ global $wp_filesystem;
+
+            if (!function_exists('WP_Filesystem')) {
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+            }
+
+            WP_Filesystem();
+
+            $content = false;
+            if ($wp_filesystem && $wp_filesystem->exists($finalPath)) {
+                $output['contentWPFS'] = $wp_filesystem->get_contents($finalPath);
+            }
 
 
             return $output;
@@ -1339,11 +1383,27 @@ class wps_ic_combine_css
 
         if (!$content) {
 
-            if ($this->log_criticalCombine) {
-                $this->logger->log('Fetch failed,', true);
+            /** Workaround if file_get_contents failed */ global $wp_filesystem;
+
+            if (!function_exists('WP_Filesystem')) {
+                require_once ABSPATH . 'wp-admin/includes/file.php';
             }
 
-            return false;
+            WP_Filesystem();
+
+            $content = false;
+            if ($wp_filesystem && $wp_filesystem->exists($finalPath)) {
+                $content = $wp_filesystem->get_contents($finalPath);
+            }
+
+            if (!$content || empty($content)) {
+
+                if ($this->log_criticalCombine) {
+                    $this->logger->log('Fetch failed,', true);
+                }
+
+                return false;
+            }
         }
 
         if ($this->log_criticalCombine) {
@@ -1351,6 +1411,103 @@ class wps_ic_combine_css
         }
 
         return $content;
+    }
+
+    public function rewrite_relative_url(string $matched_url): string
+    {
+        $matched_url = trim($matched_url);
+        $matched_url = trim($matched_url, " \t\n\r\0\x0B'\""); // remove quotes if any
+
+        // Skip already-rewritten / external / data URLs
+        if ($matched_url === '') return '';
+        if (stripos($matched_url, 'data:') === 0) return $matched_url;
+
+        if (strpos($matched_url, $this->zone_name) !== false || strpos($matched_url, 'zapwp.net') !== false) {
+            return $matched_url;
+        }
+        if (strpos($matched_url, 'google') !== false || strpos($matched_url, 'gstatic') !== false || strpos($matched_url, 'typekit') !== false) {
+            return $matched_url;
+        }
+
+        $asset_url = $this->asset_url;
+        $parsed_asset = parse_url($asset_url);
+        $home = parse_url(get_home_url());
+
+        $scheme = $parsed_asset['scheme'] ?? ($home['scheme'] ?? 'https');
+        $host = $parsed_asset['host'] ?? ($home['host'] ?? '');
+
+        // If it's already absolute (http/https or protocol-relative), just normalize
+        if (preg_match('~^https?://~i', $matched_url)) {
+            $absolute = $matched_url;
+        } elseif (strpos($matched_url, '//') === 0) {
+            $absolute = $scheme . ':' . $matched_url;
+        } else {
+            // Build base directory of the asset (CSS) file
+            $asset_path = $parsed_asset['path'] ?? '/';
+            $base_dir = rtrim(str_replace(basename($asset_path), '', $asset_path), '/');
+
+            if (strpos($matched_url, '/') === 0) {
+                // Root-relative
+                $path = $matched_url;
+            } else {
+                // Relative to CSS directory
+                $path = $base_dir . '/' . $matched_url;
+            }
+
+            // Normalize /./ and /../ segments
+            $path = $this->normalize_path($path);
+
+            $absolute = $scheme . '://' . $host . $path;
+        }
+
+        // Apply your "serve" logic BUT return plain URL (no url("..."))
+        $lower = strtolower($matched_url);
+
+        $is_font = (strpos($lower, '.eot') !== false || strpos($lower, '.woff') !== false || strpos($lower, '.woff2') !== false || strpos($lower, '.ttf') !== false);
+        $is_img = (strpos($lower, '.jpg') !== false || strpos($lower, '.jpeg') !== false || strpos($lower, '.png') !== false || strpos($lower, '.gif') !== false || strpos($lower, '.svg') !== false || strpos($lower, '.webp') !== false);
+
+        if ($is_font && !empty($this->settings['serve']['fonts'])) {
+            return 'https://' . $this->zone_name . '/m:0/a:' . $absolute;
+        }
+
+        if ($is_img) {
+            // respect your per-type flags (minimal example; keep your exact checks if you prefer)
+            $serve = false;
+            if (strpos($lower, '.jpg') !== false && !empty($this->settings['serve']['jpg'])) $serve = true;
+            if (strpos($lower, '.jpeg') !== false && !empty($this->settings['serve']['jpg'])) $serve = true;
+            if (strpos($lower, '.png') !== false && !empty($this->settings['serve']['png'])) $serve = true;
+            if (strpos($lower, '.gif') !== false && !empty($this->settings['serve']['gif'])) $serve = true;
+            if (strpos($lower, '.svg') !== false && !empty($this->settings['serve']['svg'])) $serve = true;
+
+            if ($serve) {
+                // you had the same URL for mobile/non-mobile currently
+                return 'https://' . $this->zone_name . '/q:u/r:0/wp:0/w:1/u:' . $absolute;
+            }
+        }
+
+        // default: return absolute URL
+        return $absolute;
+    }
+
+    /**
+     * Normalize a URL path by resolving /./ and /../ segments.
+     */
+    private function normalize_path(string $path): string
+    {
+        $is_abs = (strpos($path, '/') === 0);
+        $parts = explode('/', $path);
+        $out = [];
+
+        foreach ($parts as $p) {
+            if ($p === '' || $p === '.') continue;
+            if ($p === '..') {
+                array_pop($out);
+                continue;
+            }
+            $out[] = $p;
+        }
+
+        return ($is_abs ? '/' : '') . implode('/', $out);
     }
 
     public function changeFontToCDN($html)
@@ -1393,7 +1550,7 @@ class wps_ic_combine_css
             return $tag;
         }
 
-        if (current_user_can('manage_options') || self::$excludes->strInArray($tag, $this->allExcludes)) {
+        if (current_user_can('manage_wpc_settings') || self::$excludes->strInArray($tag, $this->allExcludes)) {
             return $tag;
         }
 
@@ -1423,150 +1580,6 @@ class wps_ic_combine_css
         }
     }
 
-    public function rewrite_relative_url($url)
-    {
-
-        $matched_url = $url[2];
-        $asset_url = $this->asset_url;
-        $matched_url = str_replace('"', '', $matched_url);
-        $matched_url = str_replace("'", '', $matched_url);
-
-        $parsed_url = parse_url($asset_url);
-        $path = $parsed_url['path'];
-        $path = str_replace(basename($path), '', $path);
-        $path = ltrim($path, '/');
-        $path = rtrim($path, '/');
-        $directories = explode('/', $path);
-
-        $host = $parsed_url['host'];
-        $scheme = $parsed_url['scheme'];
-        $parsed_homeurl = parse_url(get_home_url());
-
-        if (!$host) {
-            //relative asset url
-            $host = $parsed_homeurl['host'];
-        }
-
-        if (!$scheme) {
-            //relative asset url
-            $scheme = $parsed_homeurl['scheme'];
-        }
-
-        if (strpos($matched_url, $this->zone_name) !== false || strpos($matched_url, 'zapwp.net') !== false) {
-            return $url[0];
-        }
-
-        if (strpos($matched_url, 'google') !== false || strpos($matched_url, 'gstatic') !== false || strpos($matched_url, 'typekit') !== false) {
-            return $url[0];
-        }
-
-        if (strpos($matched_url, 'data:') !== false) {
-            return $url[0];
-        }
-
-        $first_char = substr($matched_url, 0, 1);
-        if (strpos($matched_url, 'http') === false && ctype_alpha($first_char)) {
-            // No,slash.. direct file
-            // Same folder
-            $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = ltrim($matched_url, './');
-            $relativePath .= $matched_url_trim;
-            $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
-
-        } else if (strpos($matched_url, '/') === 0 && strpos($matched_url, '//') !== 0) {
-            // Root folder
-            $relativePath = '';
-            $matched_url_trim = ltrim($matched_url, './');
-            $relativePath .= $matched_url_trim;
-            $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
-
-        } else if (strpos($matched_url, './') === 0) {
-            // Same folder
-            $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = ltrim($matched_url, '.');
-            $matched_url_trim = ltrim($matched_url_trim, '.');
-            $relativePath .= $matched_url_trim;
-            $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
-
-        } else if (strpos($matched_url, '../') === 0) {
-            // Are there more directories to go back?
-            $exploded_dirs = explode('../', $matched_url);
-            array_pop($exploded_dirs);
-
-            foreach ($exploded_dirs as $i => $v) {
-                // Back Folder
-                array_pop($directories); // Remove 1 last dir
-            }
-            $relativePath = implode('/', $directories) . '/';
-            $matched_url_trim = preg_replace('/^(\.\.\/)+/', '', $matched_url);
-            $relativePath .= $matched_url_trim;
-
-            $relativeUrl = $scheme . '://' . $host . '/' . $relativePath;
-
-        } else {
-
-            // Regular path
-            if (strpos($matched_url, 'http://') !== false || strpos($matched_url, 'https://') !== false) {
-                // Regular URL
-                $replace_url = $matched_url;
-            } else {
-                // Missing http/s ?
-                $replace_url = ltrim($matched_url, '/');
-                $matched_url = ltrim($matched_url, '/');
-                $replace_url = $scheme . '://' . $replace_url;
-            }
-
-            if (strpos($matched_url, '.jpg') !== false || strpos($matched_url, '.png') !== false || strpos($matched_url, '.gif') !== false || strpos($matched_url, '.svg') !== false || strpos($matched_url, '.jpeg') !== false || strpos($matched_url, '.webp') !== false) {
-                // Image, put on CDN
-                $relativeUrl = $replace_url;
-            } else if (strpos($matched_url, '.woff') !== false || strpos($matched_url, '.woff2') !== false || strpos($matched_url, '.ttf') !== false || strpos($matched_url, '.eot') !== false) {
-
-                // Font file, put on site
-                $relativeUrl = $replace_url;
-            }
-        }
-
-        $relativeUrl = trim($relativeUrl);
-
-        if ((strpos($matched_url, '.eot') !== false || strpos($matched_url, '.woff') !== false || strpos($matched_url, '.woff2') !== false || strpos($matched_url, '.ttf') !== false) && $this->settings['serve']['fonts'] == 1) {
-            if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
-                if (strpos($matched_url, 'icon') !== false || strpos($matched_url, 'awesome') !== false || strpos($matched_url, 'lightgallery') !== false || strpos($matched_url, 'gallery') !== false || strpos($matched_url, 'side-cart-woocommerce') !== false) {
-                    $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
-                } else {
-                    $relativeUrl = 'url("https://' . $this->zone_name . '/font:true/a:' . $relativeUrl . '")';
-                }
-            } else {
-                $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
-            }
-        } else if ((strpos($matched_url, '.jpg') !== false && $this->settings['serve']['jpg'] == 1) || (strpos($matched_url, '.png') !== false && $this->settings['serve']['png'] == 1) || (strpos($matched_url, '.gif') !== false && $this->settings['serve']['gif'] == 1) || (strpos($matched_url, '.svg') !== false && $this->settings['serve']['svg'] == 1)) {
-
-            if ($this::$isMobile) {
-                $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
-            } else {
-                $relativeUrl = 'url("https://' . $this->zone_name . '/m:0/a:' . $relativeUrl . '")';
-            }
-
-        } else {
-            $relativeUrl = 'url("' . $relativeUrl . '")';
-        }
-
-        return $relativeUrl;
-    }
-
-
-    public function is_home_url()
-    {
-        $home_url = rtrim(home_url(), '/');
-        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
-        $current_url = rtrim($current_url, '/');
-        $current_url = explode('?', $current_url);
-        $current_url = $current_url[0];
-        $home_url = rtrim($home_url, '/');
-        $current_url = rtrim($current_url, '/');
-
-        return $home_url === $current_url;
-    }
-
     public function get_combined_css($html)
     {
         // Reset for processing
@@ -1587,6 +1600,36 @@ class wps_ic_combine_css
         return $this->current_file;
     }
 
+    public function combine($html)
+    {
+        $html = $html[0];
+
+        // Run for Cookie Compliant CSS
+        if (!empty($_GET['testCompliant'])) {
+            $html = $this->cookieCompliantCSS($html);
+        }
+
+        // STEP 1: Extract and preserve all <script> tags (including their content)
+        $script_placeholders = [];
+        $script_counter = 0;
+
+        $html = preg_replace_callback('/<script\b[^>]*>.*?<\/script>/si', function ($match) use (&$script_placeholders, &$script_counter) {
+            $placeholder = "___SCRIPT_PLACEHOLDER_{$script_counter}___";
+            $script_placeholders[$placeholder] = $match[0];
+            $script_counter++;
+            return $placeholder;
+        }, $html);
+
+        // STEP 2: Now process CSS (scripts are temporarily removed)
+        $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
+
+        // STEP 3: Restore all <script> tags
+        foreach ($script_placeholders as $placeholder => $original_script) {
+            $html = str_replace($placeholder, $original_script, $html);
+        }
+
+        return $html;
+    }
 
     public function cookieCompliantCSS($html)
     {
@@ -1595,7 +1638,7 @@ class wps_ic_combine_css
             $script_content = $matches[1];
 
             if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
-                return print_r(array($matches),true);
+                return print_r(array($matches), true);
             }
 
             // 2. Extract the JSON: var complianz = {...};
@@ -1603,18 +1646,18 @@ class wps_ic_combine_css
                 $json_string = $json_match[1];
 
                 if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '2') {
-                    return print_r(array($json_match),true);
+                    return print_r(array($json_match), true);
                 }
 
                 // 3. Decode JSON to PHP array
                 $complianz = json_decode($json_string, true);
 
                 if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '3') {
-                    return print_r(array($json_string),true);
+                    return print_r(array($json_string), true);
                 }
 
                 if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '4') {
-                    return print_r(array($complianz, $complianz['css_file']),true);
+                    return print_r(array($complianz, $complianz['css_file']), true);
                 }
 
 
@@ -1624,11 +1667,7 @@ class wps_ic_combine_css
                     $type = $complianz['consenttype'] ?? 'optin';
 
                     // 4. Replace placeholders
-                    $css_file_final = str_replace(
-                        ['{banner_id}', '{type}'],
-                        [$banner_id, $type],
-                        $css_file
-                    );
+                    $css_file_final = str_replace(['{banner_id}', '{type}'], [$banner_id, $type], $css_file);
 
                     // 5. Insert <link> before </head>
                     #$link_tag = '<link rel="stylesheet" href="' . $css_file_final . '">';
@@ -1640,7 +1679,7 @@ class wps_ic_combine_css
                     }
 
                     if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '5') {
-                        return print_r(array($link_tag, $css_file_final),true);
+                        return print_r(array($link_tag, $css_file_final), true);
                     }
 
                     if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '6') {
@@ -1668,23 +1707,9 @@ class wps_ic_combine_css
         }
 
         if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
-            return print_r(array('not-found', $html),true);
+            return print_r(array('not-found', $html), true);
         }
 
-        return $html;
-    }
-
-
-    public function combine($html)
-    {
-        $html = $html[0];
-
-        // Run for Cookie Compliant CSS
-        if (!empty($_GET['testCompliant'])) {
-            $html = $this->cookieCompliantCSS($html);
-        }
-
-        $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
         return $html;
     }
 }

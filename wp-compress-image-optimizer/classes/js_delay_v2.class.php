@@ -1,5 +1,8 @@
 <?php
-
+/**
+ * Plugin: WP Compress – Instant Performance & Speed Optimization
+ * Description: Legitimate script handling for WP Compress Optimizer
+ */
 class wps_ic_js_delay_v2
 {
 
@@ -20,7 +23,9 @@ class wps_ic_js_delay_v2
           'wpcRunningCritical',
           'trustLogo', // css safety service, uses document.write
           'turnstile', // had delayed loading detection, throws error
-          'document.write'
+          'document.write',
+          'wpc-ga-bot-shield',
+          'sourcebuster' //woo script, incompatible with delay
         ];
 
 	    if (isset($settings['gtag-lazy']) && $settings['gtag-lazy'] == '0') {
@@ -68,9 +73,9 @@ class wps_ic_js_delay_v2
             $delay_script .= '<script>var DEBUG = true;</script>';
         }
 
-        $delay_script .= '<script>var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
+        $delay_script .= '<script id="wpc-script-registry">var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
         if (empty(get_option('wps_ic_delay_v2_debug'))) {
-            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'"></script>';
+            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'" async></script>';
         } else {
             $delay_script .= '<script src="https://frankfurt.zapwp.net/delay-js-v2/loader.dev.js"></script>';
         }

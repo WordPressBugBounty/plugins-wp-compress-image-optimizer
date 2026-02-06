@@ -437,7 +437,7 @@ class wps_advancedCache
 			    }
 		    }
 
-        header('X-Cache-By: WP Compress - ' . $type);
+        header('X-Cache-By: Advanced Cache - ' . $type);
     }
 
     public function is_mobile()

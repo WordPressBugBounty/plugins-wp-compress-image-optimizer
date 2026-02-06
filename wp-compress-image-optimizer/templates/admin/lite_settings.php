@@ -1,8 +1,12 @@
 <?php
 global $wps_ic, $wpdb;
 
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
+    if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
         die('Forbidden.');
     }
 }
@@ -33,60 +37,72 @@ if (!empty($_GET['resetTest'])) {
 $options = get_option(WPS_IC_OPTIONS);
 
 if (!empty($_POST)) {
-    $settings = $_POST['options'];
+    $sentSettings = $_POST['options'];
 
     $optionsClass = new wps_ic_options();
     $defaultSettings = $optionsClass->getDefault();
 
-    if (empty($settings) || !is_array($settings)) {
-        $settings = [];
+
+    $newSettings = $settings;
+
+
+    if (!empty($sentSettings['delay-js-v2']) && $sentSettings['delay-js-v2'] == '1' ){
+        $newSettings['delay-js-v2'] = '1';
+        $newSettings['delay-js'] = '1';
     } else {
-        if (!empty($settings['delay-js-v2'])){
-            //Make the delay js toggle controll both delays in simple settings
-	        $settings['delay-js'] = $settings['delay-js-v2'];
-        }
+        $newSettings['delay-js-v2'] = '0';
+        $newSettings['delay-js'] = '0';
     }
 
-    foreach ($defaultSettings as $option_key => $option_value) {
-        if (is_array($option_value)) {
-            foreach ($option_value as $option_value_k => $option_value_v) {
-                if (!isset($settings[$option_key][$option_value_k])) {
-                    if (!isset($settings[$option_key])) {
-                        $settings[$option_key] = [];
-                    }
-                    $settings[$option_key][$option_value_k] = '0';
-                }
-            }
-        } else {
-            if (!isset($settings[$option_key])) {
-                $settings[$option_key] = '0';
-            }
-        }
-    }
-
-    // Patch for CDNAll
-    if (isset($settings['imagesPreset']) && $settings['imagesPreset'] == '1') {
-        $settings['retina'] = '1';
-        $settings['generate_adaptive'] = '1';
-        $settings['generate_webp'] = '1';
-    }
-
-    if (isset($settings['cdnAll']) && $settings['cdnAll'] == '1') {
-        $settings['live-cdn'] = '1';
-        $settings['serve'] = ['jpg' => '1', 'gif' => '1', 'png' => '1', 'svg' => '1'];
-        $settings['css'] = '1';
-        $settings['js'] = '1';
-        $settings['fonts'] = '1';
-        $settings['qualityLevel'] = 'intelligent';
+    if (isset($sentSettings['imagesPreset']) && $sentSettings['imagesPreset'] == '1') {
+        $newSettings['retina'] = '1';
+        $newSettings['generate_adaptive'] = '1';
+        $newSettings['generate_webp'] = '1';
+        $newSettings['imagesPreset'] = '1';
     } else {
-        $settings['live-cdn'] = '0';
-        $settings['serve'] = ['jpg' => '0', 'gif' => '0', 'png' => '0', 'svg' => '0'];
-        $settings['css'] = '0';
-        $settings['js'] = '0';
-        $settings['fonts'] = '0';
+        $newSettings['retina'] = '0';
+        $newSettings['generate_adaptive'] = '0';
+        $newSettings['generate_webp'] = '0';
+        $newSettings['imagesPreset'] = '0';
     }
 
-    update_option(WPS_IC_SETTINGS, $settings);
+    if (isset($sentSettings['cdnAll']) && $sentSettings['cdnAll'] == '1') {
+        $newSettings['live-cdn'] = '1';
+        $newSettings['serve'] = ['jpg' => '1', 'gif' => '1', 'png' => '1', 'svg' => '1'];
+        $newSettings['css'] = '1';
+        $newSettings['js'] = '1';
+        $newSettings['fonts'] = '1';
+        $newSettings['qualityLevel'] = 'intelligent';
+        $newSettings['cdnAll'] = '1';
+    } else {
+        $newSettings['live-cdn'] = '0';
+        $newSettings['serve'] = ['jpg' => '0', 'gif' => '0', 'png' => '0', 'svg' => '0'];
+        $newSettings['css'] = '0';
+        $newSettings['js'] = '0';
+        $newSettings['fonts'] = '0';
+        $newSettings['cdnAll'] = '0';
+    }
+
+    if (isset($sentSettings['critical']['css']) && $sentSettings['critical']['css'] == '1') {
+        $newSettings['critical']['css'] = '1';
+    } else {
+        $newSettings['critical']['css'] = '0';
+    }
+
+    if (isset($sentSettings['nativeLazy']) && $sentSettings['nativeLazy'] == '1') {
+        $newSettings['nativeLazy'] = '1';
+    } else {
+        $newSettings['nativeLazy'] = '0';
+    }
+
+    if (isset($sentSettings['cache']['advanced']) && $sentSettings['cache']['advanced'] == '1') {
+        $newSettings['cache']['advanced'] = '1';
+    } else {
+        $newSettings['cache']['advanced'] = '0';
+    }
+
+
+    update_option(WPS_IC_SETTINGS, $newSettings);
 
     $cache = new wps_ic_cache_integrations();
 
@@ -94,7 +110,7 @@ if (!empty($_POST)) {
     $options_class = new wps_ic_options();
     $purgeList = $options_class->getPurgeList($options);
 
-    $cache::purgeAll(); //this only clears cache files
+    $cache::purgeAll(false, false, false, false); //this only clears cache files
     //To edit what setting purges what, go to wps_ic_options->__construct()
     if (in_array('combine', $purgeList)) {
         $cache::purgeCombinedFiles();
@@ -106,13 +122,18 @@ if (!empty($_POST)) {
 
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
-        $cacheLogic->purgeCDN();
+        $cacheLogic->purgeCDN(false);
 	    $cache::purgeCriticalFiles();
 	    $cache::purgePreloads();
     }
 
+    if (!class_exists('wps_ic_htaccess')) {
+        include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+    }
+
+    $htacces = new wps_ic_htaccess();
+
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
-        $htacces = new wps_ic_htaccess();
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
             // Modify HTAccess
@@ -130,7 +151,6 @@ if (!empty($_POST)) {
         $this->cacheLogic::preloadPage(0); // Purge & Preload
     } else {
         // Modify HTAccess
-        $htacces = new wps_ic_htaccess();
         $htacces->removeHtaccessRules();
 
         // Add WP_CACHE to wp-config.php
@@ -173,6 +193,8 @@ $option = get_option(WPS_IC_OPTIONS);
 
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
+
+$cf = get_option(WPS_IC_CF);
 
 if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
     ?>
@@ -223,7 +245,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     </div>
                 </div>
                 <!-- Right Side -->
-                <div class="wpc-header-right">
+                <div class="wpc-header-right" style="display: flex;width:100%;justify-content: space-between;">
                     <div class="save-button" style="display:none;">
                         <div class="save-notification">
                             <div class="save-notification-inside">
@@ -302,6 +324,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                           <?php
                         } */ ?>
                     </div>
+                    <div class="wpc-cf-banner">
+                        <img src="<?php echo WPS_IC_ASSETS; ?>/v4/images/cf-logo.png" alt="Cloudflare">
+                        <p>Connect with Cloudflare for faster TTFB and auto-optimize at the edge. <span class="wpc-cf-link">Enable now →</span></p>
+                    </div>
                 </div>
             </div>
             <!-- Header End -->
@@ -336,10 +362,14 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </li>
                                 <li>
 			                        <?php
-			                            $cdnLocked = !get_option( 'wps_ic_allow_live' );
+                                        $cfLive = false;
+                                        if ($cf && isset($cf['settings'])){
+                                            $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
+                                        }
+			                            $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
 			                            if ($liteActive) {
 				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', true );
-			                            } else if ($cdnLocked){
+			                            } else if (!$allowLive){
 				                            //dont display the toggle, off in portal
 			                            } else {
 				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', false );
@@ -451,8 +481,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                 <div class="wpc-settings-content wpc-lite-dashboard">
                     <div class="wpc-settings-content-inner">
                         <div class="wpc-rounded-box wpc-rounded-box-full">
-                            <?php
-                            echo $gui::usageLiteGraph(); ?>
+	                        <?php
+	                        if ($cf){
+		                        echo $gui::CFGraph();
+	                        } else {
+		                        echo $gui::usageGraph();
+	                        }
+	                        ?>
                         </div>
                     </div>
 

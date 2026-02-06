@@ -15,6 +15,7 @@ jQuery(document).ready(function ($) {
         $('.wpc-cf-loader').show();
         $('.wpc-cf-loader-error').hide();
 
+
         $.post(ajaxurl, {
             action: 'wpc_ic_checkCFToken',
             token: cFToken,
@@ -105,7 +106,13 @@ jQuery(document).ready(function ($) {
             } else {
                 $('.wpc-cf-loader-zone').hide();
                 $('.wpc-cf-insert-token-step').show();
-                $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+
+                if (response.data.msg){
+                    $('.wpc-cf-loader-error').html(response.data.msg).show();
+
+                } else {
+                    $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+                }
             }
 
 
@@ -133,23 +140,29 @@ jQuery(document).ready(function ($) {
     });
 
 
-    $('.wpc-cf-token-refresh-whitelist').on('click', function(e){
+
+    $('.wpc-cf-token-verify').on('click', function(e){
         $('.wpc-cf-token-hide-on-load').hide();
         $('.wpc-cf-token-connected').hide();
-        $('.wpc-cf-loader-disconnecting').hidden();
+        $('.wpc-cf-loader-disconnecting').hide();
         $('.wpc-cf-loader-refreshing').show();
         $('.wpc-cf-loader-error').hide();
 
         e.preventDefault();
         $.post(ajaxurl, {
-            action: 'wpc_ic_refreshCFWhitelist',
+            action: 'wpc_ic_refreshCFConnection',
             wps_ic_nonce: ajaxVar.nonce,
+            timeout:120,
             _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
         }, function (response) {
             window.location.reload();
         });
+
         return false;
     });
+
+
+
 
 
     $('.wpc-save-button').on('click', function (e) {
@@ -597,6 +610,7 @@ jQuery(document).ready(function ($) {
     function setSettingsState() {
         var debug = [];
         settingsState = [];
+
         $('input[type="checkbox"],input[type="range"]', '.wpc-settings-body').each(function (i, item) {
             var checkbox = $(item);
             var state = 0;
@@ -612,24 +626,28 @@ jQuery(document).ready(function ($) {
                     if ($(item).is('input[type="range"]')) {
                         state = $(item).attr('value');
                         state = parseInt(state);
-                        //settingsState.push([$(item),state]);
                         settingsState.push(state);
                     }
                 }
-
             }
+        });
+
+        // Handle CF dropdown
+        $('input[type="hidden"][name="options[cf][edge-cache]"]', '.wpc-settings-body').each(function() {
+            var value = $(this).val();
+            settingsState.push(value);
         });
     }
 
     function getSettingsState() {
         var debug = [];
         var getSettingsState = [];
+
+        // Handle checkboxes and range inputs
         $('input[type="checkbox"],input[type="range"]', '.wpc-settings-body').each(function (i, item) {
             var checkbox = $(item);
             var state = 0;
             if (!$(checkbox).hasClass('wpc-checkbox-select-all') && !$(checkbox).hasClass('wpc-checkbox-connected-option')) {
-                //console.log($(item));
-
                 if (!$(item).is('input[type="range"]') && $(item).is('input[type="checkbox"]')) {
                     if ($(checkbox).is(':checked')) {
                         getSettingsState.push(1);
@@ -640,13 +658,19 @@ jQuery(document).ready(function ($) {
                     debug.push([$(item), state]);
                     if ($(item).is('input[type="range"]')) {
                         state = $(item).attr('value');
-                        //console.log(state);
                         state = parseInt(state);
                         getSettingsState.push(state);
                     }
                 }
             }
         });
+
+        // Handle CF dropdown
+        $('input[type="hidden"][name="options[cf][edge-cache]"]', '.wpc-settings-body').each(function() {
+            var value = $(this).val();
+            getSettingsState.push(value);
+        });
+
         return getSettingsState;
     }
 
@@ -967,6 +991,170 @@ jQuery(document).ready(function ($) {
             }
         }
     }
+
+    // Toggle dropdown visibility for CF dropdown
+    $(document).on('click', '.wpc-cf-dropdown .wpc-cf-dropdown-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $dropdown = $(this).closest('.wpc-cf-dropdown');
+        var isExpanded = $(this).attr('aria-expanded') === 'true';
+
+        // Close all other CF dropdowns
+        $('.wpc-cf-dropdown').removeClass('show');
+        $('.wpc-cf-dropdown .wpc-cf-dropdown-toggle').attr('aria-expanded', 'false');
+        $('.wpc-cf-dropdown-menu').removeClass('show');
+
+        // Toggle current dropdown
+        if (!isExpanded) {
+            $dropdown.addClass('show');
+            $(this).attr('aria-expanded', 'true');
+            $dropdown.find('.wpc-cf-dropdown-menu').addClass('show');
+        }
+    });
+
+    // Handle dropdown item selection for CF dropdown
+    // Toggle CF dropdown
+    $(document).on('click', '.wpc-cf-select-button', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $dropdown = $(this).closest('.wpc-cf-select-dropdown');
+        var $menu = $dropdown.find('.wpc-cf-select-menu');
+        var isOpen = $menu.is(':visible');
+
+        // Close all CF dropdowns
+        $('.wpc-cf-select-menu').hide();
+
+        // Toggle current dropdown
+        if (!isOpen) {
+            $menu.show();
+        }
+    });
+
+    // Handle CF dropdown item selection
+    $(document).on('click', '.wpc-cf-select-item', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $item = $(this);
+        var $dropdown = $item.closest('.wpc-cf-select-dropdown');
+        var $button = $dropdown.find('.wpc-cf-select-button');
+        var $hiddenInput = $dropdown.closest('.wpc-box-check').find('input[type="hidden"]');
+
+        var value = $item.data('value');
+        var title = $item.data('preset-title');
+
+        // Update hidden input value
+        $hiddenInput.val(value);
+
+        // Update button text
+        $button.text(title);
+
+        // Update active state
+        $dropdown.find('.wpc-cf-select-item').removeClass('wpc-cf-active');
+        $item.addClass('wpc-cf-active');
+
+        // Close dropdown
+        $dropdown.find('.wpc-cf-select-menu').hide();
+
+        var newSettingsSate = getSettingsState();
+
+        if (didSettingsChanged(settingsState, newSettingsSate)) {
+            showSaveButton();
+        } else {
+            hideSaveButton();
+        }
+    });
+
+    // Close CF dropdown when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.wpc-cf-select-dropdown').length) {
+            $('.wpc-cf-select-menu').hide();
+        }
+    });
+
+    // Toggle dropdown visibility for font dropdown
+    $(document).on('click', '.wpc-font-dropdown .wpc-font-dropdown-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $dropdown = $(this).closest('.wpc-font-dropdown');
+        var isExpanded = $(this).attr('aria-expanded') === 'true';
+
+        // Close all other font dropdowns
+        $('.wpc-font-dropdown').removeClass('show');
+        $('.wpc-font-dropdown .wpc-font-dropdown-toggle').attr('aria-expanded', 'false');
+        $('.wpc-font-dropdown-menu').removeClass('show');
+
+        // Toggle current dropdown
+        if (!isExpanded) {
+            $dropdown.addClass('show');
+            $(this).attr('aria-expanded', 'true');
+            $dropdown.find('.wpc-font-dropdown-menu').addClass('show');
+        }
+    });
+
+    // Handle dropdown item selection for font dropdown
+    // Toggle font dropdown
+    $(document).on('click', '.wpc-font-select-button', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $dropdown = $(this).closest('.wpc-font-select-dropdown');
+        var $menu = $dropdown.find('.wpc-font-select-menu');
+        var isOpen = $menu.is(':visible');
+
+        // Close all font dropdowns
+        $('.wpc-font-select-menu').hide();
+
+        // Toggle current dropdown
+        if (!isOpen) {
+            $menu.show();
+        }
+    });
+
+    // Handle font dropdown item selection
+    $(document).on('click', '.wpc-font-select-item', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $item = $(this);
+        var $dropdown = $item.closest('.wpc-font-select-dropdown');
+        var $button = $dropdown.find('.wpc-font-select-button');
+        var $hiddenInput = $dropdown.closest('.wpc-box-check').find('input[type="hidden"]');
+
+        var value = $item.data('value');
+        var title = $item.data('preset-title');
+
+        // Update hidden input value
+        $hiddenInput.val(value);
+
+        // Update button text
+        $button.text(title);
+
+        // Update active state
+        $dropdown.find('.wpc-font-select-item').removeClass('wpc-font-active');
+        $item.addClass('wpc-font-active');
+
+        // Close dropdown
+        $dropdown.find('.wpc-font-select-menu').hide();
+
+        var newSettingsSate = getSettingsState();
+
+        if (didSettingsChanged(settingsState, newSettingsSate)) {
+            showSaveButton();
+        } else {
+            hideSaveButton();
+        }
+    });
+
+    // Close font dropdown when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.wpc-font-select-dropdown').length) {
+            $('.wpc-font-select-menu').hide();
+        }
+    });
 
 
 });

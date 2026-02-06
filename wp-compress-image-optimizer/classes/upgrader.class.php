@@ -97,13 +97,20 @@ class wps_ic_upgrader extends wps_ic
 
     public function update_to_latest()
     {
-        $options = get_option(WPS_IC_OPTIONS);
+        $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
-        if (!empty(parent::$version)) {
-            $options['css_hash'] = parent::$version;
-        } else {
-            $options['css_hash'] = mt_rand(100, 999);
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
+
+        $options['css_hash'] = $CSSHash;
+        $options['js_hash'] = $JSHash;
+
+        if (!class_exists('wps_ic_log')) {
+            include_once WPS_IC_DIR . 'classes/log.class.php';
         }
+
+        $log = new wps_ic_log();
+        $log->logCachePurging($oldOptions, $options, 'update_to_latest');
 
         update_option(WPS_IC_OPTIONS, $options);
 

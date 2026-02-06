@@ -20,8 +20,6 @@ class wps_ic_log {
 
 		if (empty($log_file)) {
 			$log_file = $this::$log_path;
-		} else {
-			$log_file = WPS_IC_LOG . $log_file . '.txt';
 		}
 
 		if ( ! file_exists($log_file)) {
@@ -37,9 +35,20 @@ class wps_ic_log {
 				$log .= '[' . date('d.m.Y H:i:s') . '] Event occured: ' . $event . ' - ' . $message . "\r\n";
 			}
 		}
+
 		file_put_contents($log_file, $log);
 
 	}
+
+
+    public function logCachePurging($oldOptions, $newOptions, $message, $file = 'cachePurging') {
+        if (!WPS_IC_DEBUG_LOG) {
+            return;
+        }
+
+        $this->write(WP_CONTENT_DIR . '/' . $file . '.txt', 'Cache Purged: ' . $message, 'Old Options: ' . print_r($oldOptions,true) . ' - New Options: ' . print_r($newOptions,true));
+    }
+
 
 
 }

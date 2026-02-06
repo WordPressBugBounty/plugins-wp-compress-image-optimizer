@@ -73,7 +73,7 @@ class wps_ic_media_library_live extends wps_ic
 
 
         add_filter('media_row_actions', [$this, 'add_exclude_link'], 10, 2);
-        if ((empty(self::$settings['live-cdn']) || self::$settings['live-cdn'] == '0') || (!empty(self::$settings['local']['media-library']) && self::$settings['local']['media-library'] == '1')) {
+        if (!empty(self::$settings['local']['media-library']) && self::$settings['local']['media-library'] == '1') {
             if (empty(self::$options['hide_compress']) || self::$options['hide_compress'] == '') {
 
                 // WP Custom Fields

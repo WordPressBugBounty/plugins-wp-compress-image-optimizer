@@ -31,7 +31,7 @@
                         <div style="display:flex;padding-left:40px;padding-right:80px;justify-content: space-between;">
 
                             <h4 style="text-align: start;margin-bottom: 0;width:300px;">
-                                List of cookies
+                                Cache cookies
                             </h4>
 
                             <h4 style="text-align: end;margin-bottom: 0;width:90px;">
@@ -44,7 +44,7 @@
 
                             <textarea name="wpc-cache-cookies" class="cache-cookies-textarea-value" style="font-size:13px;line-height:1.5;padding-top:0px;"></textarea>
 
-                            <div class="wps-example-list" style="display:flex;">
+                            <div class="wps-example-list" style="display:flex;min-width:220px;">
                                 <div>
                                     <div>
                                         <p> cookie_notice_accepted<br>
@@ -61,19 +61,48 @@
                                             wcml_client_country<br>
                                             geot_rocket_<br>
                                             pll_language<br>
-                                            yith_wcmcs_currency<br>
+                                            yith_wcmcs_currency</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        <div class="wps-empty-row">&nbsp;</div>
+
+                        <div style="display:flex;padding-left:40px;padding-right:80px;justify-content: space-between;">
+
+                            <h4 style="text-align: start;margin-bottom: 0;width:300px;">
+                                Exclude cookies
+                            </h4>
+
+                            <h4 style="text-align: end;margin-bottom: 0;width:90px;">
+                                Defaults
+                            </h4>
+
+                        </div>
+
+
+                        <div style="display:flex;padding-left:40px;padding-right:40px;justify-content: space-between;">
+
+                            <textarea name="wpc-exclude-cookies" class="exclude-cookies-textarea-value" style="font-size:13px;line-height:1.5;padding-top:0px;"></textarea>
+
+                            <div class="wps-example-list" style="display:flex;min-width:220px;">
+                                <div>
+                                    <div>
+                                        <p></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="wps-empty-row">&nbsp;</div>
 
                         <div class="wps-example-list">
                             <div>
                                 <h3>Examples:</h3>
                                 <div>
-                                    <p>wp_compress would exclude this particular cookie.</p>
-                                    <p>wp_compress_ is treated as a prefix and would exclude all cookies with this prefix.</p>
+                                    <p>wp_compress would cache/exclude this particular cookie.</p>
+                                    <p>wp_compress_ is treated as a prefix and would cache/exclude all cookies with this prefix.</p>
                                 </div>
                             </div>
                         </div>

@@ -3,6 +3,8 @@
 class wps_ic_preload
 {
 
+    public $apikey;
+
     public function __construct()
     {
 

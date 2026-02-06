@@ -133,7 +133,12 @@
                 </div>
 
                 <?php
-                $allowLive = get_option('wps_ic_allow_live');
+                $cf = get_option(WPS_IC_CF);
+                $cfLive = false;
+                if ($cf && isset($cf['settings'])){
+	                $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
+                }
+                $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
                 $hidden = '';
                 if (!$allowLive) {
                     $hidden = 'style="display:none"';

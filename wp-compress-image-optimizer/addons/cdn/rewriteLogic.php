@@ -1,5 +1,9 @@
 <?php
 
+/**
+ * Plugin: WP Compress – Instant Performance & Speed Optimization
+ * Description: Legitimate script handling for WP Compress Optimizer
+ */
 class wps_rewriteLogic
 {
 
@@ -131,7 +135,7 @@ class wps_rewriteLogic
         /**
          * self::$isAjax was required for Ajax Filtering to work in Precommerce
          */
-        if (strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false || !empty($_GET['dbg_preload'])) {
+        if ((!empty($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false) || !empty($_GET['dbg_preload'])) {
             self::$lazyLoadedImagesLimit = 9999;
             self::$preloaderAPI = 1;
             self::$lazyEnabled = 0;
@@ -207,7 +211,9 @@ class wps_rewriteLogic
         self::$siteUrl = trim(self::$siteUrl, '/');
         self::$homeUrl = trim(self::$homeUrl, '/');
 
-        $custom_cname = get_option('ic_custom_cname');
+        $cfCname = get_option(WPS_IC_CF_CNAME);
+        $cf = get_option(WPS_IC_CF);
+        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname)) ? $cfCname : get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             self::$zoneName = get_option('ic_cdn_zone_name');
         } else {
@@ -285,7 +291,7 @@ class wps_rewriteLogic
             self::$replaceAllLinks = '0';
         }
 
-        if (strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false || !empty($_GET['dbg_preload'])) {
+        if ((!empty($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false) || !empty($_GET['dbg_preload'])) {
             self::$lazyLoadedImagesLimit = 9999;
             self::$preloaderAPI = 1;
             self::$lazyEnabled = 0;
@@ -356,9 +362,7 @@ class wps_rewriteLogic
             $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
 
             // Define an array of mobile device keywords to check against
-            $mobileKeywords = [
-                'android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'
-            ];
+            $mobileKeywords = ['android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'];
 
             // Check if the user agent contains any of the mobile device keywords
             foreach ($mobileKeywords as $keyword) {
@@ -467,6 +471,15 @@ class wps_rewriteLogic
     public function revSlider_Replace_DataThumb($image)
     {
         $image_url = $image[1];
+
+        // Check if it's a supported image format
+        $supported_formats = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
+        $extension = strtolower(pathinfo(parse_url($image_url, PHP_URL_PATH), PATHINFO_EXTENSION));
+
+        if (!in_array($extension, $supported_formats)) {
+            return $image[0];
+        }
+
         $webp = '/wp:' . self::$webp;
         if (self::isExcludedFrom('webp', $image_url)) {
             $webp = '';
@@ -497,7 +510,7 @@ class wps_rewriteLogic
             }
         }
 
-        if ($setting == 'cdn'){
+        if ($setting == 'cdn') {
             // Fast string position check first, then regex if needed
             // Fix for i0.wp.com etc. image hosting
             if (strpos($link, '.wp.com') !== false && preg_match('/\bi[0-9a-zA-Z]{1,3}\.wp\.com\b/', $link)) {
@@ -869,7 +882,7 @@ class wps_rewriteLogic
         }
 
         if (self::$isMobile && self::$adaptiveEnabled) {
-	        $mobile_width = get_option('wpc-min-mobile-width');
+            $mobile_width = get_option('wpc-min-mobile-width');
             return $mobile_width ? $mobile_width : 400;
         }
 
@@ -902,7 +915,7 @@ class wps_rewriteLogic
         if (str_contains($html, 'wpcRunningCritical')) {
             return $html;
         } else {
-            $html = preg_replace_callback('/<\/body>/si', [__CLASS__, 'addCriticalAjax'], $html);
+            $html = preg_replace_callback('/<\/body>/si', [__CLASS__, 'addCriticalAjax'], $html, 1);
         }
 
         return $html;
@@ -936,12 +949,14 @@ class wps_rewriteLogic
     let wpcRunningCritical = false;
 
     function handleUserInteraction() {
-     if (typeof ngf298gh738qwbdh0s87v_vars === 'undefined') {
-        return;
-    }
+        if (typeof ngf298gh738qwbdh0s87v_vars === 'undefined') {
+            return;
+        }
+        
         if (wpcRunningCritical) {
             return;
         }
+        
         wpcRunningCritical = true;
 
         var xhr = new XMLHttpRequest();
@@ -955,6 +970,7 @@ class wps_rewriteLogic
                 }
             }
         };
+        
         xhr.send("action=wpc_send_critical_remote&postID={$post->ID}&realUrl={$realUrl}");
 
         removeEventListeners();
@@ -1004,6 +1020,8 @@ SCRIPT;
     public function addCritical($html)
     {
         $criticalCss = $this->addCriticalCSS($html);
+
+        $criticalCss = $this->filterCriticalFontFaces($criticalCss);
 
         if (!empty($_GET['extractCrit'])) {
             return print_r([$criticalCss], true);
@@ -1087,6 +1105,30 @@ SCRIPT;
         return $output;
     }
 
+    function filterCriticalFontFaces(string $critical): string
+    {
+        $blockedFonts = get_option('wps_ic_remove_fonts');
+        if (empty($blockedFonts)) {
+            return $critical;
+        }
+
+        // Match @font-face { ... } blocks (multiline, non-greedy)
+        $pattern = '/@font-face\s*\{.*?\}/is';
+
+        return preg_replace_callback($pattern, function ($match) use ($blockedFonts) {
+            $fontFaceBlock = $match[0];
+
+            foreach ($blockedFonts as $blocked) {
+                if (stripos($fontFaceBlock, $blocked) !== false) {
+                    // Remove this @font-face block
+                    return '';
+                }
+            }
+
+            // Keep this @font-face block
+            return $fontFaceBlock;
+        }, $critical);
+    }
 
     public function optimizeGoogleFonts($html)
     {
@@ -1095,13 +1137,11 @@ SCRIPT;
         return $html;
     }
 
-
     public function optimizeGoogleFontsRewrite($html)
     {
         $html = '';
         return $html;
     }
-
 
     public function lazyCSS($html)
     {
@@ -1115,7 +1155,6 @@ SCRIPT;
 
         return $html;
     }
-
 
     public function cssStyleLazy($html)
     {
@@ -1161,7 +1200,6 @@ SCRIPT;
 
         return $fullTag;
     }
-
 
     public function cssLinkLazy($html)
     {
@@ -1611,6 +1649,9 @@ SCRIPT;
         return false;
     }
 
+
+    // TODO: Will break sites if always active
+
     public function defferFontAwesome($html)
     {
         // TODO: Fix causes problems with Crsip on WP Compress Site
@@ -1633,15 +1674,12 @@ SCRIPT;
         return $html;
     }
 
-
-    // TODO: Will break sites if always active
     public function lazyWpFonts($html)
     {
         $pattern = '/<style[^>]*\s*id=[\'"]wp-fonts-local[\'"][^>]*>.*?<\/style>/is';
         $html = preg_replace($pattern, '', $html);
         return $html;
     }
-
 
     public function defferAssets($html)
     {
@@ -1658,9 +1696,9 @@ SCRIPT;
 
     public function replaceBackgroundImagesInCSS($image)
     {
-        $style_content = $image[0];
-
-        $html = preg_replace_callback('~\bbackground(-image)?\s*:(.*?)\(\s*(\'|")?(?<image>.*?)\3?\s*\)~i', [__CLASS__, 'replaceBackgroundImageStyles'], $style_content);
+        if (!empty($image[0])) {
+            $html = preg_replace_callback('~\bbackground(-image)?\s*:(.*?)\(\s*(\'|")?(?<image>.*?)\3?\s*\)~i', [__CLASS__, 'replaceBackgroundImageStyles'], $image[0]);
+        }
 
         return $html;
     }
@@ -1719,33 +1757,35 @@ SCRIPT;
         return $return_tag;
     }
 
-
     public function replaceBackgroundDataSetting($image)
     {
-        $data = html_entity_decode($image[2]);
-        $dataJson = json_decode($data);
+        if (!empty($image[2])) {
+            $data = html_entity_decode($image[2]);
 
-        $slides = $dataJson->background_slideshow_gallery;
+            if (!empty($data)) {
+                $dataJson = json_decode($data);
 
-        if (!empty($slides)) {
-            foreach ($slides as $i => $slide) {
-                $newSlideUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($slide->url);
-                $dataJson->background_slideshow_gallery[$i]->url = $newSlideUrl;
+                if (!empty($dataJson) && !empty($dataJson->background_slideshow_gallery)) {
+                    $slides = $dataJson->background_slideshow_gallery;
+
+                    if (!empty($slides)) {
+                        foreach ($slides as $i => $slide) {
+                            $newSlideUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($slide->url);
+                            $dataJson->background_slideshow_gallery[$i]->url = $newSlideUrl;
+                        }
+
+                        $dataJsonNew = json_encode($dataJson);
+                        $dataJsonHTML = htmlentities($dataJsonNew, ENT_QUOTES);
+
+                        return ' data-settings="' . $dataJsonHTML . '" ';
+                    }
+                }
             }
-
-            $dataJsonNew = json_encode($dataJson);
-            $dataJsonHTML = htmlentities($dataJsonNew);
-
-            return ' data-settings="' . $dataJsonHTML . '" ';
         }
 
-        if (strpos($image[2], '"') !== false) {
-            return " data-settings='" . $image[2] . "' ";
-        }
-
-        return ' data-settings="' . $image[2] . '" ';
+        // Return the ORIGINAL matched string unchanged
+        return $image[0];
     }
-
 
     public function replaceBackgroundImageStylesLocal($image)
     {
@@ -1788,48 +1828,53 @@ SCRIPT;
         }
     }
 
-
     public function replaceBackgroundImageStyles($image)
     {
-        $tag = $image[0];
-        $url = $image['image'];
-        $original_url = $url;
+        if (!empty($image[0])) {
+            $tag = $image[0];
+            $url = $image['image'];
+            $original_url = $url;
 
-        if (!strpos($url, self::$zoneName)) {
-            // File has already been replaced
-            if ($this->defaultExcluded($url)) {
-                return $tag;
+            if (!empty($url)) {
+                if (!strpos($url, self::$zoneName)) {
+                    // File has already been replaced
+                    if ($this->defaultExcluded($url)) {
+                        return $tag;
+                    }
+
+                    // File is not an image
+                    if (!self::isImage($url)) {
+                        return $tag;
+                    }
+
+                    if (self::isExcluded($url)) {
+                        return $tag;
+                    }
+
+                    if (self::isExcludedFrom('cdn', $url)) {
+                        return $tag;
+                    }
+
+                    $webp = '/wp:' . self::$webp;
+                    if (self::isExcludedFrom('webp', $url)) {
+                        $webp = '';
+                    }
+
+                    $newUrl = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $url)) . '/u:' . self::reformatUrl($url);
+                    $return_tag = str_replace($original_url, $newUrl, $tag);
+
+                    if (!empty($return_tag)) {
+                        return $return_tag;
+                    } else {
+                        return $tag;
+                    }
+                } else {
+                    return $tag;
+                }
             }
-
-            // File is not an image
-            if (!self::isImage($url)) {
-                return $tag;
-            }
-
-            if (self::isExcluded($url)) {
-                return $tag;
-            }
-
-            if (self::isExcludedFrom('cdn', $url)) {
-                return $tag;
-            }
-
-            $webp = '/wp:' . self::$webp;
-            if (self::isExcludedFrom('webp', $url)) {
-                $webp = '';
-            }
-
-            $newUrl = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $url)) . '/u:' . self::reformatUrl($url);
-            $return_tag = str_replace($original_url, $newUrl, $tag);
-
-            if (!empty($return_tag)) {
-                return $return_tag;
-            } else {
-                return $tag;
-            }
-        } else {
-            return $tag;
         }
+
+        return $tag;
     }
 
     public function replacePictureTags($html)
@@ -1838,11 +1883,9 @@ SCRIPT;
         return $html;
     }
 
-
     public function replaceImageTags($html)
     {
         $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [__CLASS__, 'replaceImageTagsDo'], $html);
-
         return $html;
     }
 
@@ -1925,9 +1968,13 @@ SCRIPT;
         //$insideElements = $html[1];
 
         if (self::$isMobile) {
-          // On mobile it can break layouts since we force an image size.
-          // w: in cdn url has to match w in srcset attribute if this is removed.
-          $html[0] = preg_replace('/(<(?:source|img)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+            // On mobile it can break layouts since we force an image size.
+            // w: in cdn url has to match w in srcset attribute if this is removed.
+            //$html[0] = preg_replace('/(<(?:source|img)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+
+            //todo: above was breaking images without src, only srcset
+            // Only remove srcset if src attribute exists
+            $html[0] = preg_replace('/(<(?:source|img)\b(?=[^>]*\ssrc=)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
         }
 
         $html = preg_replace_callback('/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i', [__CLASS__, 'replaceSourceSrcset'], $html);
@@ -1945,17 +1992,17 @@ SCRIPT;
         }
 
         if (strpos($url, self::$zoneName) !== false) {
-          // File has already been replaced
-          return $url;
+            // File has already been replaced
+            return $url;
         }
 
         if ($this->defaultExcluded($url)) {
-          return $url;
+            return $url;
         }
 
         // File is not an image
         if (!self::isImage($url)) {
-          return $url;
+            return $url;
         }
 
         if (self::isExcluded($url)) {
@@ -2019,8 +2066,7 @@ SCRIPT;
                     }
 
                     // Only process srcset if it actually contains relative URLs
-                    if (preg_match('/srcset="[^"]*?' . preg_quote($url, '/') . '/', $image[0]) &&
-                        !preg_match('/srcset="[^"]*?https?:\/\/[^"]*?' . preg_quote($url, '/') . '/', $image[0])) {
+                    if (preg_match('/srcset="[^"]*?' . preg_quote($url, '/') . '/', $image[0]) && !preg_match('/srcset="[^"]*?https?:\/\/[^"]*?' . preg_quote($url, '/') . '/', $image[0])) {
                         $image[0] = preg_replace('/srcset="([^"]*?)' . preg_quote($url, '/') . '/', 'srcset="$1' . $absolute_url, $image[0]);
                     }
 
@@ -2056,10 +2102,15 @@ SCRIPT;
             $adaptiveEnabled = '0';
         }
 
-        // Update LOCAL variables instead of self::
-        if (strpos($image[0], 'breakdance') !== false || strpos($image[0], 'skip-lazy') !== false || strpos($image[0], 'notlazy') !== false || strpos($image[0], 'nolazy') !== false || strpos($image[0], 'jet-image') !== false) {
-            $lazyEnabled = '0';
-            $adaptiveEnabled = '0';
+
+        $lazyExcludes = ['breakdance', 'skip-lazy', 'notlazy', 'nolazy', 'jet-image', 'data-lazy'];
+
+        foreach ($lazyExcludes as $exclude) {
+            if (strpos($image[0], $exclude) !== false) {
+                $lazyEnabled = '0';
+                $adaptiveEnabled = '0';
+                break;
+            }
         }
 
         if (strpos($image[0], 'data:image') !== false || strpos($image[0], 'blank') !== false || strpos($image[0], 'gform_ajax_spinner') !== false || strpos($image[0], 'spinner.svg') !== false) {
@@ -2173,15 +2224,22 @@ SCRIPT;
             return print_r(['src_is_empty' => empty($original_img_tag['original_tags']['src']), 'data-src_is_empty' => empty($original_img_tag['original_tags']['data-src']), 'data-cp-src_is_empty' => empty($original_img_tag['original_tags']['data-cp-src']), 'src' => $image_source, 'porto-lazy-src' => $original_img_tag['original_tags']['data-oi'], 'tags' => $original_img_tag], true);
         }
 
+        if (!empty($original_img_tag['original_tags']['data-interchange'])) {
+            // if this is set then JS parses it and finds the correct url to use, but if we put it on cdn we break the parsing, have to exclude
+            return $image[0];
+        }
+
         $original_img_tag['original_src'] = $image_source;
 
         /**
          * Fetch image actual size
          */
+        $originalSizeTags = false;
         if (!empty($original_img_tag['original_tags']['width'])) {
             $size = [];
             $size[0] = $original_img_tag['original_tags']['width'];
             $size[1] = $original_img_tag['original_tags']['height'];
+            $originalSizeTags = true;
         } else {
             $size = self::get_image_size($image_source);
         }
@@ -2371,9 +2429,12 @@ SCRIPT;
             $maxWidth = $this::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $image_source));
             $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $maxWidth . '/u:' . self::reformatUrl($image_source);
             $original_img_tag['data-count'] = self::$lazyLoadedImages;
+
             if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
                 $original_img_tag['additional_tags']['fetchpriority'] = 'high';
             }
+
+            #$original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped3';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
             unset($original_img_tag['additional_tags']['data-wpc-loaded'], $original_img_tag['original_tags']['data-src'], $original_img_tag['data-src']);
@@ -2381,11 +2442,23 @@ SCRIPT;
 
 
         // Recalculate dimensions once after all conditions
-        if (isset($maxWidth) && $maxWidth > 1 && !empty($original_img_tag['original_tags']['width']) && !empty($original_img_tag['original_tags']['height'])) {
-            $originalWidth = $original_img_tag['original_tags']['width'];
-            $originalHeight = $original_img_tag['original_tags']['height'];
-            $original_img_tag['original_tags']['width'] = $maxWidth;
-            $original_img_tag['original_tags']['height'] = round(($originalHeight / $originalWidth) * $maxWidth);
+        if (empty($originalSizeTags)) {
+            if (isset($maxWidth) && $maxWidth > 1 && !empty($original_img_tag['original_tags']['width']) && !empty($original_img_tag['original_tags']['height'])) {
+                $originalWidth = $original_img_tag['original_tags']['width'];
+                $originalHeight = $original_img_tag['original_tags']['height'];
+                $original_img_tag['original_tags']['width'] = $maxWidth;
+                $original_img_tag['original_tags']['height'] = round(($originalHeight / $originalWidth) * $maxWidth);
+            }
+        }
+
+        // Patch for images that already have predefined size tag
+        if (empty($originalSizeTags)) {
+            if (empty(self::$settings['add-image-sizes']) || self::$settings['add-image-sizes'] == '0') {
+                unset($original_img_tag['original_tags']['width'], $original_img_tag['original_tags']['height']);
+            }
+        } else {
+            // It has original tags and preserve them
+            $original_img_tag['original_tags']['wpc-size'] = 'preserve';
         }
 
 
@@ -2418,6 +2491,12 @@ SCRIPT;
             // TODO: For some reason this was commented out (class)
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';
             $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
+            $original_img_tag['additional_tags']['data-excluded-adaptive'] = 'true';
+            // TODO: Added 23.11.2025 - mozda sjebe lazy load?
+            // TODO: Maknuto, bilo je problema
+            // unset($original_img_tag['additional_tags']['data-wpc-loaded']);
+
+            $original_img_tag['src'] = $image_source;
         }
 
         $build_image_tag = '<img ';
@@ -2629,7 +2708,6 @@ SCRIPT;
         return $build_image_tag;
     }
 
-
     public function ajaxImage($imageElement)
     {
         if ($this->checkIsSlashed($imageElement)) {
@@ -2691,134 +2769,161 @@ SCRIPT;
 
     public function rewriteSrcset($original_img_tag, $srcset)
     {
-
-        if (!empty($srcset)) {
-
-            if (self::$isMobile){
-              // We are forcing all widths on mobile, no srcset is needed.
-              // the w: param has to match the w param from the srcset url or it can break mobile layouts.
-              return '';
-            }
-
-            $newSrcSet = '';
-            preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/si', $srcset, $srcset_links);
-
-            // Fix max-width setting for img tag
-            $maxWidthMatches = [];
-            if (!empty($original_img_tag['original_tags']['sizes'])) {
-                preg_match('/max-width:\s*(\d+)px/si', $original_img_tag['original_tags']['sizes'], $maxWidthMatches);
-            }
-
-
-            // Find image size closest to 480, but not smaller
-            $find = 480;
-            $find960 = 960;
-            $found960 = 0;
-            $found = 0;
-            $img480 = 0;
-            $img960 = 0;
-
-
-            if (!empty($srcset_links)) {
-                foreach ($srcset_links[0] as $i => $srcset) {
-                    $src = explode(' ', $srcset);
-                    $srcset_url = trim($src[0]);
-                    $srcset_width = trim($src[1]);
-
-                    if ($srcset_width >= $find) {
-                        if (!$found || $found < $srcset_width) {
-                            $found = $srcset_width;
-                            $img480 = $srcset_url;
-                        }
-                    }
-
-                    // Retina
-                    if ($srcset_width >= $find960) {
-                        if (!$found960 || $found960 > $srcset_width) {
-                            $found960 = $srcset_width;
-                            $img960 = $srcset_url;
-                        }
-                    }
-
-
-                    $webp = '/wp:' . self::$webp;
-                    if (self::isExcludedFrom('webp', $srcset_url)) {
-                        $webp = '';
-                    }
-
-                    if (self::isExcludedLink($srcset_url)) {
-                        $newSrcSet .= $srcset_url . ' ' . $srcset_width . ', ';
-                    } else {
-                        if (strpos($srcset_width, 'x') !== false) {
-                            $width_url = 1;
-                            $srcset_width = str_replace('x', '', $srcset_width);
-                            $extension = 'x';
-                        } else {
-                            $srcset_width = $width_url = str_replace('w', '', $srcset_width);
-                            $extension = 'w';
-                        }
-
-                        if ($srcset_width == '1') {
-                            $srcsetWidthExtension = '';
-                        } else {
-                            $srcsetWidthExtension = $srcset_width . $extension;
-                        }
-
-
-                        if (strpos($srcset_url, self::$zoneName) !== false) {
-                            $newSrcSet .= $srcset_url . ' ' . $srcsetWidthExtension . ', ';
-                            continue;
-                        }
-
-                        if (strpos($srcset_url, '.svg') !== false) {
-                            $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
-                        } else {
-                            // Non-retina URL
-                            $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url, self::isExcludedFrom('adaptive', $srcset_url)) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
-
-                            // Retina URL
-                            if (self::$settings['retina-in-srcset'] == '1') {
-                                $retinaWidth = (int)$width_url * 2;
-                                //$newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ' 2x, ';
-                                $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth, self::isExcludedFrom('adaptive', $original_img_tag['original_src'])) . '/u:' . self::reformatUrl($original_img_tag['original_src']) . ' ' . $retinaWidth . $extension . ', ';
-                            }
-                        }
-                    }
-
-                }
-
-                // Inject the previously found 480, if max-width bigger than 480
-                if (!empty($maxWidthMatches[1]) && $maxWidthMatches[1] >= 480) {
-                    $webp = '/wp:' . self::$webp;
-                    if (self::isExcludedFrom('webp', $srcset_url)) {
-                        $webp = '';
-                    }
-
-                    if (!empty($img480)) {
-                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:400/u:' . self::reformatUrl($img480) . ' 480w, ';
-                    } else if (!empty($original_img_tag['original_src'])) {
-                        $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:400/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
-                    }
-
-                    // Retina URL
-                    if (self::$settings['retina-in-srcset'] == '1') {
-                        //$newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w 2x, ';
-                        $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($original_img_tag['original_src']) . ' 480w, ';
-                    }
-                }
-
-                $newSrcSet = rtrim($newSrcSet);
-                $newSrcSet = rtrim($newSrcSet, ',');
-
-                return $newSrcSet;
-            }
-
+        if (empty($srcset)) {
             return $srcset;
+        }
+
+        if (self::$isMobile) {
+            // We are forcing all widths on mobile, no srcset is needed.
+            // the w: param has to match the w param from the srcset url or it can break mobile layouts.
+            return '';
+        }
+
+        $newSrcSet = '';
+
+        preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(jpg|jpeg|png|gif|svg|webp))\s(\d{1,5}+[wx])/si', $srcset, $srcset_links);
+
+        // Fix max-width setting for img tag
+        $maxWidthMatches = [];
+        if (!empty($original_img_tag['original_tags']['sizes'])) {
+            preg_match('/max-width:\s*(\d+)px/si', $original_img_tag['original_tags']['sizes'], $maxWidthMatches);
+        }
+
+        // ---------------------------------------------------------------------
+        // Pick canonical "full" image source:
+        // Prefer original_src ONLY if it is not a WP resized (-400x70) file,
+        // otherwise use the largest srcset candidate.
+        // ---------------------------------------------------------------------
+        $largestWidth = 0;
+        $largestSrc = '';
+
+        if (!empty($srcset_links[0])) {
+            foreach ($srcset_links[0] as $srcsetItem) {
+                $parts = preg_split('/\s+/', trim($srcsetItem));
+                if (count($parts) < 2) continue;
+
+                $url = trim($parts[0]);
+                $w = trim($parts[1]);
+
+                // Only treat "w" candidates as width-based (ignore "x" densities for largest selection)
+                if (strpos($w, 'w') !== false) {
+                    $wi = (int)str_replace('w', '', $w);
+                    if ($wi > $largestWidth) {
+                        $largestWidth = $wi;
+                        $largestSrc = $url;
+                    }
+                }
+            }
+        }
+
+        $originalSrc = $original_img_tag['original_src'] ?? '';
+
+        // Detect WP resized pattern in originalSrc: "-400x70.ext"
+        $originalLooksResized = false;
+        $originalWidthFromName = 0;
+
+        if (!empty($originalSrc)) {
+            if (preg_match('/-(\d{1,5})x(\d{1,5})\.(jpg|jpeg|png|gif|webp)$/i', $originalSrc, $m)) {
+                $originalLooksResized = true;
+                $originalWidthFromName = (int)$m[1];
+            }
+        }
+
+        // Decide canonical source
+        $fullSrc = $originalSrc;
+
+        // If original is missing OR looks resized OR is smaller than the largest srcset width, promote largest srcset
+        if (!empty($largestSrc)) {
+            if (empty($fullSrc)) {
+                $fullSrc = $largestSrc;
+            } elseif ($originalLooksResized) {
+                $fullSrc = $largestSrc;
+            } elseif ($originalWidthFromName > 0 && $largestWidth > $originalWidthFromName) {
+                $fullSrc = $largestSrc;
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Rewrite srcset
+        // ---------------------------------------------------------------------
+        if (!empty($srcset_links[0])) {
+            foreach ($srcset_links[0] as $i => $srcsetItem) {
+
+                $parts = preg_split('/\s+/', trim($srcsetItem));
+                if (count($parts) < 2) continue;
+
+                $srcset_url = trim($parts[0]);
+                $srcset_width = trim($parts[1]);
+
+                $webp = '/wp:' . self::$webp;
+                if (self::isExcludedFrom('webp', $srcset_url)) {
+                    $webp = '';
+                }
+
+                if (self::isExcludedLink($srcset_url)) {
+                    $newSrcSet .= $srcset_url . ' ' . $srcset_width . ', ';
+                    continue;
+                }
+
+                // Parse descriptor
+                if (strpos($srcset_width, 'x') !== false) {
+                    $width_url = 1;
+                    $width_val = (int)str_replace('x', '', $srcset_width);
+                    $extension = 'x';
+                } else {
+                    $width_val = (int)str_replace('w', '', $srcset_width);
+                    $width_url = $width_val;
+                    $extension = 'w';
+                }
+
+                $srcsetWidthExtension = ($width_val === 1) ? '' : ($width_val . $extension);
+
+                // Already CDN URL
+                if (strpos($srcset_url, self::$zoneName) !== false) {
+                    $newSrcSet .= $srcset_url . ' ' . $srcsetWidthExtension . ', ';
+                    continue;
+                }
+
+                // SVG passthrough
+                if (strpos($srcset_url, '.svg') !== false) {
+                    $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
+                    continue;
+                }
+
+                // Non-retina URL (use the actual candidate URL)
+                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url, self::isExcludedFrom('adaptive', $srcset_url)) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
+
+                // Retina URL (IMPORTANT: use canonical fullSrc, not original_src)
+                if (self::$settings['retina-in-srcset'] == '1' && !empty($fullSrc)) {
+                    $retinaWidth = (int)$width_url * 2;
+
+                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth, self::isExcludedFrom('adaptive', $fullSrc)) . '/u:' . self::reformatUrl($fullSrc) . ' ' . ($retinaWidth . $extension) . ', ';
+                }
+            }
+
+            // Inject 480/960 if max-width bigger than 480
+            if (!empty($maxWidthMatches[1]) && (int)$maxWidthMatches[1] >= 480 && !empty($fullSrc)) {
+
+                $webp = '/wp:' . self::$webp;
+                if (self::isExcludedFrom('webp', $fullSrc)) {
+                    $webp = '';
+                }
+
+                $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:480/u:' . self::reformatUrl($fullSrc) . ' 480w, ';
+
+                if (self::$settings['retina-in-srcset'] == '1') {
+                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:960/u:' . self::reformatUrl($fullSrc) . ' 960w, ';
+                }
+            }
+
+            $newSrcSet = rtrim($newSrcSet);
+            $newSrcSet = rtrim($newSrcSet, ',');
+
+            return $newSrcSet;
         }
 
         return $srcset;
     }
-
 
     public function replace_with_480w($srcset)
     {

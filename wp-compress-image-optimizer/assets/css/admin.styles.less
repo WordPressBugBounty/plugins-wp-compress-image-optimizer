@@ -66,6 +66,157 @@
   }
 }
 
+
+
+
+.wpc-custom-pointer {
+
+  /* * --- UPDATED: Tooltip Styling --- */
+  .tooltip-container {
+    display: inline-block;
+    position: relative;
+
+    &.align-right {
+      float: right;
+    }
+  }
+
+  .tooltip-text {
+    visibility: hidden;
+    width: 200px;
+    /* UPDATED: Darker background, added border */
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #444;
+    text-align: left;
+    font-weight: 400;
+    font-size: 12px;
+    border-radius: 4px;
+    padding: 8px 10px;
+    line-height: 1.4;
+
+    position: absolute;
+    z-index: 10;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    margin-left: -100px; /* Centering with margin-left */
+
+    opacity: 0;
+    transition: opacity 0.3s, visibility 0.3s;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  /* Tooltip Arrow */
+  .tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    /* UPDATED: Arrow color matches tooltip */
+    border-color: #444 transparent transparent transparent;
+  }
+  .tooltip-text::before { /* Inner arrow to match background */
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -4px; /* Slightly smaller to show border */
+    border-width: 4px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+    z-index: 11; /* Above the border arrow */
+  }
+
+
+  /* Show on hover */
+  .tooltip-container:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* Modifier for tooltips on the right side of the footer */
+  .tooltip-container.align-right .tooltip-text {
+    left: auto;
+    right: 0;
+    margin-left: 0;
+  }
+
+  .tooltip-container.align-right .tooltip-text::after,
+  .tooltip-container.align-right .tooltip-text::before {
+    left: auto;
+    right: 15px;
+    margin-left: 0;
+  }
+  /* --- End of Tooltip Styling --- */
+
+  .wp-pointer-content {
+    padding-bottom: 0px !important;
+  }
+  h3 {
+    padding:15px !important;
+    background: #fff;
+    border-color: #c3c4c7 !important;
+    border-bottom: 1px solid #c3c4c7;
+    color:#333 !important;
+  }
+  h3:before {
+    display:none;
+  }
+
+  .wp-pointer-arrow-inner,
+  .wp-pointer-arrow-inner {
+    border-bottom-color: #fff !important;
+  }
+
+  .wpc-boxed-outter {
+    padding: 15px !important;
+    p {
+      padding:0px !important;
+      margin: 0px !important;
+    }
+
+    ul {
+      li {
+        padding: 2px 0px !important;
+        margin:0px !important;
+        img {
+          width:12px !important;
+        }
+      }
+    }
+
+  }
+
+  #wps-ic-delete {
+    float:right;
+    line-height: 30px !important;
+    color:#bc0f0f !important;
+    text-decoration: none !important;
+  }
+
+  #wps-ic-leave-active {
+    margin-right:15px !important;
+  }
+
+  .wpc-boxed-footer {
+    background: #f5f5f5 !important;
+    padding:15px !important;
+  }
+
+  .wpc-boxed {
+    border:1px solid #c3c4c7 !important;
+    border-radius: 6px;
+    padding:10px !important;
+    background: #f5f5f5 !important;
+    margin:15px 0px 0px 0px !important;
+  }
+}
+
+
 .button-wpc-popup-primary {
   background: linear-gradient(81.4deg, #59A8E3 -2.9%, #4273F0 100%) !important;
   border-radius: 4px !important;

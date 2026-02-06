@@ -131,5 +131,20 @@ jQuery(document).ready(function ($) {
 
     initializeCircleProgressBars();
 
+    $('.wpc-cf-link').on('click', function() {
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wpsChangeGui',
+                view: 'advanced',
+                nonce: ajaxVar.nonce,
+            },
+            success: function (response) {
+                window.location.href = window.location.pathname + window.location.search + '#integrations';
+                window.location.reload();
+            }
+        });
+    });
 
 });

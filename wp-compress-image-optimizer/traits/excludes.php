@@ -142,6 +142,7 @@ class wps_ic_excludes extends wps_ic
         ];
 
         self::$defaultCriticalCSSExcludes = [
+            'frontend-layer'
         ];
 
         self::$defaultInlineCSSExcludes = [

@@ -1,4 +1,7 @@
 <?php
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
 
 class wps_ic_perfmatters extends wps_ic_integrations
 {
@@ -65,7 +68,7 @@ class wps_ic_perfmatters extends wps_ic_integrations
 
     if ($updated) {
       $cache = new wps_ic_cache_integrations();
-      $cache->purgeAll();
+      $cache->purgeAll(false, false, false, false);
       update_option('perfmatters_options', $perfmatters_options);
     }
 

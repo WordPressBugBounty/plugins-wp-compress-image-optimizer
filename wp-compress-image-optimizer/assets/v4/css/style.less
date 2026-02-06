@@ -31,6 +31,48 @@
 }
 
 
+.setup-accordion { margin: 16px 0; }
+
+/* Bigger + bolder summary line */
+.setup-accordion summary {
+  font-family: 'proxima_semibold' !important;
+  color: #3c434a;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 14px 16px;    /* a bit more padding so it feels balanced */
+  border: 1px solid #E9E9E9;
+  border-radius: 6px;
+  background: #fff;
+  list-style: none;
+}
+.setup-accordion summary::-webkit-details-marker { display: none; }
+.setup-accordion summary:after {
+  content: "▸";
+  float: right;
+  transform: rotate(0deg);
+  transition: transform .15s ease-in-out;
+}
+.setup-accordion[open] summary:after { transform: rotate(90deg); }
+
+.setup-accordion .accordion-body {
+  border: 1px solid #E9E9E9;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Iframe sizing */
+.setup-accordion .iframe-wrap { height: 0; }
+.setup-accordion[open] .iframe-wrap {
+  height: calc(100vh - 220px);
+  min-height: 480px;
+}
+.setup-accordion iframe { width: 100%; height: 100%; border: 0; }
+
+
 .wpc-cf-connect-form {
   flex: 1;
   border: 1px solid #E9E9E9;
@@ -51,8 +93,57 @@
     }
   }
 
+  .wpc-cf-loader-refreshing {
+    .wpcLoader {
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+  }
+
   .wpc-cf-token-connected {
     font-size:14px;
+
+    .wpcLoader {
+      width: 12px;
+      height: 12px;
+      border: 1px solid #5CB1FF;
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      position: relative;
+      animation: pulsewpcLoader 1s linear infinite;
+    }
+    .wpcLoader:after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #5CB1FF;
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      animation: scaleUpwpcLoader 1s linear infinite;
+    }
+
+    .wpc-cf-token-verify {
+      cursor: pointer;
+      width: auto !important;
+      display: inline-block !important;
+      height: auto !important;
+      background: linear-gradient(81.4deg, #f58220 -2.9%, #fbae40 100%) !important;
+      border-radius: 5px !important;
+      border: 0px solid transparent;
+      justify-content: center;
+      text-decoration: none;
+      align-items: center;
+      padding: 12px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #fff;
+    }
 
     .wpc-cf-token-refresh-whitelist {
       cursor: pointer;
@@ -94,6 +185,7 @@
       }
 
       .wpc-cf-token-connected-info-right {
+        min-width:400px;
         flex:1;
         text-align: right;
       }
@@ -7725,5 +7817,224 @@ i.wpc-locked {
   button:hover {
     cursor: pointer;
   }
+}
 
+// CF Dropdown - Completely separate from existing dropdown
+.wpc-cf-select-dropdown {
+  min-width: 150px;
+  text-align: left;
+  position: relative;
+  display: inline-block;
+
+  .wpc-cf-select-button {
+    min-width: 150px;
+    appearance: none;
+    border: 0;
+    border-radius: 40px;
+    outline: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    height: auto;
+    padding: 12px 40px 12px 20px;
+    background: url(../images/caret-down-v2.svg) no-repeat right 20px center, linear-gradient(to left, #EFF7FF 3em, #EFF7FF 3em);
+    color: #314B72;
+    cursor: pointer;
+
+    &:hover,
+    &:focus {
+      background: url(../images/caret-down-v2.svg) no-repeat right 20px center, linear-gradient(to left, #EFF7FF 3em, #EFF7FF 3em);
+      color: #314B72;
+      outline: none;
+    }
+  }
+
+  .wpc-cf-select-menu {
+    width: 170px;
+    position: absolute;
+    top: 40px;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    min-width: 10rem;
+    padding: 0;
+    margin: 0.125rem 0 0;
+    font-size: 13px;
+    color: #212529;
+    text-align: left;
+    list-style: none;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0, 0, 0, .15);
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+    .wpc-cf-select-item {
+      cursor: pointer;
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 15px;
+      clear: both;
+      font-weight: 400;
+      color: #212529;
+      text-align: inherit;
+      white-space: nowrap;
+      background-color: transparent;
+      border: 0;
+      text-decoration: none;
+
+      &.wpc-cf-active {
+        color: #1c72f3;
+        font-weight: 500;
+      }
+
+      &:focus,
+      &:hover {
+        font-weight: 500;
+        color: #16181b;
+        text-decoration: none;
+        background-color: #f8f9fa;
+      }
+    }
+  }
+}
+
+.wpc-cf-loader-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #991b1b;
+  line-height: 1.5;
+}
+
+.wpc-cf-cname-popup{
+  text-decoration-line: underline;
+  cursor: pointer;
+}
+
+.wpc-cf-banner {
+  float:right;
+  width:380px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  max-width: 450px;
+  font-size: 13px;
+}
+
+.wpc-cf-banner img {
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.wpc-cf-banner p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #374151;
+}
+
+.wpc-cf-link {
+  color: #000000;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+.wpc-cf-link:hover {
+  color: #374151;
+}
+
+// Font Dropdown - Completely separate from existing dropdown
+.wpc-font-select-dropdown {
+  min-width: 150px;
+  text-align: left;
+  position: relative;
+  display: inline-block;
+
+  .wpc-font-select-button {
+    min-width: 150px;
+    appearance: none;
+    border: 0;
+    border-radius: 40px;
+    outline: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    height: auto;
+    padding: 12px 40px 12px 20px;
+    background: url(../images/caret-down-v2.svg) no-repeat right 20px center, linear-gradient(to left, #EFF7FF 3em, #EFF7FF 3em);
+    color: #314B72;
+    cursor: pointer;
+
+    &:hover,
+    &:focus {
+      background: url(../images/caret-down-v2.svg) no-repeat right 20px center, linear-gradient(to left, #EFF7FF 3em, #EFF7FF 3em);
+      color: #314B72;
+      outline: none;
+    }
+  }
+
+  .wpc-font-select-menu {
+    width: 170px;
+    position: absolute;
+    top: 40px;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    min-width: 10rem;
+    padding: 0;
+    margin: 0.125rem 0 0;
+    font-size: 13px;
+    color: #212529;
+    text-align: left;
+    list-style: none;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0, 0, 0, .15);
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+    .wpc-font-select-item {
+      cursor: pointer;
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 15px;
+      clear: both;
+      font-weight: 400;
+      color: #212529;
+      text-align: inherit;
+      white-space: nowrap;
+      background-color: transparent;
+      border: 0;
+      text-decoration: none;
+
+      &.wpc-font-active {
+        color: #1c72f3;
+        font-weight: 500;
+      }
+
+      &:focus,
+      &:hover {
+        font-weight: 500;
+        color: #16181b;
+        text-decoration: none;
+        background-color: #f8f9fa;
+      }
+    }
+  }
 }

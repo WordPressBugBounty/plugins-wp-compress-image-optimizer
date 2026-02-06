@@ -3,12 +3,12 @@
 global $wps_ic;
 
 if (!empty($_GET['reset'])) {
-  delete_option('wps_ic_bulk_process');
+    delete_option('wps_ic_bulk_process');
 }
 
 $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
-  $live_cdn = true;
+    $live_cdn = true;
 }
 
 ?>
@@ -24,10 +24,12 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
             <div class="wp-ic-header-buttons-container">
                 <ul>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-compress" style="display:none;"><i class="icon-pause"></i> Pause Optimization</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-compress"
+                           style="display:none;"><i class="icon-pause"></i> Pause Optimization</a>
                     </li>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-restore" style="display:none;"><i class="icon-pause"></i> Pause Restore</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-restore"
+                           style="display:none;"><i class="icon-pause"></i> Pause Restore</a>
                     </li>
                     <li>
                         <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return">Return to Dashboard</a>
@@ -41,44 +43,44 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
         <div class="wp-compress-pre-wrapper-no-shadow">
 
             <div class="wp-compress-bulk-area">
-              <?php
-              /**
-               * Find uncompressed images
-               */
-              $local = new wps_ic_local();
+                <?php
+                /**
+                 * Find uncompressed images
+                 */
+                $local = new wps_ic_local();
 
-              $libraryStatus = $local->prepareImages('', 'count');
-              $uncompressedImages = count($libraryStatus['uncompressed']);
-              $compressedImages = count($libraryStatus['compressed']);
+                $libraryStatus = $local->prepareImages('', 'count');
+                $uncompressedImages = count($libraryStatus['uncompressed']);
+                $compressedImages = count($libraryStatus['compressed']);
 
-              $bulkProcess = get_option('wps_ic_bulk_process');
+                $bulkProcess = get_option('wps_ic_bulk_process');
 
-              $prepare_compress = 'display:none;';
-              $prepare_restore = 'display:none;';
-              $bulk = '';
-              $show_bulk = 'display:none;';
-              $compress_bulk_4boxes = 'display: flex;';
-              $prepare_restore = 'display:none;';
+                $prepare_compress = 'display:none;';
+                $prepare_restore = 'display:none;';
+                $bulk = '';
+                $show_bulk = 'display:none;';
+                $compress_bulk_4boxes = 'display: flex;';
+                $prepare_restore = 'display:none;';
 
-              if (!empty($bulkProcess['status'])) {
-                  if ($bulkProcess['status'] == 'compressing') {
-                    $prepare_compress = 'display:block;';
-                    $prepare_restore = 'display:none;';
-                    $bulk = 'display:none;';
-                    $show_bulk = 'display:block;';
-                    $compress_bulk_4boxes = 'display: none;';
-                    $prepare_restore = 'display:none;';
-                  } else {
-                    $prepare_compress = 'display:none;';
-                    $prepare_restore = 'display:block;';
-                    $bulk = 'display:none;';
-                    $show_bulk = 'display:block;';
-                    $compress_bulk_4boxes = 'display: none;';
-                    $prepare_restore = 'display:none;';
-                  }
-              }
+                if (!empty($bulkProcess['status'])) {
+                    if ($bulkProcess['status'] == 'compressing') {
+                        $prepare_compress = 'display:block;';
+                        $prepare_restore = 'display:none;';
+                        $bulk = 'display:none;';
+                        $show_bulk = 'display:block;';
+                        $compress_bulk_4boxes = 'display: none;';
+                        $prepare_restore = 'display:none;';
+                    } else {
+                        $prepare_compress = 'display:none;';
+                        $prepare_restore = 'display:block;';
+                        $bulk = 'display:none;';
+                        $show_bulk = 'display:block;';
+                        $compress_bulk_4boxes = 'display: none;';
+                        $prepare_restore = 'display:none;';
+                    }
+                }
 
-              ?>
+                ?>
 
                 <!-- Initial Bulk Screen IF Nothing is running ! -->
                 <div class="wp-compress-bulk-split" id="bulk-start-container" style="<?php echo $bulk; ?>">
@@ -94,18 +96,19 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     </div>
                                 </div>
                             </div>
-                          <?php
-                          if ($uncompressedImages > 0) {
-                            echo '<h3>You have ' . $uncompressedImages . ' images ready to be optimized.</h3>';
-                          } else {
-                            echo '<h3>You have 0 images to optimize.</h3>';
-                          }
-                          ?>
-                          <?php if ($uncompressedImages > 0) { ?>
-                              <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=compress'); ?>" class="button button-primary button-start-bulk-compress">Compress Images</a>
-                          <?php } else { ?>
-                              <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to compress!">Compress Images</a>
-                          <?php } ?>
+                            <?php
+                            if ($uncompressedImages > 0) {
+                                echo '<h3>You have ' . $uncompressedImages . ' images ready to be optimized.</h3>';
+                            } else {
+                                echo '<h3>You have 0 images to optimize.</h3>';
+                            }
+                            ?>
+                            <?php if ($uncompressedImages > 0) { ?>
+                                <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=compress'); ?>"
+                                   class="button button-primary button-start-bulk-compress">Compress Images</a>
+                            <?php } else { ?>
+                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to compress!">Compress Images</a>
+                            <?php } ?>
                         </div>
                     </div>
                     <div class="bulk-split-side">
@@ -122,19 +125,20 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     </div>
                                 </div>
                             </div>
-                          <?php
-                          if ($compressedImages > 0) {
-                            echo '<h3>You have ' . $compressedImages . ' images that can be restored.</h3>';
-                          } else {
-                            echo '<h3>You have 0 images that can be restored.</h3>';
-                          }
-                          ?>
+                            <?php
+                            if ($compressedImages > 0) {
+                                echo '<h3>You have ' . $compressedImages . ' images that can be restored.</h3>';
+                            } else {
+                                echo '<h3>You have 0 images that can be restored.</h3>';
+                            }
+                            ?>
 
-                          <?php if ($compressedImages > 0) { ?>
-                              <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=restore'); ?>" class="button button-primary button-start-bulk-restore">Restore Images</a>
-                          <?php } else { ?>
-                              <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to restore!">Restore Images</a>
-                          <?php } ?>
+                            <?php if ($compressedImages > 0) { ?>
+                                <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=restore'); ?>"
+                                   class="button button-primary button-start-bulk-restore">Restore Images</a>
+                            <?php } else { ?>
+                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to restore!">Restore Images</a>
+                            <?php } ?>
                         </div>
                     </div>
                 </div>
@@ -276,10 +280,10 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
 
         </div>
 
-      <?php
-      // TODO: Bottom bar with hidden message about bulk optimization
-      ?>
+        <?php
+        // TODO: Bottom bar with hidden message about bulk optimization
+        ?>
 
-      <?php include 'partials/popups/bulk/popups.php'; ?>
+        <?php include WPS_IC_DIR . 'templates/admin/partials/popups/bulk/popups.php'; ?>
     </div>
 </div>

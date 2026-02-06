@@ -253,7 +253,7 @@ class wps_ic_stats
                 $stats['totalTtfbAfter'] = round($stats['totalTtfbAfter'] / 1000, 1) . ' sec';
             }
 
-            if ($stats['totalTtfbBefore'] > 100 && $stats['totalTtfbBefore'] < 999) {
+            if ($stats['totalTtfbBefore'] < 999) {
                 $stats['totalTtfbBefore'] = $stats['totalTtfbBefore'] . ' ms';
             } else {
                 $stats['totalTtfbBefore'] = round($stats['totalTtfbBefore'] / 1000, 1) . ' sec';
@@ -364,11 +364,7 @@ class wps_ic_stats
     public
     function fetch_live_stats()
     {
-	      global $firstLoad;
-				if($firstLoad){
-					delete_transient('wps_ic_live_stats');
-				}
-
+		// stats updates every hour, so we can cache this
         $transient = get_transient('wps_ic_live_stats');
 
         if (!$transient || empty($transient)) {
@@ -387,7 +383,7 @@ class wps_ic_stats
 
                     $body = json_decode($body);
                     if (!empty($body)) {
-                        set_transient('wps_ic_live_stats', $body, 60);
+                        set_transient('wps_ic_live_stats', $body, HOUR_IN_SECONDS);
                         return $body;
                     }
                 }
@@ -489,5 +485,54 @@ class wps_ic_stats
 
         update_option('wpc_warmup_stats', $stats);
     }
+
+	/**
+	 * Fetch Cloudflare stats for chart display
+	 *
+	 * @param int $days Number of days to fetch (default 7)
+	 * @return object|false Formatted stats or false on failure
+	 */
+	public function fetch_cloudflare_stats($days = 7) {
+		$transient = get_transient('wps_ic_cf_stats');
+
+		if (!$transient || empty($transient)) {
+			$cf = get_option(WPS_IC_CF);
+
+			if (!$cf || empty($cf['token'])) {
+				return false;
+			}
+
+			// Initialize Cloudflare API
+			$cloudflare = new WPC_CloudflareAPI($cf['token']);
+
+			// Calculate date range
+			$to = date('Y-m-d');
+			$from = date('Y-m-d', strtotime("-{$days} days"));
+
+			// Get unfiltered zone analytics
+			$stats = $cloudflare->getZoneAnalyticsUnfiltered($from, $to);
+
+			if (is_wp_error($stats)) {
+				return false;
+			}
+
+			// Format data to match the existing structure
+			$formatted = new stdClass();
+			foreach ($stats as $date => $data) {
+				$formatted->$date = (object)[
+					'original' => $data['bytes'],              // Extract the integer value
+					'compressed' => $data['cached_bytes'],     // Extract the integer value
+					'requests' => $data['requests'],           // Extract the integer value
+					'cached_requests' => $data['cached_requests'] // Extract the integer value
+				];
+			}
+
+			// Cache for 5 minutes
+			set_transient('wps_ic_cf_stats', $formatted, 300);
+			return $formatted;
+		}
+
+		return $transient;
+	}
 
 }

@@ -37,41 +37,41 @@ class wps_cacheHtml
 
         }
 
-	    // Add cookie variation to cache path
-	    $cookie_string = '';
-	    if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
-		    $cookie_values = [];
-		    $cache_cookies = WPC_CACHE_COOKIES;
+        // Add cookie variation to cache path
+        $cookie_string = '';
+        if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
+            $cookie_values = [];
+            $cache_cookies = WPC_CACHE_COOKIES;
 
-		    foreach ($cache_cookies as $cookie_name) {
-			    // Check if this is a prefix cookie (ends with _)
-			    if (substr($cookie_name, -1) === '_') {
-				    // This is a prefix - find all cookies that start with this prefix
-				    $prefix = $cookie_name; // Keep the underscore for matching
-				    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
-					    if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-						    // Get the suffix (part after the prefix)
-						    $suffix = substr($actual_cookie_name, strlen($prefix));
+            foreach ($cache_cookies as $cookie_name) {
+                // Check if this is a prefix cookie (ends with _)
+                if (substr($cookie_name, -1) === '_') {
+                    // This is a prefix - find all cookies that start with this prefix
+                    $prefix = $cookie_name; // Keep the underscore for matching
+                    foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
+                        if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
+                            // Get the suffix (part after the prefix)
+                            $suffix = substr($actual_cookie_name, strlen($prefix));
 
-						    // Create a 7-character hash of the suffix and append to cookie value
-						    $suffix_hash = substr(hash('md5', $suffix), 0, 7);
-						    $cookie_values[] = $cookie_value . '_' . $suffix_hash;
-					    }
-				    }
-			    } else {
-				    // Regular cookie - exact match
-				    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
-					    $cookie_values[] = $_COOKIE[$cookie_name];
-				    }
-			    }
-		    }
+                            // Create a 7-character hash of the suffix and append to cookie value
+                            $suffix_hash = substr(hash('md5', $suffix), 0, 7);
+                            $cookie_values[] = $cookie_value . '_' . $suffix_hash;
+                        }
+                    }
+                } else {
+                    // Regular cookie - exact match
+                    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
+                        $cookie_values[] = $_COOKIE[$cookie_name];
+                    }
+                }
+            }
 
-		    if (!empty($cookie_values)) {
-			    $cookie_string = '_' . implode('_', $cookie_values);
-		    }
-	    }
+            if (!empty($cookie_values)) {
+                $cookie_string = '_' . implode('_', $cookie_values);
+            }
+        }
 
-	    $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
+        $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
     }
 
     /**
@@ -294,15 +294,13 @@ class wps_cacheHtml
 
         if (empty($this->options['cache']['ignore-server-control']) || $this->options['cache']['ignore-server-control'] == '0') {
             $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
-            if (strpos($cacheControl, 'no-cache') !== false ||
-                strpos($cacheControl, 'no-store') !== false ||
-                strpos($cacheControl, 'private') !== false) {
+            if (strpos($cacheControl, 'no-cache') !== false || strpos($cacheControl, 'no-store') !== false || strpos($cacheControl, 'private') !== false) {
                 return $buffer;
             }
         }
 
         $excludes = get_option('wpc-excludes');
-	    $url = rtrim($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], '/');
+        $url = rtrim($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], '/');
         if (!empty($excludes) && !empty($excludes['cache'])) {
             if (in_array($url, $excludes['cache'])) {
                 return $buffer;
@@ -310,6 +308,10 @@ class wps_cacheHtml
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            return $buffer;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'PURGE') {
             return $buffer;
         }
 
@@ -328,9 +330,31 @@ class wps_cacheHtml
             }
         }
 
+        // Check for excluded cookies
+        if (defined('WPC_EXCLUDE_COOKIES')) {
+            if (WPC_EXCLUDE_COOKIES !== false && is_array(WPC_EXCLUDE_COOKIES)) {
+                foreach ($_COOKIE as $cookieName => $cookieValue) {
+                    foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
+
+                        // Trailing "_" means: treat as wildcard prefix (e.g. "wp-postpass_")
+                        if (substr($excludedCookie, -1) === '_') {
+                            if (stripos($cookieName, $excludedCookie) === 0) {
+                                return $buffer; // Don't cache if excluded cookie prefix is detected
+                            }
+                        } else {
+                            // Exact match (case-insensitive)
+                            if (strcasecmp($cookieName, $excludedCookie) === 0) {
+                                return $buffer; // Don't cache if exact excluded cookie is detected
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         //page type checks for cache
         $purge_rules = get_option('wps_ic_purge_rules');
-        if (!isset($purge_rules['post-publish'])){
+        if (!isset($purge_rules['post-publish'])) {
             $options = new wps_ic_options();
             $purge_rules = $options->get_preset('purge_rules');
         }
@@ -369,7 +393,7 @@ class wps_cacheHtml
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
         }
 
-        if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1'){
+        if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1') {
             $headers = array();
 
             foreach (headers_list() as $header) {
@@ -410,11 +434,7 @@ class wps_cacheHtml
         }
 
         // Primary WordPress recent posts widget identifiers
-        $primary_markers = [
-            'widget_recent_entries',
-            'wp-block-latest-posts',
-            'class="recent-posts'
-        ];
+        $primary_markers = ['widget_recent_entries', 'wp-block-latest-posts', 'class="recent-posts'];
 
         // Check for definitive recent posts markers first
         foreach ($primary_markers as $marker) {
@@ -424,10 +444,7 @@ class wps_cacheHtml
         }
 
         // Check for specific shortcodes that display recent posts
-        if (
-            strpos($buffer, '[recent_posts') !== false ||
-            strpos($buffer, '[display-posts') !== false
-        ) {
+        if (strpos($buffer, '[recent_posts') !== false || strpos($buffer, '[display-posts') !== false) {
             return true;
         }
 
@@ -508,7 +525,7 @@ class wps_cacheHtml
             header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
         }
 
-        header('X-Cache-By: WP Compress - Gzip');
+        header('X-Cache-By: Advanced Cache - Gzip');
     }
 
     public function removeCacheFiles($post_id)
@@ -609,7 +626,8 @@ class wps_cacheHtml
         if (is_dir($folder)) rmdir($folder);
     }
 
-    private function getAllHeaders() {
+    private function getAllHeaders()
+    {
         $headers = array();
         foreach ($_SERVER as $name => $value) {
             if (substr($name, 0, 5) == 'HTTP_') {

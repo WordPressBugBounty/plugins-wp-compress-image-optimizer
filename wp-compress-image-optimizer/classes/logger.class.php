@@ -7,6 +7,7 @@ class wps_ic_logger
 	public $logFile;
 	public $userIP;
 	public $userAgent;
+	public $full_url;
 
 	public function __construct($folder = '')
 	{

@@ -9,6 +9,8 @@ class wps_ic_ajax extends wps_ic
     public static $API_URL = WPS_IC_CRITICAL_API_URL;
     public static $PAGESPEED_URL = WPS_IC_PAGESPEED_API_URL;
     public static $PAGESPEED_URL_HOME = WPS_IC_PAGESPEED_API_URL_HOME;
+    public static $CRITICAL_URL_HOME = WPS_IC_CRITICAL_API_URL_HOME;
+
 
     public static $local;
     public static $options;
@@ -52,7 +54,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
                 $this->add_ajax('wpc_ic_checkCFDisconnect');
-                $this->add_ajax('wpc_ic_refreshCFWhitelist');
+                $this->add_ajax('wpc_ic_refreshCFConnection');
                 $this->add_ajax('wpc_ic_setupCF');
 
                 // Critical CSS
@@ -124,7 +126,8 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_export_settings');
                 $this->add_ajax('wps_ic_import_settings');
                 $this->add_ajax('wps_ic_set_default_settings');
-
+                $this->add_ajax('wps_ic_save_cf_cdn');
+                $this->add_ajax('wps_ic_get_cf_cdn');
 
                 // Live Start
 
@@ -171,15 +174,23 @@ class wps_ic_ajax extends wps_ic
 
     public static function wpc_ic_checkCFDisconnect()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
-        $cfSettings = get_option(WPS_IC_CF);
+        $requests = new wps_ic_requests();
 
-        $zone = $cfSettings['zone'];
-        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
-        $cfapi->removeWhitelistIP($zone);
+        $cfSettings = get_option(WPS_IC_CF);
+        $zoneInput = $cfSettings['zone'];
+        $token = $cfSettings['token'];
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $apikey = $options['api_key'];
+
+        $siteUrl = site_url();
+        $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
+
+        $c = $requests->GET(WPS_IC_KEYSURL, ['action' => 'disconnectCF', 'token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
 
         delete_option(WPS_IC_CF);
         wp_send_json_success();
@@ -187,7 +198,7 @@ class wps_ic_ajax extends wps_ic
 
     public static function wpc_ic_checkCFConnect()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -195,6 +206,10 @@ class wps_ic_ajax extends wps_ic
         $zoneInput = sanitize_text_field($_POST['zone']);
 
         $cfapi = new WPC_CloudflareAPI($token);
+        $check = $cfapi->checkPrivileges($zoneInput);
+        if (is_wp_error($check)) {
+            wp_send_json_error(['msg' => $check->get_error_message()]);
+        }
         $zones = $cfapi->listZones();
 
         if (is_wp_error($zones)) {
@@ -229,7 +244,7 @@ class wps_ic_ajax extends wps_ic
 
     public static function wpc_ic_checkCFToken()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -276,7 +291,11 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        wp_send_json_error('unknown-error');
+        if (empty($zones['result'])) {
+            wp_send_json_error('We were unable to connect with Cloudflare API, seems your token is missing required privileges.');
+        } else {
+            wp_send_json_error('unknown-error');
+        }
     }
 
     public static function isFeatureEnabled($featureName)
@@ -290,41 +309,83 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    public function wpc_ic_refreshCFWhitelist()
+    public function wpc_ic_refreshCFConnection()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
-        $cfSettings = get_option(WPS_IC_CF);
+        $requests = new wps_ic_requests();
 
-        $zone = $cfSettings['zone'];
-        $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
-        $whitelist = $cfapi->whitelistIPs($zone);
-        if (is_wp_error($whitelist)) {
-            wp_send_json_error($whitelist->get_error_message());
+        $options = get_option(WPS_IC_OPTIONS);
+        $cf = get_option(WPS_IC_CF);
+
+        $apikey = $options['api_key'];
+
+        $token = sanitize_text_field($cf['token']);
+        $zoneInput = sanitize_text_field($cf['zone']);
+
+        $siteUrl = site_url();
+        $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
+
+        // $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'refreshCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => site_url(), 'zoneName' => $zoneName, 'staticAssets' => $cf['settings']['assets'], 'htmlCache' => $cf['settings']['edge-cache'], 'cdn' => $cf['settings']['cdn'], 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
+
+        if (!empty($body)) {
+            $data = (array)$body->data;
+
+            $cfCname = $data['cfName'];
+            update_option(WPS_IC_CF_CNAME, $cfCname);
+
+            self::$options = get_option(WPS_IC_SETTINGS);
+            self::$options['cf'] = $cf['settings'];
+            //self::$options['ic_custom_cname'] = $data['cfName'];
+            update_option(WPS_IC_SETTINGS, self::$options);
+
+            wp_send_json_success('cf-refreshed-successfully');
         }
 
-        wp_send_json_success('whitelisted-successfully');
+        wp_send_json_error();
     }
+
 
     public function wpc_ic_setupCF()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
+
+        $requests = new wps_ic_requests();
 
         $token = sanitize_text_field($_POST['token']);
         $zoneInput = sanitize_text_field($_POST['zone']);
 
-        $cfapi = new WPC_CloudflareAPI($token);
-        $whitelist = $cfapi->whitelistIPs($zoneInput);
-        if (is_wp_error($whitelist)) {
-            wp_send_json_error($whitelist->get_error_message());
+        $options = get_option(WPS_IC_OPTIONS);
+        $apikey = $options['api_key'];
+
+        // TODO: Add functions
+        $cf = get_option(WPS_IC_CF);
+
+        $siteUrl = site_url();
+        $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
+
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'setupCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => site_url(), 'zoneName' => $zoneName, 'staticAssets' => '1', 'htmlCache' => 'all', 'cdn' => '1', 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
+
+        if (!empty($body)) {
+            $data = (array)$body->data;
+
+            $cf['custom_cname'] = $data['cfName'];
+            $cfCname = $data['cfName'];
+            $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+            update_option(WPS_IC_CF, $cf);
+	          update_option(WPS_IC_CF_CNAME, $cfCname);
+            wp_send_json_success('cf-connected-successfully');
         }
 
-        wp_send_json_success('whitelisted-successfully');
+        wp_send_json_error('error');
     }
+
 
     public function wpc_send_critical_remote()
     {
@@ -346,12 +407,20 @@ class wps_ic_ajax extends wps_ic
         // Keep only the allowed parameters
         $filtered_params = array_intersect_key($query_params, array_flip($allowed_params));
 
+        // Check if there are any disallowed parameters
+        $disallowed_params = array_diff_key($query_params, array_flip($allowed_params));
+
+        if (!empty($disallowed_params)) {
+            wp_send_json_success('skipped');
+        }
+
         // Build the new query string
         $new_query = http_build_query($filtered_params);
 
         // Reconstruct the URL
         $realUrl = $parsed_url['host'] . (isset($parsed_url['path']) ? $parsed_url['path'] : '') . '?' . $new_query;
         $realUrl = rtrim($realUrl, '?');
+        $realUrl = rtrim($realUrl, '/');
 
         /**
          * Does Critical Already Exist?
@@ -376,7 +445,10 @@ class wps_ic_ajax extends wps_ic
         // is home
         $home = false;
         $home_url = rtrim(home_url(), '/');
-        if ($home_url == $realUrl) {
+        $realUrl_stripped = preg_replace('#^https?://#', '', $realUrl);
+        $home_url_stripped = preg_replace('#^https?://#', '', $home_url);
+
+        if ($home_url_stripped == $realUrl_stripped) {
             $home = true;
         }
 
@@ -384,10 +456,14 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
 
         $requests = new wps_ic_requests();
-        $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.50.46', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
-
-        $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+        if (!empty($home)) {
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $call = $requests->GET(self::$CRITICAL_URL_HOME, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+        } else {
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+        }
 
         wp_send_json_success('sent');
     }
@@ -425,12 +501,12 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_settings_change()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -520,12 +596,12 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_ajax_checkbox()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -664,7 +740,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -683,7 +759,7 @@ class wps_ic_ajax extends wps_ic
         $exclude_plugins = $option[$option_subset . '_exclude_plugins'];
         $exclude_wp = $option[$option_subset . '_exclude_wp'];
         $exclude_third = $option[$option_subset . '_exclude_third'];
-	    $min_mobile_width = get_option('wpc-min-mobile-width');
+        $min_mobile_width = get_option('wpc-min-mobile-width');
 
         if (empty($value)) {
             $value = '';
@@ -697,7 +773,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_save_excludes_settings()
     {
 
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -726,7 +802,7 @@ class wps_ic_ajax extends wps_ic
             $exclude_plugins = sanitize_text_field($_POST['exclude_plugins']);
             $exclude_wp = sanitize_text_field($_POST['exclude_wp']);
             $exclude_third = sanitize_text_field($_POST['exclude_third']);
-	        $min_mobile_width = sanitize_text_field($_POST['min_mobile_width']);
+            $min_mobile_width = sanitize_text_field($_POST['min_mobile_width']);
 
 
             $wpc_excludes = get_option($setting_group);
@@ -746,13 +822,13 @@ class wps_ic_ajax extends wps_ic
                 $wpc_excludes['deferScript'] = $defer;
             }
 
-			if ($min_mobile_width !== 'false'){
-				$updated1 = update_option('wpc-min-mobile-width', $min_mobile_width);
-			}
+            if ($min_mobile_width !== 'false') {
+                $updated1 = update_option('wpc-min-mobile-width', $min_mobile_width);
+            }
 
             $updated2 = update_option($setting_group, $wpc_excludes);
 
-			$updated = $updated1 || $updated2;
+            $updated = $updated1 || $updated2;
         } else {
             wp_send_json_error('Forbidden.');
         }
@@ -783,7 +859,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_critical_run()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -794,7 +870,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_pull_stats()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -816,7 +892,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -838,7 +914,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -893,7 +969,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -937,7 +1013,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_purge_html()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -952,7 +1028,7 @@ class wps_ic_ajax extends wps_ic
         delete_option('wps_ic_css_combined_cache');
 
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll(false, true);
+        $cache::purgeAll(false, true, false, false);
 
         // Todo: maybe remove?
         $cache::purgeCombinedFiles();
@@ -979,9 +1055,9 @@ class wps_ic_ajax extends wps_ic
 
         if ($return) {
             return true;
-        } else {
-            wp_send_json_success();
         }
+
+        wp_send_json_success();
     }
 
     /**
@@ -990,7 +1066,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_purge_critical_css()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -1015,7 +1091,7 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
-        $cache::purgeAll();
+        $cache::purgeAll(false, false, false, false);
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
@@ -1030,23 +1106,33 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_purge_cdn()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
-        $options = get_option(WPS_IC_OPTIONS);
+        $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
         if (empty($options['api_key'])) {
             wp_send_json_error('API Key empty!');
         }
 
-	    $cache = new wps_ic_cache_integrations();
-	    $cache::purgeCriticalFiles();
-	    $cache::purgeAll();
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeCriticalFiles();
+        $cache::purgeAll();
 
-        $hash = time();
-        $options['css_hash'] = $hash;
-        $options['js_hash'] = $hash;
+        $CSSHash = substr(md5(microtime(true)), 0, 6);
+        $JSHash = strrev($CSSHash);
+
+        $options['css_hash'] = $CSSHash;
+        $options['js_hash'] = $JSHash;
+
+        if (!class_exists('wps_ic_log')) {
+            include_once WPS_IC_DIR . 'classes/log.class.php';
+        }
+
+        $log = new wps_ic_log();
+        $log->logCachePurging($oldOptions, $options, 'wps_ic_purge_cdn');
+
         update_option(WPS_IC_OPTIONS, $options);
 
         delete_transient('wps_ic_css_cache');
@@ -1244,7 +1330,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wpsChangeGui()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -1269,7 +1355,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wps_ic_deauthorize_api()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -1296,25 +1382,30 @@ class wps_ic_ajax extends wps_ic
         global $wps_ic, $wpdb;
         $html = [];
 
-        $heartbeatData = $wpdb->get_results("SELECT * FROM " . $wpdb->options . " WHERE option_name LIKE '_transient_wps_ic_heartbeat_%'");
+        $like = $wpdb->esc_like('_transient_wps_ic_heartbeat_') . '%';
+
+        $heartbeatData = $wpdb->get_results($wpdb->prepare("SELECT *
+         FROM {$wpdb->options}
+         WHERE option_name LIKE %s", $like));
+
         if (!$heartbeatData) {
             wp_send_json_error();
         }
 
         foreach ($heartbeatData as $transient) {
             $data = maybe_unserialize($transient->option_value);
-
             $imageID = $data['imageID'];
             $status = $data['status'];
 
             if ($status == 'compressed') {
                 $html[$imageID] = $wps_ic->media_library->compress_details($imageID);
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_heartbeat_' . $imageID);
             } elseif ($status == 'restored') {
                 $html[$imageID] = $wps_ic->media_library->compress_details($imageID);
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_heartbeat_' . $imageID);
             }
-
-            delete_transient('wps_ic_compress_' . $imageID);
-            delete_transient('wps_ic_heartbeat_' . $imageID);
         }
 
         wp_send_json_success(['html' => $html]);
@@ -1764,7 +1855,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_StopBulk()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -1780,7 +1871,8 @@ class wps_ic_ajax extends wps_ic
             set_transient('wps_ic_bulk_done', true, 60);
 
             // Delete all transients
-            $query = $wpdb->query("DELETE FROM " . $wpdb->options . " WHERE option_name LIKE '%wps_ic_compress_%'");
+            $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('wps_ic_compress_') . '%'));
+
             wp_send_json_success();
         }
     }
@@ -1850,7 +1942,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wpc_ic_start_bulk_restore()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
         // Performance Lab - generate webp on upload
@@ -1995,7 +2087,7 @@ class wps_ic_ajax extends wps_ic
      */
     public function wpc_ic_start_bulk_compress()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2037,29 +2129,29 @@ class wps_ic_ajax extends wps_ic
         }
     }
 
-	public function wps_ic_remove_cname()
-	{
-		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-			wp_send_json_error('Forbidden.');
-		}
+    public function wps_ic_remove_cname()
+    {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
 
-		$cname_class = new wps_ic_cname();
-		$cname_class->remove();
-	}
+        $cname_class = new wps_ic_cname();
+        $cname_class->remove();
+    }
 
-	public function wps_ic_cname_retry()
-	{
-		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-			wp_send_json_error('Forbidden.');
-		}
+    public function wps_ic_cname_retry()
+    {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
 
-		$cname_class = new wps_ic_cname();
-		$cname_class->retry();
-	}
+        $cname_class = new wps_ic_cname();
+        $cname_class->retry();
+    }
 
     public function wps_ic_remove_key()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2071,7 +2163,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_ic_set_mode()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2084,7 +2176,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wpc_ic_ajax_set_preset()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2094,22 +2186,22 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success($configuration);
     }
 
-	public function wps_ic_cname_add()
-	{
-		if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
-			wp_send_json_error('Forbidden.');
-		}
+    public function wps_ic_cname_add()
+    {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
 
-		$cname_input = !empty($_POST['cname']) ? $_POST['cname'] : null;
+        $cname_input = !empty($_POST['cname']) ? $_POST['cname'] : null;
 
-		$cname_class = new wps_ic_cname();
-		$cname_class->add($cname_input);
-	}
+        $cname_class = new wps_ic_cname();
+        $cname_class->add($cname_input);
+    }
 
 
     public function wps_ic_exclude_list()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2146,7 +2238,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_geolocation_force()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2183,7 +2275,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_geolocation()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2292,7 +2384,19 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_media_library_bulk_heartbeat()
     {
         global $wpdb, $wps_ic;
-        $heartbeat_query = $wpdb->get_results("SELECT * FROM " . $wpdb->options . " WHERE option_name LIKE '_transient_wps_ic_compress_%' OR option_name LIKE '_transient_wps_ic_restore_%'");
+        $like_compress = $wpdb->esc_like('_transient_wps_ic_compress_') . '%';
+        $like_restore  = $wpdb->esc_like('_transient_wps_ic_restore_') . '%';
+
+        $heartbeat_query = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT *
+         FROM {$wpdb->options}
+         WHERE option_name LIKE %s
+            OR option_name LIKE %s",
+                $like_compress,
+                $like_restore
+            )
+        );
 
         $html = [];
         if ($heartbeat_query) {
@@ -2377,7 +2481,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_save_mode()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wpc_save_mode')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wpc_save_mode')) {
             wp_send_json_error('Forbidden.');
         }
         $preset = sanitize_text_field($_POST['mode']);
@@ -2425,16 +2529,18 @@ class wps_ic_ajax extends wps_ic
         // Remove generateCriticalCSS Options
         delete_option('wps_ic_gen_hp_url');
 
+        if (!class_exists('wps_ic_htaccess')) {
+            include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+        }
+
+        $htaccess = new wps_ic_htaccess();
+
         if ($preset == 'safe') {
-            // TODO: MAYBE WP CACHE?!
-            // Setup Advanced Caching
-            $htaccess = new wps_ic_htaccess();
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
         } else {
             // Setup Advanced Caching
-            $htaccess = new wps_ic_htaccess();
             // Add WP_CACHE to wp-config.php
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
@@ -2453,7 +2559,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_per_page_settings_html()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2528,7 +2634,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_save_per_page_settings()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2591,7 +2697,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_page_excludes_popup_html()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2662,7 +2768,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_save_page_excludes_popup()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2717,7 +2823,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_optimization_status_pages()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2745,10 +2851,20 @@ class wps_ic_ajax extends wps_ic
             $post_status = ['optimized', 'skipped', 'unoptimized'];
         }
 
+        $cf = get_option(WPS_IC_CF);
+        $cfLive = false;
+        if ($cf && isset($cf['settings'])) {
+            $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
+        }
+        $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
+        if ($allowLive) {
+            $allowLive = '1';
+        }
+
         $warmup_class = new wps_ic_preload_warmup();
         if ($process_all) {
             $pages = $warmup_class->getPagesForFiltering($post_type, $post_status, $page, $offset, $search);
-            $response = ['pages' => $pages['pages'], 'total_pages' => ceil($pages['total'] / 10), 'global_settings' => self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
+            $response = ['pages' => $pages['pages'], 'total_pages' => ceil($pages['total'] / 10), 'global_settings' => self::$settings, 'allow_live' => $allowLive];
         } else {
             $pages = $warmup_class->getOptimizationsStatus($post_type, $page, $offset, $limit, $search);
 
@@ -2757,7 +2873,7 @@ class wps_ic_ajax extends wps_ic
 
             $query = new WP_Query($args);
 
-            $response = ['pages' => $pages, 'total_pages' => $query->max_num_pages, 'global_settings' => self::$settings, 'allow_live' => get_option('wps_ic_allow_live')];
+            $response = ['pages' => $pages, 'total_pages' => $query->max_num_pages, 'global_settings' => self::$settings, 'allow_live' => $allowLive];
         }
 
 
@@ -2775,7 +2891,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_save_optimization_status()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2792,7 +2908,7 @@ class wps_ic_ajax extends wps_ic
                 $url_key = $keys->setup(get_permalink($id));
             }
 
-	        $cache = new wps_ic_cache_integrations();
+            $cache = new wps_ic_cache_integrations();
 
             if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
                 $cache::purgeCombinedFiles($url_key);
@@ -2801,10 +2917,10 @@ class wps_ic_ajax extends wps_ic
                 $cache::purgeCriticalFiles($url_key);
             }
 
-	        $cache::purgeAll($url_key);
-        } else if ($setting_action == 'generate' && $setting_name == 'critical_css'){
-			$critical = new wps_criticalCss();
-			$critical->generateCriticalCSS($id, true);
+            $cache::purgeAll($url_key);
+        } else if ($setting_action == 'generate' && $setting_name == 'critical_css') {
+            $critical = new wps_criticalCss();
+            $critical->generateCriticalCSS($id, true);
         } else {
 
             $wpc_excludes = get_option('wpc-excludes', []);
@@ -2848,7 +2964,7 @@ class wps_ic_ajax extends wps_ic
                     $url_key = $keys->setup(get_permalink($id));
                 }
 
-	            $cache = new wps_ic_cache_integrations();
+                $cache = new wps_ic_cache_integrations();
 
                 if ($setting_name == 'combine_js' || $setting_name == 'css_combine' || $setting_name == 'delay_js') {
                     $cache::purgeCombinedFiles($url_key);
@@ -2857,7 +2973,7 @@ class wps_ic_ajax extends wps_ic
                     $cache::purgeCriticalFiles($url_key);
                 }
 
-	            $cache::purgeAll($url_key);
+                $cache::purgeAll($url_key);
 
                 // Update the 'wpc-excludes' option with the modified data
                 update_option('wpc-excludes', $wpc_excludes);
@@ -2870,7 +2986,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wpsRunQuickTest()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2895,7 +3011,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_run_single_optimization()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -2919,17 +3035,17 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_resetTest()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
-	    $url = home_url();
-		$url_key_class = new wps_ic_url_key();
-		$url_key = $url_key_class->setup($url);
+        $url = home_url();
+        $url_key_class = new wps_ic_url_key();
+        $url_key = $url_key_class->setup($url);
 
         // Purge Cache
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll($url_key);
+        $cache::purgeAll($url_key, false, false, false);
         $cache::purgeCriticalFiles($url_key);
         $cache::purgeCacheFiles($url_key);
 
@@ -2939,6 +3055,15 @@ class wps_ic_ajax extends wps_ic
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
 
+        // Save history of tests
+        $history = get_option(WPS_IC_LITE_GPS_HISTORY);
+        if (empty($history)) {
+            $history = [];
+        }
+        $history[time()] = get_option(WPS_IC_LITE_GPS);
+        update_option(WPS_IC_LITE_GPS_HISTORY, $history);
+
+        // Delete data
         delete_transient('wpc_test_running');
         delete_transient('wpc_initial_test');
         delete_option(WPS_IC_LITE_GPS);
@@ -2947,7 +3072,7 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Test
-        $args = ['url' => home_url(), 'version' => '6.50.46', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => home_url(), 'version' => '6.60.10', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
         $body = wp_remote_retrieve_body($response);
@@ -2968,25 +3093,34 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_save_cache_cookies_settings()
     {
 
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')){
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
         $cookies_setting = get_option('wps_ic_cache_cookies', []);
 
-        $cookies                    = sanitize_textarea_field($_POST['cookies']);
-        $cookies                    = rtrim($cookies, "\n");
-        $cookies                    = explode("\n", $cookies);
-        $cookies_setting['cookies'] = $cookies;
+        $cache_cookies = sanitize_textarea_field($_POST['cache_cookies']);
+        $cache_cookies = rtrim($cache_cookies, "\n");
+        $cache_cookies = explode("\n", $cache_cookies);
+        $cookies_setting['cookies'] = $cache_cookies;
+
+        $exclude_cookies = sanitize_textarea_field($_POST['exclude_cookies']);
+        $exclude_cookies = rtrim($exclude_cookies, "\n");
+        $exclude_cookies = explode("\n", $exclude_cookies);
+        $cookies_setting['exclude_cookies'] = $exclude_cookies;
 
         $updated = update_option('wps_ic_cache_cookies', $cookies_setting);
 
-        if ($updated){
+        if ($updated) {
             $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll();
+            $cache::purgeAll(false, false, false, false);
 
             $settings = get_option(WPS_IC_SETTINGS);
-            if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1'){
+            if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1') {
+                if (!class_exists('wps_ic_htaccess')) {
+                    include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+                }
+
                 $htaccess = new wps_ic_htaccess();
                 $htaccess->setAdvancedCache();
             }
@@ -2999,20 +3133,28 @@ class wps_ic_ajax extends wps_ic
     {
         $cookies_setting = get_option('wps_ic_cache_cookies');
 
-        if ($cookies_setting === false){
-            $options     = new wps_ic_options();
+        if ($cookies_setting === false) {
+            $options = new wps_ic_options();
             $cookies_setting = $options->get_preset('cache_cookies');
             update_option('wps_ic_cache_cookies', $cookies_setting);
         }
 
-        $cookies = implode("\n", $cookies_setting['cookies']);
-        wp_send_json_success(['cookies' => $cookies]);
+        if (!empty($cookies_setting['cookies'])) {
+            $cache_cookies = implode("\n", $cookies_setting['cookies']);
+
+        }
+
+        if (!empty($cookies_setting['exclude_cookies'])) {
+            $exclude_cookies = implode("\n", $cookies_setting['exclude_cookies']);
+        }
+
+        wp_send_json_success(['cache_cookies' => $cache_cookies ?? '', 'exclude_cookies' => $exclude_cookies ?? '']);
     }
 
 
     public function wps_ic_run_tests()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3032,7 +3174,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_check_optimization_status()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3048,7 +3190,7 @@ class wps_ic_ajax extends wps_ic
         } elseif (isset($_POST['optimize']) && $_POST['optimize'] == 'do-not-optimize') {
             update_option('wpc-warmup-selector', 'do-not-optimize');
         } else {
-          delete_option('wpc-warmup-selector');
+            delete_option('wpc-warmup-selector');
         }
 
         $warmup_class = new wps_ic_preload_warmup();
@@ -3060,14 +3202,14 @@ class wps_ic_ajax extends wps_ic
             $next_page = reset($pages['pages']);
             if ($next_page !== false) {
                 $transient = get_transient('wpc_last_optimised_page');
-                if (!empty($transient)){
-                  if ($transient['id'] == $next_page['id'] && $transient['count'] == 2) {
-                    $warmup_class->addError($next_page['id'], 'skip');
-                  } else if ($transient['id'] == $next_page['id'] && $transient['count'] == 1){
-                    $count = 2;
-                  } else {
-                    $count = 1;
-                  }
+                if (!empty($transient)) {
+                    if ($transient['id'] == $next_page['id'] && $transient['count'] == 2) {
+                        $warmup_class->addError($next_page['id'], 'skip');
+                    } else if ($transient['id'] == $next_page['id'] && $transient['count'] == 1) {
+                        $count = 2;
+                    } else {
+                        $count = 1;
+                    }
                 }
                 if ($warmup_class->isRedirected($next_page['link'])) {
                     $warmup_class->addError($next_page['id'], 'redirect');
@@ -3076,7 +3218,7 @@ class wps_ic_ajax extends wps_ic
                 $status['id'] = $next_page['id'];
                 $status['pageTitle'] = ($status['id'] === 'home') ? 'Home Page' : get_the_title($status['id']);
                 $status['status'] = 'warmup';
-                set_transient('wpc_last_optimised_page',['id' => $next_page['id'], 'count' => $count]);
+                set_transient('wpc_last_optimised_page', ['id' => $next_page['id'], 'count' => $count]);
             }
         }
         //end local addition
@@ -3097,7 +3239,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_start_optimizations()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3108,7 +3250,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_stop_optimizations()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3118,7 +3260,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_test_api_connectivity()
     {
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3131,7 +3273,7 @@ class wps_ic_ajax extends wps_ic
     public function wps_ic_save_purge_hooks_settings()
     {
 
-        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!current_user_can('manage_wpc_settings') && !current_user_can('manage_wpc_purge')) || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
@@ -3161,7 +3303,7 @@ class wps_ic_ajax extends wps_ic
 
         if ($updated) {
             $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll();
+            $cache::purgeAll(false, false, false, false);
         }
 
         wp_send_json_success();
@@ -3176,7 +3318,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -3233,16 +3375,18 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
 
-        $settings = sanitize_text_field($_POST['settings']);
-        $excludes = sanitize_text_field($_POST['excludes']);
-        $cache = sanitize_text_field($_POST['cache']);
+        $settings       = sanitize_text_field($_POST['settings'] ?? '');
+        $excludes       = sanitize_text_field($_POST['excludes'] ?? '');
+        $cache          = sanitize_text_field($_POST['cache'] ?? '');
+        $cache_cookies  = sanitize_text_field($_POST['cookies'] ?? '');
 
         $json = [];
+
         if (!empty($settings)) {
             $json['settings'] = get_option(WPS_IC_SETTINGS);
         }
@@ -3254,12 +3398,18 @@ class wps_ic_ajax extends wps_ic
         if (!empty($cache)) {
             $json['cache'] = get_option('wps_ic_purge_rules', []);
 
-            //Don't export lists of archive pages
+            // Don't export lists of archive pages
             unset($json['cache']['type-lists']);
+        }
+
+        if (!empty($cache_cookies)) {
+            $json['cache_cookies'] = get_option('wps_ic_cache_cookies', []);
         }
 
         wp_send_json_success($json);
     }
+
+
 
     public function wps_ic_import_settings()
     {
@@ -3270,19 +3420,19 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
 
-        // Get  data
+        // Get data
         $import_data = $_POST['importData'];
 
         if (empty($import_data)) {
             wp_send_json_error(['msg' => 'No import data provided']);
         }
 
-        if (is_string($import_data) && !empty($import_data)) {
+        if (is_string($import_data)) {
             $decoded_data = json_decode($import_data, true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -3292,10 +3442,11 @@ class wps_ic_ajax extends wps_ic
             $import_data = $decoded_data;
         }
 
-        $options_class = new wps_ic_options();
         if (empty($import_data)) {
             wp_send_json_error(['msg' => 'No import data provided']);
         }
+
+        $options_class = new wps_ic_options();
 
         if (isset($import_data['settings'])) {
             $import_data['settings'] = $options_class->setMissingSettings($import_data['settings']);
@@ -3310,12 +3461,18 @@ class wps_ic_ajax extends wps_ic
             update_option('wps_ic_purge_rules', $import_data['cache']);
         }
 
+        // Import cache cookies
+        if (isset($import_data['cache_cookies'])) {
+            update_option('wps_ic_cache_cookies', $import_data['cache_cookies']);
+        }
+
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
         $cache::purgeAll();
 
         wp_send_json_success(['msg' => 'Settings imported successfully']);
     }
+
 
     public function wps_ic_set_default_settings()
     {
@@ -3326,7 +3483,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Check user capabilities
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('manage_wpc_settings')) {
             wp_send_json_error(['message' => 'Permission denied'], 403);
             wp_die();
         }
@@ -3343,9 +3500,75 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
-        $cache::purgeAll();
+        $cache::purgeAll(false, false, false, false);
 
         wp_send_json_success();
+    }
+
+    public function wps_ic_save_cf_cdn()
+    {
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
+
+        // Check user capabilities
+        if (!current_user_can('manage_wpc_settings')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
+
+        $cf = get_option(WPS_IC_CF);
+        if ($cf === false) {
+            wp_send_json_error(['message' => 'Cloudflare not connected'], 403);
+            wp_die();
+        }
+
+        $cname = sanitize_text_field($_POST['cname']);
+        if (empty($cname)) {
+            wp_send_json_error('Empty CNAME');
+        }
+
+        $requests = new wps_ic_requests();
+
+        $siteUrl = site_url();
+        $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $apikey = $options['api_key'];
+
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'updateCFCname', 'apikey' => $apikey, 'cname' => $cname, 'token' => $cf['token'], 'zoneName' => $zoneName, 'siteUrl' => site_url(), 'zone' => $cf['zone'], 'time' => microtime(true)], ['timeout' => 120]);
+
+        if (!empty($body)) {
+            $data = (array)$body->data;
+            $cfCname = $data['cfName'];
+            update_option(WPS_IC_CF_CNAME, $cfCname);
+        } else {
+            wp_send_json_error();
+        }
+
+        $cache = new wps_ic_cache_integrations();
+        $cache->purgeAll(false, false, false, false);
+        wp_send_json_success($body);
+    }
+
+    public function wps_ic_get_cf_cdn()
+    {
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
+
+        // Check user capabilities
+        if (!current_user_can('manage_wpc_settings')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
+
+        $cfsdk = new WPC_CloudflareAPI();
+        $cname = $cfsdk->getCfCname();
+
+        wp_send_json_success(['cname' => $cname]);
     }
 
 }

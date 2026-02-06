@@ -74,7 +74,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                     <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
                     Retest
                 </a>
-            <?php } elseif (empty($initialPageSpeedScore) && $warmupFailing){ ?>
+            <?php } elseif (empty($initialPageSpeedScore) && $warmupFailing) { ?>
                 <span class="wpc-test-in-progress"> Error, warmup not going.</span>
                 <a href="#" class="wps-ic-initial-retest">
                     <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
@@ -109,6 +109,7 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                     $date->setTimestamp($initialPageSpeedScore['lastRun']);
                     $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
                 }
+
                 ?>
                 <div class="wpc-box-title-right">
                     <span><?php echo $lastRun; ?></span>
@@ -129,12 +130,13 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                     <span>Usually takes about 10 minutes...</span>
                 </div>
             <?php
-            } elseif ($warmupFailing){
+            } elseif ($warmupFailing) {
                 echo '<div style="padding:35px 15px;text-align: center;">';
                 echo '<strong>Error! Seems connection to our API was blocked by Firewall on your server.</strong>';
                 echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Tutorial</a>';
                 echo '</div>';
-            } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
+            }
+            elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) || !empty($initialTestRunning))) {
             $home_page_id = get_option('page_on_front');
             ?>
                 <script type="text/javascript">
@@ -163,6 +165,32 @@ $warmupFailing = $warmup_class->isWarmupFailing();
 
             $desktopDiff = $desktopDiff < 0 ? 0 : '+' . $desktopDiff;
             $mobileDiff = $mobileDiff < 0 ? 0 : '+' . $mobileDiff;
+
+            if (!empty($_GET['testFailed'])) {
+                $mobileAfterGPS = 0;
+                $beforeGPS = 0;
+            }
+
+            // if Score is 0 or test failed, check history
+            if (empty($mobileAfterGPS) || empty($beforeGPS) || $mobileAfterGPS == 0 || $beforeGPS == 0) {
+                $gpsHistory = get_option(WPS_IC_LITE_GPS_HISTORY);
+                if (!empty($gpsHistory)) {
+                    $gpsHistoryLast = array_key_last($gpsHistory);
+                    $gpsHistory = $gpsHistory[$gpsHistoryLast];
+                    $initialPageSpeedScore = $gpsHistory['result'];
+
+                    $beforeGPS = $initialPageSpeedScore['desktop']['before']['performanceScore'] / 100;
+                    $afterGPS = $initialPageSpeedScore['desktop']['after']['performanceScore'] / 100;
+                    $mobileBeforeGPS = $initialPageSpeedScore['mobile']['before']['performanceScore'] / 100;
+                    $mobileAfterGPS = $initialPageSpeedScore['mobile']['after']['performanceScore'] / 100;
+                    $desktopDiff = $initialPageSpeedScore['desktop']['after']['performanceScore'] - $initialPageSpeedScore['desktop']['before']['performanceScore'];
+                    $mobileDiff = $initialPageSpeedScore['mobile']['after']['performanceScore'] - $initialPageSpeedScore['mobile']['before']['performanceScore'];
+
+                    $desktopDiff = $desktopDiff < 0 ? 0 : '+' . $desktopDiff;
+                    $mobileDiff = $mobileDiff < 0 ? 0 : '+' . $mobileDiff;
+                }
+            }
+
             ?>
                 <ul class="wpc-pagespeed-score" style="">
                     <li>
@@ -367,7 +395,8 @@ $warmupFailing = $warmup_class->isWarmupFailing();
                         <div class="wpc-page-speed-footer">
                             <div class="wpc-ps-f-left">
                                 <div class="wpc-badge-container">
-                                    <p style="text-align: center;font-weight: bold;font-family: 'proxima_semibold';">Ooops! Seems we had some issues with testing your site! Please retry!</p>
+                                    <p style="text-align: center;font-weight: bold;font-family: 'proxima_semibold';">Ooops! Seems we had some issues with testing your site! Please
+                                        retry!</p>
                                 </div>
                                 <?php
 

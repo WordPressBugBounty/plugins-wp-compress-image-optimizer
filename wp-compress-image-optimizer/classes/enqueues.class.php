@@ -23,9 +23,9 @@ class wps_ic_enqueues extends wps_ic
     public static $lazy_override;
     public static $preloaderAPI;
     public static $slider_compatibility;
+    public static $page_excludes;
     private static $isAmp;
     public $js_delay;
-
 
     public function __construct()
     {
@@ -40,7 +40,7 @@ class wps_ic_enqueues extends wps_ic
         self::$site_url = site_url();
         self::$preloaderAPI = 0;
         self::$isAmp = new wps_ic_amp();
-
+        $users = new wps_ic_users();
 
         if (self::$isAmp->isAmp()) {
             self::$settings['delay-js'] = '0';
@@ -89,27 +89,25 @@ class wps_ic_enqueues extends wps_ic
             }
         }
 
-        // Slider Compatibility
-        self::$slider_compatibility = 'false';
-        if (!empty(self::$settings['slider_compatibility']) && self::$settings['slider_compatibility'] == '1') {
-            self::$slider_compatibility = 'true';
-        }
-
         if (strpos($_SERVER['HTTP_USER_AGENT'], 'PreloaderAPI') !== false || !empty($_GET['dbg_preload'])) {
             self::$preloaderAPI = 1;
         }
 
         $this->js_delay = new wps_ic_js_delay();
 
-        $custom_cname = get_option('ic_custom_cname');
+        // Setup CF CNAME
+	    $cfCname = get_option(WPS_IC_CF_CNAME);
+	    $cf = get_option(WPS_IC_CF);
+	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname)) ? $cfCname : get_option('ic_custom_cname');
         if (!empty($custom_cname)) {
             self::$zone_name = $custom_cname;
         }
 
+
         if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['tatsu']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['PageSpeed']) || !empty($_GET['et_fb']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['tve']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php" || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false)) {
             // Do nothing
         } else {
-            add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend'], 1);
+            add_action('wp_enqueue_scripts', [$this, 'enqueueFrontend'], 1);
 
             if (is_admin()) {
                 if (!empty($_GET['page']) && ($_GET['page'] == 'wpcompress-mu')) {
@@ -136,14 +134,15 @@ class wps_ic_enqueues extends wps_ic
 
                 }
             } else {
-                add_action('wp_print_scripts', [$this, 'inline_frontend'], 1);
-	            add_action('wp_footer', [$this, 'inline_delay_v2_placeholder'], PHP_INT_MAX);
+                add_action('wp_print_scripts', [$this, 'inlineFrontend'], 1);
+                add_action('wp_footer', [$this, 'inline_delay_v2_placeholder'], PHP_INT_MAX);
                 if (!self::$isAmp->isAmp()) {
                     /**
                      * Remove CSS/JS Versioning - required for CDN
                      */
-                    add_filter('style_loader_src', [$this, 'remove_css_js_version'], 9999);
-                    add_filter('script_loader_src', [$this, 'remove_css_js_version'], 9999);
+                    //this is now done in adjust_src_url() and rewrite_script_tag() AFTER excludes are checked
+                    //add_filter('style_loader_src', [$this, 'removeVersion'], 9999);
+                    //add_filter('script_loader_src', [$this, 'removeVersion'], 9999);
 
                     if (!is_user_logged_in()) {
                         if (empty($_GET['disableDelay2'])) {
@@ -158,19 +157,12 @@ class wps_ic_enqueues extends wps_ic
             }
         }
 
-        //Disable cart fragments
+        // Disable cart fragments for WooCommerce
         if ($this->isPluginActive('woocommerce/woocommerce.php') && !empty(self::$settings['disable-cart-fragments']) && self::$settings['disable-cart-fragments'] == 1) {
             add_action('wp_enqueue_scripts', [$this, 'disableCartFragments'], 999);
         }
 
     }
-
-    public function inline_delay_v2_placeholder() {
-	    if ( ! empty( self::$settings['delay-js-v2'] ) && self::$settings['delay-js-v2'] == '1' ) {
-		    echo '<script type="wpc-delay-placeholder"></script>';
-	    }
-    }
-
 
     public function isPluginActive($plugin)
     {
@@ -184,38 +176,11 @@ class wps_ic_enqueues extends wps_ic
         return in_array($plugin, (array)get_option('active_plugins', []), true) || $is_plugin_active_for_network;
     }
 
-    /**
-     * Remove Dashicons if the admin bar is not showing and user is not in customizer
-     * @return void
-     */
-    public function disableDashicons()
+    public function inline_delay_v2_placeholder()
     {
-        if (!is_admin_bar_showing() && !is_customize_preview()) {
-            wp_dequeue_style('dashicons');
-            wp_deregister_style('dashicons');
+        if (!empty(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1') {
+            echo '<script type="wpc-delay-placeholder"></script>';
         }
-    }
-
-    /**
-     * Remove Gutenberg CSS Block
-     * @return void
-     */
-    public function disableGutenberg()
-    {
-
-        // blocks
-        wp_deregister_style('wp-block-library');
-        wp_dequeue_style('wp-block-library');
-        wp_deregister_style('wp-block-library-theme');
-        wp_dequeue_style('wp-block-library-theme');
-
-        // theme.json
-        wp_deregister_style('global-styles');
-        wp_dequeue_style('global-styles');
-
-        // svg
-        remove_action('wp_enqueue_scripts', 'wp_enqueue_global_styles');
-        remove_action('wp_body_open', 'wp_global_styles_render_svg_filters');
     }
 
     public function disableCartFragments()
@@ -250,7 +215,7 @@ class wps_ic_enqueues extends wps_ic
         }
     }
 
-    public function remove_css_js_version($src)
+    public function removeVersion($src)
     {
         if (!empty(self::$settings['css']) && self::$settings['css'] == '1') {
             // Remove for CSS Files
@@ -276,7 +241,7 @@ class wps_ic_enqueues extends wps_ic
     }
 
 
-    public function inline_frontend()
+    public function inlineFrontend()
     {
         //cannot be called before wp hook, we dont have $post then
         global $post;
@@ -365,7 +330,7 @@ class wps_ic_enqueues extends wps_ic
     }
 
 
-    public function enqueue_frontend()
+    public function enqueueFrontend()
     {
         $options = self::$settings;
 
@@ -380,7 +345,7 @@ class wps_ic_enqueues extends wps_ic
         }
 
         $adaptive = 'false';
-        if (!($options['generate_adaptive']) && $options['generate_adaptive'] == '1') {
+        if (!empty($options['generate_adaptive']) && $options['generate_adaptive'] == '1') {
             $adaptive = 'true';
         }
 
@@ -404,7 +369,7 @@ class wps_ic_enqueues extends wps_ic
             $retinaJS = '.pixel';
         }
 
-        if (is_user_logged_in() && current_user_can('manage_options')) {
+        if (is_user_logged_in() && (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge'))) {
             // Required for Admin Bar
             wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], '1.0.0');
             wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
@@ -415,7 +380,14 @@ class wps_ic_enqueues extends wps_ic
         if (empty($optimizeRemove)) {
             if ((!empty($options['lazy']) && $options['lazy'] == '1')) {
 
-                if (self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+                $cf = get_option(WPS_IC_CF);
+                $cfLive = true;
+                if ($cf && isset($cf['settings'])) {
+                    $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
+                }
+                $allowLive = get_option('wps_ic_allow_live') && $cfLive;
+
+                if ((self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) || !$allowLive) {
 
                     if (!empty(self::$settings['inline-js']) && self::$settings['inline-js'] == 1) {
                         wp_register_script($this::$slug . '-aio', '');
@@ -472,7 +444,8 @@ class wps_ic_enqueues extends wps_ic
 
 
                 wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'api_url' => 'https://' . self::$zone_name . '/', 'quality' => self::$quality, 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'background_sizing' => $background_sizing, 'lazy_enabled' => $lazy, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
-            } else {
+            }
+            else {
 
                 if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
 
@@ -545,31 +518,12 @@ class wps_ic_enqueues extends wps_ic
     }
 
 
-    public function is_mobile()
-    {
-        if (!empty($_GET['simulate_mobile'])) {
-            return true;
-        }
-
-        if (!isset($_SERVER['HTTP_USER_AGENT'])) {
-            $_SERVER['HTTP_USER_AGENT'] = 'wpc';
-        }
-
-        $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
-
-        if (strpos($userAgent, 'mobile')) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     public function enqueue_all_scripts()
     {
         $screen = get_current_screen();
         $page_array = ['upload', #'settings_page_' . $this::$slug,
-            'toplevel_page_' . $this::$slug . '-mu-network', #'toplevel_page_' . $this::$slug,
-            'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'settings_page_' . $this::$slug, 'plugins'];
+                'toplevel_page_' . $this::$slug . '-mu-network', #'toplevel_page_' . $this::$slug,
+                'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'settings_page_' . $this::$slug, 'plugins'];
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
@@ -591,17 +545,7 @@ class wps_ic_enqueues extends wps_ic
         $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js?ver=' . $this::$version);
         $this->asset_style('menu-icon', 'css/menu.wp.css?ver=' . $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js?ver=' . $this::$version, ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'),'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-
-        $screen = get_current_screen();
-
-        //likely not needed anymore
-        /*
-        if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-            wp_dequeue_script('swcfpc_sweetalert_js');
-            wp_deregister_script('swcfpc_sweetalert_js');
-        }
-        */
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js?ver=' . $this::$version, ['jquery'], '1.0.0');
 
@@ -656,10 +600,6 @@ class wps_ic_enqueues extends wps_ic
 
     public function v4()
     {
-        // Tooltipster
-        #$this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
-        #$this->asset_script('admin-tooltip-wcio', 'tooltip/js/tooltipster.bundle.min.js');
-
         wp_enqueue_style($this::$slug . '-tooltip-bundle-wcio', WPS_IC_URI . 'assets/tooltip/css/tooltipster.bundle.min.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-tooltip-wcio', WPS_IC_URI . 'assets/tooltip/js/tooltipster.bundle.min.js', ['jquery'], $this::$version);
 
@@ -680,33 +620,20 @@ class wps_ic_enqueues extends wps_ic
         $apikey = self::$api_key;
         $settings = self::$settings;
 
-
         $screen = get_current_screen();
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'),'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
 
         $page_array = ['upload', #'settings_page_' . $this::$slug,
-            'toplevel_page_' . $this::$slug . '-mu-network', #'toplevel_page_' . $this::$slug,
-            'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'plugins'];
+                'toplevel_page_' . $this::$slug . '-mu-network', #'toplevel_page_' . $this::$slug,
+                'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'plugins'];
 
         if (is_admin()) {
             if (in_array($screen->base, $page_array)) {
-                // Fix for Cloudflare by Optimole Plugin
-                // https://wordpress.org/plugins/wp-cloudflare-page-cache/
                 $screen = get_current_screen();
-
-	            //likely not needed anymore
-	            /*
-				if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-					wp_dequeue_script('swcfpc_sweetalert_js');
-					wp_deregister_script('swcfpc_sweetalert_js');
-				}
-				*/
-
                 wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
-
 
                 if ($screen->base == 'toplevel_page_' . $this::$slug . '-mu-network') {
                     $this->script('admin-mu-connect', 'mu.connect' . WPS_IC_MIN . '.js');
@@ -813,18 +740,7 @@ class wps_ic_enqueues extends wps_ic
     {
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'),'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-
-        $screen = get_current_screen();
-
-	    //likely not needed anymore
-	    /*
-		if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-			wp_dequeue_script('swcfpc_sweetalert_js');
-			wp_deregister_script('swcfpc_sweetalert_js');
-		}
-		*/
-
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
         // Icons
@@ -849,7 +765,6 @@ class wps_ic_enqueues extends wps_ic
     public function bootstrap()
     {
         wp_enqueue_script($this::$slug . '-bootstrap-js', 'https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js', ['jquery'], '1.0.0');
-
         wp_enqueue_style($this::$slug . '-bootstrap-css', 'https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css', []);
     }
 
@@ -857,7 +772,6 @@ class wps_ic_enqueues extends wps_ic
     {
         wp_enqueue_style($this::$slug . '-v2-css', WPS_IC_URI . 'assets/v2/css/custom.min.css', []);
         wp_enqueue_style($this::$slug . '-v2-style-css', WPS_IC_URI . 'assets/v3/css/style.css', []);
-        #wp_enqueue_script( $this::$slug . '-slider-v2-js', WPS_IC_URI . 'assets/v3/js/slider.js', [ 'jquery' ], '1.0.0', true );
         wp_enqueue_script($this::$slug . '-scripts-v2-js', WPS_IC_URI . 'assets/v2/js/scripts.js', ['jquery'], '1.0.0');
         wp_enqueue_script($this::$slug . '-popups-js', WPS_IC_URI . 'assets/v2/js/popups.js', ['jquery'], '1.0.0');
         wp_enqueue_script($this::$slug . '-tooltip-js', WPS_IC_URI . 'assets/v2/js/tooltip.js', ['jquery'], '1.0.0');
@@ -869,15 +783,6 @@ class wps_ic_enqueues extends wps_ic
         $this->bootstrap();
         $this->v2();
         $this->asset_style('menu-icon', 'css/menu.wp.css');
-        $screen = get_current_screen();
-
-	    //likely not needed anymore
-	    /*
-		if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-			wp_dequeue_script('swcfpc_sweetalert_js');
-			wp_deregister_script('swcfpc_sweetalert_js');
-		}
-		*/
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
@@ -916,17 +821,7 @@ class wps_ic_enqueues extends wps_ic
 
         if (is_admin()) {
             if (in_array($screen->base, $page_array)) {
-                // Fix for Cloudflare by Optimole Plugin
-                // https://wordpress.org/plugins/wp-cloudflare-page-cache/
                 $screen = get_current_screen();
-
-	            //likely not needed anymore
-	            /*
-				if ($screen->id !== 'settings_page_wp-cloudflare-super-page-cache-index') {
-					wp_dequeue_script('swcfpc_sweetalert_js');
-					wp_deregister_script('swcfpc_sweetalert_js');
-				}
-				*/
 
                 wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 

@@ -186,7 +186,7 @@ class wps_criticalCss
         // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 30);
 
-        $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.50.46', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
 	    if ($skipCap === true) {
@@ -494,7 +494,7 @@ class wps_criticalCss
 
     public function generateCriticalAjax()
     {
-        $args = ['url' => urldecode($this->serverRequest), 'version' => '6.50.46'];
+        $args = ['url' => urldecode($this->serverRequest), 'version' => '6.60.10'];
 
         $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
@@ -534,7 +534,7 @@ class wps_criticalCss
         $mobile = wp_remote_get($json['url']['mobile'], ['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
 
         // If fetching remote files is ERROR stop process
-        if (is_wp_error($desktop) || is_wp_error($mobile)) {
+        if (is_wp_error($desktop)) {
             // Get the error message
             $error_message = $desktop->get_error_message();
 
@@ -546,6 +546,19 @@ class wps_criticalCss
 
             return ['critical-failed' => array('desktop' => is_wp_error($desktop), 'mobile' => is_wp_error($mobile))];
         }
+
+	    if (is_wp_error($mobile)) {
+		    // Get the error message
+		    $error_message = $mobile->get_error_message();
+
+		    // Optional: Get the error code
+		    $error_code = $mobile->get_error_code();
+
+		    // Send a JSON response with the error message and code
+		    //wp_send_json_error(['msg' => 'Error downloading css file: ' . $error_message, 'code' => $error_code, 'url' => $json['desktop']]);
+
+		    return ['critical-failed' => array('desktop' => is_wp_error($desktop), 'mobile' => is_wp_error($mobile))];
+	    }
 
         $response_code = wp_remote_retrieve_response_code($desktop);
         if ($response_code !== 200) {
@@ -618,7 +631,7 @@ class wps_criticalCss
                 }
 
                 $jobStatus['critical-css'] = 'success';
-                $cache::purgeAll($urlKey, false, true);
+                $cache::purgeAll($urlKey, false, true, false);
             }
         }
 

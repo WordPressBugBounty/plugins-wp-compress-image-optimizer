@@ -16,14 +16,7 @@ class wpc_gui_v4 extends wps_ic
 
     public function __construct($options = [])
     {
-        global $firstLoad;
-        if (empty($firstLoad)) {
-            $firstLoad = true;
-        } else {
-            $firstLoad = false;
-        }
-
-        self::$user_credits = parent::getAccountStatusMemory($firstLoad);
+        self::$user_credits = parent::getAccountStatusMemory();
         self::$slug = parent::$slug;
 
         if (is_multisite()) {
@@ -42,6 +35,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
         // Update Stats
+	    /*
         $lastUpdate = get_transient('wps_ic_stats_update');
         if (empty($lastUpdate) || !$lastUpdate) {
             $settings = get_option(WPS_IC_OPTIONS);
@@ -54,6 +48,7 @@ class wpc_gui_v4 extends wps_ic
                 }
             }
         }
+	    */
 
         $statsclass = new wps_ic_stats();
 
@@ -697,10 +692,14 @@ class wpc_gui_v4 extends wps_ic
             $html .= '</div>';
         }
 
-        if (!empty($helpBtn)) {
-            $html .= '<div class="form-check" style="max-width:120px;">';
-            $html .= '<a href="' . $helpBtn . '" target="_blank" class="wps-ic-help-btn">' . $helpBtnText . '</a>';
-            $html .= '</div>';
+
+        // Hide for Whitelabel users
+        if (!class_exists('whtlbl_whitelabel_plugin')) {
+            if (!empty($helpBtn)) {
+                $html .= '<div class="form-check" style="max-width:120px;">';
+                $html .= '<a href="' . $helpBtn . '" target="_blank" class="wps-ic-help-btn">' . $helpBtnText . '</a>';
+                $html .= '</div>';
+            }
         }
 
 
@@ -1592,13 +1591,23 @@ class wpc_gui_v4 extends wps_ic
             $lockedClass = 'wpc-locked-setting';
         }
 
+        $zone_name = get_option('ic_custom_cname');
+
+        $popup = 'custom-cdn';
+        $cfSettings = get_option(WPS_IC_CF);
+        if (!empty($cfSettings)){
+            //if CF is connected show the CF cdn popup
+            $popup = 'cf-cdn';
+            $zone_name = get_option(WPS_IC_CF_CNAME, '');
+        }
+
         $html = '<div class="wpc-tab-content-box wpc-tab-content-cname ' . $lockedClass . '" 
     style="display:flex;align-items:center;justify-content: space-between;">
                                 <div style="display:flex;align-items:center;">
                                     <img src="' . WPS_IC_URI . 'assets/images/icon-exclude-list.svg"
                                          style="width:60px;margin-left:20px;margin-right:40px;"/>';
 
-        $zone_name = get_option('ic_custom_cname');
+
         if (!empty($zone_name)) {
             $html .= '<div style="flex-direction: column;display: flex;justify-content: center;">
                     <div>
@@ -1645,7 +1654,7 @@ class wpc_gui_v4 extends wps_ic
                 $html .= '
     <a href="#" class="wps-ic-configure-popup setting-configured" data-popup="remove-custom-cdn" style="display: none;">
     <i class="icon-trash"></i> Remove</a>
-    <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="custom-cdn">Configure</a>';
+    <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="'.$popup.'">Configure</a>';
             }
 
         }
@@ -1673,6 +1682,12 @@ class wpc_gui_v4 extends wps_ic
 
     }
 
+	public static function CFGraph()
+	{
+
+		include WPS_IC_DIR . 'templates/admin/partials/v4/CFChart.php';
+
+	}
 
     public static function usageLiteGraph()
     {
@@ -1691,10 +1706,215 @@ class wpc_gui_v4 extends wps_ic
         }
     }
 
-    public static function checkbox($class, $checked)
-    {
+	public static function cf_dropdown($title = 'Demo', $description = 'Demo')
+	{
+		// Dropdown options
+		$cf_preset = ['off' => 'Off', 'home' => 'Home Page', 'all' => 'Full Site'];
 
-    }
+		// Fixed option path
+		$option = ['cf', 'edge-cache'];
+		$optionName_cleaned = 'options_cf_edge-cache';
+		$optionName = 'options[cf][edge-cache]';
 
+
+        $cfOptions = get_option(WPS_IC_CF);
+
+		// Get current value
+		$cf_preset_config = $cfOptions['settings']['edge-cache'] ?? 'off';
+
+		if (empty($cf_preset_config)) {
+			$cf_preset_config = 'off';
+		}
+
+		$cssClass = '';
+		if (empty($description)) {
+			$cssClass = 'no-description';
+		}
+
+		$html = '<div class="wpc-box-for-checkbox ' . $cssClass . '">
+                   <div class="wpc-box-content">
+                   <div class="wpc-checkbox-title-holder">
+                   <div class="circle-check active"></div>
+                       <h4>' . $title . '</h4>
+                   </div>';
+
+		if (!empty($description)) {
+			$html .= '<p>' . $description . '</p>';
+		}
+
+		$html .= '</div>';
+
+		$html .= '<div class="wpc-box-check">';
+
+		// Generate dropdown HTML with unique classes
+		$html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $cf_preset_config . '" />
+<div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
+  <button class="wpc-cf-select-button" type="button">
+    ' . $cf_preset[$cf_preset_config] . '
+  </button>';
+
+		$html .= '<div class="wpc-cf-select-menu">';
+
+		foreach ($cf_preset as $k => $v) {
+			$s = '';
+			if ($k == $cf_preset_config) {
+				$s = 'wpc-cf-active';
+			}
+			$html .= '<a class="wpc-cf-select-item ' . $s . '" data-preset-title="' . $v . '" data-value="' . $k . '">' . $v . '</a>';
+		}
+
+		$html .= '</div></div>';
+
+		$html .= '</div>';
+
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	public static function cf_checkboxDescription($title = 'Demo', $description = 'Demo', $option = 'default', $configure = false)
+	{
+		$html = '';
+		$active = false;
+		$circleActive = '';
+
+		// Get CF settings from WPS_IC_CF option
+		$cf = get_option(WPS_IC_CF);
+		$cf_settings = isset($cf['settings']) ? $cf['settings'] : ['assets' => '1', 'edge-cache' => 'home'];
+
+		if (!is_array($option)) {
+			$optionName_cleaned = 'options_' . $option;
+			$optionName = 'options[' . $option . ']';
+
+			// Check CF settings
+			if (isset($cf_settings[$option]) && $cf_settings[$option] == '1') {
+				$active = true;
+				$circleActive = 'active';
+			}
+		} else {
+			$optionName_cleaned = 'options_' . $option[0] . '_' . $option[1];
+			$optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
+
+			// Check CF settings using the second array key
+			if (isset($cf_settings[$option[1]]) && $cf_settings[$option[1]] == '1') {
+				$active = true;
+				$circleActive = 'active';
+			}
+		}
+
+		$cssClass = '';
+		if (empty($description)) {
+			$cssClass = 'no-description';
+		}
+
+		$html = '<div class="wpc-box-for-checkbox ' . $cssClass . '">
+               <div class="wpc-box-content">
+                   <div class="wpc-checkbox-title-holder">
+                       <div class="circle-check ' . $circleActive . '"></div>
+                       <h4>' . $title . '</h4>';
+
+		if (!empty($configure) && $configure !== false) {
+			$html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750" style="margin-left:10px">';
+			$html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+			$html .= '</a>';
+			$html .= '</h4>';
+		}
+
+		$html .=  '</div>';
+
+		if (!empty($description)) {
+			$html .= '<p>' . $description . '</p>';
+		}
+
+		$html .= '</div>';
+		$html .= '<div class="wpc-box-check">';
+
+		if ($active) {
+			$html .= '<label class="wpc-switch">
+           <input type="checkbox" class="wpc-ic-settings-v4-checkbox" checked="checked" value="1" id="' . $optionName_cleaned . '" name="' . $optionName . '"/>
+           <span class="wpc-switch-slider wpc-switch-round"></span>
+       </label>';
+		} else {
+			$html .= '<label class="wpc-switch">
+           <input type="checkbox" class="wpc-ic-settings-v4-checkbox" value="1" id="' . $optionName_cleaned . '" name="' . $optionName . '"/>
+           <span class="wpc-switch-slider wpc-switch-round"></span>
+       </label>';
+		}
+
+		$html .= '</div>';
+		$html .= '</div>';
+
+		return $html;
+	}
+
+	public static function font_dropdown($title = 'Demo', $description = 'Demo')
+	{
+		// Dropdown options
+		$font_display_options = [
+			'off' => 'Off',
+			'auto' => 'Auto (Browser Default)',
+			'block' => 'Block (FOIT)',
+			'swap' => 'Swap (Recommended)',
+			'fallback' => 'Fallback',
+			'optional' => 'Optional'
+		];
+
+		$optionName_cleaned = 'options_font-display';
+		$optionName = 'options[font-display]';
+
+		$settings = get_option(WPS_IC_SETTINGS);
+
+		// Get current value
+		$current_value = $settings['font-display'] ?? 'off';
+
+		if (empty($current_value)) {
+			$current_value = 'off';
+		}
+
+		$cssClass = '';
+		if (empty($description)) {
+			$cssClass = 'no-description';
+		}
+
+		$html = '<div class="wpc-box-for-checkbox ' . $cssClass . '">
+                <div class="wpc-box-content">
+                <div class="wpc-checkbox-title-holder">
+                <div class="circle-check active"></div>
+                    <h4>' . $title . '</h4>
+                </div>';
+
+		if (!empty($description)) {
+			$html .= '<p>' . $description . '</p>';
+		}
+
+		$html .= '</div>';
+
+		$html .= '<div class="wpc-box-check">';
+
+		// Generate dropdown HTML
+		$html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $current_value . '" />
+<div class="wpc-font-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
+  <button class="wpc-font-select-button" type="button">
+    ' . $font_display_options[$current_value] . '
+  </button>';
+
+		$html .= '<div class="wpc-font-select-menu">';
+
+		foreach ($font_display_options as $value => $label) {
+			$activeClass = '';
+			if ($value == $current_value) {
+				$activeClass = 'wpc-font-active';
+			}
+			$html .= '<a class="wpc-font-select-item ' . $activeClass . '" data-preset-title="' . $label . '" data-value="' . $value . '">' . $label . '</a>';
+		}
+
+		$html .= '</div></div>';
+
+		$html .= '</div>';
+
+		$html .= '</div>';
+
+		return $html;
+	}
 
 }

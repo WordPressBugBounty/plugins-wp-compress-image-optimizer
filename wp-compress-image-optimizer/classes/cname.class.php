@@ -64,10 +64,6 @@ class wps_ic_cname
 								$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_setcname', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => microtime(true)]);
 								sleep(10);
 
-								//v6 call:
-								#$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_setcname_v6', 'apikey' => $apikey, 'cname' => $cname, 'zone_name' => $zone_name, 'time' => microtime(true)]);
-								#sleep(5);
-
 								$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $apikey, 'domain' => site_url(), 'zone_name' => $zone_name, 'time' => microtime(true)]);
 
 								// Wait for SSL?

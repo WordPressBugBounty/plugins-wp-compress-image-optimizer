@@ -4,25 +4,29 @@ function runAdaptive() {
     adaptiveImages.forEach(function (entry) {
         var adaptiveImage = entry;
 
+        if (adaptiveImage.hasAttribute("data-excluded-adaptive")) {
+            return; // skip this image
+        }
+
         // Integrations
-        masonry = adaptiveImage.closest(".masonry");
-        owlSlider = adaptiveImage.closest(".owl-carousel");
-        SlickSlider = adaptiveImage.closest(".slick-slider");
-        SlickList = adaptiveImage.closest(".slick-list");
-        slides = adaptiveImage.closest(".slides");
+        wpc_masonry = adaptiveImage.closest(".masonry");
+        wpc_owlSlider = adaptiveImage.closest(".owl-carousel");
+        wpc_SlickSlider = adaptiveImage.closest(".slick-slider");
+        wpc_SlickList = adaptiveImage.closest(".slick-list");
+        wpc_slides = adaptiveImage.closest(".slides");
 
         if (jsDebug) {
-            console.log(masonry);
-            console.log(owlSlider);
-            console.log(SlickSlider);
-            console.log(SlickList);
-            console.log(slides);
+            console.log(wpc_masonry);
+            console.log(wpc_owlSlider);
+            console.log(wpc_SlickSlider);
+            console.log(wpc_SlickList);
+            console.log(wpc_slides);
         }
 
         /**
          * Is SlickSlider/List?
          */
-        if (SlickSlider || SlickList || slides || owlSlider || masonry) {
+        if (wpc_SlickSlider || wpc_SlickList || wpc_slides || wpc_owlSlider || wpc_masonry) {
             if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
                 newApiURL = adaptiveImage.dataset.src;
             } else {
