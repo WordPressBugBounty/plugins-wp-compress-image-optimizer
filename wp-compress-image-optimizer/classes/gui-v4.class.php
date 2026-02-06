@@ -1814,7 +1814,7 @@ class wpc_gui_v4 extends wps_ic
                        <h4>' . $title . '</h4>';
 
 		if (!empty($configure) && $configure !== false) {
-			$html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750" style="margin-left:10px">';
+			$html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="600" style="margin-left:10px">';
 			$html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
 			$html .= '</a>';
 			$html .= '</h4>';

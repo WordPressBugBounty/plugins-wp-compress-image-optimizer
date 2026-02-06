@@ -245,13 +245,14 @@ jQuery(document).ready(function ($) {
         WPCSwal.fire({
             title: '',
             html: popupHtml,
-            width: 750,
+            width: 600,
             showCloseButton: true,
             showCancelButton: false,
             showConfirmButton: false,
             allowOutsideClick: false,
             customClass: {
                 container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+                content: 'popup-per-page-settings',
             },
             onOpen: function () {
 
@@ -2011,3 +2012,31 @@ function triggerPopEffect(newDiv, parentId) {
         }, 500); // Match the duration of the animation
     }
 }
+
+jQuery(document).ready(function($) {
+    if ($.fn.tooltipster) {
+        $('.wpc-settings-tab-list ul li a').each(function() {
+            var $this = $(this);
+            // Check if tooltipster instance exists
+            var instance = $this.data('tooltipster-ns');
+
+            // Only destroy if it's actually initialized
+            if (instance) {
+                $this.tooltipster('destroy');
+            }
+
+            // Set title if missing
+            if (!$this.attr('title')) {
+                var label = $this.find('.wpc-title').text().trim();
+                $this.attr('title', label);
+            }
+
+            // Initialize with our borderless theme
+            $this.tooltipster({
+                position: 'right',
+                theme: 'tooltipster-borderless',
+                delay: 100
+            });
+        });
+    }
+});

@@ -18,7 +18,7 @@
 						echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Real-Time Adaptive Optimization Settings</h3>
+                        <h3>Custom CDN Domain</h3>
                     </div>
                 </div>
             </div>

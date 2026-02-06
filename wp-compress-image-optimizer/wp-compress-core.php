@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.33';
+        self::$version = '6.60.34';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1143,6 +1143,15 @@ class wps_ic
                         }
                     }).pointer('open');
 
+                    var $p = jQuery(pointer).pointer('widget');
+                    $p.addClass('wps-ic-pointer');
+
+                    $p[0].style.setProperty('display', 'block', 'important');
+                    $p[0].style.setProperty('visibility', 'visible', 'important');
+                    $p[0].style.setProperty('opacity', '1', 'important');
+                    $p[0].style.setProperty('z-index', '999999', 'important');
+
+
                     // Apply width after opening
                     jQuery('.wp-pointer').css({
                         width: '440px',
@@ -1192,6 +1201,14 @@ class wps_ic
                             //
                         }
                     }).pointer('open');
+
+                    var $p = jQuery(pointer).pointer('widget');
+                    $p.addClass('wps-ic-pointer');
+
+                    $p[0].style.setProperty('display', 'block', 'important');
+                    $p[0].style.setProperty('visibility', 'visible', 'important');
+                    $p[0].style.setProperty('opacity', '1', 'important');
+                    $p[0].style.setProperty('z-index', '999999', 'important');
 
                     jQuery('#wps-ic-reconnect-confirm', '.wp-pointer-content').on('click', function (e) {
                         e.preventDefault();

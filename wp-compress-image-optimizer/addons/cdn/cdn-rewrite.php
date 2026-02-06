@@ -3582,6 +3582,12 @@ class wps_cdn_rewrite
         //clean up all our placeholder comments if not used
         $html = preg_replace('/<!--WPC[\s\S]*?-->/', '', $html);
 
+
+        if (!empty($_GET['replaceFonts'])) {
+            $fonts = new wps_ic_fonts();
+            $html = $fonts->replaceFrontend($html);
+        }
+
         return $html;
     }
 
@@ -4380,14 +4386,18 @@ class wps_cdn_rewrite
 			return $iframe[0];
 		}
 
-        if(strpos($iframe[0], 'data-src') !== false && strpos($iframe[0], 'src') === false){
-            // probably already delayed
-            return $iframe[0];
-        }
-
 		preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
 
 		if (!empty($iframeAtts[1])) {
+            $attNames = $iframeAtts[1];
+            $hasSrc     = in_array('src', $attNames, true);
+            $hasDataSrc = in_array('data-src', $attNames, true) || in_array('data-wpc-src', $attNames, true);
+
+            if ($hasDataSrc && !$hasSrc) {
+                //probably already delayed
+                return $iframe[0];
+            }
+
 			$iFrame = '<iframe';
 			$hasClass = false;
 

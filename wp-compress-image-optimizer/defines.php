@@ -37,6 +37,12 @@ define('WPS_IC_GB', 1000000000);
 define('WPC_IC_CACHE_EXPIRE', 86400); // 24 hours
 define('WPS_IC_ACCOUNT_STATUS_MEMORY', 60*60); // 1 hour
 
+// Fonts Scan API
+define('WPS_IC_FONTS_SCAN', 'https://gentle-sound-de77.withered-bird-6e69.workers.dev/scan');
+define('WPS_IC_FONTS_DIR', WP_CONTENT_DIR . '/cache/wp-cio/fonts/');
+define('WPS_IC_FONTS_URL', WP_CONTENT_URL . '/cache/wp-cio/fonts/');
+define('WPS_IC_FONTS_MAP', 'wps_ic_fonts_map');
+
 // Local API
 define('WPS_IC_LOCAL_API', 'https://frankfurt.zapwp.net/local/v3/index.php');
 define('WPS_IC_API_USERAGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');

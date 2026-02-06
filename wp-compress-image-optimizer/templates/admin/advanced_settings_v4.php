@@ -29,12 +29,7 @@ if (!empty($_GET['stopBulk'])) {
         set_transient('wps_ic_bulk_done', true, 60);
 
         // Delete all transients
-        $wpdb->query(
-                $wpdb->prepare(
-                        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
-                        $wpdb->esc_like( 'wps_ic_compress_' ) . '%'
-                )
-        );
+        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('wps_ic_compress_') . '%'));
         wp_send_json_success();
     }
 }
@@ -78,17 +73,7 @@ if (!empty($_GET['generate_crit'])) {
         $page = site_url();
     }
 
-    $response = wp_remote_post('https://mc-6463k17ku1.bunny.run/critical', array(
-        'headers' => array(
-            'Content-Type' => 'application/json',
-        ),
-        'body' => json_encode(array(
-            'url' => $page.'?criticalCombine=true&wpc-hash='.time(),
-        )),
-        'method' => 'POST',
-        'timeout' => 15,
-        'blocking' => true,
-    ));
+    $response = wp_remote_post('https://mc-6463k17ku1.bunny.run/critical', array('headers' => array('Content-Type' => 'application/json',), 'body' => json_encode(array('url' => $page . '?criticalCombine=true&wpc-hash=' . time(),)), 'method' => 'POST', 'timeout' => 15, 'blocking' => true,));
 
     if (is_wp_error($response)) {
         $error_message = $response->get_error_message();
@@ -123,11 +108,11 @@ if (!empty($_GET['show_hidden_menus'])) {
 
 // Save Settings
 if (!empty($_POST['options']['font-display'])) {
-  //todo: remove this clause if moving fonts to main settings
-  $options = get_option(WPS_IC_SETTINGS);
-  $options['font-display'] = sanitize_text_field($_POST['options']['font-display']);
-  update_option(WPS_IC_SETTINGS, $options);
-  $cache::purgeAll(false, false, false, false);
+    //todo: remove this clause if moving fonts to main settings
+    $options = get_option(WPS_IC_SETTINGS);
+    $options['font-display'] = sanitize_text_field($_POST['options']['font-display']);
+    update_option(WPS_IC_SETTINGS, $options);
+    $cache::purgeAll(false, false, false, false);
 } else if (!empty($_POST['options'])) {
 
     if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
@@ -318,21 +303,17 @@ if (!empty($_GET['debugCF'])) {
     #var_dump($cf);
 }
 
-if (!empty($cf)){
-	$cfsdk = new WPC_CloudflareAPI($cf['token']);
+if (!empty($cf)) {
+    $cfsdk = new WPC_CloudflareAPI($cf['token']);
 
-	// Initialize settings with defaults if not set
-	if (!isset($cf['settings'])){
-		$cf['settings'] = [
-			'assets'     => '1',
-			'edge-cache' => 'all',
-			'cdn'        => '1'
-		];
-		update_option(WPS_IC_CF, $cf);
-	}
+    // Initialize settings with defaults if not set
+    if (!isset($cf['settings'])) {
+        $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+        update_option(WPS_IC_CF, $cf);
+    }
 
-	if ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0'){
-		$allowLive = false;
+    if ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0') {
+        $allowLive = false;
 
         $settings['live-cdn'] = '0';
 
@@ -344,122 +325,115 @@ if (!empty($cf)){
         $settings['fonts'] = '0';
 
         update_option(WPS_IC_SETTINGS, $settings);
-	}
+    }
 
 
-	// Check if this is a form submission and CF settings changed
-	if (!empty($_POST['options'])){
-		$submittedOptions = $_POST['options'];
+    // Check if this is a form submission and CF settings changed
+    if (!empty($_POST['options'])) {
+        $submittedOptions = $_POST['options'];
 
-		// Get new CF settings from submitted options
-		$new_assets = isset($submittedOptions['cf']['assets']) && $submittedOptions['cf']['assets'] == '1' ? '1' : '0';
-		$new_edge_cache = isset($submittedOptions['cf']['edge-cache']) ? $submittedOptions['cf']['edge-cache'] : 'home';
-		$new_cdn = isset($submittedOptions['cf']['cdn']) && $submittedOptions['cf']['cdn'] == '1' ? '1' : '0';
+        // Get new CF settings from submitted options
+        $new_assets = isset($submittedOptions['cf']['assets']) && $submittedOptions['cf']['assets'] == '1' ? '1' : '0';
+        $new_edge_cache = isset($submittedOptions['cf']['edge-cache']) ? $submittedOptions['cf']['edge-cache'] : 'home';
+        $new_cdn = isset($submittedOptions['cf']['cdn']) && $submittedOptions['cf']['cdn'] == '1' ? '1' : '0';
 
-		// Check if settings changed
-		$cf_settings_changed = (
-			$cf['settings']['assets'] != $new_assets ||
-			$cf['settings']['edge-cache'] != $new_edge_cache ||
-			$cf['settings']['cdn'] != $new_cdn
-		);
+        // Check if settings changed
+        $cf_settings_changed = ($cf['settings']['assets'] != $new_assets || $cf['settings']['edge-cache'] != $new_edge_cache || $cf['settings']['cdn'] != $new_cdn);
 
-		if ($cf_settings_changed){
-			// Initialize error collection
-			$error_messages = [];
-			$new_cf_settings = $cf['settings'];
+        if ($cf_settings_changed) {
+            // Initialize error collection
+            $error_messages = [];
+            $new_cf_settings = $cf['settings'];
 
-			// Handle CDN DNS record first
-			if ($new_cdn == '1' && $cf['settings']['cdn'] != '1') {
-				//DNS nameserver check
-				$url = add_query_arg([
-					'cfDNSCheck' => 'true',
-					'host' => $cf['zoneName'],
-				], 'https://frankfurt.zapwp.net/');
+            // Handle CDN DNS record first
+            if ($new_cdn == '1' && $cf['settings']['cdn'] != '1') {
+                //DNS nameserver check
+                $url = add_query_arg(['cfDNSCheck' => 'true', 'host' => $cf['zoneName'],], 'https://frankfurt.zapwp.net/');
 
-				$response = wp_remote_get($url, ['timeout' => 15]);
-				$hasCloudflare = false;
+                $response = wp_remote_get($url, ['timeout' => 15]);
+                $hasCloudflare = false;
 
-				if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
-					$data = json_decode(wp_remote_retrieve_body($response), true);
+                if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+                    $data = json_decode(wp_remote_retrieve_body($response), true);
 
-					if (isset($data['data']['records']['result'])) {
-						foreach ($data['data']['records']['result'] as $ns) {
-							if (stripos($ns, 'cloudflare') !== false) {
-								$hasCloudflare = true;
-								break;
-							}
-						}
-					}
-				}
+                    if (isset($data['data']['records']['result'])) {
+                        foreach ($data['data']['records']['result'] as $ns) {
+                            if (stripos($ns, 'cloudflare') !== false) {
+                                $hasCloudflare = true;
+                                break;
+                            }
+                        }
+                    }
+                }
 
-				if ($hasCloudflare) {
+                if ($hasCloudflare) {
                     $new_cf_settings['cdn'] = $new_cdn;
-				} else {
-					$error_messages[] = 'CDN DNS: Domain DNS is not managed by Cloudflare';
-				}
-			} elseif ($new_cdn == '0' && $cf['settings']['cdn'] == '1') {
+                } else {
+                    $error_messages[] = 'CDN DNS: Domain DNS is not managed by Cloudflare';
+                }
+            } elseif ($new_cdn == '0' && $cf['settings']['cdn'] == '1') {
                 $new_cf_settings['cdn'] = $new_cdn;
-			}
+            }
 
-			// Test the cache config update
-			$staticAssetsEnabled = $new_assets == '1';
-			$htmlCacheMode       = $new_edge_cache;
+            // Test the cache config update
+            $staticAssetsEnabled = $new_assets == '1';
+            $htmlCacheMode = $new_edge_cache;
 
             $result = $cfsdk->configureCF($htmlCacheMode, $staticAssetsEnabled);
 
-			// Check for errors in the result
-			if (isset($result['static']) && is_wp_error($result['static'])) {
-				$formatted_error = $cfsdk->formatError($result['static'], 'Static Assets', 'Zone - Cache Rules - Edit');
-				if ($formatted_error) {
-					$error_messages[] = $formatted_error;
-				}
-			} else {
-				$new_cf_settings['assets'] = $new_assets;
-			}
+            // Check for errors in the result
+            if (isset($result['static']) && is_wp_error($result['static'])) {
+                $formatted_error = $cfsdk->formatError($result['static'], 'Static Assets', 'Zone - Cache Rules - Edit');
+                if ($formatted_error) {
+                    $error_messages[] = $formatted_error;
+                }
+            } else {
+                $new_cf_settings['assets'] = $new_assets;
+            }
 
-			if (isset($result['homepage']) && is_wp_error($result['homepage'])) {
-				$formatted_error = $cfsdk->formatError($result['homepage'], 'Homepage Cache', 'Zone - Cache Rules - Edit');
-				if ($formatted_error) {
-					$error_messages[] = $formatted_error;
-				}
-			} else {
-				$new_cf_settings['edge-cache'] = $new_edge_cache;
-			}
+            if (isset($result['homepage']) && is_wp_error($result['homepage'])) {
+                $formatted_error = $cfsdk->formatError($result['homepage'], 'Homepage Cache', 'Zone - Cache Rules - Edit');
+                if ($formatted_error) {
+                    $error_messages[] = $formatted_error;
+                }
+            } else {
+                $new_cf_settings['edge-cache'] = $new_edge_cache;
+            }
 
-			if (isset($result['fullhtml']) && is_wp_error($result['fullhtml'])) {
-				$formatted_error = $cfsdk->formatError($result['fullhtml'], 'Full HTML Cache', 'Zone - Cache Rules - Edit');
-				if ($formatted_error) {
-					$error_messages[] = $formatted_error;
-				}
-			} else {
-				$new_cf_settings['edge-cache'] = $new_edge_cache;
-			}
+            if (isset($result['fullhtml']) && is_wp_error($result['fullhtml'])) {
+                $formatted_error = $cfsdk->formatError($result['fullhtml'], 'Full HTML Cache', 'Zone - Cache Rules - Edit');
+                if ($formatted_error) {
+                    $error_messages[] = $formatted_error;
+                }
+            } else {
+                $new_cf_settings['edge-cache'] = $new_edge_cache;
+            }
 
-			if (isset($result['tiered_cache']) && is_wp_error($result['tiered_cache'])) {
-				$formatted_error = $cfsdk->formatError($result['tiered_cache'], 'Tiered Cache', 'Zone - Zone Settings - Edit');
-				if ($formatted_error) {
-					$error_messages[] = $formatted_error;
-				}
-			}
+            if (isset($result['tiered_cache']) && is_wp_error($result['tiered_cache'])) {
+                $formatted_error = $cfsdk->formatError($result['tiered_cache'], 'Tiered Cache', 'Zone - Zone Settings - Edit');
+                if ($formatted_error) {
+                    $error_messages[] = $formatted_error;
+                }
+            }
 
-			// Combine all errors with line breaks
-			if (!empty($error_messages)) {
-				$cf_error_message = implode('<br><br>', $error_messages);
-				$cf_has_error = true;
-			}
+            // Combine all errors with line breaks
+            if (!empty($error_messages)) {
+                $cf_error_message = implode('<br><br>', $error_messages);
+                $cf_has_error = true;
+            }
 
-			// Update settings with successful changes
-			$cf = get_option(WPS_IC_CF);
-			$cf['settings'] = $new_cf_settings;
-			update_option(WPS_IC_CF, $cf);
+            // Update settings with successful changes
+            $cf = get_option(WPS_IC_CF);
+            $cf['settings'] = $new_cf_settings;
+            update_option(WPS_IC_CF, $cf);
 
-			$cache::purgeAll(false, false, false, false);
+            $cache::purgeAll(false, false, false, false);
 
-			if (!empty($_GET['dbgCF'])) {
-				print_r($result);
-			}
-		}
-	}
+            if (!empty($_GET['dbgCF'])) {
+                print_r($result);
+            }
+        }
+    }
 }
 
 if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedScore))) {
@@ -783,7 +757,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </li>
                                 <?php
                                 $cdn_critical_mc = get_option('wps_ic_critical_mc');
-                                if (!empty($cdn_critical_mc) && 1==0) {
+                                if (!empty($cdn_critical_mc) && 1 == 0) {
                                     ?>
                                     <li>
                                         <a href="#" class="" data-tab="critical-css-optimization">
@@ -856,6 +830,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <span class="wpc-title">Logger</span>
                                         </a>
                                     </li>
+                                    <li style="display: block;">
+                                        <a href="#" class="" data-tab="scan-fonts">
+                                <span class="wpc-icon-container">
+                                <span class="wpc-icon">
+                                    <img src="<?php
+                                    echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
+                                </span>
+                                </span>
+                                            <span class="wpc-title">Scan Fonts</span>
+                                        </a>
+                                    </li>
                                     <?php
                                 } ?>
                             </ul>
@@ -877,7 +862,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <div class="wpc-settings-content-inner">
                                                 <div class="wpc-rounded-box wpc-rounded-box-full">
                                                     <?php
-                                                    if ($cf){
+                                                    if ($cf) {
                                                         echo $gui::CFGraph();
                                                     } else {
                                                         echo $gui::usageGraph();
@@ -1105,9 +1090,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                 echo '<h3>' . $role . '</h3>';
                                                 echo '<div class="wpc-items-list-row mb-20">';
 
-                                                echo $gui::checkboxDescription_v4('Purge Options', 'User will have capability to Purge CDN, HTML, Critical CSS and CloudFlare.', false, '0', ['permissions', $key.'_purge'], false, 'right');
+                                                echo $gui::checkboxDescription_v4('Purge Options', 'User will have capability to Purge CDN, HTML, Critical CSS and CloudFlare.', false, '0', ['permissions', $key . '_purge'], false, 'right');
 
-                                                echo $gui::checkboxDescription_v4('Manage Settings', 'User will have capability to control all the functions/settings of plugin.', false, '0', ['permissions', $key.'_manage_wpc'], false, 'right');
+                                                echo $gui::checkboxDescription_v4('Manage Settings', 'User will have capability to control all the functions/settings of plugin.', false, '0', ['permissions', $key . '_manage_wpc'], false, 'right');
 
                                                 echo '</div>';
                                             }
@@ -1266,7 +1251,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         </div>
                                         <div class="wpc-items-list-row mb-20">
                                             <?php
-                                            echo $gui::checkboxDescription_v4('New Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
+                                            echo $gui::checkboxDescription_v4('Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
 
                                             <?php
                                             #echo $gui::checkboxDescription_v4('Legacy Delay JavaScript', 'No longer required, please try the new setting at your convenience.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay'); ?>
@@ -1355,14 +1340,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                             <?php
                                             echo $gui::checkboxDescription_v4('Add Image Sizes', 'Add \'width\' and 
-                                          \'height\' to image tags.', false, false, 'add-image-sizes', false, 'right',
-                                                false, false, '', true); ?>
+                                          \'height\' to image tags.', false, false, 'add-image-sizes', false, 'right', false, false, '', true); ?>
 
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Retina in srcset', 'Generate retina links in srcset attribute', false,
-                                                false, 'retina-in-srcset', false, 'right',
-                                                false, false, ''); ?>
+                                            echo $gui::checkboxDescription_v4('Retina in srcset', 'Generate retina links in srcset attribute', false, false, 'retina-in-srcset', false, 'right', false, false, ''); ?>
 
 
                                         </div>
@@ -1405,8 +1387,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4('Filter Bot Traffic', '', false, '0', 'ga-bot-shield', false, 'right', ''); ?>
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4('Set \'fetchpriority\'', 'Set \'fetchpriority\' to high for important images', false,
-                                                    false, 'fetchpriority-high', false, 'right', false, false, ''); ?>
+                                            echo $gui::checkboxDescription_v4('Set \'fetchpriority\'', 'Set \'fetchpriority\' to high for important images', false, false, 'fetchpriority-high', false, 'right', false, false, ''); ?>
 
                                         </div>
 
@@ -1557,7 +1538,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                         </div>
 
                                                         <?php
-                                                    } */?>
+                                                    } */ ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -1712,15 +1693,15 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                 <?php } ?>
                                             </div>
                                         </div>
-	                                    <?php if (!empty($cf)){
-		                                    if (!empty($cf_error_message)){
-			                                    ?>
+                                        <?php if (!empty($cf)) {
+                                            if (!empty($cf_error_message)) {
+                                                ?>
                                                 <div class="wpc-cf-loader-error" style="display: block;">
                                                     <span><?php echo $cf_error_message; ?></span>
                                                 </div>
-			                                    <?php
-		                                    }
-		                                    ?>
+                                                <?php
+                                            }
+                                            ?>
                                             <div class="wpc-items-list-row mb-20">
 
                                                 <?php
@@ -1755,7 +1736,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     </div>
                                                 </div>
                                             </details>
-                                        <?php } else{
+                                        <?php } else {
                                             ?>
                                             <details class="setup-accordion" id="cloudflare-setup-accordion">
                                                 <summary>How To Get Your Cloudflare API Key</summary>
@@ -1787,8 +1768,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <div class="wpc-items-list-row mb-20">
 
                                                 <?php
-                                                echo $gui::checkboxDescription_v4('Disable Elementor Triggers', 'Can fix double animations, but may break menus and other elementor elements.', false, false, 'disable-elementor-triggers', false, 'right',
-                                                    false, false, '', true); ?>
+                                                echo $gui::checkboxDescription_v4('Disable Elementor Triggers', 'Can fix double animations, but may break menus and other elementor elements.', false, false, 'disable-elementor-triggers', false, 'right', false, false, '', true); ?>
 
 
                                             </div>
@@ -1814,150 +1794,153 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                         <div class="wpc-settings-export-form">
                                             <div class="cdn-popup-inner">
-                                            <div class="wps-default-excludes-enabled-checkbox-container">
-                                                <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked  style="min-width:24px">
-                                                <p>Settings</p>
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-settings" checked style="min-width:24px">
+                                                    <p>Settings</p>
+                                                </div>
+                                            </div>
+                                            <div class="cdn-popup-inner">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes" style="min-width:24px">
+                                                    <p>Excludes</p>
+                                                </div>
+                                            </div>
+                                            <div class="cdn-popup-inner">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache" style="min-width:24px">
+                                                    <p>Cache Purge Settings</p>
+                                                </div>
+                                            </div>
+                                            <div class="cdn-popup-inner">
+                                                <div class="wps-default-excludes-enabled-checkbox-container">
+                                                    <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache-cookies" style="min-width:24px">
+                                                    <p>Cache Cookies Settings</p>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="cdn-popup-inner">
-                                        <div class="wps-default-excludes-enabled-checkbox-container">
-                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-excludes"  style="min-width:24px">
-                                            <p>Excludes</p>
+
+                                        <div class="wpc-export-import-buttons">
+                                            <button id="wpc-export-button" class="wps-ic-help-btn" style="border:none">Export</button>
+                                            <button id="wpc-import-button" class="wps-ic-help-btn" style="border:none">Import</button>
+                                            <button id="wpc-set-default-button" class="wps-ic-help-btn" style="border:none;float:right">Reset to default</button>
+                                            <input type="file" id="wpc-import-file" style="display: none;" accept=".json">
                                         </div>
                                     </div>
-                                    <div class="cdn-popup-inner">
-                                        <div class="wps-default-excludes-enabled-checkbox-container">
-                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache"  style="min-width:24px">
-                                            <p>Cache Purge Settings</p>
-                                        </div>
-                                    </div>
-                                    <div class="cdn-popup-inner">
-                                        <div class="wps-default-excludes-enabled-checkbox-container">
-                                            <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-export-cache-cookies"  style="min-width:24px">
-                                            <p>Cache Cookies Settings</p>
-                                        </div>
+
                                 </div>
-                            </div>
-
-                            <div class="wpc-export-import-buttons">
-                                <button id="wpc-export-button" class="wps-ic-help-btn" style="border:none">Export</button>
-                                <button id="wpc-import-button" class="wps-ic-help-btn" style="border:none">Import</button>
-                                <button id="wpc-set-default-button" class="wps-ic-help-btn" style="border:none;float:right">Reset to default</button>
-                                <input type="file" id="wpc-import-file" style="display: none;" accept=".json">
-                            </div>
-                        </div>
-
-                    </div>
 
 
-                    <div class="wpc-tab-content" id="system-information" style="display:none;">
-                        <div class="wpc-tab-content-box">
+                                <div class="wpc-tab-content" id="system-information" style="display:none;">
+                                    <div class="wpc-tab-content-box">
 
-                            <?php
-                            echo $gui::checkboxTabTitle('System Information', '', 'other-optimization/tab-icon.svg', ''); ?>
-
-                            <div class="wpc-spacer"></div>
-
-                            <?php
-                            $location = get_option('wps_ic_geo_locate_v2');
-                            if (empty($location)) {
-                                $location = $this->geoLocate();
-                            }
-
-                            if (is_object($location)) {
-                                $location = (array)$location;
-                            }
-                            ?>
-
-                            <div class="wpc-items-list-row mb-20" style="flex-direction:column;">
-                                <ul class="wpc-list-item-ul">
-                                    <li>WP Version:
-                                        <strong><?php
-                                            global $wp_version;
-                                            echo $wp_version; ?></strong>
-                                    </li>
-                                    <li>PHP Version:
-                                        <strong><?php
-                                            echo phpversion() ?></strong>
-                                    </li>
-                                    <li>Site URL:
-                                        <strong><?php
-                                            echo site_url() ?></strong>
-                                    </li>
-                                    <li>Home URL:
-                                        <strong><?php
-                                            echo home_url() ?></strong>
-                                    </li>
-                                    <li>API Location:
-                                        <strong><?php
-                                            echo print_r($location, true); ?></strong>
-                                    </li>
-                                    <li>Bulk Status:
-                                        <strong><?php
-                                            echo print_r(get_option('wps_ic_BulkStatus'), true); ?></strong>
-                                    </li>
-                                    <li>Parsed Images:
-                                        <strong><?php
-                                            echo print_r(get_option('wps_ic_parsed_images'), true); ?></strong>
-                                    </li>
-                                    <li>Multisite:
-                                        <strong><?php
-                                            if (is_multisite()) {
-                                                echo 'True';
-                                            } else {
-                                                echo 'False';
-                                            } ?></strong>
-                                    </li>
-                                    <li>Maximum upload size:
-                                        <strong><?php
-                                            echo size_format(wp_max_upload_size()) ?></strong>
-                                    </li>
-                                    <li>Memory limit:
-                                        <strong><?php
-                                            echo ini_get('memory_limit') ?></strong>
-                                    </li>
-
-                                    <li>Thumbnails:
-                                        <strong><?php
-                                            echo count(get_intermediate_image_sizes()); ?></strong>
-                                    </li>
-
-                                    <li>
                                         <?php
-                                        if (function_exists('file_get_contents')) {
-                                            echo "file_get_contents function is available.";
-                                        } else {
-                                            echo "file_get_contents function is not available.";
+                                        echo $gui::checkboxTabTitle('System Information', '', 'other-optimization/tab-icon.svg', ''); ?>
+
+                                        <div class="wpc-spacer"></div>
+
+                                        <?php
+                                        $location = get_option('wps_ic_geo_locate_v2');
+                                        if (empty($location)) {
+                                            $location = $this->geoLocate();
+                                        }
+
+                                        if (is_object($location)) {
+                                            $location = (array)$location;
                                         }
                                         ?>
-                                    </li>
 
-                                    <li>Url changes:
-                                        <?php
-                                        echo print_r(get_option('wps_ic_url_changed_log', true)); ?>
-                                    </li>
-                                </ul>
+                                        <div class="wpc-items-list-row mb-20" style="flex-direction:column;">
+                                            <ul class="wpc-list-item-ul">
+                                                <li>WP Version:
+                                                    <strong><?php
+                                                        global $wp_version;
+                                                        echo $wp_version; ?></strong>
+                                                </li>
+                                                <li>PHP Version:
+                                                    <strong><?php
+                                                        echo phpversion() ?></strong>
+                                                </li>
+                                                <li>Site URL:
+                                                    <strong><?php
+                                                        echo site_url() ?></strong>
+                                                </li>
+                                                <li>Home URL:
+                                                    <strong><?php
+                                                        echo home_url() ?></strong>
+                                                </li>
+                                                <li>API Location:
+                                                    <strong><?php
+                                                        echo print_r($location, true); ?></strong>
+                                                </li>
+                                                <li>Bulk Status:
+                                                    <strong><?php
+                                                        echo print_r(get_option('wps_ic_BulkStatus'), true); ?></strong>
+                                                </li>
+                                                <li>Parsed Images:
+                                                    <strong><?php
+                                                        echo print_r(get_option('wps_ic_parsed_images'), true); ?></strong>
+                                                </li>
+                                                <li>Multisite:
+                                                    <strong><?php
+                                                        if (is_multisite()) {
+                                                            echo 'True';
+                                                        } else {
+                                                            echo 'False';
+                                                        } ?></strong>
+                                                </li>
+                                                <li>Maximum upload size:
+                                                    <strong><?php
+                                                        echo size_format(wp_max_upload_size()) ?></strong>
+                                                </li>
+                                                <li>Memory limit:
+                                                    <strong><?php
+                                                        echo ini_get('memory_limit') ?></strong>
+                                                </li>
+
+                                                <li>Thumbnails:
+                                                    <strong><?php
+                                                        echo count(get_intermediate_image_sizes()); ?></strong>
+                                                </li>
+
+                                                <li>
+                                                    <?php
+                                                    if (function_exists('file_get_contents')) {
+                                                        echo "file_get_contents function is available.";
+                                                    } else {
+                                                        echo "file_get_contents function is not available.";
+                                                    }
+                                                    ?>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                <div class="wpc-tab-content" id="debug" style="display:none;">
+                                    <?php
+                                    include_once 'debug_tool.php'; ?>
+                                </div>
+
+
+                                <div class="wpc-tab-content" id="logger" style="display:none;">
+                                    <?php
+                                    include_once 'logger_menu.php'; ?>
+                                </div>
+
+                              <div class="wpc-tab-content" id="scan-fonts" style="display:none;">
+                                    <?php
+                                    include_once 'scan-fonts.php'; ?>
+                                </div>
+
+
                             </div>
                         </div>
-                    </div>
-
-
-                    <div class="wpc-tab-content" id="debug" style="display:none;">
-                        <?php
-                        include_once 'debug_tool.php'; ?>
-                    </div>
-
-                    <div class="wpc-tab-content" id="logger" style="display:none;">
-                        <?php
-                        include_once 'logger_menu.php'; ?>
+                        <!-- Tab Content End -->
                     </div>
                 </div>
-            </div>
-            <!-- Tab Content End -->
-    </div>
-    </div>
-    <!-- Body End -->
-    </form>
+                <!-- Body End -->
+        </form>
     </div>
 
 <?php

@@ -514,7 +514,7 @@ jQuery(document).ready(function ($) {
         WPCSwal.fire({
             title: '',
             html: jQuery('#cf-cdn').html(),
-            width: 750,
+            width: 600,
             showCloseButton: true,
             showCancelButton: false,
             showConfirmButton: false,
