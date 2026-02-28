@@ -39,8 +39,8 @@ define('WPS_IC_ACCOUNT_STATUS_MEMORY', 60*60); // 1 hour
 
 // Fonts Scan API
 define('WPS_IC_FONTS_SCAN', 'https://gentle-sound-de77.withered-bird-6e69.workers.dev/scan');
-define('WPS_IC_FONTS_DIR', WP_CONTENT_DIR . '/cache/wp-cio/fonts/');
-define('WPS_IC_FONTS_URL', WP_CONTENT_URL . '/cache/wp-cio/fonts/');
+define('WPS_IC_FONTS_DIR', WP_CONTENT_DIR . '/cache/wp-cio-fonts/');
+define('WPS_IC_FONTS_URL', WP_CONTENT_URL . '/cache/wp-cio-fonts/');
 define('WPS_IC_FONTS_MAP', 'wps_ic_fonts_map');
 
 // Local API
@@ -51,8 +51,8 @@ define('WPS_IC_APIURL', 'https://legacy-eu.wpcompress.com/');
 define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 
 // Real URL
-define('WPS_IC_CRITICAL_API_URL', 'https://critical-api.zapwp.net/generate-ccss');
-define('WPS_IC_CRITICAL_API_URL_HOME', 'https://critical-hp-crit.zapwp.net/generate-ccss');
+define('WPS_IC_CRITICAL_API_URL', 'https://critical.zapwp.com/generate');
+define('WPS_IC_CRITICAL_API_URL_HOME', 'https://critical.zapwp.com/generate');
 define('WPS_IC_PAGESPEED_API_URL_HOME', 'https://critical-api-home.zapwp.net/run-pagespeed');
 define('WPS_IC_PAGESPEED_RESULTS_HOME', 'https://critical-api-home.zapwp.net/get-results/');
 

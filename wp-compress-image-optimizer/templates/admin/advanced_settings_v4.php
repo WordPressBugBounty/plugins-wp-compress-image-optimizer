@@ -173,7 +173,7 @@ if (!empty($_POST['options']['font-display'])) {
     }
 
     update_option(WPS_IC_SETTINGS, $options);
-    $cache::purgeAll(false, false, false, false);
+    $cache::purgeAll(false, false, false, false, true);
 
     //To edit what setting purges what, go to wps_ic_options->__construct()
     if (in_array('combine', $purgeList)) {
@@ -720,6 +720,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <span class="wpc-title">Performance Tweaks</span>
                                     </a>
                                 </li>
+                                <li style="display: block;">
+                                    <a href="#" class="" data-tab="scan-fonts">
+                                <span class="wpc-icon-container">
+                                <span class="wpc-icon">
+                                    <img src="<?php
+                                    echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
+                                </span>
+                                </span>
+                                        <span class="wpc-title">Font Optimization</span>
+                                    </a>
+                                </li>
                                 <li>
                                     <a href="#"
                                        class=""
@@ -830,17 +841,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <span class="wpc-title">Logger</span>
                                         </a>
                                     </li>
-                                    <li style="display: block;">
-                                        <a href="#" class="" data-tab="scan-fonts">
-                                <span class="wpc-icon-container">
-                                <span class="wpc-icon">
-                                    <img src="<?php
-                                    echo WPS_IC_ASSETS; ?>/v4/images/css-optimization/menu-icon.svg"/>
-                                </span>
-                                </span>
-                                            <span class="wpc-title">Scan Fonts</span>
-                                        </a>
-                                    </li>
+
                                     <?php
                                 } ?>
                             </ul>
@@ -1264,6 +1265,15 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         </div>
 
                                     </div>
+                                    <div class="wpc-tab-content-box" id="javascript-optimization-options">
+                                        <?php
+                                        echo $gui::checkboxTabTitle('Developer Mode', "For when you are doing intensive site styling or editing.", 'other-optimization/tab-icon.svg', '', '', false, '1', false, false, 'left');
+
+
+                                        echo $gui::checkboxDescription_v4('Developer mode', 'Turn off cache and critical CSS to speed up saving settings and reduce resource usage.', false, '', 'developer_mode', false, 'right', false, false, false);
+                                        ?>
+                                    </div>
+
 
                                 </div>
                                 <div class="wpc-tab-content" id="other-optimization-options" style="display:none;">

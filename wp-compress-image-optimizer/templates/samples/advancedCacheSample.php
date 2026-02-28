@@ -3,6 +3,10 @@
 defined('ABSPATH') || exit;
 define('WP_COMPRESS_ADVANCED_CACHE', true);
 
+#WPC_CACHE_DEVELOPER_MODE_START
+
+#WPC_CACHE_DEVELOPER_MODE_END
+
 #WPC_CACHE_LOGGED_IN_START
 define('WPC_CACHE_LOGGED_IN', false);
 #WPC_CACHE_LOGGED_IN_END
@@ -14,6 +18,10 @@ define('WPC_CACHE_COOKIES', false);
 #WPC_EXCLUDE_COOKIES_START
 define('WPC_EXCLUDE_COOKIES', false);
 #WPC_EXCLUDE_COOKIES_END
+
+#WPC_MANDATORY_COOKIES_START
+define('WPC_MANDATORY_COOKIES', false);
+#WPC_MANDATORY_COOKIES_END
 
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';
@@ -63,6 +71,33 @@ if (defined('WPC_EXCLUDE_COOKIES')) {
                         define('DONOTCACHEPAGE', true);
                         return; // Don't cache if exact excluded cookie is detected
                     }
+                }
+            }
+        }
+    }
+}
+
+// Check for mandatory cookies - if any are missing, bypass cache entirely
+if (defined('WPC_MANDATORY_COOKIES')) {
+    if (WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
+        foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
+            // Trailing "_" means: treat as wildcard prefix
+            if (substr($mandatoryCookie, -1) === '_') {
+                $found = false;
+                foreach ($_COOKIE as $cookieName => $cookieValue) {
+                    if (strpos($cookieName, $mandatoryCookie) === 0 && !empty($cookieValue)) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) {
+                    define('DONOTCACHEPAGE', true);
+                    return; // Mandatory cookie prefix not present, bypass cache
+                }
+            } else {
+                if (empty($_COOKIE[$mandatoryCookie])) {
+                    define('DONOTCACHEPAGE', true);
+                    return; // Mandatory cookie not set, bypass cache
                 }
             }
         }

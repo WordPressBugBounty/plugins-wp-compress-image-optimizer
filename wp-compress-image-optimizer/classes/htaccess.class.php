@@ -710,6 +710,7 @@ HTACCESS;
         }
 
         if (!empty($advancedCacheSample)) {
+            global $wp_filter;
             $settings = get_option(WPS_IC_SETTINGS);
 
             $cacheLoggedIn = 'false';
@@ -722,28 +723,62 @@ HTACCESS;
             $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
             $newContents = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
 
+            // Set Developer Mode
+            if (!empty($settings['developer_mode']) && $settings['developer_mode'] === '1') {
+                $pattern = "#WPC_CACHE_DEVELOPER_MODE_START\r?\n(.+?)\r?\n#WPC_CACHE_DEVELOPER_MODE_END";
+                $replacement = "#WPC_CACHE_DEVELOPER_MODE_START\n define('DONOTCACHEPAGE', true);\n return;\n#WPC_CACHE_DEVELOPER_MODE_END";
+                $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
+            } else {
+                $pattern = "#WPC_CACHE_DEVELOPER_MODE_START\r?\n(.+?)\r?\n#WPC_CACHE_DEVELOPER_MODE_END";
+                $replacement = "#WPC_CACHE_DEVELOPER_MODE_START\n \n#WPC_CACHE_DEVELOPER_MODE_END";
+                $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
+            }
+
             // Set cache cookies constant in advanced-cache
             $cookiesConstant = 'false';
             $excludeCookiesConstant = 'false';
+            $mandatoryCookiesConstant = 'false';
+
+            $cookies_list = [];
+            $exclude_cookies_list = [];
 
             if (!empty($settings['cache']['cookies']) && $settings['cache']['cookies'] == 1) {
                 $cookies_setting = get_option('wps_ic_cache_cookies', []);
 
-                // Handle cache_cookies
                 if (!empty($cookies_setting['cookies'])) {
-                    $cookiesFormatted = array_map(function ($cookie) {
-                        return "'" . addslashes($cookie) . "'";
-                    }, $cookies_setting['cookies']);
-                    $cookiesConstant = 'array(' . implode(', ', $cookiesFormatted) . ')';
+                    $cookies_list = $cookies_setting['cookies'];
                 }
 
-                // Handle exclude_cookies
                 if (!empty($cookies_setting['exclude_cookies'])) {
-                    $excludeCookiesFormatted = array_map(function ($cookie) {
-                        return "'" . addslashes($cookie) . "'";
-                    }, $cookies_setting['exclude_cookies']);
-                    $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
+                    $exclude_cookies_list = $cookies_setting['exclude_cookies'];
                 }
+            }
+
+            // Allow plugins to add/modify cache cookies and exclude cookies via filters
+            $cookies_list = apply_filters('wps_ic_cache_cookies', $cookies_list);
+            $exclude_cookies_list = apply_filters('wps_ic_exclude_cookies', $exclude_cookies_list);
+
+            if (!empty($cookies_list)) {
+                $cookiesFormatted = array_map(function ($cookie) {
+                    return "'" . addslashes($cookie) . "'";
+                }, $cookies_list);
+                $cookiesConstant = 'array(' . implode(', ', $cookiesFormatted) . ')';
+            }
+
+            if (!empty($exclude_cookies_list)) {
+                $excludeCookiesFormatted = array_map(function ($cookie) {
+                    return "'" . addslashes($cookie) . "'";
+                }, $exclude_cookies_list);
+                $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
+            }
+
+            // Mandatory cookies - cache is bypassed entirely if any of these are not set
+            $mandatory_cookies_list = apply_filters('wps_ic_mandatory_cookies', []);
+            if (!empty($mandatory_cookies_list)) {
+                $mandatoryCookiesFormatted = array_map(function ($cookie) {
+                    return "'" . addslashes($cookie) . "'";
+                }, $mandatory_cookies_list);
+                $mandatoryCookiesConstant = 'array(' . implode(', ', $mandatoryCookiesFormatted) . ')';
             }
 
             // Replace cache cookies
@@ -755,6 +790,11 @@ HTACCESS;
             $excludeCookiePattern = "#WPC_EXCLUDE_COOKIES_START\r?\n(.+?)\r?\n#WPC_EXCLUDE_COOKIES_END";
             $excludeCookieReplacement = "#WPC_EXCLUDE_COOKIES_START\ndefine('WPC_EXCLUDE_COOKIES', $excludeCookiesConstant);\n#WPC_EXCLUDE_COOKIES_END";
             $newContents = preg_replace("/$excludeCookiePattern/s", $excludeCookieReplacement, $newContents);
+
+            // Replace mandatory cookies
+            $mandatoryCookiePattern = "#WPC_MANDATORY_COOKIES_START\r?\n(.+?)\r?\n#WPC_MANDATORY_COOKIES_END";
+            $mandatoryCookieReplacement = "#WPC_MANDATORY_COOKIES_START\ndefine('WPC_MANDATORY_COOKIES', $mandatoryCookiesConstant);\n#WPC_MANDATORY_COOKIES_END";
+            $newContents = preg_replace("/$mandatoryCookiePattern/s", $mandatoryCookieReplacement, $newContents);
 
             if ($newContents !== $currentAdvancedCache) {
                 file_put_contents($this->advancedCachePath, $newContents);

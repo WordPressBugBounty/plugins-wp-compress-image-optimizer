@@ -142,7 +142,8 @@ class wps_ic_excludes extends wps_ic
         ];
 
         self::$defaultCriticalCSSExcludes = [
-            'frontend-layer'
+            'frontend-layer',
+            'xlink=css' //oxygen theme css
         ];
 
         self::$defaultInlineCSSExcludes = [

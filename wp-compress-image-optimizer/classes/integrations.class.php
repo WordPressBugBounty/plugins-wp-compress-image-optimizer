@@ -114,8 +114,9 @@ class wps_ic_integrations extends wps_ic
             new wps_ic_wordpresscom(),
             new wps_ic_dreampress(),
             new wps_ic_flywheel(),
-            new wps_ic_wp_serveur()
-            // ... Add other plugin classes here.
+            new wps_ic_wp_serveur(),
+
+            new wps_ic_yith_wcmcs_currency_switcher()
         ];
 
 

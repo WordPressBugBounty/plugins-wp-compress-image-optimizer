@@ -30,6 +30,386 @@
   font-style: normal;
 }
 
+/* -- Z-Index Fix -- */
+#scan-fonts .wpc-tab-content-box {
+  overflow: visible !important;
+  position: relative;
+}
+
+#scan-fonts .wpc-tab-content-box:first-child {
+  z-index: 20 !important;
+}
+
+#scan-fonts .wpc-fonts-status {
+  display: flex;
+  align-items: center;
+  border: none;
+  padding: 0;
+}
+
+#scan-fonts .wpc-smart-fonts-title {
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 16px !important;
+  font-weight: 700;
+  color: #111827 !important;
+  margin: 0;
+  line-height: 1.3;
+}
+
+#scan-fonts .wpc-smart-fonts-text {
+  font-family: 'proxima_regular', sans-serif;
+  font-size: 14px !important;
+  color: #64748b !important;
+  margin: 7px 0 4px !important;
+  line-height: 1.5;
+}
+
+#scan-fonts .wpc-box-for-checkbox {
+  align-items: center !important;
+  padding-bottom: 12px !important;
+}
+
+#scan-fonts .wpc-box-button a,
+#scan-fonts .wpc-box-button a.wps-ic-button-action {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 5px 16px !important;
+  min-height: 28px !important;
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 30px !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  background: linear-gradient(135deg, #4c89eb 0%, #3b76d1 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(76, 137, 235, 0.15) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transform: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  width: auto !important;
+  height: auto !important;
+  white-space: nowrap;
+  margin: 10px;
+}
+
+#scan-fonts .wpc-box-button a:hover,
+#scan-fonts .wpc-box-button a.wps-ic-button-action:hover {
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 10px rgba(76, 137, 235, 0.25) !important;
+}
+
+#scan-fonts .wpc-box-button a:active,
+#scan-fonts .wpc-box-button a.wps-ic-button-action:active {
+  transform: scale(1) !important;
+  box-shadow: 0 2px 6px rgba(76, 137, 235, 0.15) !important;
+}
+
+/* ── Font Scan Form ── */
+#scan-fonts form {
+  display: flex !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  width: 100%;
+  margin: 10px 0 !important;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+#scan-fonts form:focus-within {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+#scan-fonts form input[type="text"],
+#scan-fonts form input[name="scanUrl"] {
+  flex: 1 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  padding: 12px 18px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+  font-size: 13px !important;
+  font-weight: 400;
+  color: #111827 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-sizing: border-box !important;
+  min-height: 44px;
+  line-height: 1.5;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#scan-fonts form input[type="text"]:focus,
+#scan-fonts form input[name="scanUrl"]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#scan-fonts form input[type="text"]::placeholder,
+#scan-fonts form input[name="scanUrl"]::placeholder {
+  color: #94a3b8 !important;
+  font-family: 'proxima_regular', sans-serif;
+  font-style: normal;
+  font-size: 13px !important;
+}
+
+#scan-fonts form input[type="submit"],
+#scan-fonts form input[name="submit"] {
+  flex-shrink: 0 !important;
+  padding: 12px 28px !important;
+  min-width: 90px;
+  border: none !important;
+  border-left: 1px solid #e2e8f0 !important;
+  border-radius: 0 !important;
+  background: #f8fafc !important;
+  color: #334155 !important;
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 13px !important;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: none !important;
+}
+
+#scan-fonts form input[type="submit"]:hover,
+#scan-fonts form input[name="submit"]:hover {
+  background: #EFF6FF !important;
+  color: #2563eb !important;
+}
+
+#scan-fonts form input[type="submit"]:active,
+#scan-fonts form input[name="submit"]:active {
+  background: #dbeafe !important;
+}
+
+/* ── Found Fonts List ── */
+#scan-fonts .wpc-tab-content-box:last-child .wpc-items-list-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+}
+
+#scan-fonts .wpc-dropdown-row {
+  border: 1px solid #e6ecf1 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  transition: background-color 0.2s ease;
+  background: #fff;
+}
+
+#scan-fonts .wpc-dropdown-row + .wpc-dropdown-row {
+  border-top: none !important;
+}
+
+#scan-fonts .wpc-dropdown-row:first-child {
+  border-top-left-radius: 12px !important;
+  border-top-right-radius: 12px !important;
+}
+
+#scan-fonts .wpc-dropdown-row:last-child {
+  border-bottom-left-radius: 12px !important;
+  border-bottom-right-radius: 12px !important;
+}
+
+#scan-fonts .wpc-dropdown-row:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* ── Status dot: matches circle-check.active ──
+   No !important on box-shadow so bluePulse keyframes can animate it */
+#scan-fonts .wpc-dropdown-row .wpc-critical-circle {
+  width: 8px !important;
+  height: 8px !important;
+  margin-right: 0 !important;
+  border-radius: 50% !important;
+  flex-shrink: 0;
+  transform: scale(1);
+  animation: none;
+  box-shadow: none;
+}
+
+#scan-fonts .wpc-dropdown-row .wpc-critical-circle.wpc-done {
+  background: #5CB1FF !important;
+  animation: none;
+  box-shadow: none;
+}
+
+#scan-fonts .wpc-dropdown-row:hover .wpc-critical-circle.wpc-done {
+  animation: bluePulse 1.5s infinite;
+}
+
+/* ── Row header ── */
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  padding: 14px 20px !important;
+  min-height: 52px;
+}
+
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
+  flex: 1 !important;
+  min-width: 0 !important;
+  max-width: 72% !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  color: #475569 !important;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  line-height: 1.55 !important;
+}
+
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-left-side .wpc-circle-status {
+  flex-shrink: 0 !important;
+  width: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding-top: 0 !important;
+}
+
+/* ── Right side: Remove link ── */
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+  flex: 0 0 auto !important;
+  text-align: right !important;
+  padding-left: 16px;
+  margin-left: auto;
+}
+
+/* Remove at rest: subtle grey */
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-right-side a {
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 12px !important;
+  font-weight: 600;
+  color: #adbdca !important;
+  text-decoration: none !important;
+  padding: 5px 14px !important;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.02em;
+}
+
+/* Row hover: red button style */
+#scan-fonts .wpc-dropdown-row:hover .wpc-dropdown-row-right-side a {
+  opacity: 1;
+  background: #FEF2F2 !important;
+  border-color: #FECACA !important;
+  color: #991b1b !important;
+}
+
+/* Remove own hover: darken */
+#scan-fonts .wpc-dropdown-row .wpc-dropdown-row-right-side a:hover {
+  opacity: 1 !important;
+  background: #FEE2E2 !important;
+  border-color: #FCA5A5 !important;
+  color: #7f1d1d !important;
+}
+
+/* -- Replace Fonts Dropdown -- */
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown {
+  z-index: 30 !important;
+  position: relative;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-button {
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 30px;
+  padding: 10px 38px 10px 18px;
+  background-color: #EFF6FF;
+  color: #334155;
+  border: 1px solid #BFDBFE;
+  transition: all 0.2s ease;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-button:hover {
+  border-color: #3b82f6;
+  background-color: #dbeafe;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-menu {
+  z-index: 100 !important;
+  border-radius: 8px !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-menu .wpc-cf-select-item {
+  font-family: 'proxima_regular', sans-serif;
+  font-size: 13px;
+  padding: 10px 18px;
+  transition: all 0.2s ease;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-menu .wpc-cf-select-item.wpc-cf-active {
+  color: #212529;
+}
+
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown .wpc-cf-select-menu .wpc-cf-select-item:hover {
+  background: #F8FAFC;
+}
+
+/* -- Responsive -- */
+@media (max-width: 640px) {
+  #scan-fonts form {
+    flex-direction: column !important;
+    border-radius: 8px;
+  }
+
+  #scan-fonts form input[type="text"],
+  #scan-fonts form input[name="scanUrl"] {
+    width: 100% !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  #scan-fonts form input[type="submit"],
+  #scan-fonts form input[name="submit"] {
+    width: 100% !important;
+    border-left: none !important;
+    border-radius: 0 0 8px 8px !important;
+  }
+
+  #scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  #scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
+    max-width: 100% !important;
+    font-size: 11px !important;
+  }
+
+  #scan-fonts .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+    align-self: flex-end;
+  }
+}
 
 .setup-accordion { margin: 16px 0; }
 
@@ -1143,6 +1523,7 @@
     }
   }
 
+  .wpc-box-for-dropdown,
   .wpc-box-for-checkbox {
     flex: 1;
     border: 0px solid #E9E9E9;
@@ -3676,6 +4057,7 @@ i.wpc-locked {
 
       .wpc-settings-tab-list {
         width: 100%;
+        min-width: @sidebar-width;
         max-width: @sidebar-width;
       }
 
@@ -4602,6 +4984,7 @@ i.wpc-locked {
     border-radius: 50%;
   }
 
+  .wpc-box-for-dropdown,
   .wpc-box-for-input,
   .wpc-box-for-checkbox {
     flex: 1;
@@ -6413,6 +6796,7 @@ i.wpc-locked {
     flex: 50% !important;
   }
 
+  .wpc-box-for-dropdown,
   .wpc-box-for-checkbox {
     flex: 50% !important;
   }
@@ -8244,6 +8628,7 @@ i.wpc-locked {
    ======================================================================= */
 
 .wpc-advanced-settings-container-v4 .wpc-settings-body .wpc-settings-tabs .wpc-settings-tab-list {
+  min-width: 235px !important;
   max-width: 235px !important;
   width: 100% !important;
   padding-right: 12px !important;
@@ -8823,7 +9208,7 @@ i.wpc-locked {
 .wpc-settings-flex-body .wpc-gps-improvement .wpc-stats-improvement {
   background-color: #ECFDF5 !important;
   border-radius: 6px !important;
-  padding: 4px 8px !important;
+  padding: 4px 7px !important;
   margin: 5px 0 0 0 !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -9255,6 +9640,7 @@ label[for="wpc-cf-token"] .circle-check {
    10. INPUTS, TOGGLES & FORM ELEMENTS
    ======================================================================= */
 
+.wpc-box-for-dropdown,
 .wpc-box-for-checkbox,
 .wpc-box-for-input {
   background-color: #fff !important;
@@ -9269,6 +9655,7 @@ label[for="wpc-cf-token"] .circle-check {
   position: relative !important;
 }
 
+.wpc-box-for-dropdown:hover,
 .wpc-box-for-checkbox:hover,
 .wpc-box-for-input:hover {
   transform: translateY(-2px) !important;
@@ -9276,6 +9663,7 @@ label[for="wpc-cf-token"] .circle-check {
   box-shadow: 0 10px 20px -5px rgba(76, 137, 235, 0.1) !important;
 }
 
+.wpc-advanced-settings-container-v4 .wpc-box-for-dropdown .wpc-box-check,
 .wpc-advanced-settings-container-v4 .wpc-box-for-input .wpc-box-check,
 .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox .wpc-box-check {
   position: static !important;
@@ -9286,11 +9674,13 @@ label[for="wpc-cf-token"] .circle-check {
   height: auto !important;
 }
 
+.wpc-advanced-settings-container-v4 .wpc-box-for-dropdown .wpc-box-content,
 .wpc-advanced-settings-container-v4 .wpc-box-for-input .wpc-box-content,
 .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox .wpc-box-content {
   padding-right: 20px !important;
 }
 
+.wpc-advanced-settings-container-v4 .wpc-box-for-dropdown.no-description,
 .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox.no-description {
   padding: 10px 24px !important;
 }
@@ -9337,6 +9727,7 @@ label[for="wpc-cf-token"] .circle-check {
   background-color: #5CB1FF !important;
 }
 
+.wpc-box-for-dropdown:hover .circle-check.active,
 .wpc-box-for-checkbox:hover .circle-check.active {
   animation: bluePulse 1.5s infinite !important;
   transform: scale(1.1);
@@ -9447,6 +9838,7 @@ label[for="wpc-cf-token"] .circle-check {
   padding-right: 0 !important;
 }
 
+.wpc-box-for-dropdown .wpc-box-button:has(a[data-popup="exclude-advanced-caching-popup"]),
 .wpc-box-for-checkbox .wpc-box-button:has(a[data-popup="exclude-advanced-caching-popup"]) {
   display: flex !important;
   align-items: center !important;
@@ -9784,6 +10176,7 @@ input:checked + .wpc-switch-slider:before {
   padding: 50px 50px !important;
 }
 
+#other-optimization .wpc-box-for-dropdown:has(input:checked),
 #other-optimization .wpc-box-for-checkbox:has(input:checked) {
   border-color: #4c89eb !important;
   background-color: #fff !important;
@@ -9860,6 +10253,8 @@ input:checked + .wpc-switch-slider:before {
 .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
   font-size: 14px;
   flex: 2 !important;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .wpc-advanced-settings-container-v4 .wpc-settings-body .wpc-settings-tabs .wpc-settings-tab-content .wpc-tab-content-box .tab-title-checkbox .wpc-checkbox-description .wpc-smart-optimization-title {

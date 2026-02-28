@@ -80,8 +80,20 @@ class wps_ic_cache_integrations
         }
     }
 
-    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true)
+    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false)
     {
+        if (!$forcePurge) {
+            $settings = get_option(WPS_IC_SETTINGS);
+            if (empty($settings['cache']['advanced']) ||
+                $settings['cache']['advanced'] == '0' ||
+                empty($settings['cache']['purge-hooks']) ||
+                $settings['cache']['purge-hooks'] == '0' ||
+                (!empty($settings['developer_mode']) && $settings['developer_mode'] == '1')) {
+                //Do not purge if cache OFF, or cache purge OFF or developer mode ON
+                return;
+            }
+        }
+
         // Allow integrations to modify parameters
         $url_key = apply_filters('wps_ic_purge_all_url_key', $url_key, $critSave); //If set to false purge all cache
         $varnish = apply_filters('wps_ic_purge_all_varnish', $varnish, $url_key); //Allow enabling/disabling varnish purge

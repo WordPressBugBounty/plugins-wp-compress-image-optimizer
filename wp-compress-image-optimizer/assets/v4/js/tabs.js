@@ -501,7 +501,7 @@ jQuery(document).ready(function ($) {
     /***
      * IconBox click on container
      */
-    $('.wpc-iconcheckbox').on('click', function (e) {
+    $('.wpc-iconcheckbox').on('click', function (e) {3
         var box = $(this);
 
         if ($(e.target).is('span')) {
@@ -532,6 +532,21 @@ jQuery(document).ready(function ($) {
         }
     });
 
+
+    /***
+     * Dropdown Change on container
+     */
+    $('.wpc-dropdown-setting').on('change', function (e) {
+        alert('da');
+        var newSettingsSate = getSettingsState();
+console.log(newSettingsSate);
+console.log(settingsState);
+        if (didSettingsChanged(settingsState, newSettingsSate)) {
+            showSaveButton();
+        } else {
+            hideSaveButton();
+        }
+    });
 
     /**
      * Preset dropdown change
@@ -637,6 +652,12 @@ jQuery(document).ready(function ($) {
             var value = $(this).val();
             settingsState.push(value);
         });
+
+        // Handle Scan Fonts
+        $('input[type="hidden"][name="options[replace-fonts]"]', '.wpc-settings-body').each(function() {
+            var value = $(this).val();
+            settingsState.push(value);
+        });
     }
 
     function getSettingsState() {
@@ -667,6 +688,12 @@ jQuery(document).ready(function ($) {
 
         // Handle CF dropdown
         $('input[type="hidden"][name="options[cf][edge-cache]"]', '.wpc-settings-body').each(function() {
+            var value = $(this).val();
+            getSettingsState.push(value);
+        });
+
+        // Handle Font Scanning
+        $('input[type="hidden"][name="options[replace-fonts]"]', '.wpc-settings-body').each(function() {
             var value = $(this).val();
             getSettingsState.push(value);
         });
@@ -1059,6 +1086,7 @@ jQuery(document).ready(function ($) {
         $dropdown.find('.wpc-cf-select-menu').hide();
 
         var newSettingsSate = getSettingsState();
+
 
         if (didSettingsChanged(settingsState, newSettingsSate)) {
             showSaveButton();

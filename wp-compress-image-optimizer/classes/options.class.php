@@ -373,8 +373,7 @@ class wps_ic_options
                 'wcml_client_currency_language',
                 'wcml_client_country',
                 'geot_rocket_',
-                'pll_language',
-                'yith_wcmcs_currency'
+                'pll_language'
             ],
             'exclude_cookies' => []
         ];

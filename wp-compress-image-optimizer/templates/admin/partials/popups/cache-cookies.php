@@ -60,8 +60,7 @@
                                             wcml_client_currency_language<br>
                                             wcml_client_country<br>
                                             geot_rocket_<br>
-                                            pll_language<br>
-                                            yith_wcmcs_currency</p>
+                                            pll_language<br></p>
                                     </div>
                                 </div>
                             </div>

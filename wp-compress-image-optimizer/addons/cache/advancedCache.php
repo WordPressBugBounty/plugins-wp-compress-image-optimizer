@@ -267,6 +267,28 @@ class wps_advancedCache
             return true;
         }
 
+        // Check mandatory cookies - bypass if any required cookie is missing
+        if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
+            foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
+                if (substr($mandatoryCookie, -1) === '_') {
+                    $found = false;
+                    foreach ($_COOKIE as $cookieName => $cookieValue) {
+                        if (strpos($cookieName, $mandatoryCookie) === 0) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (!$found) {
+                        return true;
+                    }
+                } else {
+                    if (!isset($_COOKIE[$mandatoryCookie])) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         return false;
     }
 

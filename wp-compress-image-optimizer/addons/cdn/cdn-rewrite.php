@@ -321,17 +321,17 @@ class wps_cdn_rewrite
         }
 
         //if (!empty(self::$cdnEnabled) && self::$cdnEnabled == '1') {
-            if (self::$randomHash == 0 && strpos($formatted_url, '.css') !== false) {
-                $formatted_url .= '?icv=' . WPS_IC_HASH;
-            }
+        if (self::$randomHash == 0 && strpos($formatted_url, '.css') !== false) {
+            $formatted_url .= '?icv=' . WPS_IC_HASH;
+        }
 
-            if (self::$randomHash == 0 && strpos($formatted_url, '.js') !== false) {
-                $formatted_url .= '?js_icv=' . WPS_IC_JS_HASH;
-            }
+        if (self::$randomHash == 0 && strpos($formatted_url, '.js') !== false) {
+            $formatted_url .= '?js_icv=' . WPS_IC_JS_HASH;
+        }
 
-            if (self::$randomHash != 0) {
-                return $formatted_url . '?icv_random=' . self::$randomHash;
-            }
+        if (self::$randomHash != 0) {
+            return $formatted_url . '?icv_random=' . self::$randomHash;
+        }
         //}
 
         return $formatted_url;
@@ -986,24 +986,24 @@ class wps_cdn_rewrite
             return $html;
         }
 
-	    if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replace_iframe_tags') {
-		    return $html;
-	    }
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replace_iframe_tags') {
+            return $html;
+        }
 
-	    // Layzload Iframe - sets load="lazy" to iframe tag
-	    // TODO: Fix so that it checks does iframe already have load="lazy|auto"
-	    if (!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1' && !$isUserLoggedIn) {
-		    $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', [$this, 'replace_iframe_tags'], $html);
-		    $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
-	    }
+        // Layzload Iframe - sets load="lazy" to iframe tag
+        // TODO: Fix so that it checks does iframe already have load="lazy|auto"
+        if (!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1' && !$isUserLoggedIn) {
+            $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', [$this, 'replace_iframe_tags'], $html);
+            $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
+        }
 
-	    if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'encode_iframe') {
-		    return $html;
-	    }
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'encode_iframe') {
+            return $html;
+        }
 
-	    if (!$isUserLoggedIn) {
-		    $html = self::$rewriteLogic->encodeIframe($html);
-	    }
+        if (!$isUserLoggedIn) {
+            $html = self::$rewriteLogic->encodeIframe($html);
+        }
 
         if (self::$cdnEnabled == 0) {
             $htmlBefore = $html;
@@ -1063,13 +1063,13 @@ class wps_cdn_rewrite
             }
         }
 
-	    if (isset(self::$settings['fontawesome-lazy']) && self::$settings['fontawesome-lazy'] == '1') {
-		    // TODO: Maybe add something?
-		    $html = $combine_css->lazyFontawesome($html);
-	    }
+        if (isset(self::$settings['fontawesome-lazy']) && self::$settings['fontawesome-lazy'] == '1') {
+            // TODO: Maybe add something?
+            $html = $combine_css->lazyFontawesome($html);
+        }
 
         // Critical CSS Remove from Header
-        $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1'));
+        $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1')) && (empty($settings['developer_mode']) || $settings['developer_mode'] == '0');
 
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists();
@@ -1185,10 +1185,10 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-                        if ( ! empty( $criticalCSSExists ) ) {
-                            $html = self::$rewriteLogic->addCritical( $html );
-                            if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
-                                $html = self::$rewriteLogic->lazyCSS( $html );
+                        if (!empty($criticalCSSExists)) {
+                            $html = self::$rewriteLogic->addCritical($html);
+                            if (strpos($html, 'wpc-critical-css') !== false) {
+                                $html = self::$rewriteLogic->lazyCSS($html);
                             }
                         } else {
                             //this way should be ok for multisite
@@ -1198,9 +1198,9 @@ class wps_cdn_rewrite
             }
         }
 
-	    if (!$isUserLoggedIn) {
-		    $html = self::$rewriteLogic->decodeIframe($html);
-	    }
+        if (!$isUserLoggedIn) {
+            $html = self::$rewriteLogic->decodeIframe($html);
+        }
 
         // Theme Integrations
         $html = self::$themeIntegrations->getIntegration($html);
@@ -1377,8 +1377,8 @@ class wps_cdn_rewrite
         }
 
         //GiveWP routes
-        if (isset($_GET['givewp-route'])){
-          return false;
+        if (isset($_GET['givewp-route'])) {
+            return false;
         }
 
         //Groundhogg calendar
@@ -2030,12 +2030,12 @@ class wps_cdn_rewrite
             $this->delay_js_exclude = '';
         }
 
-	    $cf = get_option(WPS_IC_CF);
-	    $cfLive = false;
-		if ($cf && isset($cf['settings'])){
-			$cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
-		}
-	    $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
+        $cf = get_option(WPS_IC_CF);
+        $cfLive = false;
+        if ($cf && isset($cf['settings'])) {
+            $cfLive = ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0');
+        }
+        $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
 
         self::$cdnEnabled = self::$settings['live-cdn'];
         if ((isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '0') || !$allowLive) {
@@ -2111,9 +2111,9 @@ class wps_cdn_rewrite
             self::$brizyActive = false;
         }
 
-		$cfCname = get_option(WPS_IC_CF_CNAME);
-		$cf = get_option(WPS_IC_CF);
-	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname)) ? $cfCname : get_option('ic_custom_cname');
+        $cfCname = get_option(WPS_IC_CF_CNAME);
+        $cf = get_option(WPS_IC_CF);
+        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname)) ? $cfCname : get_option('ic_custom_cname');
 
         if (empty($custom_cname) || !$custom_cname) {
             self::$zone_name = get_option('ic_cdn_zone_name');
@@ -2332,16 +2332,10 @@ class wps_cdn_rewrite
         }
 
 
-		if (!empty(self::$settings['font-display']) && self::$settings['font-display'] != 'off'){
-			add_filter('style_loader_src', [
-				$this,
-				'add_font_display_swap_to_url'
-			], 1, 2);
-			add_filter('style_loader_src', [
-				$this,
-				'process_css_for_fonts'
-			], 1, 4);
-		}
+        if (!empty(self::$settings['font-display']) && self::$settings['font-display'] != 'off') {
+            add_filter('style_loader_src', [$this, 'add_font_display_swap_to_url'], 1, 2);
+            add_filter('style_loader_src', [$this, 'process_css_for_fonts'], 1, 4);
+        }
 
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
@@ -2445,61 +2439,53 @@ class wps_cdn_rewrite
         $css_base_url = dirname($clean_src);
 
         // Convert relative URLs to absolute URLs
-        $css_content = preg_replace_callback(
-            '/url\s*\(\s*(["\']?)([^"\')]+)\1\s*\)/i',
-            function ($matches) use ($css_base_url) {
-                $quote = $matches[1];
-                $url = $matches[2];
+        $css_content = preg_replace_callback('/url\s*\(\s*(["\']?)([^"\')]+)\1\s*\)/i', function ($matches) use ($css_base_url) {
+            $quote = $matches[1];
+            $url = $matches[2];
 
-                // Skip if already absolute URL or data URI
-                if (preg_match('/^(https?:|data:|#)/i', $url)) {
-                    return $matches[0];
-                }
+            // Skip if already absolute URL or data URI
+            if (preg_match('/^(https?:|data:|#)/i', $url)) {
+                return $matches[0];
+            }
 
-                // Handle protocol-relative URLs
-                if (strpos($url, '//') === 0) {
-                    $protocol = is_ssl() ? 'https:' : 'http:';
-                    return 'url(' . $quote . $protocol . $url . $quote . ')';
-                }
+            // Handle protocol-relative URLs
+            if (strpos($url, '//') === 0) {
+                $protocol = is_ssl() ? 'https:' : 'http:';
+                return 'url(' . $quote . $protocol . $url . $quote . ')';
+            }
 
-                // Handle root-relative URLs
-                if (strpos($url, '/') === 0) {
-                    return 'url(' . $quote . home_url($url) . $quote . ')';
-                }
+            // Handle root-relative URLs
+            if (strpos($url, '/') === 0) {
+                return 'url(' . $quote . home_url($url) . $quote . ')';
+            }
 
-                // Handle relative URLs (including ./ and ../)
-                // Remove ./ prefix if present
-                if (strpos($url, './') === 0) {
-                    $url = substr($url, 2);
-                }
+            // Handle relative URLs (including ./ and ../)
+            // Remove ./ prefix if present
+            if (strpos($url, './') === 0) {
+                $url = substr($url, 2);
+            }
 
-                // Build absolute URL from base
-                $absolute_url = $css_base_url . '/' . $url;
+            // Build absolute URL from base
+            $absolute_url = $css_base_url . '/' . $url;
 
-                // Resolve ../ in the path
-                while (strpos($absolute_url, '/../') !== false) {
-                    $absolute_url = preg_replace('/\/[^\/]+\/\.\.\//', '/', $absolute_url);
-                }
+            // Resolve ../ in the path
+            while (strpos($absolute_url, '/../') !== false) {
+                $absolute_url = preg_replace('/\/[^\/]+\/\.\.\//', '/', $absolute_url);
+            }
 
-                return 'url(' . $quote . $absolute_url . $quote . ')';
-            },
-            $css_content
-        );
+            return 'url(' . $quote . $absolute_url . $quote . ')';
+        }, $css_content);
 
         // Add or replace font-display: swap
-        $css_content = preg_replace_callback(
-            '/(@font-face\s*\{)([^}]*)(})/is',
-            function ($matches) {
-                $content = $matches[2];
+        $css_content = preg_replace_callback('/(@font-face\s*\{)([^}]*)(})/is', function ($matches) {
+            $content = $matches[2];
 
-                // Remove existing font-display if present
-                $content = preg_replace('/font-display\s*:\s*[^;]+;?/i', '', $content);
+            // Remove existing font-display if present
+            $content = preg_replace('/font-display\s*:\s*[^;]+;?/i', '', $content);
 
-                // Add font-display: swap
-                return $matches[1] . $content . 'font-display:' . self::$settings['font-display'] . ';' . $matches[3];
-            },
-            $css_content
-        );
+            // Add font-display: swap
+            return $matches[1] . $content . 'font-display:' . self::$settings['font-display'] . ';' . $matches[3];
+        }, $css_content);
 
         // Save optimized file
         if (!file_exists(WPS_IC_CSS)) {
@@ -2510,33 +2496,6 @@ class wps_cdn_rewrite
 
         $new_url = WPS_IC_CSS_URL . '/' . $new_filename;
         return $new_url;
-    }
-
-    /**
-     * Helper function to extract full URL from HTML for a given resource
-     */
-    private function extractUrlFromHtml($resource, $html) {
-        if (empty($resource) || empty($html)) {
-            return $resource;
-        }
-
-        // Escape special regex characters in the resource name
-        $escapedResource = preg_quote($resource, '/');
-
-        // Pattern to match URLs containing the resource between quotes
-        // Matches: href="...resource..." or src="...resource..." or content="...resource..."
-        $patterns = [
-            '/(?:href|src|content)=["\']([^"\']*' . $escapedResource . '[^"\']*)["\']/i',
-            '/url\(["\']?([^"\')]*' . $escapedResource . '[^"\')]*)["\']?\)/i'
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $html, $matches)) {
-                return trim($matches[1]);
-            }
-        }
-
-        return false;
     }
 
     public function preload_custom_assetsMobile($output = 'array', $html = '')
@@ -2568,7 +2527,7 @@ class wps_cdn_rewrite
 
                 // Extract full URL from HTML if possible
                 $fullUrl = $this->extractUrlFromHtml($preloadItem, $html);
-                if (empty($fullUrl)){
+                if (empty($fullUrl)) {
                     continue;
                 }
 
@@ -2661,6 +2620,31 @@ class wps_cdn_rewrite
         }
     }
 
+    /**
+     * Helper function to extract full URL from HTML for a given resource
+     */
+    private function extractUrlFromHtml($resource, $html)
+    {
+        if (empty($resource) || empty($html)) {
+            return $resource;
+        }
+
+        // Escape special regex characters in the resource name
+        $escapedResource = preg_quote($resource, '/');
+
+        // Pattern to match URLs containing the resource between quotes
+        // Matches: href="...resource..." or src="...resource..." or content="...resource..."
+        $patterns = ['/(?:href|src|content)=["\']([^"\']*' . $escapedResource . '[^"\']*)["\']/i', '/url\(["\']?([^"\')]*' . $escapedResource . '[^"\')]*)["\']?\)/i'];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $html, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+
+        return false;
+    }
+
     public function preload_custom_assets($output = 'array', $html = '')
     {
         $alreadyPreloaded = [];
@@ -2690,7 +2674,7 @@ class wps_cdn_rewrite
 
                 // Extract full URL from HTML if possible
                 $fullUrl = $this->extractUrlFromHtml($preloadItem, $html);
-                if (empty($fullUrl)){
+                if (empty($fullUrl)) {
                     continue;
                 }
 
@@ -2981,7 +2965,7 @@ class wps_cdn_rewrite
             $postID = get_queried_object_id();
             $url = get_permalink($postID);
             $url_key = $urlKey->setup($url);
-            $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
             #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
             $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
@@ -3220,7 +3204,7 @@ class wps_cdn_rewrite
         }
 
         // Critical CSS Remove from Header
-        $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1'));
+        $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1')) && (empty($settings['developer_mode']) || $settings['developer_mode'] == '0');
 
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists();
@@ -3287,8 +3271,6 @@ class wps_cdn_rewrite
         }
 
 
-
-
         if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
             if (!is_user_logged_in() && !is_admin_bar_showing()) {
                 if (!empty($_GET['debugCriticalRunning'])) {
@@ -3350,10 +3332,10 @@ class wps_cdn_rewrite
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
-                        if ( ! empty( $criticalCSSExists ) ) {
-                            $html = self::$rewriteLogic->addCritical( $html );
-                            if ( strpos( $html, 'wpc-critical-css' ) !== false ) {
-                                $html = self::$rewriteLogic->lazyCSS( $html );
+                        if (!empty($criticalCSSExists)) {
+                            $html = self::$rewriteLogic->addCritical($html);
+                            if (strpos($html, 'wpc-critical-css') !== false) {
+                                $html = self::$rewriteLogic->lazyCSS($html);
                             }
                         } else {
                             //this way should be ok for multisite
@@ -3368,9 +3350,9 @@ class wps_cdn_rewrite
         }
 
         // encode meta and json tags so we dont replace urls
-      if (empty(self::$settings['optimize_meta_images']) || self::$settings['optimize_meta_images'] == '0') {
-        $metaData = $this->encodeMeta($html);
-        $html = $metaData['html'];
+        if (empty(self::$settings['optimize_meta_images']) || self::$settings['optimize_meta_images'] == '0') {
+            $metaData = $this->encodeMeta($html);
+            $html = $metaData['html'];
         }
 
         // Find all URLs on page that have not been replaced
@@ -3378,14 +3360,14 @@ class wps_cdn_rewrite
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
         //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
-	    if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == 1){
-		    $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
-		    $html  = preg_replace_callback($regEx, function($matches){
-			    $url = str_replace('&#039;', '', $matches[2]);
+        if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == 1) {
+            $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
+            $html = preg_replace_callback($regEx, function ($matches) {
+                $url = str_replace('&#039;', '', $matches[2]);
 
-			    return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
-		    }, $html);
-	    }
+                return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
+            }, $html);
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'externalUrls') {
             return $html;
@@ -3399,50 +3381,50 @@ class wps_cdn_rewrite
             }
         }
 
-	    if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-		    // Find and Preload Fonts!!
-		    self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
+        if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
+            // Find and Preload Fonts!!
+            self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
 
-		    if (!empty(self::$wpcPreloadLinks)) {
-			    // Extract href values from preload links
-			    preg_match_all('/href=["\']([^"\']+)["\']/', self::$wpcPreloadLinks, $matches);
+            if (!empty(self::$wpcPreloadLinks)) {
+                // Extract href values from preload links
+                preg_match_all('/href=["\']([^"\']+)["\']/', self::$wpcPreloadLinks, $matches);
 
-				/* add fetchpririty to discovered lcp images, maybe not needed
-			    if (!empty($matches[1])) {
-				    foreach ($matches[1] as $imageUrl) {
-					    // Escape special regex characters in the URL
-					    $escapedUrl = preg_quote($imageUrl, '/');
+                /* add fetchpririty to discovered lcp images, maybe not needed
+                if (!empty($matches[1])) {
+                    foreach ($matches[1] as $imageUrl) {
+                        // Escape special regex characters in the URL
+                        $escapedUrl = preg_quote($imageUrl, '/');
 
-					    // Find and modify img tags with this src
-					    $html = preg_replace_callback(
-						    '/<img([^>]*src=["\']' . $escapedUrl . '["\'][^>]*)>/i',
-						    function($imgMatch) {
-							    $imgTag = $imgMatch[1];
+                        // Find and modify img tags with this src
+                        $html = preg_replace_callback(
+                            '/<img([^>]*src=["\']' . $escapedUrl . '["\'][^>]*)>/i',
+                            function($imgMatch) {
+                                $imgTag = $imgMatch[1];
 
-							    // Check if fetchpriority already exists
-							    if (preg_match('/fetchpriority=/i', $imgTag)) {
-								    // Replace existing fetchpriority
-								    $imgTag = preg_replace('/fetchpriority=["\'][^"\']*["\']/i', 'fetchpriority="high"', $imgTag);
-							    } else {
-								    // Add fetchpriority
-								    $imgTag .= ' fetchpriority="high"';
-							    }
+                                // Check if fetchpriority already exists
+                                if (preg_match('/fetchpriority=/i', $imgTag)) {
+                                    // Replace existing fetchpriority
+                                    $imgTag = preg_replace('/fetchpriority=["\'][^"\']*["\']/i', 'fetchpriority="high"', $imgTag);
+                                } else {
+                                    // Add fetchpriority
+                                    $imgTag .= ' fetchpriority="high"';
+                                }
 
-							    return '<img' . $imgTag . '>';
-						    },
-						    $html
-					    );
-				    }
-			    }
-				*/
+                                return '<img' . $imgTag . '>';
+                            },
+                            $html
+                        );
+                    }
+                }
+                */
 
-			    $html = str_replace('<!--WPC_INSERT_PRELOAD-->', self::$wpcPreloadLinks, $html);
-		    }
-	    }
+                $html = str_replace('<!--WPC_INSERT_PRELOAD-->', self::$wpcPreloadLinks, $html);
+            }
+        }
 
         // decode meta and json tags
-        if(!empty($metaData)) {
-          $html = $this->decodeMeta($html, $metaData['store']);
+        if (!empty($metaData)) {
+            $html = $this->decodeMeta($html, $metaData['store']);
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'fonts') {
@@ -3583,10 +3565,15 @@ class wps_cdn_rewrite
         $html = preg_replace('/<!--WPC[\s\S]*?-->/', '', $html);
 
 
-        if (!empty($_GET['replaceFonts'])) {
-            $fonts = new wps_ic_fonts();
-            $html = $fonts->replaceFrontend($html);
-        }
+        #if (!empty($_GET['replaceFonts'])) {
+            #return print_r(self::$settings['replace-fonts'],true);
+            if (!empty(self::$settings['replace-fonts'])) {
+                $fonts = new wps_ic_fonts();
+                if (self::$settings['replace-fonts'] == 'local') {
+                    $html = $fonts->replaceFrontend($html);
+                }
+            }
+        #}
 
         return $html;
     }
@@ -3675,6 +3662,35 @@ class wps_cdn_rewrite
         }
 
         return ['html' => $html, 'templates' => $templates];
+    }
+
+    /**
+     * Encode meta tags to protect them from URL rewriting
+     * @param string $html
+     * @return array ['html' => modified_html, 'store' => meta_tags_store]
+     */
+    public function encodeMeta($html)
+    {
+        $metaTagsStore = [];
+        $metaCounter = 0;
+
+        // Find and encode all meta tags with image content
+        $html = preg_replace_callback('#<meta\s+(?:property=["\'](?:og:image|twitter:image)["\']|name=["\']twitter:image["\'])[^>]*>#i', function ($matches) use (&$metaTagsStore, &$metaCounter) {
+            $placeholder = '<!--META_PLACEHOLDER_' . $metaCounter . '-->';
+            $metaTagsStore[$metaCounter] = $matches[0];
+            $metaCounter++;
+            return $placeholder;
+        }, $html);
+
+        // Also handle JSON-LD scripts
+        $html = preg_replace_callback('#<script\s+type=["\']application/ld\+json["\'][^>]*>.*?</script>#si', function ($matches) use (&$metaTagsStore, &$metaCounter) {
+            $placeholder = '<!--JSONLD_PLACEHOLDER_' . $metaCounter . '-->';
+            $metaTagsStore[$metaCounter] = $matches[0];
+            $metaCounter++;
+            return $placeholder;
+        }, $html);
+
+        return ['html' => $html, 'store' => $metaTagsStore];
     }
 
     public function cdn_rewrite_url($url, $addslashes = false)
@@ -3991,6 +4007,33 @@ class wps_cdn_rewrite
     }
 
     /**
+     * Decode meta tags back to their original form
+     * @param string $html
+     * @param array $metaTagsStore
+     * @return string
+     */
+    public function decodeMeta($html, $metaTagsStore)
+    {
+        if (empty($metaTagsStore)) {
+            return $html;
+        }
+
+        foreach ($metaTagsStore as $index => $originalTag) {
+            $metaPlaceholder = '<!--META_PLACEHOLDER_' . $index . '-->';
+            $jsonldPlaceholder = '<!--JSONLD_PLACEHOLDER_' . $index . '-->';
+
+            // Try meta placeholder first, then JSON-LD placeholder
+            if (strpos($html, $metaPlaceholder) !== false) {
+                $html = str_replace($metaPlaceholder, $originalTag, $html);
+            } elseif (strpos($html, $jsonldPlaceholder) !== false) {
+                $html = str_replace($jsonldPlaceholder, $originalTag, $html);
+            }
+        }
+
+        return $html;
+    }
+
+    /**
      * Restores script template content by ID from the saved templates array
      *
      * @param string $html The HTML with empty script templates
@@ -4181,6 +4224,141 @@ class wps_cdn_rewrite
         return $inject;
     }
 
+    public function get_ga_script()
+    {
+        if (!empty(self::$settings['ga-bot-shield']) && self::$settings['ga-bot-shield'] === '1') {
+            return <<<JS
+<script id="wpc-ga-bot-shield">
+(function () {
+  try {
+    var ua = (navigator.userAgent || "").toLowerCase();
+
+    /* ===============================
+       Test helper (force bot mode)
+       =============================== */
+    function hasCookie(name) {
+      try {
+        return (document.cookie || "")
+          .split(";")
+          .some(c => c.trim().startsWith(name + "="));
+      } catch(e) { return false; }
+    }
+
+    var forceBot =
+      /(?:\\?|&)wpc_force_bot=1(?:&|$)/.test(location.search) ||
+      hasCookie("wpc_force_bot");
+
+    /* ===============================
+       Bot detection
+       =============================== */
+
+    var isAutomation = false;
+    try { isAutomation = (navigator.webdriver === true); } catch (e) {}
+
+    var isKnownBot =
+      ua.includes("petalbot") ||
+      ua.includes("sogou") ||
+      ua.includes("baiduspider") ||
+      ua.includes("yandexbot");
+
+    if (!(forceBot || isAutomation || isKnownBot)) return;
+
+    // Debug flag for support / QA
+    window.__WPC_GA_BLOCKED__ = true;
+
+    // Prevent inline GA errors
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+    window.ga = window.ga || function(){ (window.ga.q = window.ga.q || []).push(arguments); };
+
+    function isGA(url) {
+      url = String(url || "").toLowerCase();
+      return (
+        url.includes("google-analytics.com") ||
+        url.includes("stats.g.doubleclick.net") ||
+        url.includes("/collect") ||
+        url.includes("/g/collect") ||
+        url.includes("/mp/collect")
+      );
+    }
+
+    /* ===============================
+       sendBeacon
+       =============================== */
+    if (navigator.sendBeacon) {
+      var _sb = navigator.sendBeacon.bind(navigator);
+      navigator.sendBeacon = function (url, data) {
+        if (isGA(url)) return true;
+        return _sb(url, data);
+      };
+    }
+
+    /* ===============================
+       fetch
+       =============================== */
+    if (window.fetch) {
+      var _fetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        var url = "";
+        try {
+          url = (typeof input === "string")
+            ? input
+            : (input && input.url) || "";
+        } catch(e) {}
+        if (isGA(url)) {
+          return Promise.resolve(new Response("", { status: 204 }));
+        }
+        return _fetch(input, init);
+      };
+    }
+
+    /* ===============================
+       XMLHttpRequest
+       =============================== */
+    if (window.XMLHttpRequest) {
+      var _open = XMLHttpRequest.prototype.open;
+      var _send = XMLHttpRequest.prototype.send;
+
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this.__wpc_block_ga = isGA(url);
+        return _open.apply(this, arguments);
+      };
+
+      XMLHttpRequest.prototype.send = function () {
+        if (this.__wpc_block_ga) {
+          try { this.abort(); } catch(e) {}
+          return;
+        }
+        return _send.apply(this, arguments);
+      };
+    }
+
+    /* ===============================
+       Image pixel fallback
+       =============================== */
+    try {
+      var desc = Object.getOwnPropertyDescriptor(Image.prototype, "src");
+      if (desc && desc.set) {
+        Object.defineProperty(Image.prototype, "src", {
+          configurable: true,
+          get: desc.get,
+          set: function (v) {
+            if (!isGA(v)) desc.set.call(this, v);
+          }
+        });
+      }
+    } catch(e) {}
+
+  } catch (e) {
+    // Fail open: never break analytics for humans
+  }
+})();
+</script>
+JS;
+        }
+        return '';
+    }
+
     public function elementorAnimations($matches)
     {
         $animationData = $matches[1];
@@ -4203,8 +4381,8 @@ class wps_cdn_rewrite
         $tag = trim($src[0]);
         $srcToLower = strtolower($tag);
 
-	    //This is now done in delayJS class
-	    return $tag;
+        //This is now done in delayJS class
+        return $tag;
 
         if (self::$isAmp->isAmp()) {
             return $tag;
@@ -4342,7 +4520,7 @@ class wps_cdn_rewrite
 
     public function replace_source_tags($source)
     {
-		//if any problems with escaping characters, see replace_iframe_tags() and implement the same
+        //if any problems with escaping characters, see replace_iframe_tags() and implement the same
         preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
         if (!empty($sourceAtts[1])) {
             $iFrame = '<source';
@@ -4380,17 +4558,17 @@ class wps_cdn_rewrite
         }
     }
 
-	public function replace_iframe_tags($iframe)
-	{
-		if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
-			return $iframe[0];
-		}
+    public function replace_iframe_tags($iframe)
+    {
+        if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
+            return $iframe[0];
+        }
 
-		preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
+        preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=(["\'])([^"\']*)\2/is', $iframe[0], $iframeAtts);
 
-		if (!empty($iframeAtts[1])) {
+        if (!empty($iframeAtts[1])) {
             $attNames = $iframeAtts[1];
-            $hasSrc     = in_array('src', $attNames, true);
+            $hasSrc = in_array('src', $attNames, true);
             $hasDataSrc = in_array('data-src', $attNames, true) || in_array('data-wpc-src', $attNames, true);
 
             if ($hasDataSrc && !$hasSrc) {
@@ -4398,74 +4576,84 @@ class wps_cdn_rewrite
                 return $iframe[0];
             }
 
-			$iFrame = '<iframe';
-			$hasClass = false;
+            if ($hasDataSrc && $hasSrc) {
+                $srcIndex = array_search('src', $attNames, true);
+                $srcValue = $iframeAtts[3][$srcIndex];
 
-			$attNames = $iframeAtts[1];
-			$attValues = $iframeAtts[3];
+                if (strpos($srcValue, 'data:') === 0) {
+                    // Has data-src + src is a data: URI = definitely a lazy-load placeholder
+                    return $iframe[0];
+                }
+            }
 
-			foreach ($attNames as $i => $attName) {
-				if ($attName == 'src') {
-					$attName = 'data-wpc-src';
-					$escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
-				} elseif ($attName == 'class') {
-					$hasClass = true;
-					$attValues[$i] .= ' wpc-iframe-delay';
-					$escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
-				} elseif ($attName == 'loading') {
-					$attValues[$i] = 'lazy';
-					$escapedValue = $attValues[$i];
-				} else {
-					$escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
-				}
+            $iFrame = '<iframe';
+            $hasClass = false;
 
-				$iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
-			}
+            $attNames = $iframeAtts[1];
+            $attValues = $iframeAtts[3];
 
-			if (!$hasClass) {
-				$iFrame .= ' class="wpc-iframe-delay"';
-			}
+            foreach ($attNames as $i => $attName) {
+                if ($attName == 'src') {
+                    $attName = 'data-wpc-src';
+                    $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
+                } elseif ($attName == 'class') {
+                    $hasClass = true;
+                    $attValues[$i] .= ' wpc-iframe-delay';
+                    $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+                } elseif ($attName == 'loading') {
+                    $attValues[$i] = 'lazy';
+                    $escapedValue = $attValues[$i];
+                } else if ($attName == 'data-src') {
+                    $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]); }
+                else {
+                    $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
+                }
 
-			$iFrame .= '></iframe>';
+                $iFrame .= ' ' . $attName . '="' . $escapedValue . '"';
+            }
 
-			return $iFrame;
-		} else {
-			return $iframe[0]; // Return original if no attributes found
-		}
-	}
+            if (!$hasClass) {
+                $iFrame .= ' class="wpc-iframe-delay"';
+            }
 
-	private function conditionallyEscapeUrl($url)
-	{
-		// Common patterns that indicate the URL is already encoded
-		$encodedPatterns = [
-			'&amp;',     // & encoded
-			'&#038;',    // WordPress-style & encoding
-			'%20',       // Space encoded
-			'%2C',       // Comma encoded
-			'&quot;',    // Quote encoded
-			'&lt;',      // < encoded
-			'&gt;'       // > encoded
-		];
+            $iFrame .= '></iframe>';
 
-		foreach ($encodedPatterns as $pattern) {
-			if (strpos($url, $pattern) !== false) {
-				return $url; // Already encoded
-			}
-		}
+            return $iFrame;
+        } else {
+            return $iframe[0]; // Return original if no attributes found
+        }
+    }
 
-		// Check for any HTML entity pattern
-		if (preg_match('/&[a-zA-Z0-9#]+;/', $url)) {
-			return $url; // Already encoded
-		}
+    private function conditionallyEscapeUrl($url)
+    {
+        // Common patterns that indicate the URL is already encoded
+        $encodedPatterns = ['&amp;',     // & encoded
+            '&#038;',    // WordPress-style & encoding
+            '%20',       // Space encoded
+            '%2C',       // Comma encoded
+            '&quot;',    // Quote encoded
+            '&lt;',      // < encoded
+            '&gt;'       // > encoded
+        ];
 
-		// Not encoded, apply escaping only if needed
-		if (strpos($url, '&') !== false || strpos($url, '"') !== false ||
-		    strpos($url, '<') !== false || strpos($url, '>') !== false) {
-			return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
-		}
+        foreach ($encodedPatterns as $pattern) {
+            if (strpos($url, $pattern) !== false) {
+                return $url; // Already encoded
+            }
+        }
 
-		return $url; // Safe as-is
-	}
+        // Check for any HTML entity pattern
+        if (preg_match('/&[a-zA-Z0-9#]+;/', $url)) {
+            return $url; // Already encoded
+        }
+
+        // Not encoded, apply escaping only if needed
+        if (strpos($url, '&') !== false || strpos($url, '"') !== false || strpos($url, '<') !== false || strpos($url, '>') !== false) {
+            return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+        }
+
+        return $url; // Safe as-is
+    }
 
     public function maybe_addslashes($image, $addslashes = false)
     {
@@ -4724,70 +4912,67 @@ class wps_cdn_rewrite
         return '<img ' . $image_tag . ' />';
     }
 
-	public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])
-	{
-		$found_tags = [];
+    public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])
+    {
+        $found_tags = [];
 
-		// This pattern accounts for HTML entities like &quot; within attribute values
-		preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"((?:[^"\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)"|\'((?:[^\'\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
+        // This pattern accounts for HTML entities like &quot; within attribute values
+        preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"((?:[^"\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)"|\'((?:[^\'\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
 
-		if (!empty($_GET['dbg_img1'])) {
-			return [$image, $matches];
-		}
+        if (!empty($_GET['dbg_img1'])) {
+            return [$image, $matches];
+        }
 
-		$attributes = [];
-		unset($matches[0]);
+        $attributes = [];
+        unset($matches[0]);
 
-		foreach ($matches as $match) {
-			$attrName = $match[1];
-			$attrValue = null;
+        foreach ($matches as $match) {
+            $attrName = $match[1];
+            $attrValue = null;
 
-			// Determine the attribute value based on the capturing group that caught it
-			foreach ([2, 3, 4] as $index) {
-				if (!empty($match[$index])) {
-					$attrValue = $match[$index];
-					break;
-				}
-			}
+            // Determine the attribute value based on the capturing group that caught it
+            foreach ([2, 3, 4] as $index) {
+                if (!empty($match[$index])) {
+                    $attrValue = $match[$index];
+                    break;
+                }
+            }
 
-			// Only decode HTML entities for non-JSON attributes
-			// Check if this looks like JSON data (starts with [ or { and contains &quot;)
-			if ($attrValue !== null &&
-			    (strpos($attrName, 'data-') === 0) &&
-			    (strpos($attrValue, '[{') !== false || strpos($attrValue, '{') !== false) &&
-			    strpos($attrValue, '&quot;') !== false) {
-				// This looks like JSON data - keep HTML entities encoded
-				// but clean up any potential corruption from the original regex
-				$attributes[$attrName] = $attrValue;
-			} else {
-				// For regular attributes, decode HTML entities as before
-				$attributes[$attrName] = $attrValue ? html_entity_decode($attrValue) : $attrValue;
-			}
-		}
+            // Only decode HTML entities for non-JSON attributes
+            // Check if this looks like JSON data (starts with [ or { and contains &quot;)
+            if ($attrValue !== null && (strpos($attrName, 'data-') === 0) && (strpos($attrValue, '[{') !== false || strpos($attrValue, '{') !== false) && strpos($attrValue, '&quot;') !== false) {
+                // This looks like JSON data - keep HTML entities encoded
+                // but clean up any potential corruption from the original regex
+                $attributes[$attrName] = $attrValue;
+            } else {
+                // For regular attributes, decode HTML entities as before
+                $attributes[$attrName] = $attrValue ? html_entity_decode($attrValue) : $attrValue;
+            }
+        }
 
-		if (!empty($_GET['dbg_img2'])) {
-			return [$image, $attributes];
-		}
+        if (!empty($_GET['dbg_img2'])) {
+            return [$image, $attributes];
+        }
 
-		// Process the attributes
-		foreach ($attributes as $tag => $value) {
-			if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
-				continue;
-			}
+        // Process the attributes
+        foreach ($attributes as $tag => $value) {
+            if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
+                continue;
+            }
 
-			if ($tag == 'data-mk-image-src-set') {
-				$value = htmlspecialchars_decode($value);
-				$decoded = json_decode($value, true);
-				if ($decoded && isset($decoded['default'])) {
-					$value = $decoded['default'];
-				}
-			}
+            if ($tag == 'data-mk-image-src-set') {
+                $value = htmlspecialchars_decode($value);
+                $decoded = json_decode($value, true);
+                if ($decoded && isset($decoded['default'])) {
+                    $value = $decoded['default'];
+                }
+            }
 
-			$found_tags[$tag] = $value;
-		}
+            $found_tags[$tag] = $value;
+        }
 
-		return $found_tags;
-	}
+        return $found_tags;
+    }
 
     public static function get_image_size($url)
     {
@@ -4800,203 +4985,6 @@ class wps_cdn_rewrite
         }
 
         return $sizes;
-    }
-
-  /**
-   * Encode meta tags to protect them from URL rewriting
-   * @param string $html
-   * @return array ['html' => modified_html, 'store' => meta_tags_store]
-   */
-  public function encodeMeta($html) {
-    $metaTagsStore = [];
-    $metaCounter = 0;
-
-    // Find and encode all meta tags with image content
-    $html = preg_replace_callback(
-      '#<meta\s+(?:property=["\'](?:og:image|twitter:image)["\']|name=["\']twitter:image["\'])[^>]*>#i',
-      function($matches) use (&$metaTagsStore, &$metaCounter) {
-        $placeholder = '<!--META_PLACEHOLDER_' . $metaCounter . '-->';
-        $metaTagsStore[$metaCounter] = $matches[0];
-        $metaCounter++;
-        return $placeholder;
-      },
-      $html
-    );
-
-    // Also handle JSON-LD scripts
-    $html = preg_replace_callback(
-      '#<script\s+type=["\']application/ld\+json["\'][^>]*>.*?</script>#si',
-      function($matches) use (&$metaTagsStore, &$metaCounter) {
-        $placeholder = '<!--JSONLD_PLACEHOLDER_' . $metaCounter . '-->';
-        $metaTagsStore[$metaCounter] = $matches[0];
-        $metaCounter++;
-        return $placeholder;
-      },
-      $html
-    );
-
-    return ['html' => $html, 'store' => $metaTagsStore];
-  }
-
-  /**
-   * Decode meta tags back to their original form
-   * @param string $html
-   * @param array $metaTagsStore
-   * @return string
-   */
-  public function decodeMeta($html, $metaTagsStore) {
-    if (empty($metaTagsStore)) {
-      return $html;
-    }
-
-    foreach ($metaTagsStore as $index => $originalTag) {
-      $metaPlaceholder = '<!--META_PLACEHOLDER_' . $index . '-->';
-      $jsonldPlaceholder = '<!--JSONLD_PLACEHOLDER_' . $index . '-->';
-
-      // Try meta placeholder first, then JSON-LD placeholder
-      if (strpos($html, $metaPlaceholder) !== false) {
-        $html = str_replace($metaPlaceholder, $originalTag, $html);
-      } elseif (strpos($html, $jsonldPlaceholder) !== false) {
-        $html = str_replace($jsonldPlaceholder, $originalTag, $html);
-      }
-    }
-
-    return $html;
-  }
-
-    public function get_ga_script()
-    {
-        if (!empty(self::$settings['ga-bot-shield']) && self::$settings['ga-bot-shield'] === '1') {
-            return <<<JS
-<script id="wpc-ga-bot-shield">
-(function () {
-  try {
-    var ua = (navigator.userAgent || "").toLowerCase();
-
-    /* ===============================
-       Test helper (force bot mode)
-       =============================== */
-    function hasCookie(name) {
-      try {
-        return (document.cookie || "")
-          .split(";")
-          .some(c => c.trim().startsWith(name + "="));
-      } catch(e) { return false; }
-    }
-
-    var forceBot =
-      /(?:\\?|&)wpc_force_bot=1(?:&|$)/.test(location.search) ||
-      hasCookie("wpc_force_bot");
-
-    /* ===============================
-       Bot detection
-       =============================== */
-
-    var isAutomation = false;
-    try { isAutomation = (navigator.webdriver === true); } catch (e) {}
-
-    var isKnownBot =
-      ua.includes("petalbot") ||
-      ua.includes("sogou") ||
-      ua.includes("baiduspider") ||
-      ua.includes("yandexbot");
-
-    if (!(forceBot || isAutomation || isKnownBot)) return;
-
-    // Debug flag for support / QA
-    window.__WPC_GA_BLOCKED__ = true;
-
-    // Prevent inline GA errors
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
-    window.ga = window.ga || function(){ (window.ga.q = window.ga.q || []).push(arguments); };
-
-    function isGA(url) {
-      url = String(url || "").toLowerCase();
-      return (
-        url.includes("google-analytics.com") ||
-        url.includes("stats.g.doubleclick.net") ||
-        url.includes("/collect") ||
-        url.includes("/g/collect") ||
-        url.includes("/mp/collect")
-      );
-    }
-
-    /* ===============================
-       sendBeacon
-       =============================== */
-    if (navigator.sendBeacon) {
-      var _sb = navigator.sendBeacon.bind(navigator);
-      navigator.sendBeacon = function (url, data) {
-        if (isGA(url)) return true;
-        return _sb(url, data);
-      };
-    }
-
-    /* ===============================
-       fetch
-       =============================== */
-    if (window.fetch) {
-      var _fetch = window.fetch.bind(window);
-      window.fetch = function (input, init) {
-        var url = "";
-        try {
-          url = (typeof input === "string")
-            ? input
-            : (input && input.url) || "";
-        } catch(e) {}
-        if (isGA(url)) {
-          return Promise.resolve(new Response("", { status: 204 }));
-        }
-        return _fetch(input, init);
-      };
-    }
-
-    /* ===============================
-       XMLHttpRequest
-       =============================== */
-    if (window.XMLHttpRequest) {
-      var _open = XMLHttpRequest.prototype.open;
-      var _send = XMLHttpRequest.prototype.send;
-
-      XMLHttpRequest.prototype.open = function (method, url) {
-        this.__wpc_block_ga = isGA(url);
-        return _open.apply(this, arguments);
-      };
-
-      XMLHttpRequest.prototype.send = function () {
-        if (this.__wpc_block_ga) {
-          try { this.abort(); } catch(e) {}
-          return;
-        }
-        return _send.apply(this, arguments);
-      };
-    }
-
-    /* ===============================
-       Image pixel fallback
-       =============================== */
-    try {
-      var desc = Object.getOwnPropertyDescriptor(Image.prototype, "src");
-      if (desc && desc.set) {
-        Object.defineProperty(Image.prototype, "src", {
-          configurable: true,
-          get: desc.get,
-          set: function (v) {
-            if (!isGA(v)) desc.set.call(this, v);
-          }
-        });
-      }
-    } catch(e) {}
-
-  } catch (e) {
-    // Fail open: never break analytics for humans
-  }
-})();
-</script>
-JS;
-        }
-        return '';
     }
 
 

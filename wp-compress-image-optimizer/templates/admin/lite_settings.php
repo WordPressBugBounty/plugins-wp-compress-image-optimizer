@@ -356,7 +356,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </li>
                                 <li>
                                     <?php
-			                            $liteActive = empty($option['api_key']);
+			                            $liteActive = (empty($options['api_key']) || (!empty($options['version']) && $options['version'] == 'lite'));
 			                            echo $gui::simpleCheckbox('Images', '', false, '0', 'imagesPreset', $liteActive);
                                     ?>
                                 </li>
@@ -390,7 +390,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     </div>
 
                     <?php
-                    if (empty($options['api_key']) || (!empty($options['version']) && $options['version'] == 'lite')) {
+                    if ($liteActive) {
                         ?>
                         <div class="wpc-rounded-box wpc-promo-box">
                             <div class="wpc-box-title"><img

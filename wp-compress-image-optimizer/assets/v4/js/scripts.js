@@ -5,9 +5,28 @@ jQuery(document).ready(function ($) {
     var searchPending = false;
     var searchTerm = '';
 
+    /**
+     * Remove Scanned Fonts
+     */
+    $('.wpc-remove-fonts').on('click', function (e) {
+        e.preventDefault();
+
+        var fontID = $(this).data('font-id');
+        $.ajax({
+            url: ajaxurl, type: 'POST', data: {
+                action: 'wpsRemoveFont', fontId: fontID, nonce: wpc_ajaxVar.nonce,
+            }, success: function (response) {
+                $('.wpc-dropdown-row[data-font-row="'+fontID+'"]').fadeOut(500, function(){
+                   $(this).remove();
+                });
+            }
+        });
+
+        return false;
+    });
 
     // Fancy Dropdown
-    $('.wpc-cf-zone-list').on('click', function(){
+    $('.wpc-cf-zone-list').on('click', function () {
         $('.wpc-cf-zone-list-items').toggle();
     });
 
@@ -31,18 +50,13 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    $('.wpc-change-ui-to-simple').on('click', function (e){
+    $('.wpc-change-ui-to-simple').on('click', function (e) {
         e.preventDefault();
 
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wpsChangeGui',
-                view:'lite',
-                nonce: wpc_ajaxVar.nonce,
-            },
-            success: function (response) {
+            url: ajaxurl, type: 'POST', data: {
+                action: 'wpsChangeGui', view: 'lite', nonce: wpc_ajaxVar.nonce,
+            }, success: function (response) {
                 window.location.reload();
             }
         });
@@ -57,7 +71,7 @@ jQuery(document).ready(function ($) {
         $.ajax({
             url: ajaxurl,
             type: 'POST',
-            data: {action: 'wps_ic_StopBulk',nonce: wpc_ajaxVar.nonce},
+            data: {action: 'wps_ic_StopBulk', nonce: wpc_ajaxVar.nonce},
             success: function (response) {
                 if (response.success == true) {
                     window.location.reload();
@@ -251,8 +265,7 @@ jQuery(document).ready(function ($) {
             showConfirmButton: false,
             allowOutsideClick: false,
             customClass: {
-                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
-                content: 'popup-per-page-settings',
+                container: 'no-padding-popup-bottom-bg switch-legacy-popup', content: 'popup-per-page-settings',
             },
             onOpen: function () {
 
@@ -260,9 +273,7 @@ jQuery(document).ready(function ($) {
                 $('.cdn-popup-loading', popup).show();
 
                 $.post(wpc_ajaxVar.ajaxurl, {
-                    action: 'wps_ic_get_per_page_settings_html',
-                    id: ID,
-                    nonce: wpc_ajaxVar.nonce
+                    action: 'wps_ic_get_per_page_settings_html', id: ID, nonce: wpc_ajaxVar.nonce
                 }, function (response) {
                     popup.html(response.data.html);
                     savePerPageExcludes(popup, ID);
@@ -318,8 +329,7 @@ jQuery(document).ready(function ($) {
         $(button).html('Updating...');
 
         $.post(ajaxurl, {
-            action: 'wps_ic_pull_stats',
-            wps_ic_nonce: wpc_ajaxVar.nonce
+            action: 'wps_ic_pull_stats', wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             $(button).html(state);
         });
@@ -384,9 +394,7 @@ jQuery(document).ready(function ($) {
         var assets_count_js = $('#assets_js_' + pageID);
         link.text = 'In Progress';
         $.post(ajaxurl, {
-            action: 'wps_ic_critical_get_assets',
-            pageID: pageID,
-            nonce: wpc_ajaxVar.nonce
+            action: 'wps_ic_critical_get_assets', pageID: pageID, nonce: wpc_ajaxVar.nonce
         }, function (response) {
             var files = JSON.parse(response.data);
 
@@ -395,9 +403,7 @@ jQuery(document).ready(function ($) {
             assets_count_js.html(files.js);
 
             $.post(ajaxurl, {
-                action: 'wps_ic_critical_run',
-                pageID: pageID,
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                action: 'wps_ic_critical_run', pageID: pageID, wps_ic_nonce: wpc_ajaxVar.nonce
             }, function (response) {
                 if (response.success) {
                     link.text = 'Done';
@@ -469,9 +475,7 @@ jQuery(document).ready(function ($) {
 
         //var selectedValue = $('.wpc-preset-dropdown').val();
         $.post(ajaxurl, {
-            action: 'wpc_ic_ajax_set_preset',
-            value: 'custom',
-            wps_ic_nonce: wpc_ajaxVar.nonce
+            action: 'wpc_ic_ajax_set_preset', value: 'custom', wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
 
         });
@@ -537,10 +541,7 @@ jQuery(document).ready(function ($) {
                 $('.cdn-popup-loading', popup).show();
 
                 $.post(wpc_ajaxVar.ajaxurl, {
-                    action: 'wps_ic_get_page_excludes_popup_html',
-                    id: ID,
-                    setting: setting,
-                    nonce: wpc_ajaxVar.nonce
+                    action: 'wps_ic_get_page_excludes_popup_html', id: ID, setting: setting, nonce: wpc_ajaxVar.nonce
                 }, function (response) {
                     popup.html(response.data.html);
                     savePageExcludePopup(popup, ID, setting);
@@ -626,9 +627,7 @@ jQuery(document).ready(function ($) {
         var selectedStatusesOnThisCall = selectedStatuses;
         fetchRunning = true;
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
+            url: ajaxurl, type: 'POST', data: {
                 action: 'wps_ic_get_optimization_status_pages',
                 post_type: selected,
                 post_status: selectedStatuses,
@@ -636,8 +635,7 @@ jQuery(document).ready(function ($) {
                 page: page,
                 offset: offset,
                 search: searchTerm
-            },
-            success: function (response) {
+            }, success: function (response) {
                 globalSettings = response.data.global_settings;
                 locked = response.data['locked'];
                 $.each(response.data.pages, function (index, item) {
@@ -698,8 +696,7 @@ jQuery(document).ready(function ($) {
                         lineCap: 'round',
                         thickness: '5',
                         fill: {
-                            gradient: ["#61CB70", "#61CB70"],
-                            gradientAngle: Math.PI / 7
+                            gradient: ["#61CB70", "#61CB70"], gradientAngle: Math.PI / 7
                         },
                         emptyFill: 'rgba(176,224,176,0.5)'
                     });
@@ -951,7 +948,7 @@ jQuery(document).ready(function ($) {
             }
         }
         if (settingName === 'critical_css') {
-            if (pageItem.critGenerating == '1'){
+            if (pageItem.critGenerating == '1') {
                 return 'page_not_generated page_generating';
             }
             if (pageSetting == '1' && pageItem.critGenerated == '0') {
@@ -974,9 +971,7 @@ jQuery(document).ready(function ($) {
         fetchRunning = true;
 
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
+            url: ajaxurl, type: 'POST', data: {
                 action: 'wps_ic_get_optimization_status_pages',
                 post_type: selectedTypes,
                 post_status: selectedStatuses,
@@ -984,8 +979,7 @@ jQuery(document).ready(function ($) {
                 page: page,
                 offset: offset,
                 search: searchTerm
-            },
-            success: function (response) {
+            }, success: function (response) {
                 globalSettings = response.data.global_settings;
                 locked = response.data['locked'];
                 $.each(response.data.pages, function (index, newItem) {
@@ -1031,11 +1025,7 @@ jQuery(document).ready(function ($) {
                     console.log('985');
                     var newTestResultsHtml = insertResultsRow(newItem);
                     var $testResultsElement = $row.find('.test-results');
-                    var shouldUpdate =
-                        $testResultsElement.find('.test-is-running').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-is-running').css('display') ||
-                        $testResultsElement.find('.test-not-runned').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-not-runned').css('display') ||
-                        $testResultsElement.find('.wpc-test-results').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-results').css('display') ||
-                        $testResultsElement.find('.wpc-test-redo').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-redo').css('display');
+                    var shouldUpdate = $testResultsElement.find('.test-is-running').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-is-running').css('display') || $testResultsElement.find('.test-not-runned').css('display') !== $('<div>').html(newTestResultsHtml).find('.test-not-runned').css('display') || $testResultsElement.find('.wpc-test-results').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-results').css('display') || $testResultsElement.find('.wpc-test-redo').css('display') !== $('<div>').html(newTestResultsHtml).find('.wpc-test-redo').css('display');
 
                     if (shouldUpdate && local === false) {
                         $testResultsElement.html(newTestResultsHtml);
@@ -1043,15 +1033,9 @@ jQuery(document).ready(function ($) {
                         // Circle Progress Bar
                         setTimeout(function () {
                             $('.circle-progress-bar', $testResultsElement).circleProgress({
-                                size: 50,
-                                startAngle: -Math.PI / 6 * 3,
-                                lineCap: 'round',
-                                thickness: '5',
-                                fill: {
-                                    gradient: ["#61CB70", "#61CB70"],
-                                    gradientAngle: Math.PI / 7
-                                },
-                                emptyFill: 'rgba(176,224,176,0.5)'
+                                size: 50, startAngle: -Math.PI / 6 * 3, lineCap: 'round', thickness: '5', fill: {
+                                    gradient: ["#61CB70", "#61CB70"], gradientAngle: Math.PI / 7
+                                }, emptyFill: 'rgba(176,224,176,0.5)'
                             });
                         }, 200); // 200ms timeout
                     }
@@ -1136,8 +1120,7 @@ jQuery(document).ready(function ($) {
         $(this).after(dropdownHtml);
         var dropdownMenu = $(this).next('.dropdown-menu');
         dropdownMenu.css({
-            top: $(this).position().top + $(this).outerHeight(),
-            left: $(this).position().left
+            top: $(this).position().top + $(this).outerHeight(), left: $(this).position().left
         }).slideDown(200);
 
         // Setup mouseleave event for the anchor and dropdown
@@ -1183,20 +1166,16 @@ jQuery(document).ready(function ($) {
         if (action != 'excludes') {
             // Perform AJAX call
             $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
+                url: ajaxurl, type: 'POST', data: {
                     action: 'wps_ic_save_optimization_status',
                     id: ID,
                     setting_name: settingName,
                     setting_action: action,
                     nonce: wpc_ajaxVar.nonce,
-                },
-                success: function (response) {
+                }, success: function (response) {
                     updateOptimizationStatus();
                     updatePosts(selectedTypes, currentPage);
-                },
-                error: function (xhr, status, error) {
+                }, error: function (xhr, status, error) {
                     // Handle error
                 }
             });
@@ -1217,18 +1196,12 @@ jQuery(document).ready(function ($) {
 
         if (optimize === 1) {
             $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wps_ic_run_single_optimization',
-                    id: ID,
-                    nonce: wpc_ajaxVar.nonce,
-                },
-                success: function (response) {
+                url: ajaxurl, type: 'POST', data: {
+                    action: 'wps_ic_run_single_optimization', id: ID, nonce: wpc_ajaxVar.nonce,
+                }, success: function (response) {
                     updateOptimizationStatus();
                     optimizationCheckInterval = setInterval(updateOptimizationStatus, 5000);
-                },
-                error: function (response) {
+                }, error: function (response) {
                     $('.test-is-running', testResultsRow).hide();
                     $('.test-not-runned', testResultsRow).show();
                 }
@@ -1238,15 +1211,9 @@ jQuery(document).ready(function ($) {
                 updatePosts(selectedTypes, currentPage);
             }, 1000)
             $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wps_ic_run_tests',
-                    id: ID,
-                    retest: retest,
-                    nonce: wpc_ajaxVar.nonce,
-                },
-                success: function (response) {
+                url: ajaxurl, type: 'POST', data: {
+                    action: 'wps_ic_run_tests', id: ID, retest: retest, nonce: wpc_ajaxVar.nonce,
+                }, success: function (response) {
                     clearInterval(optimizationCheckInterval);
                     updateOptimizationStatus();
                     updatePosts(selectedTypes, currentPage);
@@ -1261,14 +1228,12 @@ jQuery(document).ready(function ($) {
                             lineCap: 'round',
                             thickness: '5',
                             fill: {
-                                gradient: ["#61CB70", "#61CB70", "#b0e0b0"],
-                                gradientAngle: Math.PI / 7
+                                gradient: ["#61CB70", "#61CB70", "#b0e0b0"], gradientAngle: Math.PI / 7
                             },
                             emptyFill: 'rgba(176,224,176,0.8)'
                         });
                     }, 200); // 200ms timeout
-                },
-                error: function (xhr, status, error) {
+                }, error: function (xhr, status, error) {
                     testResultsRow.html('<p>Error loading test results.</p>');
                 }
 
@@ -1449,25 +1414,9 @@ jQuery(document).ready(function ($) {
     function updateMessageCycle(response) {
         var statusMessages;
         if (local === true) {
-            statusMessages = [
-                'Scanning for optimization opportunities...',
-                'Warming up the Cache...',
-                'Finalizing Performance Optimizations...',
-                'Finalizing Performance Optimizations...',
-            ];
+            statusMessages = ['Scanning for optimization opportunities...', 'Warming up the Cache...', 'Finalizing Performance Optimizations...', 'Finalizing Performance Optimizations...',];
         } else {
-            statusMessages = [
-                'Scanning for optimization opportunities...',
-                'Verifying Real-Time Image Optimization...',
-                'Analyzing Adaptive Performance...',
-                'Warming up the Cache...',
-                'Minifying HTML...',
-                'Enhancing Server Response time...',
-                'Optimizing CSS Files...',
-                'Optimizing JavaScript Files...',
-                'Finalizing Performance Optimizations...',
-                'Finalizing Performance Optimizations...',
-            ];
+            statusMessages = ['Scanning for optimization opportunities...', 'Verifying Real-Time Image Optimization...', 'Analyzing Adaptive Performance...', 'Warming up the Cache...', 'Minifying HTML...', 'Enhancing Server Response time...', 'Optimizing CSS Files...', 'Optimizing JavaScript Files...', 'Finalizing Performance Optimizations...', 'Finalizing Performance Optimizations...',];
         }
 
         var newOptimizationId = response.data.optimizationStatus.id;
@@ -1558,14 +1507,9 @@ jQuery(document).ready(function ($) {
 
             var selectedOptimizesOnThisCall = selectedOptimizes;
             $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wps_ic_check_optimization_status',
-                    optimize: selectedOptimizes,
-                    nonce: wpc_ajaxVar.nonce,
-                },
-                success: function (response) {
+                url: ajaxurl, type: 'POST', data: {
+                    action: 'wps_ic_check_optimization_status', optimize: selectedOptimizes, nonce: wpc_ajaxVar.nonce,
+                }, success: function (response) {
 
                     if (response.success == false) {
                         return true;
@@ -1589,18 +1533,14 @@ jQuery(document).ready(function ($) {
                             var countTo = total;
                             $this.text('0'); // Ensure it starts from 0
                             $({countNum: $this.text()}).animate({
-                                    countNum: countTo
-                                },
-                                {
-                                    duration: 3000,
-                                    easing: 'swing',
-                                    step: function () {
-                                        $this.text(Math.floor(this.countNum).toLocaleString());
-                                    },
-                                    complete: function () {
-                                        $this.text(this.countNum.toLocaleString());
-                                    }
-                                });
+                                countNum: countTo
+                            }, {
+                                duration: 3000, easing: 'swing', step: function () {
+                                    $this.text(Math.floor(this.countNum).toLocaleString());
+                                }, complete: function () {
+                                    $this.text(this.countNum.toLocaleString());
+                                }
+                            });
                         });
                         $('.optimized-pages-bottom-text').text('Pages Optimized');
 
@@ -1661,8 +1601,7 @@ jQuery(document).ready(function ($) {
                     }
 
 
-                },
-                error: function (error) {
+                }, error: function (error) {
                     callInProgress = false;
                     console.error('Error:', error);
                 }
@@ -1680,13 +1619,9 @@ jQuery(document).ready(function ($) {
         $('.wpc-preparing-optimization').show()
 
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wps_ic_start_optimizations',
-                nonce: wpc_ajaxVar.nonce,
-            },
-            success: function () {
+            url: ajaxurl, type: 'POST', data: {
+                action: 'wps_ic_start_optimizations', nonce: wpc_ajaxVar.nonce,
+            }, success: function () {
                 updateOptimizationStatus();
                 optimizationCheckInterval = setInterval(updateOptimizationStatus, 5000);
             }
@@ -1696,13 +1631,9 @@ jQuery(document).ready(function ($) {
 
     $('.wpc-optimization-page-button').on('click', '.wpc-stop-page-optimizations', function () {
         $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wps_ic_stop_optimizations',
-                nonce: wpc_ajaxVar.nonce,
-            },
-            success: function () {
+            url: ajaxurl, type: 'POST', data: {
+                action: 'wps_ic_stop_optimizations', nonce: wpc_ajaxVar.nonce,
+            }, success: function () {
                 updateOptimizationStatus();
                 stopBarAnimation();
             }
@@ -1750,12 +1681,9 @@ jQuery(document).ready(function ($) {
         e.preventDefault();
         $.ajax({
             url: ajaxurl, // WordPress AJAX URL
-            type: 'POST',
-            data: {
-                action: 'wps_ic_test_api_connectivity',
-                nonce: wpc_ajaxVar.nonce,
-            },
-            success: function (response) {
+            type: 'POST', data: {
+                action: 'wps_ic_test_api_connectivity', nonce: wpc_ajaxVar.nonce,
+            }, success: function (response) {
                 // Building the HTML table for the first section
                 let tableHtml = '<h3>Outbound tests</h3><table border="1" style="width:100%"><tr><th>Test Case</th><th>Result</th></tr>';
                 let keys = Object.keys(response.data);
@@ -1794,17 +1722,12 @@ jQuery(document).ready(function ($) {
 
                 // Display the tables in a SweetAlert
                 WPCSwal.fire({
-                    title: 'API Test Results',
-                    html: tableHtml,
-                    width: '500px'
+                    title: 'API Test Results', html: tableHtml, width: '500px'
                 });
-            },
-            error: function (error) {
+            }, error: function (error) {
                 // Display error in SweetAlert
                 WPCSwal.fire({
-                    title: 'Error!',
-                    text: 'An error occurred while fetching the data.',
-                    icon: 'error'
+                    title: 'Error!', text: 'An error occurred while fetching the data.', icon: 'error'
                 });
             }
         });
@@ -1831,8 +1754,7 @@ jQuery(document).ready(function ($) {
         }
 
         progressBar.css({
-            'width': '15%',
-            'margin-left': marginLeft + '%'
+            'width': '15%', 'margin-left': marginLeft + '%'
         });
         animationFrameId = requestAnimationFrame(step);
     }
@@ -2013,9 +1935,9 @@ function triggerPopEffect(newDiv, parentId) {
     }
 }
 
-jQuery(document).ready(function($) {
+jQuery(document).ready(function ($) {
     if ($.fn.tooltipster) {
-        $('.wpc-settings-tab-list ul li a').each(function() {
+        $('.wpc-settings-tab-list ul li a').each(function () {
             var $this = $(this);
             // Check if tooltipster instance exists
             var instance = $this.data('tooltipster-ns');
@@ -2033,9 +1955,7 @@ jQuery(document).ready(function($) {
 
             // Initialize with our borderless theme
             $this.tooltipster({
-                position: 'right',
-                theme: 'tooltipster-borderless',
-                delay: 100
+                position: 'right', theme: 'tooltipster-borderless', delay: 100
             });
         });
     }

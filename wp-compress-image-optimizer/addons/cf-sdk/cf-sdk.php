@@ -103,6 +103,7 @@ class WPC_CloudflareAPI
 
         $response = wp_remote_get($url, ['headers' => $this->getHeaders(),]);
 
+
         return $this->processResponse($response);
     }
 

@@ -71,7 +71,7 @@ class wps_ic_combine_css
             $this->filesize_cap = '10000000000'; //in bytes
             $this->combine_inline_scripts = true;
             $this->combine_external = true;
-            $this->allExcludes = ['media="print"', 'media=\'print\''];
+            $this->allExcludes = array_merge(['media="print"', 'media=\'print\''], $this->allExcludes);
         }
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';

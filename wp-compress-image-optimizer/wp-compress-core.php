@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.34';
+        self::$version = '6.60.35';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -123,11 +123,17 @@ class wps_ic
             die();
         }
 
+
+        if (!class_exists('wps_ic_cache')) {
+            include_once WPS_IC_DIR . 'classes/cache.class.php';
+        }
+
         $cache = new wps_ic_cache();
         $cache->purgeHooks();
 
         $this->integrations = new wps_ic_integrations();
         $this->integrations->add_admin_hooks();
+        $this->integrations->apply_admin_filters();
 
         $preload = new wps_ic_preload_warmup();
         $preload->setupCronPreload();
@@ -1545,10 +1551,10 @@ class wps_ic
                     $uuidPart = substr($uuid, 0, 4);
 
                     // Mobile CSS
-                    $mobileCriticalCSS = 'https://critical-css.b-cdn.net/' . $uuidPart . '/' . $uuid . '-mobile.css';
+                    $mobileCriticalCSS = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/' . $uuid . '-mobile.css';
 
                     // Desktop CSS
-                    $desktopCriticalCSS = 'https://critical-css.b-cdn.net/' . $uuidPart . '/' . $uuid . '-desktop.css';
+                    $desktopCriticalCSS = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/' . $uuid . '-desktop.css';
 
                     if (!class_exists('wps_criticalCss')) {
                         include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
@@ -1558,8 +1564,8 @@ class wps_ic
                     $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
 
                     // Check if LCP Exists
-                    $mobileLCP = 'https://critical-css.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-mobile';
-                    $desktopLCP = 'https://critical-css.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-desktop';
+                    $mobileLCP = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-mobile';
+                    $desktopLCP = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-desktop';
 
                     $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
 
@@ -2128,7 +2134,7 @@ class wps_ic
             $requests = new wps_ic_requests();
 
             // Test
-            $args = ['url' => home_url(), 'version' => '6.60.10', 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
+            $args = ['url' => home_url(), 'version' => '6.60.60', 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
             $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
             $body = wp_remote_retrieve_body($response);

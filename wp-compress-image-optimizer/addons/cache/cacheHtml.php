@@ -352,6 +352,28 @@ class wps_cacheHtml
             }
         }
 
+        // Check mandatory cookies - don't save cache if any required cookie is missing
+        if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
+            foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
+                if (substr($mandatoryCookie, -1) === '_') {
+                    $found = false;
+                    foreach ($_COOKIE as $cookieName => $cookieValue) {
+                        if (strpos($cookieName, $mandatoryCookie) === 0 && !empty($cookieValue)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (!$found) {
+                        return $buffer; // Don't save cache if mandatory cookie prefix not present
+                    }
+                } else {
+                    if (empty($_COOKIE[$mandatoryCookie])) {
+                        return $buffer; // Don't save cache if mandatory cookie not set
+                    }
+                }
+            }
+        }
+
         //page type checks for cache
         $purge_rules = get_option('wps_ic_purge_rules');
         if (!isset($purge_rules['post-publish'])) {

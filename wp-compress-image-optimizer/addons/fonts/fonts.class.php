@@ -25,6 +25,21 @@ class wps_ic_fonts
     }
 
 
+    public function isActive() {
+        $options = get_option(WPS_IC_SETTINGS);
+        if (!empty($options) && !empty($options['replace-fonts'])) {
+            // Active, check if local or bunny
+            if ($options['replace-fonts'] == 'local') {
+                return 'local';
+            } else if ($options['replace-fonts'] == 'bunny') {
+                return 'bunny';
+            }
+        }
+
+        return false;
+    }
+
+
     public function listFoundFonts()
     {
         return $this->stylesheetMap;
@@ -34,6 +49,7 @@ class wps_ic_fonts
     public function replaceFrontend($html)
     {
         if (!empty($this->stylesheetMap)) {
+
             foreach ($this->stylesheetMap as $style => $replaceData) {
                 if (empty($replaceData) || empty($replaceData['filename'])) {
                     continue;
@@ -44,6 +60,10 @@ class wps_ic_fonts
                 }
 
                 $replaceUrl = WPS_IC_FONTS_URL . $replaceData['dir'] . '/' . $replaceData['filename'];
+                $styleEncoded = str_replace('&', '&#038;', $style);
+
+                // Try to find encoded and non encoded url
+                $html = str_replace($styleEncoded, $replaceUrl, $html);
                 $html = str_replace($style, $replaceUrl, $html);
             }
         }
@@ -111,7 +131,7 @@ class wps_ic_fonts
     {
         if (!empty($array['googleFontsStylesheets'])) {
             foreach ($array['googleFontsStylesheets'] as $font) {
-                echo 'downloading: ' . $font . " -- ";
+                #echo 'downloading: ' . $font . " -- ";
 
                 // Read CSS Stylesheet
                 $download = $this->read($font);
@@ -263,6 +283,14 @@ class wps_ic_fonts
         update_option(WPS_IC_FONTS_MAP, $this->stylesheetMap);
     }
 
+
+    public function removeFont($fontId)
+    {
+        $this->stylesheetMap = get_option(WPS_IC_FONTS_MAP);
+        unset($this->stylesheetMap[$fontId]);
+        update_option(WPS_IC_FONTS_MAP, $this->stylesheetMap);
+    }
+
     public function download($url, $dir = '')
     {
         $this->filename = basename($url);
@@ -356,7 +384,7 @@ class wps_ic_fonts
     {
         if (!empty($array['googleFontsStylesheets'])) {
             foreach ($array['googleFontsStylesheets'] as $font) {
-                echo 'downloading: ' . $font . " -- ";
+                #echo 'downloading: ' . $font . " -- ";
                 $download = $this->download($font);
                 if (!empty($download) && empty($download['error'])) {
                     echo 'Download successful!' . "\r\n";

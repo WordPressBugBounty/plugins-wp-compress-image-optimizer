@@ -186,7 +186,7 @@ class wps_criticalCss
         // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 30);
 
-        $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
 	    if ($skipCap === true) {
@@ -494,7 +494,7 @@ class wps_criticalCss
 
     public function generateCriticalAjax()
     {
-        $args = ['url' => urldecode($this->serverRequest), 'version' => '6.60.10'];
+        $args = ['url' => urldecode($this->serverRequest), 'version' => '6.60.60'];
 
         $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 

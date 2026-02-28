@@ -2847,6 +2847,8 @@ SCRIPT;
         // Rewrite srcset
         // ---------------------------------------------------------------------
         if (!empty($srcset_links[0])) {
+            $hasXDescriptor = false;
+
             foreach ($srcset_links[0] as $i => $srcsetItem) {
 
                 $parts = preg_split('/\s+/', trim($srcsetItem));
@@ -2866,43 +2868,67 @@ SCRIPT;
                 }
 
                 // Parse descriptor
-                if (strpos($srcset_width, 'x') !== false) {
-                    $width_url = 1;
+                $isXDescriptor = (strpos($srcset_width, 'x') !== false);
+
+                if ($isXDescriptor) {
+                    $hasXDescriptor = true;
                     $width_val = (int)str_replace('x', '', $srcset_width);
                     $extension = 'x';
                 } else {
                     $width_val = (int)str_replace('w', '', $srcset_width);
-                    $width_url = $width_val;
                     $extension = 'w';
                 }
 
-                $srcsetWidthExtension = ($width_val === 1) ? '' : ($width_val . $extension);
-
                 // Already CDN URL
                 if (strpos($srcset_url, self::$zoneName) !== false) {
-                    $newSrcSet .= $srcset_url . ' ' . $srcsetWidthExtension . ', ';
+                    $newSrcSet .= $srcset_url . ' ' . $width_val . $extension . ', ';
                     continue;
                 }
 
                 // SVG passthrough
                 if (strpos($srcset_url, '.svg') !== false) {
-                    $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
+                    $newSrcSet .= 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($srcset_url) . ' ' . $width_val . $extension . ', ';
                     continue;
                 }
+
+                // ---------------------------------------------------------
+                // x-descriptor: density maps to r: flag, width is always 1
+                // (full size). Use fullSrc as canonical source.
+                // No retina injection needed — density is explicit.
+                // ---------------------------------------------------------
+                if ($isXDescriptor) {
+                    $isRetina = ($width_val >= 2) ? '1' : '0';
+
+                    $webpFull = '/wp:' . self::$webp;
+                    if (!empty($fullSrc) && self::isExcludedFrom('webp', $fullSrc)) {
+                        $webpFull = '';
+                    }
+
+                    $rewriteUrl = !empty($fullSrc) ? $fullSrc : $srcset_url;
+
+                    $newSrcSet .= self::$apiUrl . '/r:' . $isRetina . $webpFull . '/w:1/u:' . self::reformatUrl($rewriteUrl) . ' ' . $width_val . 'x, ';
+                    continue;
+                }
+
+                // ---------------------------------------------------------
+                // w-descriptor: standard width-based rewriting
+                // ---------------------------------------------------------
+                $width_url = $width_val;
+                $srcsetWidthExtension = ($width_val === 1) ? '' : ($width_val . 'w');
 
                 // Non-retina URL (use the actual candidate URL)
                 $newSrcSet .= self::$apiUrl . '/r:0' . $webp . '/w:' . self::getCurrentMaxWidth($width_url, self::isExcludedFrom('adaptive', $srcset_url)) . '/u:' . self::reformatUrl($srcset_url) . ' ' . $srcsetWidthExtension . ', ';
 
-                // Retina URL (IMPORTANT: use canonical fullSrc, not original_src)
+                // Retina URL (use canonical fullSrc)
                 if (self::$settings['retina-in-srcset'] == '1' && !empty($fullSrc)) {
                     $retinaWidth = (int)$width_url * 2;
 
-                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth, self::isExcludedFrom('adaptive', $fullSrc)) . '/u:' . self::reformatUrl($fullSrc) . ' ' . ($retinaWidth . $extension) . ', ';
+                    $newSrcSet .= self::$apiUrl . '/r:1' . $webp . '/w:' . self::getCurrentMaxWidth($retinaWidth, self::isExcludedFrom('adaptive', $fullSrc)) . '/u:' . self::reformatUrl($fullSrc) . ' ' . ($retinaWidth . 'w') . ', ';
                 }
             }
 
-            // Inject 480/960 if max-width bigger than 480
-            if (!empty($maxWidthMatches[1]) && (int)$maxWidthMatches[1] >= 480 && !empty($fullSrc)) {
+            // Inject 480/960 only for w-descriptor srcsets
+            if (!$hasXDescriptor && !empty($maxWidthMatches[1]) && (int)$maxWidthMatches[1] >= 480 && !empty($fullSrc)) {
 
                 $webp = '/wp:' . self::$webp;
                 if (self::isExcludedFrom('webp', $fullSrc)) {

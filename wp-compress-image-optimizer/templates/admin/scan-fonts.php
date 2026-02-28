@@ -1,49 +1,75 @@
 <?php
 global $wps_ic, $wpdb;
+$gui = new wpc_gui_v4();
 ?>
-<table id="information-table" class="wp-list-table widefat fixed striped posts">
-    <thead>
-    </thead>
-    <tbody>
-    <tr>
-        <td>Scan fonts</td>
-        <td colspan="3">
-            <form method="GET" action="<?php echo admin_url('options-general.php?page=wpcompress#scan-fonts'); ?>">
-                <input type="text" name="scanUrl" value="" size="64"/>
-                <input type="hidden" name="page" value="wpcompress"/>
-                <input type="submit" name="submit" value="scan"/>
-            </form>
-            <?php
 
-            if (!empty($_GET['showFonts'])) {
-                var_dump(get_option(WPS_IC_FONTS_MAP));
-            } else {
-                if (!empty($_GET['scanUrl'])) {
-                    $site = $_GET['scanUrl'];
+<div class="wpc-tab-content-box" style="">
+    <?php
+    echo $gui::checkboxTabTitle('Font Configuration', 'Tailor font settings.', 'tab-icons/ux-settings.svg', '', ''); ?>
+    <div class="wpc-spacer"></div>
 
+    <div class="wpc-items-list-row mb-20">
 
-                    $fonts = new wps_ic_fonts();
-                    $response = $fonts->callAPI($site);
+        <?php
+        echo $gui::buttonAction('Purge & Rescan Font Cache', 'Purge Cache of found fonts & Rescan the Home Page.', 'Purge', '', admin_url('options-general.php?page=wpcompress&purgeFontCache=true')); ?>
 
-                    $found = $fonts->scanForFonts($response);
-                    var_dump($found);
+        <?php
+        echo $gui::dropdown('replace-fonts', 'Replace with locally hosted fonts', 'Serve fonts from your server.', array('off' => 'Off', 'local' => 'Local Fonts')); ?>
 
-                    if (!empty($found)) {
+    </div>
+</div>
 
-                        $findFontLinks = $fonts->readGoogleStylesheet($found);
-                        var_dump($findFontLinks);
+<div class="wpc-tab-content-box" style="">
+    <?php
+    echo $gui::checkboxTabTitle('Font Scan', 'Insert URL of page which you wish to scan for fonts.', 'tab-icons/ux-settings.svg', '', ''); ?>
+    <div class="wpc-spacer"></div>
 
-                    }
-                }
+    <div class="wpc-items-list-row mb-20">
+
+        <form method="POST" action="<?php echo admin_url('options-general.php?page=wpcompress#scan-fonts'); ?>">
+            <input type="text" name="scanUrl" value="" size="64"/>
+            <input type="hidden" name="page" value="wpcompress"/>
+            <input type="hidden" name="wpc_settings_save_nonce" value="<?php echo wp_create_nonce('wpc_settings_save'); ?>"/>
+            <input type="submit" name="submit" value="scan"/>
+        </form>
+        <?php
+
+        if (!empty($_GET['purgeFontCache'])) {
+            delete_option(WPS_IC_FONTS_MAP);
+
+            // Scan Home Page
+            $fonts = new wps_ic_fonts();
+            $response = $fonts->callAPI(site_url());
+            $found = $fonts->scanForFonts($response);
+
+            if (!empty($found)) {
+                $findFontLinks = $fonts->readGoogleStylesheet($found);
             }
 
-            ?>
-        </td>
-    </tr>
-    </tbody>
-</table>
+            wp_safe_redirect(admin_url('options-general.php?page=wpcompress#scan-fonts'));
+            die();
+        }
 
-<div class="wpc-tab-content-box" style="margin-top:20px;">
+        if (!empty($_POST['scanUrl'])) {
+            $site = sanitize_url($_POST['scanUrl']);
+
+            $fonts = new wps_ic_fonts();
+            $response = $fonts->callAPI($site);
+
+            $found = $fonts->scanForFonts($response);
+
+            if (!empty($found)) {
+                $findFontLinks = $fonts->readGoogleStylesheet($found);
+            }
+
+        }
+
+        ?>
+
+    </div>
+</div>
+
+<div class="wpc-tab-content-box" style="">
     <div class="wpc-fonts-status" style="display:flex;align-items:center;border:none;">
 
         <div class="d-flex align-items-top gap-3 tab-title-checkbox" style="width:100%; padding-right:20px">
@@ -64,7 +90,7 @@ global $wps_ic, $wpdb;
         if (!empty($listFonts)) {
             foreach ($listFonts as $foundFont => $savedLocally) {
                 ?>
-                <div class="wpc-dropdown-row">
+                <div class="wpc-dropdown-row" data-font-row="<?php echo $foundFont; ?>">
                     <div class="wpc-dropdown-row-header">
                         <div class="wpc-dropdown-row-left-side" style="max-width: 65%;">
                             <div class="wpc-circle-status">
@@ -73,11 +99,11 @@ global $wps_ic, $wpdb;
                             <?php echo $foundFont; ?>
                         </div>
                         <div class="wpc-dropdown-row-right-side">
-                            <a href="#">Remove</a>
+                            <a href="#" class="wpc-remove-fonts" data-font-id="<?php echo $foundFont; ?>">Remove</a>
                         </div>
                     </div>
                 </div>
-        <?php
+                <?php
             }
         }
         ?>

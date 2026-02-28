@@ -50,6 +50,9 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_fetchInitialTest');
                 $this->add_ajax('wps_ic_pull_stats');
 
+                // Scan Fonts
+                $this->add_ajax('wpsRemoveFont');
+
                 // Cloudflare
                 $this->add_ajax('wpc_ic_checkCFToken');
                 $this->add_ajax('wpc_ic_checkCFConnect');
@@ -370,7 +373,7 @@ class wps_ic_ajax extends wps_ic
         $siteUrl = site_url();
         $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'setupCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => site_url(), 'zoneName' => $zoneName, 'staticAssets' => '1', 'htmlCache' => 'all', 'cdn' => '1', 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'setupCF', 'token' => $token, 'zone' => $zoneInput, 'siteUrl' => site_url(), 'zoneName' => $cf['zoneName'], 'staticAssets' => '1', 'htmlCache' => 'all', 'cdn' => '1', 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
 
         if (!empty($body)) {
             $data = (array)$body->data;
@@ -379,7 +382,7 @@ class wps_ic_ajax extends wps_ic
             $cfCname = $data['cfName'];
             $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
             update_option(WPS_IC_CF, $cf);
-	          update_option(WPS_IC_CF_CNAME, $cfCname);
+            update_option(WPS_IC_CF_CNAME, $cfCname);
             wp_send_json_success('cf-connected-successfully');
         }
 
@@ -458,11 +461,11 @@ class wps_ic_ajax extends wps_ic
         $requests = new wps_ic_requests();
 
         if (!empty($home)) {
-            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-            $call = $requests->GET(self::$CRITICAL_URL_HOME, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $call = $requests->GET(self::$CRITICAL_URL_HOME, $args, ['timeout' => 2, 'blocking' => false]);
         } else {
-            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.60.10', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-            $call = $requests->GET(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $call = $requests->GET(self::$API_URL, $args, ['timeout' => 3, 'blocking' => false]);
         }
 
         wp_send_json_success('sent');
@@ -1028,7 +1031,7 @@ class wps_ic_ajax extends wps_ic
         delete_option('wps_ic_css_combined_cache');
 
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll(false, true, false, false);
+        $cache::purgeAll(false, true, false, false, true);
 
         // Todo: maybe remove?
         $cache::purgeCombinedFiles();
@@ -1325,6 +1328,21 @@ class wps_ic_ajax extends wps_ic
     {
         $connect = new wps_ic_connect();
         $call = $connect->connectLite();
+    }
+
+
+    public function wpsRemoveFont()
+    {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $fontId = sanitize_text_field($_POST['fontId']);
+
+        $font = new wps_ic_fonts();
+        $font->removeFont($fontId);
+
+        wp_send_json_success();
     }
 
 
@@ -3049,6 +3067,18 @@ class wps_ic_ajax extends wps_ic
         $cache::purgeCriticalFiles($url_key);
         $cache::purgeCacheFiles($url_key);
 
+        // Scan for Fonts
+        delete_option(WPS_IC_FONTS_MAP);
+
+        // Scan Home Page
+        $fonts = new wps_ic_fonts();
+        $response = $fonts->callAPI($url_key);
+        $found = $fonts->scanForFonts($response);
+
+        if (!empty($found)) {
+            $findFontLinks = $fonts->readGoogleStylesheet($found);
+        }
+
         $requests = new wps_ic_requests();
 
         $tests = get_option(WPS_IC_TESTS);
@@ -3072,7 +3102,7 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Test
-        $args = ['url' => home_url(), 'version' => '6.60.10', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => home_url(), 'version' => '6.60.60', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
         $body = wp_remote_retrieve_body($response);
@@ -3233,7 +3263,7 @@ class wps_ic_ajax extends wps_ic
             }
         }
 
-        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => get_option('wpc-connectivity-status'), $next_page, $pages['pages']];
+        $response = ['optimizationStatus' => $status, 'optimized' => $pages['total'] - $pages['unoptimized'], 'total' => $pages['total'], 'connectivity' => true, $next_page, $pages['pages']];
         wp_send_json_success($response);
     }
 

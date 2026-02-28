@@ -49,6 +49,7 @@ class wps_ic_requests
       $configParams['timeout'] = 30;
     }
 
+
     $call = wp_remote_get($url, $configParams);
 
     if (wp_remote_retrieve_response_code($call) == 200) {
