@@ -10,7 +10,7 @@ if (empty($_GET['min_debug'])) {
 }
 
 // Local API
-$dev = true;
+$dev = false;
 if ($dev) {
     define('WPC_IC_LOCAL_BULK_START', 'https://local-dev.zapwp.net/bulk-start');
     define('WPC_IC_LOCAL_BULK_RUN', 'https://local-dev.zapwp.net/process');
