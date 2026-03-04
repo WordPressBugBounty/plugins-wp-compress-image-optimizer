@@ -25,7 +25,8 @@ class wps_ic_js_delay_v2
           'turnstile', // had delayed loading detection, throws error
           'document.write',
           'wpc-ga-bot-shield',
-          'sourcebuster' //woo script, incompatible with delay
+          'sourcebuster', //woo script, incompatible with delay
+          'SR7.' // Slider Revolution inline scripts, load ugly if delayed
         ];
 
 	    if (isset($settings['gtag-lazy']) && $settings['gtag-lazy'] == '0') {

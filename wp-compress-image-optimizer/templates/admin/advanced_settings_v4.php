@@ -1921,6 +1921,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     }
                                                     ?>
                                                 </li>
+
+                                                <li>Url changes:
+                                                    <?php
+                                                    echo print_r(get_option('wps_ic_url_changed_log'), true); ?>
+                                                </li>
                                             </ul>
                                         </div>
                                     </div>

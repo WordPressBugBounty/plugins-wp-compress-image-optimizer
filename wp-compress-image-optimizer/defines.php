@@ -53,8 +53,8 @@ define('WPS_IC_KEYSURL', 'https://keys.wpmediacompress.com/');
 // Real URL
 define('WPS_IC_CRITICAL_API_URL', 'https://critical.zapwp.com/generate');
 define('WPS_IC_CRITICAL_API_URL_HOME', 'https://critical.zapwp.com/generate');
-define('WPS_IC_PAGESPEED_API_URL_HOME', 'https://critical-api-home.zapwp.net/run-pagespeed');
-define('WPS_IC_PAGESPEED_RESULTS_HOME', 'https://critical-api-home.zapwp.net/get-results/');
+define('WPS_IC_PAGESPEED_API_URL_HOME', 'http://pagespeed.zapwp.net/run-pagespeed');
+define('WPS_IC_PAGESPEED_RESULTS_HOME', 'http://pagespeed.zapwp.net/get-results/');
 
 // Others
 define('WPS_IC_PAGESPEED_API_URL', 'https://critical-api.zapwp.net/run-pagespeed');

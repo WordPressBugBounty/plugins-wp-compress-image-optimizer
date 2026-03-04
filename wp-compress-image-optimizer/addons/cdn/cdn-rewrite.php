@@ -4568,11 +4568,11 @@ JS;
 
         if (!empty($iframeAtts[1])) {
             $attNames = $iframeAtts[1];
-            $hasSrc = in_array('src', $attNames, true);
+            $srcIndex = array_search('src', $attNames, true);
+            $hasSrc = $srcIndex !== false && !empty($iframeAtts[3][$srcIndex]);
             $hasDataSrc = in_array('data-src', $attNames, true) || in_array('data-wpc-src', $attNames, true);
 
-            if ($hasDataSrc && !$hasSrc) {
-                //probably already delayed
+            if (!$hasSrc) {
                 return $iframe[0];
             }
 
@@ -4581,7 +4581,7 @@ JS;
                 $srcValue = $iframeAtts[3][$srcIndex];
 
                 if (strpos($srcValue, 'data:') === 0) {
-                    // Has data-src + src is a data: URI = definitely a lazy-load placeholder
+                    // Probably already delayed with a placeholder in src
                     return $iframe[0];
                 }
             }

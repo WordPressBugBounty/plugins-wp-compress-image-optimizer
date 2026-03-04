@@ -82,7 +82,7 @@ class wps_ic_cache_integrations
 
     public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false)
     {
-        if (!$forcePurge) {
+        if (!$forcePurge || !$critSave) {
             $settings = get_option(WPS_IC_SETTINGS);
             if (empty($settings['cache']['advanced']) ||
                 $settings['cache']['advanced'] == '0' ||

@@ -44,6 +44,13 @@ global $wps_ic;
 
                                 <a href="#" class="wps-ic-connect-retry">Retry</a>
                             </div>
+                            <div class="wps-ic-apikey-in-use" style="display: none;">
+                                <div class="wps-ic-image"><img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/error.svg" /></div>
+                                <h1>We have encountered an error</h1>
+                                <h2>This apikey is already in use!</h2>
+
+                                <a href="#" class="wps-ic-connect-retry">Retry</a>
+                            </div>
 
                             <div class="wps-ic-unable-to-communicate" style="padding:200px;display: none;">
                                 <div class="wps-ic-image"><img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/error.svg" /></div>

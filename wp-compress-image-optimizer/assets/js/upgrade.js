@@ -39,6 +39,7 @@ jQuery(document).ready(function ($) {
                 var error_message_container = $('.wps-ic-error-message-container', swal_container);
                 var error_message_text = $('.wps-ic-invalid-apikey', swal_container);
                 var already_connected = $('.wps-ic-site-already-connected', swal_container);
+                var apikeyInUse = $('.wps-ic-apikey-in-use', swal_container);
                 var success_message_text = $('.wps-ic-success-message-container-text', swal_container);
                 var success_message_choice_text = $('.wps-ic-success-message-choice-container-text', swal_container);
                 var success_message_buttons = $('.wps-ic-success-message-choice-container-text a', swal_container);
@@ -94,6 +95,15 @@ jQuery(document).ready(function ($) {
 
                             if (response.data.msg == 'site-already-connected') {
                                 $(already_connected).show();
+                                $(error_message_container).show();
+                                $(error_message_text).hide();
+                                $(success_message_choice_text).hide();
+                                $(success_message_text).hide();
+                                $(success_message).hide();
+                                $(loader).hide();
+                                $(tests).hide();
+                            } else if (response.data.msg == 'apikey-in-use') {
+                                $(apikeyInUse).show();
                                 $(error_message_container).show();
                                 $(error_message_text).hide();
                                 $(success_message_choice_text).hide();

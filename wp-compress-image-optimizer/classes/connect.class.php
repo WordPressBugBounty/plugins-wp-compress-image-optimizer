@@ -106,7 +106,6 @@ class wps_ic_connect extends wps_ic
 
         // Verify API Key is our database and user has is confirmed getresponse
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connectV6', 'apikey' => $apikey, 'domain' => $siteurl, 'plugin_version' => self::$version, 'hash' => md5(time()), 'time_hash' => time()], ['timeout' => 60]);
-
         if (!empty($call)) {
             if (!empty($call->data->code)) {
                 if ($call->data->code == 'site-user-different') {
@@ -115,6 +114,9 @@ class wps_ic_connect extends wps_ic
                 } elseif ($call->data->code == 'site-already-connected') {
                     // Popup Site Already Connected
                     wp_send_json_error(['msg' => 'site-already-connected', 'url' => $uri]);
+                } elseif ($call->data->code == 'apikey-in-use') {
+                    // Popup Site Already Connected
+                    wp_send_json_error(['msg' => 'apikey-in-use', 'url' => $uri]);
                 }
             }
 
