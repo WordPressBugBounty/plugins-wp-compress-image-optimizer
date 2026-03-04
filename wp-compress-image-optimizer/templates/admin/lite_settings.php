@@ -592,6 +592,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <?php } ?>
                             </div>
                             <div class="wpc-box-content wpc-box-centered">
+                                <div class="wpc-pagespeed-running wpc-pagespeed-preparing" style="display:none">
+                                    <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
+                                    <span>Preparing...</span>
+                                </div>
+
                                 <?php
                                 if (empty($options['api_key']) || (empty($initialPageSpeedScore) && !empty(get_transient('wpc_test_running')))) {
                                     ?>

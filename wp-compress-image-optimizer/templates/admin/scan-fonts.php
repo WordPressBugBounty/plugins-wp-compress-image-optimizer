@@ -11,7 +11,7 @@ $gui = new wpc_gui_v4();
     <div class="wpc-items-list-row mb-20">
 
         <?php
-        echo $gui::buttonAction('Purge & Rescan Font Cache', 'Purge Cache of found fonts & Rescan the Home Page.', 'Purge', '', admin_url('options-general.php?page=wpcompress&purgeFontCache=true')); ?>
+        echo $gui::buttonAction('Purge & Rescan Font Cache', 'Purge Cache of found fonts & Rescan the Home Page.', 'Purge', '', admin_url('options-general.php?page='.$wps_ic::$slug.'&purgeFontCache=true')); ?>
 
         <?php
         echo $gui::dropdown('replace-fonts', 'Replace with locally hosted fonts', 'Serve fonts from your server.', array('off' => 'Off', 'local' => 'Local Fonts')); ?>
@@ -26,7 +26,7 @@ $gui = new wpc_gui_v4();
 
     <div class="wpc-items-list-row mb-20">
 
-        <form method="POST" action="<?php echo admin_url('options-general.php?page=wpcompress#scan-fonts'); ?>">
+        <form method="POST" action="<?php echo admin_url('options-general.php?page='.$wps_ic::$slug.'#scan-fonts'); ?>">
             <input type="text" name="scanUrl" value="" size="64"/>
             <input type="hidden" name="page" value="wpcompress"/>
             <input type="hidden" name="wpc_settings_save_nonce" value="<?php echo wp_create_nonce('wpc_settings_save'); ?>"/>
@@ -46,7 +46,7 @@ $gui = new wpc_gui_v4();
                 $findFontLinks = $fonts->readGoogleStylesheet($found);
             }
 
-            wp_safe_redirect(admin_url('options-general.php?page=wpcompress#scan-fonts'));
+            wp_safe_redirect(admin_url('options-general.php?page='.$wps_ic::$slug.'#scan-fonts'));
             die();
         }
 

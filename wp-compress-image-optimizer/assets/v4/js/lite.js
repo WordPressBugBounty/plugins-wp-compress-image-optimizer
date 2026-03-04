@@ -69,6 +69,17 @@ jQuery(document).ready(function ($) {
 
     $('.wps-ic-initial-retest').on('click', function (e) {
         e.preventDefault();
+
+        var $boxContent = $(this)
+            .closest('.wpc-rounded-box')
+            .find('.wpc-box-content');
+
+        // Hide everything inside
+        $boxContent.children().hide();
+
+        // Show the loading div
+        $boxContent.find('.wpc-pagespeed-preparing').show();
+
         $.ajax({
             url: ajaxurl,
             type: 'POST',

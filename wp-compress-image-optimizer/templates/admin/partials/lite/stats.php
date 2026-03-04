@@ -121,6 +121,10 @@ $warmupFailing = $warmup_class->isWarmupFailing();
             <?php } ?>
         </div>
         <div class="wpc-box-content">
+            <div class="wpc-pagespeed-running wpc-pagespeed-preparing" style="display:none">
+                <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
+                <span>Preparing...</span>
+            </div>
             <?php
             if (empty($options['api_key'])) {
                 ?>
