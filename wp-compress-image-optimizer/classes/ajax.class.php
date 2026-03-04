@@ -3103,7 +3103,7 @@ class wps_ic_ajax extends wps_ic
 
         // Test
         $args = ['url' => home_url(), 'version' => '6.60.60', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
+        $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
