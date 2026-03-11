@@ -656,17 +656,29 @@ class wps_ic_combine_css
 
     public function lazyFontawesome($html)
     {
-        preg_match_all('/<link\s+[^>]*\bhref=(["\'])(.*?)\1[^>]*>/is', $html, $matches);
+        preg_match_all('/<link\b[^>]*>/is', $html, $matches);
 
-        if (!empty($matches[2])) {
-            foreach ($matches[2] as $k => $href) {
-                if (strpos($href, 'fontawesome.com') || strpos($href, 'font-awesome')) {
-                    // <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.13.1/css/all.css" integrity="sha384-B9BoFFAuBaCfqw6lxWBZrhg/z4NkwqdBci+E+Sc2XlK/Rz25RYn8Fetb+Aw5irxa" crossorigin="anonymous">
+        if (!empty($matches[0])) {
+            foreach ($matches[0] as $tag) {
+                preg_match('/\brel=(["\'])(.*?)\1/i', $tag, $relMatch);
+                preg_match('/\bhref=(["\'])(.*?)\1/i', $tag, $hrefMatch);
+
+                $rel  = $relMatch[2] ?? '';
+                $href = $hrefMatch[2] ?? '';
+
+                if (
+                    strtolower($rel) === 'stylesheet' &&
+                    (
+                        strpos($href, 'fontawesome.com') !== false ||
+                        strpos($href, 'font-awesome') !== false
+                    )
+                ) {
                     $preload = "<link rel='preload' href='" . $href . "' as='style' media='all' onload=\"this.onload=null;this.rel='stylesheet'\" />";
-                    $html = str_replace($matches[0][$k], $preload, $html);
+                    $html = str_replace($tag, $preload, $html);
                 }
             }
         }
+
         return $html;
     }
 
@@ -1128,11 +1140,17 @@ class wps_ic_combine_css
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'oldrewrite') {
                 $content = preg_replace_callback("/url(\(((?:[^()])+)\))/i", [$this, 'rewrite_relative_url'], $content);
             } else {
-                if ($this->enabledCDN) {
                     $re = '~url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)~i';
 
                     $content = preg_replace_callback($re, function ($m) {
-                        $url = $m[1] ?? $m[2] ?? $m[3] ?? '';
+                        $url = '';
+                        foreach ([1, 2, 3] as $i) {
+                            if (isset($m[$i]) && $m[$i] !== '') {
+                                $url = $m[$i];
+                                break;
+                            }
+                        }
+
                         if ($url === '') return $m[0];
 
                         $new = $this->rewrite_relative_url($url);
@@ -1140,14 +1158,19 @@ class wps_ic_combine_css
 
                         // Unwrap if rewrite_relative_url mistakenly returned url(...)
                         if (is_string($new) && preg_match('~^\s*url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)\s*$~i', $new, $mm)) {
-                            $new = $mm[1] ?? $mm[2] ?? $mm[3] ?? $new;
+                            foreach ([1, 2, 3] as $i) {
+                                if (isset($mm[$i]) && $mm[$i] !== '') {
+                                    $new = $mm[$i];
+                                    break;
+                                }
+                            }
                         }
 
                         if (!empty($m[1])) return 'url("' . $new . '")';
                         if (!empty($m[2])) return "url('" . $new . "')";
                         return 'url(' . $new . ')';
                     }, $content);
-                }
+
             }
 
 
@@ -1201,7 +1224,9 @@ class wps_ic_combine_css
         #$content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
         #}
 
-        $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
+        if ($this->enabledCDN) {
+            $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
+        }
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
         // Wrap content in media query if it exists

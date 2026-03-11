@@ -488,7 +488,7 @@ class wps_rewriteLogic
         if (self::isExcludedLink($image_url) || $this->defaultExcluded($image_url) || empty($image_url)) {
             return $image[0];
         } else {
-            $NewSrc = 'https://' . self::$zoneName . '/q:' . self::$settings['optimization'] . '/r:' . self::$isRetina . $webp . '/w:480/u:' . $this->specialChars($image_url);
+            $NewSrc = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $this->getCurrentMaxWidth(1, false) . '/u:' . self::reformatUrl($image_url);
 
             return 'data-thumb="' . $NewSrc . '"';
         }
@@ -1174,7 +1174,8 @@ SCRIPT;
         }
 
         if (strpos($fullTag, 'rs6') !== false) {
-            return $fullTag;
+            //Removed in 6.60.39 - leftover from when we were excluding rev slider from delayJS?
+            //return $fullTag;
         }
 
 
@@ -1233,7 +1234,8 @@ SCRIPT;
         }
 
         if (strpos($fullTag, 'rs6') !== false) {
-            return $fullTag;
+            //Removed in 6.60.39 - leftover from when we were excluding rev slider from delayJS?
+            //return $fullTag;
         }
 
 
@@ -1271,7 +1273,9 @@ SCRIPT;
                 $gfonts = '<link rel="wpc-mobile-stylesheet" href="' . $newHref . '" as="style" onload="this.onload=null;this.rel=\'stylesheet\'"/>';
                 return $gfonts;
             } elseif (strpos($href[2], self::$siteUrl) === false) {
-                return $fullTag;
+                //Removed in 6.60.39
+                //return $fullTag;
+                $lazyCss = 'wpc-mobile-stylesheet';
             } else {
                 $lazyCss = 'wpc-mobile-stylesheet';
             }
@@ -2487,6 +2491,8 @@ SCRIPT;
 
         if (!self::$excludes_class->isAdaptiveExcluded($image_source, $original_img_tag['original_tags']['class'])) {
             $original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
+            //here
+            $original_img_tag['original_tags']['data-srcset'] = $this->cdnSrcsetOnly($original_img_tag['original_tags']['data-srcset']);
         } else {
             // TODO: For some reason this was commented out (class)
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';
@@ -3012,6 +3018,75 @@ SCRIPT;
         }
 
         return $srcset;
+    }
+
+    public function cdnSrcsetOnly($srcset)
+    {
+        if (empty($srcset)) {
+            return $srcset;
+        }
+
+        $parts = preg_split('/\s*,\s*/', trim($srcset));
+        $rebuilt = [];
+
+        foreach ($parts as $candidate) {
+            if (empty($candidate)) {
+                continue;
+            }
+
+            // Match: URL [optional descriptor]
+            if (!preg_match('/^\s*(\S+)(?:\s+(.+))?\s*$/', $candidate, $m)) {
+                $rebuilt[] = $candidate;
+                continue;
+            }
+
+            $url = trim($m[1]);
+            $descriptor = !empty($m[2]) ? trim($m[2]) : '';
+
+            // Already CDN
+            if (strpos($url, self::$zoneName) !== false) {
+                $rebuilt[] = trim($url . ' ' . $descriptor);
+                continue;
+            }
+
+            // Exclusions
+            if ($this->defaultExcluded($url) || self::isExcluded($url) || self::isExcludedFrom('cdn', $url)) {
+                $rebuilt[] = trim($url . ' ' . $descriptor);
+                continue;
+            }
+
+            // Must be image and enabled for serving
+            if (!self::isImage($url)) {
+                $rebuilt[] = trim($url . ' ' . $descriptor);
+                continue;
+            }
+
+            // Respect external-url setting
+            if ((self::$externalUrlEnabled == 'false' || self::$externalUrlEnabled == '0') && !self::imageUrlMatchingSiteUrl($url)) {
+                $rebuilt[] = trim($url . ' ' . $descriptor);
+                continue;
+            }
+
+            // SVG should use asset endpoint, raster images use image endpoint
+            if (stripos($url, '.svg') !== false) {
+                $cdnUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($url);
+            } else {
+                $webp = '/wp:' . self::$webp;
+                if (self::isExcludedFrom('webp', $url)) {
+                    $webp = '';
+                }
+
+                $cdnUrl = self::$apiUrl
+                    . '/r:' . self::$isRetina
+                    . $webp
+                    . '/w:' . self::getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $url))
+                    . '/u:' . self::reformatUrl($url);
+            }
+
+            $rebuilt[] = trim($cdnUrl . ' ' . $descriptor);
+        }
+
+        return implode(', ', $rebuilt);
     }
 
 

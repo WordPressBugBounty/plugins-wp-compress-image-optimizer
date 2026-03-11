@@ -398,6 +398,13 @@ class wps_ic_ajax extends wps_ic
         $postID = sanitize_text_field($_POST['postID']);
 
         /**
+         * Check does http/s exist if not add it
+         */
+        if (strpos($realUrl, 'https://') === false && strpos($realUrl, 'http://') === false) {
+            $realUrl = 'https://' . $realUrl;
+        }
+
+        /**
          * Only keep allowed params in url
          */
         $keys = new wps_ic_url_key();
@@ -458,7 +465,7 @@ class wps_ic_ajax extends wps_ic
 
         $criticalCSS->sendCriticalUrl($realUrl, 0);
 
-        wp_send_json_success('sent');
+        wp_send_json_success(array('sent', $realUrl));
     }
 
 

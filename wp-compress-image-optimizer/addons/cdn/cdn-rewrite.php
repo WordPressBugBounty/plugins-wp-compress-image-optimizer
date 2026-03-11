@@ -2244,6 +2244,19 @@ class wps_cdn_rewrite
             self::$settings['optimization'] = 'i';
         }
 
+        // Optimization Switch from Legacy
+        switch (self::$settings['optimization']) {
+            case 'intelligent':
+                self::$settings['optimization'] = 'i';
+                break;
+            case 'ultra':
+                self::$settings['optimization'] = 'u';
+                break;
+            case 'lossless':
+                self::$settings['optimization'] = 'l';
+                break;
+        }
+
         if (!empty(self::$retina_enabled) && self::$retina_enabled == '1') {
             if (isset($_COOKIE["ic_pixel_ratio"])) {
                 if ($_COOKIE["ic_pixel_ratio"] >= 2) {
@@ -2357,6 +2370,9 @@ class wps_cdn_rewrite
             }
 
             add_action("wp_head", [$this, 'dnsPrefetch'], 0);
+
+            // Rewrite WooCommerce variation image URLs so they match CDN-rewritten DOM URLs
+            add_filter('woocommerce_available_variation', [$this, 'rewrite_woo_variation_image_urls'], 10, 3);
         } else {
 
             // Local Mode
@@ -3389,35 +3405,6 @@ class wps_cdn_rewrite
                 // Extract href values from preload links
                 preg_match_all('/href=["\']([^"\']+)["\']/', self::$wpcPreloadLinks, $matches);
 
-                /* add fetchpririty to discovered lcp images, maybe not needed
-                if (!empty($matches[1])) {
-                    foreach ($matches[1] as $imageUrl) {
-                        // Escape special regex characters in the URL
-                        $escapedUrl = preg_quote($imageUrl, '/');
-
-                        // Find and modify img tags with this src
-                        $html = preg_replace_callback(
-                            '/<img([^>]*src=["\']' . $escapedUrl . '["\'][^>]*)>/i',
-                            function($imgMatch) {
-                                $imgTag = $imgMatch[1];
-
-                                // Check if fetchpriority already exists
-                                if (preg_match('/fetchpriority=/i', $imgTag)) {
-                                    // Replace existing fetchpriority
-                                    $imgTag = preg_replace('/fetchpriority=["\'][^"\']*["\']/i', 'fetchpriority="high"', $imgTag);
-                                } else {
-                                    // Add fetchpriority
-                                    $imgTag .= ' fetchpriority="high"';
-                                }
-
-                                return '<img' . $imgTag . '>';
-                            },
-                            $html
-                        );
-                    }
-                }
-                */
-
                 $html = str_replace('<!--WPC_INSERT_PRELOAD-->', self::$wpcPreloadLinks, $html);
             }
         }
@@ -3489,6 +3476,10 @@ class wps_cdn_rewrite
             if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
                 $js_delay = new wps_ic_js_delay_v2();
 
+                if (!empty($_GET['stop_before']) && $_GET['stop_before'] == '3463') {
+                    return $html;
+                }
+
                 if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
                     $html = $js_delay->process_html($html);
                 } else {
@@ -3498,6 +3489,10 @@ class wps_cdn_rewrite
         } elseif ((isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1')) {
             if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
                 $js_delay = new wps_ic_js_delay();
+
+                if (!empty($_GET['stop_before']) && $_GET['stop_before'] == '3473') {
+                    return $html;
+                }
 
                 if (empty($_GET['disableCritical']) && $delayActive && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
                     if (!empty(self::$settings['preload-scripts']) && self::$settings['preload-scripts'] == '1') {
@@ -3517,6 +3512,9 @@ class wps_cdn_rewrite
 
         }
 
+        if (!empty($_GET['stop_before']) && $_GET['stop_before'] == '3491') {
+            return $html;
+        }
 
         if (empty($_GET['disableCritical']) && !empty(self::$settings['scripts-to-footer']) && self::$settings['scripts-to-footer'] == '1') {
             $js_delay = new wps_ic_js_delay();
@@ -3706,8 +3704,13 @@ class wps_cdn_rewrite
             return $this->maybe_slash($url, $addslashes);
         }
 
-        // Check if the URL contains spaces or encoded spaces (%20)
-        if (strpos($url, ' ') !== false || strpos($url, '%20') !== false) {
+        $matchCount = preg_match_all(
+            '/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/',
+            $url,
+            $srcset_links
+        );
+
+        if ((strpos($url, ' ') !== false || strpos($url, '%20') !== false) && $matchCount === 0) {
             return $url;
         }
 
@@ -3734,7 +3737,6 @@ class wps_cdn_rewrite
         $originalUrl = $url;
         $newSrcSet = '';
 
-        preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/', $url, $srcset_links);
 
         // TODO: Hrvoje fix for sites having bad srcset like https... 525w, https... without XYw
         if (!empty($srcset_links[0])) {
@@ -3745,6 +3747,7 @@ class wps_cdn_rewrite
 
         if (!empty($srcset_links[0])) {
             $debug = [];
+
             foreach ($srcset_links[0] as $i => $srcset) {
                 $src = explode(' ', $srcset);
                 $srcset_url = $src[0];
@@ -3774,7 +3777,7 @@ class wps_cdn_rewrite
                         $srcsetWidthExtension = $srcset_width . $extension;
                     }
 
-                    $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:' . $width_url . '/u:' . self::reformat_url($srcset_url) . ' ' . $srcsetWidthExtension . ',';
+                    $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:1/u:' . self::reformat_url($srcset_url) . ' ' . $srcsetWidthExtension . ',';
                 }
             }
 
@@ -3914,6 +3917,17 @@ class wps_cdn_rewrite
                     }
 
                     return $newUrl;
+                }
+
+                if (strpos($url, '.webp') !== false) {
+                    if (!self::is_excluded($url, $url)) {
+                        $webp = '/wp:' . self::$webp;
+                        if (self::isExcludedFrom('webp', $url)) {
+                            $webp = '/wp:0';
+                        }
+                        $newUrl = 'https://' . self::$zone_name . '/q:i/r:' . self::$is_retina . $webp . '/w:' . self::$rewriteLogic->getCurrentMaxWidth(1, self::isExcludedFrom('adaptive', $url)) . '/u:' . self::reformat_url($url);
+                        return $newUrl;
+                    }
                 }
 
                 return $url;
@@ -4985,6 +4999,30 @@ JS;
         }
 
         return $sizes;
+    }
+
+    public function rewrite_woo_variation_image_urls($variation, $product, $variation_obj)
+    {
+        if (empty($variation['image']) || empty(self::$rewriteLogic) || empty(self::$zone_name)) {
+            return $variation;
+        }
+
+        $url_keys = ['url', 'src', 'full_src', 'gallery_thumbnail_src', 'thumb_src'];
+        foreach ($url_keys as $key) {
+            if (!empty($variation['image'][$key])) {
+                $variation['image'][$key] = self::$rewriteLogic->replaceSourceSrcset([$variation['image'][$key]]);
+            }
+        }
+
+        if (!empty($variation['image']['srcset'])) {
+            $variation['image']['srcset'] = preg_replace_callback(
+                '/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i',
+                [self::$rewriteLogic, 'replaceSourceSrcset'],
+                $variation['image']['srcset']
+            );
+        }
+
+        return $variation;
     }
 
 

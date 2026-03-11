@@ -328,7 +328,7 @@ class wps_ic_js_delay_v2
             return true;
         }
 
-        if (!empty($attributes['type']) && in_array($attributes['type'], ['application/ld+json', 'text/template', 'wpc-delay-placeholder'])) {
+        if (!empty($attributes['type']) && in_array($attributes['type'], ['text/mf', 'application/ld+json', 'text/template', 'wpc-delay-placeholder'])) {
             return true;
         }
 
