@@ -390,7 +390,79 @@ class wps_ic_ajax extends wps_ic
     }
 
 
-    public function wpc_send_critical_remote()
+    public function wpc_send_critical_remote() {
+        $criticalCSS = new wps_criticalCss();
+
+        $realUrl = urldecode($_POST['realUrl']);
+        $realUrl = sanitize_text_field($realUrl);
+        $postID = sanitize_text_field($_POST['postID']);
+
+        /**
+         * Only keep allowed params in url
+         */
+        $keys = new wps_ic_url_key();
+
+        $allowed_params = $keys->get_allowed_params();
+        $parsed_url = parse_url($realUrl);
+        parse_str($parsed_url['query'], $query_params);
+
+        // Keep only the allowed parameters
+        $filtered_params = array_intersect_key($query_params, array_flip($allowed_params));
+
+        // Check if there are any disallowed parameters
+        $disallowed_params = array_diff_key($query_params, array_flip($allowed_params));
+
+        if (!empty($disallowed_params)) {
+            wp_send_json_success('skipped');
+        }
+
+        // Build the new query string
+        $new_query = http_build_query($filtered_params);
+
+        // Reconstruct the URL
+        $realUrl = $parsed_url['host'] . (isset($parsed_url['path']) ? $parsed_url['path'] : '') . '?' . $new_query;
+        $realUrl = rtrim($realUrl, '?');
+        $realUrl = rtrim($realUrl, '/');
+
+        /**
+         * Does Critical Already Exist?
+         */
+        $criticalCSSExists = $criticalCSS->criticalExistsAjax($realUrl);
+        if (!empty($criticalCSSExists)) {
+            wp_send_json_success(['exists', $realUrl, $criticalCSSExists]);
+        }
+
+        /**
+         * Is Critical Ajax Already Running?
+         */
+        $ccss_debug = get_option('ccss_debug');
+        if (empty($ccss_debug) || $ccss_debug == 'false') {
+            $running = get_transient('wpc_critical_ajax_' . $postID);
+            if (!empty($running) && $running == 'true') {
+                wp_send_json_success(['already-running', $realUrl]);
+            }
+        }
+
+        // is home
+        $home = false;
+        $home_url = rtrim(home_url(), '/');
+        $realUrl_stripped = preg_replace('#^https?://#', '', $realUrl);
+        $home_url_stripped = preg_replace('#^https?://#', '', $home_url);
+
+        if ($home_url_stripped == $realUrl_stripped) {
+            $home = true;
+        }
+
+        // Set as Running
+        set_transient('wpc_critical_ajax_' . $postID, 'true', 60);
+
+        $criticalCSS->sendCriticalUrl($realUrl, 0);
+
+        wp_send_json_success('sent');
+    }
+
+
+    public function wpc_send_critical_remote_old()
     {
         $criticalCSS = new wps_criticalCss();
 

@@ -14,7 +14,6 @@ class wps_criticalCss
     public $urlKey;
     public $serverRequest;
     public $url_key_class;
-
     public function __construct($url = '')
     {
         if (empty($url)) {
@@ -175,6 +174,49 @@ class wps_criticalCss
         // Use md5() or sha1() for a predictable short hash.
         $url_key = md5($url);
 
+        // Poll /status for any in-flight request for this URL
+        $needsPush   = false;
+        $uuid_key    = 'wpc_critical_uuid_' . $url_key;
+        $pendingUuid = get_transient($uuid_key);
+
+        if ($pendingUuid) {
+            $statusUrl = 'https://critical.zapwp.com/status?uuid=' . urlencode($pendingUuid);
+            $response  = wp_remote_get($statusUrl, ['timeout' => 3]);
+
+            if (!is_wp_error($response)) {
+                if (wp_remote_retrieve_response_code($response) === 200) {
+                    $data = json_decode(wp_remote_retrieve_body($response), true);
+
+                    if (!empty($data['status']) && $data['status'] === 'success') {
+                        $criticalCSS = new wps_criticalCss();
+                        $criticalCSS->saveCriticalCss($url_key, [
+                            'url' => [
+                                'desktop' => $data['desktop_url'],
+                                'mobile'  => $data['mobile_url'],
+                            ]
+                        ]);
+                        delete_transient($uuid_key);
+                        delete_transient('wpc_critical_key_' . $url_key);
+                        return false;
+                    }
+
+                    if (!empty($data['status']) && $data['status'] === 'not_found') {
+                        // POST never reached API — clear transients so next page load retries
+                        delete_transient($uuid_key);
+                        delete_transient('wpc_critical_key_' . $url_key);
+                    }
+
+                    if (!empty($data['status']) && $data['status'] === 'failed') {
+                        if (!empty($data['error_type']) && $data['error_type'] === 'fetch_blocked') {
+                            $needsPush = true;
+                        }
+                        delete_transient($uuid_key);
+                        delete_transient('wpc_critical_key_' . $url_key);
+                    }
+                }
+            }
+        }
+
         $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
         $critTransient = get_transient($transient_name);
 
@@ -186,16 +228,82 @@ class wps_criticalCss
         // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 30);
 
-        $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-        #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $uuid     = wp_generate_uuid4();
+        $uuid_key = 'wpc_critical_uuid_' . $url_key;
+        set_transient($uuid_key, $uuid, 60 * 30);
 
-	    if ($skipCap === true) {
-		    $args['skipCap'] = 'true';
-	    }
+        $options = get_option(WPS_IC_OPTIONS);
+        $apikey  = $options['api_key'] ?? '';
+        $forcePull = isset($_GET['pushMode']) && sanitize_key($_GET['pushMode']) === 'false';
 
-        $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
-	    wp_send_json_success($call);
+        // Build args — matches existing flow (cdn-rewrite.php:2968, ajax.class.php:464)
+        $args = [
+            'url'     => $url . '?criticalCombine=true&testCompliant=true',
+            'uuid'    => $uuid,
+            'version' => '6.60.60',
+            'async'   => 'false',
+            'dbg'     => 'true',
+            'hash'    => time() . mt_rand(100, 9999),
+            'apikey'  => $apikey,
+        ];
+
+        // Push only when needed: API proved it can't reach the site (fetch_blocked),
+        // or admin clicked the button (AJAX always tries push).
+        // Nope transient guards constrained hosts: blocked + slow loopback = one 1.5s
+        // attempt, then 24h of zero overhead. Admin button ignores nope. Self-heals.
+        if (!$forcePull && ($needsPush || wp_doing_ajax())) {
+            $pushFailedKey = 'wpc_push_nope_' . $url_key;
+            if (wp_doing_ajax() || !get_transient($pushFailedKey)) {
+                $html = $this->fetchCriticalCombineHtml($url);
+                if ($html) {
+                    $args['html'] = $html;
+                } elseif (!wp_doing_ajax()) {
+                    // Push recovery failed — don't penalize visitors for 24h
+                    set_transient($pushFailedKey, true, 86400);
+                }
+            }
+        }
+
+        // POST to API — fire-and-forget
+        $requests = new wps_ic_requests();
+        $call = $requests->POST(self::$API_URL, $args, [
+            'timeout'  => 2,
+            'blocking' => false,
+            'headers'  => ['Content-Type' => 'application/json'],
+        ]);
+
+        return;
     }
+
+    // --- v2.85 Push Model (fetch_blocked recovery) ---
+
+    private function fetchCriticalCombineHtml($url) {
+        // Adaptive timeout: AJAX 5s (admin click), auto 1.5s (visitor page load)
+        $timeout = wp_doing_ajax() ? 5 : 1.5;
+
+        $response = wp_remote_get($url . '?criticalCombine=true', [
+            'timeout'    => $timeout,
+            'cookies'    => [],
+            'user-agent' => 'WP-Compress/CriticalCSS-Push',
+        ]);
+
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
+        }
+
+        $html = wp_remote_retrieve_body($response);
+        if (empty($html)) {
+            return null;
+        }
+
+        // Strip scripts and blank images — not needed for CSS generation
+        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+        $html = preg_replace('/(<img[^>]+)\bsrc=["\'][^"\']*["\']/i', '$1src=""', $html);
+
+        return $html;
+    }
+
+    // --- End v2.85 Push Model ---
 
     public function sendCriticalUrl($realUrl = '', $postID = 0, $timeout = 120)
     {
