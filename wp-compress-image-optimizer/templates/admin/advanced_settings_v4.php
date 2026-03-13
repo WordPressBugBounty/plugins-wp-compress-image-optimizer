@@ -124,8 +124,28 @@ if (!empty($_POST['options']['font-display'])) {
     $submittedOptions = $_POST['options'];
     $optimizatonQuality = 'lossless';
 
+
     //todo remove when moving
     $options = get_option(WPS_IC_SETTINGS);
+
+    if ($options['eu-routing'] !== $submittedOptions['eu-routing']){
+        $region = 'all';
+        if ($submittedOptions['eu-routing'] == '1'){
+            $region = 'eu';
+        }
+
+        $options = get_option(WPS_IC_OPTIONS);
+        $apikey = $options['api_key'];
+
+        $requests = new wps_ic_requests();
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'setZoneRouting', 'region' => $region,  'apikey' => $apikey], ['timeout' => 30]);
+
+        if (empty($body)) {
+            // dont change if failed
+            $submittedOptions['eu-routing'] = $options['eu-routing'];
+        }
+    }
+
     $submittedOptions['font-display'] = $options['font-display'] ?? 'off';
 
     if (isset($submittedOptions['qualityLevel'])) {
@@ -930,6 +950,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     <?php
                                     echo $gui::cname(); ?>
+
+                                    <div class="wpc-tab-content-box">
+
+                                        <?php
+                                        echo $gui::iconCheckBox('EU Routing', 'cdn-delivery/css.svg', 'eu-routing'); ?>
+
+                                    </div>
 
                                 </div>
                                 <div class="wpc-tab-content" id="image-optimization-options" style="display:none;">

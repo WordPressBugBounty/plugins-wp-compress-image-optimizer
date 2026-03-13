@@ -3371,6 +3371,7 @@ class wps_cdn_rewrite
             $html = $metaData['html'];
         }
 
+
         // Find all URLs on page that have not been replaced
         $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
@@ -3384,6 +3385,24 @@ class wps_cdn_rewrite
                 return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
             }, $html);
         }
+
+        // process base64 encoded chunks and put images on cdn
+        $html = preg_replace_callback('/data-code="([^"]+)"/', function ($m) use ($regEx) {
+            $decoded = base64_decode($m[1]);
+            if ($decoded === false) {
+                return $m[0];
+            }
+            $decoded = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $decoded);
+            $decoded = preg_replace_callback('/data-code="([^"]+)"/', function ($m2) use ($regEx) {
+                $decoded2 = base64_decode($m2[1]);
+                if ($decoded2 === false) {
+                    return $m2[0];
+                }
+                $decoded2 = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $decoded2);
+                return 'data-code="' . base64_encode($decoded2) . '"';
+            }, $decoded);
+            return 'data-code="' . base64_encode($decoded) . '"';
+        }, $html);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'externalUrls') {
             return $html;

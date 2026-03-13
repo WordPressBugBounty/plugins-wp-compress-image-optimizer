@@ -294,11 +294,16 @@ class wps_ic_enqueues extends wps_ic
         $optimizeRemove = get_option('wps_optimizejs_remove');
         $debugOptimize = get_option('wps_optimizejs_debug');
 
+        $pullzone = 'optimizerwpc';
+        if (!empty(self::$settings['eu-routing']) && self::$settings['eu-routing'] == '1'){
+            $pullzone = 'eu-static';
+        }
+
         if (empty($optimizeRemove)) {
             if (empty($debugOptimize) || $debugOptimize == 'false') {
-                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
+                echo '<script type="text/javascript" src="https://' . $pullzone . '.b-cdn.net/optimize.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
             } else {
-                echo '<script type="text/javascript" src="https://optimizerwpc.b-cdn.net/optimize.dev.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
+                echo '<script type="text/javascript" src="https://' . $pullzone . '.b-cdn.net/optimize.dev.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
             }
         }
 

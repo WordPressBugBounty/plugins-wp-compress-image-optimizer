@@ -12,10 +12,10 @@ class wps_ic_js_delay_v2
     private $priority_run;
 
     private $userExcludes;
-
+    public static $settings;
     public function __construct()
     {
-		$settings = get_option(WPS_IC_SETTINGS);
+		self::$settings = get_option(WPS_IC_SETTINGS);
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode', // dark mode switcher
@@ -29,7 +29,7 @@ class wps_ic_js_delay_v2
           'SR7.' // Slider Revolution inline scripts, load ugly if delayed
         ];
 
-	    if (isset($settings['gtag-lazy']) && $settings['gtag-lazy'] == '0') {
+	    if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '0') {
 		    $this->excludes[] = 'gtag';
 		    $this->excludes[] = 'googletag';
 	    }
@@ -74,9 +74,14 @@ class wps_ic_js_delay_v2
             $delay_script .= '<script>var DEBUG = true;</script>';
         }
 
+        $pullzone = 'optimize-v2';
+        if (!empty(self::$settings['eu-routing']) && self::$settings['eu-routing'] == '1'){
+            $pullzone = 'static-eu';
+        }
+
         $delay_script .= '<script id="wpc-script-registry">var wpcScriptRegistry=' . json_encode($this->script_registry) . ';</script>';
         if (empty(get_option('wps_ic_delay_v2_debug'))) {
-            $delay_script .= '<script src="https://optimize-v2.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'" async></script>';
+            $delay_script .= '<script src="https://' . $pullzone . '.b-cdn.net/loader.min.js?icv='.WPS_IC_HASH.'" async></script>';
         } else {
             $delay_script .= '<script src="https://frankfurt.zapwp.net/delay-js-v2/loader.dev.js"></script>';
         }
