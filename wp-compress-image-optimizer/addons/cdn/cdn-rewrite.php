@@ -3719,6 +3719,7 @@ class wps_cdn_rewrite
         }
 
         $url = $url[0];
+
         if (strpos($url, 'cookie') !== false) {
             return $this->maybe_slash($url, $addslashes);
         }
@@ -3765,13 +3766,23 @@ class wps_cdn_rewrite
         }
 
         if (!empty($srcset_links[0])) {
-            $debug = [];
+            $hadTrailingEscapedQuoteSlash = false;
+
+            if (substr($url, -1) === '\\') {
+                $hadTrailingEscapedQuoteSlash = true;
+                $url = substr($url, 0, -1);
+
+                $matchCount = preg_match_all(
+                    '/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/',
+                    $url,
+                    $srcset_links
+                );
+            }
 
             foreach ($srcset_links[0] as $i => $srcset) {
                 $src = explode(' ', $srcset);
                 $srcset_url = $src[0];
                 $srcset_width = $src[1];
-
 
                 if (self::is_excluded_link($srcset_url) || self::is_excluded($srcset_url, $srcset_url)) {
                     $newSrcSet .= $srcset_url . ' ' . $srcset_width . ',';
@@ -3801,7 +3812,11 @@ class wps_cdn_rewrite
             }
 
             $newSrcSet = rtrim($newSrcSet, ',');
-            $newSrcSet = $this->maybe_slash($newSrcSet, $addslashes);
+
+            if ($hadTrailingEscapedQuoteSlash) {
+                $newSrcSet .= '\\';
+            }
+
             return $newSrcSet;
         } else {
             if (strpos($url, 'data:image') !== false) {

@@ -21,15 +21,16 @@ if ($dev) {
     define('WPC_IC_LOCAL_RESTORE', 'https://local-dev.zapwp.net/restore');
     define('WPC_IC_LOCAL_DOWNLOAD', 'https://local-dev.zapwp.net/download');
 } else {
-    define('WPC_IC_LOCAL_BULK_START', 'https://local-api.zapwp.net/bulk-start');
-    define('WPC_IC_LOCAL_BULK_RUN', 'https://local-api.zapwp.net/process');
-    define('WPC_IC_LOCAL_BULK_STOP', 'https://local-api.zapwp.net/stop');
-    define('WPC_IC_LOCAL_BULK_RESTORE_START', 'https://local-api.zapwp.net/bulk-restore-start');
-    define('WPC_IC_LOCAL_BULK_RESTORE_RUN', 'https://local-api.zapwp.net/bulk-restore-process');
-    define('WPC_IC_LOCAL_OPTIMIZE', 'https://local-api.zapwp.net/optimize');
-    define('WPC_IC_LOCAL_RESTORE', 'https://local-api.zapwp.net/restore');
-    define('WPC_IC_LOCAL_DOWNLOAD', 'https://local-api.zapwp.net/download');
+    define('WPC_IC_LOCAL_BULK_START', 'https://local-mc.zapwp.net/bulk-start');
+    define('WPC_IC_LOCAL_BULK_RUN', 'https://local-mc.zapwp.net/process');
+    define('WPC_IC_LOCAL_BULK_STOP', 'https://local-mc.zapwp.net/stop');
+    define('WPC_IC_LOCAL_BULK_RESTORE_START', 'https://local-mc.zapwp.net/bulk-restore-start');
+    define('WPC_IC_LOCAL_BULK_RESTORE_RUN', 'https://local-mc.zapwp.net/bulk-restore-process');
+    define('WPC_IC_LOCAL_OPTIMIZE', 'https://local-mc.zapwp.net/optimize');
+    define('WPC_IC_LOCAL_RESTORE', 'https://local-mc.zapwp.net/restore');
+    define('WPC_IC_LOCAL_DOWNLOAD', 'https://local-mc.zapwp.net/download');
 }
+
 
 define('WPS_IC_CF', 'wps-ic-cf');
 define('WPS_IC_CF_CNAME', 'wps-ic-cf-cname');
