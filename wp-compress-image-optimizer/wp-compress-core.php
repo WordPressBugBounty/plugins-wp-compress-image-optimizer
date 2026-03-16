@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.42';
+        self::$version = '6.60.43';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {

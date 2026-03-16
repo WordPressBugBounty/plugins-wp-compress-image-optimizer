@@ -180,7 +180,7 @@ class wps_criticalCss
         $pendingUuid = get_transient($uuid_key);
 
         if ($pendingUuid) {
-            $statusUrl = 'https://critical.zapwp.com/status?uuid=' . urlencode($pendingUuid);
+            $statusUrl = 'https://critical-push.zapwp.net/status?uuid=' . urlencode($pendingUuid);
             $response  = wp_remote_get($statusUrl, ['timeout' => 3]);
 
             if (!is_wp_error($response)) {
