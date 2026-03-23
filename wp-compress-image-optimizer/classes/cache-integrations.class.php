@@ -1,12 +1,92 @@
 <?php
-
+//This file has to be self-contained, include everything used
+include_once __DIR__ . '/../traits/url_key.php';
+include_once __DIR__ . '/../defines.php';
 
 class wps_ic_cache_integrations
 {
-
+    // Tracks what has been purged in the current request to avoid duplicate purges.
+    private static $purged = ['all' => false, 'keys' => []];
 
     public function __construct()
     {
+    }
+
+    /**
+     * Purge cache for a specific post by ID.
+     *
+     * Usage: (new wps_ic_cache_integrations())->purge_id(42);
+     *        (new wps_ic_cache_integrations())->purge_id(42, false);
+     *
+     * @param int  $post_id  WordPress post ID whose cache should be purged.
+     * @param bool $critical Whether to also purge the critical CSS for this page. Default true.
+     * @return bool          True on success, false if the permalink could not be resolved.
+     */
+    public function purge_id($post_id, $critical = true)
+    {
+        $url = get_permalink($post_id);
+        if (!$url) {
+            return false;
+        }
+
+        $url_key_class = new wps_ic_url_key();
+        $url_key = $url_key_class->setup($url);
+
+        if ($critical) {
+            self::purgeCriticalFiles($url_key);
+        }
+
+        self::purgeAll($url_key, true);
+
+        return true;
+    }
+
+    /**
+     * Purge cache for a specific URL.
+     *
+     * Usage: (new wps_ic_cache_integrations())->purge_url('https://example.com/my-page/');
+     *        (new wps_ic_cache_integrations())->purge_url('https://example.com/my-page/', false);
+     *
+     * @param string $url      Full URL of the page whose cache should be purged.
+     * @param bool   $critical Whether to also purge the critical CSS for this page. Default true.
+     * @return bool            Always true.
+     */
+    public function purge_url($url, $critical = true)
+    {
+        $url_key_class = new wps_ic_url_key();
+        $url_key = $url_key_class->setup($url);
+
+        if ($critical) {
+            self::purgeCriticalFiles($url_key);
+        }
+
+        self::purgeAll($url_key, true);
+
+        return true;
+    }
+
+    /**
+     * Purge cache for the entire site.
+     *
+     * Usage: (new wps_ic_cache_integrations())->purge_site();
+     *        (new wps_ic_cache_integrations())->purge_site(false);
+     *
+     * @param bool $critical Whether to also purge all critical CSS files. Default true.
+     * @return bool          Always true.
+     */
+    public function purge_site($critical = true)
+    {
+        if (self::$purged['all']) {
+            return true;
+        }
+
+        if ($critical) {
+            self::purgeCriticalFiles();
+        }
+
+        self::purgeAll(false, true);
+
+        return true;
     }
 
     public static function purgePreloads()
@@ -82,6 +162,19 @@ class wps_ic_cache_integrations
 
     public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false)
     {
+        // Deduplicate: skip if this url_key (or full site) was already purged in this request
+        if ($url_key === false) {
+            if (self::$purged['all']) {
+                return;
+            }
+            self::$purged['all'] = true;
+        } else {
+            if (self::$purged['all'] || isset(self::$purged['keys'][$url_key])) {
+                return;
+            }
+            self::$purged['keys'][$url_key] = true;
+        }
+
         if (!$forcePurge && !$critSave) {
             $settings = get_option(WPS_IC_SETTINGS);
             if (empty($settings['cache']['advanced']) ||
@@ -304,6 +397,5 @@ class wps_ic_cache_integrations
 
         return true;
     }
-
 
 }

@@ -740,7 +740,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <span class="wpc-title">Performance Tweaks</span>
                                     </a>
                                 </li>
-                                <li style="display: block;">
+                                <li style="display: none;">
                                     <a href="#" class="" data-tab="scan-fonts">
                                 <span class="wpc-icon-container">
                                 <span class="wpc-icon">

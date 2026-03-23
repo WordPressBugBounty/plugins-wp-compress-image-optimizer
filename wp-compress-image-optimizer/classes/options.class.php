@@ -357,8 +357,10 @@ class wps_ic_options
                 'update_option_theme_mods_' . get_option('stylesheet', ''),
                 'elementor/core/files/clear_cache',
                 'uagb_delete_uag_asset_dir',
-				        'uagb_delete_page_assets',
-                'et_core_static_resources_removed'
+				'uagb_delete_page_assets',
+                'et_core_static_resources_removed',
+                'fl_builder_cache_cleared',
+                'bricks/settings/after_save'
             ]
         ];
 

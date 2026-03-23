@@ -2489,6 +2489,10 @@ SCRIPT;
             $original_img_tag['original_tags']['srcset'] = '';
         }
 
+	    if (!isset($original_img_tag['original_tags']['data-srcset'])) {
+		    $original_img_tag['original_tags']['data-srcset'] = '';
+	    }
+
         if (!self::$excludes_class->isAdaptiveExcluded($image_source, $original_img_tag['original_tags']['class'])) {
             $original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
             //here

@@ -188,7 +188,12 @@ class wps_ic_cache
                 if (!empty(self::$purge_rules) && !empty(self::$purge_rules['hooks'])) {
 
                     // List of hooks to also clear crit, combine, new cdn hashes
-                    $full_param_hooks = ['switch_theme', 'wp_update_nav_menu', 'update_option_theme_mods_' . get_option('stylesheet'), 'elementor/core/files/clear_cache'];
+                    $full_param_hooks = ['switch_theme',
+                        'wp_update_nav_menu',
+                        'update_option_theme_mods_' . get_option('stylesheet'),
+                        'et_core_static_resources_removed',
+                        'fl_builder_cache_cleared',
+                        ''];
                     foreach (self::$purge_rules['hooks'] as $hook) {
                         if (in_array($hook, $full_param_hooks)) {
                             self::purgeHook($hook, 1, 1, 1, 1);

@@ -179,7 +179,7 @@ class wps_ic_combine_css
                 $cleanHref = trim($cleanHref[0]);
 
                 if (strpos($cleanHref, self::$site_url) !== false) {
-                    $path = str_replace([self::$site_url, $this->zone_name, 'https:///m:0/a:', 'https://' . $this->zone_name . '/m:0/a:'], '', $cleanHref);
+                    $path = str_replace([self::$site_url, $this->zone_name, 'https:///m:0/a:', 'https://' . $this->zone_name . '/m:0/a:','https:///m:1/a:', 'https://' . $this->zone_name . '/m:1/a:'], '', $cleanHref);
                     $path = ltrim($path, '/');
                     $relativePath = ABSPATH . $path;
 

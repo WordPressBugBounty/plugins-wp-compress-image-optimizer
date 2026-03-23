@@ -619,6 +619,21 @@ class wps_cacheHtml
     {
         if ($post_id == 'all') {
             self::removeDirectory(WPS_IC_CRITICAL);
+            global $wpdb;
+            $options_table = $wpdb->options;
+
+            $wpdb->query("DELETE FROM $options_table
+             WHERE option_name LIKE '_transient_wpc_critical_key_%'
+             OR option_name LIKE '_transient_timeout_wpc_critical_key_%'
+             OR option_name LIKE '_transient_wpc_critical_uuid_%'
+             OR option_name LIKE '_transient_timeout_wpc_critical_uuid_%'
+             OR option_name LIKE '_transient_wpc_critical_ajax_%'
+             OR option_name LIKE '_transient_timeout_wpc_critical_ajax_%'
+             OR option_name LIKE '_transient_wpc_push_nope_%'
+             OR option_name LIKE '_transient_timeout_wpc_push_nope_%'
+             OR option_name LIKE '_transient_wpc_push_domain_%'
+             OR option_name LIKE '_transient_timeout_wpc_push_domain_%'");
+
             return;
         }
 

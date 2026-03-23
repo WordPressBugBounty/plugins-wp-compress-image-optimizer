@@ -175,12 +175,12 @@ class wps_criticalCss
         $url_key = md5($url);
 
         // Poll /status for any in-flight request for this URL
-        $needsPush   = false;
+        $needsPush = true;
         $uuid_key    = 'wpc_critical_uuid_' . $url_key;
         $pendingUuid = get_transient($uuid_key);
 
         if ($pendingUuid) {
-            $statusUrl = 'https://critical-push.zapwp.net/status?uuid=' . urlencode($pendingUuid);
+            $statusUrl = str_replace('/generate', '/status', WPS_IC_CRITICAL_API_URL) . '?uuid=' . urlencode($pendingUuid);
             $response  = wp_remote_get($statusUrl, ['timeout' => 3]);
 
             if (!is_wp_error($response)) {
@@ -209,6 +209,10 @@ class wps_criticalCss
                     if (!empty($data['status']) && $data['status'] === 'failed') {
                         if (!empty($data['error_type']) && $data['error_type'] === 'fetch_blocked') {
                             $needsPush = true;
+                            $domain = parse_url($url, PHP_URL_HOST);
+                            if ($domain) {
+                                set_transient('wpc_push_domain_' . $domain, true, 86400 * 7);
+                            }
                         }
                         delete_transient($uuid_key);
                         delete_transient('wpc_critical_key_' . $url_key);
@@ -226,11 +230,11 @@ class wps_criticalCss
         }
 
         // Make transient expire after 30 mins
-        set_transient($transient_name, true, 60 * 30);
+        set_transient($transient_name, true, 60 * 5);
 
         $uuid     = wp_generate_uuid4();
         $uuid_key = 'wpc_critical_uuid_' . $url_key;
-        set_transient($uuid_key, $uuid, 60 * 30);
+        set_transient($uuid_key, $uuid, 60 * 5);
 
         $options = get_option(WPS_IC_OPTIONS);
         $apikey  = $options['api_key'] ?? '';
@@ -251,6 +255,13 @@ class wps_criticalCss
         // or admin clicked the button (AJAX always tries push).
         // Nope transient guards constrained hosts: blocked + slow loopback = one 1.5s
         // attempt, then 24h of zero overhead. Admin button ignores nope. Self-heals.
+
+        // TODO: NeedsPush is set to TRUE on #178
+//        $domain = parse_url($url, PHP_URL_HOST);
+//        if ($domain && get_transient('wpc_push_domain_' . $domain)) {
+//            $needsPush = true;
+//        }
+
         if (!$forcePull && ($needsPush || wp_doing_ajax())) {
             $pushFailedKey = 'wpc_push_nope_' . $url_key;
             if (wp_doing_ajax() || !get_transient($pushFailedKey)) {

@@ -969,7 +969,7 @@ class WPC_CloudflareAPI
     }
 
     /**
-     * Add CDN CNAME record (cdn.domain.com -> cdn-node.zapwp.net)
+     * Add CDN CNAME record (cdn.domain.com -> cdn-mc.zapwp.net)
      * Also verifies and sets SSL/TLS to Full if needed
      *
      * @param string $zoneId Cloudflare Zone ID
@@ -983,14 +983,14 @@ class WPC_CloudflareAPI
         } else {
             $cdn_subdomain = $this->getCfCname();
         }
-        $target = 'cdn-node.zapwp.net';
+
+        $target = 'cdn-mc.zapwp.net';
 
         // Check SSL/TLS setting first
         $sslCheck = $this->checkAndSetSSL($zoneId);
         if (is_wp_error($sslCheck)) {
             return $sslCheck;
         }
-
 
         // Check if record already exists in CF
         $existingRecord = $this->findDNSRecord($zoneId, $cdn_subdomain, 'CNAME');

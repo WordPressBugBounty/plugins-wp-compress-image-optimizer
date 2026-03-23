@@ -965,6 +965,8 @@ class wps_cdn_rewrite
     public function buffer_local_callback($html)
     {
 
+	    $isUserLoggedIn = is_user_logged_in();
+		
         if (!self::dontRunif()) {
             return $html;
         }
@@ -1857,7 +1859,9 @@ class wps_cdn_rewrite
         }
 
         // Raise memory limit
-        ini_set('memory_limit', '1024M');
+        if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
+            ini_set('memory_limit', '1024M');
+        }
 
         // Raise backtrack limit for regex
         ini_set('pcre.backtrack_limit', '10000000');

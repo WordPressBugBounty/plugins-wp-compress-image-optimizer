@@ -88,7 +88,9 @@
                                             elementor/core/files/clear_cache<br>
                                             uagb_delete_uag_asset_dir<br>
                                             uagb_delete_page_assets<br>
-                                            et_core_static_resources_removed</p>
+                                            et_core_static_resources_removed<br>
+                                            fl_builder_cache_cleared<br>
+                                            bricks/settings/after_save</p>
                                     </div>
                                 </div>
                             </div>

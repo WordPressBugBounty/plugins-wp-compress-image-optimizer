@@ -1029,7 +1029,7 @@ class wps_ic_compress
             return;
         }
 
-        $guid = $wpdb->get_var("SELECT posts.guid FROM {$wpdb->posts} posts WHERE posts.ID='" . $attachmentID . "'");
+        $guid = $wpdb->get_var("SELECT posts.guid FROM {$wpdb->posts} posts WHERE posts.ID=%d", $attachmentID);
 
         // Find Children
         $children = $wpdb->get_results($wpdb->prepare("

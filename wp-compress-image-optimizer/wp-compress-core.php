@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.44';
+        self::$version = '6.60.45';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1257,7 +1257,9 @@ class wps_ic
     {
         if (!is_admin()) {
             // Raise memory limit
-            ini_set('memory_limit', '1024M');
+            if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
+                ini_set('memory_limit', '1024M');
+            }
         }
 
         //Display notice if site url changed
@@ -2403,6 +2405,20 @@ class wps_ic
         }
     }
 
+}
+
+function wpc_convert_to_bytes($value) {
+    $value = trim($value);
+    $last = strtolower($value[strlen($value) - 1]);
+    $num = (int)$value;
+
+    switch ($last) {
+        case 'g': $num *= 1024;
+        case 'm': $num *= 1024;
+        case 'k': $num *= 1024;
+    }
+
+    return $num;
 }
 
 

@@ -143,7 +143,7 @@ class wps_ic_comms extends wps_ic
 
                                 copy($temp, $file_path . $file_name);
 
-                                $query = $wpdb->prepare("UPDATE " . $wpdb->prefix . "ic_compressed SET restored='1' WHERE attachment_ID='" . $attachments[0]->ID . "'");
+                                $query = $wpdb->prepare("UPDATE " . $wpdb->prefix . "ic_compressed SET restored='1' WHERE attachment_ID=%d",$attachments[0]->ID);
                                 $wpdb->query($query);
 
                                 $attach_data = wp_generate_attachment_metadata($attachments[0]->ID, $attachment_Path);

@@ -31,7 +31,7 @@ class wps_ic_queue extends wps_ic {
         delete_post_meta($row->attachment_ID, 'wps_ic_cdn');
         delete_post_meta($row->attachment_ID, 'wps_ic_times');
 
-        $query = $wpdb->prepare("UPDATE " . $wpdb->prefix . "ic_queue SET status='-1' WHERE attachment_ID='" . $row->attachment_ID . "'");
+        $query = $wpdb->prepare("UPDATE " . $wpdb->prefix . "ic_queue SET status='-1' WHERE attachment_ID=%d", $row->attachment_ID);
         $wpdb->query($query);
       }
 

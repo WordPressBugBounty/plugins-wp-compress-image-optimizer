@@ -34,6 +34,7 @@ class wpc_ic_delivery
             wp_send_json_error('images-array-empty');
         }
 
+
         self::$local = new wps_local_compress();
 
         $this->getAPIUrl();
