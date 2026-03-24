@@ -42,7 +42,7 @@ class wps_ic_log {
 
 
     public function logCachePurging($oldOptions, $newOptions, $message, $file = 'cachePurging') {
-        if (!WPS_IC_DEBUG_LOG) {
+        if (!defined('WPS_IC_DEBUG_LOG') || !WPS_IC_DEBUG_LOG) {
             return;
         }
 
