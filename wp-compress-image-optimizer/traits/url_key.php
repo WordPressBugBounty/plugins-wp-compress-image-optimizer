@@ -8,6 +8,28 @@ class wps_ic_url_key
     public $trp_settings;
 	private static $url_mappings = [];
 
+    /**
+     * Captured host+URI from before translation plugins (e.g. Weglot) rewrite
+     * $_SERVER['REQUEST_URI'] to strip the language prefix.  Set once, early,
+     * via captureRequestUrl() and reused by every subsequent setup() call that
+     * has no explicit $url argument.
+     */
+    private static $captured_request_url = null;
+
+    /**
+     * Lock in the current host + REQUEST_URI.  Call this as early as possible
+     * (e.g. at plugins_loaded priority 1) before any translation plugin has a
+     * chance to modify $_SERVER['REQUEST_URI'].
+     */
+    public static function captureRequestUrl()
+    {
+        if (self::$captured_request_url === null) {
+            $host = $_SERVER['HTTP_HOST'] ?? '';
+            $uri  = $_SERVER['REQUEST_URI'] ?? '';
+            self::$captured_request_url = $host . $uri;
+        }
+    }
+
     public function __construct()
     {
         $this->trp_active = 0;
@@ -21,9 +43,15 @@ class wps_ic_url_key
     public function setup($url = '')
     {
       if (empty($url)) {
-          $host = $_SERVER['HTTP_HOST'] ?? '';
-          $uri  = $_SERVER['REQUEST_URI'] ?? '';
-          $url = $host . $uri;
+          // Use the pre-captured URL if available (prevents translation plugins
+          // that rewrite $_SERVER['REQUEST_URI'] from corrupting the cache key).
+          if (self::$captured_request_url !== null) {
+              $url = self::$captured_request_url;
+          } else {
+              $host = $_SERVER['HTTP_HOST'] ?? '';
+              $uri  = $_SERVER['REQUEST_URI'] ?? '';
+              $url = $host . $uri;
+          }
       }
 
 	    $original_url = $url;

@@ -1,8 +1,8 @@
 <?php
 global $ic_running;
 global $wps_ic_cdn_instance;
-include __DIR__ . '/debug.php';
-include __DIR__ . '/defines.php';
+include_once __DIR__ . '/debug.php';
+include_once __DIR__ . '/defines.php';
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
 include_once WPS_IC_DIR . 'addons/legacy/compress.php';
 include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.46';
+        self::$version = '6.60.47';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -2002,8 +2002,11 @@ class wps_ic
             // Add WP_CACHE to wp-config.php
             $htacces->setWPCache(true);
             $htacces->setAdvancedCache();
+
             // Add mod_Deflate to Htaccess
-            $htacces->addGzip();
+            if ($htacces->isApache()) {
+                $htacces->addGzip();
+            }
         }
 
 

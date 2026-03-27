@@ -19,13 +19,24 @@ class wps_ic_htaccess extends wps_ic
             self::$webPMarker = 'WPC Serve WebP';
 
             $this->cacheConstant = "define('WP_CACHE', VALUE); // WP Compress Cache";
-            $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
+            $this->isApache();
+        }
+    }
+
+
+    public function isApache() {
+        $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
+        if (!empty($serverSoftware)) {
             if (strpos(strtolower($serverSoftware), 'litespeed') !== false || strpos(strtolower($serverSoftware), 'apache') !== false) {
                 $this->isApache = true;
             } else if (strpos(strtolower($serverSoftware), 'nginx') !== false) {
                 $this->isApache = false;
             }
+        } else {
+            $this->isApache = false;
         }
+
+        return $this->isApache;
     }
 
 
@@ -58,29 +69,15 @@ class wps_ic_htaccess extends wps_ic
         if (!empty($this->htaccessContent)) {
 
             // Check if gzip rules already exist
-            if (strpos($this->htaccessContent, 'IfModule mod_deflate.c') === false) {
+            if (strpos($this->htaccessContent, 'mod_deflate') === false) {
 
-                $mimeTypes = array(
-                    'text/plain', 'text/css', 'text/javascript', 'application/javascript',
-                    'application/x-javascript', 'application/json', 'text/html', 'text/xml',
-                    'application/atom+xml', 'application/rss+xml', 'application/xhtml+xml',
-                    'application/xml', 'text/x-component', 'application/vnd.ms-fontobject',
-                    'application/x-font-ttf', 'font/eot', 'font/opentype', 'image/bmp',
-                    'image/svg+xml', 'image/vnd.microsoft.icon', 'image/x-icon',
-                );
-
-                // Build rules
-                $rules = "<IfModule mod_deflate.c>\n";
-                foreach ($mimeTypes as $type) {
-                    $rules .= "    AddOutputFilterByType DEFLATE {$type}\n";
-                }
-                $rules .= "</IfModule>\n";
+                $rules = $this->modifyModDeflate();
 
                 // Prepare new content (append)
                 $newHtaccessContent = rtrim($this->htaccessContent) . "\n\n" . $rules;
 
                 // Only write if content actually changed
-                if ($newHtaccessContent !== $this->htaccessContent) {
+                if (!empty($newHtaccessContent) && $newHtaccessContent !== $this->htaccessContent) {
                     file_put_contents($this->htaccessPath, $newHtaccessContent);
                 }
             }
@@ -896,45 +893,32 @@ HTACCESS;
     private static function getWebpReplaceRules()
     {
 
-        $webp_rules = '<IfModule mod_rewrite.c>
-             RewriteEngine On
-             # Is the browser Chrome?
-             RewriteCond %{HTTP_USER_AGENT} Chrome [OR]
-             # OR Is request from Page Speed
-             RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights" [OR]
-             # OR does this browser explicitly support webp
-             RewriteCond %{HTTP_ACCEPT} image/webp
-             # AND NOT MS EDGE 42/17 - doesnt work.
-             RewriteCond %{HTTP_USER_AGENT} !Edge/17
-             # AND is the request a jpg, png or gif?
-             RewriteCond %{REQUEST_URI} ^(.+)\.(?:jpe?g|png|gif)$
-             # AND does a .ext.webp image exist?
-             RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}.webp -f
-             # THEN send the webp image and set the env var webp
-             RewriteRule ^(.+)$ $1.webp [NC,T=image/webp,E=webp,L]
-             ##### IF NOT, try the file with replaced extension (test.webp) #####
-             RewriteCond %{HTTP_USER_AGENT} Chrome [OR]
-             RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights" [OR]
-             RewriteCond %{HTTP_ACCEPT} image/webp
-             RewriteCond %{HTTP_USER_AGENT} !Edge/17
-             # AND is the request a jpg, png or gif? (also grab the basepath %1 to match in the next rule)
-             RewriteCond %{REQUEST_URI} ^(.+)\.(?:jpe?g|png|gif)$
-             # AND does a .webp image exist?
-             RewriteCond %{DOCUMENT_ROOT}/%1.webp -f
-             # THEN send the webp image and set the env var webp
-             RewriteRule (.+)\.(?:jpe?g|png|gif)$ $1.webp [NC,T=image/webp,E=webp,L]
-           </IfModule>
-           <IfModule mod_headers.c>
-             # If REDIRECT_webp env var exists, append Accept to the Vary header
-             Header append Vary Accept env=REDIRECT_webp
-           </IfModule>
-           <IfModule mod_mime.c>
-             AddType image/webp .webp
-           </IfModule>';
+        $webp_rules = '<IfModule mod_rewrite.c>'.PHP_EOL;
+        $webp_rules .= 'RewriteEngine On'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp [OR]'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} Chrome [OR]'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights"'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} !Edge/17'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}.webp -f'.PHP_EOL;
+        $webp_rules .= 'RewriteRule ^(.+)$ $1.webp [E=webp,L]'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp [OR]'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} Chrome [OR]'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights"'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} !Edge/17'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}/%1.webp -f'.PHP_EOL;
+        $webp_rules .= 'RewriteRule ^(.+)\.(jpe?g|png|gif)$ $1.webp [E=webp,L]'.PHP_EOL;
+        $webp_rules .= '</IfModule>'.PHP_EOL;
+
+        $webp_rules .= '<IfModule mod_mime.c>'.PHP_EOL;
+        $webp_rules .= 'AddType image/webp .webp'.PHP_EOL;
+        $webp_rules .= '</IfModule>'.PHP_EOL;
+        $webp_rules .= '<IfModule mod_headers.c>'.PHP_EOL;
+        $webp_rules .= 'Header append Vary Accept env=REDIRECT_webp'.PHP_EOL;
+        $webp_rules .= '</IfModule>'.PHP_EOL;
 
         return $webp_rules;
-
-        return ['#StartWPC-WebP-Replace', '<IfModule mod_rewrite.c>', 'RewriteEngine On', '# Serve existing WebP files for matching JPEG/PNG only when client supports WebP', 'RewriteCond %{HTTP_ACCEPT} image/webp', 'RewriteCond %{REQUEST_FILENAME} -f', 'RewriteCond %{REQUEST_FILENAME}\.webp -f', 'RewriteRule ^(.+)\.(?:jpe?g|png)$ $1.webp [L,T=image/webp,E=servewebp:1]', '</IfModule>', '<IfModule mod_headers.c>', '# Make caches aware that the response varies on the Accept header', 'Header append Vary Accept env=servewebp', 'Header append Vary Accept env=REDIRECT_servewebp', '</IfModule>',];
     }
 
     public function removeWebpReplace()

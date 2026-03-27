@@ -1710,6 +1710,13 @@ class wps_cdn_rewrite
 
     public function checkCache_plugins_loaded()
     {
+        // Weglot rewrites $_SERVER['REQUEST_URI'] at plugins_loaded priority 10,
+        // stripping the language prefix (e.g. /en/ → /).  We capture the real URL
+        // here at priority 1 — before Weglot runs — so every subsequent cache key
+        // lookup in this request uses the correct, language-aware URL.
+        if (defined('WEGLOT_VERSION')) {
+            wps_ic_url_key::captureRequestUrl();
+        }
 
         if (!empty($_GET['disableCache']) || !empty($_GET['forceRecombine'])) {
             return true;
@@ -4125,6 +4132,11 @@ class wps_cdn_rewrite
 
         // Skip images that have wpc-size="preserve"
         if (preg_match('/wpc-size=(["\'])preserve\1/', $matches[0])) {
+            return $matches[0];
+        }
+
+        //Don't change existing size attributes
+        if (preg_match('/\s(width|height)\s*=\s*["\']?\d+/i', $matches[0])) {
             return $matches[0];
         }
 
