@@ -74,8 +74,10 @@ class wps_ic_options
             'external-url' => 0,
             'disable-cart-fragments' => 0,
             'iframe-lazy' => 1,
+            'video-preload-none' => 0,
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
+            'icon-font-display' => 'block',
             'critical' => ['css' => 1],
             'css_minify' => 0,
             'css_combine' => 0,
@@ -100,6 +102,7 @@ class wps_ic_options
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
+                'show_admin_bar_title' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -147,7 +150,9 @@ class wps_ic_options
             'disable-cart-fragments' => '0',
             'gtag-lazy' => 0,
             'fontawesome-lazy' => 0,
+            'icon-font-display' => 'block',
             'iframe-lazy' => '0',
+            'video-preload-none' => 0,
             'critical' => ['css' => '0'],
             'css_minify' => '0',
             'css_combine' => '0',
@@ -175,6 +180,7 @@ class wps_ic_options
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',
+                'show_admin_bar_title' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -218,8 +224,10 @@ class wps_ic_options
             'external-url' => 0,
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
+            'video-preload-none' => 0,
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
+            'icon-font-display' => 'block',
             'critical' => ['css' => '1'],
             'css_minify' => '0',
             'css_combine' => '0',
@@ -244,6 +252,7 @@ class wps_ic_options
             'local' => ['media-library' => '0'],
             'status' => [
                 'hide_in_admin_bar' => '0',
+                'show_admin_bar_title' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -294,8 +303,10 @@ class wps_ic_options
             'external-url' => 0,
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
+            'video-preload-none' => 0,
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
+            'icon-font-display' => 'block',
             'critical' => ['css' => 1],
             'css_minify' => 0,
             'css_combine' => 0,
@@ -323,6 +334,7 @@ class wps_ic_options
             'local' => ['media-library' => 0],
             'status' => [
                 'hide_in_admin_bar' => '0',
+                'show_admin_bar_title' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'

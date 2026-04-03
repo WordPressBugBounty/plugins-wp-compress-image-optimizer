@@ -26,7 +26,7 @@ if ($option = 'exclude-url-from-all'){
                     </div>
                     <div class="inline-heading-text">
                         <h3><?php echo $title; ?></h3>
-                        <p>Add excluded URLs</p>
+                        <p><?php echo esc_html__('Add excluded URLs', WPS_IC_TEXTDOMAIN); ?></p>
                     </div>
                 </div>
             </div>
@@ -43,22 +43,24 @@ if ($option = 'exclude-url-from-all'){
                     <div class="cdn-popup-content-inner">
                         <textarea name="wpc-url-excludes" data-setting-name="wpc-url-excludes"
                                   data-setting-subset="<?php echo $current_option; ?>"  class="exclude-list-textarea-value"
-                                  placeholder="e.g. www.example.com example.com example.com/page1"></textarea>
+                                  placeholder="<?php echo esc_attr__('e.g. www.example.com example.com example.com/page1', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 
                     </div>
                 </div>
-                <div class="wps-example-list">
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <div class="wps-example-list" style="display: none;">
                     <div>
-                        <h3>Examples:</h3>
                         <div>
-                            <p>www.siteurl.com/page to exclude just the page</p>
-                            <p>www.siteurl.com/page/subpage to exclude just the subpage</p>
+                            <p><?php echo esc_html__('www.siteurl.com/page to exclude just the page', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><?php echo esc_html__('www.siteurl.com/page/subpage to exclude just the subpage', WPS_IC_TEXTDOMAIN); ?></p>
                         </div>
                     </div>
                 </div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                </div>
             </form>
         </div>
 

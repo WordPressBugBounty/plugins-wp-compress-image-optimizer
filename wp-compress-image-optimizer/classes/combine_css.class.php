@@ -521,14 +521,19 @@ class wps_ic_combine_css
 
     public function findFontFace($css)
     {
-        return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) {
+        // Read settings once outside the callback to avoid repeated DB queries
+        $settings = get_option(WPS_IC_SETTINGS);
+        $textFontDisplay = !empty($settings['font-display']) ? $settings['font-display'] : 'swap';
+        $iconFontDisplay = !empty($settings['icon-font-display']) ? $settings['icon-font-display'] : 'block';
+
+        return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) use ($textFontDisplay, $iconFontDisplay) {
             $fontFamily = $fontStyle = $fontWeight = $woffUrl = '';
-            $urlFound = false; // Flag to indicate if a URL was found
+            $urlFound = false;
 
             // Try to match .woff or .woff2 URL
             if (preg_match('/url\((["\']?)([^)]+\.(woff2?))\1\)/si', $fontface[0], $matchesWoffUrl)) {
                 $woffUrl = $matchesWoffUrl[2];
-                $urlFound = true; // URL found, set flag to true
+                $urlFound = true;
             }
 
             // Extract font-family, font-style, and font-weight
@@ -542,12 +547,19 @@ class wps_ic_combine_css
                 $fontWeight = 'font-weight: ' . $matchesWeight[1] . ';';
             }
 
-            // If a URL was found, construct a new @font-face declaration; otherwise, return the original
             if ($urlFound) {
                 $format = strpos($woffUrl, '.woff2') !== false ? 'woff2' : 'woff';
-                return "@font-face{{$fontFamily}{$fontStyle}{$fontWeight}font-display:swap;src:url(\"$woffUrl\") format(\"$format\");}";
+
+                // Detect icon fonts — use block to prevent garbled characters
+                $fontDisplayValue = $textFontDisplay;
+                $familyRaw = isset($matchesFontFamily[1]) ? strtolower(trim($matchesFontFamily[1])) : '';
+                if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $familyRaw)) {
+                    $fontDisplayValue = $iconFontDisplay;
+                }
+
+                return "@font-face{{$fontFamily}{$fontStyle}{$fontWeight}font-display:{$fontDisplayValue};src:url(\"$woffUrl\") format(\"$format\");}";
             } else {
-                return $fontface[0]; // Return the original @font-face declaration
+                return $fontface[0];
             }
         }, $css);
     }

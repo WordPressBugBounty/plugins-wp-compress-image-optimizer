@@ -126,7 +126,7 @@ class wps_ic_cron
         $options = get_option(WPS_IC_OPTIONS);
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
-        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
         if (wp_remote_retrieve_response_code($call) == 401) {
             $cache = new wps_ic_cache_integrations();

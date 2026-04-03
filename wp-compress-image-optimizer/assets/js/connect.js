@@ -151,9 +151,17 @@ jQuery(document).ready(function ($) {
 
                 showProApiKey();
 
-                $('.wps-ic-connect-retry').on('click', function (e) {
+                jQuery('.wps-ic-connect-retry').on('click', function (e) {
                     e.preventDefault();
-                    liteConnectPopup();
+                    var swal = jQuery('.swal2-container');
+                    // Hide ALL error + loading states
+                    var allStates = jQuery('.wps-ic-site-already-connected, .wps-ic-invalid-apikey, .wps-ic-apikey-in-use, .wps-ic-unable-to-communicate, .wps-ic-loading-container', swal);
+                    var form = jQuery('.wps-lite-form-container', swal);
+                    // Hide everything first, then show form once
+                    allStates.hide();
+                    form.css('display', 'none').fadeIn(250, function() {
+                        jQuery('input[name="apikey"]', swal).val('').focus();
+                    });
                     return false;
                 });
 
@@ -209,7 +217,9 @@ jQuery(document).ready(function ($) {
                             window.location.reload();
                         } else {
                             if (response.data.msg == 'api-issue') {
+                                $(loader).hide();
                                 $(loaderLite).hide();
+                                $(form_container).hide();
                                 $(unableToCommunicate).show();
                             }
                         }
@@ -255,37 +265,20 @@ jQuery(document).ready(function ($) {
                             window.location.reload();
                         } else {
 
+                            // Hide loading + form, keep left illustration visible
+                            $(loader).hide();
+                            $(loaderLite).hide();
+                            $(form_container).hide();
+                            $(tests).hide();
+
                             if (response.data.msg == 'site-already-connected') {
                                 $(already_connected).show();
-                                $(error_message_container).show();
-                                $(error_message_text).hide();
-                                $(success_message_choice_text).hide();
-                                $(success_message_text).hide();
-                                $(success_message).hide();
-                                $(loader).hide();
-                                $(tests).hide();
                             } else if (response.data.msg == 'api-issue') {
-                                $(left).hide();
-                                $(loader).hide();
-                                $(loaderLite).hide();
                                 $(unableToCommunicate).show();
                             } else if (response.data.msg == 'apikey-in-use') {
                                 $(apikeyInUse).show();
-                                $(error_message_container).show();
-                                $(error_message_text).hide();
-                                $(success_message_choice_text).hide();
-                                $(success_message_text).hide();
-                                $(success_message).hide();
-                                $(loader).hide();
-                                $(tests).hide();
                             } else {
                                 $(error_message_text).show();
-                                $(error_message_container).show();
-                                $(success_message_text).hide();
-                                $(success_message_choice_text).hide();
-                                $(success_message).hide();
-                                $(loader).hide();
-                                $(tests).hide();
                             }
 
                             // $('.wps-ic-connect-retry', swal_container).bind('click');

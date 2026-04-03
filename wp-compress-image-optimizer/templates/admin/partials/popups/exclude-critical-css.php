@@ -18,8 +18,8 @@
           echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
         </div>
         <div class="inline-heading-text">
-          <h3>Exclude from Critical CSS</h3>
-          <p>Add excluded files or paths as desired as we use wildcard searching.</p>
+          <h3><?php echo esc_html__('Critical CSS Exclusions', WPS_IC_TEXTDOMAIN); ?></h3>
+          <p><?php echo esc_html__('Prevent specific stylesheets or paths from being processed by Critical CSS. Partial matches work automatically.', WPS_IC_TEXTDOMAIN); ?></p>
         </div>
       </div>
     </div>
@@ -27,24 +27,24 @@
     <form method="post" class="wpc-save-popup-data" action="#">
       <div class="cdn-popup-content-full">
         <div class="cdn-popup-content-inner">
-          <textarea name="wpc-excludes[critical_css]" data-setting-name="wpc-excludes" data-setting-subset="critical_css"  class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
+          <textarea name="wpc-excludes[critical_css]" data-setting-name="wpc-excludes" data-setting-subset="critical_css"  class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. theme-name/style.css, custom-fonts.css, /wp-content/plugins/my-plugin/', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
             <div class="wps-default-excludes-container">
             <div class="wps-default-excludes-enabled-checkbox-container">
                 <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-default-excludes">
-                <p>Disable Default Excludes</p>
+                <p><?php echo esc_html__('Disable Default Excludes', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
             <div class="wps-default-excludes-enabled-checkbox-container">
                 <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-themes">
-                <p>Exclude Themes Files</p>
+                <p><?php echo esc_html__('Exclude Theme Stylesheets', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
             <div class="wps-default-excludes-enabled-checkbox-container">
                 <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-plugins">
-                <p>Exclude Plugins Files</p>
+                <p><?php echo esc_html__('Exclude Plugin Stylesheets', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
             <div class="wps-default-excludes-enabled-checkbox-container">
                 <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-wp">
-                <p>Exclude WordPress Files</p>
+                <p><?php echo esc_html__('Exclude WordPress Core Styles', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
             </div>
 
@@ -52,18 +52,19 @@
 
         </div>
       </div>
-      <div class="wps-example-list">
+      <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <div class="wps-example-list" style="display: none;">
         <div>
-          <h3>Examples:</h3>
           <div>
-            <p>.svg would exclude all assets with that extension</p>
-            <p>imagename would exclude any file with that name</p>
-            <p>/myplugin/image.jpg would exclude that specific file</p>
-            <p>/wp-content/myplugin/ would exclude everything using that path</p>
+            <p><span class="wpc-example-chip">style.css</span> <?php echo esc_html__('would exclude any stylesheet containing that name', WPS_IC_TEXTDOMAIN); ?></p>
+            <p><span class="wpc-example-chip">/my-plugin/css/custom.css</span> <?php echo esc_html__('would exclude that specific file', WPS_IC_TEXTDOMAIN); ?></p>
+            <p><span class="wpc-example-chip">/wp-content/themes/my-theme/</span> <?php echo esc_html__('would exclude all styles from that theme', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
         </div>
       </div>
-      <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                </div>
     </form>
     </div>
 

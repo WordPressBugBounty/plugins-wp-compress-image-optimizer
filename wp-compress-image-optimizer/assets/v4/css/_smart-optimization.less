@@ -1,0 +1,1213 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Smart Optimization Tab
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Header — Monitor Hero + Counter ────────────────────────────────────
+.wpc-smart-opt-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 40px 28px;
+}
+
+.wpc-smart-opt-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wpc-smart-monitor-img-animated {
+  width: 100px;
+  height: 100px;
+  border-radius: @radius-md;
+  position: relative;
+  flex-shrink: 0;
+
+  .background-image {
+    width: 100%;
+    height: 100%;
+    background-size: contain;
+    background-repeat: no-repeat;
+    border-radius: @radius-md;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pulse-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-radius: @radius-md;
+    animation: pulse-border 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    z-index: 0;
+  }
+
+  .shimmer-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    z-index: 2;
+    border-radius: @radius-md;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.55), transparent);
+      animation: shimmer 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+  }
+}
+
+.wpc-smart-opt-title-area {
+  flex: 1;
+  min-width: 0;
+
+  p {
+    font-size: 14px;
+    color: @color-text-secondary;
+    font-family: @font-regular;
+    margin: 4px 0 12px;
+    line-height: 1.4;
+  }
+}
+
+.wpc-smart-opt-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  h4 {
+    font-family: @font-bold;
+    font-size: 18px;
+    color: @color-text-dark;
+    margin: 0;
+    line-height: 1.3;
+  }
+}
+
+.wpc-monitoring-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--wpc-brand-tint, @color-ice);
+  color: var(--wpc-brand-accent, @color-gradient-mid);
+  font-family: @font-semibold;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: @radius-full;
+
+  svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+  }
+}
+
+.optimizations-progress-bar-container {
+  width: 100%;
+  background-color: @color-bg-frost;
+  border-radius: @radius-sm;
+  overflow: hidden;
+}
+
+.optimizations-progress-bar {
+  height: 6px;
+  background: var(--wpc-brand-primary, @color-blue);
+  border-radius: @radius-sm;
+  transition: width 0.5s ease;
+}
+
+.wpc-smart-opt-counter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border: 1px solid @color-border;
+  border-radius: @radius-md;
+  background: @color-white;
+
+  .optimization-image {
+    flex-shrink: 0;
+
+    img {
+      width: 48px;
+      height: 48px;
+    }
+  }
+
+  .optimized-pages-text {
+    font-family: @font-bold;
+    font-size: 28px;
+    color: @color-text-dark;
+    line-height: 1.1;
+  }
+
+  .optimized-pages-bottom-text {
+    font-size: 12px;
+    color: @color-gray-muted;
+    font-family: @font-regular;
+    white-space: nowrap;
+  }
+}
+
+
+// ─── Toolbar — Search + Filter Dropdowns ─────────────────────────────────
+.wpc-smart-opt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 14px 40px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+
+  #live-search {
+    font-family: @font-semibold;
+    font-size: 14px;
+    color: @color-text-dark;
+    padding: 10px 12px 10px 38px;
+    border: 1.5px solid @color-border;
+    border-radius: @radius-input;
+    background-color: @color-white;
+    background-image: url('../icons/magnifying-glass-solid.svg');
+    background-repeat: no-repeat;
+    background-position: 12px 50%;
+    background-size: 15px;
+    width: 280px;
+    outline: none;
+    transition: @transition-fast;
+    margin-right: auto;
+
+    &::placeholder {
+      color: @color-gray-muted;
+      font-family: @font-regular;
+    }
+
+    &:focus {
+      border-color: var(--wpc-brand-primary-light, @color-primary);
+      box-shadow: @shadow-focus-ring;
+      width: 340px;
+    }
+  }
+
+  .dropdown-container.selector-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 !important; // FORCED: override legacy padding-bottom
+    width: auto !important; // FORCED: override legacy width:100%
+  }
+}
+
+// ─── Filter dropdown sections ─────────────────────────────────────────
+.dropdown-section-label {
+  font-family: @font-bold;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: @color-gray-muted;
+  padding: 8px 14px 4px;
+  pointer-events: none;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: @color-border;
+  margin: 4px 0;
+}
+
+.wpc-filter-count {
+  font-size: 11px;
+  color: var(--wpc-brand-primary-light, @color-primary);
+  margin-left: 4px;
+}
+
+
+// ─── Toolbar — Tablet ─────────────────────────────────────────────────
+@media screen and (max-width: 768px) {
+  .wpc-smart-opt-toolbar {
+    flex-direction: column;
+    padding: 16px 20px;
+    gap: 12px;
+
+    #live-search {
+      width: 100%;
+      margin-right: 0;
+
+      &:focus { width: 100%; }
+    }
+
+    .dropdown-container.selector-dropdown {
+      width: 100% !important; // FORCED: full width at tablet
+    }
+  }
+}
+
+// ─── Toolbar — Mobile ─────────────────────────────────────────────────
+@media screen and (max-width: 480px) {
+  .wpc-smart-opt-toolbar {
+    padding: 16px;
+  }
+}
+
+// Legacy — keep selector-dropdown styles for JS compatibility
+.wpc-tab-content-box .dropdown-container.selector-dropdown {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 12px;
+  gap: 8px;
+
+  .dropdown {
+    position: relative;
+
+    .dropdown-header {
+      font-family: @font-regular;
+      font-size: 14px;
+      color: @color-text-slate;
+      padding: 14px 16px;
+      border: 1px solid @color-border;
+      border-radius: @radius-input;
+      background: @color-white;
+      cursor: pointer;
+      width: auto;
+      min-width: 170px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+
+      &:hover {
+        border-color: @color-border-medium;
+        color: @color-text-dark;
+        background: @color-bg-frost;
+      }
+
+      .wpc-dropdown-row-arrow {
+        i {
+          font-size: 14px;
+          color: @color-gray-muted;
+          transition: transform 0.2s ease;
+        }
+      }
+    }
+
+    .dropdown-menu {
+      margin-top: 6px;
+      display: none;
+      position: absolute;
+      background: @color-white;
+      border: 1px solid @color-bg-frost;
+      border-radius: @radius-input;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                  0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      padding: 6px;
+      z-index: 1000;
+      right: 0;
+      overflow: hidden;
+
+      .dropdown-item {
+        padding: 8px 12px;
+        color: @color-text-slate;
+        cursor: pointer;
+        min-width: 150px;
+        text-align: left;
+        position: relative;
+        font-size: 13px;
+        transition: @transition-fast;
+        border-radius: @radius-base;
+
+        &.icon-pages:before,
+        &.icon-posts:before,
+        &.icon-products:before {
+          content: '';
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          vertical-align: middle;
+          margin-right: 8px;
+          background-size: contain;
+          background-repeat: no-repeat;
+        }
+
+        &.icon-pages:before { background-image: url('../icons/select_pages_icon.svg'); }
+        &.icon-posts:before { background-image: url('../icons/select_posts_icon.svg'); }
+        &.icon-products:before { background-image: url('../icons/select_product_icon.svg'); }
+
+        &:after {
+          content: '';
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          background-color: transparent;
+          border-radius: @radius-circle;
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+        }
+
+        &.selected:after { background-color: var(--wpc-brand-primary-light, @color-primary); }
+        &:hover { background-color: @color-bg-frost; }
+        &.selected { color: @color-text-dark; font-weight: 600; }
+      }
+    }
+  }
+}
+
+
+// ─── Optimization Table ──────────────────────────────────────────────────
+#optimizationTable {
+  width: 100%;
+
+  .optimization_excludes {
+    border-bottom: 1px solid @color-bg-neutral;
+    padding-bottom: 10px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+  }
+
+  .wpc_page_title {
+    font-weight: bold;
+  }
+
+  .exclude_dropdown_anchor {
+    transition: transform 0.3s ease;
+    width: 40px;
+    height: 40px;
+
+    &:hover {
+      cursor: pointer;
+      transform: scale(1.15);
+    }
+  }
+
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    background-color: @color-bg-neutral;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+
+    .dropdown-item {
+      padding: 8px 20px;
+      text-decoration: none;
+      display: block;
+      color: @color-text-charcoal;
+      text-align: left;
+
+      &:hover {
+        background-color: @color-bg-neutral;
+      }
+    }
+
+    .icon {
+      margin-right: 8px;
+      display: none;
+    }
+  }
+
+  // ─── Feature Icon States — Cache ────────────────────────────────────────
+  .advanced_cache {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/cache_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/cache_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/cache_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/cache_off.svg);
+      background-size: cover;
+    }
+  }
+
+  // ─── Feature Icon States — Critical CSS ─────────────────────────────────
+  .critical_css {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/css_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/css_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/css_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/css_off.svg);
+      background-size: cover;
+    }
+  }
+
+  // ─── Feature Icon States — CDN ──────────────────────────────────────────
+  .cdn {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/cdn_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/cdn_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/cdn_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/cdn_off.svg);
+      background-size: cover;
+    }
+  }
+
+  // ─── Feature Icon States — JS Delay ─────────────────────────────────────
+  .delay_js {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/js_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/js_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/js_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/js_off.svg);
+      background-size: cover;
+    }
+  }
+
+  .delay_js_v2 {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/js_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/js_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/js_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/js_off.svg);
+      background-size: cover;
+    }
+  }
+
+  // ─── Feature Icon States — Adaptive Images ──────────────────────────────
+  .adaptive {
+    .page_not_generated {
+      background-image: url(../../images/optimization_page_icons/images_not_generated.svg);
+      background-size: cover;
+    }
+    .page_excluded {
+      background-image: url(../../images/optimization_page_icons/images_exclude.svg);
+      background-size: cover;
+    }
+    .page_ready {
+      background-image: url(../../images/optimization_page_icons/images_fully_active.svg);
+      background-size: cover;
+    }
+    .page_off {
+      background-image: url(../../images/optimization_page_icons/images_off.svg);
+      background-size: cover;
+    }
+  }
+
+  .test-results {
+    /*height: 120px;*/
+  }
+}
+
+// ─── Dropdown Row — Standalone (outside #optimizationTable) ─────────────
+.wpc-dropdown-row {
+  border: 1px solid @color-border;
+  border-radius: @radius-xs;
+  padding: 20px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+
+  .wpc-dropdown-progress-bar {
+    display: flex;
+    height: 3px;
+    width: 100%;
+    background: @color-white;
+    position: relative;
+    margin-bottom: 20px;
+    justify-content: space-between;
+
+    .wpc-dropdown-progress-bar-green {
+      border-radius: @radius-xl;
+      height: 4px;
+      flex-basis: 63%;
+      background: @color-success-light;
+
+      .circle-container {
+        left: 30%;
+
+        & > span.circle {
+          background: @color-success-light;
+          border: 1px solid @color-white;
+        }
+      }
+    }
+
+    .wpc-dropdown-progress-bar-orange {
+      flex-basis: 20%;
+      border-radius: @radius-xl;
+      height: 4px;
+      background: @color-warning;
+    }
+
+    .wpc-dropdown-progress-bar-red {
+      flex-basis: 15%;
+      border-radius: @radius-xl;
+      height: 4px;
+      background: @color-coral;
+
+      .circle-container {
+        left: 0%;
+
+        & > span.circle {
+          background: @color-coral;
+          border: 1px solid @color-white;
+        }
+      }
+    }
+
+    & > div {
+      position: relative;
+
+      .circle-container {
+        position: absolute;
+        top: -4px;
+        text-align: right;
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+
+        & > span.circle {
+          content: '';
+          border-radius: @radius-circle;
+          height: 10px;
+          width: 10px;
+          margin-bottom: 5px;
+        }
+      }
+    }
+
+    .wpc-dropdown-progress-end {
+      position: absolute;
+      right: -10px;
+      top: -4px;
+      text-align: right;
+      display: flex;
+      align-items: center;
+      flex-direction: column;
+
+      span.text {
+        position: relative;
+        font-size: 13px;
+
+        &:before {
+          content: '';
+          position: absolute;
+          left: -20px;
+          top: 2px;
+          width: 15px;
+          height: 15px;
+          background-size: contain;
+          background-image: url('../icons/turtle-icon.svg');
+          background-position: left center;
+          background-repeat: no-repeat;
+        }
+      }
+
+      span.circle {
+        content: '';
+        background: @color-blue-pale;
+        border-radius: @radius-circle;
+        height: 10px;
+        width: 10px;
+        margin-bottom: 5px;
+      }
+    }
+
+    .wpc-dropdown-progress-status {
+      background: var(--wpc-brand-primary-light, @color-primary);
+      width: 30%;
+      height: 3px;
+      position: relative;
+
+      span.circle {
+        content: '';
+        background: var(--wpc-brand-primary-light, @color-primary);
+        border-radius: @radius-circle;
+        height: 10px;
+        width: 10px;
+        margin-bottom: 5px;
+      }
+
+      span.text {
+        position: relative;
+        font-size: 13px;
+
+        &:before {
+          content: '';
+          position: absolute;
+          left: -15px;
+          top: 2px;
+          width: 15px;
+          height: 15px;
+          background-size: contain;
+          background-image: url('../icons/thunder-icon.svg');
+          background-position: left center;
+          background-repeat: no-repeat;
+        }
+      }
+
+      span.circle-container {
+        position: absolute;
+        right: -20px;
+        top: -4px;
+        text-align: right;
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+      }
+    }
+  }
+
+  // ─── Check icon (inside status badge) ────────────────────────────────
+  .wpc-icon-check {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    background-image: url('../images/icon_check.svg');
+    margin-right: .4em;
+    margin-left: .55em;
+    vertical-align: middle;
+  }
+
+  // ─── Page Status Badge ──────────────────────────────────────────────────
+  .wpc-page-status {
+    min-width: 90px;
+    border-radius: @radius-pill-xl;
+    background: @color-success-bg;
+    color: @color-success;
+    padding: 5px 10px 5px 5px;
+    display: flex;
+    align-items: center;
+    margin: 0px 8px;
+
+    &.pending {
+      background: @color-border;
+      color: @color-navy-dark;
+    }
+  }
+
+  .wpc-page-status-gray {
+    border-radius: @radius-pill-xl;
+    background: @color-bg-neutral;
+    color: @color-gray-medium;
+    padding: 5px 10px 5px 5px;
+    display: inline-block;
+    margin: 0px 8px;
+
+    &.pending {
+      background: @color-border;
+      color: @color-navy-dark;
+    }
+  }
+
+  .wpc-dropdown-row-arrow {
+    display: inline-block;
+
+    i {
+      font-size: 18px;
+    }
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: inline-block;
+
+    li {
+      display: inline-block;
+      padding: 0 5px;
+      margin: 0;
+    }
+  }
+
+  .wpc-dropdown-infobox {
+    margin: 15px 0px;
+    flex: 1;
+  }
+
+  .wpc-dropdown-infobox-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: left;
+    align-items: center;
+    margin-bottom: 10px;
+
+    .wpc-dropdown-infobox-icon {
+      flex-basis: 20px;
+      padding-right: 10px;
+
+      .wpc-server-icon {
+        background-image: url(../icons/server-icon.svg);
+      }
+
+      .wpc-folder-icon {
+        background-image: url(../icons/folder-icon.svg);
+      }
+
+      .wpc-time-icon {
+        background-image: url(../icons/time-icon.svg);
+      }
+    }
+
+    i {
+      flex-basis: 20px;
+    }
+
+    h5 {
+      flex: 1;
+      margin: 0;
+      font-size: 13px;
+    }
+  }
+
+  .wpc-dropdown-row-header {
+    display: flex;
+    align-items: center;
+
+    .wpc-dropdown-row-left-side {
+      flex: 2 !important; // FORCED: enterprise override 10729
+      font-size: 14px;
+      align-items: center;
+      font-weight: bold;
+      font-family: @font-semibold !important; // FORCED: override inherited font
+      color: @color-navy-dark;
+      display: flex;
+      align-items: center;
+      overflow-wrap: break-word;
+      word-break: break-word;
+
+      .lds-ring {
+        margin-left: -10px;
+        height: 22px !important; // FORCED: override lds-ring base
+        width: 22px !important; // FORCED: override lds-ring base
+      }
+    }
+
+    .wpc-dropdown-row-right-side {
+      flex: 1;
+      text-align: right;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+  }
+
+  .wpc-dropdown-row-data {
+    display: flex;
+    padding-top: 15px;
+
+    .wpc-dropdown-box-bigger {
+      flex: 0 0 26%;
+      padding: 0px 12px;
+      display: flex;
+      align-items: center;
+    }
+
+    .wpc-dropdown-box-smaller {
+      flex: 1;
+      display: flex;
+      max-width: 130px;
+      margin-left: 10px;
+
+      .progress-bar-container {
+        flex: 0 0 50%;
+        margin: 0 0px;
+
+        &:first-of-type {
+          margin-right: 5px;
+        }
+
+        .wpc-mobile-icon {
+          display: block;
+          width: 100%;
+          height: 30px;
+          background: url('../icons/mobile-score.svg') no-repeat;
+          background-size: 20px;
+          background-position: 18px 5px;
+        }
+
+        .wpc-desktop-icon {
+          display: block;
+          width: 100%;
+          height: 30px;
+          background: url('../icons/desktop-score.svg') no-repeat;
+          background-size: 20px;
+          background-position: 18px 5px;
+        }
+
+        h2 {
+          font-size: 13px;
+          text-align: center;
+          margin: 0px 0px 5px 0px;
+        }
+      }
+    }
+  }
+
+  .per-page-settings-cog {
+    display: block;
+    width: 40px;
+    height: 40px;
+    background: url(../images/three-dots.svg) no-repeat;
+    background-size: 30px 30px;
+    background-position: center;
+    filter: brightness(0) saturate(100%) invert(90%) sepia(0%) saturate(0%) hue-rotate(180deg) brightness(0.8) contrast(0.9);
+    float: inline-end;
+    margin-left: 10px;
+
+    &:hover {
+      filter: none;
+    }
+  }
+}
+
+.wpc-advanced-settings-container-v4 #smart-optimization .wpc-items-list-row {
+  gap: 0;
+  margin: 10px auto 0;
+  padding: 0;
+  width: calc(100% - 80px); // 40px gutter each side
+}
+
+// Enterprise override — backup 10718-10720
+.wpc-advanced-settings-container-v4 #smart-optimization .wpc-dropdown-row {
+  padding: 30px;
+}
+
+// ─── Enterprise Page Status Override ────────────────────────────────────
+// Backup enterprise override 10743-10756
+.wpc-page-status {
+  background-color: #ebfdf5 !important; // FORCED: optimized badge bg
+  color: #069668 !important; // FORCED: optimized badge text
+  font-family: @font-bold !important; // FORCED: enterprise override
+  font-size: 10px !important; // FORCED: compact badge
+  font-weight: 800 !important; // FORCED: enterprise override
+  text-transform: uppercase !important; // FORCED: enterprise override
+  letter-spacing: 0.05em !important; // FORCED: enterprise override
+  border-radius: @radius-pill !important; // FORCED: pill shape
+  padding: 7px 14px 7px 10px !important; // FORCED: compact but taller
+  display: inline-flex !important; // FORCED: enterprise override
+  align-items: center !important; // FORCED: enterprise override
+  gap: 4px !important; // FORCED: tighter gap
+
+  .wpc-icon-check {
+    display: inline-block;
+    width: 1.25em;
+    height: 1.25em;
+  }
+}
+
+// Table inner padding + item cards
+#smart-opt-table {
+  overflow: hidden !important; // FORCED: clip rows to card border-radius (overrides .wpc-perf-section)
+
+  .wpc-items-list-row {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  #pagination { padding: 16px 24px 8px; }
+}
+
+// ─── Smart Optimization — Mid-range responsive (backup 11246-11274) ───
+// At wide desktop, icons auto-size and never wrap
+@media screen and (min-width: 1401px) {
+  .wpc-dropdown-row .wpc-dropdown-row-header {
+    flex-wrap: nowrap !important; // FORCED: prevent wrapping
+  }
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+    flex: 0 0 auto !important; // FORCED: auto-size to icon content
+  }
+}
+
+// Mid-range desktop — icons wrap below, centered
+@media screen and (min-width: 769px) and (max-width: 1400px) {
+  .wpc-dropdown-row .wpc-dropdown-row-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
+    flex: 0 0 100% !important; // FORCED: full width row
+    min-width: 150px !important; // FORCED: never crush text
+    justify-content: center !important; // FORCED: center title
+  }
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+    flex: 0 0 100% !important; // FORCED: full width when wrapped
+    justify-content: center !important; // FORCED: center icons
+  }
+}
+
+// ─── Smart Optimization — Below Desktop ───────────────────────────────
+@media screen and (max-width: 1220px) {
+  .wpc-smart-opt-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .wpc-smart-opt-hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .wpc-smart-opt-title-row {
+    justify-content: center;
+  }
+
+  .wpc-smart-opt-title-area p {
+    text-align: center;
+  }
+
+  .wpc-smart-opt-counter {
+    align-self: center;
+  }
+}
+
+// ─── Smart Optimization — Tablet ──────────────────────────────────────
+@media screen and (max-width: 768px) {
+  .wpc-smart-opt-header {
+    flex-direction: column;
+    text-align: center;
+    padding: 20px 20px 24px;
+    gap: 16px;
+  }
+
+  .wpc-smart-opt-hero {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .wpc-smart-opt-title-row {
+    justify-content: center;
+  }
+
+  .wpc-smart-opt-title-area p {
+    text-align: center;
+  }
+
+  .wpc-smart-opt-counter {
+    justify-content: center;
+    width: auto;
+  }
+
+  .wpc-advanced-settings-container-v4 #smart-optimization .wpc-items-list-row {
+    width: calc(100% - 40px); // 20px gutter each side
+    margin: 10px auto 0;
+    padding: 0;
+  }
+
+  .wpc-advanced-settings-container-v4 #smart-optimization .wpc-dropdown-row {
+    padding: 20px;
+  }
+
+  // Rows wrap: title centered, icons centered below
+  .wpc-dropdown-row .wpc-dropdown-row-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
+    flex: 0 0 100% !important; // FORCED: full width
+    justify-content: center !important; // FORCED: center title
+  }
+
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+    flex: 0 0 100% !important; // FORCED: full width
+    justify-content: center !important; // FORCED: center icons
+  }
+}
+
+// ─── Smart Optimization — Mobile ──────────────────────────────────────
+@media screen and (max-width: 480px) {
+  .wpc-advanced-settings-container-v4 #smart-optimization .wpc-items-list-row {
+    width: calc(100% - 32px); // 16px gutter each side
+    margin: 10px auto 0;
+    padding: 0;
+  }
+
+  .wpc-advanced-settings-container-v4 #smart-optimization .wpc-dropdown-row {
+    padding: 16px;
+  }
+
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-left-side {
+    flex: 1 1 100% !important; // FORCED: full width row
+    display: flex !important; // FORCED: flex layout
+    align-items: center !important; // FORCED: vertical center
+    justify-content: center !important; // FORCED: center title
+    gap: 8px !important; // FORCED: spacing
+  }
+
+  .wpc-dropdown-row .wpc-dropdown-row-header .wpc-dropdown-row-right-side {
+    flex: 0 0 100% !important; // FORCED: full width row
+    display: flex !important; // FORCED: flex for icons
+    flex-wrap: wrap !important; // FORCED: allow wrapping
+    gap: 6px !important; // FORCED: icon spacing
+    justify-content: center !important; // FORCED: center icons
+  }
+}
+
+
+// ─── Misc ────────────────────────────────────────────────────────────────
+.wpc-optimization-percentage {
+  text-align: end;
+  width: 15%;
+  color: @color-gray-dim;
+  font-size: 15px;
+  font-family: @font-bold;
+}
+
+.wpc-disable-clickable {
+  pointer-events: none;
+}
+
+.wpc-circle-status {
+  display: inline-block;
+  width: 30px;
+  text-align: center;
+}
+
+// ─── Blue Dot Indicator ─────────────────────────────────────────────────
+.wpc-critical-circle {
+  display: inline-block;
+  content: '';
+  width: 10px;
+  height: 10px;
+  margin-right: 10px;
+  background: @color-gray-muted;
+  border-radius: 100%;
+
+  &.wpc-done {
+    background: var(--wpc-brand-primary-light, @color-primary);
+  }
+
+  &.wpc-error {
+    background: @color-red-brand;
+  }
+
+  &.wpc-unknown {
+    background: @color-border;
+  }
+}
+
+// Pulse brand dot on row hover
+.wpc-dropdown-row:hover .wpc-critical-circle.wpc-done {
+  animation: bluePulse 1.5s infinite;
+  transform: scale(1.1);
+}
+
+.wpc-status-message {
+  flex: 0 0 auto;
+  font-weight: normal;
+  font-family: @font-regular;
+}
+
+// Loading ring
+.lds-ring {
+  display: inline-block;
+  position: relative;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+
+  div {
+    box-sizing: border-box;
+    display: block;
+    position: absolute;
+    width: 21px;
+    height: 21px;
+    margin: 2px;
+    border: 2px solid var(--wpc-brand-accent-light, @color-gradient-start);
+    border-radius: @radius-circle;
+    animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    border-color: var(--wpc-brand-accent-light, @color-gradient-start) transparent transparent transparent;
+
+    &:nth-child(1) { animation-delay: -0.45s; }
+    &:nth-child(2) { animation-delay: -0.3s; }
+    &:nth-child(3) { animation-delay: -0.15s; }
+  }
+}
+
+// Pagination
+#pagination {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+  gap: 4px;
+
+  a, span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: @radius-base;
+    font-family: @font-semibold;
+    font-size: 13px;
+    text-decoration: none;
+    transition: @transition-fast;
+  }
+
+  a {
+    color: @color-text-secondary;
+    &:hover { background: @color-bg-frost; color: @color-text-dark; }
+  }
+
+  span.current,
+  .current {
+    background: var(--wpc-brand-primary, @color-blue);
+    color: @color-white;
+  }
+}

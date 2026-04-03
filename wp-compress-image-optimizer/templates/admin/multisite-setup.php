@@ -9,8 +9,8 @@ if (!empty($_GET['tab'])) {
 
 // Menu configuration
 $menu_items = [];
-$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=default-settings'), 'tab' => 'default-settings', 'title' => 'Default Settings', 'class' => 'wp-mu-default-settings'];
-$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=manage-websites'), 'tab' => 'manage-websites', 'title' => 'Manage Websites', 'class' => 'wp-mu-manage-websites'];
+$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=default-settings'), 'tab' => 'default-settings', 'title' => esc_html__('Default Settings', WPS_IC_TEXTDOMAIN), 'class' => 'wp-mu-default-settings'];
+$menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=manage-websites'), 'tab' => 'manage-websites', 'title' => esc_html__('Manage Websites', WPS_IC_TEXTDOMAIN), 'class' => 'wp-mu-manage-websites'];
 
 ?>
 <div class="wrap">

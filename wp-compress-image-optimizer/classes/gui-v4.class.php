@@ -14,6 +14,59 @@ class wpc_gui_v4 extends wps_ic
     public static $accountQuota;
     public static $slug;
 
+    // Popup ID → [option_group, option_key] for override detection
+    private static $popup_option_map = [
+        'exclude-critical-css'          => ['wpc-excludes', 'critical_css'],
+        'exclude-js-delay-v2'           => ['wpc-excludes', 'delay_js_v2'],
+        'exclude-advanced-caching-popup' => ['wpc-excludes', 'cache'],
+        'exclude-simple-caching'        => ['wpc-excludes', 'simple_caching'],
+        'exclude-inline-css'            => ['wpc-excludes', 'inline_css'],
+        'exclude-minify-html'           => ['wpc-excludes', 'minify_html'],
+        'exclude-js-defer'              => ['wpc-excludes', 'defer_js'],
+        'exclude-js-combine'            => ['wpc-excludes', 'combine_js'],
+        'exclude-js-minify'             => ['wpc-excludes', 'js_minify'],
+        'exclude-css-minify'            => ['wpc-excludes', 'css_minify'],
+        'exclude-css-render-blocking'   => ['wpc-excludes', 'css_render_blocking'],
+        'exclude-css-combine'           => ['wpc-excludes', 'css_combine'],
+        'exclude-scripts-to-footer'     => ['wpc-excludes', 'exclude-scripts-to-footer'],
+        'delay-js-configuration'        => ['wpc-excludes', 'lastLoadScript'],
+        'exclude-lazy-popup'            => ['wpc-excludes', 'lazy'],
+        'exclude-adaptive-popup'        => ['wpc-excludes', 'adaptive'],
+        'exclude-webp-popup'            => ['wpc-excludes', 'webp'],
+        'exclude-cdn-popup'             => ['wpc-excludes', 'cdn'],
+    ];
+
+    private static $excludes_cache = null;
+
+    /**
+     * Check if a configure popup has stored overrides (non-empty exclude list)
+     */
+    public static function hasPopupOverrides($popup_id) {
+        if (empty($popup_id) || !isset(self::$popup_option_map[$popup_id])) {
+            return false;
+        }
+
+        $map = self::$popup_option_map[$popup_id];
+
+        if (self::$excludes_cache === null) {
+            self::$excludes_cache = [
+                'wpc-excludes'     => get_option('wpc-excludes', []),
+                'wpc-url-excludes' => get_option('wpc-url-excludes', []),
+            ];
+        }
+
+        $group = $map[0];
+        $key   = $map[1];
+        $data  = isset(self::$excludes_cache[$group][$key]) ? self::$excludes_cache[$group][$key] : [];
+
+        if (is_array($data)) {
+            $data = array_filter($data, function($v) { return trim($v) !== ''; });
+            return !empty($data);
+        }
+
+        return !empty($data);
+    }
+
     public function __construct($options = [])
     {
         self::$user_credits = parent::getAccountStatusMemory();
@@ -506,7 +559,11 @@ class wpc_gui_v4 extends wps_ic
     public static function checkboxTabTitleCheckbox($title = 'Demo', $description = '', $icon = '', $notify = '', $option = 'default', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left')
     {
         $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
-        $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
+        if (strpos($icon, '<svg') === 0) {
+            $html .= '<div class="wpc-checkbox-icon">' . $icon . '</div>';
+        } else {
+            $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
+        }
 
         $html .= '<div class="wpc-checkbox-description">';
 
@@ -515,7 +572,7 @@ class wpc_gui_v4 extends wps_ic
         } else {
             $html .= '<h4 class="fs-500 text-dark-300 fw-500 p-inline" style="display:flex;align-items:center;">' . $title;
             $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750" style="margin-left:10px">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</h4>';
         }
@@ -578,17 +635,12 @@ class wpc_gui_v4 extends wps_ic
         if (!empty($option) && !$locked) {
             $html .= '<div class="form-check">';
             $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all" data-for-div-id="' . $option . '" type="checkbox" value="1" id="select-all-' . $option . '" name="select-all-' . $option . '">';
-            $html .= '<label class="with-label" for="select-all-' . $option . '"><div>Select All</div><span></span></label>';
+            $html .= '<button type="button" class="wpc-select-all-btn" data-for-div-id="' . $option . '" data-checkbox-id="select-all-' . $option . '">Select All</button>';
             $html .= '</div>';
-
-            //      $html .= '<label class="wpc-switch" for="select-all-' . $option . '">';
-            //      $html .= '<input type="checkbox" data-for-div-id="' . $option . '" class="form-check-input checkbox mt-0 wpc-checkbox-select-all" value="1" id="select-all-' . $option . '" name="select-all-' . $optionName . '"/>';
-            //      $html .= '<span class="wpc-switch-slider wpc-switch-round"></span>';
-            //      $html .= '</label>';
         } else if ($locked) {
             $html .= '<div class="form-check">';
             $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all wpc-locked-checkbox" data-for-div-id="' . $option . '" type="checkbox" value="0" id="select-all-' . $option . '" name="select-all-' . $option . '">';
-            $html .= '<label class="with-label" for=""><div>Select All</div><span></span></label>';
+            $html .= '<button type="button" class="wpc-select-all-btn disabled" data-for-div-id="' . $option . '">Select All</button>';
             $html .= '</div>';
         }
 
@@ -598,12 +650,14 @@ class wpc_gui_v4 extends wps_ic
         return $html;
     }
 
-    public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false, $helpBtn = false, $helpBtnText = false)
+    public static function checkboxTabTitle($title = 'Demo', $description = '', $icon = '', $notify = '', $option = '', $locked = false, $value = '1', $configure = false, $tooltip = false, $tooltipPosition = 'left', $additionalConfigure = false, $helpBtn = false, $helpBtnText = false, $purgeAction = false)
     {
         $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
 
 
-        if ($icon == 'cf-logo.png') {
+        if (strpos($icon, '<svg') === 0) {
+            $html .= '<div class="wpc-checkbox-icon">' . $icon . '</div>';
+        } elseif ($icon == 'cf-logo.png') {
             $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" style="height:auto !important;padding-bottom: 12px !important;margin-right: 15px;" /></div>';
         } else {
             $html .= '<div class="wpc-checkbox-icon"><img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '" /></div>';
@@ -616,7 +670,7 @@ class wpc_gui_v4 extends wps_ic
         } else {
             $html .= '<h4 class="fs-500 text-dark-300 fw-500 p-inline" style="display:flex;align-items:center;">' . $title;
             $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750" style="margin-left:10px">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</h4>';
         }
@@ -692,6 +746,12 @@ class wpc_gui_v4 extends wps_ic
             $html .= '</div>';
         }
 
+        if (!empty($purgeAction)) {
+            $html .= '<div class="form-check">';
+            $html .= '<a href="#" class="wpc-purge-action ' . $purgeAction . '">Purge Cache</a>';
+            $html .= '</div>';
+        }
+
 
         // Hide for Whitelabel users
         if (!class_exists('whtlbl_whitelabel_plugin')) {
@@ -749,18 +809,20 @@ class wpc_gui_v4 extends wps_ic
                                            ';
 
         if (!empty($configure) && $configure !== false) {
+            $hasOverrides = self::hasPopupOverrides($configure);
+            $overrideClass = $hasOverrides ? ' wpc-has-overrides' : '';
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
-            $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<a href="#" class="wps-ic-configure-popup' . $overrideClass . '" data-popup="' . $configure . '" data-popup-width="750">';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</h4>';
         } else {
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
             $html .= '</h4>';
         }
@@ -840,18 +902,20 @@ class wpc_gui_v4 extends wps_ic
         }
 
         if (!empty($configure) && $configure !== false) {
+            $hasOverrides = self::hasPopupOverrides($configure);
+            $overrideClass = $hasOverrides ? ' wpc-has-overrides' : '';
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
-            $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<a href="#" class="wps-ic-configure-popup' . $overrideClass . '" data-popup="' . $configure . '" data-popup-width="750">';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</h4>';
         } else {
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
             $html .= '</h4>';
         }
@@ -1113,18 +1177,20 @@ class wpc_gui_v4 extends wps_ic
                                            ';
 
         if (!empty($configure) && $configure !== false) {
+            $hasOverrides = self::hasPopupOverrides($configure);
+            $overrideClass = $hasOverrides ? ' wpc-has-overrides' : '';
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
-            $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<a href="#" class="wps-ic-configure-popup' . $overrideClass . '" data-popup="' . $configure . '" data-popup-width="750">';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</h4>';
         } else {
             $html .= '<h4>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
             $html .= '</h4>';
         }
@@ -1153,11 +1219,9 @@ class wpc_gui_v4 extends wps_ic
         }
 
         if ($locked) {
-            #$html .= '<span class="wpc-custom-tooltip LockedTooltip" data-tooltip-id="bla2" data-pop-text="asd" data-tooltip-position="top"><i class="tooltip-icon"></i></span>';
-
             $html .= '<label class="wpc-switch">
-  <input type="checkbox" class="wpc-ic-settings-v4-checkbox ' . $popup . '" data-popup="' . $popupData . '" ' . $contactSupport . ' value="0" id="' . $optionName_cleaned . '" name="' . $optionName . '" />
-  <span class="wpc-switch-slider wpc-switch-disabled wpc-switch-round LockedTooltip" data-tooltip-id="' . $optionName . '" data-pop-text="<i class=\'wpc-sparkle-icon\'></i> Optimize Plan Required" data-tooltip-position="top"></span>
+  <input type="checkbox" class="wpc-ic-settings-v4-checkbox" value="0" id="' . $optionName_cleaned . '" name="' . $optionName . '" disabled />
+  <span class="wpc-switch-slider wpc-switch-disabled wpc-switch-round"></span>
   </label>';
 
         } else {
@@ -1240,9 +1304,27 @@ class wpc_gui_v4 extends wps_ic
             $circleActive = '';
         }
 
+        // Inline SVG for dynamic coloring via CSS currentColor
+        $iconPath = WPS_IC_DIR . 'assets/v4/images/' . $icon;
+        $svgContent = '';
+        if (file_exists($iconPath) && pathinfo($iconPath, PATHINFO_EXTENSION) === 'svg') {
+            $svgContent = file_get_contents($iconPath);
+            // Strip XML declaration and comments, add class for CSS targeting
+            $svgContent = preg_replace('/<!--.*?-->/s', '', $svgContent);
+            $svgContent = preg_replace('/<\?xml[^>]*\?>/', '', $svgContent);
+            $svgContent = str_replace('<svg ', '<svg class="wpc-iconcheckbox-svg" ', $svgContent);
+        }
+
         $html .= '<div class="wpc-iconcheckbox ' . $circleActive . ' ' . $lockedCss . '">
-    <div class="wpc-iconcheckbox-icon">
-        <img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '"/>
+    <div class="wpc-iconcheckbox-icon">';
+
+        if ($svgContent) {
+            $html .= $svgContent;
+        } else {
+            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/' . $icon . '"/>';
+        }
+
+        $html .= '
     </div>
     <div class="wpc-iconcheckbox-title">
         ' . $title . '
@@ -1347,18 +1429,20 @@ class wpc_gui_v4 extends wps_ic
                                        <div class="wpc-checkbox-title-holder">';
 
         if (!empty($configure) && $configure !== false) {
+            $hasOverrides = self::hasPopupOverrides($configure);
+            $overrideClass = $hasOverrides ? ' wpc-has-overrides' : '';
             $html .= '<span>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
-            $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<a href="#" class="wps-ic-configure-popup' . $overrideClass . '" data-popup="' . $configure . '" data-popup-width="750">';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>';
             $html .= '</a>';
             $html .= '</span>';
         } else {
             $html .= '<span>' . $title;
             if ($beta) {
-                $html .= '<span class="wpc-beta-badge">BETA</span>';
+                $html .= '<span class="wpc-beta-badge">' . (is_string($beta) ? $beta : 'BETA') . '</span>';
             }
             $html .= '</span>';
         }
@@ -1387,11 +1471,9 @@ class wpc_gui_v4 extends wps_ic
         }
 
         if ($locked) {
-            #$html .= '<span class="wpc-custom-tooltip LockedTooltip" data-tooltip-id="bla2" data-pop-text="asd" data-tooltip-position="top"><i class="tooltip-icon"></i></span>';
-
             $html .= '<label class="wpc-switch">
-  <input type="checkbox" class="wpc-ic-settings-v4-checkbox ' . $popup . '" data-popup="' . $popupData . '" ' . $contactSupport . ' value="0" id="' . $optionName_cleaned . '" name="' . $optionName . '" />
-  <span class="wpc-switch-slider wpc-switch-disabled wpc-switch-round LockedTooltip" data-tooltip-id="' . $optionName . '" data-pop-text="<i class=\'wpc-sparkle-icon\'></i> Optimize Plan Required" data-tooltip-position="top"></span>
+  <input type="checkbox" class="wpc-ic-settings-v4-checkbox" value="0" id="' . $optionName_cleaned . '" name="' . $optionName . '" disabled />
+  <span class="wpc-switch-slider wpc-switch-disabled wpc-switch-round"></span>
   </label>';
 
         } else {
@@ -1576,19 +1658,19 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-preset-mode-title">
                     <div>
-                       <h4 class="fs-500 text-dark-300 fw-500 p-inline mb-10" style="margin-top:0;margin-bottom:10px;">Preset Optimization Modes</h4>
+                       <h4 class="fs-500 text-dark-300 fw-500 p-inline mb-10" style="margin-top:0;margin-bottom:10px;">'.esc_html__('Preset Optimization Modes', WPS_IC_TEXTDOMAIN).'</h4>
                     </div>
                     <div class="setting-value setting-configure">
-                         <p style="margin:0;">One-click configure recommended image optimization settings and performance tweaks based on your preferences and website compatibility.</p>
+                         <p style="margin:0;">'.esc_html__('One-click configure recommended image optimization settings and performance tweaks based on your preferences and website compatibility.', WPS_IC_TEXTDOMAIN).'</p>
                     </div>
                 </div>';
 
 
         $preset_config = get_option(WPS_IC_PRESET);
         $preset = ['recommended' => 'Recommended Mode',
-            'safe' => 'Safe Mode',
-            'aggressive' => 'Aggressive Mode',
-            'custom' => 'Custom'];
+            'safe' => esc_html__('Safe Mode', WPS_IC_TEXTDOMAIN),
+            'aggressive' => esc_html__('Aggressive Mode', WPS_IC_TEXTDOMAIN),
+            'custom' => esc_html__('Custom', WPS_IC_TEXTDOMAIN)];
 
         if (empty($preset_config)) {
             update_option('wps_ic_preset_setting', 'aggressive');
@@ -1634,8 +1716,11 @@ class wpc_gui_v4 extends wps_ic
 
         $popup = 'custom-cdn';
         $cfSettings = get_option(WPS_IC_CF);
-        if (!empty($cfSettings)){
-            //if CF is connected show the CF cdn popup
+        $cfCdnActive = !empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1';
+
+        // Show CF CNAME when CF is connected AND CF CDN is active
+        $isCfActive = !empty($cfSettings) && $cfCdnActive;
+        if ($isCfActive) {
             $popup = 'cf-cdn';
             $zone_name = get_option(WPS_IC_CF_CNAME, '');
         }
@@ -1643,33 +1728,32 @@ class wpc_gui_v4 extends wps_ic
         $html = '<div class="wpc-tab-content-box wpc-tab-content-cname ' . $lockedClass . '" 
     style="display:flex;align-items:center;justify-content: space-between;">
                                 <div style="display:flex;align-items:center;">
-                                    <img src="' . WPS_IC_URI . 'assets/images/icon-exclude-list.svg"
-                                         style="width:60px;margin-left:20px;margin-right:40px;"/>';
+                                    <div class="wpc-cname-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M296 288c57.4 0 104-46.6 104-104S353.4 80 296 80L152 80c-57.4 0-104 46.6-104 104 0 34 16.3 64.1 41.4 83.1-5.2 16.2-8.3 33.3-9.2 50.9-47.8-25.6-80.2-76-80.2-134 0-83.9 68.1-152 152-152l144 0c83.9 0 152 68.1 152 152S379.9 336 296 336l-72 0 0-48 72 0zm232 40c0-31-13.6-58.9-35.2-78 5.7-16.3 9.4-33.7 10.6-51.6 43.5 26.7 72.5 74.8 72.5 129.6 0 83.9-68.1 152-152 152l-144 0c-83.9 0-152-68.1-152-152s68.1-152 152-152l72 0 0 48-72 0c-57.4 0-104 46.6-104 104s46.6 104 104 104l144 0c57.4 0 104-46.6 104-104z"/></svg></div>';
 
 
         if (!empty($zone_name)) {
             $html .= '<div style="flex-direction: column;display: flex;justify-content: center;">
                     <div>
-                       <h4 class="fs-500 text-dark-300 fw-500 p-inline mb-10" style="margin-top:0;margin-bottom:10px;">Custom CDN Domain</h4>
+                       <h4 class="fs-500 text-dark-300 fw-500 p-inline mb-10" style="margin-top:0;margin-bottom:10px;">' . esc_html__('Custom CDN Domain', WPS_IC_TEXTDOMAIN) . '</h4>
                     </div>
                     <div class="setting-value setting-configured cname-configured">
-                       <strong>Connected Domain: ' . $zone_name . '</strong><br/>
+                       <strong class="wpc-cname-label">' . esc_html__('Connected Domain:', WPS_IC_TEXTDOMAIN) . '</strong> ' . esc_html($zone_name) . '<br/>
                     </div>
                     <div class="setting-value setting-configure" style="display: none;">
-                         <p style="margin:0;">Use <strong>any domain</strong> you own to serve images and assets.</p>
+                         <p style="margin:0;">' . __('Use <strong>any domain</strong> you own to serve images and assets.', WPS_IC_TEXTDOMAIN) . '</p>
                     </div>
                 </div>';
 
         } else {
             $html .= '<div style="flex-direction: column;display: flex;justify-content: center;">
                     <div>
-                        <h4 class="fs-500 text-dark-300 fw-500 p-inline" style="margin-top:0;margin-bottom:10px;">Custom CDN Domain</h4>
+                        <h4 class="fs-500 text-dark-300 fw-500 p-inline" style="margin-top:0;margin-bottom:10px;">' . esc_html__('Custom CDN Domain', WPS_IC_TEXTDOMAIN) . '</h4>
                     </div>
                     <div class="setting-value setting-configured cname-configured" style="display: none;">
-                        <strong>Connected Domain: ' . $zone_name . '</strong><br/>
+                        <strong class="wpc-cname-label">' . esc_html__('Connected Domain:', WPS_IC_TEXTDOMAIN) . '</strong> ' . esc_html($zone_name) . '<br/>
                     </div>
                     <div class="setting-value setting-configure">
-                        <p style="margin:0;">Use <strong>any domain</strong> you own to serve images and assets.</p>
+                        <p style="margin:0;">' . __('Use <strong>any domain</strong> you own to serve images and assets.', WPS_IC_TEXTDOMAIN) . '</p>
                     </div>
                 </div>';
         }
@@ -1677,23 +1761,27 @@ class wpc_gui_v4 extends wps_ic
         $html .= '</div>
               <div>';
 
-        $zone_name = get_option('ic_custom_cname');
-        if (!empty($zone_name)) {
+        if (!empty($zone_name) && $isCfActive) {
+            // CF is active with a CNAME — show Configure (CF popup), not Remove
+            $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup-width="600" data-popup="cf-cdn">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
+
+        } elseif (!empty($zone_name)) {
+            // Generic/Bunny CNAME is set — show Remove + hidden Configure
             $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup="remove-custom-cdn">
-                <i class="icon-trash"></i> Remove</a>
-                <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="custom-cdn" style="display:none;">Configure</a>';
+                <i class="icon-trash"></i> ' . esc_html__('Remove', WPS_IC_TEXTDOMAIN) . '</a>
+                <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="' . $popup . '" style="display:none;">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
 
         } else {
 
             if ($cnameLocked) {
-                $html .= '<div class="wpc-box-check LockedTooltip" data-pop-text="<i class=\'wpc-sparkle-icon\'></i> Optimize Plan Required" data-tooltip-position="top">';
-                $html .= '<a href="#" class="wps-ic-configure-popup wpc-locked-configure-popup" style="pointer-events:none"><i class="wpc-gray-lock"></i>Locked</a>';
+                $html .= '<div class="wpc-box-check LockedTooltip" data-pop-text="<i class=\'wpc-sparkle-icon\'></i> ' . esc_attr__('Optimize Plan Required', WPS_IC_TEXTDOMAIN) . '" data-tooltip-position="top">';
+                $html .= '<a href="#" class="wps-ic-configure-popup wpc-locked-configure-popup" style="pointer-events:none"><i class="wpc-gray-lock"></i>' . esc_html__('Locked', WPS_IC_TEXTDOMAIN) . '</a>';
                 $html .= '</div>';
             } else {
                 $html .= '
     <a href="#" class="wps-ic-configure-popup setting-configured" data-popup="remove-custom-cdn" style="display: none;">
-    <i class="icon-trash"></i> Remove</a>
-    <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="'.$popup.'">Configure</a>';
+    <i class="icon-trash"></i> ' . esc_html__('Remove', WPS_IC_TEXTDOMAIN) . '</a>
+    <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="'.$popup.'">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
             }
 
         }
@@ -1746,7 +1834,7 @@ class wpc_gui_v4 extends wps_ic
     }
 
 
-    public static function dropdown($optionName = '', $title, $description = '', $values = [])
+    public static function dropdown($optionName = '', $title, $description = '', $values = [], $recommended = '')
     {
 
         if (empty(self::$options[$optionName])) {
@@ -1783,11 +1871,18 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
+        // Clean parenthesized text from button label
+        $buttonLabel = $values[$currentSetting];
+        if (preg_match('/^(.+?)\s*\(.+?\)\s*$/', $buttonLabel, $bm)) {
+            $buttonLabel = trim($bm[1]);
+        }
+
         // Generate dropdown HTML with unique classes
-        $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $option . '" />
+        $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $currentSetting . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
-    ' . $values[$currentSetting] . '
+    <span class="selected-text">' . esc_html($buttonLabel) . '</span>
+    <svg class="wpc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
   </button>';
 
         $html .= '<div class="wpc-cf-select-menu">';
@@ -1797,7 +1892,19 @@ class wpc_gui_v4 extends wps_ic
             if ($k == $currentSetting) {
                 $s = 'wpc-cf-active';
             }
-            $html .= '<a class="wpc-cf-select-item ' . $s . '" data-preset-title="' . $v . '" data-value="' . $k . '">' . $v . '</a>';
+            // Extract parenthesized text as badge
+            $badge = '';
+            $label = $v;
+            if (preg_match('/^(.+?)\s*\((.+?)\)\s*$/', $v, $m)) {
+                $label = trim($m[1]);
+                $badgeClass = (stripos($m[2], 'Recommended') !== false) ? 'wpc-recommended-badge' : 'wpc-info-badge';
+                $badge = '<span class="' . $badgeClass . '">' . esc_html($m[2]) . '</span>';
+            }
+            // Explicit recommended param overrides
+            if ($recommended !== '' && $k === $recommended && empty($badge)) {
+                $badge = '<span class="wpc-recommended-badge">' . esc_html__('Recommended', WPS_IC_TEXTDOMAIN) . '</span>';
+            }
+            $html .= '<a class="wpc-cf-select-item ' . $s . '" data-preset-title="' . esc_attr($label) . '" data-value="' . $k . '">' . esc_html($label) . $badge . '</a>';
         }
 
         $html .= '</div></div>';
@@ -1853,7 +1960,8 @@ class wpc_gui_v4 extends wps_ic
         $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $cf_preset_config . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
-    ' . $cf_preset[$cf_preset_config] . '
+    <span class="selected-text">' . $cf_preset[$cf_preset_config] . '</span>
+    <svg class="wpc-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
   </button>';
 
         $html .= '<div class="wpc-cf-select-menu">';
@@ -1918,9 +2026,8 @@ class wpc_gui_v4 extends wps_ic
 
         if (!empty($configure) && $configure !== false) {
             $html .= '<a href="#" class="wps-ic-configure-popup" data-popup="' . $configure . '" data-popup-width="750" style="margin-left:10px">';
-            $html .= '<img src="' . WPS_IC_ASSETS . '/v4/images/cog.svg"/>';
+            $html .= '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z"/></svg>';
             $html .= '</a>';
-            $html .= '</h4>';
         }
 
         $html .=  '</div>';
@@ -1968,7 +2075,7 @@ class wpc_gui_v4 extends wps_ic
         $settings = get_option(WPS_IC_SETTINGS);
 
         // Get current value
-        $current_value = $settings['font-display'] ?? 'off';
+        $current_value = $settings['font-display'] ?? 'swap';
 
         if (empty($current_value)) {
             $current_value = 'off';

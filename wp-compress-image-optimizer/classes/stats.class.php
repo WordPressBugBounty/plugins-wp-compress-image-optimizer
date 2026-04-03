@@ -110,7 +110,7 @@ class wps_ic_stats
                                                 <span class="wpc-stats-info-icon">
                                                     <img src="' . WPS_IC_ASSETS . '/lite/images/stats-speed.svg"/>
                                                 </span>
-                                                <span class="wpc-stats-info-text">' . $after . '</span>
+                                                <span class="wpc-stats-info-text">' . preg_replace('/([0-9.]+)\s*([a-zA-Z%]+)/', '$1<span class="wpc-stats-unit">$2</span>', $after) . '</span>
                                             </div>
                                             <div class="wpc-stats-improvement">
                                                 <span class="wpc-stats-improvement-icon">
@@ -141,11 +141,11 @@ class wps_ic_stats
         $option = get_option(WPS_IC_OPTIONS);
         if (!empty($option['version']) && $option['version'] == 'lite' && !get_option('hide_wpcompress_plugin')) {
 
-            $html = '<div class="wpc-stats-unlock"><a href="#" class="wpc-custom-btn wpc-custom-btn-locked"><span>Unlock 24/7 Monitoring</span> <img src="' . WPS_IC_URI . 'assets/lite/images/unlock-24-7.svg" alt="Unlock 24/7 Monitoring"/></a></div>';
+            $html = '<div class="wpc-stats-unlock"><a href="#" class="wpc-custom-btn wpc-custom-btn-locked"><span>' . esc_html__('Unlock 24/7 Monitoring', WPS_IC_TEXTDOMAIN) . '</span> <img src="' . WPS_IC_URI . 'assets/lite/images/unlock-24-7.svg" alt="'.esc_html__('Unlock 24/7 Monitoring', WPS_IC_TEXTDOMAIN).'"/></a></div>';
 
         } else {
 
-            $html = '<div class="wpc-stats-monitoring"><span><img src="' . WPS_IC_URI . 'assets/lite/images/checkbox-link.svg" alt="24/7 Monitoring Active"/> 24/7 Monitoring Active</span></div>';
+            $html = '<div class="wpc-stats-monitoring"><span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" style="vertical-align:-1px;margin-right:6px"><path fill="currentColor" d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z"/></svg> '.esc_html__('24/7 Monitoring Active', WPS_IC_TEXTDOMAIN).'</span></div>';
 
         }
 

@@ -18,7 +18,7 @@
 						echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Custom CDN Domain</h3>
+                        <h3><?php echo esc_html__('Custom CDN Domain', WPS_IC_TEXTDOMAIN); ?></h3>
                     </div>
                 </div>
             </div>
@@ -26,12 +26,12 @@
             <form method="post" class="wpc-save-popup-data" action="#">
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
-                        <p>Specify your CNAME.</p>
+                        <p><?php echo esc_html__('Specify your CNAME.', WPS_IC_TEXTDOMAIN); ?></p>
                         <input type="text" name="custom-cdn" id="wpc-custom-cdn" style="min-width:250px">
                     </div>
                 </div>
                 <div class="wps-empty-row">&nbsp;</div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
             </form>
         </div>
     </div>

@@ -386,7 +386,7 @@
 }
 
 .wps-ic-notice-connect {
-  border-bottom: 4px solid #61a7f9 !important;
+  border-bottom: 4px solid var(--wpc-brand-primary, #4c89eb) !important;
 }
 
 .wps-ic-legacy-hide {
@@ -1669,9 +1669,10 @@
 
 .button-get-started {
   color: #fff !important;
-  background: #61a7f9 !important;
+  background: var(--wpc-brand-primary, #4c89eb) !important;
   border-bottom: 0px !important;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   line-height: normal;
   letter-spacing: 1px;
   padding: 12px 40px;
@@ -1680,8 +1681,19 @@
   font-weight: 600;
   vertical-align: middle !important;
   font-size: 15px !important;
-  margin-right: 50px;
-  /*animation: shadow-pulse 1s infinite;*/
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  outline: none !important;
+  box-shadow: none !important;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--wpc-brand-shadow, rgba(76, 137, 235, 0.3)) !important;
+  }
+
+  &:focus, &:active {
+    outline: none !important;
+    box-shadow: none !important;
+  }
 }
 
 .wp-compress-notice .wp-ic-logo-main {

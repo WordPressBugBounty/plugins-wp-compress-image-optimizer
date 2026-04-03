@@ -125,21 +125,21 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     <div class="results-inner">
         <span class="ic-terminal-dot blink"><span></span></span>
     </div>
-    <a href="#" class="copy-debug">Copy Debug Results</a>
+    <a href="#" class="copy-debug"><?php esc_html_e('Copy Debug Results', WPS_IC_TEXTDOMAIN); ?></a>
 </div>
 
 <table id="information-table" class="wp-list-table widefat fixed striped posts">
     <thead>
     <tr>
-        <th>Check Name</th>
-        <th>Value</th>
-        <th>Status</th>
-        <th>Action</th>
+        <th><?php esc_html_e('Check Name', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php esc_html_e('Value', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php esc_html_e('Status', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php esc_html_e('Action', WPS_IC_TEXTDOMAIN); ?></th>
     </tr>
     </thead>
     <tbody>
     <tr>
-        <td>Use OLD Critical API</td>
+        <td><?php esc_html_e('Use OLD Critical API', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -161,17 +161,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
 
 
                 if (empty($settings['mcCriticalCSS']) || $settings['mcCriticalCSS'] == 'mc') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=false') . '" class="button-primary" style="margin-right:20px;">Enable Old API</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable Old API', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=true') . '" class="button-primary" style="margin-right:20px;">Enable New API</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_critical_mc=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable New API', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                Enable Bunny Critical CSS API.
+                <?php esc_html_e('Enable Bunny Critical CSS API.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>New CDN API Test</td>
+        <td><?php esc_html_e('New CDN API Test', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -195,17 +195,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $cdn_mc = get_option('wps_ic_cdn_mc');
 
                 if (empty($cdn_mc) || $cdn_mc == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_cdn_mc=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                Enable Bunny MC API.
+                <?php esc_html_e('Enable Bunny MC API.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>New DelayJS DEBUG</td>
+        <td><?php esc_html_e('New DelayJS DEBUG', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
 					    <?php
@@ -220,17 +220,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
 					    $v2_debug = get_option('wps_ic_delay_v2_debug');
 
 					    if (empty($v2_debug) || $v2_debug == 'false') {
-						    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_delay_v2_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+						    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_delay_v2_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
 					    } else {
-						    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_delay_v2_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+						    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_delay_v2_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
 					    }
 					    ?>
-                Enable console log debug.
+                <?php esc_html_e('Enable console log debug.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Remove OptimizeJS</td>
+        <td><?php esc_html_e('Remove OptimizeJS', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -245,17 +245,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $optimizejs_remove = get_option('wps_optimizejs_remove');
 
                 if (empty($optimizejs_remove) || $optimizejs_remove == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_remove=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with optimize.js this will give you the debug version.
+                <?php esc_html_e('If you are having any sort of issues with optimize.js this will give you the debug version.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Enable OptimizeJS Debug</td>
+        <td><?php esc_html_e('Enable OptimizeJS Debug', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -266,17 +266,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $optimizejs_debug = get_option('wps_optimizejs_debug');
 
                 if (empty($optimizejs_debug) || $optimizejs_debug == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&optimizejs_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with optimize.js this will give you the debug version.
+                <?php esc_html_e('If you are having any sort of issues with optimize.js this will give you the debug version.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Debug Log</td>
+        <td><?php esc_html_e('Debug Log', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -287,16 +287,16 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $development = get_option('wps_ic_debug_log');
 
                 if (empty($development) || $development == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&wps_ic_debug_log=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Plugin Development Mode</td>
+        <td><?php esc_html_e('Plugin Development Mode', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -307,16 +307,16 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $development = get_option('wps_ic_development');
 
                 if (empty($development) || $development == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_development=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Enable Critical CSS Debug</td>
+        <td><?php esc_html_e('Enable Critical CSS Debug', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -327,17 +327,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $ccss_debug = get_option('ccss_debug');
 
                 if (empty($ccss_debug) || $ccss_debug == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ccss_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with critical CSS.
+                <?php esc_html_e('If you are having any sort of issues with critical CSS.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Enable PageSpeed & Critical Debug</td>
+        <td><?php esc_html_e('Enable PageSpeed & Critical Debug', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -348,18 +348,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $debugPhp = get_option('wps_ps_debug');
 
                 if (empty($debugPhp) || $debugPhp == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&ps_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with our plugin, enabling this option will give you some basic
-                debug output in Console log of your browser.
+                <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Enable PHP Debug</td>
+        <td><?php esc_html_e('Enable PHP Debug', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -370,18 +369,17 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 $debugPhp = get_option('wps_ic_debug');
 
                 if (empty($debugPhp) || $debugPhp == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&php_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with our plugin, enabling this option will give you some basic
-                debug output in Console log of your browser.
+                <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
     <tr>
-        <td>Enable JavaScript Debug</td>
+        <td><?php esc_html_e('Enable JavaScript Debug', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -390,51 +388,50 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 }
 
                 if (get_option('wps_ic_js_debug') == 'false') {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&js_debug=true') . '" class="button-primary" style="margin-right:20px;">Enable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&js_debug=true') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
                 } else {
-                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&js_debug=false') . '" class="button-primary" style="margin-right:20px;">Disable</a>';
+                    echo '<a href="' . admin_url('admin.php?page=' . $wps_ic::$slug . '&view=debug_tool&js_debug=false') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                If you are having any sort of issues with our plugin, enabling this option will give you some basic
-                debug output in Console log of your browser.
+                <?php esc_html_e('If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>
 
 
     <tr>
-        <td>Site Url</td>
+        <td><?php esc_html_e('Site Url', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
-                echo 'Site URL: ' . site_url();
+                echo esc_html__('Site URL:', WPS_IC_TEXTDOMAIN) . ' ' . site_url();
                 ?>
             </p>
             <p>
                 <?php
-                echo 'Get site url: ' . get_site_url();
+                echo esc_html__('Get site url:', WPS_IC_TEXTDOMAIN) . ' ' . get_site_url();
                 ?>
             </p>
         </td>
     </tr>
 
     <tr>
-        <td>Plugin Configuration</td>
+        <td><?php esc_html_e('Plugin Configuration', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
                 $allowLive = get_option('wps_ic_allow_live');
                 $allowLocal = get_option('wps_ic_allow_local');
-                echo '<h3>Allow live:</h3>' .$allowLive;
-                echo '<h3>Allow local:</h3>' .$allowLocal;
-                echo '<h3>Account Status:</h3>' . var_dump(get_transient('wps_ic_account_status'));
+                echo '<h3>' . esc_html__('Allow live:', WPS_IC_TEXTDOMAIN) . '</h3>' .$allowLive;
+                echo '<h3>' . esc_html__('Allow local:', WPS_IC_TEXTDOMAIN) . '</h3>' .$allowLocal;
+                echo '<h3>' . esc_html__('Account Status:', WPS_IC_TEXTDOMAIN) . '</h3>' . var_dump(get_transient('wps_ic_account_status'));
                 ?>
             </p>
         </td>
     </tr>
 
     <tr>
-        <td>Get JobID For Crit</td>
+        <td><?php esc_html_e('Get JobID For Crit', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -446,7 +443,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </tr>
 
     <tr>
-        <td>Generate Ajax Params</td>
+        <td><?php esc_html_e('Generate Ajax Params', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -457,7 +454,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td>Generate Ajax Params</td>
+        <td><?php esc_html_e('Generate Ajax Params', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <p>
                 <?php
@@ -492,26 +489,26 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </tr>
 
     <tr>
-        <td>Thumbnails</td>
+        <td><?php esc_html_e('Thumbnails', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <?php
             $sizes = get_intermediate_image_sizes();
-            echo 'Total Thumbs: ' . count($sizes);
+            echo sprintf(esc_html__('Total Thumbs: %d', WPS_IC_TEXTDOMAIN), count($sizes));
             echo print_r($sizes, true);
             ?>
         </td>
     </tr>
     <tr>
-        <td>Paths</td>
+        <td><?php esc_html_e('Paths', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <?php
-            echo 'Debug Log: ' . WPS_IC_LOG . 'debug-log-' . date('d-m-Y') . '.txt';
-            echo '<br/>Debug Log URI: <a href="' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt">' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt' . '</a>';
+            echo esc_html__('Debug Log:', WPS_IC_TEXTDOMAIN) . ' ' . WPS_IC_LOG . 'debug-log-' . date('d-m-Y') . '.txt';
+            echo '<br/>' . esc_html__('Debug Log URI:', WPS_IC_TEXTDOMAIN) . ' <a href="' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt">' . WPS_IC_URI . 'debug-log-' . date('d-m-Y') . '.txt' . '</a>';
             ?>
         </td>
     </tr>
     <tr>
-        <td>Excluded List</td>
+        <td><?php esc_html_e('Excluded List', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <?php
             $excluded = get_option('wps_ic_exclude_list');
@@ -520,7 +517,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td>API Key</td>
+        <td><?php esc_html_e('API Key', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <?php
             $options = get_option(WPS_IC_OPTIONS);
@@ -529,7 +526,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td>CDN Zone Name</td>
+        <td><?php esc_html_e('CDN Zone Name', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
             echo get_option('ic_cdn_zone_name');
@@ -537,12 +534,12 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
         <td>
             <a href="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool&delete_option=ic_cdn_zone_name'); ?>">Delete</a>
+            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool&delete_option=ic_cdn_zone_name'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
         </td>
         <td></td>
     </tr>
     <tr>
-        <td>Custom CDN Zone Name</td>
+        <td><?php esc_html_e('Custom CDN Zone Name', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
             echo get_option('ic_custom_cname');
@@ -550,13 +547,13 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
         <td>
             <a href="<?php
-            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool&delete_option=ic_custom_cname'); ?>">Delete</a>
+            echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=debug_tool&delete_option=ic_custom_cname'); ?>"><?php esc_html_e('Delete', WPS_IC_TEXTDOMAIN); ?></a>
         </td>
         <td></td>
     </tr>
 
     <tr>
-        <td>Plugin Activated</td>
+        <td><?php esc_html_e('Plugin Activated', WPS_IC_TEXTDOMAIN); ?></td>
         <td><?php
             if (is_plugin_active('wp-compress-image-optimizer/wp-compress.php')) {
                 echo 'Yes';
@@ -568,10 +565,10 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             ?></td>
         <td><?php
             echo $status; ?></td>
-        <td>None</td>
+        <td><?php esc_html_e('None', WPS_IC_TEXTDOMAIN); ?></td>
     </tr>
     <tr>
-        <td>PHP Version</td>
+        <td><?php esc_html_e('PHP Version', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
             $version = phpversion();
@@ -585,10 +582,10 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
         <td><?php
             echo $status; ?></td>
-        <td>None</td>
+        <td><?php esc_html_e('None', WPS_IC_TEXTDOMAIN); ?></td>
     </tr>
     <tr>
-        <td>WP Version</td>
+        <td><?php esc_html_e('WP Version', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
             $wp_version = get_bloginfo('version');
@@ -606,13 +603,13 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             ?>
         </td>
         <td>
-            None
+            <?php esc_html_e('None', WPS_IC_TEXTDOMAIN); ?>
         </td>
     </tr>
     <tr>
-        <td>Options</td>
+        <td><?php esc_html_e('Options', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
-            <button class="wps_copy_button button-primary" data-field="options" style="float:right">Copy text</button>
+            <button class="wps_copy_button button-primary" data-field="options" style="float:right"><?php esc_html_e('Copy text', WPS_IC_TEXTDOMAIN); ?></button>
             <textarea id="wps_options_field" style="width:100%"><?php
                 echo json_encode(get_option(WPS_IC_OPTIONS));
                 ?>
@@ -620,24 +617,24 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td>Settings</td>
+        <td><?php esc_html_e('Settings', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
-            <button class="wps_copy_button button-primary" data-field="settings" style="float:right">Copy text</button>
+            <button class="wps_copy_button button-primary" data-field="settings" style="float:right"><?php esc_html_e('Copy text', WPS_IC_TEXTDOMAIN); ?></button>
 
         </td>
     </tr>
     <tr>
-        <td>Test API Connectivity</td>
+        <td><?php esc_html_e('Test API Connectivity', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
-            <button class="test-api-button">Start Test</button>
+            <button class="test-api-button"><?php esc_html_e('Start Test', WPS_IC_TEXTDOMAIN); ?></button>
         </td>
     </tr>
     <tr>
-        <td>Local server API</td>
+        <td><?php esc_html_e('Local server API', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <label for="server">Server:</label>
+                <label for="server"><?php esc_html_e('Server:', WPS_IC_TEXTDOMAIN); ?></label>
                 <select id="server" name="local_server">
                     <?php
                     foreach ($servers as $value => $label) {
@@ -646,12 +643,12 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                     }
                     ?>
                 </select>
-                <input type="submit" value="Save Server" class="button-primary" style="float:right">
+                <input type="submit" value="<?php esc_attr_e('Save Server', WPS_IC_TEXTDOMAIN); ?>" class="button-primary" style="float:right">
             </form>
         </td>
     </tr>
     <tr>
-        <td>Preloads Debug - Last Warmup</td>
+        <td><?php esc_html_e('Preloads Debug - Last Warmup', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <?php
             $lastLog = get_option('wps_ic_last_warmpup');
@@ -660,91 +657,91 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td>Preloads Desktop</td>
+        <td><?php esc_html_e('Preloads Desktop', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <h3>Automatic Preloads found by API (can edit)</h3>
+                <h3><?php esc_html_e('Automatic Preloads found by API (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloads_lcp" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['lcp'])) {
                         echo implode("\n", $preloads['lcp']);
                     }
                     ?></textarea>
-                <h3>Manual Desktop Preloads (can edit)</h3>
+                <h3><?php esc_html_e('Manual Desktop Preloads (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloads" style="width:100%;height:150px;"><?php
                     if (!empty($preloads['custom']) && is_array($preloads['custom'])) {
                         echo implode("\n", $preloads['custom']);
                     }
                     ?></textarea>
 
-                <h3>Automatic Mobile Preloads found by API (can edit)</h3>
+                <h3><?php esc_html_e('Automatic Mobile Preloads found by API (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloadsMobile_lcp" style="width:100%;height:150px;"><?php
                 if (!empty($preloadsMobile['lcp'])) {
                     echo implode("\n", $preloadsMobile['lcp']);
                 }
                     ?></textarea>
-                <h3>Manual Mobile Preloads (can edit)</h3>
+                <h3><?php esc_html_e('Manual Mobile Preloads (can edit)', WPS_IC_TEXTDOMAIN); ?></h3>
                 <textarea name="preloadsMobile" style="width:100%;height:150px;"><?php
                     if (!empty($preloadsMobile['custom']) && is_array($preloadsMobile['custom'])) {
                         echo implode("\n", $preloadsMobile['custom']);
                     }
                     ?></textarea>
-                <input type="submit" value="Save Preloads" name="savePreloads" class="button-primary"
+                <input type="submit" value="<?php esc_attr_e('Save Preloads', WPS_IC_TEXTDOMAIN); ?>" name="savePreloads" class="button-primary"
                        style="float:right">
             </form>
         </td>
     </tr>
     <tr>
-        <td>Cache refresh time (minutes)</td>
+        <td><?php esc_html_e('Cache refresh time (minutes)', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
                 <input type="text" name="cache_refresh_time" value="<?php echo
                 $settings['cache_refresh_time']; ?>">
-                <input type="submit" value="Save cache refresh" name="save" class="button-primary"
+                <input type="submit" value="<?php esc_attr_e('Save cache refresh', WPS_IC_TEXTDOMAIN); ?>" name="save" class="button-primary"
                        style="float:right">
             </form>
         </td>
     </tr>
     <tr>
-        <td>Elementor Skip Sections</td>
+        <td><?php esc_html_e('Elementor Skip Sections', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
 			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <p>Configure how many Elementor sections to skip before applying lazy loading/optimization.</p>
+                <p><?php esc_html_e('Configure how many Elementor sections to skip before applying lazy loading/optimization.', WPS_IC_TEXTDOMAIN); ?></p>
 
 			    <?php $skipSections = get_option('wps_ic_elementor_skip_sections', []); ?>
 
-                <label for="elementor_skip_desktop">Desktop Skip Count:</label>
+                <label for="elementor_skip_desktop"><?php esc_html_e('Desktop Skip Count:', WPS_IC_TEXTDOMAIN); ?></label>
                 <input type="number" id="elementor_skip_desktop" name="elementor_skip_desktop"
                        value="<?php echo isset($skipSections['desktop']) ? $skipSections['desktop'] : 5; ?>"
                        min="0" max="20" style="width: 80px;">
 
 
-                <label for="elementor_skip_mobile">Mobile Skip Count:</label>
+                <label for="elementor_skip_mobile"><?php esc_html_e('Mobile Skip Count:', WPS_IC_TEXTDOMAIN); ?></label>
                 <input type="number" id="elementor_skip_mobile" name="elementor_skip_mobile"
                        value="<?php echo isset($skipSections['mobile']) ? $skipSections['mobile'] : 5; ?>"
                        min="0" max="20" style="width: 80px;">
 
-                <input type="submit" name="elementor_skip_sections" value="Save Skip Settings" class="button-primary" style="float:right;">
+                <input type="submit" name="elementor_skip_sections" value="<?php esc_attr_e('Save Skip Settings', WPS_IC_TEXTDOMAIN); ?>" class="button-primary" style="float:right;">
             </form>
         </td>
     </tr>
     <tr>
-        <td>Fonts</td>
+        <td><?php esc_html_e('Fonts', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
 			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce');
                 $gui = new wpc_gui_v4();
                 echo $gui->font_dropdown('Fonts', 'Description');
                 ?>
-                <input type="submit" name="fonts" value="Save Fonts" class="button-primary" style="float:right;">
+                <input type="submit" name="fonts" value="<?php esc_attr_e('Save Fonts', WPS_IC_TEXTDOMAIN); ?>" class="button-primary" style="float:right;">
             </form>
         </td>
     </tr>
     <tr>
     <tr>
-        <td>Remove fonts from critical</td>
+        <td><?php esc_html_e('Remove fonts from critical', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
                 <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
@@ -752,7 +749,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                     $removeFonts = get_option('wps_ic_remove_fonts', []);
                     echo implode("\n", $removeFonts);
                     ?></textarea>
-                <input type="submit" value="Save" class="button-primary"
+                <input type="submit" value="<?php esc_attr_e('Save', WPS_IC_TEXTDOMAIN); ?>" class="button-primary"
                        style="float:right">
             </form>
         </td>
@@ -773,7 +770,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
             navigator.clipboard.writeText(text.value);
 
             // Alert the copied text
-            alert('Copied to Clipboard');
+            alert('<?php echo esc_js(__('Copied to Clipboard', WPS_IC_TEXTDOMAIN)); ?>');
         })
 
     });

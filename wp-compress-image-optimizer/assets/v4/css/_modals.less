@@ -1,0 +1,2891 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Modals & Popups
+// ═══════════════════════════════════════════════════════════════════════════
+// SweetAlert2 overrides, .ajax-settings-popup, .cdn-popup-inner,
+// all popup variants, select-mode, CNAME multi-step, tooltips
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+// ─── Popup variant selector ────────────────────────────────────────────────
+// All 12 popup classes grouped for shared rules
+@popup-all: ~":is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings)";
+
+// Subset: popups with checkbox containers
+@popup-checkbox: ~":is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-advanced-caching-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-per-page-settings, .popup-purge-settings)";
+
+// Subset: popups with example lists
+@popup-examples: ~":is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings)";
+
+// Subset: popups with side example lists (not cache-cookies/purge)
+@popup-side-examples: ~":is(.popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes)";
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. SWEETALERT2 OVERRIDES
+// ═══════════════════════════════════════════════════════════════════════════
+
+.swal2-container {
+  z-index: 99999 !important; // FORCED: must be above WP admin
+  transition: background-color 0.3s ease;
+}
+
+.swal2-popup {
+  border-radius: @radius-card !important; // FORCED: SA2 inline styles
+  padding: 0 !important; // FORCED: SA2 inline styles
+  max-width: 800px !important; // FORCED: SA2 inline styles
+  width: 90vw !important; // FORCED: SA2 inline styles
+  font-family: @font-regular !important; // FORCED: SA2 inline styles
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important; // FORCED: SA2 inline styles
+  overflow: visible !important; // FORCED: SA2 close button needs overflow visible
+  animation: wpcModalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important; // FORCED: custom entrance
+}
+
+.swal2-close {
+  width: 44px !important; // FORCED: 44px tap target
+  height: 44px !important; // FORCED: 44px tap target
+  font-size: 24px !important; // FORCED: SA2 inline styles
+  color: @color-gray-dim !important; // FORCED: SA2 inline styles — visible contrast
+  position: absolute !important; // FORCED: SA2 inline styles
+  top: @space-sm !important; // FORCED: SA2 inline styles
+  right: @space-sm !important; // FORCED: SA2 inline styles
+  z-index: 10 !important; // FORCED: above content
+  background: none !important; // FORCED: SA2 inline styles
+  border: none !important; // FORCED: SA2 inline styles
+  border-radius: @radius-md !important; // FORCED: SA2 inline styles
+  transition: @transition-fast !important; // FORCED: SA2 inline styles
+  display: flex !important; // FORCED: SA2 inline styles
+  align-items: center !important; // FORCED: SA2 inline styles
+  justify-content: center !important; // FORCED: SA2 inline styles
+  cursor: pointer !important; // FORCED: SA2 inline styles
+
+  &:hover {
+    color: @color-text-dark !important; // FORCED: SA2 inline styles
+    background: @color-bg-frost !important; // FORCED: SA2 inline styles
+  }
+}
+
+.swal2-container.swal2-backdrop-show {
+  background: rgba(17, 24, 39, 0.4) !important; // FORCED: SA2 inline styles
+  backdrop-filter: blur(4px);
+}
+
+// SA2 v9 leaves container in DOM after close — must hide it
+.swal2-container.swal2-backdrop-hide {
+  display: none !important; // FORCED: SA2 v9 doesn't remove container on close
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. BASE POPUP STRUCTURE
+// ═══════════════════════════════════════════════════════════════════════════
+
+.ajax-settings-popup {
+  padding: 0;
+}
+
+.cdn-popup-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+// Popup top (icon + title + description)
+.cdn-popup-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: @space-2xl @space-2xl @space-lg;
+  border-bottom: 1px solid @color-border;
+
+  img {
+    width: 48px;
+    height: 48px;
+    margin-bottom: @space-md;
+  }
+
+  h4 {
+    font-family: @font-bold;
+    font-size: @font-size-lg;
+    color: @color-text-dark;
+    margin: 0 0 @space-sm;
+  }
+
+  p {
+    font-family: @font-regular;
+    font-size: @font-size-base;
+    color: @color-text-secondary;
+    margin: 0;
+    max-width: 500px;
+    line-height: 1.6;
+  }
+}
+
+.cdn-popup-content {
+  padding: @space-xl @space-2xl;
+}
+
+.cdn-popup-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: @space-3xl;
+  min-height: 200px;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. POPUP FORM CONTENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+.cdn-popup-content textarea {
+  font-family: @font-code;
+  font-size: @font-size-sm;
+  color: @color-text-dark;
+  background: @color-bg-frost;
+  border: 1px solid @color-border;
+  border-radius: @radius-md;
+  padding: @space-md;
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  outline: none;
+  line-height: 1.6;
+  transition: @transition-fast;
+
+  &:focus {
+    border-color: var(--wpc-brand-primary-light, @color-primary);
+    box-shadow: @shadow-focus-ring;
+    background: @color-white;
+  }
+}
+
+.cdn-popup-content input[type="text"] {
+  font-family: @font-regular;
+  font-size: @font-size-base;
+  color: @color-text-dark;
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-radius: @radius-md;
+  padding: @space-sm @space-base;
+  width: 100%;
+  min-height: 42px;
+  outline: none;
+  transition: @transition-fast;
+
+  &:focus {
+    border-color: var(--wpc-brand-primary-light, @color-primary);
+    box-shadow: @shadow-focus-ring;
+  }
+}
+
+.cdn-popup-content label {
+  font-family: @font-semibold;
+  font-size: @font-size-sm;
+  color: @color-text-dark;
+  display: flex;
+  align-items: center;
+  gap: @space-sm;
+  margin-bottom: @space-sm;
+}
+
+.cdn-popup-content h4 {
+  font-family: @font-semibold;
+  font-size: @font-size-md;
+  color: @color-text-dark;
+  margin: 0 0 @space-md;
+}
+
+.cdn-popup-content p {
+  font-family: @font-regular;
+  font-size: @font-size-sm;
+  color: @color-text-secondary;
+  line-height: 1.6;
+  margin: 0 0 @space-md;
+}
+
+.cdn-popup-content ol {
+  padding-left: @space-xl;
+  margin: @space-md 0;
+
+  li {
+    font-size: @font-size-sm;
+    color: @color-text-body;
+    line-height: 1.8;
+    padding: @space-xs 0;
+  }
+}
+
+.cdn-popup-content .form-check-input {
+  margin-right: @space-sm;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. POPUP BUTTONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+.cdn-popup-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: @space-md;
+  padding: @space-lg @space-2xl @space-2xl;
+}
+
+.cdn-popup-footer-info {
+  text-align: center;
+  padding: 0 @space-2xl @space-lg;
+
+  p {
+    font-size: @font-size-sm;
+    color: @color-text-light;
+    margin: 0;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. ERROR MESSAGES
+// ═══════════════════════════════════════════════════════════════════════════
+
+.cdn-popup-content .wpc-error-message,
+.popup-error-message {
+  background: @color-error-bg;
+  border: 1px solid @color-error-border;
+  border-radius: @radius-md;
+  padding: @space-md @space-base;
+  margin: @space-md 0;
+  font-size: @font-size-sm;
+  color: @color-error-dark;
+  animation: popupErrorFadeIn 0.3s ease;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. ALL POPUP VARIANTS — SHARED STYLES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Base container reset
+@{popup-all} {
+  font-family: @font-system;
+  padding: 32px !important; // FORCED: SA2 inline styles
+}
+
+// ─── Top Section — Icon & Heading ───────────────────────────────────────
+
+@{popup-all} .cdn-popup-top {
+  padding: 0 0 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid @color-border;
+}
+
+@{popup-all} .inline-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+@{popup-all} .inline-heading-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wpc-brand-tint, fade(@color-ice, 80%));
+  border-radius: @radius-input;
+  border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+
+  img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+}
+
+@{popup-all} .inline-heading-text {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  h3 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 600;
+    color: @color-text-heading;
+    line-height: 1.4;
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    color: @color-text-secondary;
+    line-height: 1.5;
+    text-align: left;
+  }
+}
+
+// ─── Form Content ───────────────────────────────────────────────────────
+
+@{popup-all} .cdn-popup-content-full {
+  padding: 0;
+}
+
+@{popup-all} .cdn-popup-content-inner h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: @color-text-body;
+  margin: 0 0 12px;
+  width: auto !important; // FORCED: no fixed width
+  text-align: start !important; // FORCED: left-align
+}
+
+// ─── Textarea ───────────────────────────────────────────────────────────
+
+@{popup-all} textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 16px;
+  border: 1px solid @color-border !important; // FORCED: override SA2
+  border-radius: @radius-lg;
+  font-size: 14px;
+  font-family: @font-code;
+  line-height: 1.5;
+  color: @color-text-heading;
+  background: @color-white;
+  transition: @transition-fast;
+  resize: vertical;
+  box-sizing: border-box;
+  box-shadow: @shadow-sm;
+  margin-bottom: 10px;
+  visibility: visible !important; // FORCED: some popups hide initially
+
+  &:focus {
+    outline: none;
+    border-color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: override SA2
+    box-shadow: 0 0 0 4px fade(@color-blue, 15%);
+  }
+
+  &::placeholder {
+    color: @color-gray-muted;
+  }
+}
+
+// ─── Checkbox Container ─────────────────────────────────────────────────
+
+@{popup-checkbox} .wps-default-excludes-container {
+  margin-top: 20px;
+  padding: 16px;
+  background: @color-bg-frost;
+  border-radius: @radius-md;
+  border: 1px solid @color-border;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@{popup-checkbox} .wps-default-excludes-enabled-checkbox-container {
+  width: 100%;
+  padding: 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+
+  p {
+    margin: 0;
+    font-size: @font-size-sm;
+    color: @color-text-body;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  &:hover p {
+    color: @color-text-dark;
+  }
+}
+
+@{popup-checkbox} .wps-default-excludes-enabled-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid darken(@color-border-medium, 8%);
+  border-radius: @radius-sm;
+  background: @color-white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: @transition-fast;
+  position: relative;
+
+  &:checked {
+    background: var(--wpc-brand-primary, @color-blue);
+    border-color: var(--wpc-brand-accent, @color-gradient-end);
+    box-shadow: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 5px;
+      width: 3px;
+      height: 7px;
+      border: solid @color-white;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+  }
+
+  &:hover { border-color: var(--wpc-brand-primary-light, @color-primary); }
+  &:focus-visible { outline: 2px solid var(--wpc-brand-primary, @color-blue); outline-offset: 2px; }
+}
+
+// ─── Content Inner Layout ───────────────────────────────────────────────
+
+.cdn-popup-content-inner > div {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 10px !important; // FORCED: inherited layout
+  padding-right: 10px !important; // FORCED: inherited layout
+}
+
+
+// ─── Examples Section — Muted Card with Overlapping Pill ──────────────
+@{popup-all} .wps-example-section,
+.popup-per-page-excludes .wps-example-section {
+  position: relative;
+  margin-top: 32px;
+  margin-bottom: 0;
+  background: transparent;
+  border: none;
+  border-radius: @radius-input;
+  padding: 0;
+  text-align: center;
+
+  // Show muted card only when examples are open
+  &.wps-examples-visible {
+    margin-top: 36px;
+    background: @color-bg-frost;
+    border: 1px solid @color-border;
+    padding: 28px 24px 20px;
+  }
+}
+
+@{popup-all} .wps-example-toggle-btn,
+.popup-per-page-excludes .wps-example-toggle-btn {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: @color-white;
+  border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+  border-radius: @radius-pill;
+  color: var(--wpc-brand-primary, @color-blue);
+  font-family: @font-semibold;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: @transition-fast;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  z-index: 1;
+  white-space: nowrap;
+
+  // Remove CSS pseudo chevron — using inline SVG now
+  &::after { display: none; }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.25s ease;
+  }
+
+  &:hover {
+    background: var(--wpc-brand-tint, @color-ice);
+    border-color: var(--wpc-brand-primary, @color-blue);
+  }
+
+  // Open state — rotate SVG chevron
+  &.wps-example-open svg {
+    transform: rotate(180deg);
+  }
+}
+
+// ─── Example List Content ──────────────────────────────────────────────
+
+@{popup-all} .wps-example-list {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+
+  // Hide the redundant "Examples:" heading if still present
+  h3 { display: none; }
+
+  // Remove nested wrapper divs' layout
+  > div { display: contents; }
+  > div > div { display: contents; }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: @color-text-slate;
+    line-height: 1.6;
+    font-family: @font-code;
+    text-align: left;
+    padding-left: 12px;
+    border-left: 2px solid var(--wpc-brand-tint, fade(@color-blue, 15%));
+  }
+}
+
+// ─── Spacing, Form Container ────────────────────────────────────────────
+
+@{popup-all} .wps-empty-row { height: 8px; }
+@{popup-all} .wpc-save-popup-data { margin: 0; }
+@{popup-all} .bottom-border { border-radius: @radius-input; overflow: hidden; background: @color-white; }
+
+// ─── Heading Font Consistency ──────────────────────────────────────────
+
+@{popup-all} .inline-heading-text h3 {
+  font-family: @font-semibold;
+}
+
+// ─── Section Dividers for Complex Popups ───────────────────────────────
+
+// Purge + Cookies: wider for two-column layout
+.popup-purge-settings.swal2-popup,
+.popup-cache-cookies.swal2-popup {
+  max-width: 960px !important; // FORCED: needs wider for two-column data
+}
+
+// Purge + Cookies: no internal scrollbar — let SA2 overlay scroll naturally
+.popup-purge-settings,
+.popup-cache-cookies {
+  .swal2-html-container,
+  .swal2-content {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+// ─── Custom CDN Domain Overrides ───────────────────────────────────────
+
+// CF CDN popup inherits shared save button style — no override needed
+
+// ─── Global Overrides ───────────────────────────────────────────────────
+
+.cdn-popup-inner.ajax-settings-popup .cdn-popup-top {
+  min-height: 50px !important; // FORCED: inherited layout
+  margin: 0 auto;
+}
+
+.cdn-popup-inner .inline-heading {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  margin-bottom: 0 !important; // FORCED: inherited layout
+  margin-top: 10px !important; // FORCED: inherited layout
+}
+
+.cdn-popup-inner.ajax-settings-popup .cdn-popup-content .inline-heading h3 {
+  font-weight: 400;
+  margin: 5px 0;
+}
+
+// ─── Save Buttons ───────────────────────────────────────────────────────
+
+@{popup-all} .btn-exclude-save,
+.popup-per-page-settings .btn-exclude-pages-save,
+.popup-per-page-excludes .btn-exclude-pages-save {
+  display: block !important; // FORCED: override .btn-primary
+  width: 100% !important; // FORCED: full-width
+  max-width: none !important; // FORCED: override .btn-primary
+  min-height: 0 !important; // FORCED: kill .btn-primary min-height
+  margin: 0 !important; // FORCED: override .btn-primary
+  padding: 14px 24px !important; // FORCED: override .btn-primary
+  background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: override .btn-primary
+  color: @color-white !important; // FORCED: override .btn-primary
+  border: none !important; // FORCED: override .btn-primary
+  border-radius: @radius-lg !important; // FORCED: 10px rounded rect
+  font-family: @font-semibold;
+  font-size: 15px !important; // FORCED: override .btn-primary
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none !important; // FORCED: <a> tag
+  cursor: pointer;
+  transition: @transition-fast;
+  box-shadow: 0 4px 6px -1px fade(@color-blue, 20%), 0 2px 4px -1px fade(@color-blue, 10%);
+  box-sizing: border-box;
+
+  &:hover {
+    background: var(--wpc-brand-primary-dark, @color-blue-vivid) !important; // FORCED
+    transform: translateY(-1px);
+    box-shadow: 0 6px 8px -1px fade(@color-blue, 30%), 0 4px 6px -1px fade(@color-blue, 20%);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px -1px fade(@color-blue, 15%);
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. SELECT MODE POPUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Override SweetAlert2 size for the wider select-mode popup ONLY
+// NOTE: .no-padding-popup-bottom-bg is applied to ALL popups by popups.js,
+// so we must scope the 1050px rule to only the select-mode popup container.
+.no-padding-popup-bottom-bg.swal2-container .swal2-popup:not(@{popup-all}) {
+  max-width: 1050px !important; // FORCED: SA2 inline styles — needs wider for 3-col
+  width: 1050px !important; // FORCED: override 90vw for 3-col layout
+}
+
+// ─── Per-popup width overrides ─────────────────────────────────────────
+// Simple popups with minimal content get narrower widths
+.popup-cf-cdn.swal2-popup {
+  max-width: 750px !important; // FORCED: wider for full domain display
+}
+
+.popup-per-page-settings.swal2-popup {
+  max-width: 600px !important; // FORCED: per-page settings popup
+}
+
+#select-mode-popup-inner {
+  margin-bottom: 25px !important; // FORCED: spacing below popup
+
+  .cdn-popup-top { border-bottom: none; }
+
+  .inline-heading {
+    h3 {
+      font-size: 30px;
+      color: @color-text-navy;
+      margin-bottom: 5px;
+    }
+
+    p {
+      margin-top: 0 !important; // FORCED: reset
+      margin-bottom: 20px !important; // FORCED: reset
+      font-size: @font-size-sm;
+      color: @color-text-light;
+    }
+  }
+
+  // Checkbox animation
+  .checkbox {
+    margin: 0 !important; // FORCED: reset
+    border: 0 !important; // FORCED: reset
+    min-width: 0 !important; // FORCED: reset
+    min-height: 0 !important; // FORCED: reset
+    border-radius: 0 !important; // FORCED: reset
+    outline: none !important; // FORCED: reset
+    box-shadow: none !important; // FORCED: reset
+
+    &:checked {
+      background-color: var(--wpc-brand-primary-light, @color-primary);
+      border-color: var(--wpc-brand-primary-light, @color-primary);
+      box-shadow: none;
+    }
+
+    &:focus { box-shadow: none; }
+  }
+
+  .checkbox:checked:before { content: "" !important; } // FORCED: WP override
+
+  input[type='checkbox'] {
+    height: 0;
+    width: 0;
+    position: absolute;
+    pointer-events: none;
+  }
+
+  input[type='checkbox'] + label {
+    padding: 20px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    color: @color-text-secondary;
+    transition: color 200ms cubic-bezier(.4, .0, .23, 1);
+  }
+
+  input[type='checkbox'] + label.with-label > div {
+    width: 65px;
+    padding-right: 10px;
+    font-size: 11px;
+    text-align: right;
+  }
+
+  input[type='checkbox'] + label > span {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, .25);
+    border-radius: .25em;
+    cursor: pointer;
+    transition: @transition-snappy;
+  }
+
+  input[type='checkbox'] + label:hover > span,
+  input[type='checkbox']:focus + label > span {
+    background: rgba(255, 255, 255, .1);
+  }
+
+  input[type='checkbox']:checked + label > span {
+    height: 0 !important; // FORCED: animation
+    width: 0 !important; // FORCED: animation
+    border: 13px solid var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: animation
+    animation: shrink-bounce 200ms cubic-bezier(.4, .0, .23, 1) !important; // FORCED: animation
+  }
+
+  input[type='checkbox']:checked + label.with-label > span {
+    position: relative !important; // FORCED: animation positioning
+  }
+
+  input[type='checkbox']:checked + label.with-label > span:before {
+    top: -10px !important; // FORCED: checkmark positioning
+    left: -5px !important; // FORCED: checkmark positioning
+  }
+
+  input[type='checkbox']:checked + label > span:before {
+    content: "";
+    position: absolute !important; // FORCED: checkmark
+    top: 22px !important; // FORCED: checkmark
+    left: 27px !important; // FORCED: checkmark
+    height: 9px !important; // FORCED: checkmark
+    width: 4px !important; // FORCED: checkmark
+    border-right: 2px solid @color-white;
+    border-bottom: 2px solid @color-white;
+    transform: rotate(45deg) !important; // FORCED: checkmark
+    transform-origin: 0% 100% !important; // FORCED: checkmark
+    animation: checkbox-check 125ms 200ms cubic-bezier(.4, .0, .23, 1) forwards !important; // FORCED: animation
+  }
+
+  input[type='checkbox'].wpc-locked-checkbox:not(:checked) + label > span:after {
+    position: absolute;
+    content: '' !important; // FORCED: lock icon
+    background-color: transparent !important; // FORCED: lock icon
+  }
+
+  input[type='checkbox'].wpc-locked-checkbox:not(:checked) + label > span:before {
+    border: 4px solid @color-border-accent;
+    border-radius: @radius-xs;
+    background: @color-border-accent;
+    position: absolute;
+    transform: rotate(0deg) !important; // FORCED: lock icon
+    content: '' !important; // FORCED: lock icon
+    background-image: url('../images/option-locked.svg') !important; // FORCED: lock icon
+    background-position: center;
+    background-size: 15px;
+    width: 20px !important; // FORCED: lock icon
+    height: 20px !important; // FORCED: lock icon
+    background-repeat: no-repeat;
+  }
+}
+
+// Select bar (progress slider)
+.wpc-popup-select-bar-container {
+  width: 70%;
+  margin: 0 auto;
+
+  .wpc-select-bar {
+    position: relative;
+
+    .wpc-select-bar-outter {
+      display: inline-block;
+      height: 5px;
+      width: 100%;
+      border-radius: @radius-default;
+      background: @color-border;
+      transition: @transition-default;
+
+      .wpc-select-bar-inner {
+        position: absolute;
+        left: 0;
+        display: inline-block;
+        height: 5px;
+        border-radius: @radius-default;
+        background: @color-teal;
+        transition: @transition-default;
+
+        &:before {
+          content: '';
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border: 3px solid @color-teal;
+          background: @color-white;
+          border-radius: @radius-circle;
+          position: absolute;
+          right: 0;
+          top: -5px;
+        }
+
+        &.wpc-select-bar-width-1 { width: 9%; }
+        &.wpc-select-bar-width-2 { width: 50%; }
+        &.wpc-select-bar-width-3 { width: 100%; }
+      }
+    }
+  }
+}
+
+// Save settings button
+.cdn-popup-save {
+  text-align: center;
+  padding: 0 @space-xl @space-xl;
+}
+
+.cdn-popup-save-btn {
+  margin-top: 30px;
+  background: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: override inherited
+  border-radius: @radius-md;
+  color: @color-white !important; // FORCED: override inherited
+  font-family: @font-semibold;
+  font-weight: 600;
+  font-size: @font-size-base;
+  letter-spacing: 0.02em;
+  text-align: center;
+  padding: 12px 32px;
+  text-decoration: none;
+  transition: @transition-fast;
+  justify-content: center;
+  align-items: center;
+  display: inline-flex;
+  border: none;
+  cursor: pointer;
+
+  img { margin-right: 15px; }
+}
+
+// Three-column mode selector
+.wpc-popup-columns {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  width: 86%;
+  gap: 25px;
+  justify-content: space-between;
+  align-items: stretch;
+
+  &.wpc-three-columns .wpc-popup-column {
+    flex: 1;
+
+    .wpc-column-heading {
+      padding: 20px 10px;
+
+      h3 {
+        color: @color-text-secondary;
+        margin-bottom: 10px;
+        font-size: 16px;
+        font-family: @font-semibold;
+        font-weight: 600;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      p {
+        color: @color-text-light;
+        margin-bottom: 10px;
+        font-size: @font-size-sm;
+      }
+    }
+
+    ul {
+      list-style: none;
+      padding: 20px;
+      margin: 0;
+      border-radius: @radius-lg;
+      border: 1px solid @color-border;
+      transition: transform 0.3s ease-in-out;
+
+      &:hover {
+        transform: scale(1.05);
+        box-shadow: @shadow-blue-glow;
+        cursor: pointer;
+      }
+
+      li {
+        padding: 8px 4px;
+        font-size: @font-size-base;
+        text-align: left;
+        color: @color-gray-text;
+
+        &:before {
+          content: '';
+          display: inline-block;
+          border-radius: @radius-circle;
+          width: 8px;
+          height: 8px;
+          background: @color-border;
+          margin-right: 10px;
+        }
+
+        &.wpc-active {
+          color: @color-text-heading;
+          &:before { background-color: var(--wpc-brand-primary-light, @color-primary); }
+        }
+      }
+    }
+
+    // Active state
+    &.wpc-active {
+      .wpc-column-heading h3 {
+        color: @color-gray-dark;
+        font-weight: bold;
+      }
+
+      ul {
+        transform: scale(1.05);
+        background: @color-midnight !important; // FORCED: dark theme
+
+        li {
+          color: @color-gray-text !important; // FORCED: dark theme
+          &:before { background-color: @color-gray-text; }
+        }
+
+        li.wpc-active {
+          color: @color-white !important; // FORCED: dark theme
+          &:before { background-color: @color-aqua !important; } // FORCED: dark theme
+        }
+      }
+    }
+
+    // Darker variant (aggressive column)
+    &.wpc-darker {
+      ul li {
+        color: @color-gray-dark;
+        &:before { background-color: var(--wpc-brand-primary-light, @color-primary); }
+      }
+
+      &.wpc-active li.wpc-active {
+        color: @color-white !important; // FORCED: dark theme
+        &:before { background-color: @color-aqua !important; } // FORCED: dark theme
+      }
+    }
+  }
+}
+
+// CDN option row — bordered card
+.wpc-popup-options {
+  margin-top: 50px;
+}
+
+.wpc-popup-option {
+  border: 1px solid var(--wpc-brand-primary-light, @color-primary);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  max-width: 550px;
+  margin: 0 auto;
+  border-radius: @radius-lg;
+  overflow: hidden;
+
+  > div {
+    height: 70px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: @color-white;
+    font-size: 20px;
+  }
+
+  .wpc-popup-option-icon {
+    flex: 1 0 calc(15% - 10px);
+    background: var(--wpc-brand-tint, @color-ice-deep);
+    color: var(--wpc-brand-primary, @color-blue);
+  }
+
+  .wpc-popup-option-description {
+    flex: 1 0 calc(70% - 10px);
+    background: @color-white;
+    color: @color-text-charcoal;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 10px 15px;
+
+    h4 {
+      text-align: left;
+      margin: 0 0 2px;
+      font-family: @font-semibold;
+      font-size: @font-size-base;
+      color: @color-gray-dark !important; // FORCED: inherited override
+    }
+
+    p {
+      text-align: left;
+      margin: 0;
+      font-size: @font-size-sm;
+      color: @color-text-light !important; // FORCED: inherited override
+    }
+  }
+
+  .wpc-popup-option-checkbox {
+    flex: 1 0 calc(15% - 10px);
+    background: @color-white;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. POPUP-SPECIFIC OVERRIDES
+// ═══════════════════════════════════════════════════════════════════════════
+
+// --- Critical CSS ---
+.popup-exclude-critical-css .exclude-list-textarea-value { min-height: 100px; }
+
+
+// --- JS Delay V2 ---
+.popup-exclude-js-delay-v2 .exclude-list-textarea-value { min-height: 100px; }
+
+// --- Delay JS Configuration ---
+.popup-delay-js-configuration {
+  .exclude-list-textarea-value,
+  .exclude-list-textarea-value-defer { min-height: 100px; }
+
+  .cdn-popup-content-inner h4:first-of-type { margin-top: 0; }
+
+  .wps-example-list {
+    margin-top: 15px !important; // FORCED: spacing
+    margin-bottom: 5px !important; // FORCED: spacing
+    padding: 10px !important; // FORCED: compact
+  }
+}
+
+// --- Advanced Caching ---
+.popup-exclude-advanced-caching-popup .exclude-list-textarea-value { min-height: 100px; }
+
+// --- Adaptive ---
+.popup-exclude-adaptive-popup {
+  .exclude-list-textarea-value { min-height: 100px; }
+
+  .wps-default-excludes-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: @font-size-base;
+    color: @color-text-body;
+    font-weight: 500;
+  }
+
+  .wps-min-mobile-width {
+    max-height: 30px;
+    max-width: 80px;
+    margin: 0 5px;
+    padding: 6px 10px;
+    border: 1.5px solid @color-border-medium;
+    border-radius: @radius-base;
+    font-size: @font-size-base;
+    font-family: @font-code;
+    color: @color-text-heading;
+    background: @color-white;
+    transition: @transition-fast;
+    -moz-appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    &:focus { outline: none; border-color: var(--wpc-brand-primary, @color-blue); box-shadow: @shadow-focus-ring; }
+  }
+}
+
+// --- WebP ---
+.popup-exclude-webp-popup .exclude-list-textarea-value { min-height: 100px; }
+
+// --- Lazy ---
+.popup-exclude-lazy-popup .exclude-list-textarea-value { min-height: 100px; }
+
+// --- CDN ---
+.popup-exclude-cdn-popup .exclude-list-textarea-value { min-height: 100px; }
+
+// --- Purge Settings + Cache Cookies (shared two-column layout) ---
+.popup-purge-settings,
+.popup-cache-cookies {
+
+  .cdn-popup-content-inner {
+    margin: 25px 0 15px;
+  }
+
+  // Section dividers
+  .wpc-section-divider {
+    height: 1px;
+    background: @color-border;
+    border: none;
+    margin: 20px 0 12px;
+  }
+
+  // Section headers — uppercase label style
+  .wpc-section-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: @color-gray-text;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+    font-family: @font-semibold;
+  }
+
+  .wpc-section-header-centered { text-align: center; }
+
+  .wpc-section-header-split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    .wpc-section-header { margin-bottom: 0; }
+  }
+
+  // Checkbox grid — 2-col cards
+  .wpc-checkbox-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .wpc-checkbox-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    cursor: pointer;
+    transition: @transition-fast;
+
+    &:hover {
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+      background: @color-bg-frost;
+    }
+
+    &:has(input:checked) {
+      background: var(--wpc-brand-tint, @color-ice);
+      border-color: var(--wpc-brand-primary, @color-blue);
+    }
+
+    // Checkbox inherits shared @{popup-checkbox} styles (appearance: none, custom checkmark)
+    input[type="checkbox"] {
+      margin-right: 12px;
+    }
+
+    p {
+      font-size: 14px;
+      font-weight: 500;
+      color: @color-text-dark;
+      margin: 0;
+      user-select: none;
+    }
+  }
+
+  // Hooks container — side-by-side textarea + defaults
+  .wpc-hooks-container {
+    display: flex !important; // FORCED: override inherited layout
+    flex-direction: row !important; // FORCED: side-by-side
+    gap: 16px;
+    text-align: left;
+  }
+
+  .wpc-hooks-textarea-wrap,
+  .wpc-hooks-defaults-wrap {
+    flex: 1 1 50% !important; // FORCED: equal halves
+    min-width: 0; // prevent flex overflow
+    display: flex;
+    flex-direction: column;
+  }
+
+  // Textarea fills full height of its wrapper (matches sibling defaults box)
+  .wpc-hooks-textarea-wrap .hooks-list-textarea-value {
+    flex: 1 1 auto;
+  }
+
+  // Defaults box fills full height of its wrapper (matches sibling textarea)
+  .wpc-hooks-defaults-wrap .wpc-hooks-defaults-box {
+    flex: 1 1 auto;
+  }
+
+  .hooks-list-textarea-value {
+    width: 100% !important; // FORCED: fill flex container
+    padding: 10px 12px !important; // FORCED: override shared textarea
+    font-family: @font-code;
+    font-size: 11px !important; // FORCED: fit all hooks without scroll
+    color: @color-text-dark;
+    border: 1px solid @color-border !important; // FORCED: override shared
+    border-radius: @radius-md;
+    resize: vertical !important; // FORCED: allow vertical resize
+    transition: @transition-fast;
+    box-shadow: @shadow-sm;
+    line-height: 1.45;
+    white-space: pre;
+    overflow: hidden !important; // FORCED: no scrollbar — grows with content
+    min-height: 100px !important; // FORCED: reasonable starting height
+    text-align: left;
+
+    &:focus {
+      outline: none;
+      border-color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: override shared
+      box-shadow: 0 0 0 4px fade(@color-blue, 15%);
+    }
+  }
+
+  .wpc-hooks-defaults-wrap {
+    position: relative;
+  }
+
+  .wpc-copy-defaults-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-base;
+    color: @color-text-secondary;
+    font-family: @font-regular;
+    font-size: 11px;
+    cursor: pointer;
+    opacity: 0;
+    transition: @transition-fast;
+    z-index: 1;
+
+    svg { flex-shrink: 0; }
+
+    &:hover {
+      border-color: var(--wpc-brand-primary, @color-blue);
+      color: var(--wpc-brand-primary, @color-blue);
+      background: var(--wpc-brand-tint, @color-ice);
+    }
+
+    // "Copied!" state
+    &.wpc-copied {
+      border-color: @color-success;
+      color: @color-success;
+      background: @color-success-bg;
+    }
+  }
+
+  .wpc-hooks-defaults-wrap:hover .wpc-copy-defaults-btn {
+    opacity: 1;
+  }
+
+  .wpc-hooks-defaults-box {
+    width: 100%;
+    padding: 10px 12px;
+    background: @color-bg-frost;
+    border-radius: @radius-md;
+    font-family: @font-code;
+    font-size: 11px;
+    color: @color-text-secondary;
+    line-height: 1.45;
+    border: 1px solid transparent;
+    white-space: pre;
+    overflow-x: auto;
+    text-align: left;
+  }
+
+  // Scheduled purge box
+  .wpc-scheduled-purge-box {
+    background: @color-bg-frost;
+    border-radius: @radius-lg;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 14px;
+    color: @color-text-dark;
+    font-weight: 500;
+  }
+
+  .wpc-time-select {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    padding: 8px 32px 8px 14px;
+    font-family: @font-regular;
+    font-size: 14px;
+    color: @color-text-dark;
+    background: @color-white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+    box-shadow: @shadow-sm;
+    cursor: pointer;
+    transition: @transition-fast;
+    min-width: 120px;
+
+    &:focus {
+      outline: none;
+      border-color: var(--wpc-brand-primary, @color-blue);
+      box-shadow: 0 0 0 4px fade(@color-blue, 15%);
+    }
+
+    &:hover {
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+    }
+  }
+
+  .wpc-server-time {
+    color: @color-text-secondary;
+    font-weight: 400;
+    font-size: 14px;
+  }
+}
+
+// --- CF CDN ---
+.popup-cf-cdn {
+  .cdn-popup-content-inner p {
+    margin: 0 0 12px;
+    font-size: @font-size-base;
+    color: @color-gray-secondary;
+    line-height: 1.5;
+    text-align: center;
+    display: none;
+  }
+
+  #wpc-custom-cdn {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 18px;
+    border: 1.5px solid @color-border-medium;
+    border-radius: @radius-md;
+    font-size: 15px;
+    font-family: @font-code;
+    color: @color-text-heading;
+    background: @color-white;
+    transition: @transition-fast;
+    box-sizing: border-box;
+    display: block;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .cdn-popup-content-full {
+    padding: 32px 32px 0 !important; // FORCED: specific spacing
+  }
+
+  .btn-exclude-save {
+    max-width: 320px !important; // FORCED: match input width on simple popup
+    margin: 16px auto 24px !important; // FORCED: centered with spacing
+  }
+}
+
+// --- Per-Page Settings ---
+.popup-per-page-settings {
+  .cdn-popup-content {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .wps-default-excludes-container {
+    margin-top: 20px;
+    padding: 16px;
+    background: @color-bg-frost;
+    border-radius: @radius-md;
+    border: 1px solid @color-border;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    &:first-of-type {
+      padding: 20px;
+      text-align: center;
+
+      > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 0;
+        width: 100%;
+      }
+
+      strong {
+        font-size: 16px;
+        font-weight: 600;
+        color: @color-text-body;
+        margin: 0 0 16px 0;
+        width: 100%;
+        text-align: center;
+      }
+
+      p {
+        margin: 0;
+        font-size: 14px;
+        color: @color-text-body;
+        font-weight: 500;
+      }
+    }
+
+    &:last-of-type {
+      margin-top: 20px;
+    }
+  }
+
+  .per_page_lazy_skip {
+    max-height: 36px;
+    max-width: 70px;
+    margin: 0 4px;
+    padding: 8px 12px;
+    border: 1.5px solid @color-border-medium;
+    border-radius: @radius-base;
+    font-size: 14px;
+    font-family: @font-code;
+    color: @color-text-heading;
+    background: @color-white;
+    transition: @transition-fast;
+    text-align: center;
+    -moz-appearance: textfield;
+
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: var(--wpc-brand-primary, @color-blue);
+      box-shadow: @shadow-focus-ring;
+    }
+  }
+
+  .wps-default-excludes-enabled-checkbox-container {
+    width: auto !important; // FORCED: override inline width
+    padding: 5px 0;
+    padding-left: 0 !important; // FORCED: override inline padding
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. CNAME SETUP (multi-step)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// --- Base container ---
+.no-padding-popup-bottom-bg .swal2-popup.popup-custom-cdn,
+.popup-custom-cdn {
+  font-family: @font-system;
+  padding: 0 !important; // FORCED: SA2 inline styles
+  width: 480px !important; // FORCED: override 1050px generic popup width
+  max-width: 480px !important; // FORCED: override SA2 inline width
+
+  .cdn-popup-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  // --- Close button ---
+  .swal2-close {
+    width: 32px !important; // FORCED: SA2 inline styles
+    height: 32px !important; // FORCED: SA2 inline styles
+    font-size: 24px !important; // FORCED: SA2 inline styles
+    line-height: 32px !important; // FORCED: SA2 inline styles
+    margin: 12px !important; // FORCED: SA2 inline styles
+    padding: 0 !important; // FORCED: SA2 inline styles
+  }
+
+  // --- Top section (icon + title) ---
+  .cdn-popup-inner.ajax-settings-popup .cdn-popup-top,
+  .cdn-popup-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 28px 32px 20px;
+    margin: 0;
+    border-bottom: 1px solid @color-border;
+    width: 100%;
+    min-height: auto !important; // FORCED: override generic popup rule
+    box-sizing: border-box;
+
+    h3 {
+      margin: 0;
+      font-family: @font-semibold;
+      font-size: 20px;
+      color: @color-text-heading;
+    }
+
+    .popup-icon {
+      display: block;
+      width: 96px;
+      height: 96px;
+      margin: 0 0 16px;
+      padding: 0;
+      background: none;
+      border-radius: 0;
+      object-fit: contain;
+    }
+  }
+
+  // --- Content area ---
+  .cdn-popup-inner.custom-cname-popup .cdn-popup-content,
+  .cdn-popup-content {
+    padding: 24px 40px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  // --- Form container — stacked, centered ---
+  .custom-cdn-steps form.wpc-form-inline {
+    display: flex !important; // FORCED: override inline styles
+    flex-direction: column !important; // FORCED: stacked layout
+    gap: 10px !important; // FORCED: consistent spacing
+    margin: 0 !important; // FORCED: reset
+    padding: 0 0 8px !important; // FORCED: bottom breathing room
+  }
+
+  // --- Text input ---
+  .custom-cdn-steps form.wpc-form-inline input[type="text"],
+  .custom-cdn-steps form.wpc-form-inline input[name="custom-cdn"] {
+    width: 100% !important; // FORCED: fill container
+    max-width: none !important; // FORCED: override cap
+    padding: 12px 14px !important; // FORCED: comfortable
+    border: 1.5px solid @color-border-medium !important; // FORCED: clean border
+    border-radius: @radius-md !important; // FORCED: consistent
+    font-size: 14px !important; // FORCED: readable
+    font-family: @font-system !important; // FORCED: system font
+    color: @color-text-heading !important; // FORCED: dark text
+    background: @color-white !important; // FORCED: clean bg
+    background-image: none !important; // FORCED: remove WP gradients
+    transition: @transition-fast !important; // FORCED: consistent
+    box-sizing: border-box !important; // FORCED: sizing
+    height: auto !important; // FORCED: override inline
+    min-height: 48px !important; // FORCED: touch target
+    line-height: 1.5 !important; // FORCED: readable
+    box-shadow: none !important; // FORCED: clean
+
+    &:focus-visible {
+      outline: none !important; // FORCED: custom focus
+      border-color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: blue focus
+      box-shadow: @shadow-focus-ring !important; // FORCED: ring
+    }
+
+    &::placeholder {
+      color: @color-gray-muted !important; // FORCED: muted
+      font-style: italic !important; // FORCED: hint style
+    }
+  }
+
+  // --- Submit button ---
+  .custom-cdn-steps form.wpc-form-inline input[type="submit"],
+  .custom-cdn-steps form.wpc-form-inline input[name="save"] {
+    width: 100% !important; // FORCED: full-width CTA
+    padding: 14px 28px !important; // FORCED: comfortable
+    background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: brand primary
+    background-image: none !important; // FORCED: remove WP gradients
+    border: none !important; // FORCED: clean
+    border-radius: @radius-md !important; // FORCED: consistent
+    color: @color-white !important; // FORCED: white text
+    font-family: @font-system !important; // FORCED: system font
+    font-weight: 600 !important; // FORCED: semibold
+    font-size: 15px !important; // FORCED: readable
+    text-align: center !important; // FORCED: centered
+    cursor: pointer !important; // FORCED: clickable
+    transition: @transition-fast !important; // FORCED: consistent
+    box-shadow: @shadow-sm !important; // FORCED: depth
+    height: auto !important; // FORCED: override inline
+    display: block !important; // FORCED: block layout
+    margin: 0 !important; // FORCED: no margin
+
+    &:hover {
+      background: var(--wpc-brand-primary-dark, @color-blue-vivid) !important; // FORCED: darker
+      box-shadow: 0 4px 6px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.2)) !important; // FORCED: glow
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--wpc-brand-primary, @color-blue) !important; // FORCED: ring
+      outline-offset: 2px !important; // FORCED: offset
+    }
+  }
+
+  // --- Instruction list ---
+  .custom-cdn-step-1 ul,
+  .custom-cdn-step-1-retry ul {
+    margin: 12px 0 @space-xl 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      font-family: @font-regular;
+      font-size: @font-size-base;
+      color: @color-text-secondary;
+      line-height: 1.7;
+      margin-bottom: @space-md;
+      padding: 0;
+      text-align: left;
+
+      b, .step-num {
+        font-family: @font-semibold;
+        color: @color-text-dark;
+      }
+
+      // CNAME domain — click-to-copy code snippet
+      strong {
+        font-family: @font-code;
+        background-color: var(--wpc-brand-tint, @color-ice);
+        color: var(--wpc-brand-primary, @color-blue);
+        border: 1px dashed fade(@color-blue, 40%);
+        border-radius: @radius-base;
+        padding: 3px 10px;
+        font-size: @font-size-sm;
+        font-weight: 600;
+        cursor: pointer;
+        transition: @transition-fast;
+        display: inline-block;
+        user-select: all;
+
+        &:hover {
+          background-color: var(--wpc-brand-tint, @color-ice-deep);
+          border-color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+        }
+      }
+    }
+  }
+
+  // --- Error / warning messages ---
+  .wpc-error-text,
+  .wpc-dns-error-text,
+  .custom-cdn-error-message {
+    padding: 10px 14px;
+    background: #fef9ee !important; // FORCED: warm amber bg
+    border: 1px solid #fde68a !important; // FORCED: amber border
+    border-radius: @radius-md !important; // FORCED: consistent radius
+    color: #92400e !important; // FORCED: amber-dark text
+    font-size: 13px !important; // FORCED: compact
+    line-height: 1.5 !important; // FORCED: comfortable
+    margin: 0 0 @space-sm !important; // FORCED: above form
+    font-family: @font-system !important; // FORCED: system font
+    text-align: left;
+
+    .icon-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin-right: 6px;
+      vertical-align: middle;
+      color: #d97706;
+    }
+  }
+
+  // --- Step 2 success view ---
+  .custom-cdn-step-2 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 32px 24px;
+    animation: stepFadeIn 0.6s ease-out;
+
+    h3 {
+      margin: 0 0 @space-sm 0;
+      font-family: @font-semibold;
+      font-size: 22px;
+      color: @color-text-heading;
+    }
+
+    p {
+      margin: 0 0 @space-lg 0;
+      font-family: @font-regular;
+      font-size: @font-size-base;
+      color: @color-text-secondary;
+      line-height: 1.6;
+      max-width: 320px;
+    }
+  }
+
+  .custom-cdn-step-2-img {
+    width: 225px;
+    height: 150px;
+    margin: 0 auto @space-lg;
+    display: block;
+    padding: 20px;
+    background: var(--wpc-brand-tint, @color-ice);
+    border-radius: @radius-card;
+    object-fit: contain;
+  }
+
+  // --- Check CDN / action buttons ---
+  .wpc-check-cdn-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: @space-sm @space-xl;
+    background: @color-white;
+    color: @color-text-body;
+    border: 1px solid @color-border;
+    border-radius: @radius-pill;
+    text-decoration: none;
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    transition: @transition-fast;
+    margin-bottom: @space-xl;
+
+    &:hover {
+      background: @color-bg-frost;
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+      color: var(--wpc-brand-primary, @color-blue);
+    }
+  }
+
+  .btn-cdn-config {
+    display: block;
+    width: 100%;
+    padding: 14px 28px;
+    margin: 0 0 @space-sm;
+    border-radius: @radius-md;
+    font-family: @font-semibold;
+    font-size: 15px;
+    cursor: pointer;
+    transition: @transition-fast;
+    text-decoration: none;
+    text-align: center;
+    border: none;
+  }
+
+  .btn-i-cant-see {
+    background: @color-bg-frost;
+    color: @color-text-body;
+    border: 1px solid @color-border;
+
+    &:hover {
+      background: @color-border;
+      border-color: @color-border-medium;
+    }
+  }
+
+  .btn-close.btn-active {
+    background: var(--wpc-brand-primary, @color-blue);
+    color: @color-white;
+    box-shadow: @shadow-sm;
+
+    &:hover {
+      background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      box-shadow: 0 4px 6px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.2));
+      transform: translateY(-2px);
+    }
+  }
+
+  // --- Loading state ---
+  .cdn-popup-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 56px 32px;
+  }
+
+  .wpc-cname-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid @color-border;
+    border-top-color: var(--wpc-brand-primary, @color-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: @space-lg;
+  }
+
+  .wpc-cname-loading-text {
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  // --- Spacing & container ---
+  .wps-empty-row { height: 8px; }
+  .wpc-save-popup-data { margin: 0; }
+
+  .bottom-border {
+    border-radius: @radius-input;
+    overflow: hidden;
+    background: @color-white;
+  }
+}
+
+// --- Generic code snippets (shared by CNAME steps) ---
+.custom-cdn-steps code,
+.custom-cdn-steps .code-snippet {
+  font-family: @font-code;
+  font-size: @font-size-sm;
+  background: @color-bg-frost;
+  border: 1px solid @color-border;
+  border-radius: @radius-md;
+  padding: @space-md;
+  display: block;
+  margin: @space-md 0;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+// popupErrorFadeIn keyframe lives in _animations.less
+
+// --- CNAME responsive ---
+@media (max-width: 640px) {
+  .no-padding-popup-bottom-bg .swal2-popup.popup-custom-cdn,
+  .popup-custom-cdn {
+    width: ~"calc(100vw - 32px)" !important; // FORCED: fit mobile viewport
+    max-width: ~"calc(100vw - 32px)" !important; // FORCED: fit mobile viewport
+
+    .cdn-popup-top,
+    .cdn-popup-inner.ajax-settings-popup .cdn-popup-top {
+      padding: 24px 20px 16px;
+    }
+
+    .cdn-popup-inner.custom-cname-popup .cdn-popup-content,
+    .cdn-popup-content {
+      padding: 20px;
+    }
+
+    .custom-cdn-step-2 {
+      padding: 20px;
+    }
+
+    .btn-cdn-config {
+      display: block;
+      width: 100%;
+      margin: 8px 0;
+    }
+  }
+}
+
+
+// ─── REMOVE CNAME POPUP ──────────────────────────────────────────────────
+.no-padding-popup-bottom-bg .swal2-popup.popup-remove-custom-cdn,
+.popup-remove-custom-cdn {
+  width: 400px !important; // FORCED: compact remove dialog
+  max-width: 400px !important; // FORCED: override 1050px
+  padding: 0 !important; // FORCED: SA2 inline styles
+
+  .cdn-popup-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 48px 32px;
+  }
+
+  .wpc-cname-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid @color-border;
+    border-top-color: var(--wpc-brand-primary, @color-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: @space-lg;
+  }
+
+  .wpc-cname-loading-text {
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 640px) {
+  .no-padding-popup-bottom-bg .swal2-popup.popup-remove-custom-cdn,
+  .popup-remove-custom-cdn {
+    width: ~"calc(100vw - 32px)" !important; // FORCED: mobile
+    max-width: ~"calc(100vw - 32px)" !important; // FORCED: mobile
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. TOOLTIPS
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-custom-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+
+  .tooltip-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.5;
+    transition: @transition-fast;
+    &:hover { opacity: 0.8; }
+  }
+}
+
+.tooltipster-base {
+  font-family: @font-regular;
+}
+
+.tooltipster-borderless .tooltipster-box {
+  background: @color-text-dark;
+  border-radius: @radius-md;
+  padding: @space-sm @space-md;
+
+  .tooltipster-content {
+    font-size: @font-size-sm;
+    color: @color-white;
+    line-height: 1.5;
+  }
+}
+
+// ─── Feature Icon Tooltips (Smart Optimization) ────────────────────────
+.tooltipster-sidetip.tooltipster-shadow .tooltipster-box {
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-radius: @radius-input;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  padding: 0;
+}
+
+.tooltipster-sidetip.tooltipster-shadow .tooltipster-content {
+  color: @color-text-dark;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tooltipster-sidetip.tooltipster-shadow .tooltipster-arrow-border {
+  border-bottom-color: @color-white !important; // FORCED: match box bg
+  border-top-color: @color-white !important; // FORCED: match box bg
+}
+
+// Tooltip inner HTML content
+.wpc-tooltip-html {
+  .wpc-tooltip-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .title {
+      font-family: @font-semibold;
+      font-size: 13px;
+      color: @color-text-dark;
+    }
+
+    .status {
+      font-family: @font-semibold;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: @radius-pill;
+      background: @color-bg-frost;
+      color: @color-gray-muted;
+
+      &.active {
+        background: #ebfdf5;
+        color: #069668;
+      }
+
+      &.disabled {
+        background: @color-error-bg;
+        color: @color-error;
+      }
+    }
+  }
+
+  .desc {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: @color-text-secondary;
+    font-family: @font-regular;
+  }
+}
+
+.LockedTooltip {
+  cursor: not-allowed;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. COMPATIBILITY POPUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Compatibility popup swal2 wrapper ────────────────────────────────────
+.swal2-popup.popup-delay-js,
+.swal2-popup.popup-combine-js,
+.swal2-popup.popup-combine-css,
+.swal2-popup.popup-connectivity {
+  padding: 0 !important; // FORCED: our inner handles spacing
+  border-radius: @radius-card !important; // FORCED: 16px card radius
+  width: 680px !important; // FORCED: SaaS modal width
+  max-width: 680px !important; // FORCED
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  .swal2-title { display: none !important; } // FORCED: we have our own h3
+  .swal2-content { padding: 0 !important; margin: 0 !important; } // FORCED
+  #swal2-content { padding: 0 !important; } // FORCED
+
+  .swal2-close {
+    top: 20px;
+    right: 20px;
+    color: @color-gray-text;
+    font-size: 28px;
+    width: 40px;
+    height: 40px;
+    border-radius: @radius-md;
+    transition: @transition-fast;
+
+    &:hover {
+      background-color: @color-bg-frost;
+      color: @color-text-dark;
+    }
+  }
+}
+
+.wpc-compatibility-popup {
+  padding: 32px 36px 28px;
+  text-align: center;
+
+  .cdn-popup-top-left {
+    text-align: center;
+    margin-bottom: 20px;
+    img { width: 110px; height: auto; display: inline-block; }
+  }
+
+  .cdn-popup-content {
+    h3 {
+      font-family: @font-semibold;
+      text-align: center;
+      font-size: 17px;
+      line-height: 1.5;
+      color: @color-text-dark;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    p {
+      font-family: @font-regular;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      color: @color-gray-text;
+    }
+  }
+
+  .cdn-popup-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 28px;
+    padding: 0;
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px 24px;
+      border-radius: @radius-md;
+      font-family: @font-semibold;
+      font-size: 15px;
+      line-height: 20px;
+      cursor: pointer;
+      transition: @transition-fast;
+
+      .wpc-button-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+
+        svg { width: 18px; height: 18px; }
+      }
+    }
+  }
+
+  .wpc-get-support {
+    background: @color-white;
+    border: 1px solid @color-border;
+    color: @color-blue;
+
+    &:hover {
+      border-color: @color-border-medium;
+      background: @color-bg-frost;
+    }
+  }
+
+  .wpc-popup-confirm {
+    background: @color-blue;
+    border: 1px solid @color-blue;
+    color: @color-white;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2), 0 2px 4px -1px rgba(59, 130, 246, 0.1);
+
+    &:hover {
+      background: @color-blue-vivid;
+      border-color: @color-blue-vivid;
+      box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.3), 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+      transform: translateY(-1px);
+    }
+  }
+}
+
+// ─── Compatibility popup — mobile ─────────────────────────────────────────
+@media screen and (max-width: 480px) {
+  .wpc-compatibility-popup .cdn-popup-buttons {
+    flex-direction: column;
+
+    button { width: 100%; }
+  }
+}
+
+// ─── Compatibility popup footer link (outside .wpc-compatibility-popup) ───
+.swal2-popup.popup-delay-js,
+.swal2-popup.popup-combine-js,
+.swal2-popup.popup-combine-css {
+  .cdn-popup-footer-info {
+    margin-top: 0;
+    padding: 0 36px 28px;
+    text-align: center;
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: @color-bg-frost;
+      border: 1px solid @color-border;
+      border-radius: @radius-pill;
+      color: @color-text-secondary;
+      font-family: @font-regular;
+      font-size: 13px;
+      text-decoration: none;
+      transition: @transition-fast;
+
+      &:hover {
+        background: @color-white;
+        border-color: @color-border-medium;
+        color: @color-blue;
+
+        svg { color: @color-blue; }
+      }
+
+      svg {
+        width: 14px;
+        height: 14px;
+        color: @color-gray-text;
+        flex-shrink: 0;
+        transition: @transition-fast;
+      }
+
+      // Legacy img fallback
+      img.popup-icon {
+        width: 14px;
+        height: 14px;
+        opacity: 0.6;
+      }
+    }
+  }
+}
+
+// ─── SaaS-style centered popup (Hide Plugin, etc.) ──────────────────────
+// Override SA2 defaults when this popup is shown
+// SaaS-style popup override (Hide Plugin, etc.)
+.swal2-popup.popup-hide_compress {
+  padding: 0 !important; // FORCED: remove SA2 padding, our inner handles it
+  border-radius: @radius-card !important; // FORCED
+  width: 480px !important; // FORCED: compact SaaS modal
+  max-width: 480px !important; // FORCED: compact SaaS modal
+
+  .swal2-title { display: none !important; } // FORCED: we have our own h3
+  .swal2-content { padding: 0 !important; margin: 0 !important; } // FORCED
+  #swal2-content { padding: 0 !important; } // FORCED
+
+  .swal2-actions {
+    padding: 0 40px 40px !important; // FORCED
+    margin: 0 auto !important; // FORCED
+    max-width: 600px;
+    justify-content: center !important; // FORCED
+
+    .swal2-confirm {
+      width: 100% !important; // FORCED
+      background: var(--wpc-brand-primary, @color-blue) !important; // FORCED
+      border-radius: @radius-lg !important; // FORCED
+      padding: 16px 24px !important; // FORCED
+      font-family: @font-semibold !important; // FORCED
+      font-size: 16px !important; // FORCED
+      box-shadow: 0 4px 6px -1px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.2)) !important; // FORCED
+      transition: @transition-fast !important; // FORCED
+
+      &:hover {
+        transform: translateY(-1px) !important; // FORCED
+      }
+    }
+  }
+}
+
+.wpc-saas-popup {
+  text-align: center;
+  padding: 40px;
+  max-width: 500px;
+  margin: 0 auto;
+
+  .wpc-saas-popup-icon {
+    width: 64px;
+    height: 64px;
+    background: @color-ice;
+    border-radius: @radius-card;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid fade(@color-blue, 10%);
+    margin: 0 auto 20px;
+
+    img {
+      width: 32px;
+      height: 32px;
+    }
+  }
+
+  h3 {
+    font-family: @font-semibold;
+    font-size: 20px;
+    font-weight: 600;
+    color: @color-text-dark;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  p {
+    font-family: @font-regular;
+    font-size: 15px;
+    color: @color-text-secondary;
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+}
+
+// ─── Copy Chip (inline code + copy button) ──────────────────────────────
+.wpc-copy-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: @color-bg-neutral;
+  border: 1px solid @color-border;
+  padding: 14px 20px;
+  border-radius: @radius-lg;
+  cursor: pointer;
+  transition: @transition-fast;
+  margin-bottom: 0;
+
+  &:hover {
+    border-color: var(--wpc-brand-primary, @color-blue);
+    background: @color-white;
+    box-shadow: @shadow-sm;
+  }
+
+  code {
+    font-family: @font-code;
+    font-size: 14px;
+    color: @color-text-body;
+    font-weight: 500;
+  }
+
+  .wpc-copy-chip-icon {
+    color: @color-gray-text;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+  }
+
+  &:hover .wpc-copy-chip-icon {
+    color: var(--wpc-brand-primary, @color-blue);
+  }
+
+  .wpc-copy-chip-feedback {
+    display: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: @color-success;
+  }
+
+  // Copied state
+  &.copied {
+    background: @color-success-bg;
+    border-color: #a7f3d0;
+
+    code { color: @color-success; }
+    .wpc-copy-chip-icon { display: none; }
+    .wpc-copy-chip-feedback { display: block; }
+  }
+}
+
+// ─── Example Chip (monospace pattern in example lists) ──────────────────
+.wpc-example-chip {
+  font-family: @font-code;
+  font-size: 13px;
+  color: @color-text-dark;
+  background: @color-white;
+  border: 1px solid @color-border;
+  padding: 2px 8px;
+  border-radius: @radius-base;
+  font-weight: 500;
+  box-shadow: @shadow-sm;
+  display: inline-block;
+  margin-right: 6px;
+  user-select: all;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. GRADIENT BOTTOM BORDER & LOADING
+// ═══════════════════════════════════════════════════════════════════════════
+
+#cdn-popup-inner {
+  * { max-width: 100%; }
+
+  .cdn-popup-bottom-border {
+    height: 10px;
+    background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: gradient bar
+    width: 100%;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    right: 0;
+  }
+}
+
+// Loading spinner with dot-pulse
+.wpc-loading-spinner {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  align-items: center;
+
+  .snippet { position: relative; border-radius: 0; width: 100%; max-width: 200px; }
+  .stage { height: 50px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; }
+
+  .dot-pulse {
+    position: relative;
+    left: -9999px;
+    width: 10px;
+    height: 10px;
+    border-radius: @radius-default;
+    background-color: var(--wpc-brand-primary-light, @color-primary);
+    color: var(--wpc-brand-primary-light, @color-primary);
+    box-shadow: 9999px 0 0 -5px var(--wpc-brand-primary-light, @color-primary);
+    animation: dotPulse 1.5s infinite linear;
+    animation-delay: .25s;
+
+    &::before, &::after {
+      content: '';
+      display: inline-block;
+      position: absolute;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      border-radius: @radius-default;
+      background-color: var(--wpc-brand-primary-light, @color-primary);
+      color: var(--wpc-brand-primary-light, @color-primary);
+    }
+
+    &::before { box-shadow: 9984px 0 0 -5px var(--wpc-brand-primary-light, @color-primary); animation: dotPulseBefore 1.5s infinite linear; animation-delay: 0s; }
+    &::after { box-shadow: 10014px 0 0 -5px var(--wpc-brand-primary-light, @color-primary); animation: dotPulseAfter 1.5s infinite linear; animation-delay: .5s; }
+  }
+}
+
+// Saving logo animation
+.wpc-popup-saving-logo-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+
+  .wpc-popup-saving-preparing-logo {
+    position: relative;
+    width: 80px;
+    height: 80px;
+
+    .wpc-ic-popup-logo-saving {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+      width: 36px;
+      height: 36px;
+    }
+    .wpc-ic-popup-logo-saving-loader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 80px;
+      height: 80px;
+      animation: spin 1.2s linear infinite;
+    }
+  }
+}
+
+// DNS loading text — show only in CNAME popup (not mode-select or other popups)
+.popup-custom-cdn .cdn-popup-loading h4 {
+  display: block !important; // FORCED: PHP sets display:none inline
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 13. EXPORT / IMPORT SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+#export_settings {
+
+  // ─── Checkbox Card Grid ──────────────────────────────────────────────
+  .wpc-settings-export-form {
+    display: grid !important; // FORCED: override inline styles
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+    margin-bottom: 0 !important;
+    border: none !important;
+    padding: 20px 0 24px;
+  }
+
+  // ─── Individual Cards ────────────────────────────────────────────────
+  .cdn-popup-inner {
+    background: @color-white !important;
+    border: 1.5px solid fade(@color-border, 70%) !important;
+    border-radius: @radius-card !important;
+    padding: 20px 24px !important;
+    transition: all 0.25s cubic-bezier(0.36, 0.66, 0.04, 1) !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    margin-bottom: 0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+
+    &:hover {
+      border-color: fade(@color-primary, 50%) !important;
+      background: @color-bg-frost !important;
+      transform: translateY(-2px) !important;
+      box-shadow: 0 4px 12px rgba(76, 137, 235, 0.08) !important;
+    }
+
+    // Unchecked state
+    &:not(.export-card-checked) {
+      border-color: fade(@color-border, 70%) !important;
+      background: @color-white !important;
+    }
+
+    // Checked state — tint bg + brand border + subtle glow
+    &.export-card-checked {
+      border-color: var(--wpc-brand-primary-light, @color-primary) !important;
+      background: var(--wpc-brand-tint, @color-ice) !important;
+      box-shadow: 0 0 0 3px fade(@color-primary, 8%), 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+    }
+  }
+
+  // ─── Checkbox + Label Container ──────────────────────────────────────
+  .wps-default-excludes-enabled-checkbox-container {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 14px !important;
+    min-height: 24px !important;
+
+    p {
+      font-family: @font-semibold !important;
+      font-size: 14px !important;
+      color: @color-text-dark !important;
+      font-weight: 600 !important;
+      margin: 0 !important;
+      line-height: 24px !important;
+    }
+  }
+
+  // ─── Custom Checkbox ─────────────────────────────────────────────────
+  input[type="checkbox"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
+    border: 2px solid @color-border-medium !important;
+    border-radius: @radius-md !important;
+    background: @color-white !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    position: relative !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: none !important;
+    outline: none !important;
+
+    &:focus, &:focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    &:checked {
+      background: var(--wpc-brand-primary, @color-blue) !important;
+      border-color: var(--wpc-brand-primary-dark, @color-blue-deep) !important;
+      animation: none !important;
+      width: 24px !important;
+      height: 24px !important;
+
+      &::before {
+        content: '' !important;
+        position: absolute !important;
+        top: 7px !important;
+        left: 11px !important;
+        width: 5px !important;
+        height: 10px !important;
+        border: solid @color-white !important;
+        border-width: 0 2px 2px 0 !important;
+        transform: rotate(45deg) !important;
+        animation: none !important;
+      }
+    }
+
+    &:not(:checked)::before {
+      content: none !important;
+    }
+  }
+
+  // ─── Button Row ──────────────────────────────────────────────────────
+  .wpc-export-import-buttons {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 24px 0 0 !important;
+    border-top: 1px solid fade(@color-border, 40%) !important;
+    margin: 0 !important;
+  }
+
+  button {
+    height: 42px !important;
+    padding: 0 28px !important;
+    border-radius: @radius-md !important;
+    font-family: @font-semibold !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    text-transform: capitalize !important;
+    cursor: pointer !important;
+    transition: @transition-smooth !important;
+    border-style: solid !important;
+    border-width: 1px !important;
+  }
+
+  #wpc-export-button {
+    background: var(--wpc-brand-primary, @color-blue) !important;
+    color: @color-white !important;
+    border: none !important;
+    box-shadow: 0 4px 10px rgba(76, 137, 235, 0.15) !important;
+
+    &:hover {
+      transform: translateY(-2px) !important;
+      box-shadow: 0 6px 16px rgba(76, 137, 235, 0.25) !important;
+      filter: brightness(1.05) !important;
+    }
+  }
+
+  #wpc-import-button {
+    background: @color-white !important;
+    border-color: @color-border !important;
+    color: @color-text-slate !important;
+
+    &:hover {
+      border-color: var(--wpc-brand-accent-light, @color-border-blue) !important;
+      background-color: @color-bg-frost !important;
+      color: @color-text-dark !important;
+      transform: translateY(-2px) !important;
+    }
+  }
+
+  #wpc-set-default-button {
+    margin-left: auto !important;
+    float: none !important;
+    background: transparent !important;
+    border-color: fade(@color-error, 30%) !important;
+    color: @color-error !important;
+
+    &:hover {
+      background-color: @color-error-bg !important;
+      border-color: @color-error !important;
+      transform: translateY(-1px) !important;
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 14. RESPONSIVE — MOBILE POPUPS (≤640px)
+// ═══════════════════════════════════════════════════════════════════════════
+
+@media (max-width: 640px) {
+
+  // Top section padding
+  @{popup-all} .cdn-popup-top { padding: 24px 20px 20px; }
+  @{popup-all} .cdn-popup-content-full { padding: 20px; }
+
+  // Checkbox grid → single column
+  @{popup-checkbox} .wps-default-excludes-container { grid-template-columns: 1fr; }
+
+  // Example list padding
+  @{popup-examples} .cdn-popup-content-inner > .wps-example-list { padding: 16px 20px; }
+  @{popup-examples} .cdn-popup-content-inner > .wps-example-list > div { flex-direction: column; gap: 12px; }
+
+  // Save buttons — sticky at bottom on mobile
+  @{popup-all} .btn-exclude-save,
+  .popup-per-page-settings .btn-exclude-pages-save,
+  .popup-per-page-excludes .btn-exclude-pages-save {
+    max-width: none !important; // FORCED: full width on mobile
+    margin: 0 !important; // FORCED: no top margin
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    padding: 11px 28px !important; // FORCED: mobile padding
+    box-shadow: 0 2px 8px rgba(66, 115, 240, 0.25), 0 -4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  // Close button → 44px tap target
+  @{popup-all} .swal2-close {
+    width: 44px !important; // FORCED: tap target
+    height: 44px !important; // FORCED: tap target
+    font-size: 28px !important; // FORCED: readability
+    line-height: 44px !important; // FORCED: centering
+    margin: 8px !important; // FORCED: spacing
+  }
+
+  // h4 — remove fixed width
+  @{popup-all} .cdn-popup-content-inner h4 {
+    width: auto !important; // FORCED: prevent overflow
+    max-width: 100% !important; // FORCED: prevent overflow
+  }
+
+  // Purge + Cookies — stack hooks side-by-side to vertical
+  .popup-purge-settings .wpc-hooks-container,
+  .popup-cache-cookies .wpc-hooks-container {
+    flex-direction: column !important; // FORCED: stack on mobile
+    height: auto !important; // FORCED: natural height
+  }
+
+  .popup-purge-settings .hooks-list-textarea-value,
+  .popup-cache-cookies .hooks-list-textarea-value {
+    min-height: 150px !important; // FORCED: enough space
+  }
+
+  .popup-purge-settings .wpc-hooks-defaults-box,
+  .popup-cache-cookies .wpc-hooks-defaults-box {
+    min-height: 100px !important; // FORCED: readable
+  }
+
+  // Purge checkbox grid → single column
+  .popup-purge-settings .wpc-checkbox-grid {
+    grid-template-columns: 1fr !important; // FORCED: stack on mobile
+  }
+
+  // Purge scheduled box — wrap
+  .popup-purge-settings .wpc-scheduled-purge-box {
+    flex-wrap: wrap !important; // FORCED: prevent overflow
+    gap: 8px !important; // FORCED: tighter
+    padding: 16px !important; // FORCED: compact
+    font-size: 14px !important; // FORCED: readable
+  }
+
+  // Purge + Cookies — section headers stack
+  .popup-purge-settings .wpc-section-header-split,
+  .popup-cache-cookies .wpc-section-header-split {
+    flex-direction: column !important; // FORCED: stack labels
+    gap: 4px !important; // FORCED: compact
+  }
+
+  // Popup top margin
+  .cdn-popup-inner.ajax-settings-popup .cdn-popup-top {
+    margin: 0 auto !important; // FORCED: centered on mobile
+    padding: 0 16px 12px !important; // FORCED: tighter padding
+  }
+
+  // CDN input cap
+  .popup-cf-cdn #wpc-custom-cdn {
+    max-width: 100% !important; // FORCED: prevent overflow
+  }
+
+  // Textarea min-height reduction
+  .popup-exclude-critical-css .exclude-list-textarea-value,
+  .popup-exclude-js-delay-v2 .exclude-list-textarea-value,
+  .popup-exclude-advanced-caching-popup .exclude-list-textarea-value,
+  .popup-exclude-adaptive-popup .exclude-list-textarea-value,
+  .popup-exclude-webp-popup .exclude-list-textarea-value,
+  .popup-exclude-lazy-popup .exclude-list-textarea-value,
+  .popup-exclude-cdn-popup .exclude-list-textarea-value,
+  .popup-delay-js-configuration .exclude-list-textarea-value,
+  .popup-delay-js-configuration .exclude-list-textarea-value-defer {
+    min-height: 100px !important; // FORCED: save space on mobile
+  }
+
+  .popup-cache-cookies .cache-cookies-textarea-value,
+  .popup-cache-cookies .exclude-cookies-textarea-value,
+  .popup-purge-settings .hooks-list-textarea-value {
+    min-height: 120px !important; // FORCED: save space on mobile
+  }
+
+  // Input tap targets
+  .popup-exclude-adaptive-popup .wps-min-mobile-width,
+  .popup-purge-settings .wps-scheduled-purge,
+  .popup-per-page-settings .per_page_lazy_skip {
+    min-height: 44px !important; // FORCED: 44px tap target
+    max-height: none !important; // FORCED: allow growth
+  }
+
+  // Icon reduction
+  @{popup-all} .inline-heading-icon {
+    width: 60px !important; // FORCED: mobile size
+    height: 60px !important; // FORCED: mobile size
+    padding: 12px !important; // FORCED: mobile size
+  }
+
+  // Example list — remove min-width that forces overflow
+  .wps-example-list {
+    min-width: 0 !important; // FORCED: prevent overflow
+    width: 100% !important; // FORCED: full width
+  }
+
+  // Example list — stack labels above text
+  @{popup-examples} .cdn-popup-content-inner > .wps-example-list > div {
+    flex-direction: column !important; // FORCED: mobile stack
+    gap: 8px !important; // FORCED: mobile spacing
+  }
+
+  // Example list paragraphs — allow wrapping
+  @{popup-examples} .cdn-popup-content-inner > .wps-example-list div > div p {
+    margin-left: 0 !important; // FORCED: remove indent
+    word-break: break-word !important; // FORCED: prevent overflow
+    overflow-wrap: anywhere !important; // FORCED: prevent overflow
+  }
+
+  // Content inner — allow wrapping
+  .cdn-popup-content-inner > div {
+    flex-wrap: wrap !important; // FORCED: mobile wrap
+    gap: 8px !important; // FORCED: mobile spacing
+  }
+
+  // Side list margins
+  @{popup-side-examples} .wps-example-list {
+    margin: 0 !important; // FORCED: prevent overflow
+    box-sizing: border-box !important; // FORCED: sizing
+  }
+
+  // Select mode popup — override for 3-col
+  .no-padding-popup-bottom-bg.swal2-container .swal2-popup {
+    padding: 16px !important; // FORCED: mobile padding
+  }
+
+  // Save settings button — 44px tap target
+  .cdn-popup-save-btn {
+    min-height: 44px !important; // FORCED: tap target
+    display: flex !important; // FORCED: centering
+    align-items: center !important; // FORCED: centering
+    justify-content: center !important; // FORCED: centering
+    font-size: 15px !important; // FORCED: readability
+  }
+
+  // Select mode columns — stack vertically
+  .wpc-popup-columns {
+    width: 100%;
+    gap: 16px;
+
+    &.wpc-three-columns .wpc-popup-column {
+      flex: 1 1 100%;
+      min-width: 100%;
+    }
+  }
+
+  #select-mode-popup-inner .inline-heading h3 {
+    font-size: 22px;
+  }
+
+  .wpc-popup-select-bar-container {
+    width: 90%;
+  }
+}
+
+// ─── Mobile popup fixes ──────────────────────────────────────────────────
+@media screen and (max-width: 480px) {
+  .popup-cache-cookies,
+  .popup-cf-cdn,
+  .popup-delay-js-configuration,
+  .popup-exclude-adaptive-popup,
+  .popup-exclude-advanced-caching-popup,
+  .popup-exclude-cdn-popup,
+  .popup-exclude-critical-css,
+  .popup-exclude-js-delay-v2,
+  .popup-exclude-lazy-popup,
+  .popup-exclude-webp-popup,
+  .popup-per-page-settings,
+  .popup-per-page-excludes,
+  .popup-purge-settings {
+    padding: 0 !important; // FORCED: no popup padding on mobile
+  }
+
+  .cdn-popup-content {
+    padding: 20px !important; // FORCED: override other mobile rules
+  }
+
+  // Override WP core 782px checkbox enlargement inside our popups
+  .swal2-popup input[type=checkbox]:before,
+  .swal2-popup input[type=checkbox]:checked:before {
+    display: none !important; // FORCED: hide WP core duplicate checkbox
+  }
+}
+
+@media (max-width: 640px) {
+  // Purge settings + cache cookies popup — no SA2 padding
+  .no-padding-popup-bottom-bg.swal2-container .swal2-popup.popup-purge-settings,
+  .no-padding-popup-bottom-bg.swal2-container .swal2-popup.popup-cache-cookies {
+    padding: 0 !important; // FORCED
+  }
+
+  // All popup variants — no content-full padding
+  .popup-cache-cookies,
+  .popup-cf-cdn,
+  .popup-delay-js-configuration,
+  .popup-exclude-adaptive-popup,
+  .popup-exclude-advanced-caching-popup,
+  .popup-exclude-cdn-popup,
+  .popup-exclude-critical-css,
+  .popup-exclude-js-delay-v2,
+  .popup-exclude-lazy-popup,
+  .popup-exclude-webp-popup,
+  .popup-per-page-settings,
+  .popup-per-page-excludes,
+  .popup-purge-settings {
+    .cdn-popup-content-full {
+      padding: 0 !important; // FORCED
+    }
+  }
+}

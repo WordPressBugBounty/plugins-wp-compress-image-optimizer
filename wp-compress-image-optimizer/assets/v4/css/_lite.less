@@ -1,0 +1,2480 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Lite / Simple Dashboard
+// ═══════════════════════════════════════════════════════════════════════════
+// Styles specific to the lite/simple settings page
+// (templates/admin/lite_settings.php)
+//
+// DOM:
+//   .wpc-lite-settings-container
+//     form.wpc-lite-form
+//       .wpc-header
+//         .wpc-header-left (logo)
+//         .wpc-header-right (save btn, CF banner)
+//       .wpc-settings-flex-body
+//         .wpc-settings-sidebar
+//           .wpc-rounded-box (Quick Optimizations)
+//           .wpc-rounded-box.wpc-promo-box (Usage / Unlock PRO)
+//         .wpc-lite-dashboard
+//           .wpc-rounded-box-full (Chart)
+//           [hidden: old stats row]
+//           .wpc-v2-section (Performance Overview + Score v2 cards)
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-lite-settings-container {
+  overflow-x: hidden;
+
+  // ─── Form constraint (matches v4 layout) ────────────────────────────────
+  > form.wpc-lite-form {
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+
+  // ─── Header overrides for lite ──────────────────────────────────────────
+  .wpc-header {
+    flex-wrap: wrap;
+    gap: @space-md;
+    min-height: 88px; // prevent CLS when save pill appears/disappears
+  }
+
+  .wpc-header-right {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: @space-md;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  // ─── Header Advanced Settings Button (blue gradient pill, far right) ────
+  .wpc-header-advanced-btn {
+    flex-shrink: 0;
+
+    .wpc-header-adv-link {
+      display: inline-flex;
+      align-items: center;
+      gap: @space-sm;
+      padding: 10px 22px;
+      background: var(--wpc-brand-primary, @color-blue);
+      border: none;
+      border-radius: @radius-input; // rounded rect — visually distinct from pill Save button
+      font-family: @font-semibold;
+      font-size: 13px;
+      color: @color-white;
+      text-decoration: none;
+      transition: @transition-smooth;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px var(--wpc-brand-shadow, rgba(76, 137, 235, 0.25));
+
+      img {
+        width: 14px;
+        height: 14px;
+        filter: brightness(0) invert(1);
+      }
+
+      &:hover {
+        box-shadow: 0 4px 14px var(--wpc-brand-shadow, rgba(76, 137, 235, 0.35));
+        transform: translateY(-1px);
+      }
+    }
+  }
+
+  // ─── Hidden on all lite/simple screens ──────────────────────────────────
+  .wpc-cf-banner { display: none; }
+  .wpc-cf-header-banner { display: none; }
+
+  // ─── Hidden only on true Lite (no API key) ────────────────────────────
+  &.wpc-is-lite {
+    .wpc-cf-sidebar-banner { display: none !important; } // FORCED: no CF promo on lite
+  }
+
+  // ─── Sidebar CF Banner (below usage card, clean centered stack) ─────────
+  .wpc-cf-sidebar-banner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+    gap: 0;
+    padding: @space-xl @space-base;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+    height: 195px;
+
+    img {
+      width: auto;
+      height: 40px;
+      object-fit: contain;
+      margin-bottom: @space-md;
+    }
+
+    .wpc-cf-sidebar-text {
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-text-secondary;
+      line-height: 1.5;
+      margin: 0 0 @space-base;
+    }
+
+    .wpc-cf-enable-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: @space-xs;
+      font-family: @font-semibold;
+      font-size: 13px;
+      color: #F6821F !important; // FORCED: Cloudflare brand orange — override .wpc-cf-link
+      background: rgba(246, 130, 31, 0.06);
+      border: 1px solid rgba(246, 130, 31, 0.18);
+      border-radius: @radius-pill;
+      padding: @space-sm @space-lg;
+      cursor: pointer;
+      transition: @transition-smooth;
+
+      &:hover {
+        background: rgba(246, 130, 31, 0.12);
+        border-color: rgba(246, 130, 31, 0.3);
+        color: #E5740E !important; // FORCED: override .wpc-cf-link
+      }
+
+      &:focus {
+        outline: none;
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+    }
+
+    // Dismiss X button — hidden for now
+    .wpc-cf-dismiss {
+      display: none !important; // FORCED: overrides flex from base styles
+      position: absolute;
+      top: @space-sm;
+      right: @space-sm;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      border-radius: @radius-circle;
+      font-size: 18px;
+      color: @color-gray-muted;
+      cursor: pointer;
+      transition: @transition-fast;
+      padding: 0;
+      line-height: 1;
+
+      &:hover {
+        background: @color-bg-frost;
+        color: @color-text-secondary;
+      }
+    }
+
+    // Connected badge — shown when CF integration is active
+    .wpc-cf-connected-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: @font-semibold;
+      font-size: 13px;
+      color: @color-success;
+      background: @color-success-bg;
+      border: 1px solid fade(@color-success, 18%);
+      border-radius: @radius-pill;
+      padding: @space-sm @space-lg;
+
+      svg { flex-shrink: 0; }
+    }
+
+    // Connected variant — no dismiss, tighter padding
+    &.wpc-cf-connected {
+      padding: @space-xl;
+
+      .wpc-cf-sidebar-text {
+        margin-bottom: @space-sm;
+      }
+    }
+  }
+
+  // ─── Sidebar Advanced Settings Button (hidden — moved to header) ────────
+  .wpc-sidebar-advanced-btn { display: none; }
+
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Sidebar — Quick Optimizations (enterprise toggle list)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  .wpc-settings-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: @space-base;
+
+    // Staggered entrance — left-to-right wave starts here
+    .wpc-rounded-box,
+    .wpc-usage-card,
+    .wpc-cf-sidebar-banner {
+      opacity: 0;
+      animation: wpcSmoothSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      transition: box-shadow 0.3s ease;
+      will-change: opacity, transform;
+    }
+
+    .wpc-quick-opts        { animation-delay: 80ms; }
+    .wpc-usage-card        { animation-delay: 280ms; }
+    .wpc-cf-sidebar-banner { animation-delay: 380ms; }
+
+    .wpc-box-title h3 {
+      font-family: @font-bold !important; // FORCED: override WP admin h3 styles
+      font-size: 12px !important; // FORCED: override WP admin h3 styles
+      font-weight: 800 !important; // FORCED: override WP admin h3 styles
+      text-transform: uppercase !important; // FORCED: override WP admin h3 styles
+      letter-spacing: 0.05em !important; // FORCED: override WP admin h3 styles
+      color: @color-text-dark !important; // FORCED: override WP admin h3 styles
+      margin: 0 !important; // FORCED: override WP admin h3 styles
+    }
+  }
+
+  // ─── Toggle Switch — gradient thumb with CSS checkmark ───────────────────
+  // Matches _section-cards.less style but fully self-contained for lite page
+  .wpc-switch {
+    width: 56px;
+    height: 32px;
+    overflow: hidden;
+
+    .wpc-switch-slider {
+      background: #e8ecf1;
+      border: none;
+      border-radius: @radius-pill-md;
+      box-shadow: none;
+      overflow: hidden;
+      transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 1;
+
+      // Thumb — OFF: white circle with subtle shadow
+      &::before {
+        width: 26px;
+        height: 26px;
+        left: 3px;
+        bottom: 3px;
+        background: @color-white;
+        background-image: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+        border-radius: @radius-circle;
+        transition: all 0.3s ease;
+      }
+
+      // Checkmark — hidden when off
+      &::after {
+        content: "";
+        position: absolute;
+        width: 6px;
+        height: 9px;
+        left: 12px;
+        bottom: 13px;
+        border: solid @color-white;
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
+        opacity: 0;
+        transition: all 0.3s ease;
+      }
+    }
+
+    &:hover .wpc-switch-slider {
+      background: #dde2e8;
+    }
+
+    input:checked + .wpc-switch-slider {
+      background: var(--wpc-brand-tint, fade(@color-primary, 15%));
+
+      &::before {
+        transform: translateX(24px);
+        background: var(--wpc-brand-primary, @color-blue);
+        box-shadow: 0 2px 6px var(--wpc-brand-shadow, rgba(76, 137, 235, 0.3)), 0 0 0 1px var(--wpc-brand-shadow, rgba(76, 137, 235, 0.08));
+      }
+
+      &::after {
+        opacity: 0.9;
+        left: 37px;
+      }
+    }
+  }
+
+  // ─── Toggle List ────────────────────────────────────────────────────────
+  .wpc-toggles {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    > li {
+      padding: 0;
+      transition: @transition-fast;
+      // Decelerating cascade — gaps shrink (75→35ms) for organic momentum
+      opacity: 0;
+      animation: wpcSmoothSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+      &:nth-child(1) { animation-delay: 180ms; }
+      &:nth-child(2) { animation-delay: 255ms; } // +75ms
+      &:nth-child(3) { animation-delay: 320ms; } // +65ms
+      &:nth-child(4) { animation-delay: 375ms; } // +55ms
+      &:nth-child(5) { animation-delay: 420ms; } // +45ms
+      &:nth-child(6) { animation-delay: 455ms; } // +35ms
+    }
+  }
+
+  // ─── Unified card style for all lite page cards ─────────────────────────
+  .wpc-quick-opts,
+  .wpc-usage-card,
+  .wpc-cf-sidebar-banner,
+  .wpc-rounded-box,
+  .wpc-rounded-box-half,
+  .wpc-rounded-box-full,
+  .wpc-v2-card {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.02);
+  }
+
+  // ─── Quick Optimizations Card ──────────────────────────────────────────
+  .wpc-quick-opts {
+    padding: 18px 20px;
+    height: 381px;
+
+    // Title — uppercase label with separator
+    .wpc-box-title {
+      margin-bottom: @space-base;
+      padding-bottom: @space-base;
+      border-bottom: 1px solid fade(@color-border, 45%);
+
+      h3 {
+        font-family: @font-bold;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: @color-text-dark;
+        white-space: nowrap;
+      }
+    }
+
+    // Toggle rows — consistent rhythm
+    .wpc-toggles > li {
+      margin-bottom: 0;
+    }
+
+    // Advanced Settings — subtle CTA
+    .wpc-menu-divider {
+      margin-top: @space-base;
+      padding-top: @space-base;
+      border-top: 1px solid fade(@color-border, 40%);
+
+      a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: @space-xs;
+        width: 100%;
+        padding: 10px @space-base;
+        background: fade(@color-bg-frost, 80%);
+        border: 1px solid fade(@color-border, 40%);
+        border-radius: @radius-md;
+        font-family: @font-bold;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--wpc-brand-primary, @color-blue);
+        text-decoration: none;
+        transition: @transition-smooth;
+        white-space: nowrap;
+
+        img {
+          width: 14px;
+          height: 14px;
+          opacity: 0.7;
+        }
+
+        &:hover {
+          background: fade(#eef2ff, 90%);
+          border-color: fade(@color-blue, 25%);
+          box-shadow: 0 4px 16px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.12));
+          color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+          transform: translateY(-1px);
+          img { opacity: 1; }
+        }
+
+        &:active {
+          transform: translateY(0);
+        }
+      }
+    }
+  }
+
+  // ─── Lite Toggle Row ──────────────────────────────────────────────────
+  .wpc-box-for-checkbox-lite {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @space-md;
+    padding: 10px 0;
+    min-height: 44px;
+    transition: @transition-fast;
+    border-top: none;
+
+    .wpc-box-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .wpc-box-check {
+      flex-shrink: 0;
+    }
+
+    &.no-description .wpc-box-content p {
+      display: none;
+    }
+  }
+
+  // ─── Toggle Label States (active/inactive/hover) ─────────────────────
+  // Base: regular weight, body text color
+  .wpc-checkbox-title-holder span {
+    font-family: @font-regular !important; // FORCED: override WP admin
+    font-size: 14px !important; // FORCED: override WP admin
+    color: #334155 !important; // FORCED: override WP admin — slate-700
+    font-weight: 500 !important; // FORCED: override WP admin
+    transition: @transition-fast !important; // FORCED: override WP admin
+  }
+
+  // Hover — bold + dark
+  .wpc-toggles li:hover .wpc-checkbox-title-holder span {
+    font-family: @font-bold !important; // FORCED: override WP admin
+    font-weight: 700 !important; // FORCED: override WP admin
+    color: @color-text-dark !important; // FORCED: override WP admin
+  }
+
+  // Unchecked — muted grey
+  .wpc-toggles li:has(input:not(:checked)) .wpc-checkbox-title-holder span {
+    color: #c1c6cb !important; // FORCED: override WP admin — muted blue-grey
+  }
+
+  // Unchecked + hover — partially revealed, still bold
+  .wpc-toggles li:has(input:not(:checked)):hover .wpc-checkbox-title-holder span {
+    color: fade(@color-text-dark, 56%) !important; // FORCED: override WP admin
+    font-family: @font-bold !important; // FORCED: override WP admin
+    font-weight: 700 !important; // FORCED: override WP admin
+  }
+
+  // ─── Box Title ──────────────────────────────────────────────────────────
+  .wpc-box-title {
+    display: flex;
+    align-items: center;
+    gap: @space-sm;
+    margin-bottom: @space-md;
+    padding-bottom: @space-md;
+    border-bottom: 1px solid @color-border;
+
+    h3 {
+      font-family: @font-bold;
+      font-size: @font-size-md;
+      color: @color-text-dark;
+      margin: 0;
+    }
+
+    img {
+      width: 20px;
+      height: 20px;
+    }
+
+    // "circle" variant — pulsing dot before title
+    &.circle h3::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--wpc-brand-primary-light, @color-primary);
+      border-radius: @radius-circle;
+      margin-right: @space-sm;
+      vertical-align: middle;
+      animation: monitoringPulse 1.5s infinite;
+    }
+
+    // No separator variant
+    &.no-separator {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+  }
+
+  // ─── Menu Divider (Advanced Settings link) ──────────────────────────────
+  .wpc-menu-divider {
+    background: transparent !important; // FORCED: override hover bg
+
+    a {
+      display: flex;
+      align-items: center;
+      gap: @space-sm;
+      padding: @space-md @space-base;
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+      transition: @transition-fast;
+      border-top: 1px solid @color-border;
+      margin-top: @space-xs;
+
+      img {
+        width: 16px;
+        height: 16px;
+        opacity: 0.5;
+        transition: @transition-fast;
+      }
+
+      &:hover {
+        color: var(--wpc-brand-primary-dark, @color-blue-deep);
+
+        img {
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Locked items — lock icon replaces toggle
+  // ═══════════════════════════════════════════════════════════════════════
+
+  .wpc-locked {
+    cursor: default !important; // FORCED: no pointer change on locked items
+
+    .wpc-checkbox-title-holder span {
+      color: @color-border-medium !important; // FORCED: muted text #cbd5e1
+    }
+
+    // Hide the slider, repurpose the switch as ghost PRO badge
+    .wpc-switch-slider { display: none !important; } // FORCED
+
+    .wpc-switch {
+      width: auto !important; // FORCED: override 44px
+      height: 22px !important; // FORCED
+      display: flex !important; // FORCED
+      align-items: center !important; // FORCED
+      justify-content: center !important; // FORCED
+      gap: 4px;
+      padding: 0 8px !important; // FORCED
+      border: 1px solid @color-border !important; // FORCED
+      border-radius: 11px !important; // FORCED
+      cursor: default !important; // FORCED
+      box-sizing: border-box;
+      transition: border-color 0.2s ease;
+
+      // Lock icon via CSS
+      // Lock icon — uses mask so color inherits from ::after text color (brand-aware)
+      &::before {
+        content: "" !important; // FORCED
+        display: block;
+        width: 9px;
+        height: 9px;
+        background-color: currentColor !important; // FORCED: inherits text color
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E");
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        margin-top: -1px;
+        position: static !important; // FORCED: override absolute from base
+        border-radius: 0 !important; // FORCED
+        box-shadow: none !important; // FORCED
+        transform: none !important; // FORCED
+        color: #94a3b8;
+      }
+
+      // PRO text
+      &::after {
+        content: "PRO" !important; // FORCED
+        font-size: 9px;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        position: static !important; // FORCED
+        border: none !important; // FORCED
+        background: none !important; // FORCED
+        display: block !important; // FORCED
+        width: auto !important; // FORCED
+        height: auto !important; // FORCED
+        opacity: 1 !important; // FORCED
+      }
+    }
+
+    &:hover .wpc-switch {
+      border-color: var(--wpc-brand-accent-light, fade(@color-blue, 40%)) !important; // FORCED
+      background: var(--wpc-brand-tint, fade(@color-ice, 60%));
+
+      &::before {
+        color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: mask inherits color
+      }
+
+      &::after {
+        color: var(--wpc-brand-primary, @color-blue) !important; // FORCED
+      }
+    }
+  }
+
+  // Legacy chip class — hidden (replaced by CSS-only approach)
+  .wpc-locked-chip {
+    display: none;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Sidebar — Promo Box / Usage Stats
+  // ═══════════════════════════════════════════════════════════════════════
+
+  .wpc-promo-box {
+    border-radius: @radius-xl !important; // FORCED: 20px rounded
+    padding: 24px !important; // FORCED: compact padding
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03),
+                0 20px 40px -5px rgba(0, 0, 0, 0.05),
+                0 0 0 1px rgba(0, 0, 0, 0.02) !important; // FORCED: layered shadow
+    height: 437px;
+
+    // --- Header ---
+    .wpc-box-title {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      font-family: @font-bold;
+      font-size: 16px;
+      font-weight: 700;
+      color: @color-text-dark;
+      letter-spacing: -0.01em;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid @color-border;
+      text-align: center;
+
+      img {
+        width: 60px;
+        height: 60px;
+        filter: drop-shadow(0 0 12px rgba(91, 141, 239, 0.3));
+      }
+    }
+
+    // --- Feature list ---
+    .wpc-box-content ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin: 0 0 24px 0;
+      padding: 0;
+
+      li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: default;
+
+        &:hover {
+          transform: translateY(-2px);
+        }
+
+        img, svg {
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+          object-fit: contain;
+          color: var(--wpc-brand-primary, @color-blue);
+        }
+
+        span {
+          font-family: @font-regular;
+          font-size: 12px;
+          color: @color-text-dark;
+          line-height: 1.3;
+          white-space: normal;
+        }
+      }
+    }
+
+    // --- CTA button ---
+    .wpc-box-content-btn {
+      display: block;
+      width: 100%;
+
+      .wpc-add-access-key-btn-pro {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        border-radius: @radius-full; // pill
+        background: var(--wpc-brand-primary, linear-gradient(135deg, #6a96f9 0%, #4b74f3 100%));
+        color: @color-white;
+        font-family: @font-semibold;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        box-shadow: 0 8px 16px -4px var(--wpc-brand-shadow, rgba(75, 116, 243, 0.35));
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        box-sizing: border-box;
+
+        img, svg {
+          width: 12px;
+          height: 14px;
+          object-fit: contain;
+          filter: brightness(0) invert(1);
+          transition: transform 0.2s ease;
+        }
+
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 24px -4px var(--wpc-brand-shadow, rgba(75, 116, 243, 0.35));
+          color: @color-white;
+
+          img { transform: translateX(3px); }
+        }
+
+        &:active {
+          transform: translateY(0);
+          box-shadow: 0 8px 16px -4px var(--wpc-brand-shadow, rgba(75, 116, 243, 0.35));
+        }
+      }
+    }
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Content — Hide old stats, keep only V2 cards
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Hide the old-style Optimization Stats + PageSpeed Score boxes
+  // (second .wpc-settings-content-inner — between chart and v2 section)
+  .wpc-lite-dashboard > .wpc-settings-content-inner:not(:first-child):not(.wpc-v2-section) {
+    display: none;
+  }
+
+  // Remove bottom margin on last visible content block so columns align
+  .wpc-lite-dashboard > .wpc-settings-content-inner:last-child {
+    margin-bottom: 0;
+  }
+
+  // Staggered entrance — main content wave (starts while sidebar is mid-cascade)
+  .wpc-lite-dashboard {
+    // Chart card — enters first in main column
+    .wpc-rounded-box-full {
+      opacity: 0;
+      animation: cardFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      animation-delay: 250ms;
+      will-change: opacity, transform;
+    }
+
+    // V2 stats + pagespeed cards — staggered after chart
+    .wpc-v2-card {
+      opacity: 0;
+      animation: cardFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      will-change: opacity, transform;
+
+      &:nth-child(1) { animation-delay: 400ms; }
+      &:nth-child(2) { animation-delay: 500ms; }
+    }
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Save Button (lite form variant)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Save bar — glassmorphism pill
+  .save-button {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid fade(@color-border, 50%);
+    border-radius: @radius-pill;
+    padding: @space-sm @space-base @space-sm @space-lg;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  }
+
+  .save-button-lite {
+    background: var(--wpc-brand-primary, @color-blue);
+    border: none;
+    border-radius: @radius-pill;
+    padding: @space-sm @space-xl;
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: @font-size-base;
+    cursor: pointer;
+    transition: @transition-smooth;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-sm;
+    min-height: 40px;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    .wpc-save-button-icon {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  // ─── Loading skeleton for stats (matches original backup) ──────────────
+  .wpc-ic-small-thick-placeholder {
+    border-radius: @radius-lg;
+    height: 8px;
+    background: @color-border;
+    display: inline-block;
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, fade(@color-white, 40%), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+  }
+
+  // ─── Loading icon ─────────────────────────────────────────────────────
+  .loading-icon {
+    flex: 2;
+    background: url(../../stats-box-placeholder.svg) center center no-repeat @color-ice;
+    background-size: 30px 30px;
+    border-radius: @radius-default;
+    overflow: hidden;
+    height: 40px;
+    width: 40px;
+    display: inline-block;
+  }
+
+  // ─── Badge/Woohoo footer in PageSpeed card ────────────────────────────
+  .wpc-page-speed-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid @color-border;
+    margin-top: @space-md;
+    padding-top: @space-md;
+
+    .wpc-badge-container {
+      display: flex;
+      align-items: center;
+      gap: @space-md;
+      width: 100%;
+      justify-content: space-between;
+
+      p {
+        display: flex;
+        align-items: center;
+        gap: @space-sm;
+        font-family: @font-regular;
+        font-size: @font-size-sm;
+        color: @color-text-body;
+        margin: 0;
+
+        img {
+          width: 20px;
+          height: 20px;
+        }
+      }
+
+      .wpc-badge-success {
+        display: inline-flex;
+        align-items: center;
+        gap: @space-xs;
+        background: @color-success-bg;
+        padding: @space-xs @space-md;
+        border-radius: @radius-pill;
+        font-family: @font-semibold;
+        font-size: @font-size-sm;
+        color: @color-success;
+        white-space: nowrap;
+
+        img {
+          width: 14px;
+          height: 14px;
+        }
+      }
+    }
+
+    .wpc-ps-f-left span {
+      font-family: @font-regular;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+
+      strong {
+        font-family: @font-semibold;
+        color: var(--wpc-brand-accent, @color-gradient-mid);
+      }
+    }
+
+    .wpc-custom-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: @space-sm;
+      background: var(--wpc-brand-tint, @color-ice);
+      border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+      padding: 6px 14px;
+      border-radius: @radius-pill;
+      font-family: @font-semibold;
+      font-size: 12px;
+      color: var(--wpc-brand-accent, @color-gradient-mid);
+      text-decoration: none;
+      transition: @transition-fast;
+      white-space: nowrap;
+
+      img {
+        width: 16px;
+        height: 16px;
+      }
+
+      &:hover {
+        background: var(--wpc-brand-tint, @color-ice-deep);
+        color: var(--wpc-brand-primary-dark, @color-blue-deep);
+        border-color: var(--wpc-brand-primary, @color-blue);
+      }
+
+      // Locked variant — styled as badge
+      &.wpc-custom-btn-locked {
+        background: var(--wpc-brand-tint, @color-ice);
+        border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+        color: var(--wpc-brand-accent, @color-gradient-mid);
+        cursor: pointer;
+        padding: 5px 12px;
+        font-size: 11px;
+        gap: 6px;
+
+        img {
+          width: 14px;
+          height: 14px;
+          opacity: 0.8;
+        }
+
+        &:hover {
+          border-color: var(--wpc-brand-accent, @color-blue);
+          transform: translateY(-1px);
+
+          img { opacity: 1; }
+        }
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Usage Card
+  // ═══════════════════════════════════════════════════════════════════════
+
+  .wpc-usage-card {
+    padding: @space-base;
+    overflow: hidden;
+    max-height: 320px;
+
+    // ─── Header ───────────────────────────────────────────────────────────
+    .wpc-usage-header {
+      margin-bottom: @space-md;
+      padding: 0;
+      border-bottom: none;
+    }
+
+    .wpc-usage-title-row {
+      display: flex;
+      align-items: center;
+      gap: @space-sm;
+
+      h3 {
+        font-family: @font-semibold;
+        font-size: 14px;
+        color: #0f172a;
+        margin: 0;
+        line-height: 1.2;
+        letter-spacing: -0.025em;
+      }
+    }
+
+    // Icon — rounded square with indigo tint + bar chart
+    .wpc-usage-icon {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      margin-right: 3px;
+      background: linear-gradient(to bottom, fade(#eef2ff, 50%), fade(#e0e7ff, 50%));
+      border: 1px solid fade(#e0e7ff, 60%);
+      border-radius: @radius-lg;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 20V10'/%3E%3Cpath d='M12 20V4'/%3E%3Cpath d='M6 20v-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+
+      &::after {
+        content: none;
+      }
+    }
+
+    .wpc-usage-subtitle {
+      font-family: @font-regular;
+      font-size: 11px;
+      color: @color-text-secondary;
+      margin-top: 1px;
+      display: block;
+      line-height: 1.25;
+    }
+
+    // ─── Stat rows ────────────────────────────────────────────────────────
+    .wpc-usage-stats {
+      display: flex;
+      flex-direction: column;
+      gap: @space-sm;
+      padding: 5px 10px;
+    }
+
+    .wpc-usage-stat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: @transition-fast;
+
+      & + .wpc-usage-stat {
+        margin-top: 0;
+      }
+
+      &:hover .wpc-usage-label {
+        color: #0f172a;
+      }
+    }
+
+    .wpc-usage-sep {
+      width: 100%;
+      height: 0;
+      border-top: 1px dashed fade(@color-border, 80%);
+      background: none;
+      margin: @space-xs 0;
+    }
+
+    .wpc-usage-label {
+      font-family: @font-regular;
+      font-size: 13px;
+      color: #475569;
+      padding-left: 0;
+      transition: color 0.2s ease;
+    }
+
+    .wpc-usage-value {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      padding-right: 0;
+    }
+
+    .wpc-usage-num {
+      font-family: @font-bold;
+      font-size: 22px;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.025em;
+      line-height: 1;
+    }
+
+    .wpc-usage-unit {
+      font-family: @font-semibold;
+      font-size: 12px;
+      color: @color-gray-text;
+    }
+
+    // ─── Projected footer ───────────────────────────────────────────────
+    .wpc-usage-footer {
+      margin-top: @space-md;
+      background: fade(#f8fafc, 80%);
+      border-radius: @radius-input;
+      padding: @space-sm @space-md;
+      border: 1px solid fade(#f1f5f9, 80%);
+      position: relative;
+    }
+
+    .wpc-usage-footer-label {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: @font-bold;
+      font-size: 9px;
+      color: @color-gray-text;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: @space-sm;
+
+      // Blue dot — 15% smaller than other section dots
+      &::before {
+        content: '';
+        display: block;
+        width: 5px;
+        height: 5px;
+        background: var(--wpc-brand-primary, @color-blue);
+        border-radius: @radius-circle;
+        flex-shrink: 0;
+        z-index: 2;
+        transition: @transition-fast;
+      }
+    }
+
+    .wpc-usage-footer-dot { display: none; }
+    .wpc-usage-footer-label-ico { display: none; }
+
+    // Pulse the projected usage dot on card hover
+    &:hover .wpc-usage-footer-label::before {
+      box-shadow: 0 0 0 2.5px fade(@color-blue, 25%);
+      animation: bluePulse 1.5s ease-in-out infinite;
+    }
+
+    .wpc-usage-footer-boxes {
+      display: flex;
+      flex-direction: column;
+      gap: @space-sm;
+    }
+
+    .wpc-usage-footer-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wpc-usage-footer-title {
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-text-secondary;
+      text-transform: none;
+      letter-spacing: 0;
+      padding-left: 0;
+    }
+
+    .wpc-usage-footer-ico {
+      width: 9px;
+      height: 9px;
+      opacity: 0.3;
+      flex-shrink: 0;
+    }
+
+    .wpc-usage-footer-value {
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+      font-family: @font-bold;
+      font-size: 15px;
+      color: @color-text-dark;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.025em;
+      line-height: 1;
+      white-space: nowrap;
+      padding-right: 0;
+    }
+
+    .wpc-usage-footer-unit {
+      font-family: @font-semibold;
+      font-size: 10px;
+      color: @color-gray-text;
+    }
+  }
+
+} // end .wpc-lite-settings-container
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Lite Connect / Activation Popup
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Float animation for illustration
+@keyframes wpcConnectFloat {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes wpcErrorPop {
+  0% { opacity: 0; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1.08) rotate(-3deg); }
+  70% { transform: scale(0.98) rotate(2deg); }
+  85% { transform: scale(1.02) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.swal2-popup.wps-ic-lite-connect-popup {
+  padding: 0 !important; // FORCED: override SA2 padding
+  overflow: hidden;
+  max-width: 900px !important; // FORCED: override global 750px cap
+  width: 900px !important; // FORCED: match SA2 width setting
+  border-radius: @radius-2xl !important; // FORCED: 24px rounded
+
+  // --- Loading / Message container ---
+  .wps-ic-msg-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 0 0 auto; // don't grow — collapse when all children are hidden
+    width: 100%;
+
+    .wps-ic-connect-retry {
+      display: block;
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto;
+      padding: 14px;
+      color: @color-white;
+      text-align: center;
+      background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      border-radius: @radius-input;
+      border: 0;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: @font-semibold;
+      cursor: pointer;
+      transition: @transition-fast;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+
+      &:hover {
+        background: var(--wpc-brand-primary-dark, @color-blue-deep);
+        transform: translateY(-1px);
+      }
+    }
+
+    .wps-ic-loading-container {
+      text-align: center;
+      flex: 1;
+      padding-bottom: 0 !important; // FORCED: remove default padding
+
+      img {
+        width: 100px !important; // FORCED: consistent loading icon
+        padding: 50px 0 !important; // FORCED: spacing
+      }
+
+      h1 {
+        font-family: @font-bold;
+        font-size: 22px;
+        color: @color-text-dark;
+        letter-spacing: -0.025em;
+      }
+
+      h2 {
+        font-family: @font-regular;
+        font-size: 15px;
+        color: @color-text-secondary;
+        font-weight: 400;
+      }
+    }
+
+    // --- Error states (site connected, invalid key, API in use, comms) ---
+    .wps-ic-site-already-connected,
+    .wps-ic-invalid-apikey,
+    .wps-ic-apikey-in-use,
+    .wps-ic-unable-to-communicate {
+      text-align: center;
+      flex: none !important; // FORCED: prevent flex stretch — all errors same size
+      width: 100% !important; // FORCED: fill parent consistently
+      padding: 48px 32px !important; // FORCED: override inline padding
+      display: flex;
+      box-sizing: border-box !important; // FORCED: padding inside width
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      .wps-ic-image {
+        width: 120px;
+        height: 120px;
+        margin-bottom: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: wpcErrorPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+
+        img {
+          width: 120px !important; // FORCED: larger error illustration
+          height: auto !important; // FORCED: maintain aspect ratio
+          padding: 0 !important; // FORCED: remove default padding
+        }
+      }
+
+      h1 {
+        font-family: @font-bold;
+        font-size: 22px;
+        color: @color-text-dark;
+        letter-spacing: -0.025em;
+        margin: 0 0 8px;
+      }
+
+      h2 {
+        font-family: @font-regular;
+        font-size: 15px;
+        color: @color-text-secondary;
+        font-weight: 400;
+        margin: 0 0 32px;
+        white-space: nowrap;
+      }
+
+      p {
+        font-family: @font-regular;
+        font-size: 14px;
+        color: @color-text-secondary;
+        line-height: 1.6;
+        margin: 0 0 16px;
+        max-width: 400px;
+
+        a {
+          color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+          font-weight: 600;
+          text-decoration: none;
+
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+
+      .wps-ic-connect-retry {
+        text-decoration: none !important; // FORCED: remove underline
+      }
+
+      // Communication Issue — custom icon + detail box
+      .wpc-connect-error-icon {
+        width: 88px;
+        height: 88px;
+        margin-bottom: 24px;
+        background: fade(@color-warning, 10%);
+        border-radius: @radius-circle;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: @color-warning;
+        animation: wpcErrorPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+
+      .wpc-connect-error-detail {
+        background: @color-bg-frost;
+        border-radius: @radius-input;
+        padding: 20px 24px;
+        margin-bottom: 24px;
+        max-width: 380px;
+
+        p {
+          font-size: 14px;
+          color: @color-text-slate;
+          line-height: 1.6;
+          margin: 0 0 16px;
+          text-align: left;
+        }
+
+        .wpc-connect-guide-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-family: @font-semibold;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+          text-decoration: none;
+          transition: color 0.2s ease;
+
+          svg { flex-shrink: 0; }
+
+          &:hover {
+            color: var(--wpc-brand-primary-dark, @color-blue-deep);
+          }
+        }
+      }
+    }
+  }
+
+  // --- Two-column layout ---
+  .wps-lite-connect-outter {
+    display: flex;
+  }
+
+  .wps-lite-connect-inner {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    width: 100%;
+    flex-direction: row;
+  }
+
+  // --- Left panel — SVG illustration ---
+  .wps-lite-connect-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 45%;
+    background: @color-bg-neutral;
+    position: relative;
+    overflow: hidden;
+    padding: 40px;
+    border-right: 1px solid @color-bg-frost;
+  }
+
+  // Mesh gradient blobs
+  .wpc-connect-mesh-1 {
+    position: absolute;
+    top: -20%;
+    left: -20%;
+    width: 70%;
+    height: 70%;
+    background: fade(@color-border-blue, 40%);
+    border-radius: @radius-circle;
+    filter: blur(60px);
+  }
+
+  .wpc-connect-mesh-2 {
+    position: absolute;
+    bottom: -10%;
+    right: -10%;
+    width: 60%;
+    height: 60%;
+    background: fade(#c7d2fe, 40%);
+    border-radius: @radius-circle;
+    filter: blur(50px);
+  }
+
+  // Illustration wrapper
+  .wpc-connect-illustration {
+    position: relative;
+    z-index: 10;
+    animation: wpcConnectFloat 6s ease-in-out infinite;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .wpc-connect-lock-box {
+    background: @color-white;
+    padding: 24px;
+    border-radius: 24px;
+    box-shadow: 0 20px 25px -5px rgba(30, 58, 138, 0.05);
+    border: 1px solid fade(@color-white, 60%);
+    position: relative;
+    color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+  }
+
+  .wpc-connect-floating-key {
+    position: absolute;
+    bottom: -24px;
+    right: -24px;
+    background: #facc15;
+    color: #713f12;
+    padding: 12px;
+    border-radius: 16px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    transform: rotate(12deg);
+  }
+
+  .wpc-connect-illus-text {
+    margin-top: 48px;
+    text-align: center;
+    position: relative;
+    z-index: 10;
+
+    h3 {
+      font-family: @font-bold;
+      font-size: 18px;
+      color: @color-text-dark;
+      margin: 0 0 8px;
+    }
+
+    p {
+      font-family: @font-regular;
+      font-size: 14px;
+      color: @color-text-secondary;
+      margin: 0;
+    }
+  }
+
+  // Mobile-only icon (shown when left illustration is hidden)
+  .wpc-connect-mobile-icon {
+    display: none;
+  }
+
+  // --- Right panel — form ---
+  .wps-lite-connect-right {
+    width: 55%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: @color-white;
+    padding: 48px;
+    min-height: 520px; // consistent height across form/loading/error states
+  }
+
+  .wps-lite-form-container {
+    font-family: @font-regular;
+    text-align: left;
+  }
+
+  // Header
+  .wpc-connect-header {
+    margin-bottom: 32px;
+
+    h2 {
+      font-family: @font-bold;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: @color-text-dark;
+      margin: 0 0 8px;
+    }
+
+    p {
+      font-family: @font-regular;
+      font-size: 15px;
+      color: @color-text-secondary;
+      margin: 0;
+    }
+  }
+
+  // Premium value prop box
+  .wpc-connect-premium-box {
+    display: flex;
+    align-items: flex-start;
+    background: fade(@color-ice, 50%);
+    border: 1px solid fade(@color-border-blue, 60%);
+    border-radius: @radius-input;
+    padding: 16px;
+    margin-bottom: 32px;
+
+    p {
+      font-family: @font-regular;
+      font-size: 14px;
+      color: @color-text-slate;
+      font-weight: 500;
+      margin: 0;
+      line-height: 1.5;
+    }
+  }
+
+  .wpc-connect-premium-icon {
+    background: var(--wpc-brand-primary, linear-gradient(135deg, #60A5FA, #2563EB));
+    border-radius: @radius-circle;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin-right: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: @color-white;
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  // Warning variant for URL-changed
+  .wpc-connect-warning-box {
+    background: fade(@color-warning, 8%);
+    border-color: fade(@color-warning, 40%);
+  }
+
+  .wpc-connect-warning-icon {
+    background: fade(@color-warning, 25%);
+    color: #92400e;
+  }
+
+  // --- Input container ---
+  .wps-ic-lite-input-container {
+    display: flex;
+    flex-direction: row;
+    background: @color-white;
+    border-radius: @radius-input;
+    padding: 4px 14px;
+    align-items: center;
+    justify-content: flex-start;
+    border: 1px solid @color-border;
+    transition: border-color 0.2s ease;
+    box-shadow: none;
+
+    &:focus-within {
+      border-color: var(--wpc-brand-primary, @color-blue);
+    }
+
+    &.wpc-error {
+      border-color: @color-error;
+      background: @color-error-bg;
+    }
+  }
+
+  .wps-ic-lite-input-icon {
+    flex-shrink: 0;
+    width: 20px;
+    display: flex;
+    align-items: center;
+    color: @color-gray-text;
+
+    img { vertical-align: middle; }
+    svg { color: @color-gray-text; }
+  }
+
+  .wps-ic-lite-input-field {
+    flex: 1;
+    min-width: 0; // allow flex child to shrink below content width
+    text-align: left;
+    padding: 0;
+    overflow: hidden;
+
+    input {
+      padding: 12px 10px;
+      margin: 0;
+      width: 100%;
+      border: 0 !important; // FORCED: remove WP borders
+      background: transparent !important; // FORCED: inherit container bg
+      font-family: @font-code;
+      font-size: 13px;
+      color: @color-text-dark;
+      letter-spacing: -0.02em;
+      text-overflow: ellipsis;
+
+      &::placeholder {
+        font-family: @font-regular;
+        font-size: 14px;
+        color: @color-gray-muted;
+        letter-spacing: 0;
+      }
+
+      &:focus {
+        outline: none !important; // FORCED: custom focus
+        box-shadow: none !important; // FORCED: remove WP shadow
+      }
+
+      // Kill browser autofill blue/yellow background
+      &:-webkit-autofill,
+      &:-webkit-autofill:hover,
+      &:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0 1000px @color-white inset !important; // FORCED: override autofill bg
+        -webkit-text-fill-color: @color-text-dark !important; // FORCED: keep text dark
+        transition: background-color 5000s ease-in-out 0s;
+      }
+    }
+  }
+
+  // Error text
+  .wps-ic-lite-input-field-error {
+    padding: 0 0 12px;
+    font-size: 14px;
+    color: @color-error;
+    font-family: @font-regular;
+    display: inline-block;
+  }
+
+  // Spacer
+  .wps-spacer {
+    display: block;
+    width: 100%;
+    height: 24px;
+  }
+
+  // --- Submit button ---
+  .wps-ic-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 14px;
+    color: @color-white;
+    text-align: center;
+    background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+    border-radius: @radius-input;
+    border: 0;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: @font-semibold;
+    cursor: pointer;
+    transition: @transition-fast;
+    box-shadow: 0 4px 6px -1px var(--wpc-brand-shadow, rgba(37, 99, 235, 0.3));
+
+    &:hover {
+      background: var(--wpc-brand-primary-dark, @color-blue-deep);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &:focus {
+      outline: none;
+    }
+  }
+
+  // No focus outlines inside connect popup
+  a:focus, button:focus, input:focus {
+    outline: none;
+  }
+
+  // --- Lite version link ---
+  .wpc-connect-lite-link {
+    margin-top: 20px;
+    text-align: center;
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: @color-text-secondary;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: @font-regular;
+      text-decoration: none;
+      transition: color 0.2s ease;
+      outline: none;
+
+      svg {
+        margin-right: 8px;
+        color: @color-gray-text;
+        transition: color 0.2s ease;
+      }
+
+      &:hover {
+        color: @color-text-dark;
+        svg { color: @color-text-slate; }
+      }
+    }
+  }
+
+  // --- Footer ---
+  .wps-ic-lite-connect-footer {
+    margin-top: 32px;
+    padding: 16px 20px;
+    background: @color-bg-frost;
+    border-radius: @radius-md;
+    text-align: center;
+
+    p {
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-secondary;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      font-weight: 600;
+      text-decoration: none;
+      font-family: @font-semibold;
+      transition: color 0.2s ease;
+
+      &:hover {
+        color: var(--wpc-brand-primary-dark, @color-blue-deep);
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+// --- Lite Connect — responsive ---
+@media (max-width: 960px) {
+  .swal2-popup.wps-ic-lite-connect-popup {
+    max-width: 95vw !important; // FORCED: fit viewport
+    width: 95vw !important; // FORCED: fit viewport
+
+    .wps-lite-connect-left {
+      display: none !important; // FORCED: hide illustration when popup can't fit both columns
+    }
+
+    .wps-lite-connect-right {
+      width: 100%;
+      padding: 32px 24px;
+      min-height: auto !important; // FORCED: remove 520px desktop min
+      text-align: center;
+      justify-content: flex-start !important; // FORCED: push content to top, not center
+    }
+
+    .wpc-connect-mobile-icon {
+      display: block;
+      margin: 0 auto 16px;
+      width: 72px;
+      height: 72px;
+      background: var(--wpc-brand-tint, @color-ice);
+      border-radius: @radius-card;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+    }
+
+    .wps-lite-form-container {
+      text-align: center;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .wpc-connect-premium-box {
+      text-align: left;
+    }
+
+    .wps-ic-msg-container {
+      padding: 24px 20px;
+      text-align: center;
+      flex: none !important; // FORCED: override desktop flex:1
+      width: 100% !important; // FORCED: fill right panel
+      display: flex;
+      justify-content: center;
+      align-items: center;
+
+      .wps-ic-site-already-connected,
+      .wps-ic-invalid-apikey,
+      .wps-ic-apikey-in-use,
+      .wps-ic-unable-to-communicate,
+      .wps-ic-loading-container {
+        max-width: 100%;
+        width: 100%;
+        padding: 32px 16px !important; // FORCED: tighter padding on mobile
+      }
+
+      .wps-ic-connect-retry {
+        max-width: 100%;
+        width: 100%;
+        display: block;
+      }
+
+      .wpc-connect-error-detail {
+        padding: 16px !important; // FORCED
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .swal2-popup.wps-ic-lite-connect-popup {
+    max-width: 100vw !important; // FORCED: full width mobile
+    width: 100vw !important; // FORCED: full width mobile
+    border-radius: 0 !important; // FORCED: no radius full-width
+    margin: 0 !important; // FORCED: no SA2 margin
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+
+    .wps-lite-connect-right {
+      padding: 32px 20px;
+      text-align: center;
+    }
+
+    .wps-ic-msg-container {
+      padding: 32px 0 !important; // FORCED: no horizontal padding on mobile
+
+      .wps-ic-site-already-connected,
+      .wps-ic-invalid-apikey,
+      .wps-ic-apikey-in-use,
+      .wps-ic-unable-to-communicate,
+      .wps-ic-loading-container {
+        max-width: 100% !important; // FORCED
+        width: 100% !important; // FORCED
+        padding: 24px 0 !important; // FORCED
+        box-sizing: border-box !important; // FORCED
+        overflow-wrap: break-word !important; // FORCED
+        word-wrap: break-word !important; // FORCED
+
+        h1, h2 {
+          word-wrap: break-word !important; // FORCED
+          overflow-wrap: break-word !important; // FORCED
+          white-space: normal !important; // FORCED
+          max-width: 100% !important; // FORCED
+        }
+      }
+
+      .wps-ic-connect-retry {
+        width: 100%;
+        max-width: stretch;
+      }
+    }
+
+    .wps-lite-form-container {
+      text-align: center;
+    }
+
+    .wpc-connect-header h2 {
+      font-size: 22px;
+    }
+
+    .wpc-connect-header p {
+      font-size: 14px;
+    }
+
+    .wpc-connect-premium-box {
+      text-align: left;
+    }
+
+    .wps-ic-submit-btn {
+      font-size: 16px;
+      padding: 16px;
+    }
+
+    .wpc-connect-lite-link {
+      justify-content: center;
+    }
+
+    .wps-ic-lite-connect-footer p {
+      font-size: 12px;
+    }
+
+    .wps-ic-msg-container {
+      padding: 32px 16px;
+      text-align: center;
+
+      h1 { font-size: 20px; }
+      h2 { font-size: 14px; }
+
+      .wps-ic-connect-retry {
+        width: 100%;
+      }
+    }
+
+    .wpc-connect-error-detail {
+      padding: 16px;
+      text-align: left;
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Save Pill — shared between lite + advanced settings
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-lite-settings-container,
+.wpc-advanced-settings-container-v4 {
+
+  // jQuery fadeIn sets display:block — override to flex when visible
+  .wpc-save-pill[style*="block"],
+  .wpc-save-pill[style*="flex"] {
+    display: flex !important; // FORCED: jQuery .fadeIn() sets display:block
+  }
+
+  .wpc-save-pill {
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 6px 6px 16px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid fade(@color-border, 60%);
+    border-radius: @radius-pill-xl;
+    box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.08);
+    gap: @space-sm;
+    flex: 1;
+    max-width: 750px;
+
+    // Floating state — pill detaches from header and floats at bottom center
+    &.wpc-save-pill-floating {
+      @media screen and (min-width: 769px) {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        flex: none;
+        min-width: 600px;
+        max-width: calc(100vw - 48px);
+        box-shadow:
+          0 20px 60px -15px rgba(0, 0, 0, 0.2),
+          0 4px 16px rgba(0, 0, 0, 0.06),
+          0 0 0 1px fade(@color-border, 30%);
+        animation: wpcSaveSlideUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+        &.wpc-save-pill-docking {
+          animation: wpcSaveSlideDown 0.35s cubic-bezier(0.4, 0, 1, 1) both;
+        }
+      }
+    }
+
+    // Landing effect — subtle bounce when pill docks back into header (desktop only)
+    @media screen and (min-width: 769px) {
+      &.wpc-save-pill-landed {
+        animation: wpcSaveLanded 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+    }
+  }
+
+  @keyframes wpcSaveSlideUp {
+    from { transform: translateX(-50%) translateY(80px); opacity: 0; }
+    to { transform: translateX(-50%) translateY(0); opacity: 1; }
+  }
+
+  @keyframes wpcSaveSlideDown {
+    from { transform: translateX(-50%) translateY(0); opacity: 1; }
+    to { transform: translateX(-50%) translateY(80px); opacity: 0; }
+  }
+
+  @keyframes wpcSaveLanded {
+    0% { transform: scale(0.98); opacity: 0.8; }
+    60% { transform: scale(1.01); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .wpc-save-pill-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .wpc-save-pill-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: @radius-circle;
+    background: var(--wpc-brand-tint, fade(@color-blue, 8%));
+    border: 1px solid var(--wpc-brand-border, fade(@color-blue, 12%));
+    flex-shrink: 0;
+  }
+
+  // Warning triangle icon via CSS mask
+  .wpc-save-pill-warn-ico {
+    display: block;
+    width: 15px;
+    height: 15px;
+    background-color: var(--wpc-brand-primary, @color-blue);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M256.5 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.6 480 472.5 480l-432 0c-14.1 0-27.1-7.4-34.3-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 32c-2.9 0-5.6 1.6-7 4.2l-216 400c-1.3 2.5-1.3 5.5 .2 7.9s4.1 3.9 6.9 3.9l432 0c2.8 0 5.4-1.5 6.9-3.9s1.5-5.4 .2-7.9l-216-400c-1.4-2.6-4.1-4.2-7-4.2zm0 368a24 24 0 1 1 0-48 24 24 0 1 1 0 48zm0-224c13.6 0 24.3 11.6 23.4 25.1l-7.4 104c-.6 8.4-7.6 14.9-16 14.9s-15.4-6.5-16-14.9l-7.4-104c-1-13.6 9.8-25.1 23.4-25.1z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M256.5 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.6 480 472.5 480l-432 0c-14.1 0-27.1-7.4-34.3-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 32c-2.9 0-5.6 1.6-7 4.2l-216 400c-1.3 2.5-1.3 5.5 .2 7.9s4.1 3.9 6.9 3.9l432 0c2.8 0 5.4-1.5 6.9-3.9s1.5-5.4 .2-7.9l-216-400c-1.4-2.6-4.1-4.2-7-4.2zm0 368a24 24 0 1 1 0-48 24 24 0 1 1 0 48zm0-224c13.6 0 24.3 11.6 23.4 25.1l-7.4 104c-.6 8.4-7.6 14.9-16 14.9s-15.4-6.5-16-14.9l-7.4-104c-1-13.6 9.8-25.1 23.4-25.1z'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  // Floppy disk icon via CSS mask
+  .wpc-save-pill-save-ico {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-color: @color-white;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath d='M64 64C46.3 64 32 78.3 32 96l0 320c0 17.7 14.3 32 32 32l320 0c17.7 0 32-14.3 32-32l0-242.7c0-8.5-3.4-16.6-9.4-22.6L329.4 73.4c-2.7-2.7-5.9-4.9-9.4-6.5L320 176c0 17.7-14.3 32-32 32l-160 0c-17.7 0-32-14.3-32-32l0-112-32 0zm64 0l0 112 160 0 0-112-160 0zM0 96C0 60.7 28.7 32 64 32l242.7 0c17 0 33.3 6.7 45.3 18.7L429.3 128c12 12 18.7 28.3 18.7 45.3L448 416c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM256 320a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm-96 0a64 64 0 1 1 128 0 64 64 0 1 1 -128 0z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath d='M64 64C46.3 64 32 78.3 32 96l0 320c0 17.7 14.3 32 32 32l320 0c17.7 0 32-14.3 32-32l0-242.7c0-8.5-3.4-16.6-9.4-22.6L329.4 73.4c-2.7-2.7-5.9-4.9-9.4-6.5L320 176c0 17.7-14.3 32-32 32l-160 0c-17.7 0-32-14.3-32-32l0-112-32 0zm64 0l0 112 160 0 0-112-160 0zM0 96C0 60.7 28.7 32 64 32l242.7 0c17 0 33.3 6.7 45.3 18.7L429.3 128c12 12 18.7 28.3 18.7 45.3L448 416c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM256 320a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm-96 0a64 64 0 1 1 128 0 64 64 0 1 1 -128 0z'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    vertical-align: -1px;
+  }
+
+  .wpc-save-pill-ping {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: @radius-circle;
+    background: var(--wpc-brand-primary, @color-blue);
+    border: 2px solid @color-white;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: @radius-circle;
+      background: var(--wpc-brand-primary, @color-blue);
+      opacity: 0.6;
+      animation: monitoringPulse 1.5s infinite;
+    }
+  }
+
+  .wpc-save-pill-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .wpc-save-pill-title {
+    font-family: @font-semibold;
+    font-size: 13px;
+    color: @color-text-dark;
+    line-height: 1.2;
+  }
+
+  .wpc-save-pill-sub {
+    font-family: @font-regular;
+    font-size: 12px;
+    color: @color-text-secondary;
+    line-height: 1.2;
+    margin-top: 1px;
+  }
+
+  .wpc-save-pill-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .wpc-save-pill-btn {
+    display: flex !important; // FORCED: overrides btn-gradient hidden
+    align-items: center;
+    gap: @space-sm;
+    padding: 8px 20px;
+    background: var(--wpc-brand-primary, @color-blue);
+    border: 1px solid transparent;
+    border-radius: @radius-pill;
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: 13px;
+    cursor: pointer;
+    transition: @transition-fast;
+    box-shadow: 0 2px 10px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25)), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    white-space: nowrap;
+
+    &:hover {
+      background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      box-shadow: 0 4px 16px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.35));
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
+
+    // Saving state
+    &.wpc-saving {
+      background: var(--wpc-brand-primary, @color-blue);
+      min-width: 120px;
+      justify-content: center;
+    }
+
+    // Saved success state
+    &.wpc-saved {
+      background: linear-gradient(to bottom, @color-success, #1da32e);
+      border-color: @color-success;
+      box-shadow: 0 2px 10px rgba(34, 183, 58, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      min-width: 120px;
+      justify-content: center;
+    }
+  }
+
+  // Spinner inside save button
+  .wpc-save-pill-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: @color-white;
+    border-radius: @radius-circle;
+    animation: spin 0.6s linear infinite;
+    vertical-align: -2px;
+  }
+
+  // Checkmark inside saved button (via CSS mask)
+  .wpc-save-pill-check-ico {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    background-color: @color-white;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    vertical-align: -2px;
+  }
+
+} // end shared save pill
+
+
+// ─── Lite Dashboard — Responsive ──────────────────────────────────────────
+
+// ─── ≤1400px — stack V2 cards + half-boxes vertically (matches advanced) ────
+@media screen and (max-width: 1400px) {
+  body.wp-admin .wpc-lite-settings-container {
+    .wpc-v2-section {
+      flex-direction: column;
+    }
+
+    .wpc-settings-content-inner {
+      flex-direction: column;
+
+      .wpc-rounded-box-half {
+        width: 100%;
+      }
+    }
+  }
+}
+
+// ─── 1024px — stack sidebar above content (matches advanced settings) ───────
+@media screen and (max-width: 1024px) {
+  body.wp-admin .wpc-lite-settings-container {
+    .wpc-settings-flex-body {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .wpc-settings-sidebar {
+      width: 100%;
+    }
+
+  }
+}
+
+// ─── 768px — full vertical stack ─────────────────────────────────────────
+@media screen and (max-width: 768px) {
+  // Viewport clamp at tablet too
+  body.wp-admin #wpcontent,
+  body.wp-admin #wpbody,
+  body.wp-admin #wpbody-content {
+    max-width: 100vw !important; // FORCED
+    overflow-x: hidden !important; // FORCED
+    box-sizing: border-box !important; // FORCED
+  }
+
+  // Promo box — center list + larger text on mobile
+  .wpc-lite-settings-container .wpc-promo-box {
+    .wpc-box-content ul {
+      align-items: center;
+
+      li span {
+        font-size: 15px;
+      }
+    }
+  }
+
+  body.wp-admin .wpc-lite-settings-container {
+    padding: @space-lg;
+    width: 100% !important; // FORCED
+    max-width: 100vw !important; // FORCED
+    box-sizing: border-box !important; // FORCED
+
+    .wpc-settings-flex-body {
+      flex-direction: column;
+      align-items: stretch; // children fill full width in column mode
+    }
+
+    .wpc-settings-sidebar {
+      width: 100%;
+      order: 1;
+    }
+
+    .wpc-lite-dashboard {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .wpc-lite-dashboard .wpc-settings-content-inner {
+      flex-direction: column;
+    }
+
+    .wpc-rounded-box,
+    .wpc-rounded-box-half,
+    .wpc-rounded-box-full {
+      padding: @space-lg;
+      width: 100%;
+    }
+
+    .wpc-header {
+      padding: @space-sm @space-base;
+    }
+
+    .wpc-cf-banner {
+      max-width: 100%;
+    }
+
+
+    // V2 cards — stack the two cards (stats + PageSpeed) vertically
+    .wpc-v2-section {
+      flex-direction: column;
+    }
+
+    // V2 stats row — stack the 3 stat cards vertically
+    .wpc-v2-stats-row {
+      flex-direction: column;
+    }
+
+    // V2 card header — tighter padding, allow badge wrap
+    .wpc-v2-card-header {
+      padding: @space-sm @space-base;
+      flex-wrap: nowrap;
+      gap: @space-sm;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    // V2 card — allow content to breathe (no clip on badges)
+    .wpc-v2-card {
+      overflow: visible;
+    }
+
+    // V2 scores — stack Mobile/Desktop vertically
+    .wpc-v2-scores {
+      flex-direction: column;
+    }
+
+    // V2 score footer — stack text + badge, prevent truncation
+    .wpc-v2-score-footer {
+      flex-direction: column;
+      text-align: center;
+      padding: @space-sm @space-md;
+    }
+
+    // Page speed footer (legacy) — stack at tablet
+    .wpc-page-speed-footer {
+      flex-direction: column;
+      gap: @space-sm;
+      text-align: center;
+    }
+
+    // Save pill — sticky bottom bar on mobile
+    .wpc-save-pill {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      max-width: none;
+      border-radius: 0;
+      padding: @space-sm @space-base;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: none;
+      border-top: 1px solid fade(@color-border, 60%);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    }
+  }
+}
+
+@media screen and (max-width: 480px) {
+  // Nuclear viewport clamp — ensure entire WP wrapper chain stays within viewport
+  body.wp-admin #wpcontent,
+  body.wp-admin #wpbody,
+  body.wp-admin #wpbody-content {
+    max-width: 100vw !important; // FORCED: hard viewport clamp
+    overflow-x: hidden !important; // FORCED
+    box-sizing: border-box !important; // FORCED
+    padding-left: 0 !important; // FORCED: clear WP padding
+    padding-right: 0 !important; // FORCED: clear WP padding
+  }
+
+  body.wp-admin .wpc-lite-settings-container {
+    padding: @space-base;
+    width: 100% !important; // FORCED
+    max-width: 100vw !important; // FORCED: hard viewport clamp
+    box-sizing: border-box !important; // FORCED
+    overflow-x: hidden !important; // FORCED
+
+    .wpc-header {
+      padding: @space-sm @space-md;
+    }
+
+    .wpc-rounded-box,
+    .wpc-rounded-box-half,
+    .wpc-rounded-box-full {
+      padding: @space-base;
+      border-radius: @radius-input;
+    }
+
+    // Icon-only Advanced Settings button on mobile
+    .wpc-header-advanced-btn {
+      margin-left: auto;
+
+      .wpc-header-adv-link {
+        padding: 10px;
+        border-radius: @radius-circle;
+        min-width: 40px;
+        min-height: 40px;
+        justify-content: center;
+
+        .wpc-adv-btn-text {
+          display: none;
+        }
+
+        img {
+          width: 16px;
+          height: 16px;
+        }
+      }
+    }
+
+    // All content must fill width — prevent narrow cards on mobile
+    .wpc-settings-flex-body,
+    .wpc-lite-dashboard,
+    .wpc-settings-content-inner,
+    .wpc-v2-section,
+    .wpc-rounded-box-full,
+    .wpc-v2-card,
+    .white-box {
+      width: 100% !important; // FORCED: fill parent on mobile
+      max-width: 100% !important; // FORCED: prevent overflow
+      box-sizing: border-box !important; // FORCED: padding included in width
+    }
+
+    // V2 cards — stack vertically
+    .wpc-v2-section {
+      flex-direction: column;
+    }
+
+    .wpc-v2-stats-row {
+      flex-direction: column;
+      padding: @space-base;
+    }
+
+    .wpc-v2-card-header {
+      padding: @space-base;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: @space-sm;
+    }
+
+    .wpc-v2-meta-date {
+      display: none !important; // FORCED: hide date on mobile
+    }
+
+    .wpc-v2-scores {
+      flex-direction: column;
+    }
+
+    .wpc-page-speed-footer {
+      flex-direction: column;
+      gap: @space-sm;
+      text-align: center;
+    }
+  }
+
+  // ─── Accessibility: disable animations for reduced motion ────────────
+  @media (prefers-reduced-motion: reduce) {
+    .wpc-settings-sidebar .wpc-rounded-box,
+    .wpc-settings-sidebar .wpc-usage-card,
+    .wpc-settings-sidebar .wpc-cf-sidebar-banner,
+    .wpc-toggles > li,
+    .wpc-lite-dashboard .wpc-rounded-box-full,
+    .wpc-lite-dashboard .wpc-v2-card {
+      animation: none !important; // FORCED: a11y override
+      opacity: 1 !important; // FORCED: a11y override
+      will-change: auto;
+    }
+  }
+}

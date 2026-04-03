@@ -999,6 +999,17 @@ class wps_cdn_rewrite
             $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
         }
 
+        // Add preload="none" to video tags — prevents browser from downloading video until play
+        if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
+            $html = preg_replace_callback('/<video\b([^>]*)>/i', function($matches) {
+                $attrs = $matches[1];
+                if (preg_match('/\bpreload\s*=/i', $attrs)) {
+                    return $matches[0];
+                }
+                return '<video' . $attrs . ' preload="none">';
+            }, $html);
+        }
+
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'encode_iframe') {
             return $html;
         }
@@ -2356,7 +2367,11 @@ class wps_cdn_rewrite
         }
 
 
-        if (!empty(self::$settings['font-display']) && self::$settings['font-display'] != 'off') {
+        // Default to swap if not explicitly set — fixes PageSpeed font-display warning
+        if (empty(self::$settings['font-display'])) {
+            self::$settings['font-display'] = 'swap';
+        }
+        if (self::$settings['font-display'] != 'off') {
             add_filter('style_loader_src', [$this, 'add_font_display_swap_to_url'], 1, 2);
             add_filter('style_loader_src', [$this, 'process_css_for_fonts'], 1, 4);
         }
@@ -2503,15 +2518,24 @@ class wps_cdn_rewrite
             return 'url(' . $quote . $absolute_url . $quote . ')';
         }, $css_content);
 
-        // Add or replace font-display: swap
-        $css_content = preg_replace_callback('/(@font-face\s*\{)([^}]*)(})/is', function ($matches) {
+        // Add or replace font-display (icon fonts get separate setting)
+        $iconFontDisplay = !empty(self::$settings['icon-font-display']) ? self::$settings['icon-font-display'] : 'block';
+        $css_content = preg_replace_callback('/(@font-face\s*\{)([^}]*)(})/is', function ($matches) use ($iconFontDisplay) {
             $content = $matches[2];
 
             // Remove existing font-display if present
             $content = preg_replace('/font-display\s*:\s*[^;]+;?/i', '', $content);
 
-            // Add font-display: swap
-            return $matches[1] . $content . 'font-display:' . self::$settings['font-display'] . ';' . $matches[3];
+            // Detect icon fonts by font-family name — use block to prevent garbled characters
+            $fontDisplayValue = self::$settings['font-display'];
+            if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $content, $familyMatch)) {
+                $family = strtolower(trim($familyMatch[1]));
+                if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $family)) {
+                    $fontDisplayValue = $iconFontDisplay;
+                }
+            }
+
+            return $matches[1] . $content . 'font-display:' . $fontDisplayValue . ';' . $matches[3];
         }, $css_content);
 
         // Save optimized file
@@ -3117,6 +3141,17 @@ class wps_cdn_rewrite
             $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
         }
 
+        // Add preload="none" to video tags — prevents browser from downloading video until play
+        if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
+            $html = preg_replace_callback('/<video\b([^>]*)>/i', function($matches) {
+                $attrs = $matches[1];
+                if (preg_match('/\bpreload\s*=/i', $attrs)) {
+                    return $matches[0];
+                }
+                return '<video' . $attrs . ' preload="none">';
+            }, $html);
+        }
+
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'encode_iframe') {
             return $html;
         }
@@ -3596,9 +3631,13 @@ class wps_cdn_rewrite
         #if (!empty($_GET['replaceFonts'])) {
             #return print_r(self::$settings['replace-fonts'],true);
             if (!empty(self::$settings['replace-fonts'])) {
-                $fonts = new wps_ic_fonts();
                 if (self::$settings['replace-fonts'] == 'local') {
+                    $fonts = new wps_ic_fonts();
                     $html = $fonts->replaceFrontend($html);
+                } else if (self::$settings['replace-fonts'] == 'bunny') {
+                    // Bunny Fonts is a GDPR-compliant drop-in replacement for Google Fonts
+                    $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
+                    $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
                 }
             }
         #}

@@ -1,0 +1,999 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Cloudflare Integration
+// ═══════════════════════════════════════════════════════════════════════════
+// Ported from style.less.backup-unicorn (lines 641-889, 8501-8639, 9664-9811)
+// Enterprise overrides merged as final values with !important flags preserved
+
+// ─── Setup Accordion ─────────────────────────────────────────────────────
+.setup-accordion {
+  margin: 16px 40px;
+
+  summary {
+    font-family: @font-semibold;
+    color: @color-text-dark;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 14px 16px;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    background: @color-white;
+    list-style: none;
+    transition: @transition-fast;
+
+    &:hover { border-color: var(--wpc-brand-accent-light, @color-border-blue); }
+    &::-webkit-details-marker { display: none; }
+    &:after {
+      content: "▸";
+      float: right;
+      transform: rotate(0deg);
+      transition: transform 0.15s ease-in-out;
+      color: @color-gray-muted;
+    }
+  }
+
+  &[open] summary:after { transform: rotate(90deg); }
+
+  .accordion-body {
+    border: 1px solid @color-border;
+    border-top: none;
+    border-radius: 0 0 @radius-md @radius-md;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .iframe-wrap { height: 0; transition: height 0.3s ease; }
+  &[open] .iframe-wrap {
+    height: calc(100vh - 220px);
+    min-height: 480px;
+  }
+  iframe { width: 100%; height: 100%; border: 0; }
+}
+
+
+// ─── CF Connect Wrapper ─────────────────────────────────────────────────
+.wpc-cf-connect-wrapper {
+  padding: 25px 40px 5px;
+}
+
+
+// ─── CF Connect Form ─────────────────────────────────────────────────────
+// Base: backup 641-889 | Enterprise overrides: 9691-9705 merged in
+.wpc-cf-connect-form {
+  flex: 1;
+  padding: 24px !important; // FORCED: enterprise override 9694
+  position: relative;
+  align-items: flex-start;
+  justify-content: flex-start;
+  background-color: @color-white !important; // FORCED: enterprise override 9692
+  border: 1px solid @color-border !important; // FORCED: enterprise override 9693
+  border-radius: @radius-sm;
+  transition: @transition-smooth !important; // FORCED: enterprise override 9695
+
+  // Loading states
+  .wpc-cf-loader-disconnecting span,
+  .wpc-cf-loader span,
+  .wpc-cf-loader-zone span,
+  .wpc-cf-loader-refreshing span {
+    vertical-align: middle;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .wpcLoader { margin-right: 8px; }
+  }
+
+  // Pulsing dot for connecting states
+  .wpc-pulse-dot {
+    animation: bluePulse 1.5s ease-in-out infinite;
+  }
+
+  .wpc-cf-loader-refreshing .wpcLoader {
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  // Connected state
+  .wpc-cf-token-connected {
+    font-size: 14px;
+
+    // CONNECTED dot — brand colored
+    .circle-check.active {
+      background-color: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: brand dot
+    }
+
+    // Inner flex wrapper must stretch full width for button alignment
+    > div { width: 100%; }
+
+    .wpcLoader {
+      width: 12px;
+      height: 12px;
+      border: 1px solid var(--wpc-brand-primary-light, @color-primary);
+      border-radius: @radius-circle;
+      display: inline-block;
+      box-sizing: border-box;
+      position: relative;
+      animation: pulsewpcLoader 1s linear infinite;
+    }
+
+    .wpcLoader:after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--wpc-brand-primary-light, @color-primary);
+      border-radius: @radius-circle;
+      display: inline-block;
+      box-sizing: border-box;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      animation: scaleUpwpcLoader 1s linear infinite;
+    }
+
+    .wpc-cf-token-verify {
+      cursor: pointer;
+      width: auto !important; // FORCED: backup 698
+      display: inline-block !important; // FORCED: backup 699
+      height: auto !important; // FORCED: backup 700
+      background: linear-gradient(81.4deg, @color-warning-dark -2.9%, @color-warning 100%) !important; // FORCED: backup 701
+      border-radius: @radius-default !important; // FORCED: backup 702
+      border: 0px solid transparent;
+      justify-content: center;
+      text-decoration: none;
+      align-items: center;
+      padding: 12px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: @color-white;
+      transition: @transition-fast;
+
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px fade(@color-warning, 35%);
+      }
+    }
+
+    .wpc-cf-token-refresh-whitelist {
+      cursor: pointer;
+      width: auto !important; // FORCED: backup 715
+      display: inline-block !important; // FORCED: backup 716
+      height: auto !important; // FORCED: backup 717
+      background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: backup 718
+      border-radius: @radius-default !important; // FORCED: backup 719
+      border: 0px solid transparent;
+      justify-content: center;
+      text-decoration: none;
+      align-items: center;
+      padding: 12px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: @color-white;
+      transition: @transition-fast;
+
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px fade(@color-gradient-end, 35%);
+      }
+    }
+
+    .wpc-cf-token-disconnect {
+      background: @color-bg-frost !important; // FORCED: neutral disconnect
+      color: @color-text-secondary !important; // FORCED: neutral disconnect
+      padding: 12px 20px !important; // FORCED: backup 733
+      cursor: pointer;
+      transition: @transition-fast;
+
+      &:hover {
+        background: darken(@color-bg-frost, 3%) !important; // FORCED: neutral hover
+        transform: translateY(-1px);
+      }
+    }
+
+    strong {
+      font-size: 15px;
+      font-family: @font-semibold;
+      font-weight: 600;
+      color: @color-gray-neutral;
+    }
+
+    .wpc-cf-token-connected-info {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+
+      .wpc-cf-token-connected-info-left {
+        flex: 1;
+        margin-left: 5px !important; // FORCED: enterprise override 9744
+      }
+
+      .wpc-cf-token-connected-info-right {
+        flex-shrink: 0;
+        text-align: right;
+      }
+    }
+  }
+
+  // Error message (inside form)
+  .wpc-cf-loader-error {
+    padding: 10px;
+    color: @color-red;
+  }
+
+  // Circle check dots — matches standard from _section-cards.less
+  .circle-check {
+    width: 8px !important; // FORCED: match standard dot
+    height: 8px !important; // FORCED: match standard dot
+    border-radius: @radius-circle !important; // FORCED: match standard dot
+    background-color: @color-border !important; // FORCED: off state — neutral grey
+    flex-shrink: 0 !important; // FORCED: match standard dot
+    transition: all 0.3s ease !important; // FORCED: match standard dot
+    margin: 0 !important; // FORCED: flex handles alignment
+
+    &::before { display: none; } // kill legacy pseudo-element
+
+    &.active {
+      background-color: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: brand dot
+    }
+  }
+
+  &:hover .circle-check.active {
+    animation: bluePulse 1.5s infinite !important; // FORCED: enterprise override 9699
+    transform: scale(1.1) !important; // FORCED: match standard hover
+  }
+
+  // Token label
+  label[for="wpc-cf-token"] {
+    font-family: @font-bold !important; // FORCED: enterprise override 9730
+    font-size: 12px !important; // FORCED: enterprise override 9731
+    font-weight: 800 !important; // FORCED: enterprise override 9732
+    text-transform: uppercase !important; // FORCED: enterprise override 9733
+    letter-spacing: 0.05em !important; // FORCED: enterprise override 9734
+    color: @color-text-dark !important; // FORCED: enterprise override 9735
+    margin: 4px 10px 0 0;
+
+    .circle-check { flex-shrink: 0 !important; } // FORCED: enterprise override 9740
+  }
+
+  // Form inputs
+  input[type="text"] {
+    border: 1px solid @color-border !important; // FORCED: backup 793
+    margin-right: 10px;
+  }
+
+  .wpc-select-holder-no-change,
+  .wpc-input-holder-no-change {
+    display: flex; // no !important — must respect inline display:none on zone holder
+    flex-direction: row !important; // FORCED: override _forms.less column
+    flex-wrap: wrap !important; // FORCED: label takes full row, input+btn share next row
+    align-items: center;
+    gap: 10px;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 100%;
+      padding-right: 15px;
+      padding-bottom: 5px;
+    }
+
+    input[type="text"] {
+      flex: 1 1 auto;
+      min-width: 200px;
+      width: auto !important; // FORCED: override _forms.less width:100%
+    }
+
+    // Connect button — must not grow
+    .wpc-cf-button {
+      flex: 0 0 auto !important; // FORCED: never grow
+      width: auto !important; // FORCED: content-sized
+      display: inline-flex !important; // FORCED
+      align-items: center !important; // FORCED
+      justify-content: center !important; // FORCED
+      padding: 10px 24px !important; // FORCED: balanced padding
+      min-height: 42px;
+      white-space: nowrap;
+    }
+  }
+
+  // ─── Zone Picker ────────────────────────────────────────────────────────
+  .wpc-cf-zone-list {
+    display: block;
+    position: relative;
+    cursor: pointer;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  // Trigger button — matches token input style
+  .wpc-cf-zone-list-selected {
+    width: 100%;
+    box-sizing: border-box;
+    background: @color-bg-frost;
+    border: 0 solid transparent;
+    border-radius: @radius-sm;
+    padding: 10px 36px 10px 14px;
+    color: @color-gray-muted;
+    font-family: @font-regular;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+    transition: @transition-fast;
+
+    &.has-value { color: @color-text-dark; }
+
+    .wpc-cf-zone-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .wpc-cf-zone-arrow {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: @color-gray-muted;
+      transition: transform 0.2s ease;
+    }
+  }
+
+  // Dropdown panel
+  .wpc-cf-zone-list-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-lg;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.04);
+    z-index: 200;
+    overflow: hidden;
+  }
+
+  // Search field inside dropdown
+  .wpc-cf-zone-search-wrap {
+    padding: 10px 12px;
+    border-bottom: 1px solid @color-border;
+    position: relative;
+
+    input.wpc-cf-zone-search {
+      width: 100% !important; // FORCED: override WP admin 25em default
+      max-width: 100% !important; // FORCED: override any max-width
+      box-sizing: border-box !important; // FORCED
+      border: 1px solid @color-border !important; // FORCED: visible boundary
+      border-radius: @radius-base;
+      padding: 8px 10px 8px 32px !important; // FORCED
+      font-family: @font-regular;
+      font-size: 13px;
+      outline: none !important; // FORCED
+      background: @color-white !important; // FORCED
+      color: @color-text-dark;
+      min-height: auto !important; // FORCED: override form min-height
+      margin: 0 !important; // FORCED: override WP admin margins
+
+      &:focus {
+        border-color: transparent !important; // FORCED
+        box-shadow: none !important; // FORCED
+      }
+
+      &::placeholder { color: @color-gray-muted; }
+    }
+
+    // Search icon
+    &::before {
+      content: '';
+      position: absolute;
+      left: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 13px;
+      height: 13px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a0aab6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-size: contain;
+      pointer-events: none;
+      z-index: 1;
+    }
+  }
+
+  // Zone items list
+  .wpc-cf-zone-list-items {
+    max-height: 280px;
+    overflow-y: auto;
+    display: block !important; // FORCED: always visible inside dropdown
+
+    > div {
+      padding: 11px 16px 11px 14px;
+      cursor: pointer;
+      font-family: @font-regular;
+      font-size: 14px;
+      color: @color-text-body;
+      transition: background 0.12s ease, color 0.12s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      // Globe icon before each domain
+      &::before {
+        content: '';
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0aab6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: contain;
+      }
+
+      &:hover,
+      &.wpc-cf-zone-hover {
+        background: linear-gradient(135deg, fade(@color-ice, 80%), fade(@color-ice-deep, 60%));
+        color: var(--wpc-brand-accent, @color-gradient-end);
+
+        &::before {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234273f0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E");
+        }
+      }
+
+      &:not(:last-child) {
+        border-bottom: 1px solid fade(@color-border, 40%);
+      }
+    }
+  }
+
+  .wpc-cf-zone-no-results {
+    padding: 20px 14px;
+    font-family: @font-regular;
+    font-size: 13px;
+    color: @color-gray-muted;
+    text-align: center;
+  }
+
+  #wpc-cf-token {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 200px;
+    background: @color-bg-frost;
+    border: 0 solid transparent !important; // FORCED: no border per design
+    border-radius: @radius-sm;
+    color: @color-text-dark;
+    font-family: @font-regular;
+    font-size: 14px;
+    padding: 10px 14px;
+    min-height: 42px;
+    box-sizing: border-box;
+
+    &:focus {
+      box-shadow: none !important; // FORCED: no focus ring
+      outline: none !important; // FORCED: no focus outline
+      border: 0 solid transparent !important; // FORCED: no border
+    }
+  }
+}
+
+
+// ─── Connected Info — Enterprise overrides ───────────────────────────────
+// Enterprise overrides 9707-9727 — applied globally for specificity
+.wpc-cf-token-connected-info-right .wpc-cf-button {
+  font-family: @font-semibold !important; // FORCED: enterprise override 9708
+  font-size: 13px !important; // FORCED: enterprise override 9709
+  font-weight: 700 !important; // FORCED: enterprise override 9710
+  text-transform: none !important; // FORCED: enterprise override 9711
+  letter-spacing: normal !important; // FORCED: enterprise override 9712
+  cursor: pointer !important; // FORCED: enterprise override 9713
+  transition: @transition-smooth !important; // FORCED: enterprise override 9714
+  min-height: 44px;
+  display: inline-flex !important; // FORCED: enterprise override 9716
+  align-items: center !important; // FORCED: enterprise override 9717
+  justify-content: center !important; // FORCED: enterprise override 9718
+  padding: 8px 16px !important; // FORCED: enterprise override 9719
+  border-radius: @radius-base !important; // FORCED: enterprise override 9720
+}
+
+.wpc-cf-token-connected-info-right .wpc-cf-button:hover {
+  transform: translateY(-2px) !important; // FORCED: enterprise override 9724
+  box-shadow: @shadow-blue-glow !important; // FORCED: enterprise override 9725
+  filter: brightness(1.02);
+}
+
+
+// ─── Connected Info — Strong text override ───────────────────────────────
+// Enterprise overrides 9747-9753
+.wpc-cf-token-connected-info-left strong {
+  font-family: @font-regular !important; // FORCED: enterprise override 9748
+  font-weight: 500 !important; // FORCED: enterprise override 9749
+  font-size: 14px !important; // FORCED: enterprise override 9750
+  color: @color-text-secondary !important; // FORCED: enterprise override 9751
+  letter-spacing: 0.02em !important; // FORCED: enterprise override 9752
+}
+
+
+// ─── CF Connected Info — Below Desktop ────────────────────────────────
+@media screen and (max-width: 1220px) {
+  .wpc-cf-token-connected-info {
+    flex-wrap: wrap;
+    justify-content: center !important; // FORCED: override flex-end
+    gap: 12px;
+  }
+
+  .wpc-cf-token-connected-info-left {
+    width: 100%;
+    text-align: center;
+  }
+
+  .wpc-cf-token-connected-info-right {
+    text-align: center;
+  }
+}
+
+// ─── CF Select Dropdown (HTML Edge Caching pill) ─────────────────────────
+.wpc-cf-select-dropdown {
+  min-width: 0;
+  text-align: left;
+  position: relative;
+  display: inline-block;
+
+  .wpc-cf-select-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid @color-border;
+    border-radius: @radius-full;
+    outline: 0;
+    font-family: @font-regular;
+    font-size: 14px;
+    font-weight: 500;
+    height: auto;
+    padding: 8px 16px;
+    background: @color-white;
+    color: @color-text-slate;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+
+    &:hover {
+      border-color: @color-border-medium;
+      color: @color-text-dark;
+      background: @color-bg-frost;
+    }
+
+    .selected-text { flex: 1; }
+
+    .wpc-chevron {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      color: @color-gray-text;
+      transition: transform 0.15s ease-in-out;
+    }
+
+    // Kill the ::after triangle from _forms.less
+    &::after {
+      display: none !important; // FORCED: _forms.less adds duplicate arrow via ::after
+    }
+
+    &:hover {
+      background: @color-bg-frost;
+      color: @color-text-dark;
+      outline: none;
+    }
+  }
+
+  // Open state — subtle border darken + soft lift
+  &.is-open .wpc-cf-select-button {
+    outline: none;
+    background: @color-bg-frost;
+    border-color: @color-border-medium;
+    color: @color-text-dark;
+
+    .wpc-chevron { transform: rotate(180deg); }
+  }
+
+  .wpc-cf-select-menu {
+    min-width: 14em;
+    width: max-content;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 100;
+    padding: 8px;
+    background-color: @color-white;
+    border: 1px solid @color-bg-frost;
+    border-radius: @radius-card;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08),
+                0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    // Animated entry — display:block !important overrides _forms.less display:none
+    display: block !important; // FORCED: _forms.less sets display:none under container scope
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.95) translateY(-10px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    .wpc-cf-select-item {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 14px;
+      margin-bottom: 2px;
+      font-family: @font-regular;
+      font-size: 14px;
+      font-weight: 500;
+      color: @color-text-secondary;
+      text-decoration: none;
+      white-space: nowrap;
+      background-color: transparent;
+      border: 0;
+      border-radius: @radius-input;
+      transition: all 0.15s ease-in-out;
+
+      &:last-child { margin-bottom: 0; }
+
+      .wpc-checkmark {
+        width: 18px;
+        height: 18px;
+        display: none;
+        flex-shrink: 0;
+        color: var(--wpc-brand-primary-dark, @color-blue-vivid);
+      }
+
+      &.wpc-cf-active {
+        color: @color-text-dark;
+        background: @color-bg-frost;
+        font-weight: 600;
+
+        .wpc-checkmark { display: block; }
+      }
+
+      &:hover {
+        background: @color-bg-neutral;
+        color: @color-text-dark;
+      }
+    }
+  }
+
+  // Open state — menu visible
+  &.is-open .wpc-cf-select-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1) translateY(0);
+  }
+}
+
+
+// ─── CF Global Error ─────────────────────────────────────────────────────
+.wpc-cf-loader-error {
+  background-color: @color-error-bg;
+  border: 1px solid @color-error-border;
+  border-left: 4px solid @color-error-accent;
+  border-radius: @radius-base;
+  padding: 12px 16px;
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: @color-error-dark;
+  line-height: 1.5;
+}
+
+
+// ─── CF CNAME Popup Link ─────────────────────────────────────────────────
+.wpc-cf-cname-popup {
+  text-decoration-line: underline;
+  cursor: pointer;
+}
+
+
+// ─── CF Banner ───────────────────────────────────────────────────────────
+// Base: backup 8601-8626
+.wpc-cf-banner {
+  float: right;
+  width: 380px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-radius: @radius-base;
+  box-shadow: @shadow-sm;
+  max-width: 450px;
+  font-size: 13px;
+
+  img {
+    height: 32px;
+    flex-shrink: 0;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: @color-text-body;
+  }
+}
+
+// Enterprise override: backup 9664-9673
+.wpc-settings-flex-body .wpc-cf-banner {
+  background-color: @color-white !important; // FORCED: enterprise override 9665
+  border: 1px solid @color-bg-frost !important; // FORCED: enterprise override 9666
+  border-radius: @radius-card !important; // FORCED: enterprise override 9667
+  box-shadow: @shadow-card !important; // FORCED: enterprise override 9668
+  padding: 15px 20px !important; // FORCED: enterprise override 9669
+  margin-bottom: 24px !important; // FORCED: enterprise override 9670
+  display: flex !important; // FORCED: enterprise override 9671
+  align-items: center !important; // FORCED: enterprise override 9672
+  gap: 15px !important; // FORCED: enterprise override 9673
+}
+
+
+// ─── CF Link ─────────────────────────────────────────────────────────────
+// Enterprise override: backup 9676-9688
+.wpc-cf-link {
+  margin-left: 4px !important; // FORCED: enterprise override 9677
+  cursor: pointer !important; // FORCED: enterprise override 9678
+  display: inline-block !important; // FORCED: enterprise override 9679
+  transition: @transition-fast !important; // FORCED: enterprise override 9680
+  color: var(--wpc-brand-primary, @color-gradient-mid) !important; // FORCED: enterprise override 9681
+  font-weight: 700 !important; // FORCED: enterprise override 9682
+  text-decoration: none !important; // FORCED: enterprise override 9683
+  white-space: nowrap;
+}
+
+.wpc-cf-banner:hover .wpc-cf-link {
+  color: @color-text-dark !important; // FORCED: enterprise override 9687
+  transform: translateX(3px) !important; // FORCED: enterprise override 9688
+}
+
+
+// ─── CF Buttons (global) ─────────────────────────────────────────────────
+// Enterprise override: backup 9769-9811
+#wpc-cf-token-check,
+.wpc-cf-button {
+  font-family: @font-semibold !important; // FORCED: enterprise override 9771
+  font-size: 13px !important; // FORCED: enterprise override 9772
+  font-weight: 700 !important; // FORCED: enterprise override 9773
+  text-transform: none !important; // FORCED: enterprise override 9774
+  letter-spacing: normal !important; // FORCED: enterprise override 9775
+  display: inline-flex !important; // FORCED: enterprise override 9776
+  align-items: center !important; // FORCED: enterprise override 9777
+  justify-content: center !important; // FORCED: enterprise override 9778
+  min-height: 44px !important; // FORCED: enterprise override 9779
+  padding: 8px 16px !important; // FORCED: enterprise override 9780
+  border-radius: @radius-md !important; // FORCED: enterprise override 9781
+  cursor: pointer !important; // FORCED: enterprise override 9782
+  text-decoration: none !important; // FORCED: enterprise override 9783
+  transition: @transition-smooth !important; // FORCED: enterprise override 9784
+  -webkit-appearance: none !important; // FORCED: enterprise override 9785
+  appearance: none !important; // FORCED: enterprise override 9786
+  background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: enterprise override 9787
+  color: @color-white !important; // FORCED: enterprise override 9788
+  border: none !important; // FORCED: enterprise override 9789
+  box-shadow: 0 4px 10px rgba(76, 137, 235, 0.1) !important; // FORCED: enterprise override 9790
+}
+
+#wpc-cf-token-check:hover,
+.wpc-cf-button:hover {
+  transform: translateY(-2px) !important; // FORCED: enterprise override 9795
+  box-shadow: @shadow-hover-lift !important; // FORCED: enterprise override 9796
+  filter: brightness(1.05) !important; // FORCED: enterprise override 9797
+  color: @color-white !important; // FORCED: enterprise override 9798
+}
+
+#wpc-cf-token-check:focus-visible,
+.wpc-cf-button:focus-visible {
+  outline: none !important; // FORCED: enterprise override 9803
+  box-shadow: 0 0 0 3px rgba(76, 137, 235, 0.18), 0 1px 2px rgba(0, 0, 0, 0.03) !important; // FORCED: enterprise override 9804
+}
+
+#wpc-cf-token-check:active,
+.wpc-cf-button:active {
+  transform: translateY(0) !important; // FORCED: enterprise override 9809
+  box-shadow: 0 2px 6px rgba(76, 137, 235, 0.10) !important; // FORCED: enterprise override 9810
+}
+
+// Disconnect — flat (no shadow), override .wpc-cf-button cascade above
+.wpc-cf-token-disconnect.wpc-cf-button {
+  box-shadow: none !important; // FORCED: flat button
+  &:hover { box-shadow: none !important; } // FORCED: keep flat on hover
+}
+
+
+// ─── CF Select Menu z-index override ─────────────────────────────────────
+// Enterprise override: backup 9763-9765
+.wpc-cf-select-menu {
+  z-index: 100 !important; // FORCED: enterprise override 9764
+}
+
+
+// ─── CF Connect Options Cards ────────────────────────────────────────────
+// Enterprise override: backup 9755-9761
+#cf-connect-options {
+  overflow: visible !important; // FORCED: dropdowns must not clip
+
+  .wpc-perf-grid { overflow: visible; }
+  .wpc-box-for-checkbox,
+  .wpc-box-for-dropdown { overflow: visible; }
+  .wpc-box-check { overflow: visible; }
+
+  .wpc-box-for-checkbox { justify-self: stretch; width: 100%; }
+  .wpc-box-for-checkbox:hover { transform: none !important; } // FORCED: enterprise override 9756
+
+  // Show descriptions in CF cards (override _section-cards.less > p { display: none })
+  .wpc-perf-grid .wpc-box-for-checkbox .wpc-box-content {
+    flex-wrap: wrap;
+
+    > p {
+      display: block !important; // FORCED: show CF option descriptions
+      flex: 0 0 100%;
+      margin: 4px 0 0;
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-text-secondary;
+      line-height: 1.4;
+    }
+  }
+
+  // Gear icon always visible in CF cards
+  .wpc-perf-grid .wps-ic-configure-popup {
+    opacity: 1 !important; // FORCED: always show gear in CF section
+  }
+
+  // Real-Time Adaptive Optimization — full width, description below title
+  .wpc-perf-grid .wpc-box-for-checkbox:last-child {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+
+    .wpc-box-content {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      flex: 1;
+
+      > p {
+        padding-left: 20px;
+      }
+    }
+  }
+
+  // CF logo — constrain size (inline height:auto !important overrides base 60px)
+  > .tab-title-checkbox > .wpc-checkbox-icon img {
+    width: 110px !important; // FORCED: override inline styles
+    height: auto !important; // FORCED
+  }
+}
+
+
+// ─── CF Dropdown Row ─────────────────────────────────────────────────────
+.wpc-cf-dropdown-row {
+  .wpc-box-content { flex: 1; }
+}
+
+
+// ─── Scan Fonts CF Dropdown Override ─────────────────────────────────────
+#scan-fonts .wpc-box-check .wpc-cf-select-dropdown {
+  z-index: 30;
+  position: relative;
+
+  .wpc-cf-select-button {
+    font-family: @font-regular;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: @radius-full;
+    padding: 10px 16px;
+    min-height: 32px;
+    background-color: @color-white;
+    color: @color-text-secondary;
+    border: 1px solid @color-border;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    justify-content: center;
+
+    &:hover {
+      border-color: @color-border-medium;
+      color: @color-text-dark;
+      background-color: @color-bg-frost;
+    }
+  }
+
+  .wpc-cf-select-menu {
+    z-index: 100;
+    border-radius: @radius-input;
+    border: 1px solid @color-bg-frost;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-top: 6px;
+    padding: 6px;
+
+    .wpc-cf-select-item {
+      font-family: @font-regular;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: @radius-base;
+      transition: @transition-fast;
+
+      &.wpc-cf-active {
+        color: @color-text-dark;
+        font-family: @font-semibold;
+        background: @color-bg-frost;
+      }
+      &:hover { background: @color-bg-frost; }
+    }
+  }
+}
+
+// ─── Dropdown Badges ────────────────────────────────────────────────────
+.wpc-recommended-badge,
+.wpc-info-badge {
+  font-size: 9px;
+  font-family: @font-semibold;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: @color-bg-frost;
+  color: @color-gray-text;
+  padding: 2px 7px;
+  border-radius: @radius-sm;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+
+// ─── Font Scan Result Messages ───────────────────────
+.wpc-scan-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: @radius-md;
+  font-family: @font-regular;
+  font-size: 13px;
+  line-height: 1.4;
+
+  &.wpc-scan-result-empty {
+    color: @color-gray-dim;
+  }
+
+  &.wpc-scan-result-error {
+    color: @color-error;
+  }
+
+  &.wpc-scan-result-found {
+    color: @color-success;
+    transition: opacity 0.4s ease;
+  }
+}
+
+// ─── Font Info Note ───────────────────────────────────
+.wpc-font-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 16px 4px;
+  padding: 10px 14px;
+  background: var(--wpc-brand-tint, @color-ice);
+  border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+  border-radius: @radius-md;
+  font-family: @font-regular;
+  font-size: 12.5px;
+  color: var(--wpc-brand-primary-dark, @color-blue-deep);
+  line-height: 1.5;
+
+  svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    opacity: 0.7;
+  }
+}

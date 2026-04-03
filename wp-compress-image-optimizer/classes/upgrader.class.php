@@ -38,7 +38,7 @@ class wps_ic_upgrader extends wps_ic
         $site_type = is_multisite() ? 'multisite' : 'single';
 
         // Setup URI
-        $uri = WPS_IC_KEYSURL . '?action=upgrade_notify&apikey=' . $apikey . '&site_type=' . $site_type . '&domain=' . $siteurl . '&zone_name=' . $zone_name . '&hash=' . md5(time()) . '&time_hash=' . time();
+        $uri = WPS_IC_KEYSURL . '?action=upgrade_notify&apikey=' . $apikey . '&site_type=' . $site_type . '&domain=' . $siteurl . '&zone_name=' . $zone_name . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
         // Verify API Key is our database and user has is confirmed getresponse
         $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);

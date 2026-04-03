@@ -66,18 +66,18 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                   <div class="dashboard-account-circle-text">
                                       <h5><?php
                                         echo $donut_text; ?>%</h5>
-                                      <h4>Savings</h4>
+                                      <h4><?php esc_html_e('Savings', WPS_IC_TEXTDOMAIN); ?></h4>
                                   </div>
                                   <!-- -35s == 35% -->
                               </div>
                               <div class="youve-saved">
                                 <?php
                                 if (!empty($stats_live)) { ?>
-                                    <h3>You've Saved</h3>
+                                    <h3><?php esc_html_e('You\'ve Saved', WPS_IC_TEXTDOMAIN); ?></h3>
                                     <h4><?php echo $user_credits->formatted->bandwidth_savings_bytes; ?></h4>
                                   <?php
                                 } else { ?>
-                                    <h3>You've Saved</h3>
+                                    <h3><?php esc_html_e('You\'ve Saved', WPS_IC_TEXTDOMAIN); ?></h3>
                                     <h4><?php echo 0 . ' MB'; ?></h4>
                                   <?php
                                 } ?>
@@ -101,7 +101,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                           <img src="<?php echo WPS_IC_URI; ?>/assets/images/icon-original-size.svg"/>
                                       </div>
                                       <div class="stats-box-text-holder">
-                                          <h5>Original</h5>
+                                          <h5><?php esc_html_e('Original', WPS_IC_TEXTDOMAIN); ?></h5>
                                           <h3><?php echo $user_credits->formatted->original_bandwidth; ?></h3>
                                       </div>
                                   </div>
@@ -112,7 +112,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                           echo WPS_IC_URI; ?>/assets/images/icon-total-images.svg"/>
                                       </div>
                                       <div class="stats-box-text-holder">
-                                          <h5>Optimized</h5>
+                                          <h5><?php esc_html_e('Optimized', WPS_IC_TEXTDOMAIN); ?></h5>
                                           <h3><?php echo $user_credits->formatted->cdn_bandwidth; ?></h3>
                                       </div>
                                   </div>
@@ -122,7 +122,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                           <img src="<?php echo WPS_IC_URI; ?>/assets/images/icon-after-optimization.svg"/>
                                       </div>
                                       <div class="stats-box-text-holder">
-                                          <h5>Assets Served</h5>
+                                          <h5><?php esc_html_e('Assets Served', WPS_IC_TEXTDOMAIN); ?></h5>
                                           <h3><?php echo $user_credits->formatted->cdn_requests; ?></h3>
                                       </div>
                                   </div>

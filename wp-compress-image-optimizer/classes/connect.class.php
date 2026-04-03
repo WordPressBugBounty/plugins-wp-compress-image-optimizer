@@ -104,6 +104,19 @@ class wps_ic_connect extends wps_ic
         // Required for DEBUG?
         $uri = WPS_IC_KEYSURL . '?action=connectV6&apikey=' . $apikey . '&domain=' . $siteurl . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
+        // Simulations of failure?
+        if (!empty($apikey)) {
+            if ($apikey == '1') {
+                wp_send_json_error(['msg' => 'api-issue', 'code' => 'call-empty', 'url' => $uri]);
+            } else if ($apikey == '2') {
+                wp_send_json_error(['msg' => 'api-issue', 'code' => 'not-successful', 'url' => $uri]);
+            } else if ($apikey == '3') {
+                wp_send_json_error(['msg' => 'apikey-in-use', 'url' => $uri]);
+            } else if ($apikey == '4') {
+                wp_send_json_error(['msg' => 'site-already-connected', 'url' => $uri]);
+            }
+        }
+
         // Verify API Key is our database and user has is confirmed getresponse
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connectV6', 'apikey' => $apikey, 'domain' => $siteurl, 'plugin_version' => self::$version, 'hash' => md5(time()), 'time_hash' => time()], ['timeout' => 60]);
         if (!empty($call)) {

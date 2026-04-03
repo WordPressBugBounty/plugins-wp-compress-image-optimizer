@@ -1,0 +1,334 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Header & Navigation
+// ═══════════════════════════════════════════════════════════════════════════
+
+//
+// DOM:
+//   .wpc-header
+//     .wpc-header-left
+//       .wpc-header-logo > img
+//       .wpc-dropdown.wpc-dropdown-trigger-popup > button#dropdownMenuButton
+//       .wpc-header-pro-site > span "Unlimited"
+//     .wpc-header-right
+//       .wpc-header-right-inner
+//         .save-button (display:none until changes)
+//           .save-notification > p
+//           .save-button-inside > button.wpc-save-button
+//         .wpc-loading-spinner > .dot-pulse
+//         .addon-buttons
+//           a.wpc-plain-btn (Advanced/Simple Settings)
+//           .wpc-optimization-page-button > various state buttons
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  // ─── Header Bar ──────────────────────────────────────────────────────────
+  .wpc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: @space-base @space-xl;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    margin-bottom: @space-lg;
+    box-shadow: @shadow-sm;
+    min-height: 88px; // prevent CLS when save pill appears/disappears
+    flex-wrap: wrap;
+    gap: @space-md;
+
+    // ─── Preset Mode Dropdown (header) ───────────────────────────────────────
+    .wpc-dropdown {
+      position: relative;
+
+      button#dropdownMenuButton {
+        background: var(--wpc-brand-primary, @color-blue);
+        border: none;
+        border-radius: @radius-pill;
+        padding: @space-sm @space-lg;
+        min-height: 40px;
+        color: @color-white;
+        font-family: @font-semibold;
+        font-size: @font-size-base;
+        display: inline-flex;
+        align-items: center;
+        gap: @space-sm;
+        cursor: pointer;
+        transition: @transition-fast;
+        box-shadow: 0 2px 8px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
+
+        &:hover {
+          background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.3));
+        }
+
+        // Dropdown arrow
+        &::after {
+          border: none;
+          content: "";
+          display: inline-block;
+          width: 14px;
+          height: 14px;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polylyine%3E%3C/svg%3E");
+          background-repeat: no-repeat;
+          background-position: center;
+          background-size: contain;
+          vertical-align: middle;
+          opacity: 0.9;
+        }
+      }
+    }
+  }
+
+  // ─── Header Left (logo + preset dropdown) ────────────────────────────────
+  .wpc-header-left {
+    display: flex;
+    align-items: center;
+    gap: @space-base;
+    flex-wrap: wrap;
+  }
+
+  .wpc-header-logo {
+    display: flex;
+    align-items: center;
+
+    img {
+      height: 36px;
+      width: auto;
+    }
+  }
+
+  // Pro site badge — hidden for now
+  .wpc-header-pro-site {
+    display: none;
+
+    span {
+      font-family: @font-semibold;
+      font-size: @font-size-xs;
+      color: @color-white;
+      background: linear-gradient(135deg, var(--wpc-brand-accent-light, @color-gradient-start), var(--wpc-brand-accent, @color-gradient-end));
+      padding: 3px 10px;
+      border-radius: @radius-pill;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+  }
+
+  // ─── Header Right (save button, actions) ─────────────────────────────────
+  .wpc-header-right {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .wpc-header-right-inner {
+    display: flex;
+    align-items: center;
+    gap: @space-md;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  // ─── Save Button ─────────────────────────────────────────────────────────
+  .save-button {
+    display: flex;
+    align-items: center;
+    gap: @space-md;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .save-notification {
+    display: flex;
+    align-items: center;
+
+    p {
+      font-family: @font-regular;
+      font-size: @font-size-sm;
+      color: @color-warning-dark;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: @space-xs;
+      white-space: nowrap;
+    }
+  }
+
+  .wpc-save-button {
+    background: linear-gradient(135deg, @color-success, @color-success-dark);
+    border: none;
+    border-radius: @radius-md;
+    padding: @space-sm @space-xl;
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: @font-size-base;
+    cursor: pointer;
+    transition: @transition-fast;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-sm;
+    min-height: 40px;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(34, 183, 58, 0.3);
+    }
+
+    &:active {
+      transform: scale(0.97);
+      transition-duration: 0.06s;
+    }
+  }
+
+  // ─── Addon Buttons (Advanced Settings, Start Optimization) ───────────────
+  .addon-buttons {
+    display: flex;
+    align-items: center;
+    gap: @space-md;
+    flex-wrap: wrap;
+  }
+
+  // Icon style toggle button
+  .wpc-icon-style-toggle {
+    display: none !important; // FORCED: hidden until style persistence is implemented
+    align-items: center;
+    gap: 5px;
+    padding: @space-xs @space-md;
+    background: @color-white;
+    border: 1.5px solid @color-border;
+    border-radius: @radius-pill;
+    color: @color-text-secondary;
+    font-family: @font-semibold;
+    font-size: 12px;
+    cursor: pointer;
+    transition: @transition-fast;
+    white-space: nowrap;
+
+    svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    &:hover {
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+      color: @color-text-dark;
+      background: @color-bg-frost;
+    }
+  }
+
+  .wpc-plain-btn {
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-sm;
+    padding: @space-sm @space-base;
+    border-radius: @radius-md;
+    transition: @transition-fast;
+    white-space: nowrap;
+
+    img {
+      width: 18px;
+      height: 18px;
+      opacity: 0.6;
+    }
+
+    &:hover {
+      color: @color-text-dark;
+      background: @color-bg-frost;
+
+      img {
+        opacity: 0.9;
+      }
+    }
+
+    &:focus {
+      outline: none;
+      box-shadow: none;
+    }
+  }
+
+  // Pause Local Optimization — ghost button
+  .wps-ic-stop-bulk-compress,
+  .wps-ic-stop-bulk-restore {
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    display: inline-flex;
+    align-items: center;
+    gap: @space-sm;
+    padding: @space-sm @space-lg;
+    border: 1.5px solid @color-border;
+    border-radius: @radius-pill;
+    background: @color-white;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: @transition-fast;
+
+    &:hover {
+      border-color: @color-error;
+      color: @color-error;
+      background: @color-error-bg;
+    }
+
+    i {
+      font-size: 14px;
+    }
+  }
+
+  // Gradient action buttons (Start Optimization, etc.)
+  // Hidden for now — re-enable when ready
+  .btn-gradient {
+    display: none !important; // FORCED: jQuery .show() sets inline display
+  }
+
+  // ─── Loading Spinner (dot-pulse in header) ───────────────────────────────
+  .wpc-loading-spinner {
+    display: flex;
+    align-items: center;
+    padding: 0 @space-md;
+  }
+
+  .dot-pulse {
+    position: relative;
+    left: -9999px;
+    width: 8px;
+    height: 8px;
+    border-radius: @radius-circle;
+    background-color: var(--wpc-brand-primary-light, @color-primary);
+    color: var(--wpc-brand-primary-light, @color-primary);
+    box-shadow: 9999px 0 0 -5px var(--wpc-brand-primary-light, @color-primary);
+    animation: dotPulse 1.2s infinite linear;
+    animation-delay: .25s;
+
+    &::before,
+    &::after {
+      content: '';
+      display: inline-block;
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: @radius-circle;
+      background-color: var(--wpc-brand-primary-light, @color-primary);
+      color: var(--wpc-brand-primary-light, @color-primary);
+    }
+
+    &::before {
+      box-shadow: 9984px 0 0 -5px var(--wpc-brand-primary-light, @color-primary);
+      animation: dotPulseBefore 1.2s infinite linear;
+      animation-delay: 0s;
+    }
+
+    &::after {
+      box-shadow: 10014px 0 0 -5px var(--wpc-brand-primary-light, @color-primary);
+      animation: dotPulseAfter 1.2s infinite linear;
+      animation-delay: .5s;
+    }
+  }
+
+} // end .wpc-advanced-settings-container-v4 / .wpc-lite-settings-container

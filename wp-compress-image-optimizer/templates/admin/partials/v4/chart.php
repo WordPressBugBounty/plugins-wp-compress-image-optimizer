@@ -3,14 +3,14 @@
         <div class="col-6">
             <ul>
                 <li>
-                    <h3>Compression Report</h3>
+                    <h3><?php echo esc_html__('Compression Report', WPS_IC_TEXTDOMAIN); ?></h3>
                 </li>
             </ul>
         </div>
         <div class="col-6 last">
             <ul>
-                <li><span class="legend-original"></span>Original Size</li>
-                <li><span class="legend-after"></span>After Optimization</li>
+                <li><span class="legend-original"></span><?php echo esc_html__('Original Size', WPS_IC_TEXTDOMAIN); ?></li>
+                <li><span class="legend-after"></span><?php echo esc_html__('After Optimization', WPS_IC_TEXTDOMAIN); ?></li>
             </ul>
         </div>
     </div>

@@ -1,0 +1,1697 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Dashboard & Stats
+// ═══════════════════════════════════════════════════════════════════════════
+// Stats cards, donut chart, chart/graph, preset modes, PageSpeed,
+// optimization progress, CF banner, pull stats
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Dashboard-specific color tokens (used 2+ times in this file)
+@dash-blue: #4c89eb;
+@dash-blue-bg: #EEF4FE;
+@dash-blue-light: #EFF6FF;
+@dash-green: #10B981;
+@dash-green-bg: #ECFDF5;
+@dash-slate: #3A3B5D;
+
+
+// All dashboard styles scoped under the main container
+// Also applies to lite/simple settings which uses .wpc-lite-settings-container
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  // ─── Stats Container ───────────────────────────────────────────────────
+  .wp-compress-settings { margin-bottom: @space-lg; }
+
+  .wp-compress-settings-row-blank {
+    display: flex;
+    gap: @space-lg;
+  }
+
+  .white-box {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    box-shadow: @shadow-card;
+    padding: @space-xl;
+    opacity: 0;
+    animation: cardFadeUp 0.5s ease forwards;
+    animation-delay: 0.05s;
+  }
+
+
+  // ─── Inner Flex (donut left + stats right) ─────────────────────────────
+  .inner-flex { display: flex; gap: @space-2xl; align-items: center; }
+
+  .left-side-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: @space-base;
+    min-width: 180px;
+  }
+
+  .right-side-box { flex: 1; min-width: 0; }
+
+
+  // ─── Donut Chart ───────────────────────────────────────────────────────
+  .user-account-circle {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dashboard-account-circle-text {
+    position: absolute;
+    text-align: center;
+    h5 { font-family: @font-bold; font-size: @font-size-2xl; color: @color-text-dark; margin: 0; line-height: 1.2; }
+    h4 { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-secondary; margin: 0; }
+  }
+
+  .youve-saved {
+    text-align: center;
+    h3 { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-secondary; margin: 0 0 @space-xs; }
+    h4 { font-family: @font-bold; font-size: @font-size-lg; color: @color-success; margin: 0 0 @space-sm; }
+  }
+
+  .image-credits-remaining {
+    text-align: center;
+    .requests-left, .local-requests-left {
+      display: inline-flex; align-items: center; gap: @space-xs;
+      font-family: @font-semibold; font-size: @font-size-sm; color: var(--wpc-brand-primary-light, @color-primary);
+      background: var(--wpc-brand-tint, @color-ice); border: 1px solid var(--wpc-brand-accent-light, @color-border-blue);
+      border-radius: @radius-pill; padding: @space-xs @space-md; text-decoration: none;
+      h5 { margin: 0; font-size: inherit; color: inherit; }
+    }
+  }
+
+
+  // ─── Stats Boxes (3-card grid) ─────────────────────────────────────────
+  .stats-boxes {
+    display: flex; gap: @space-base; flex-wrap: wrap;
+    &.smaller { gap: @space-sm; }
+  }
+
+  .stats-box-single {
+    flex: 1; min-width: 140px;
+    display: flex; flex-direction: column; align-items: center; gap: @space-sm;
+    padding: @space-lg @space-base;
+    background: @color-bg-frost; border: 1px solid @color-border; border-radius: @radius-input;
+    text-align: center; transition: @transition-smooth;
+    &:hover { border-color: var(--wpc-brand-accent-light, @color-border-blue); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.06); }
+  }
+
+  .stats-box-icon-holder {
+    display: flex; align-items: center; justify-content: center;
+    img { width: 28px; height: 28px; opacity: 0.7; }
+  }
+
+  .stats-box-text-holder {
+    h5 { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-secondary; margin: 0 0 @space-xs; }
+    h3 { font-family: @font-bold; font-size: @font-size-lg; color: @color-text-dark; margin: 0; }
+  }
+
+
+  // ─── Chart / Graph ─────────────────────────────────────────────────────
+  .wp-compress-pre-wrapper-v4 {
+    background: @color-white; border: 1px solid @color-border;
+    border-radius: @radius-card; box-shadow: @shadow-card;
+    padding: @space-xl; margin-bottom: @space-lg;
+  }
+
+  .wp-compress-pre-subheader {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: @space-lg; flex-wrap: wrap; gap: @space-md;
+    h3 { font-family: @font-semibold; font-size: @font-size-md; color: @color-text-dark; margin: 0; }
+    ul {
+      list-style: none; margin: 0; padding: 0; display: flex; gap: @space-lg;
+      li { display: flex; align-items: center; gap: @space-sm; font-size: @font-size-sm; color: @color-text-secondary; }
+    }
+  }
+
+  .legend-original { display: inline-block; width: 10px; height: 10px; border-radius: @radius-circle; background: @color-border-accent; }
+  .legend-after { display: inline-block; width: 10px; height: 10px; border-radius: @radius-circle; background: var(--wpc-brand-primary-light, @color-primary); }
+
+  .wp-compress-chart {
+    position: relative; height: 400px;
+    canvas { width: 100% !important; height: 100% !important; } // FORCED: Chart.js inline
+  }
+
+
+  // ─── Preset Modes ──────────────────────────────────────────────────────
+  .wpc-tab-content-box:has(.wpc-preset-modes-container) {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.02);
+    padding: 30px 36px;
+  }
+
+  .wpc-preset-modes-container {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .wpc-preset-modes-container-inner {
+    display: flex;
+    align-items: center;
+    gap: @space-lg;
+  }
+
+  .wpc-preset-modes-icon img {
+    width: 64px;
+    height: auto;
+    display: block;
+  }
+
+  .wpc-preset-mode-title {
+    flex: 1; min-width: 0;
+    h4 { font-family: @font-bold; font-size: 18px; color: @color-text-dark; margin: 0 0 @space-xs; }
+    p { font-family: @font-regular; font-size: @font-size-base; color: @color-text-secondary; margin: 0; line-height: 1.5; }
+  }
+
+  // Preset dropdown — light blue pill style
+  .wpc-preset-modes-container .wpc-dropdown {
+    position: relative;
+    flex-shrink: 0;
+
+    button#dropdownMenuButton {
+      background: var(--wpc-brand-tint, @color-ice);
+      border: 1px solid var(--wpc-brand-primary, @color-blue);
+      border-radius: @radius-pill;
+      padding: 12px 24px;
+      min-height: 44px;
+      color: var(--wpc-brand-accent, @color-gradient-mid);
+      font-family: @font-semibold;
+      font-size: @font-size-base;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: @space-sm;
+      cursor: pointer;
+      transition: @transition-fast;
+      box-shadow: none;
+      white-space: nowrap;
+
+      &:hover {
+        border-color: var(--wpc-brand-accent, @color-gradient-mid);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(76, 137, 235, 0.08);
+      }
+
+      &:focus {
+        background: var(--wpc-brand-tint, @color-ice);
+        outline: none;
+        box-shadow: none;
+      }
+
+      &:active,
+      &:focus:active {
+        background: var(--wpc-brand-tint, @color-ice);
+        border-color: var(--wpc-brand-accent, @color-gradient-mid);
+        transform: translateY(0);
+        box-shadow: inset 0 2px 4px rgba(76, 137, 235, 0.1);
+        outline: none;
+        color: var(--wpc-brand-accent, @color-gradient-mid);
+      }
+
+      // Chevron arrow — uses mask so color inherits from currentColor (brand-aware)
+      &::after {
+        border: none;
+        content: "";
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        background-color: currentColor;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        vertical-align: middle;
+        opacity: 0.6;
+      }
+    }
+
+    // Dropdown menu
+    .wpc-dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      z-index: 1000;
+      display: none;
+      min-width: 200px;
+      margin-top: @space-xs;
+      padding: @space-xs 0;
+      background: @color-white;
+      border: 1px solid @color-border;
+      border-radius: @radius-md;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+
+      &.show { display: block; }
+
+      .dropdown-item {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 20px;
+        font-family: @font-regular;
+        font-size: @font-size-base;
+        color: @color-text-body;
+        text-decoration: none;
+        cursor: pointer;
+        transition: @transition-fast;
+        white-space: nowrap;
+        border: none;
+        background: transparent;
+
+        &:hover {
+          background: @color-bg-frost;
+          color: @color-text-dark;
+        }
+
+        &.active {
+          background: var(--wpc-brand-tint, @color-ice);
+          color: var(--wpc-brand-accent, @color-gradient-mid);
+          font-family: @font-semibold;
+        }
+      }
+    }
+  }
+
+
+  // ─── Pull Stats ────────────────────────────────────────────────────────
+  .wpc-pull-stats-container {
+    text-align: center; padding: @space-base;
+    h3 { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-secondary; margin: 0; }
+    .wpc-pull-stats { display: inline-flex; align-items: center; gap: @space-sm; margin-top: @space-sm; font-size: @font-size-sm; }
+    .wpc-pull-stats-icon { width: 16px; height: 16px; }
+  }
+
+
+  // ─── Optimization Stats ────────────────────────────────────────────────
+  .wpc-optimization-stats {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; gap: @space-md;
+    li { flex: 1; min-width: 0; }
+  }
+
+  .wpc-optimization-stats-box {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px 15px; text-align: center;
+    background: @color-white; border: 1px solid @color-border; border-radius: @radius-input;
+    height: 100%; transition: all 0.2s ease-in-out;
+    &:hover { border-color: var(--wpc-brand-accent, @color-gradient-mid); transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+    h3 { font-size: 12px; color: @dash-slate; margin: 0 0 @space-sm; }
+  }
+
+  // Stats value row: icon + number
+  .wpc-stats-info { display: flex; align-items: center; justify-content: center; gap: @space-sm; margin-bottom: @space-xs; }
+  .wpc-stats-info-icon img { width: 28px; height: 28px; }
+  .wpc-stats-info-text { font-family: @font-bold; font-size: @font-size-xl; color: @color-text-dark; display: flex; align-items: baseline; gap: 2px; }
+  .wpc-stats-unit { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-secondary; }
+
+  // Stats improvement badge — blue pill, always one line
+  .wpc-stats-improvement {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    background: var(--wpc-brand-tint, @color-ice); padding: 4px 10px;
+    border-radius: @radius-base; margin: @space-sm 0;
+    white-space: nowrap;
+  }
+  .wpc-stats-improvement-icon img { width: 10px; height: 10px; margin: 0 0 1px -2px; }
+  .wpc-stats-improvement-text { font-family: @font-semibold; font-size: 11px; color: var(--wpc-brand-primary, @color-blue); letter-spacing: 0.25px; white-space: nowrap; }
+
+  // Divider after improvement badge (border-top on the "was" line)
+  .wpc-stats-before {
+    display: flex; align-items: center; justify-content: center; gap: @space-xs;
+    border-top: 1px solid #EFF1F4; padding-top: @space-sm; margin-top: @space-xs;
+    .wpc-stats-improvement-icon img { width: 20px; height: 20px; opacity: 0.7; }
+    .wpc-stats-improvement-text { font-family: @font-regular; font-size: @font-size-sm; color: @color-text-light; }
+  }
+
+  // Loading states (matches original skeleton from backup)
+  .wpc-ic-small-thick-placeholder {
+    border-radius: @radius-lg;
+    height: 8px;
+    background: @color-border;
+    display: inline-block;
+    position: relative;
+    overflow: hidden;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, fade(@color-white, 40%), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+  }
+
+  .loading-icon {
+    flex: 2;
+    background: url(../../stats-box-placeholder.svg) center center no-repeat @color-ice;
+    background-size: 30px 30px;
+    border-radius: @radius-default;
+    overflow: hidden;
+    height: 40px;
+    width: 40px;
+    display: inline-block;
+  }
+
+
+  // ─── Box Title ─────────────────────────────────────────────────────────
+  .wpc-box-title {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: @space-base; flex-wrap: wrap; gap: @space-sm;
+    h3 {
+      font-family: @font-bold; font-size: @font-size-md; color: @color-text-dark; margin: 0;
+      display: flex; align-items: center; gap: @space-sm;
+      &::before { content: ''; width: 8px; height: 8px; border-radius: @radius-circle; background: var(--wpc-brand-primary-light, @color-primary); flex-shrink: 0; transition: all 0.3s ease; }
+    }
+    &.no-separator { border-bottom: none; padding-bottom: 0; }
+  }
+
+  // Blue dot pulses on card hover
+  .wpc-rounded-box:hover .wpc-box-title.circle h3::before,
+  .wpc-rounded-box-half:hover .wpc-box-title.circle h3::before,
+  .wpc-rounded-box-half:hover .wpc-box-title h3::before {
+    animation: bluePulse 1.5s infinite;
+    transform: scale(1.1);
+  }
+
+  .wpc-box-title-right {
+    display: flex; align-items: center; gap: @space-md;
+    span { font-family: @font-regular; font-size: @font-size-xs; color: @color-text-light; }
+    a {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: @font-bold; font-size: @font-size-xs; color: var(--wpc-brand-accent, @color-gradient-mid);
+      padding: 5px 12px; border-radius: @radius-md;
+      border: 1px solid @color-border; background: @color-white;
+      text-decoration: none; transition: all 0.2s ease;
+      img { width: 12px; height: 12px; filter: invert(48%) sepia(51%) saturate(2326%) hue-rotate(196deg) brightness(97%) contrast(92%); }
+      &:hover { border-color: var(--wpc-brand-accent, @color-gradient-mid); background: fade(@dash-blue-light, 20%); transform: translateY(-1px); }
+    }
+  }
+
+  // Monitoring badge — blue
+  .wpc-stats-monitoring {
+    background: var(--wpc-brand-tint, @color-ice); border: 1px solid var(--wpc-brand-accent-light, fade(@color-border-blue, 80%));
+    padding: 6px 12px; border-radius: @radius-pill;
+    color: var(--wpc-brand-accent, @color-gradient-mid); font-family: @font-semibold; font-size: @font-size-xs;
+    display: flex; align-items: center; gap: 6px;
+    transition: all 0.2s ease; cursor: default; white-space: nowrap;
+    &:hover { border-color: var(--wpc-brand-accent, @color-gradient-mid); transform: translateY(-2px); }
+    span {
+      display: flex; align-items: center;
+      img { padding-right: 6px; animation: monitorHeartbeat 2s infinite ease-in-out; }
+      svg {
+        width: 14px;
+        height: 14px;
+        border-radius: @radius-circle;
+        box-shadow: 0 0 0 2px var(--wpc-brand-accent-light, fade(@color-gradient-mid, 40%));
+      }
+    }
+  }
+
+  // Running/test states
+  .wpc-test-in-progress { font-size: @font-size-sm; }
+  .wpc-pagespeed-running {
+    display: flex; align-items: center; justify-content: center; gap: @space-md;
+    padding: @space-3xl; text-align: center;
+    img { width: 28px; height: 28px; animation: spin 1.5s linear infinite; }
+    span { font-size: @font-size-sm; color: @color-text-secondary; }
+  }
+
+
+  // ─── PageSpeed Score ───────────────────────────────────────────────────
+  .wpc-pagespeed-score {
+    list-style: none; margin: 0; padding: 0; display: flex;
+    column-gap: 20px;
+
+    > li {
+      flex: 1; min-width: 0; padding: 0;
+
+      > ul {
+        list-style: none; margin: 0; padding: 0;
+        display: flex;
+        > li { flex: 1; }
+        // Circles row
+        > li:nth-child(2) { flex: 1; display: flex; align-items: center; justify-content: center; gap: @space-sm; }
+      }
+    }
+  }
+
+  // Device header — single line: icon + "Mobile" + "+16 POINTS"
+  .wpc-gps-info-box {
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+
+    .wpc-gps-info-icon {
+      flex: 1;
+      img { height: 20px; }
+    }
+
+    .wpc-gps-info-text { flex: 1; font-family: @font-bold; font-size: @font-size-base; color: @color-text-dark; }
+
+    // Points badge
+    .wpc-gps-improvement {
+      flex: 1;
+      .wpc-stats-improvement {
+        background: var(--wpc-brand-tint, @color-ice); padding: 4px 6px; border-radius: 5px; color: var(--wpc-brand-primary, @color-blue);
+        display: flex; align-items: center; justify-content: center; margin: 10px 0;
+      }
+      .wpc-stats-improvement-icon { flex-shrink: 0; width: 22px; img { width: 9px; vertical-align: middle; } }
+      .wpc-stats-improvement-text { font-family: @font-semibold; flex: 1; font-size: 11px; color: var(--wpc-brand-primary, @color-blue); }
+    }
+  }
+
+  // Before/After labels
+  .page-stats-circle-container {
+    padding: 0 5px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    margin-top: 6px;
+
+    .wpc-stats-before {
+      border-top: 0; padding-top: 0; margin-top: 0; margin-bottom: 10px;
+      width: 90%; display: flex; justify-content: center; align-items: center;
+      .wpc-stats-improvement-icon { flex-shrink: 0; width: 24px; img { vertical-align: middle; width: 22px; } }
+      .wpc-stats-improvement-text {
+        font-family: @font-bold; font-size: 9px; color: #939dad;
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+    }
+  }
+
+  // Arrow between circles
+  .page-stats-circle-container-small {
+    display: flex; justify-content: center; align-items: center;
+    width: 12px; flex-shrink: 0;
+    img { padding-top: 28px; width: 100%; opacity: 0.35; }
+  }
+
+  // Circle + score — no hover transform (canvas re-renders cause color flash)
+  .page-stats-circle {
+    position: relative; margin: 0; width: 50px;
+    cursor: default;
+  }
+
+  .stats-circle-text {
+    font-family: @font-bold; position: absolute; top: 31%; left: 0; right: 0; bottom: 0; width: 100%;
+    h5 { font-size: 15px; text-align: center; margin: 0; font-weight: bold; }
+  }
+
+  .circle-progress-bar-lite {
+    canvas { width: 100% !important; height: auto !important; } // FORCED: JS inline
+  }
+
+  // Hover micro-interactions
+  .wpc-pagespeed-score > li:hover {
+    .page-stats-circle-container-small img { opacity: 0.5; }
+  }
+
+
+  // ─── Celebration Footer (match old design exactly) ─────────────────────
+  .wpc-page-speed-footer {
+    border-top: 1px solid #EFF1F4;
+    padding: 10px 5px 0 5px;
+    margin-top: 5px;
+    display: flex; flex-direction: row; align-items: center;
+    .wpc-ps-f-left { flex: 1; }
+    .wpc-ps-f-right { width: 180px; flex-shrink: 0; text-align: right; }
+  }
+
+  .wpc-badge-container {
+    display: flex; align-items: center;
+    p {
+      flex: 1; margin: 0;
+      img { width: 16px; vertical-align: middle; padding-right: 6px; }
+    }
+    .wpc-badge-success {
+      background: var(--wpc-brand-tint, @color-ice); padding: 6px 12px;
+      border-radius: 20px; display: inline-flex; align-items: center;
+      color: var(--wpc-brand-primary, @color-blue); font-size: 12px;
+      img { vertical-align: middle; padding-right: 5px; width: 14px; }
+    }
+  }
+
+
+  // ─── Two-Card Row (stats + pagespeed) ──────────────────────────────────
+  .wpc-settings-content-inner {
+    display: flex; gap: @space-lg; margin-bottom: @space-lg;
+    align-items: stretch; // equal height cards
+    .wpc-rounded-box-half {
+      width: calc(50% - @space-sm); flex: 1 1 auto;
+      display: flex; flex-direction: column;
+      .wpc-box-title { flex-shrink: 0; }
+      .wpc-box-content { flex: 1; display: flex; flex-direction: column; }
+    }
+  }
+
+
+  // ─── V2 Stats (Lite/PageSpeed Dashboard) ───────────────────────────────
+
+  // Two-card row layout — equal height
+  .wpc-v2-section {
+    display: flex;
+    gap: @space-lg;
+    margin-bottom: @space-lg;
+    align-items: stretch;
+
+    > .wpc-v2-card {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  // Card container — entrance + hover
+  .wpc-v2-card {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    // Entrance animation (opacity: 1 fallback if animation fails)
+    opacity: 0;
+    animation: cardFadeUp 0.5s ease forwards;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    }
+  }
+
+  .wpc-v2-section > .wpc-v2-card:nth-child(1) { animation-delay: 0.1s; }
+  .wpc-v2-section > .wpc-v2-card:nth-child(2) { animation-delay: 0.25s; }
+
+  // Card header
+  .wpc-v2-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: @space-lg @space-xl @space-sm;
+    flex-wrap: wrap;
+    gap: @space-sm;
+  }
+
+  .wpc-v2-title {
+    display: flex;
+    align-items: center;
+    gap: @space-sm;
+    font-family: @font-bold;
+    font-size: @font-size-md;
+    color: @color-text-dark;
+    margin: 0;
+
+    h3 {
+      margin: 0;
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+    }
+  }
+
+  .wpc-v2-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: @radius-circle;
+    display: inline-block;
+    background: var(--wpc-brand-primary-light, @color-primary);
+    transition: @transition-fast;
+    cursor: pointer;
+
+    &:hover {
+      transform: scale(1.5);
+      box-shadow: 0 0 6px rgba(92, 177, 255, 0.4);
+    }
+  }
+
+  .wpc-v2-dot-green {
+    background: var(--wpc-brand-primary-light, @color-primary);
+  }
+
+  // Blue pulse on card hover for all v2 dots
+  .wpc-v2-card:hover .wpc-v2-dot {
+    animation: bluePulse 1.5s infinite !important; // FORCED: override monitoringPulse on green dot
+    background: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: unify dot color on hover
+  }
+
+  // Header meta (date + retest button)
+  .wpc-v2-header-meta {
+    display: flex;
+    align-items: center;
+    gap: @space-md;
+  }
+
+  .wpc-v2-meta-date {
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+    color: @color-text-light;
+  }
+
+  .wpc-v2-retest-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-xs;
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    text-decoration: none;
+    padding: @space-sm @space-lg;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    transition: @transition-smooth;
+    cursor: pointer;
+
+    img {
+      width: 14px;
+      height: 14px;
+      opacity: 0.5;
+      transition: @transition-smooth;
+    }
+
+    &:focus,
+    &:focus-visible,
+    &:active {
+      outline: none !important; // FORCED: browser focus ring override
+      box-shadow: none;
+    }
+
+    &:hover {
+      color: var(--wpc-brand-primary-light, @color-primary);
+      border-color: fade(@color-border-blue, 80%);
+      box-shadow: @shadow-blue-glow;
+
+      img {
+        opacity: 1;
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  // Badge (savings percentage — compact pill)
+  .wpc-v2-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: @font-bold;
+    font-size: @font-size-sm;
+    color: var(--wpc-brand-primary, @color-blue-bright);
+    background: var(--wpc-brand-tint, @color-ice);
+    padding: 4px 10px;
+    border-radius: @radius-base;
+    white-space: nowrap;
+    opacity: 0;
+    animation: badgePop 0.4s ease forwards;
+    animation-delay: 0.55s;
+
+    img {
+      width: 12px;
+      height: 12px;
+      opacity: 0.7;
+    }
+
+    .wpc-v2-badge-arrow {
+      width: 11px;
+      height: 11px;
+    }
+  }
+
+  .wpc-v2-stat-box:nth-child(2) .wpc-v2-badge,
+  .wpc-v2-stat:nth-child(2) .wpc-v2-badge { animation-delay: 0.65s; }
+  .wpc-v2-stat-box:nth-child(3) .wpc-v2-badge,
+  .wpc-v2-stat:nth-child(3) .wpc-v2-badge { animation-delay: 0.75s; }
+
+  // "was X" previous value
+  .wpc-v2-stat-before {
+    display: flex;
+    align-items: center;
+    gap: @space-xs;
+    font-family: @font-regular;
+    font-size: @font-size-xs;
+    color: @color-text-light;
+    margin-top: 0;
+
+    img {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  // ─── Optimization Stats Row ─────────────────────────────────────────────
+  .wpc-v2-stats-row {
+    display: flex;
+    gap: @space-md;
+    padding: @space-sm @space-lg @space-lg;
+    flex: 1;
+    align-items: stretch;
+  }
+
+  // Separator line inside stat box (between badge and "was")
+  .wpc-v2-stat-sep {
+    width: 65%;
+    height: 1px;
+    background: @color-ice-muted;
+    margin: 2px 0;
+  }
+
+  // Individual stat card with border (also .wpc-v2-stat in lite dashboard)
+  .wpc-v2-stat-box,
+  .wpc-v2-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    border: 1px solid @color-border;
+    border-radius: @radius-input;
+    padding: @space-base @space-md;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    opacity: 0;
+    animation: cardFadeUp 0.4s ease forwards;
+
+    &:hover {
+      transform: translateY(-2px);
+      border-color: var(--wpc-brand-primary-light, @color-primary);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  .wpc-v2-stat-box:nth-child(1),
+  .wpc-v2-stat:nth-child(1) { animation-delay: 0.3s; }
+  .wpc-v2-stat-box:nth-child(2),
+  .wpc-v2-stat:nth-child(2) { animation-delay: 0.4s; }
+  .wpc-v2-stat-box:nth-child(3),
+  .wpc-v2-stat:nth-child(3) { animation-delay: 0.5s; }
+
+  .wpc-v2-stat-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .wpc-v2-stat-label {
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+  }
+
+  .wpc-v2-stat-value {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  .wpc-v2-stat-num {
+    font-family: @font-bold;
+    font-size: 22px;
+    color: @color-text-dark;
+  }
+
+  .wpc-v2-stat-unit {
+    font-family: @font-bold;
+    font-size: 15px;
+    color: @color-text-dark;
+  }
+
+  // ─── Skeleton Loading State ─────────────────────────────────────────────
+  .wpc-v2-skeleton-box {
+    pointer-events: none; // no hover effects on skeleton
+    animation: wpcSmoothSlideUp 0.3s ease forwards;
+
+    &:hover {
+      transform: none;
+      border-color: @color-border;
+      box-shadow: none;
+    }
+  }
+
+  .wpc-v2-skeleton-value {
+    display: flex;
+    justify-content: center;
+    padding: @space-sm 0;
+  }
+
+  .wpc-v2-skeleton-badge {
+    display: flex;
+    justify-content: center;
+    padding: @space-xs 0 @space-sm;
+  }
+
+  .wpc-v2-skeleton-before {
+    display: flex;
+    justify-content: center;
+    padding: @space-xs 0;
+  }
+
+  .wpc-v2-skeleton-line {
+    border-radius: @radius-base;
+    background: linear-gradient(90deg, @color-bg-frost 25%, fade(@color-border, 40%) 50%, @color-bg-frost 75%);
+    background-size: 200% 100%;
+    animation: wpcSkeletonShimmer 1.5s ease-in-out infinite;
+  }
+
+  .wpc-v2-skeleton-lg {
+    width: 80px;
+    height: 28px;
+  }
+
+  .wpc-v2-skeleton-md {
+    width: 100px;
+    height: 20px;
+  }
+
+  .wpc-v2-skeleton-sm {
+    width: 60px;
+    height: 14px;
+  }
+
+  @keyframes wpcSkeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  // ─── Retest Button Loading State ──────────────────────────────────────
+  .wpc-v2-retest-loading {
+    opacity: 0.6;
+  }
+
+  .wpc-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .wpc-v2-skeleton-spinner {
+    display: flex;
+    justify-content: center;
+    padding: @space-sm 0;
+  }
+
+  // ─── PageSpeed Scores Layout ────────────────────────────────────────────
+  .wpc-v2-scores {
+    display: flex;
+    gap: 0;
+    padding: @space-xs @space-base 0;
+    flex: 1;
+  }
+
+  .wpc-v2-score-col {
+    flex: 1;
+    min-width: 0;
+    padding: @space-sm @space-md @space-xs;
+  }
+
+  .wpc-v2-score-sep {
+    width: 1px;
+    background: @color-ice-muted;
+    align-self: stretch;
+    margin: @space-sm 0;
+  }
+
+  // ─── Device Header & Score Pill ─────────────────────────────────────────
+  .wpc-v2-device-header {
+    display: flex;
+    align-items: center;
+    gap: @space-sm;
+    margin-bottom: @space-md;
+  }
+
+  .wpc-v2-device-ico {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: @color-bg-frost;
+    border: 1px solid @color-ice-muted;
+    border-radius: @radius-md;
+
+    img { height: 14px; opacity: 0.5; }
+  }
+
+  .wpc-v2-device-name {
+    font-family: @font-bold;
+    font-size: @font-size-base;
+    color: @color-text-dark;
+    flex: 1;
+  }
+
+  .wpc-v2-score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: @font-bold;
+    font-size: 12px;
+    line-height: 1;
+    color: @dash-green;
+    background: @dash-green-bg;
+    border: 1px solid fade(@dash-green, 20%);
+    padding: 6px 10px;
+    border-radius: @radius-base;
+    white-space: nowrap;
+    vertical-align: middle;
+    opacity: 0;
+    animation: badgePop 0.35s ease forwards;
+    animation-delay: 0.4s;
+
+    .wpc-v2-badge-arrow,
+    .wpc-v2-pill-icon {
+      width: 12px;
+      height: 12px;
+    }
+
+  }
+
+  .wpc-v2-pill-perfect {
+    color: @dash-green;
+    background: @dash-green-bg;
+  }
+
+  // ─── Score Circles ──────────────────────────────────────────────────────
+  .wpc-v2-circles {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: @space-base;
+    padding: @space-sm 0 0;
+  }
+
+  .wpc-v2-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    animation: cardFadeUp 0.4s ease forwards;
+  }
+
+  .wpc-v2-circle-sm { animation-delay: 0.35s; }
+  .wpc-v2-circle-lg { animation-delay: 0.55s; }
+
+  .wpc-v2-circle-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    margin-bottom: 22px;
+    opacity: 0;
+    animation: stepFadeIn 0.3s ease forwards;
+    animation-delay: 0.45s;
+
+    img {
+      width: 100%;
+      opacity: 0.3;
+    }
+  }
+
+  // Before/After labels with icons
+  .wpc-v2-label-before,
+  .wpc-v2-label-after {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+
+    img {
+      width: 12px;
+      height: 12px;
+    }
+
+    span {
+      font-family: @font-bold;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+  }
+
+  .wpc-v2-label-before span { color: @color-gray-muted; }
+  .wpc-v2-label-after span { color: @color-success; }
+
+  .wpc-v2-ring {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: default;
+
+    &:hover {
+      transform: scale(1.12);
+      filter: drop-shadow(0 4px 10px rgba(34, 197, 94, 0.2));
+    }
+  }
+
+  // SVG circles — fill container so CSS sizing works
+  .wpc-v2-ring svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  // Progress ring fill animation — second circle is the colored progress arc
+  // Fast exponential curve: snaps into place with sharp deceleration
+  .wpc-v2-ring svg circle:last-child {
+    animation: v2RingFill 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.4s backwards;
+  }
+
+  .wpc-v2-circle-lg .wpc-v2-ring svg circle:last-child {
+    animation-delay: 0.55s;
+  }
+
+  // Both circles same size
+  .wpc-v2-circle-sm .wpc-v2-ring,
+  .wpc-v2-circle-lg .wpc-v2-ring {
+    width: 60px;
+    height: 60px;
+  }
+
+  .wpc-v2-ring-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: @font-bold;
+
+    span { font-size: 18px; }
+  }
+
+  // Both circles — same color
+  .wpc-v2-circle-sm .wpc-v2-ring-text,
+  .wpc-v2-circle-lg .wpc-v2-ring-text {
+    color: @color-text-dark;
+  }
+
+  // ─── Score Footer (glass bar) ───────────────────────────────────────────
+  .wpc-v2-score-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: @space-sm;
+    padding: @space-md @space-lg;
+    margin: @space-sm @space-md @space-md;
+    background: rgba(248, 250, 252, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(241, 245, 249, 0.8);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.01);
+    border-radius: @radius-md;
+    transition: @transition-default;
+    opacity: 0;
+    animation: celebrateSlideUp 0.5s ease forwards;
+    animation-delay: 0.7s;
+  }
+
+  .wpc-v2-footer-msg {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+    color: @color-text-body;
+    white-space: nowrap;
+
+    strong {
+      font-family: @font-semibold;
+    }
+
+    img {
+      width: 16px;
+      vertical-align: middle;
+      padding-right: 6px;
+    }
+  }
+
+  .wpc-v2-footer-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: var(--wpc-brand-accent, @color-gradient-mid);
+    padding: 5px 15px;
+    background: var(--wpc-brand-tint, @color-ice);
+    border: 1px solid color-mix(in srgb, var(--wpc-brand-accent-light, @color-border-blue) 18%, transparent);
+    border-radius: @radius-pill;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: default;
+    flex-shrink: 0;
+
+    &:hover {
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+
+    svg {
+      width: 14px;
+      height: 14px;
+      border-radius: @radius-circle;
+      box-shadow: 0 0 0 2px var(--wpc-brand-accent-light, fade(@color-gradient-mid, 40%));
+      opacity: 0.85;
+    }
+
+    img {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  // ─── Loading State ──────────────────────────────────────────────────────
+  .wpc-v2-scores-loading {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 25px 40px 40px;
+    color: @color-text-secondary;
+    font-family: @font-regular;
+    font-size: @font-size-sm;
+
+    img, svg {
+      width: 40px;
+      height: 40px;
+    }
+  }
+
+} // end dashboard container scope
+
+// ─── Dashboard — Mobile ──────────────────────────────────────────────────
+@media screen and (max-width: 480px) {
+  body.wp-admin .wpc-advanced-settings-container-v4,
+  body.wp-admin .wpc-lite-settings-container {
+    .wpc-v2-score-footer {
+      flex-direction: column;
+      text-align: center;
+      padding: @space-sm @space-md;
+
+      .wpc-v2-footer-msg {
+        font-size: @font-size-xs;
+      }
+    }
+  }
+}
+
+// ─── Reduced Motion — disable entrance animations, keep content visible ──
+@media (prefers-reduced-motion: reduce) {
+  .wpc-advanced-settings-container-v4,
+  .wpc-lite-settings-container {
+    .white-box,
+    .wpc-v2-card,
+    .wpc-v2-stat-box,
+    .wpc-v2-stat,
+    .wpc-v2-badge,
+    .wpc-v2-score-pill,
+    .wpc-v2-circle,
+    .wpc-v2-circle-arrow,
+    .wpc-v2-score-footer {
+      animation: none;
+      opacity: 1;
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENTERPRISE FLEX-BODY — Stats & PageSpeed Overrides
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-settings-flex-body .wpc-rounded-box-half {
+  background-color: @color-white;
+  border: 1px solid @color-bg-frost;
+  border-radius: @radius-card;
+  box-shadow: @shadow-card;
+  padding: 20px;
+  height: 100%;
+  box-sizing: border-box;
+  transition: @transition-fast;
+}
+
+.wpc-settings-flex-body .wpc-rounded-box-half .wpc-box-title {
+  display: flex !important; // FORCED: override base
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 15px !important;
+
+  h3 {
+    font-family: @font-bold !important;
+    color: @color-text-dark !important;
+    margin: 0 !important;
+    font-weight: 800 !important;
+    font-size: 16px !important;
+    -webkit-font-smoothing: antialiased !important;
+  }
+}
+
+.wpc-settings-flex-body .wpc-stats-monitoring {
+  background-color: var(--wpc-brand-tint, @color-ice) !important;
+  border: 1px solid color-mix(in srgb, var(--wpc-brand-accent-light, @color-border-blue) 18%, transparent) !important;
+  border-radius: @radius-pill !important;
+  padding: 6px 12px !important;
+  margin-top: -2px !important;
+  font-family: @font-semibold !important;
+  text-transform: none !important;
+  color: var(--wpc-brand-accent, @color-gradient-mid) !important;
+  font-size: 11px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: @transition-fast !important;
+  cursor: default !important;
+
+  &:hover { border-color: color-mix(in srgb, var(--wpc-brand-accent-light, @color-border-blue) 40%, transparent) !important; transform: translateY(-2px) !important; }
+  img { margin: 0 0 -4px 0 !important; margin-right: 5px !important; animation: monitorHeartbeat 2s infinite ease-in-out !important; }
+}
+
+.wpc-settings-flex-body .wpc-optimization-stats {
+  display: flex !important;
+  gap: 10px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+
+  li { flex: 1 !important; margin: 0 !important; border: none !important; }
+}
+
+.wpc-settings-flex-body .wpc-optimization-stats-box {
+  background-color: @color-white !important;
+  border: 1px solid @color-border !important;
+  box-shadow: @shadow-sm !important;
+  border-radius: @radius-input !important;
+  padding: 15px 12px !important;
+  text-align: center !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: @transition-fast-inout !important;
+
+  &:hover {
+    border-color: var(--wpc-brand-accent, @color-gradient-mid) !important;
+    transform: translateY(-4px) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025) !important;
+  }
+
+  h3 { font-size: 12px !important; color: @color-text-navy !important; margin: 0 0 10px !important; }
+
+  .wpc-stats-info .wpc-stats-info-text {
+    font-family: @font-bold !important;
+    font-size: 17px !important;
+    color: @color-text-dark !important;
+    font-weight: 800 !important;
+  }
+}
+
+.wpc-settings-flex-body .wpc-stats-improvement {
+  background-color: var(--wpc-brand-tint, @color-ice) !important;
+  border-radius: @radius-base !important;
+  padding: 4px 10px !important;
+  margin: 10px 0 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+}
+
+.wpc-settings-flex-body .wpc-box-title-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+
+  span { font-family: @font-regular !important; font-size: 11px !important; color: @color-gray-text !important; }
+}
+
+.wpc-settings-flex-body .wps-ic-initial-retest {
+  background-color: @color-white !important;
+  border: 1px solid @color-border !important;
+  border-radius: @radius-md !important;
+  padding: 5px 12px !important;
+  font-family: @font-bold !important;
+  font-size: 11px !important;
+  color: var(--wpc-brand-accent, @color-gradient-mid) !important;
+  text-decoration: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  transition: @transition-fast !important;
+
+  &:hover { border-color: var(--wpc-brand-accent, @color-gradient-mid) !important; transform: translateY(-1px) !important; }
+  img { width: 12px !important; filter: invert(48%) sepia(51%) saturate(2326%) hue-rotate(196deg) brightness(97%) contrast(92%) !important; }
+}
+
+// PageSpeed score circles
+.wpc-settings-flex-body .wpc-pagespeed-score {
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+
+  > li { padding-bottom: 0 !important; }
+  > li:last-child { border-bottom: none !important; padding-bottom: 0 !important; margin-bottom: 0 !important; }
+  > li > ul { display: flex !important; align-items: center !important; justify-content: space-between !important; margin: 3px 0 0 !important; padding: 0 !important; }
+}
+
+.wpc-settings-flex-body .wpc-gps-info-icon {
+  background-color: @color-bg-frost !important;
+  border: 1px solid @color-bg-frost !important;
+  border-radius: @radius-lg !important;
+  padding: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-bottom: 8px !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+
+  img { width: 24px !important; opacity: 0.75 !important; }
+}
+
+.wpc-settings-flex-body .wpc-pagespeed-score > li:hover .wpc-gps-info-icon {
+  border-color: var(--wpc-brand-accent-light, @color-border-blue) !important;
+  transform: scale(1.025) !important;
+  box-shadow: 0 4px 12px rgba(76, 137, 235, 0.15) !important;
+}
+
+.wpc-settings-flex-body .wpc-gps-info-text {
+  font-family: @font-bold !important;
+  font-size: 14px !important;
+  color: @color-text-dark !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.wpc-settings-flex-body .wpc-gps-improvement .wpc-stats-improvement {
+  background-color: @color-success-bg !important;
+  border-radius: @radius-base !important;
+  padding: 3px 6px !important;
+  margin: 5px 0 0 !important;
+  gap: 0 !important;
+}
+
+.wpc-settings-flex-body .wpc-gps-improvement .wpc-stats-improvement-text {
+  font-family: @font-bold !important;
+  font-size: 9px !important;
+  color: @color-success !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+}
+
+.page-stats-circle {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  cursor: default !important;
+  &:hover { transform: scale(1.10) !important; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.05)) !important; }
+}
+
+// PageSpeed footer
+.wpc-settings-flex-body .wpc-page-speed-footer {
+  background: rgba(248, 250, 252, 0.75) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(241, 245, 249, 0.8) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.01) !important;
+  border-radius: @radius-card !important;
+  padding: 12px 15px !important;
+  margin-top: 11px !important;
+  transition: @transition-default !important;
+
+  &:hover {
+    transform: translateY(-2px) !important;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.7), rgba(240, 249, 255, 0.5)) !important;
+    border-color: var(--wpc-brand-accent-light, @color-border-blue) !important;
+  }
+
+  p img { transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
+  &:hover p img { transform: scale(1.15) !important; }
+}
+
+.wpc-settings-flex-body .wpc-badge-container {
+  opacity: 0;
+  animation: fadeInDown 0.5s ease forwards !important;
+  animation-delay: 600ms !important;
+
+  p {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    font-family: @font-bold !important;
+    font-size: 13px !important;
+    color: @color-text-body !important;
+  }
+}
+
+.wpc-settings-flex-body .wpc-badge-success {
+  border: 1px solid @color-border !important;
+  border-radius: @radius-xl !important;
+  padding: 5px 15px !important;
+  font-family: @font-semibold !important;
+  font-size: 12px !important;
+  color: var(--wpc-brand-accent, @color-gradient-mid) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  cursor: default !important;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLOUDFLARE BANNER & CONNECT
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-settings-flex-body .wpc-cf-banner {
+  background-color: @color-white !important;
+  border: 1px solid @color-bg-frost !important;
+  border-radius: @radius-card !important;
+  box-shadow: @shadow-card !important;
+  padding: 15px 20px !important;
+  margin-bottom: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 15px !important;
+}
+
+.wpc-cf-banner .wpc-cf-link {
+  margin-left: 4px !important; // FORCED: CF banner link spacing
+  cursor: pointer !important; // FORCED: CF banner link
+  display: inline-block !important; // FORCED: CF banner link
+  transition: @transition-fast !important; // FORCED: CF banner link
+  color: var(--wpc-brand-accent, @color-gradient-mid) !important; // FORCED: CF banner link
+  font-weight: 700 !important; // FORCED: CF banner link
+  text-decoration: none !important; // FORCED: CF banner link
+}
+
+.wpc-cf-banner:hover .wpc-cf-link {
+  color: @color-text-dark !important; // FORCED: CF banner hover
+  transform: translateX(3px) !important; // FORCED: CF banner hover
+}
+
+#wpc-cf-token-check,
+.wpc-cf-button {
+  font-family: @font-semibold !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 44px !important;
+  padding: 8px 16px !important;
+  border-radius: @radius-md !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  transition: @transition-smooth !important;
+  background: var(--wpc-brand-primary, @color-blue) !important;
+  color: @color-white !important;
+  border: none !important;
+  box-shadow: 0 4px 10px rgba(76, 137, 235, 0.1) !important;
+
+  &:hover { transform: translateY(-2px) !important; filter: brightness(1.05) !important; color: @color-white !important; }
+  &:focus-visible { outline: none !important; box-shadow: 0 0 0 3px rgba(76, 137, 235, 0.18) !important; }
+}
+
+label[for="wpc-cf-token"] {
+  font-family: @font-bold !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: @color-text-dark !important;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOCKED SETTINGS & MISC
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-locked-setting {
+  color: @color-text-light;
+  .wpc-popup-option { border-color: @color-border; }
+  .wpc-popup-option-icon { background: @color-bg-neutral; }
+  img { filter: brightness(0) saturate(100%) invert(93%) sepia(2%) saturate(5592%) hue-rotate(181deg) brightness(95%) contrast(87%); }
+}
+
+.settings_page_wpcompress #wpbody {
+  padding: 0 !important; // FORCED: WP admin override — no extra padding
+}
+
+// Smart Optimization Table
+#optimizationTable {
+  border-radius: @radius-card !important;
+  background: @color-white !important;
+  border: 1px solid @color-border !important;
+  overflow: hidden !important;
+
+  .wpc-dropdown-row {
+    transition: background-color 0.2s ease !important;
+    border: none !important;
+    border-bottom: 1px solid @color-bg-frost !important;
+    border-radius: 0 !important;
+    background: @color-white !important;
+    &:hover { background-color: @color-bg-frost !important; }
+    &:last-child { border-bottom: none !important; }
+  }
+}
+
+.wpc-page-status {
+  background-color: @color-success-bg !important;
+  color: @color-success !important;
+  font-family: @font-bold !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-radius: @radius-xl !important;
+  padding: 8px 20px 8px 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+// Other Optimization muted states
+#other-optimization .wpc-box-for-checkbox:not(:has(input:checked)) {
+  h4 { color: @color-gray-text !important; }
+  p { color: @color-border-accent !important; }
+  &:hover h4 { color: @color-text-dark !important; }
+  &:hover p { color: @color-text-secondary !important; }
+}
+
+// Sidebar widget stats
+.wpc-lite-settings-container .wpc-stats-footer-box {
+  background-color: @color-white !important;
+  border: 1px solid @color-border !important;
+  border-radius: @radius-md !important;
+  padding: 10px 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  font-family: @font-bold !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: @color-text-body !important;
+  transition: @transition-fast-inout !important;
+  cursor: default !important;
+
+  &:hover { transform: translateY(-2px) !important; box-shadow: 0 4px 10px rgba(76, 137, 235, 0.1) !important; }
+}
+
+.wpc-lite-settings-container .wpc-box-footer-content .wpc-box-footer-title {
+  display: block !important;
+  font-family: @font-bold !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: @color-text-secondary !important;
+  margin-bottom: 6px !important;
+  margin-top: 6px !important;
+  font-weight: 800 !important;
+
+  &::before {
+    content: "" !important;
+    display: inline-block !important;
+    width: 8px !important;
+    height: 8px !important;
+    background-color: @color-success !important;
+    border-radius: @radius-circle !important;
+    margin-right: 8px !important;
+  }
+}
+
+// Sidebar version of the toggle-advanced button (scoped to sidebar only)
+.wpc-settings-sidebar .wpc-lite-toggle-advanced {
+  background-color: var(--wpc-brand-tint, @color-ice) !important; // FORCED: override gradient for sidebar context
+  color: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: match sidebar text
+  border-radius: @radius-md !important; // FORCED: sidebar item shape
+  font-family: @font-bold !important; // FORCED: sidebar weight
+  font-size: 11px !important; // FORCED: sidebar size
+  font-weight: 700 !important; // FORCED: sidebar weight
+  text-transform: uppercase !important; // FORCED: sidebar style
+  display: flex !important; // FORCED: sidebar layout
+  align-items: center !important; // FORCED: sidebar layout
+  justify-content: center !important; // FORCED: sidebar layout
+  width: 100% !important; // FORCED: sidebar full width
+  padding: 10px 0 !important; // FORCED: sidebar padding
+  transition: @transition-transform !important; // FORCED: sidebar anim
+  margin-top: 2.5px !important; // FORCED: sidebar spacing
+
+  &:hover { transform: translateY(-1px) !important; } // FORCED: sidebar hover
+}
+
+.wpc-menu-divider {
+  border-top: 1px solid @color-bg-frost !important;
+  margin-top: 12px !important;
+  padding-top: 15px !important;
+}
+
+// Header button interactions
+.wpc-header-right .wpc-change-ui-to-simple,
+.wpc-header-right .btn-gradient {
+  transition: @transition-transform !important;
+}
+
+.wpc-header-right .wpc-change-ui-to-simple:hover { transform: translateY(-2px) !important; }
+.wpc-header-right .btn-gradient:hover { transform: translateY(-2px) !important; color: @color-white !important; opacity: 1 !important; }
+
+.wps-ic-help-btn {
+  text-transform: none !important;
+  font-family: @font-semibold !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+  text-decoration: none !important;
+  display: inline-block !important;
+  transition: @transition-fast !important;
+  cursor: pointer !important;
+
+  &:hover { transform: translateY(-2px) !important; filter: brightness(1.05); }
+}
+
+// Purge button states
+.wpc-purge-html-cache {
+  transition: @transition-fast;
+  &.wpc-purging { pointer-events: none; opacity: 0.7; }
+  &.wpc-purge-success { color: @color-success !important; border-color: @color-success !important; } // FORCED: override base
+}
+

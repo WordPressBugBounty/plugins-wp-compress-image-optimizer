@@ -236,7 +236,8 @@ class wps_ic_preload_warmup
         $warmup_errors = get_option('wpc-warmup-errors');
 
         if ($post_type == 'any' || empty($post_type)) {
-            $post_type = ['post', 'page', 'product'];
+            $post_type = array_keys(get_post_types(['public' => true]));
+            $post_type = array_diff($post_type, ['attachment']);
         }
 
 
@@ -347,7 +348,8 @@ class wps_ic_preload_warmup
 
             foreach ((array)$q['search_terms'] as $term) {
                 $term = esc_sql($wpdb->esc_like($term));
-                $search[] = "{$searchand}($wpdb->posts.post_title LIKE '{$n}{$term}{$n}')";
+                // Search title, slug (URL), and post name for smarter URL/page matching
+                $search[] = "{$searchand}($wpdb->posts.post_title LIKE '{$n}{$term}{$n}' OR $wpdb->posts.post_name LIKE '{$n}{$term}{$n}')";
                 $searchand = ' AND ';
             }
             if (!is_array($q['search_terms']) || count($q['search_terms']) > 1) {

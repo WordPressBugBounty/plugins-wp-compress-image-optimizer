@@ -1020,8 +1020,13 @@ SCRIPT;
     public function addCritical($html)
     {
         $criticalCss = $this->addCriticalCSS($html);
-
         $criticalCss = $this->filterCriticalFontFaces($criticalCss);
+
+        // Extract font preloads AFTER filtering — only preload fonts that survive
+        if (!empty(self::$settings['preload-crit-fonts']) && self::$settings['preload-crit-fonts'] == '1') {
+            $preloadLinks = $this->extractCriticalFontPreloads($criticalCss);
+            $criticalCss = $preloadLinks . $criticalCss;
+        }
 
         if (!empty($_GET['extractCrit'])) {
             return print_r([$criticalCss], true);
@@ -1048,54 +1053,20 @@ SCRIPT;
                     // Do Nothing, it's html
                 } else {
 
-                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
-                    $createPreloadLinks = function ($cssContent) {
-                        $preloadLinks = '';
-                        $loadedFonts = []; // Array to track already added URLs
-                        $commentPos = strpos($cssContent, '/* Preload Fonts */');
-
-                        // Proceed only if the comment is found
-                        if ($commentPos !== false) {
-                            $relevantContent = substr($cssContent, 0, $commentPos);
-                            $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
-                            if (preg_match_all($fontPattern, $relevantContent, $matches, PREG_SET_ORDER)) {
-                                foreach ($matches as $match) {
-                                    $fontUrl = $match[2];
-                                    if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
-                                        continue;
-                                    }
-                                    // Check if the font URL is already in the array
-                                    if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
-                                        if (!in_array($fontUrl, $loadedFonts)) {
-                                            $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
-                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        return $preloadLinks;
-                    };
-
-                    // Function to get the CSS content after the "/* Preload Fonts */" comment
-                    $getCSSAfterPreloadComment = function ($cssContent) {
+                    // Strip content before "/* Preload Fonts */" marker if present (legacy separator)
+                    $getCSSContent = function ($cssContent) {
                         $commentPos = strpos($cssContent, '/* Preload Fonts */');
                         return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
                     };
 
+                    $criticalCSSContent_Desktop = $getCSSContent($criticalCSSContent_Desktop);
+                    $criticalCSSContent_Mobile = $getCSSContent($criticalCSSContent_Mobile);
 
-                    $preloadLinks_Desktop = $createPreloadLinks($criticalCSSContent_Desktop);
-                    $preloadLinks_Mobile = $createPreloadLinks($criticalCSSContent_Mobile);
-
-
-                    $criticalCSSContent_Desktop_After = $getCSSAfterPreloadComment($criticalCSSContent_Desktop);
-                    $criticalCSSContent_Mobile_After = $getCSSAfterPreloadComment($criticalCSSContent_Mobile);
-
-                    // Append preload links followed by the critical CSS after the preload comment
+                    // Output critical CSS — preload links are now added by addCritical() after filtering
                     if ($this->isMobile() && !empty($criticalCSSContent_Mobile)) {
-                        $output .= "\r\n" . $preloadLinks_Mobile . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-mobile">' . $criticalCSSContent_Mobile_After . '</style>';
+                        $output .= "\r\n" . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-mobile">' . $criticalCSSContent_Mobile . '</style>';
                     } elseif (!empty($criticalCSSContent_Desktop)) {
-                        $output .= "\r\n" . $preloadLinks_Desktop . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-desktop">' . $criticalCSSContent_Desktop_After . '</style>';
+                        $output .= "\r\n" . '<style type="text/css" id="wpc-critical-css" class="wpc-critical-css-desktop">' . $criticalCSSContent_Desktop . '</style>';
                     }
 
                 }
@@ -1128,6 +1099,81 @@ SCRIPT;
             // Keep this @font-face block
             return $fontFaceBlock;
         }, $critical);
+    }
+
+    /**
+     * Extract font URLs from critical CSS @font-face blocks and generate preload links.
+     * Runs AFTER filterCriticalFontFaces() so we only preload fonts with surviving declarations.
+     * The critical CSS API already runs trimUnusedFontFaces() — only above-fold fonts are included.
+     *
+     * Safeguards:
+     * - Max 4 preloads to prevent preload storms
+     * - woff2 prioritized (smallest, widest support)
+     * - Icon fonts excluded by comprehensive pattern
+     * - Data URIs skipped
+     * - URLs escaped with esc_url()
+     * - Correct MIME type per extension
+     * - Deduplication by base URL
+     */
+    private function extractCriticalFontPreloads(string $criticalCss): string
+    {
+        if (empty($criticalCss)) return '';
+
+        // Extract only @font-face blocks — don't match random url() in other rules
+        if (!preg_match_all('/@font-face\s*\{[^}]+\}/is', $criticalCss, $fontFaceBlocks)) {
+            return '';
+        }
+        $fontFaceCss = implode(' ', $fontFaceBlocks[0]);
+
+        // Extract font file URLs from the @font-face blocks
+        $fontPattern = '/url\((\'|")?([^\'")\s]+\.(woff2|woff|ttf|otf|eot))\1?\)/i';
+        if (!preg_match_all($fontPattern, $fontFaceCss, $matches, PREG_SET_ORDER)) {
+            return '';
+        }
+
+        // Prioritize woff2 (smallest, most modern), then woff
+        usort($matches, function ($a, $b) {
+            $order = ['woff2' => 0, 'woff' => 1, 'ttf' => 2, 'otf' => 3, 'eot' => 4];
+            return ($order[strtolower($a[3])] ?? 5) - ($order[strtolower($b[3])] ?? 5);
+        });
+
+        $maxPreloads = 4;
+        $loadedFonts = [];
+        $preloadLinks = '';
+
+        foreach ($matches as $match) {
+            if (count($loadedFonts) >= $maxPreloads) break;
+
+            $fontUrl = $match[2];
+
+            // Skip icon fonts
+            if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $fontUrl)) {
+                continue;
+            }
+
+            // Skip data URIs
+            if (strpos($fontUrl, 'data:') === 0) continue;
+
+            // Deduplicate by base URL (strip query strings)
+            $baseUrl = strtok($fontUrl, '?');
+            if (in_array($baseUrl, $loadedFonts)) continue;
+
+            // Correct MIME type from extension
+            $ext = strtolower($match[3]);
+            $typeMap = [
+                'woff2' => 'font/woff2',
+                'woff'  => 'font/woff',
+                'ttf'   => 'font/ttf',
+                'otf'   => 'font/otf',
+                'eot'   => 'application/vnd.ms-fontobject',
+            ];
+            $type = $typeMap[$ext] ?? 'font/woff2';
+
+            $preloadLinks .= '<link rel="preload" href="' . esc_url($fontUrl) . '" as="font" type="' . esc_attr($type) . '" crossorigin="anonymous">' . "\n";
+            $loadedFonts[] = $baseUrl;
+        }
+
+        return $preloadLinks;
     }
 
     public function optimizeGoogleFonts($html)

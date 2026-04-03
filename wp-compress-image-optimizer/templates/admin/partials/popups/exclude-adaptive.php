@@ -18,8 +18,8 @@
                         echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Exclude from Adaptive</h3>
-                        <p>Add excluded files or paths as desired as we use wildcard searching.</p>
+                        <h3><?php echo esc_html__('Exclude from Adaptive', WPS_IC_TEXTDOMAIN); ?></h3>
+                        <p><?php echo __('List files or paths to exclude. Partial names work too — we match automatically.', WPS_IC_TEXTDOMAIN); ?></p>
                     </div>
                 </div>
             </div>
@@ -29,37 +29,37 @@
                     <div class="cdn-popup-content-inner">
                         <textarea name="wpc-excludes[adaptive]" data-setting-name="wpc-excludes"
                                   data-setting-subset="adaptive"  class="exclude-list-textarea-value"
-                                  placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
+                                  placeholder="<?php echo esc_attr__('e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 
                     </div>
                 </div>
-                <div class="wps-example-list">
-                    <div>
-                        <h3>Examples:</h3>
-                        <div>
-                            <p>.svg would exclude all assets with that extension</p>
-                            <p>imagename would exclude any file with that name</p>
-                            <p>/myplugin/image.jpg would exclude that specific file</p>
-                            <p>/wp-content/myplugin/ would exclude everything using that path</p>
-                            <p>#classname would exclude all files with that class</p>
-                        </div>
-                    </div>
-                </div>
-
-
             <div class="wps-empty-row">&nbsp;</div>
 
             <div class="wps-default-excludes-container">
-                Minimum mobile image width <input type="number" value="<?php
+                <?php echo esc_html__('Minimum mobile image width', WPS_IC_TEXTDOMAIN); ?> <input type="number" value="<?php
 	            $mobile_width = get_option('wpc-min-mobile-width');
 	            echo $mobile_width ? $mobile_width : 400;
-	            ?>" name="min-mobile-width" class="wps-min-mobile-width" style="max-height:30px;margin-left:5px;margin-right:5px;max-width:80px;"> px
+	            ?>" name="min-mobile-width" class="wps-min-mobile-width" style="max-height:30px;margin-left:5px;margin-right:5px;max-width:80px;"> <?php echo esc_html__('px', WPS_IC_TEXTDOMAIN); ?>
             </div>
 
              <div class="wps-empty-row">&nbsp;</div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <div class="wps-example-list" style="display: none;">
+                    <div>
+                        <div>
+                            <p><span class="wpc-example-chip">.svg</span> <?php echo esc_html__('would exclude all assets with that extension', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><span class="wpc-example-chip">imagename</span> <?php echo esc_html__('would exclude any file with that name', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><span class="wpc-example-chip">/myplugin/image.jpg</span> <?php echo esc_html__('would exclude that specific file', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><span class="wpc-example-chip">/wp-content/myplugin/</span> <?php echo esc_html__('would exclude everything using that path', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><span class="wpc-example-chip">#classname</span> <?php echo esc_html__('would exclude all files with that class', WPS_IC_TEXTDOMAIN); ?></p>
+                        </div>
+                    </div>
+                </div>
+                </div>
             </form>
         </div>
 

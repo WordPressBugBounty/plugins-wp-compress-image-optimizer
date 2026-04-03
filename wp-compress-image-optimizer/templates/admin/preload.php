@@ -10,6 +10,13 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
   $live_cdn = true;
 }
+// Also check CF CDN setting
+if (!$live_cdn) {
+    $cfSettings = get_option(WPS_IC_CF);
+    if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
+        $live_cdn = true;
+    }
+}
 
 ?>
 <div class="wrap">
@@ -24,7 +31,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
             <div class="wp-ic-header-buttons-container">
                 <ul>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return">Return to Dashboard</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return"><?php esc_html_e('Return to Dashboard', WPS_IC_TEXTDOMAIN); ?></a>
                     </li>
                 </ul>
             </div>
@@ -33,7 +40,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
 
 
         <div class="wp-compress-pre-wrapper-no-shadow">
-            <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=preload&start=true&hash=' . time()); ?>" class="wps-ic-start-preload">Start Preload</a>
+            <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=preload&start=true&hash=' . time()); ?>" class="wps-ic-start-preload"><?php esc_html_e('Start Preload', WPS_IC_TEXTDOMAIN); ?></a>
         </div>
     </div>
 </div>

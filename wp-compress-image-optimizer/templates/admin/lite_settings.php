@@ -7,7 +7,7 @@ if (!defined('ABSPATH')) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wpc_settings_save_nonce'], 'wpc_settings_save')) {
-        die('Forbidden.');
+        die(esc_html__('Forbidden.', WPS_IC_TEXTDOMAIN));
     }
 }
 
@@ -228,7 +228,8 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
         var selectedStatuses = <?php echo json_encode([]); ?>;
         var selectedOptimizes = <?php echo json_encode($optimize); ?>;
     </script>
-    <div class="wpc-advanced-settings-container wpc-lite-settings-container wps_ic_settings_page">
+    <?php $isLiteMode = (empty($options['api_key']) || (!empty($options['version']) && $options['version'] == 'lite')); ?>
+    <div class="wpc-advanced-settings-container wpc-lite-settings-container wps_ic_settings_page<?php if ($isLiteMode) echo ' wpc-is-lite'; ?>">
         <?php
         $wps_ic->integrations->render_plugin_notices();
         ?>
@@ -237,30 +238,35 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
         <form method="POST" class="wpc-lite-form"
               action="">
             <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
+            <?php $liteActive = (empty($options['api_key']) || (!empty($options['version']) && $options['version'] == 'lite')); ?>
             <!-- Header Start -->
             <div class="wpc-header">
-                <div class="wpc-header-left" style="max-width:250px;">
+                <div class="wpc-header-left">
                     <div class="wpc-header-logo">
                         <img src="<?php echo WPS_IC_URI; ?>assets/v4/images/main-logo.svg"/>
                     </div>
                 </div>
                 <!-- Right Side -->
-                <div class="wpc-header-right" style="display: flex;width:100%;justify-content: space-between;">
-                    <div class="save-button" style="display:none;">
-                        <div class="save-notification">
-                            <div class="save-notification-inside">
-                                <p class="cdn-active d-flex align-items-center gap-2 fs-400">
-                                    <i class="wpc-warning-icon"></i> Please save your changes!
-                                </p>
+                <div class="wpc-header-right">
+                    <button type="button" class="wpc-icon-style-toggle" title="<?php echo esc_attr__('Switch icon style', WPS_IC_TEXTDOMAIN); ?>">
+                        <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor"><path d="M464 256l0 16-108.1 0c-64 0-115.9 51.9-115.9 115.9 0 20.2 5.3 39.9 15.1 57.2L237 463.1C131 453.5 48 364.5 48 256 48 141.1 141.1 48 256 48s208 93.1 208 208zM320 448l-12.1-12.1c-12.7-12.7-19.9-30-19.9-48 0-37.5 30.4-67.9 67.9-67.9l156.1 0 0-64C512 114.6 397.4 0 256 0S0 114.6 0 256 114.6 512 256 512c19.4-19.4 40.7-40.7 64-64zM256 160a32 32 0 1 0 0-64 32 32 0 1 0 0 64zm-64 0a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm-32 96a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm224-96a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z"/></svg>
+                        <span class="wpc-icon-style-label"><?php echo esc_html__('Style', WPS_IC_TEXTDOMAIN); ?></span>
+                    </button>
+                    <div class="save-button wpc-save-pill" style="display:none;">
+                        <div class="wpc-save-pill-left">
+                            <span class="wpc-save-pill-icon">
+                                <span class="wpc-save-pill-warn-ico"></span>
+                                <span class="wpc-save-pill-ping"></span>
+                            </span>
+                            <div class="wpc-save-pill-text">
+                                <span class="wpc-save-pill-title"><?php echo esc_html__('Unsaved changes', WPS_IC_TEXTDOMAIN); ?></span>
+                                <span class="wpc-save-pill-sub"><?php echo esc_html__('Please save your progress.', WPS_IC_TEXTDOMAIN); ?></span>
                             </div>
                         </div>
-                        <div class="save-button-inside">
-                            <div>
-                                <button type="submit"
-                                        class="btn btn-gradient text-white fw-400 btn-radius save-button-lite">
-                                    <i class="wpc-save-button-icon"></i> Save
-                                </button>
-                            </div>
+                        <div class="wpc-save-pill-actions">
+                            <button type="submit" class="wpc-save-pill-btn save-button-lite">
+                                <span class="wpc-save-pill-save-ico"></span> <?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?>
+                            </button>
                         </div>
                     </div>
                     <div class="wpc-loading-spinner" style="display:none;">
@@ -273,34 +279,34 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     <div class="wpc-optimization-page-button">
                         <a class="wpc-optimizer-running wpc-page-optimizations-running wpc-stop-page-optimizations"
                            style="display:none">
-                            <i class="icon-pause"></i> Pause Optimization</a>
+                            <i class="icon-pause"></i> <?php echo esc_html__('Pause Optimization', WPS_IC_TEXTDOMAIN); ?></a>
                         <a class="btn btn-gradient text-white fw-500 btn-radius wpc-optimizer-running wpc-page-optimizations-running"
                            style="display:none;font-weight: bold;font-family:'proxima_semibold' !important;">
                             <img src="<?php
                             echo WPS_IC_ASSETS; ?>/v4/images/loading-icon-media.svg"
                                  style="max-height: 25px;margin-right:10px">
-                            Optimization in progress...
+                            <?php echo esc_html__('Optimization in progress...', WPS_IC_TEXTDOMAIN); ?>
                         </a>
                         <a class="btn btn-gradient text-white fw-500 btn-radius wpc-start-optimizations"
                            style="display:none;font-weight: bold;font-family:'proxima_semibold' !important;">
                             <img src="<?php
                             echo WPS_IC_ASSETS; ?>/v4/icons/thunder-icon-white.svg"
-                                 style="height: 17px;;margin-right:10px">Start Optimization
+                                 style="height: 17px;;margin-right:10px"><?php echo esc_html__('Start Optimization', WPS_IC_TEXTDOMAIN); ?>
                         </a>
                         <a class="btn btn-gradient text-white fw-500 btn-radius
                                     wpc-optimization-complete"
                            style="display:none;font-weight: bold;font-family:'proxima_semibold' !important;">
-                            Site Optimized
+                            <?php echo esc_html__('Optimized', WPS_IC_TEXTDOMAIN); ?>
                         </a>
                         <a class="btn btn-gradient text-white fw-500 btn-radius
                                     wpc-preparing-optimization"
                            style="display:none;font-weight: bold;font-family:'proxima_semibold' !important;">
-                            Preparing...
+                            <?php echo esc_html__('Preparing...', WPS_IC_TEXTDOMAIN); ?>
                         </a>
                         <a class="btn btn-gradient text-white fw-500 btn-radius
                                     wpc-optimization-locked" style="display:none;font-weight: bold;
                                     font-family:'proxima_semibold' !important;">
-                            Smart Optimization Locked
+                            <?php echo esc_html__('Smart Optimization Locked', WPS_IC_TEXTDOMAIN); ?>
                         </a>
 
                         <?php
@@ -324,9 +330,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                           <?php
                         } */ ?>
                     </div>
-                    <div class="wpc-cf-banner">
-                        <img src="<?php echo WPS_IC_ASSETS; ?>/v4/images/cf-logo.png" alt="Cloudflare">
-                        <p>Connect with Cloudflare for faster TTFB and auto-optimize at the edge. <span class="wpc-cf-link">Enable now →</span></p>
+                    <div class="wpc-header-advanced-btn">
+                        <?php if ($liteActive) { ?>
+                            <a href="#" class="wpc-lite-locked-advanced wpc-header-adv-link"><img src="<?php echo WPS_IC_URI; ?>assets/lite/images/advanced-settings.svg"/> <span class="wpc-adv-btn-text"><?php echo esc_html__('Advanced Settings', WPS_IC_TEXTDOMAIN); ?></span></a>
+                        <?php } else { ?>
+                            <a href="#" class="wpc-lite-toggle-advanced wpc-header-adv-link"><img src="<?php echo WPS_IC_URI; ?>assets/lite/images/advanced-settings.svg"/> <span class="wpc-adv-btn-text"><?php echo esc_html__('Advanced Settings', WPS_IC_TEXTDOMAIN); ?></span></a>
+                        <?php } ?>
                     </div>
                 </div>
             </div>
@@ -336,28 +345,28 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
             <div class="wpc-settings-flex-body">
                 <div class="wpc-settings-sidebar">
 
-                    <div class="wpc-rounded-box">
-                        <div class="wpc-box-title circle">
-                            <h3>Quick Optimizations</h3>
+                    <div class="wpc-rounded-box wpc-quick-opts">
+                        <div class="wpc-box-title circle no-separator">
+                            <h3><?php echo esc_html__('Quick Optimizations', WPS_IC_TEXTDOMAIN); ?></h3>
                         </div>
                         <div class="wpc-box-content">
                             <ul class="wpc-toggles">
                                 <li>
-                                    <?php echo $gui::simpleCheckbox('Cache', '', false, '0', ['cache', 'advanced'], false); ?>
+                                    <?php echo $gui::simpleCheckbox(esc_html__('Cache', WPS_IC_TEXTDOMAIN), '', false, '0', ['cache', 'advanced'], false); ?>
                                 </li>
                                 <li>
-                                    <?php echo $gui::simpleCheckbox('CSS', '', false, '0', ['critical', 'css'], false); ?>
+                                    <?php echo $gui::simpleCheckbox(esc_html__('CSS', WPS_IC_TEXTDOMAIN), '', false, '0', ['critical', 'css'], false); ?>
                                 </li>
                                 <li>
-                                    <?php echo $gui::simpleCheckbox('JavaScript', '', false, '0', 'delay-js-v2', false); ?>
+                                    <?php echo $gui::simpleCheckbox(esc_html__('JavaScript', WPS_IC_TEXTDOMAIN), '', false, '0', 'delay-js-v2', false); ?>
                                 </li>
                                 <li>
-                                    <?php echo $gui::simpleCheckbox('Lazy Loading', '', false, '0', 'nativeLazy', false); ?>
+                                    <?php echo $gui::simpleCheckbox(esc_html__('Lazy Loading', WPS_IC_TEXTDOMAIN), '', false, '0', 'nativeLazy', false); ?>
                                 </li>
                                 <li>
                                     <?php
 			                            $liteActive = (empty($options['api_key']) || (!empty($options['version']) && $options['version'] == 'lite'));
-			                            echo $gui::simpleCheckbox('Images', '', false, '0', 'imagesPreset', $liteActive);
+			                            echo $gui::simpleCheckbox(esc_html__('Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'imagesPreset', $liteActive);
                                     ?>
                                 </li>
                                 <li>
@@ -368,22 +377,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         }
 			                            $allowLive = get_option('wps_ic_allow_live') && !$cfLive;
 			                            if ($liteActive) {
-				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', true );
+				                            echo $gui::simpleCheckbox( esc_html__('CDN', WPS_IC_TEXTDOMAIN), '', false, '0', 'cdnAll', true );
 			                            } else if (!$allowLive){
 				                            //dont display the toggle, off in portal
 			                            } else {
-				                            echo $gui::simpleCheckbox( 'CDN', '', false, '0', 'cdnAll', false );
+				                            echo $gui::simpleCheckbox( esc_html__('CDN', WPS_IC_TEXTDOMAIN), '', false, '0', 'cdnAll', false );
 			                            }
 			                        ?>
-                                </li>
-                                <li class="wpc-menu-divider">
-                                    <?php
-                                    if ($liteActive) {
-                                        ?>
-                                        <a href="#" class="wpc-lite-locked-advanced"><img src="<?php echo WPS_IC_URI; ?>assets/lite/images/advanced-settings.svg"/>Advanced Settings</a>
-                                    <?php } else { ?>
-                                        <a href="#" class="wpc-lite-toggle-advanced"><img src="<?php echo WPS_IC_URI; ?>assets/lite/images/advanced-settings.svg"/>Advanced Settings</a>
-                                    <?php } ?>
                                 </li>
                             </ul>
                         </div>
@@ -393,87 +393,113 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     if ($liteActive) {
                         ?>
                         <div class="wpc-rounded-box wpc-promo-box">
-                            <div class="wpc-box-title"><img
+                            <div class="wpc-box-title"><img class="wpc-ic-logo"
                                         src="<?php echo WPS_IC_URI; ?>assets/lite/images/unlock-icon.svg"
-                                        alt="Unlock PRO Features"/> Unlock PRO Features
+                                        alt="<?php echo esc_attr__('Unlock PRO Features', WPS_IC_TEXTDOMAIN); ?>"/> <?php echo esc_html__('Unlock PRO Features', WPS_IC_TEXTDOMAIN); ?>
                             </div>
                             <div class="wpc-box-content">
                                 <ul>
                                     <li>
-                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/up-pro.svg"
-                                             alt="Instant Page Speed Boost"/>
-                                        <span>Instant Page Speed Boost</span>
+                                        <svg class="wpc-promo-icon" width="16" height="16" viewBox="0 0 512 512" fill="currentColor"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464a256 256 0 1 0 0-512 256 256 0 1 0 0 512zm32-400a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zM256 408c30.9 0 56-25.1 56-56 0-14.4-5.4-27.5-14.4-37.5l60.5-145.3 9.2-22.2-44.3-18.5-9.2 22.2-60.5 145.3c-29.7 1.4-53.3 25.9-53.3 55.9 0 30.9 25.1 56 56 56zM192 160a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zM112 288a32 32 0 1 0 0-64 32 32 0 1 0 0 64zm320-32a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z"/></svg>
+                                        <span><?php echo esc_html__('Instant Page Speed Boost', WPS_IC_TEXTDOMAIN); ?></span>
                                     </li>
                                     <li>
-                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/magic-wand.svg"
-                                             alt="One-Click Smart Optimization"/>
-                                        <span>One-Click Smart Optimization</span>
+                                        <svg class="wpc-promo-icon" width="16" height="16" viewBox="0 0 640 512" fill="currentColor"><path d="M288 112l-24-56-56-24 56-24 24-56 24 56 56 24-56 24-24 56zM492-21.9c2.1 2.1 31.8 31.8 89 89l17 17-17 17-416 416-17 17c-2.1-2.1-31.8-31.8-89-89l-17-17 17-17 416-416 17-17zM109.9 428L148 466.1 386.1 228 348 189.9 109.9 428zM492 45.9L381.9 156 420 194.1 530.1 84 492 45.9zM96 96l32-80 32 80 80 32-80 32-32 80-32-80-80-32 80-32zM384 400l80-32 32-80 32 80 80 32-80 32-32 80-32-80-80-32z"/></svg>
+                                        <span><?php echo esc_html__('24/7 Smart Optimization', WPS_IC_TEXTDOMAIN); ?></span>
                                     </li>
                                     <li>
-                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/falling-star.svg"
-                                             alt="Adaptive Image Optimization"/>
-                                        <span>Adaptive Image Optimization</span>
+                                        <svg class="wpc-promo-icon" width="16" height="16" viewBox="0 0 576 512" fill="currentColor"><path d="M480 80c8.8 0 16 7.2 16 16l0 256c0 8.8-7.2 16-16 16l-320 0c-8.8 0-16-7.2-16-16l0-256c0-8.8 7.2-16 16-16l320 0zM160 32c-35.3 0-64 28.7-64 64l0 256c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L160 32zm80 112a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zm140.7 3.8c-4.3-7.3-12.2-11.8-20.7-11.8s-16.4 4.5-20.7 11.8l-46.5 79-17.2-24.6c-4.5-6.4-11.8-10.2-19.7-10.2s-15.2 3.8-19.7 10.2l-56 80c-5.1 7.3-5.8 16.9-1.6 24.8S191.1 320 200 320l240 0c8.6 0 16.6-4.6 20.8-12.1s4.2-16.7-.1-24.1l-80-136zM48 152c0-13.3-10.7-24-24-24S0 138.7 0 152L0 448c0 35.3 28.7 64 64 64l360 0c13.3 0 24-10.7 24-24s-10.7-24-24-24L64 464c-8.8 0-16-7.2-16-16l0-296z"/></svg>
+                                        <span><?php echo esc_html__('Adaptive Images + WebP', WPS_IC_TEXTDOMAIN); ?></span>
                                     </li>
                                     <li>
-                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/bolt.svg"
-                                             alt="Ultra-Fast Global CDN Delivery"/>
-                                        <span>Ultra-Fast Global CDN Delivery</span>
+                                        <svg class="wpc-promo-icon" width="16" height="16" viewBox="0 0 448 512" fill="currentColor"><path d="M64 80c-8.8 0-16 7.2-16 16l0 320c0 8.8 7.2 16 16 16l320 0c8.8 0 16-7.2 16-16l0-320c0-8.8-7.2-16-16-16L64 80zM0 96C0 60.7 28.7 32 64 32l320 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zM128.6 272c-9.2 0-16.6-7.4-16.6-16.6 0-4.7 2-9.2 5.5-12.4L258.7 116.7c3.4-3 7.8-4.7 12.4-4.7 12.4 0 21.3 12 17.8 23.9l-31.2 104.1 61.8 0c9.2 0 16.6 7.4 16.6 16.6 0 4.7-2 9.2-5.5 12.4L189.3 395.3c-3.4 3-7.8 4.7-12.4 4.7-12.4 0-21.3-12-17.8-23.9l31.2-104.1-61.8 0z"/></svg>
+                                        <span><?php echo esc_html__('Ultra-Fast CDN Delivery', WPS_IC_TEXTDOMAIN); ?></span>
+                                    </li>
+                                    <li>
+                                        <svg class="wpc-promo-icon" width="16" height="16" viewBox="0 0 512 512" fill="currentColor"><path d="M48 56l0-24-48 0 0 448 512 0 0-48-464 0 0-376zm296 72l-24 0 0 48 78.1 0-94.1 94.1c-63-63-95-95-96-96l-17 17-88 88-17 17 33.9 33.9c2.3-2.3 31.6-31.6 88-88l79 79 17 17 17-17 111-111 0 78.1 48 0 0-160-136 0z"/></svg>
+                                        <span><?php echo esc_html__('Management & Reporting', WPS_IC_TEXTDOMAIN); ?></span>
                                     </li>
                                 </ul>
                             </div>
                             <div class="wpc-box-content-btn">
-                                <a href="#" class="wpc-add-access-key-btn-pro">Enter Access Key <img
-                                            src="<?php echo WPS_IC_URI; ?>assets/lite/images/btn-arrow.svg"/></a>
+                                <a href="#" class="wpc-add-access-key-btn-pro"><svg width="9" height="9" viewBox="0 0 448 512" fill="currentColor"><path d="M341.2-12.1c9.1 6 13 17.3 9.6 27.6L292 192 412.9 192c19.4 0 35.1 15.7 35.1 35.1 0 10-4.2 19.5-11.7 26.1L136 521.9c-8.1 7.3-20.1 8.2-29.2 2.2s-13-17.3-9.6-27.6L156 320 35.1 320C15.7 320 0 304.3 0 284.9 0 275 4.2 265.5 11.7 258.8L312-9.9c8.1-7.3 20.1-8.1 29.2-2.2zM68.9 272l120.4 0c7.7 0 15 3.7 19.5 10s5.7 14.3 3.3 21.6L171.3 425.9 379.1 240 258.7 240c-7.7 0-15-3.7-19.5-10s-5.7-14.3-3.3-21.6L276.7 86.1 68.9 272z"/></svg> <?php echo esc_html__('Enter Access Key', WPS_IC_TEXTDOMAIN); ?></a>
                             </div>
                         </div>
                     <?php } else { ?>
-                        <div class="wpc-rounded-box wpc-promo-box">
-                            <div class="wpc-box-title"><img
-                                        src="<?php echo WPS_IC_URI; ?>assets/lite/images/unlock-icon.svg"
-                                        alt="Unlock PRO Features"/>
-                                <div>
-                                    <span>This Month’s Usage</span>
-                                    <span class="wpc-small-txt">statistics updated hourly</span>
+                        <div class="wpc-rounded-box wpc-usage-card">
+                            <!-- Header -->
+                            <div class="wpc-usage-header">
+                                <div class="wpc-usage-title-row">
+                                    <span class="wpc-usage-icon"></span>
+                                    <div>
+                                        <h3><?php echo esc_html__("This Month's Usage", WPS_IC_TEXTDOMAIN); ?></h3>
+                                        <span class="wpc-usage-subtitle"><?php echo esc_html__('statistics updated hourly', WPS_IC_TEXTDOMAIN); ?></span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="wpc-box-content">
-                                <ul>
-                                    <li>
-                                        <div class="wpc-month-usage">
-                                            <span class="label">Total Assets</span>
-                                            <span class="value"><?php echo $apiStats->display->requests; ?></span>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <div class="wpc-month-usage">
-                                            <span class="label">Optimized</span>
-                                            <span class="value"><?php echo $apiStats->display->bytes; ?></span>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </div>
-                            <div class="wpc-box-footer-content">
-                                <div class="wpc-box-footer-title">
-                                    Projected Usage
+
+                            <!-- Stats -->
+                            <?php
+                            // Parse the bytes value to extract number and unit
+                            preg_match('/([0-9.,]+)\s*([a-zA-Z]+)/', $apiStats->display->bytes, $bytesMatch);
+                            $bytesNum = isset($bytesMatch[1]) ? $bytesMatch[1] : $apiStats->display->bytes;
+                            $bytesUnit = isset($bytesMatch[2]) ? $bytesMatch[2] : '';
+                            ?>
+                            <div class="wpc-usage-stats">
+                                <div class="wpc-usage-stat">
+                                    <span class="wpc-usage-label"><?php echo esc_html__('Total Assets', WPS_IC_TEXTDOMAIN); ?></span>
+                                    <div class="wpc-usage-value">
+                                        <span class="wpc-usage-num"><?php echo number_format((int) $apiStats->display->requests); ?></span>
+                                    </div>
                                 </div>
-                                <ul class="wpc-footer-li-inline">
-                                    <li>
-                                        <span class="wpc-stats-footer-title">Assets</span>
-                                        <span class="wpc-stats-footer-box">
-                                            <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/projected-stats.svg"/>
-                                            <?php echo $apiStats->display->projectedRequests; ?>
-                                        </span>
-                                    </li>
-                                    <li>
-                                        <span class="wpc-stats-footer-title">Data</span>
-                                        <span class="wpc-stats-footer-box">
-                                            <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/projected-stats.svg"/>
-                                            <?php echo $apiStats->display->projectedBytes; ?>
-                                        </span>
-                                    </li>
-                                </ul>
+                                <div class="wpc-usage-sep"></div>
+                                <div class="wpc-usage-stat">
+                                    <span class="wpc-usage-label"><?php echo esc_html__('Optimized', WPS_IC_TEXTDOMAIN); ?></span>
+                                    <div class="wpc-usage-value">
+                                        <span class="wpc-usage-num"><?php echo $bytesNum; ?></span>
+                                        <?php if ($bytesUnit) { ?><span class="wpc-usage-unit"><?php echo $bytesUnit; ?></span><?php } ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Projected Usage Footer -->
+                            <div class="wpc-usage-footer">
+                                <div class="wpc-usage-footer-label">
+                                    <img class="wpc-usage-footer-label-ico" src="<?php echo WPS_IC_URI; ?>assets/lite/images/projected-stats.svg" alt="" />
+                                    <?php echo esc_html__('Projected Usage', WPS_IC_TEXTDOMAIN); ?>
+                                </div>
+                                <div class="wpc-usage-footer-boxes">
+                                    <div class="wpc-usage-footer-box">
+                                        <span class="wpc-usage-footer-title"><?php echo esc_html__('Assets', WPS_IC_TEXTDOMAIN); ?></span>
+                                        <span class="wpc-usage-footer-value"><?php echo $apiStats->display->projectedRequests; ?></span>
+                                    </div>
+                                    <div class="wpc-usage-footer-box">
+                                        <span class="wpc-usage-footer-title"><?php echo esc_html__('Data', WPS_IC_TEXTDOMAIN); ?></span>
+                                        <?php
+                                        preg_match('/([0-9.,]+)\s*([a-zA-Z]+)/', $apiStats->display->projectedBytes, $projMatch);
+                                        $projNum = isset($projMatch[1]) ? $projMatch[1] : $apiStats->display->projectedBytes;
+                                        $projUnit = isset($projMatch[2]) ? $projMatch[2] : '';
+                                        ?>
+                                        <span class="wpc-usage-footer-value"><?php echo $projNum; ?><?php if ($projUnit) { ?><span class="wpc-usage-footer-unit"><?php echo $projUnit; ?></span><?php } ?></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    <?php } ?>
+
+                    <?php $cf_option = get_option(WPS_IC_CF); if (!empty($cf_option) && !empty($cf_option['token'])) { ?>
+                    <div class="wpc-rounded-box wpc-cf-sidebar-banner wpc-cf-connected" id="wpc-cf-banner">
+                        <img src="<?php echo WPS_IC_ASSETS; ?>/v4/images/cf-logo.png" alt="<?php echo esc_attr__('Cloudflare', WPS_IC_TEXTDOMAIN); ?>">
+                        <span class="wpc-cf-sidebar-text"><?php echo esc_html__('Faster TTFB and auto-optimization at the edge.', WPS_IC_TEXTDOMAIN); ?></span>
+                        <span class="wpc-cf-connected-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> <?php echo esc_html__('Connected', WPS_IC_TEXTDOMAIN); ?></span>
+                    </div>
+                    <?php } else { ?>
+                    <div class="wpc-rounded-box wpc-cf-sidebar-banner" id="wpc-cf-banner">
+                        <button type="button" class="wpc-cf-dismiss" aria-label="<?php echo esc_attr__('Dismiss', WPS_IC_TEXTDOMAIN); ?>" onclick="this.closest('.wpc-cf-sidebar-banner').style.display='none'">&times;</button>
+                        <img src="<?php echo WPS_IC_ASSETS; ?>/v4/images/cf-logo.png" alt="<?php echo esc_attr__('Cloudflare', WPS_IC_TEXTDOMAIN); ?>">
+                        <span class="wpc-cf-sidebar-text"><?php echo esc_html__('Connect for faster TTFB and auto-optimize at the edge.', WPS_IC_TEXTDOMAIN); ?></span>
+                        <button type="button" class="wpc-cf-enable-btn wpc-cf-link"><?php echo esc_html__('Enable now', WPS_IC_TEXTDOMAIN); ?> &#8594;</button>
+                    </div>
                     <?php } ?>
 
                 </div>
@@ -495,42 +521,42 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     <div class="wpc-settings-content-inner">
                         <div class="wpc-rounded-box wpc-rounded-box-half">
                             <div class="wpc-box-title circle no-separator">
-                                <h3>Optimization Stats</h3>
+                                <h3><?php echo esc_html__('Optimization Stats', WPS_IC_TEXTDOMAIN); ?></h3>
                                 <?php echo $optimizationStatus; ?>
                             </div>
                             <div class="wpc-box-content">
                                 <ul class="wpc-optimization-stats">
                                     <li>
-                                        <?php echo $stats->getLiteStatsBox('Page Size', 'down', $optimizedStats['totalPageSizeAfter'], $optimizedStats['pageSizeSavingsPercentage'] . ' Smaller', $optimizedStats['totalPageSizeBefore']); ?>
+                                        <?php echo $stats->getLiteStatsBox(esc_html__('Page Size', WPS_IC_TEXTDOMAIN), 'down', $optimizedStats['totalPageSizeAfter'], $optimizedStats['pageSizeSavingsPercentage'] . ' ' . esc_html__('Smaller', WPS_IC_TEXTDOMAIN), $optimizedStats['totalPageSizeBefore']); ?>
                                     </li>
                                     <li>
-                                        <?php echo $stats->getLiteStatsBox('Requests', 'down', $optimizedStats['totalRequestsAfter'], $optimizedStats['totalRequestsSavings'] . ' Less', $optimizedStats['totalRequestsBefore']); ?>
+                                        <?php echo $stats->getLiteStatsBox(esc_html__('Requests', WPS_IC_TEXTDOMAIN), 'down', $optimizedStats['totalRequestsAfter'], $optimizedStats['totalRequestsSavings'] . ' ' . esc_html__('Less', WPS_IC_TEXTDOMAIN), $optimizedStats['totalRequestsBefore']); ?>
                                     </li>
                                     <li>
-                                        <?php echo $stats->getLiteStatsBox('Server Response (TTFB)', 'up', $optimizedStats['totalTtfbAfter'], $optimizedStats['ttfbLess'] . ' Faster', $optimizedStats['totalTtfbBefore']); ?>
+                                        <?php echo $stats->getLiteStatsBox(esc_html__('Server Speed', WPS_IC_TEXTDOMAIN), 'up', $optimizedStats['totalTtfbAfter'], $optimizedStats['ttfbLess'] . ' ' . esc_html__('Faster', WPS_IC_TEXTDOMAIN), $optimizedStats['totalTtfbBefore']); ?>
                                     </li>
                                 </ul>
                             </div>
                         </div>
                         <div class="wpc-rounded-box wpc-rounded-box-half">
                             <div class="wpc-box-title circle no-separator">
-                                <h3>PageSpeed Score</h3>
+                                <h3><?php echo esc_html__('PageSpeed Score', WPS_IC_TEXTDOMAIN); ?></h3>
                                 <?php
                                 if (empty($initialPageSpeedScore) && !empty(get_transient('wpc_test_running')) && !$warmupFailing) {
                                     ?>
 
-                                    <span class="wpc-test-in-progress">Running...</span>
+                                    <span class="wpc-test-in-progress"><?php echo esc_html__('Running...', WPS_IC_TEXTDOMAIN); ?></span>
                                     <a href="#" class="wps-ic-initial-retest">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                                        Retest
+                                        <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
                                     </a>
                                 <?php } elseif(empty($initialPageSpeedScore) && $warmupFailing){
                                   ?>
                                     <div class="wpc-box-title-right">
-                                        <span class="wpc-test-not-going">Error, connection to API Failed.</span>
+                                        <span class="wpc-test-not-going"><?php echo esc_html__('Error: connection to API failed.', WPS_IC_TEXTDOMAIN); ?></span>
                                         <a href="#" class="wps-ic-initial-retest">
                                             <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                                            Retest
+                                            <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
                                         </a>
                                     </div>
                                 <?php } else {
@@ -566,24 +592,24 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         }
 
                                         $date->setTimestamp($initialPageSpeedScore['lastRun']);
-                                        $lastRun = "Last Tested " . $date->format('F jS, Y @ g:i A');
+                                        $lastRun = $date->format('F jS, Y \a\t g:i A');
                                         ?>
                                         <div class="wpc-box-title-right">
                                             <span><?php echo $lastRun; ?></span>
                                             <a href="#" class="wps-ic-initial-retest">
                                                 <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                                                Retest
+                                                <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
                                             </a>
                                         </div>
                                             <?php
                                     } else {
-                                        $lastRun = "Running...";
+                                        $lastRun = esc_html__('Running...', WPS_IC_TEXTDOMAIN);
                                         ?>
                                         <div class="wpc-box-title-right">
-                                            <span class="wpc-test-in-progress">Running...</span>
+                                            <span class="wpc-test-in-progress"><?php echo esc_html__('Running...', WPS_IC_TEXTDOMAIN); ?></span>
                                             <a href="#" class="wps-ic-initial-retest">
                                                 <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
-                                                Retest
+                                                <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
                                             </a>
                                         </div>
                                             <?php
@@ -594,7 +620,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                             <div class="wpc-box-content wpc-box-centered">
                                 <div class="wpc-pagespeed-running wpc-pagespeed-preparing" style="display:none">
                                     <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                                    <span>Preparing...</span>
+                                    <span><?php echo esc_html__('Preparing...', WPS_IC_TEXTDOMAIN); ?></span>
                                 </div>
 
                                 <?php
@@ -603,13 +629,13 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     <div class="wpc-pagespeed-running">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                                        <span>Usually takes about 10 minutes...</span>
+                                        <span><?php echo esc_html__('Usually takes about 10 minutes...', WPS_IC_TEXTDOMAIN); ?></span>
                                     </div>
                                 <?php
                                 } elseif (empty($initialPageSpeedScore) && $warmupFailing){
                                     echo '<div style="padding:35px 15px;text-align: center;">';
-                                    echo '<strong>Error! Seems connection to our API was blocked by Firewall on your server.</strong>';
-                                    echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">Whitelisting Tutorial</a>';
+                                    echo '<strong>' . esc_html__('Error: Connection to our API was blocked by a firewall on your server.', WPS_IC_TEXTDOMAIN) . '</strong>';
+                                    echo '<br/><br/><a href="https://help.wpcompress.com/en-us/article/whitelisting-wp-compress-for-uninterrupted-service-4dwkra/" target="_blank">' . esc_html__('Whitelisting Tutorial', WPS_IC_TEXTDOMAIN) . '</a>';
                                     echo '</div>';
 
                                 } elseif (!empty($options['api_key']) && (empty($initialPageSpeedScore) && empty(get_transient('wpc_test_running')))) {
@@ -622,7 +648,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                                     <div class="wpc-pagespeed-running">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
-                                        <span>Usually takes about 10 minutes...</span>
+                                        <span><?php echo esc_html__('Usually takes about 10 minutes...', WPS_IC_TEXTDOMAIN); ?></span>
                                     </div>
                                 <?php } else {
                                 /**
@@ -642,8 +668,8 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     $desktopDiff = $initialPageSpeedScore['desktop']['after']['performanceScore'] - $initialPageSpeedScore['desktop']['before']['performanceScore'];
                                     $mobileDiff = $initialPageSpeedScore['mobile']['after']['performanceScore'] - $initialPageSpeedScore['mobile']['before']['performanceScore'];
 
-                                    $desktopDiff = $desktopDiff < 0 ? 0 : '+' . $desktopDiff;
-                                    $mobileDiff = $mobileDiff < 0 ? 0 : '+' . $mobileDiff;
+                                    if ($desktopDiff <= 0) { $desktopDiff = esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN); } else { $desktopDiff = '+' . $desktopDiff; }
+                                    if ($mobileDiff <= 0) { $mobileDiff = esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN); } else { $mobileDiff = '+' . $mobileDiff; }
                                 } else {
                                     $afterGPS = 0;
                                     $beforeGPS = 0;
@@ -660,17 +686,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     <div class="wpc-gps-info-box">
                                                         <div class="wpc-gps-info-icon">
                                                             <img src="<?php echo WPS_IC_ASSETS . '/lite/images/mobile-icon.svg'; ?>"
-                                                                 alt="Mobile GPS"/>
+                                                                 alt="<?php echo esc_attr__('Mobile GPS', WPS_IC_TEXTDOMAIN); ?>"/>
                                                         </div>
                                                         <div class="wpc-gps-info-text">
-                                                            Mobile
+                                                            <?php echo esc_html__('Mobile', WPS_IC_TEXTDOMAIN); ?>
                                                         </div>
                                                         <div class="wpc-gps-improvement">
                                                             <div class="wpc-stats-improvement">
                                                                 <span class="wpc-stats-improvement-icon">
                                                                     <img src="<?php echo WPS_IC_ASSETS . '/lite/images/arrow-up.svg'; ?>"/>
                                                                 </span>
-                                                                <span class="wpc-stats-improvement-text"><?php echo $mobileDiff; ?> points</span>
+                                                                <span class="wpc-stats-improvement-text"><?php echo $mobileDiff === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN) ? $mobileDiff : $mobileDiff . ' ' . esc_html__('points', WPS_IC_TEXTDOMAIN); ?></span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -682,7 +708,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 <img src="<?php echo WPS_IC_ASSETS . '/lite/images/gps-before.svg'; ?>"/>
                                                             </span>
                                                             <span class="wpc-stats-improvement-text">
-                                                                Before
+                                                                <?php echo esc_html__('Before', WPS_IC_TEXTDOMAIN); ?>
                                                             </span>
                                                         </div>
                                                         <div class="page-stats-circle">
@@ -702,7 +728,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 <img src="<?php echo WPS_IC_ASSETS . '/lite/images/gps-after.svg'; ?>"/>
                                                             </span>
                                                             <span class="wpc-stats-improvement-text">
-                                                                After
+                                                                <?php echo esc_html__('After', WPS_IC_TEXTDOMAIN); ?>
                                                             </span>
                                                         </div>
                                                         <div class="page-stats-circle">
@@ -722,17 +748,17 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                     <div class="wpc-gps-info-box">
                                                         <div class="wpc-gps-info-icon">
                                                             <img src="<?php echo WPS_IC_ASSETS . '/lite/images/desktop-icon.svg'; ?>"
-                                                                 alt="Desktop GPS"/>
+                                                                 alt="<?php echo esc_attr__('Desktop GPS', WPS_IC_TEXTDOMAIN); ?>"/>
                                                         </div>
                                                         <div class="wpc-gps-info-text">
-                                                            Desktop
+                                                            <?php echo esc_html__('Desktop', WPS_IC_TEXTDOMAIN); ?>
                                                         </div>
                                                         <div class="wpc-gps-improvement">
                                                             <div class="wpc-stats-improvement">
                                                                 <span class="wpc-stats-improvement-icon">
                                                                     <img src="<?php echo WPS_IC_ASSETS . '/lite/images/arrow-up.svg'; ?>"/>
                                                                 </span>
-                                                                <span class="wpc-stats-improvement-text"><?php echo $desktopDiff; ?> points</span>
+                                                                <span class="wpc-stats-improvement-text"><?php echo $desktopDiff === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN) ? $desktopDiff : $desktopDiff . ' ' . esc_html__('points', WPS_IC_TEXTDOMAIN); ?></span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -744,7 +770,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 <img src="<?php echo WPS_IC_ASSETS . '/lite/images/gps-before.svg'; ?>"/>
                                                             </span>
                                                             <span class="wpc-stats-improvement-text">
-                                                                Before
+                                                                <?php echo esc_html__('Before', WPS_IC_TEXTDOMAIN); ?>
                                                             </span>
                                                         </div>
                                                         <div class="page-stats-circle">
@@ -764,7 +790,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 <img src="<?php echo WPS_IC_ASSETS . '/lite/images/gps-after.svg'; ?>"/>
                                                             </span>
                                                             <span class="wpc-stats-improvement-text">
-                                                                After
+                                                                <?php echo esc_html__('After', WPS_IC_TEXTDOMAIN); ?>
                                                             </span>
                                                         </div>
                                                         <div class="page-stats-circle">
@@ -785,15 +811,15 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     ?>
                                     <div class="wpc-page-speed-footer">
                                         <div class="wpc-ps-f-left">
-                                            <span>Unlock even more power with <strong>PRO</strong> Access!</span>
+                                            <span><?php echo __('Unlock even more power with <strong>PRO</strong> Access!', WPS_IC_TEXTDOMAIN); ?></span>
                                         </div>
                                         <div class="wpc-ps-f-right">
                                             <a href="https://wpcompress.com/go/plans/" target="_blank"
                                                class="wpc-custom-btn">
                                                 <div>
-                                                    <img src="<?php echo WPS_IC_ASSETS . '/lite/images/checkbox-link.svg'; ?>"/>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" style="vertical-align:-1px;fill:currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z"/></svg>
                                                 </div>
-                                                <div>View Plans</div>
+                                                <div><?php echo esc_html__('View Plans', WPS_IC_TEXTDOMAIN); ?></div>
                                             </a>
                                         </div>
                                     </div>
@@ -804,8 +830,8 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <div class="wpc-page-speed-footer">
                                                 <div class="wpc-ps-f-left">
                                                     <div class="wpc-badge-container">
-                                                        <p><img src="<?php echo WPS_IC_ASSETS . '/lite/images/wohoo.png'; ?>"/> Woohoo! Your Website is Now Loading Faster!</p>
-                                                        <span class="wpc-badge-success"><img src="<?php echo WPS_IC_ASSETS . '/lite/images/checkbox-link.svg'; ?>"/> Site Optimized</span>
+                                                        <p><img src="<?php echo WPS_IC_ASSETS . '/lite/images/wohoo.png'; ?>"/> <?php echo esc_html__('Woohoo! Your Website is Now Loading Faster!', WPS_IC_TEXTDOMAIN); ?></p>
+                                                        <span class="wpc-badge-success"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" style="vertical-align:-1px;fill:currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z"/></svg> <?php echo esc_html__('Optimized', WPS_IC_TEXTDOMAIN); ?></span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -816,7 +842,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <div class="wpc-page-speed-footer">
                                 <div class="wpc-ps-f-left">
                                     <div class="wpc-badge-container">
-                                        <p style="text-align: center;font-weight: bold;font-family: 'proxima_semibold';">Ooops! Seems we had some issues with testing your site! Please retry!</p>
+                                        <p style="text-align: center;font-weight: bold;font-family: 'proxima_semibold';"><?php echo esc_html__('Oops! We had some issues testing your site. Please retry!', WPS_IC_TEXTDOMAIN); ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -827,6 +853,231 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                             </div>
                         </div>
                     </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════
+                         V2 REDESIGN — World-Class Dashboard Cards
+                         (Identical markup to Advanced dashboard stats.php)
+                         ═══════════════════════════════════════════════════════════ -->
+                    <?php
+                    // Recompute GPS data for v2 section
+                    $v2_gps = get_option(WPS_IC_LITE_GPS);
+                    $v2_hasGPS = false;
+                    if (!empty($v2_gps) && !empty($v2_gps['result'])) {
+                        $v2_hasGPS = true;
+                        $v2_result = $v2_gps['result'];
+                        $v2_beforeGPS = $v2_result['desktop']['before']['performanceScore'] / 100;
+                        $v2_afterGPS = $v2_result['desktop']['after']['performanceScore'] / 100;
+                        $v2_mobileBeforeGPS = $v2_result['mobile']['before']['performanceScore'] / 100;
+                        $v2_mobileAfterGPS = $v2_result['mobile']['after']['performanceScore'] / 100;
+                        $v2_desktopDiff = $v2_result['desktop']['after']['performanceScore'] - $v2_result['desktop']['before']['performanceScore'];
+                        $v2_mobileDiff = $v2_result['mobile']['after']['performanceScore'] - $v2_result['mobile']['before']['performanceScore'];
+                        if ($v2_desktopDiff <= 0) { $v2_desktopDiff = esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN); } else { $v2_desktopDiff = '+' . $v2_desktopDiff; }
+                        if ($v2_mobileDiff <= 0) { $v2_mobileDiff = esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN); } else { $v2_mobileDiff = '+' . $v2_mobileDiff; }
+                        $v2_date = new DateTime();
+                        $v2_tz = get_option('timezone_string');
+                        if (!$v2_tz) {
+                            $v2_offset = get_option('gmt_offset');
+                            $v2_tz = $v2_offset == 0 ? 'UTC' : timezone_name_from_abbr('', $v2_offset * 3600, 0);
+                            if (!$v2_tz) $v2_tz = 'UTC';
+                        }
+                        try { $v2_date->setTimezone(new DateTimeZone($v2_tz)); } catch (Exception $e) { $v2_date->setTimezone(new DateTimeZone('UTC')); }
+                        $v2_date->setTimestamp($v2_gps['lastRun']);
+                        $v2_lastRun = $v2_date->format('F jS, Y \a\t g:i A');
+                    }
+                    ?>
+                    <div class="wpc-settings-content-inner wpc-v2-section">
+                        <!-- ─── Optimization Stats ─── -->
+                        <div class="wpc-v2-card">
+                            <div class="wpc-v2-card-header">
+                                <div class="wpc-v2-title">
+                                    <span class="wpc-v2-dot"></span>
+                                    <h3><?php echo esc_html__('Optimization Stats', WPS_IC_TEXTDOMAIN); ?></h3>
+                                </div>
+                                <?php echo $optimizationStatus; ?>
+                            </div>
+                            <?php
+                            $v2_testRunning = !empty(get_transient('wpc_initial_test')) || !empty(get_transient('wpc_test_running'));
+                            $v2_noTestData = empty(get_option(WPS_IC_TESTS));
+                            $v2_pageSizeNum = floatval(preg_replace('/[^0-9.]/', '', $optimizedStats['totalPageSizeAfter']));
+                            $v2_requestsNum = floatval(preg_replace('/[^0-9.]/', '', $optimizedStats['totalRequestsAfter']));
+                            $v2_hasZeroData = ($v2_pageSizeNum == 0 || $v2_requestsNum == 0);
+                            $v2_showSkeleton = ($v2_testRunning || $v2_noTestData || $v2_hasZeroData);
+
+                            if ($v2_showSkeleton) { ?>
+                            <div class="wpc-v2-stats-row wpc-v2-skeleton-row">
+                                <?php
+                                $v2_labels = array(esc_html__('Page Size', WPS_IC_TEXTDOMAIN), esc_html__('Requests', WPS_IC_TEXTDOMAIN), esc_html__('Server Speed', WPS_IC_TEXTDOMAIN));
+                                foreach ($v2_labels as $v2_label) { ?>
+                                    <div class="wpc-v2-stat-box wpc-v2-skeleton-box">
+                                        <span class="wpc-v2-stat-label"><?php echo $v2_label; ?></span>
+                                        <div class="wpc-v2-skeleton-value">
+                                            <div class="loading-icon"><div class="inner"></div></div>
+                                        </div>
+                                        <div class="wpc-v2-skeleton-badge">
+                                            <div class="wpc-ic-small-thick-placeholder" style="width:90px;"></div>
+                                        </div>
+                                        <div class="wpc-v2-stat-sep"></div>
+                                        <div class="wpc-v2-skeleton-before">
+                                            <div class="wpc-ic-small-thick-placeholder" style="width:70px;"></div>
+                                        </div>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <?php } else { ?>
+                            <div class="wpc-v2-stats-row">
+                                <?php
+                                $v2_stats = array(
+                                    array('label' => esc_html__('Page Size', WPS_IC_TEXTDOMAIN), 'value' => $optimizedStats['totalPageSizeAfter'], 'badge' => $optimizedStats['pageSizeSavingsPercentage'] . ' ' . esc_html__('Smaller', WPS_IC_TEXTDOMAIN), 'arrow' => 'down', 'before' => $optimizedStats['totalPageSizeBefore']),
+                                    array('label' => esc_html__('Requests', WPS_IC_TEXTDOMAIN), 'value' => $optimizedStats['totalRequestsAfter'], 'badge' => $optimizedStats['totalRequestsSavings'] . ' ' . esc_html__('Less', WPS_IC_TEXTDOMAIN), 'arrow' => 'down', 'before' => $optimizedStats['totalRequestsBefore']),
+                                    array('label' => esc_html__('Server Speed', WPS_IC_TEXTDOMAIN), 'value' => $optimizedStats['totalTtfbAfter'], 'badge' => $optimizedStats['ttfbLess'] . ' ' . esc_html__('Faster', WPS_IC_TEXTDOMAIN), 'arrow' => 'up', 'before' => $optimizedStats['totalTtfbBefore']),
+                                );
+                                $v2_i = 0;
+                                foreach ($v2_stats as $v2_stat) {
+                                    preg_match('/([0-9.]+)\s*([a-zA-Z%]*)/', $v2_stat['value'], $v2_m);
+                                    $v2_arrow = $v2_stat['arrow'] === 'down'
+                                        ? '<svg class="wpc-v2-badge-arrow" viewBox="0 0 448 512" fill="currentColor"><path d="M207.5 505l17 17 17-17 168-168 17-17-33.9-33.9-17 17-127 127 0-430.1-48 0 0 430.1-127-127-17-17-33.9 33.9 17 17 168 168z"/></svg>'
+                                        : '<svg class="wpc-v2-badge-arrow" viewBox="0 0 448 512" fill="currentColor"><path d="M241.4 7l-17-17-17 17-185 185 33.9 33.9 17-17 127-127 0 430.1 48 0 0-430.1 127 127 17 17 33.9-33.9-17-17-168-168z"/></svg>';
+                                    ?>
+                                    <div class="wpc-v2-stat-box">
+                                        <span class="wpc-v2-stat-label"><?php echo $v2_stat['label']; ?></span>
+                                        <div class="wpc-v2-stat-value">
+                                            <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/stats-speed.svg" class="wpc-v2-stat-icon" />
+                                            <span class="wpc-v2-stat-num"><?php echo isset($v2_m[1]) ? $v2_m[1] : $v2_stat['value']; ?></span>
+                                            <?php if (!empty($v2_m[2])) { ?><span class="wpc-v2-stat-unit"><?php echo $v2_m[2]; ?></span><?php } ?>
+                                        </div>
+                                        <div class="wpc-v2-badge">
+                                            <?php echo $v2_arrow; ?>
+                                            <span><?php echo $v2_stat['badge']; ?></span>
+                                        </div>
+                                        <div class="wpc-v2-stat-sep"></div>
+                                        <div class="wpc-v2-stat-before">
+                                            <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-before.svg" />
+                                            <span><?php echo esc_html__('was', WPS_IC_TEXTDOMAIN); ?> <?php echo $v2_stat['before']; ?></span>
+                                        </div>
+                                    </div>
+                                    <?php
+                                    $v2_i++;
+                                }
+                                ?>
+                            </div>
+                            <?php } ?>
+                        </div>
+
+                        <!-- ─── PageSpeed Score ─── -->
+                        <div class="wpc-v2-card">
+                            <div class="wpc-v2-card-header">
+                                <div class="wpc-v2-title">
+                                    <span class="wpc-v2-dot wpc-v2-dot-green"></span>
+                                    <h3><?php echo esc_html__('PageSpeed Score', WPS_IC_TEXTDOMAIN); ?></h3>
+                                </div>
+                                <?php if ($v2_hasGPS) { ?>
+                                <div class="wpc-v2-header-meta">
+                                    <span class="wpc-v2-meta-date"><?php echo $v2_lastRun; ?></span>
+                                    <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
+                                        <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                                        <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
+                                    </a>
+                                </div>
+                                <?php } ?>
+                            </div>
+                            <?php if ($v2_hasGPS) { ?>
+                            <div class="wpc-v2-scores">
+                                <?php
+                                $v2_devices = array(
+                                    array('name' => esc_html__('Mobile', WPS_IC_TEXTDOMAIN), 'icon' => WPS_IC_ASSETS . '/lite/images/mobile-icon.svg', 'before' => $v2_mobileBeforeGPS, 'after' => $v2_mobileAfterGPS, 'diff' => $v2_mobileDiff),
+                                    array('name' => esc_html__('Desktop', WPS_IC_TEXTDOMAIN), 'icon' => WPS_IC_ASSETS . '/lite/images/desktop-icon.svg', 'before' => $v2_beforeGPS, 'after' => $v2_afterGPS, 'diff' => $v2_desktopDiff),
+                                );
+                                $v2_di = 0;
+                                foreach ($v2_devices as $v2_dev) {
+                                    if ($v2_di > 0) echo '<div class="wpc-v2-score-sep"></div>';
+                                    $isPerfect = ($v2_dev['diff'] === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN));
+                                    $beforeScore = round($v2_dev['before'] * 100);
+                                    $afterScore = round($v2_dev['after'] * 100);
+                                    // SVG circle math
+                                    $smSize = 50; $smR = 21; $smStroke = 5; $smCirc = 2 * M_PI * $smR;
+                                    $lgSize = 50; $lgR = 21; $lgStroke = 5; $lgCirc = 2 * M_PI * $lgR;
+                                    $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
+                                    $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
+                                    // Color by score
+                                    $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
+                                    $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
+                                    $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');
+                                    $lgBg = $afterScore <= 55 ? '#fee2e2' : ($afterScore <= 89 ? '#fef3c7' : '#dcfce7');
+                                    ?>
+                                    <div class="wpc-v2-score-col">
+                                        <div class="wpc-v2-device-header">
+                                            <div class="wpc-v2-device-ico">
+                                                <img src="<?php echo $v2_dev['icon']; ?>" alt="<?php echo esc_attr($v2_dev['name']); ?>" />
+                                            </div>
+                                            <span class="wpc-v2-device-name"><?php echo $v2_dev['name']; ?></span>
+                                            <div class="wpc-v2-score-pill<?php echo $isPerfect ? ' wpc-v2-pill-perfect' : ''; ?>">
+                                                <?php if ($isPerfect) { ?>
+                                                    <svg class="wpc-v2-pill-icon" viewBox="0 0 576 512" fill="currentColor"><path d="M318.3 82.1c6.1-7 9.7-16.1 9.7-26.1 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 10 3.7 19.1 9.7 26.1L184.1 192.6 95 145.1c.7-2.9 1-5.9 1-9.1 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 20.2 15 36.9 34.4 39.6L86.8 375.7c7.6 41.8 44.1 72.3 86.6 72.3l229.2 0c42.5 0 79-30.4 86.6-72.3l36.4-200.1c19.5-2.7 34.4-19.4 34.4-39.6 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 3.1 .4 6.1 1 9.1l-89.1 47.5-73.6-110.4zM212 237.3l76-114 76 114c6.8 10.3 20.4 13.7 31.3 7.9l76.2-40.6-29.6 162.6c-3.5 19-20 32.8-39.4 32.8l-229.2 0c-19.3 0-35.9-13.8-39.4-32.8l-29.6-162.6 76.2 40.6c10.9 5.8 24.4 2.4 31.3-7.9z"/></svg>
+                                                <?php } else { ?>
+                                                    <svg class="wpc-v2-pill-icon" viewBox="0 0 576 512" fill="currentColor"><path d="M352 120c0-13.3 10.7-24 24-24l176 0c13.3 0 24 10.7 24 24l0 176c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-118.1-191 191c-9.4 9.4-24.6 9.4-33.9 0L192 257.9 41 409c-9.4 9.4-24.6 9.4-33.9 0S-2.3 384.4 7 375L175 207c9.4-9.4 24.6-9.4 33.9 0L320 318.1 494.1 144 376 144c-13.3 0-24-10.7-24-24z"/></svg>
+                                                <?php } ?>
+                                                <span><?php echo $isPerfect ? esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN) : $v2_dev['diff'] . ' ' . esc_html__('Points', WPS_IC_TEXTDOMAIN); ?></span>
+                                            </div>
+                                        </div>
+                                        <div class="wpc-v2-circles">
+                                            <div class="wpc-v2-circle wpc-v2-circle-sm">
+                                                <div class="wpc-v2-label-before">
+                                                    <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-before.svg" />
+                                                    <span><?php echo esc_html__('Before', WPS_IC_TEXTDOMAIN); ?></span>
+                                                </div>
+                                                <div class="wpc-v2-ring">
+                                                    <svg width="<?php echo $smSize; ?>" height="<?php echo $smSize; ?>" viewBox="0 0 <?php echo $smSize; ?> <?php echo $smSize; ?>">
+                                                        <circle cx="<?php echo $smSize/2; ?>" cy="<?php echo $smSize/2; ?>" r="<?php echo $smR; ?>" fill="none" stroke="<?php echo $smBg; ?>" stroke-width="<?php echo $smStroke; ?>"/>
+                                                        <circle cx="<?php echo $smSize/2; ?>" cy="<?php echo $smSize/2; ?>" r="<?php echo $smR; ?>" fill="none" stroke="<?php echo $smColor; ?>" stroke-width="<?php echo $smStroke; ?>" stroke-linecap="round" stroke-dasharray="<?php echo $smCirc; ?>" stroke-dashoffset="<?php echo $smOffset; ?>" transform="rotate(-90 <?php echo $smSize/2; ?> <?php echo $smSize/2; ?>)"/>
+                                                    </svg>
+                                                    <div class="wpc-v2-ring-text"><span><?php echo $beforeScore; ?></span></div>
+                                                </div>
+                                            </div>
+                                            <div class="wpc-v2-circle-arrow">
+                                                <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/small-arrow.svg" />
+                                            </div>
+                                            <div class="wpc-v2-circle wpc-v2-circle-lg">
+                                                <div class="wpc-v2-label-after">
+                                                    <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-after.svg" />
+                                                    <span><?php echo esc_html__('After', WPS_IC_TEXTDOMAIN); ?></span>
+                                                </div>
+                                                <div class="wpc-v2-ring wpc-v2-ring-hero">
+                                                    <svg width="<?php echo $lgSize; ?>" height="<?php echo $lgSize; ?>" viewBox="0 0 <?php echo $lgSize; ?> <?php echo $lgSize; ?>">
+                                                        <circle cx="<?php echo $lgSize/2; ?>" cy="<?php echo $lgSize/2; ?>" r="<?php echo $lgR; ?>" fill="none" stroke="<?php echo $lgBg; ?>" stroke-width="<?php echo $lgStroke; ?>"/>
+                                                        <circle cx="<?php echo $lgSize/2; ?>" cy="<?php echo $lgSize/2; ?>" r="<?php echo $lgR; ?>" fill="none" stroke="<?php echo $lgColor; ?>" stroke-width="<?php echo $lgStroke; ?>" stroke-linecap="round" stroke-dasharray="<?php echo $lgCirc; ?>" stroke-dashoffset="<?php echo $lgOffset; ?>" transform="rotate(-90 <?php echo $lgSize/2; ?> <?php echo $lgSize/2; ?>)"/>
+                                                    </svg>
+                                                    <div class="wpc-v2-ring-text"><span><?php echo $afterScore; ?></span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php
+                                    $v2_di++;
+                                }
+                                ?>
+                            </div>
+                            <?php if (!empty($option['version']) && $option['version'] != 'lite') { ?>
+                            <div class="wpc-v2-score-footer">
+                                <div class="wpc-v2-footer-msg">
+                                    <img src="<?php echo WPS_IC_ASSETS . '/lite/images/wohoo.png'; ?>" alt="" />
+                                    <?php echo __('<strong>Woohoo!</strong> Your Website is Now Loading Faster!', WPS_IC_TEXTDOMAIN); ?>
+                                </div>
+                                <div class="wpc-v2-footer-pill">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" style="vertical-align:-1px;fill:currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z"/></svg>
+                                    <span><?php echo esc_html__('Optimized', WPS_IC_TEXTDOMAIN); ?></span>
+                                </div>
+                            </div>
+                            <?php } ?>
+                            <?php } else { ?>
+                            <div class="wpc-v2-scores-loading">
+                                <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
+                                <span><?php echo esc_html__('Analyzing performance...', WPS_IC_TEXTDOMAIN); ?></span>
+                            </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                    <!-- ═══ End V2 Redesign ═══ -->
+
                     <?php
                     if (empty($option) || (!empty($option['version']) && $option['version'] == 'lite')) {
                         ?>
@@ -835,19 +1086,18 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <div class="wpc-box-content">
                                     <div class="wpc-box-content-inner">
                                         <div class="wpc-box-content-icon">
-                                            <img src="<?php echo WPS_IC_ASSETS . '/v4/images/wpc-logo.svg'; ?>" alt="Go Pro for Portal Access"/>
+                                            <img src="<?php echo WPS_IC_ASSETS . '/v4/images/wpc-logo.svg'; ?>" alt="<?php echo esc_attr__('Go PRO for Portal Access', WPS_IC_TEXTDOMAIN); ?>"/>
                                         </div>
                                         <div class="wpc-box-content-text">
-                                            <h3>Go PRO for Portal Access</h3>
-                                            <p>Get image optimization access, CDN Delivery, remote configuration and
-                                                more by creating an account!</p>
+                                            <h3><?php echo esc_html__('Go PRO for Portal Access', WPS_IC_TEXTDOMAIN); ?></h3>
+                                            <p><?php echo esc_html__('Get image optimization access, CDN Delivery, remote configuration and more by creating an account!', WPS_IC_TEXTDOMAIN); ?></p>
                                         </div>
                                         <div class="wpc-box-content-button">
                                             <a href="#" class="wpc-add-access-key-btn">
                                                 <div>
-                                                    <img src="<?php echo WPS_IC_ASSETS . '/lite/images/checkbox-link.svg'; ?>"/>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 512 512" style="vertical-align:-1px;fill:currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z"/></svg>
                                                 </div>
-                                                <div>Add Access Key</div>
+                                                <div><?php echo esc_html__('Add Access Key', WPS_IC_TEXTDOMAIN); ?></div>
                                             </a>
                                         </div>
                                     </div>

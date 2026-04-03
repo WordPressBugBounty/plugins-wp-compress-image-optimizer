@@ -1,4 +1,5 @@
 <?php
+define('WPS_IC_TEXTDOMAIN', 'wp-compress-image-optimizer');
 
 define('WPS_IC_MAXWIDTH', 3000);
 define('WPS_IC_QUEUE_EXECUTION_TIME', 360);

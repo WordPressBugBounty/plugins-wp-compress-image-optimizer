@@ -244,7 +244,7 @@ class wps_criticalCss
         $args = [
             'url'     => $url . '?criticalCombine=true&testCompliant=true',
             'uuid'    => $uuid,
-            'version' => '6.60.60',
+            'version' => wps_ic::$version,
             'async'   => 'false',
             'dbg'     => 'true',
             'hash'    => time() . mt_rand(100, 9999),
@@ -613,7 +613,7 @@ class wps_criticalCss
 
     public function generateCriticalAjax()
     {
-        $args = ['url' => urldecode($this->serverRequest), 'version' => '6.60.60'];
+        $args = ['url' => urldecode($this->serverRequest), 'version' => wps_ic::$version];
 
         $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 

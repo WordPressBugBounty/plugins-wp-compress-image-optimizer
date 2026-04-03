@@ -37,6 +37,26 @@ class wps_ic_ajax extends wps_ic
             self::$cacheIntegrations = new wps_ic_cache_integrations();
             self::$settings = get_option(WPS_IC_SETTINGS);
             self::$options = get_option(WPS_IC_OPTIONS);
+
+            // Sync live-cdn from actual state: CF CDN or any CDN file type on
+            if (empty(self::$settings['live-cdn']) || self::$settings['live-cdn'] != '1') {
+                $cfSettings = get_option(WPS_IC_CF);
+                if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
+                    self::$settings['live-cdn'] = '1';
+                } else {
+                    $cdnOn = false;
+                    if (!empty(self::$settings['serve'])) {
+                        foreach (self::$settings['serve'] as $v) {
+                            if ($v == '1') { $cdnOn = true; break; }
+                        }
+                    }
+                    if (!$cdnOn && (!empty(self::$settings['css']) && self::$settings['css'] == '1')) $cdnOn = true;
+                    if (!$cdnOn && (!empty(self::$settings['js']) && self::$settings['js'] == '1')) $cdnOn = true;
+                    if (!$cdnOn && (!empty(self::$settings['fonts']) && self::$settings['fonts'] == '1')) $cdnOn = true;
+                    if ($cdnOn) self::$settings['live-cdn'] = '1';
+                }
+            }
+
             self::$apikey = parent::$api_key;
             self::$count_thumbs = count(get_intermediate_image_sizes());
             self::$local = parent::$local;
@@ -44,14 +64,17 @@ class wps_ic_ajax extends wps_ic
             self::$logo_uncompressed = WPS_IC_URI . 'assets/images/legacy/logo-not-compressed.svg';
             self::$logo_excluded = WPS_IC_URI . 'assets/images/legacy/logo-excluded.svg';
 
+            // GUI switch — must be available even without API key (lite CF banner uses it)
+            $this->add_ajax('wpsChangeGui');
+
             if (!empty(parent::$api_key)) {
                 // Pull Stats
-                $this->add_ajax('wpsChangeGui');
                 $this->add_ajax('wps_fetchInitialTest');
                 $this->add_ajax('wps_ic_pull_stats');
 
                 // Scan Fonts
                 $this->add_ajax('wpsRemoveFont');
+                $this->add_ajax('wpsScanFonts');
 
                 // Cloudflare
                 $this->add_ajax('wpc_ic_checkCFToken');
@@ -97,6 +120,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_get_default_settings');
 
                 $this->add_ajax('wps_ic_ajax_v2_checkbox');
+                $this->add_ajax('wps_ic_purge_after_save');
                 $this->add_ajax('wps_ic_ajax_checkbox');
 
                 $this->add_ajax('wps_ic_purge_cdn');
@@ -193,9 +217,14 @@ class wps_ic_ajax extends wps_ic
         $siteUrl = site_url();
         $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
 
+        // Remove CDN bypass rule before disconnecting
+        $cfsdk = new WPC_CloudflareAPI($token);
+        $cfsdk->removeCdnBypassRule($zoneInput);
+
         $c = $requests->GET(WPS_IC_KEYSURL, ['action' => 'disconnectCF', 'token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true)], ['timeout' => 120]);
 
         delete_option(WPS_IC_CF);
+        delete_transient('wpc_cdn_backup');
         wp_send_json_success();
     }
 
@@ -346,6 +375,11 @@ class wps_ic_ajax extends wps_ic
             //self::$options['ic_custom_cname'] = $data['cfName'];
             update_option(WPS_IC_SETTINGS, self::$options);
 
+            // Ensure CDN bypass rule + IP whitelist exists
+            $cfsdk = new WPC_CloudflareAPI($token);
+            $cfsdk->addCdnBypassRule($zoneInput);
+            $cfsdk->whitelistIPs($zoneInput);
+
             wp_send_json_success('cf-refreshed-successfully');
         }
 
@@ -383,6 +417,12 @@ class wps_ic_ajax extends wps_ic
             $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
             update_option(WPS_IC_CF, $cf);
             update_option(WPS_IC_CF_CNAME, $cfCname);
+
+            // Create CDN bypass rule + IP whitelist for country-block protection
+            $cfsdk = new WPC_CloudflareAPI($token);
+            $cfsdk->addCdnBypassRule($zoneInput);
+            $cfsdk->whitelistIPs($zoneInput);
+
             wp_send_json_success('cf-connected-successfully');
         }
 
@@ -540,10 +580,10 @@ class wps_ic_ajax extends wps_ic
         $requests = new wps_ic_requests();
 
         if (!empty($home)) {
-            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
             $call = $requests->GET(self::$CRITICAL_URL_HOME, $args, ['timeout' => 2, 'blocking' => false]);
         } else {
-            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => $realUrl . '?criticalCombine=true&testCompliant=true', 'home' => $home_url, 'version' => self::$version, 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
             $call = $requests->GET(self::$API_URL, $args, ['timeout' => 3, 'blocking' => false]);
         }
 
@@ -895,9 +935,17 @@ class wps_ic_ajax extends wps_ic
             $wpc_excludes[$setting_name . '_exclude_wp'] = $exclude_wp;
             $wpc_excludes[$setting_name . '_exclude_third'] = $exclude_third;
 
-            if ($setting_name == 'lastLoadScript' && isset($_POST['deferScript'])) {
-                //this function was made for excludes popup having only 1 textfield, so this is added for defer
-                $defer = $_POST['deferScript'];
+            // JS Delay popup saves both tabs at once: excludes + configure (lastLoadScript + deferScript)
+            if (isset($_POST['lastLoadScript'])) {
+                $lastLoad = sanitize_textarea_field($_POST['lastLoadScript']);
+                $lastLoad = rtrim($lastLoad, "\n");
+                $lastLoad = explode("\n", $lastLoad);
+                $lastLoad = array_filter($lastLoad, 'trim');
+                $wpc_excludes['lastLoadScript'] = $lastLoad;
+            }
+
+            if (isset($_POST['deferScript'])) {
+                $defer = sanitize_textarea_field($_POST['deferScript']);
                 $defer = rtrim($defer, "\n");
                 $defer = explode("\n", $defer);
                 $defer = array_filter($defer, 'trim');
@@ -1008,34 +1056,135 @@ class wps_ic_ajax extends wps_ic
 
         $optionName = explode(',', $optionName);
 
-        if (is_array($optionName) && count($optionName) > 1) {
+        // CF settings are stored in WPS_IC_CF['settings'], not WPS_IC_SETTINGS
+        if (is_array($optionName) && count($optionName) > 1 && $optionName[0] === 'cf') {
+            $cf = get_option(WPS_IC_CF);
+            if (!empty($cf)) {
+                if (!isset($cf['settings'])) {
+                    $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+                }
+                $newValue = $cf['settings'][$optionName[1]] = $optionValue;
+                update_option(WPS_IC_CF, $cf);
+            } else {
+                $newValue = $optionValue;
+            }
+        } elseif (is_array($optionName) && count($optionName) > 1) {
             $newValue = $options[$optionName[0]][$optionName[1]] = $optionValue;
+
+            // Recalculate live-cdn when any serve option changes
+            if ($optionName[0] === 'serve') {
+                $cdnOn = false;
+                if (isset($options['serve'])) {
+                    foreach ($options['serve'] as $v) {
+                        if ($v == '1') { $cdnOn = true; break; }
+                    }
+                }
+                if (!$cdnOn && !empty($options['css']) && $options['css'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($options['js']) && $options['js'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($options['fonts']) && $options['fonts'] == '1') $cdnOn = true;
+                $options['live-cdn'] = $cdnOn ? '1' : '0';
+            }
+
+            update_option(WPS_IC_SETTINGS, $options);
         } else {
             $optionName = $optionName[0];
             $newValue = $options[$optionName] = $optionValue;
-        }
 
-        update_option(WPS_IC_SETTINGS, $options);
+            // Auto-scan homepage when Local font hosting is first enabled
+            if ($optionName === 'replace-fonts' && $newValue === 'local') {
+                $fontsMap = get_option(WPS_IC_FONTS_MAP);
+                if (empty($fontsMap)) {
+                    $fonts = new wps_ic_fonts();
+                    $response = $fonts->callAPI(site_url());
+                    $found = $fonts->scanForFonts($response);
+                    $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+                    if ($hasGoogleFonts) {
+                        $fonts->readGoogleStylesheet($found);
+                    }
+                }
+            }
 
-        self::purgeBreeze();
-        self::purge_cache_files();
+            // Recalculate live-cdn when css, js, or fonts changes
+            if (in_array($optionName, ['css', 'js', 'fonts'])) {
+                $cdnOn = false;
+                if (!empty($options['serve'])) {
+                    foreach ($options['serve'] as $v) {
+                        if ($v == '1') { $cdnOn = true; break; }
+                    }
+                }
+                if (!$cdnOn && !empty($options['css']) && $options['css'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($options['js']) && $options['js'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($options['fonts']) && $options['fonts'] == '1') $cdnOn = true;
+                $options['live-cdn'] = $cdnOn ? '1' : '0';
+            }
 
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-
-        // Lite Speed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-
-        // HummingBird
-        if (defined('WPHB_VERSION')) {
-            do_action('wphb_clear_page_cache');
+            update_option(WPS_IC_SETTINGS, $options);
         }
 
         wp_send_json_success(['newValue' => $newValue, 'optionName' => $optionName]);
+    }
+
+    /**
+     * Purge all caches — called as separate AJAX request after settings are saved.
+     */
+    public function wps_ic_purge_after_save()
+    {
+        if (!current_user_can('manage_wpc_settings') || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        // Settings that affect cached HTML output
+        $htmlPurgeKeys = [
+            // Fonts
+            'replace-fonts', 'font-display', 'icon-font-display',
+            'preload-crit-fonts', 'fontawesome-lazy',
+            // CDN file types
+            'css', 'js', 'fonts', 'lazy',
+            'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
+            // Image optimization (changes CDN URL parameters in HTML)
+            'generate_adaptive', 'generate_webp', 'retina', 'background-sizing',
+            'qualityLevel',
+            // Performance
+            'critical,css', 'delay,js',
+            'minify,html', 'minify,css', 'minify,js',
+            // CF (changes CDN routing/URLs)
+            'cf,cdn', 'cf,assets',
+        ];
+        // Settings that affect Critical CSS content (CSS-only changes)
+        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css'];
+
+        $changedKeys = !empty($_POST['changed_keys']) ? array_map('sanitize_text_field', (array) $_POST['changed_keys']) : [];
+
+        $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
+        $needsCritPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $critPurgeKeys));
+
+        if ($needsHtmlPurge) {
+            // Purge WPC HTML cache + bump ICV hashes
+            delete_transient('wps_ic_css_cache');
+            delete_option('wps_ic_modified_css_cache');
+            delete_option('wps_ic_css_combined_cache');
+            $cache = new wps_ic_cache_integrations();
+            $cache::purgeAll(false, true, false, false, true);
+            $cache::purgeCombinedFiles();
+
+            // Purge third-party caches
+            self::purgeBreeze();
+            self::purge_cache_files();
+            if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+            if (defined('LSCWP_V')) do_action('litespeed_purge_all');
+            if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
+        }
+
+        if ($needsCritPurge) {
+            // Purge WPC Critical CSS
+            global $wpdb;
+            $options_table = $wpdb->options;
+            $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'));
+            if (!isset($cache)) $cache = new wps_ic_cache_integrations();
+            $cache::purgeCriticalFiles();
+        }
+
+        wp_send_json_success();
     }
 
     /**
@@ -1424,6 +1573,30 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success();
     }
 
+
+    public function wpsScanFonts()
+    {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'], 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $url = sanitize_url($_POST['scanUrl']);
+        if (empty($url)) {
+            wp_send_json_error('No URL provided.');
+        }
+
+        $fonts = new wps_ic_fonts();
+        $response = $fonts->callAPI($url);
+        $found = $fonts->scanForFonts($response);
+
+        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+
+        if ($hasGoogleFonts) {
+            $fonts->readGoogleStylesheet($found);
+        }
+
+        wp_send_json_success(['found' => $hasGoogleFonts]);
+    }
 
     public function wpsChangeGui()
     {
@@ -2720,7 +2893,7 @@ class wps_ic_ajax extends wps_ic
         $html .= '<div class="wps-empty-row">&nbsp;</div>';
         $html .= '</div>';
         $html .= '</div>';
-        $html .= '<a href="#" class="btn btn-primary btn-active btn-save btn-exclude-pages-save">Save</a>';
+        $html .= '<a href="#" class="btn btn-primary btn-active btn-save btn-exclude-pages-save">' . esc_html__('Save', WPS_IC_TEXTDOMAIN) . '</a>';
         $html .= '</form>';
         $html .= '</div>';
 
@@ -2811,7 +2984,7 @@ class wps_ic_ajax extends wps_ic
             $current_excludes = '';
         }
 
-        $setting_name = ['cdn' => 'CDN', 'adaptive' => 'Adaptive Images', 'advanced_cache' => 'Advanced Cache', 'critical_css' => 'Critical CSS', 'delay_js' => 'Delay JS'];
+        $setting_name = ['cdn' => esc_html__('CDN', WPS_IC_TEXTDOMAIN), 'adaptive' => esc_html__('Adaptive Images', WPS_IC_TEXTDOMAIN), 'advanced_cache' => esc_html__('Advanced Cache', WPS_IC_TEXTDOMAIN), 'critical_css' => esc_html__('Critical CSS', WPS_IC_TEXTDOMAIN), 'delay_js' => esc_html__('JavaScript', WPS_IC_TEXTDOMAIN), 'delay_js_v2' => esc_html__('JavaScript', WPS_IC_TEXTDOMAIN)];
 
         // Start building the HTML
         $html = '<div class="cdn-popup-loading" style="display: none;">';
@@ -2829,32 +3002,32 @@ class wps_ic_ajax extends wps_ic
         $html .= '<img src="' . WPS_IC_URI . 'assets/images/icon-exclude-from-cdn.svg"/>';
         $html .= '</div>';
         $html .= '<div class="inline-heading-text">';
-        $html .= '<h3>Exclude from ' . $setting_name[$setting] . '</h3>';
-        $html .= '<p>Add excluded files or paths as desired as we use wildcard searching.</p>';
+        $html .= '<h3>' . sprintf(esc_html__('Exclude from %s', WPS_IC_TEXTDOMAIN), $setting_name[$setting]) . '</h3>';
+        $html .= '<p>' . esc_html__('List files or paths to exclude. Partial names work too — we match automatically.', WPS_IC_TEXTDOMAIN) . '</p>';
         $html .= '</div>';
         $html .= '</div>';
         $html .= '</div>';
         $html .= '<form method="post" class="wpc-save-popup-data" action="#">';
         $html .= '<div class="cdn-popup-content-full">';
         $html .= '<div class="cdn-popup-content-inner">';
-        $html .= '<textarea name="exclude-pages" data-setting-name="' . $setting . '" data-page-id="' . $id . '" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg">';
+        $html .= '<textarea name="exclude-pages" data-setting-name="' . $setting . '" data-page-id="' . $id . '" class="exclude-list-textarea-value" placeholder="' . esc_attr__('e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg', WPS_IC_TEXTDOMAIN) . '">';
         $html .= $current_excludes;
         $html .= '</textarea>';
         $html .= '<div class="wps-empty-row">&nbsp;</div>';
         $html .= '</div>';
         $html .= '</div>';
-        $html .= '<div class="wps-example-list">';
-        $html .= '<div>';
-        $html .= '<h3>Examples:</h3>';
-        $html .= '<div>';
-        $html .= '<p>.svg would exclude all assets with that extension</p>';
-        $html .= '<p>imagename would exclude any file with that name</p>';
-        $html .= '<p>/myplugin/image.jpg would exclude that specific file</p>';
-        $html .= '<p>/wp-content/myplugin/ would exclude everything using that path</p>';
+        $html .= '<a href="#" class="btn btn-primary btn-active btn-save btn-exclude-pages-save">' . esc_html__('Save', WPS_IC_TEXTDOMAIN) . '</a>';
+        $html .= '<div class="wps-example-section">';
+        $html .= '<button type="button" class="wps-example-toggle-btn">' . esc_html__('See Examples', WPS_IC_TEXTDOMAIN) . ' <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>';
+        $html .= '<div class="wps-example-list" style="display:none;">';
+        $html .= '<div><div>';
+        $html .= '<p>' . esc_html__('.svg would exclude all assets with that extension', WPS_IC_TEXTDOMAIN) . '</p>';
+        $html .= '<p>' . esc_html__('imagename would exclude any file with that name', WPS_IC_TEXTDOMAIN) . '</p>';
+        $html .= '<p>' . esc_html__('/myplugin/image.jpg would exclude that specific file', WPS_IC_TEXTDOMAIN) . '</p>';
+        $html .= '<p>' . esc_html__('/wp-content/myplugin/ would exclude everything using that path', WPS_IC_TEXTDOMAIN) . '</p>';
+        $html .= '</div></div>';
         $html .= '</div>';
         $html .= '</div>';
-        $html .= '</div>';
-        $html .= '<a href="#" class="btn btn-primary btn-active btn-save btn-exclude-pages-save">Save</a>';
         $html .= '</form>';
         $html .= '</div>';
 
@@ -3140,23 +3313,10 @@ class wps_ic_ajax extends wps_ic
         $url_key_class = new wps_ic_url_key();
         $url_key = $url_key_class->setup($url);
 
-        // Purge Cache
+        // Only purge HTML cache for the tested page — preserves CDN cache,
+        // Critical CSS, and CSS/JS hashes so visitors aren't affected
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll($url_key, false, false, false);
-        $cache::purgeCriticalFiles($url_key);
         $cache::purgeCacheFiles($url_key);
-
-        // Scan for Fonts
-        delete_option(WPS_IC_FONTS_MAP);
-
-        // Scan Home Page
-        $fonts = new wps_ic_fonts();
-        $response = $fonts->callAPI($url_key);
-        $found = $fonts->scanForFonts($response);
-
-        if (!empty($found)) {
-            $findFontLinks = $fonts->readGoogleStylesheet($found);
-        }
 
         $requests = new wps_ic_requests();
 
@@ -3181,7 +3341,7 @@ class wps_ic_ajax extends wps_ic
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
         // Test
-        $args = ['url' => home_url(), 'version' => '6.60.60', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+        $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
         $response = $requests->POST(self::$PAGESPEED_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
         $body = wp_remote_retrieve_body($response);

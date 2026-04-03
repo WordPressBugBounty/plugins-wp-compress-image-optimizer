@@ -195,6 +195,110 @@ class WPC_CloudflareAPI
     }
 
     /**
+     * Fetch the CDN bypass token from WPC API.
+     * Auto-generated server-side if it doesn't exist yet.
+     *
+     * @return string|false The 64-char hex token, or false on failure
+     */
+    public function getCdnBypassToken() {
+        $options = get_option(WPS_IC_OPTIONS);
+        if (empty($options['api_key'])) {
+            error_log('[WPC] getCdnBypassToken: no api_key in options');
+            return false;
+        }
+
+        $response = wp_remote_get(
+            WPS_IC_KEYSURL . '?action=get_cf_bypass_token&apikey=' . $options['api_key'],
+            ['timeout' => 15, 'sslverify' => false]
+        );
+
+        if (is_wp_error($response)) {
+            error_log('[WPC] getCdnBypassToken: wp_remote_get error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($body['success']) || empty($body['data']['token'])) {
+            error_log('[WPC] getCdnBypassToken: unexpected response: ' . wp_remote_retrieve_body($response));
+            return false;
+        }
+
+        return $body['data']['token'];
+    }
+
+    /**
+     * Create a WAF custom rule that skips country-block for CDN origin fetches.
+     * Safe to call multiple times — checks for existing rule first.
+     * Appends to existing rules, never replaces.
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|true|false Result from CF API, true if already exists, false on failure
+     */
+    public function addCdnBypassRule($zoneId) {
+        $token = $this->getCdnBypassToken();
+        if (!$token) {
+            error_log('[WPC] addCdnBypassRule: failed to get bypass token');
+            return false;
+        }
+
+        $url = 'zones/' . $zoneId . '/firewall/rules';
+
+        // Check if bypass rule already exists
+        $existing = $this->getRequest($url);
+        if (!is_wp_error($existing) && !empty($existing['result'])) {
+            foreach ($existing['result'] as $rule) {
+                if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]') {
+                    return true;
+                }
+            }
+        }
+
+        $expression = 'any(http.request.headers["x-origin-auth"][*] == "' . $token . '")';
+
+        // Create using legacy Firewall Rules API — works with "Firewall Services > Edit" permission
+        // Bypass action skips all security features, priority 1 ensures it evaluates first
+        $result = $this->postRequest($url, [[
+            'action'      => 'bypass',
+            'description' => 'Optimizer Bypass [DO NOT EDIT]',
+            'priority'    => 1,
+            'products'    => ['zoneLockdown', 'uaBlock', 'bic', 'hot', 'securityLevel', 'rateLimit', 'waf'],
+            'filter'      => [
+                'expression' => $expression,
+                'paused'     => false,
+            ],
+        ]]);
+
+        if (is_wp_error($result)) {
+            error_log('[WPC] addCdnBypassRule CF API error: ' . $result->get_error_message());
+            return false;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Remove the CDN bypass WAF rule on CF disconnect.
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|false Result from CF API or false on failure
+     */
+    public function removeCdnBypassRule($zoneId) {
+        $url = 'zones/' . $zoneId . '/firewall/rules';
+        $existing = $this->getRequest($url);
+
+        if (is_wp_error($existing) || empty($existing['result'])) return false;
+
+        foreach ($existing['result'] as $rule) {
+            if (!empty($rule['description']) && $rule['description'] === 'Optimizer Bypass [DO NOT EDIT]' && !empty($rule['id'])) {
+                return $this->deleteRequest($url . '/' . $rule['id']);
+            }
+        }
+
+        return false;
+    }
+
+
+    /**
      * Whitelist IPs in the Cloudflare Firewall
      *
      * @param string $zoneId Cloudflare Zone ID
@@ -204,7 +308,8 @@ class WPC_CloudflareAPI
     public function whitelistIPs($zoneId)
     {
         if (!file_exists(WPC_API_WHITELIST)) {
-            die("Error: File not found - WPC_API_WHITELIST");
+            error_log('[WPC] whitelistIPs: whitelist-ip.txt not found');
+            return false;
         }
 
         $errors = false;

@@ -1,0 +1,1457 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Responsive Overrides
+// ═══════════════════════════════════════════════════════════════════════════
+// 4 breakpoints: 1024px, 768px, 480px, 375px
+// Organized by component within each breakpoint
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+// ─── V2 Cards Stack (≤1400px) ──────────────────────────────────────────────
+// Full sidebar (220px) + two cards side by side is too tight below ~1400px
+@media screen and (max-width: 1400px) {
+  .wpc-advanced-settings-container-v4 .wpc-v2-section {
+    flex-direction: column;
+  }
+}
+
+
+// ─── Small Desktop / iPad Pro (≤1024px) ──────────────────────────────────
+@media screen and (max-width: 1024px) {
+
+  // Layout
+  .wpc-advanced-settings-container-v4 {
+    padding: @space-base;
+  }
+
+  // Sidebar nav — collapse to icon-only with centered icons
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list {
+    width: 55px;
+    min-width: 55px;
+    overflow: visible; // allow tooltips to escape
+    padding-right: 0;
+    z-index: 10; // above content area so CSS tooltips overlap
+    position: relative;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a {
+    justify-content: center;
+    padding: @space-md;
+    gap: 0;
+    position: relative;
+  }
+
+  // Title → CSS tooltip on hover
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a .wpc-title {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: @color-text-dark;
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: @font-size-xs;
+    padding: 6px 12px;
+    border-radius: @radius-base;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+    // Arrow
+    &::before {
+      content: '';
+      position: absolute;
+      right: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 5px solid transparent;
+      border-right-color: @color-text-dark;
+    }
+  }
+
+  // Show tooltip on hover (inactive tabs only)
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a:not(.active):hover .wpc-title {
+    opacity: 1;
+    transition: opacity 0.15s ease;
+  }
+
+  // Show tooltip briefly on click via JS-added class
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a.wpc-tooltip-flash .wpc-title {
+    opacity: 1;
+    transition: opacity 0.15s ease;
+  }
+
+  // Active tab — no hover tooltip (JS flash handles it)
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a.active .wpc-title {
+    opacity: 0;
+  }
+
+  // Dashboard inner layout
+  .wpc-advanced-settings-container-v4 .wpc-settings-flex-body {
+    flex-direction: column;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-settings-sidebar {
+    width: 100%;
+  }
+
+  // Stats
+  .wpc-advanced-settings-container-v4 .inner-flex {
+    flex-direction: column;
+    text-align: center;
+  }
+
+}
+
+
+// ─── Tablet (≤768px) ─────────────────────────────────────────────────────
+@media screen and (max-width: 768px) {
+
+  // Hide dev tools nav on tablet/mobile
+  .wpc-advanced-settings-container-v4 .wpc-dev-tools-nav {
+    display: none !important; // FORCED: dev tools are desktop-only
+  }
+
+  // Remove transform that creates stacking context — breaks position:fixed on drawer
+  .wpc-advanced-settings-container-v4 .wpc-settings-body,
+  .wpc-advanced-settings-container-v4 .wpc-settings-body.wpc-tabs-ready {
+    transform: none;
+  }
+
+  // Layout — stack sidebar + content vertically
+  .wpc-advanced-settings-container-v4 .wpc-settings-tabs {
+    flex-direction: column;
+  }
+
+  // Tab content — stretch full width now that sidebar is a drawer
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-content {
+    width: 100%;
+  }
+
+  // ─── Sidebar → Full-screen Drawer (hamburger menu) ────────────────────
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    width: 100vw;
+    min-height: 100vh;
+    min-height: 100dvh; // dynamic viewport height — accounts for mobile browser chrome
+    max-width: 100vw;
+    min-width: 0; // reset 1024px min-width
+    z-index: 100000; // above WP admin bar (z-index: 99999)
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: @color-white;
+    padding: 0 0 20px 0;
+    box-shadow: none;
+  }
+
+  // UL stays vertical (not horizontal)
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list ul {
+    flex-direction: column;
+    gap: 2px;
+    padding: @space-sm;
+    overflow: visible;
+  }
+
+  // Tab links — full width, 44px tap target, labels visible, LEFT-aligned
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a {
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-family: @font-regular;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-direction: row;
+    gap: 12px;
+    border-radius: @radius-md;
+    white-space: nowrap;
+    color: @color-text-secondary;
+
+    // Restore labels hidden at 1024px — in drawer mode they must be visible
+    .wpc-title {
+      position: static;
+      opacity: 1;
+      pointer-events: auto;
+      transform: none;
+      background: none;
+      color: inherit;
+      padding: 0;
+      box-shadow: none;
+      font-family: inherit;
+      font-size: inherit;
+
+      &::before {
+        display: none;
+      }
+    }
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a:hover {
+    background: @color-bg-frost;
+    transform: none;
+  }
+
+  // Active state — dark pill with glassmorphism (matches desktop sidebar)
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a.active {
+    background: @color-text-dark;
+    color: @color-white;
+    font-family: @font-semibold;
+    border-radius: @radius-lg;
+    border-left: none;
+    transform: none;
+
+    .wpc-title {
+      opacity: 1; // override 1024px tooltip-hide rule
+      color: @color-white;
+    }
+
+    .wpc-icon-container {
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: @radius-base;
+    }
+
+    .wpc-icon img {
+      opacity: 1;
+      filter: grayscale(0%) brightness(0) invert(1); // white icon
+    }
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-settings-tab-list li a.active::before {
+    display: none;
+    content: none;
+  }
+
+  // Drawer header — logo + close button (injected by JS)
+  #wpc-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid @color-border;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+
+    .wpc-drawer-logo {
+      display: flex;
+      align-items: center;
+
+      img {
+        height: 28px;
+        width: auto;
+      }
+
+      span {
+        font-family: @font-bold;
+        font-size: 16px;
+        color: @color-text-dark;
+      }
+    }
+  }
+
+  #wpc-drawer-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    cursor: pointer;
+    color: @color-gray-dim;
+    transition: @transition-fast;
+    flex-shrink: 0;
+
+    &:hover {
+      background: @color-bg-frost;
+      color: @color-text-dark;
+      border-color: @color-border-medium;
+    }
+  }
+
+  // Hamburger button (injected by JS into .wpc-header)
+  #wpc-mobile-menu-toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 44px;
+    height: 44px;
+    padding: 13px 11px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: auto;
+
+    span {
+      display: block;
+      width: 100%;
+      height: 2px;
+      background: @color-text-dark;
+      border-radius: @radius-full;
+      transition: @transition-fast;
+    }
+  }
+
+  // Backdrop overlay — must sit below drawer (100000) but above everything else
+  #wpc-mobile-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99999;
+  }
+
+  // Open state — JS toggles .wpc-mobile-menu-open
+  .wpc-advanced-settings-container-v4.wpc-mobile-menu-open {
+    #wpc-mobile-backdrop {
+      display: block;
+    }
+
+    .wpc-settings-tab-list {
+      transform: translateX(0);
+      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  // ─── Drawer Footer (divider + Simple Settings) ────────────────────────
+  #wpc-drawer-footer {
+    padding: 0 @space-sm;
+
+    .wpc-drawer-divider {
+      height: 1px;
+      background: @color-border;
+      margin: @space-sm 0 2px;
+    }
+
+    // Match tab link styling exactly
+    .wpc-drawer-simple-link {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      padding: 12px 16px;
+      min-height: 48px;
+      font-family: @font-regular;
+      font-size: 15px;
+      color: @color-text-secondary;
+      text-decoration: none;
+      border-radius: @radius-md;
+      transition: @transition-fast;
+
+      &:hover {
+        background: @color-bg-frost;
+      }
+
+      .wpc-icon-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+      }
+
+      .wpc-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+
+        svg {
+          width: 20px;
+          height: 20px;
+          filter: brightness(0);
+          opacity: 0.4;
+        }
+      }
+    }
+  }
+
+  // ─── End Drawer ────────────────────────────────────────────────────────
+
+  // Header — single row: [Logo] [≡] — lock at 62px to prevent CLS
+  .wpc-advanced-settings-container-v4 .wpc-header,
+  .wpc-lite-settings-container .wpc-header {
+    padding: @space-sm @space-base;
+    gap: @space-sm;
+    min-height: 62px;
+    margin-bottom: @space-sm;
+    border-radius: @radius-md;
+  }
+
+  // Hide header-right visible content on mobile — save pill stays
+  .wpc-advanced-settings-container-v4 .addon-buttons,
+  .wpc-advanced-settings-container-v4 .wpc-loading-spinner,
+  .wpc-advanced-settings-container-v4 .save-notification,
+  .wpc-lite-settings-container .addon-buttons,
+  .wpc-lite-settings-container .wpc-loading-spinner,
+  .wpc-lite-settings-container .save-notification {
+    display: none;
+  }
+
+  // Header-right: zero visual space but still in DOM for save pill
+  .wpc-advanced-settings-container-v4 .wpc-header-right,
+  .wpc-lite-settings-container .wpc-header-right {
+    flex: none;
+    width: auto;
+    min-width: 0;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-right-inner,
+  .wpc-lite-settings-container .wpc-header-right-inner {
+    position: static;
+    gap: 0;
+  }
+
+  // Save pill — sticky bottom bar on mobile
+  .wpc-advanced-settings-container-v4 .save-button,
+  .wpc-lite-settings-container .save-button {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    border-radius: 0;
+    margin: 0;
+    padding: @space-sm @space-base;
+    background: @color-white;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+    border-top: 1px solid @color-border;
+    justify-content: center;
+    gap: @space-md;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-left,
+  .wpc-lite-settings-container .wpc-header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // Hide Simple Settings — accessible via drawer
+  .wpc-advanced-settings-container-v4 .wpc-plain-btn {
+    display: none;
+  }
+
+  // Compact Start Optimization button
+  .wpc-advanced-settings-container-v4 .btn-gradient {
+    padding: @space-xs @space-md;
+    font-size: @font-size-xs;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-logo img {
+    height: 30px;
+  }
+
+  // Section cards
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-box {
+    padding: @space-lg @space-base;
+    border-radius: @radius-input;
+  }
+
+  // Row-cards keep zero padding at all breakpoints
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-box.wpc-card-rows {
+    padding: 0;
+  }
+
+  // Section header — centered stack on tablet/mobile
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: @space-base @space-sm;
+    margin: -@space-xs -@space-xs 0;
+    gap: @space-sm;
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-icon {
+    width: 48px;
+    height: 48px;
+    margin-right: 0;
+    margin-bottom: @space-xs;
+
+    img {
+      height: 28px;
+    }
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-description {
+    text-align: center;
+    align-items: center;
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-description h4 {
+    font-size: @font-size-lg;
+    text-align: center;
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-description p {
+    font-size: @font-size-sm;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  // Action buttons (Deselect All, Configure, Purge) — centered
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .form-check {
+    width: 100%;
+    justify-content: center;
+    margin-top: @space-xs;
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .form-check a,
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox a.wpc-purge-action {
+    justify-content: center;
+    text-align: center;
+  }
+
+  // Setting rows
+  .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-dropdown,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-input {
+    padding: @space-md @space-base;
+  }
+
+  // Dropdown rows — wrap label + dropdown at tablet
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-dropdown {
+    flex-wrap: wrap;
+    gap: @space-sm;
+  }
+
+  // Stats
+  .wpc-advanced-settings-container-v4 .stats-boxes {
+    flex-direction: column;
+  }
+
+  .wpc-advanced-settings-container-v4 .stats-box-single {
+    min-width: 100%;
+  }
+
+  // Icon checkbox grid — 2 columns at tablet
+  .wpc-advanced-settings-container-v4 .wpc-items-list-row.real-time-optimization {
+    grid-template-columns: repeat(2, 1fr);
+    gap: @space-sm;
+  }
+
+  // Performance Tweaks individual card grid — 1-col on tablet
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid {
+    grid-template-columns: 1fr !important; // FORCED
+    padding: 20px 24px 28px;
+  }
+
+  // Perf-section header — reduce side margins
+  .wpc-advanced-settings-container-v4 .wpc-perf-section .tab-title-checkbox {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+
+  // Perf-grid sub-cards — no hover lift on touch
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-checkbox:hover {
+    transform: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+
+  // Font scanner — reduce padding on tablet
+  .wpc-advanced-settings-container-v4 .wpc-font-scan-form {
+    padding: 16px 24px 28px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-font-list {
+    padding: 0 24px 20px;
+  }
+
+  // Permissions matrix — reduce margins on tablet
+  .wpc-advanced-settings-container-v4 .wpc-permissions-matrix {
+    margin-left: 24px;
+    margin-right: 24px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-perm-header .wpc-perm-col .wpc-perm-col-desc {
+    display: none;
+  }
+
+  // CF wrapper + accordion — reduce padding on tablet
+  .wpc-cf-connect-wrapper {
+    padding: 0 24px 20px !important; // FORCED
+  }
+  .setup-accordion {
+    margin-left: 24px !important; // FORCED
+    margin-right: 24px !important; // FORCED
+  }
+
+  // CF connected bar — stack and center on mobile
+  body.wp-admin .wpc-cf-token-connected > div {
+    flex-wrap: wrap !important; // FORCED: override inline flex
+    justify-content: center !important; // FORCED
+
+    > label {
+      flex: 0 0 100% !important; // FORCED: full width row
+      max-width: 100% !important; // FORCED: override inline max-width:100px
+      justify-content: center !important; // FORCED
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .wpc-cf-token-connected-info {
+      flex: 0 0 100% !important; // FORCED: override inline flex:2
+      flex-wrap: wrap !important; // FORCED
+      justify-content: center !important; // FORCED
+
+      .wpc-cf-token-connected-info-left {
+        flex: 0 0 100% !important; // FORCED
+        text-align: center;
+        margin-bottom: 10px;
+        margin-left: 0 !important; // FORCED
+      }
+
+      .wpc-cf-token-connected-info-right {
+        text-align: center;
+      }
+    }
+  }
+
+  // CF "How to?" — center on mobile
+  body.wp-admin #cf-connect-options .tab-title-checkbox .form-check {
+    max-width: 100% !important; // FORCED: override inline max-width:120px
+    display: flex !important; // FORCED
+    justify-content: center !important; // FORCED
+  }
+
+  // Smart Optimization header — stack on tablet
+  .wpc-smart-opt-header {
+    flex-direction: column;
+    padding: 16px 24px 24px;
+    gap: 16px;
+  }
+
+  .wpc-smart-opt-counter {
+    border: none;
+    padding: 16px 0 0;
+    border-top: 1px solid fade(@color-border, 60%);
+    border-radius: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  // Smart Optimization toolbar — stack on tablet
+  .wpc-smart-opt-toolbar {
+    flex-direction: column;
+    padding: 0 24px 16px;
+    gap: 12px;
+
+    #live-search { width: 100%; margin-right: 0; }
+    .dropdown-container.selector-dropdown { width: 100%; justify-content: flex-start; }
+  }
+
+  // CNAME card — centered stack
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-cname {
+    flex-direction: column !important; // FORCED: inline style override
+    align-items: center !important; // FORCED: inline style override
+    justify-content: center !important; // FORCED: inline style override
+    text-align: center;
+    padding: 40px @space-lg;
+    gap: @space-base;
+
+    > div:first-child {
+      flex-direction: column !important; // FORCED: inline style override
+      align-items: center !important; // FORCED: inline style override
+      text-align: center;
+      width: 100%;
+    }
+
+    .wpc-cname-icon { margin-right: 0; margin-bottom: @space-sm; }
+
+    // Buttons container — centered
+    > div:last-child {
+      display: flex;
+      justify-content: center;
+      gap: @space-sm;
+      width: 100%;
+    }
+  }
+
+  // EU Routing card — centered stack
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-eu-routing {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 40px @space-lg;
+    gap: @space-base;
+
+    .wpc-eu-routing-inner {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: @space-sm;
+    }
+
+    .wpc-eu-routing-text {
+      text-align: center;
+      h4 { text-align: center; }
+      p { text-align: center; }
+    }
+
+    .wpc-eu-routing-toggle { margin-left: 0; width: 100%; }
+    .wpc-eu-routing-toggle-row { justify-content: center; gap: @space-md; }
+  }
+
+  // Chart
+  .wpc-advanced-settings-container-v4 .wp-compress-chart {
+    height: 280px;
+  }
+
+  // Popup columns — stack
+  .wpc-advanced-settings-container-v4 .wpc-popup-columns {
+    flex-direction: column;
+  }
+
+  // Preset modes — stack
+  .wpc-advanced-settings-container-v4 .wpc-preset-modes-container-inner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  // Modals
+  .swal2-popup {
+    max-width: 95vw !important; // FORCED: SA2 inline
+    width: 95vw !important; // FORCED: SA2 inline
+  }
+
+  .cdn-popup-top {
+    padding: @space-xl @space-base @space-md;
+  }
+
+  .cdn-popup-content {
+    padding: @space-base;
+  }
+
+  .cdn-popup-buttons {
+    padding: @space-md @space-base @space-lg;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-v2-ring-hero {
+    transform: none;
+  }
+
+  // Standalone cards (Optimization Level, Auto-Optimize, Media Library) — stack vertically
+  body.wp-admin .wpc-optimization-level-card,
+  body.wp-admin .wpc-auto-optimize-card,
+  body.wp-admin .wpc-optimize-library-card {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px 20px;
+    gap: 12px;
+  }
+
+  // Inner row → column
+  body.wp-admin .wpc-opt-level-header,
+  body.wp-admin .wpc-auto-optimize-inner,
+  body.wp-admin .wpc-optimize-library-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+
+    h4 { margin-bottom: 5px; }
+    p { margin-bottom: 5px; }
+  }
+
+  // Slider full width
+  body.wp-admin .wpc-opt-level-slider {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  // Toggle centered — override margin-left: auto from base
+  body.wp-admin .wpc-auto-optimize-toggle {
+    margin-left: 0 !important; // FORCED: override base margin-left: auto
+  }
+
+  // Text spacing before controls
+  body.wp-admin .wpc-auto-optimize-text p,
+  body.wp-admin .wpc-optimize-library-text p {
+    margin-bottom: 0;
+  }
+}
+
+
+// ─── Mobile (≤480px) ─────────────────────────────────────────────────────
+@media screen and (max-width: 480px) {
+
+  // Layout — tighter edge padding
+  .wpc-advanced-settings-container-v4 {
+    padding: 10px;
+  }
+
+  // Header — compact
+  .wpc-advanced-settings-container-v4 .wpc-header {
+    padding: @space-sm;
+    border-radius: @radius-md;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-logo img {
+    height: 26px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header .wpc-dropdown button#dropdownMenuButton {
+    padding: @space-xs @space-md;
+    font-size: @font-size-sm;
+    min-height: 36px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-pro-site span {
+    font-size: 9px;
+    padding: 2px 8px;
+  }
+
+  // Hide text on some header buttons, keep icons
+  .wpc-advanced-settings-container-v4 .btn-gradient {
+    padding: @space-sm @space-md;
+    font-size: @font-size-xs;
+  }
+
+  // Section cards
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-box {
+    padding: 36px 24px;
+    margin-bottom: @space-md;
+    border-radius: @radius-md;
+  }
+
+  // Row-cards keep zero padding
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-box.wpc-card-rows {
+    padding: 0;
+  }
+
+  // Row-card header tighter on mobile
+  .wpc-advanced-settings-container-v4 .wpc-card-rows .tab-title-checkbox {
+    padding: 20px;
+  }
+
+  // Section header — tighter sizes (centering inherits from 768px)
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-icon {
+    width: 42px;
+    height: 42px;
+
+    img { height: 24px; }
+  }
+
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-description h4 {
+    font-size: @font-size-md;
+  }
+
+  // Setting rows — tighter
+  .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-dropdown,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-input {
+    padding: @space-md;
+    gap: @space-sm;
+    border-radius: @radius-md;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-box-content p {
+    font-size: @font-size-xs;
+  }
+
+  // Toggle — keep same size on mobile (44×24 is already a good tap target)
+  .wpc-advanced-settings-container-v4 .wpc-switch {
+    width: 44px;
+    height: 24px;
+  }
+
+  // Perf-grid — tighter padding + single column on mobile
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid {
+    padding: 16px 16px 24px;
+    grid-template-columns: minmax(0, 1fr) !important; // FORCED: 0 min prevents auto-width blowout
+
+    > .wpc-box-for-checkbox,
+    > .wpc-box-for-dropdown,
+    > .wpc-box-for-input {
+      min-width: 0; // FORCED: allow grid item to shrink below content min-width
+    }
+  }
+
+  // Content area — MUST be constrained to prevent overflow
+  // (flex:1 only controls height in column mode, not width)
+  .wpc-advanced-settings-container-v4 .wpc-settings-content,
+  .wpc-advanced-settings-container-v4 .wpc-settings-content-inner,
+  .wpc-advanced-settings-container-v4 .wpc-v2-section,
+  .wpc-advanced-settings-container-v4 .wpc-rounded-box-full,
+  .wpc-advanced-settings-container-v4 .white-box {
+    width: 100% !important; // FORCED: fill parent, not content width
+    max-width: 100% !important; // FORCED
+    box-sizing: border-box !important; // FORCED
+  }
+
+  // V2 cards — constrain content without clipping
+  .wpc-advanced-settings-container-v4 .wpc-v2-card,
+  .wpc-lite-settings-container .wpc-v2-card {
+    width: 100% !important; // FORCED
+    max-width: 100% !important; // FORCED
+    box-sizing: border-box !important; // FORCED
+  }
+
+  // V2 card header — keep row, shrink to fit one line
+  .wpc-advanced-settings-container-v4 .wpc-v2-card-header,
+  .wpc-lite-settings-container .wpc-v2-card-header {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: @space-sm;
+
+    h3 {
+      font-size: 15px !important; // FORCED: fits on one line alongside badge
+    }
+
+    .wpc-stats-monitoring {
+      flex-shrink: 0;
+      padding: 4px 8px !important; // FORCED: compact badge
+      font-size: 10px !important; // FORCED
+    }
+  }
+
+  // Chart container — constrain canvas
+  .wp-compress-chart {
+    max-width: 100% !important; // FORCED
+    overflow: hidden !important; // FORCED: clip chart canvas, not visible UI
+  }
+
+  // V2 stat boxes — tighter padding so they fit
+  .wpc-advanced-settings-container-v4 .wpc-v2-stat-box,
+  .wpc-lite-settings-container .wpc-v2-stat-box {
+    padding: @space-base;
+    margin: 0 @space-base;
+  }
+
+  // Chart canvas — constrain to parent
+  body.wp-admin canvas {
+    max-width: 100% !important; // FORCED: prevent chart overflow
+  }
+
+  // White-box (chart card) — constrain without clipping visible UI
+  .wpc-advanced-settings-container-v4 .white-box,
+  .wpc-lite-settings-container .white-box {
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: @space-base;
+  }
+
+  // Page-level overflow guard — only on the WP wrapper, not our cards
+  body.wp-admin #wpcontent {
+    overflow-x: hidden;
+  }
+
+  // Select mode popup option — remove fixed height so text wraps properly
+  .wpc-popup-option {
+    max-width: 100%;
+
+    > div {
+      height: auto !important; // FORCED: remove 70px fixed height that truncates text
+      min-height: 60px;
+    }
+
+    .wpc-popup-option-description {
+      flex: 1 1 60%;
+      padding: 12px 14px;
+
+      h4 { font-size: 13px; }
+    }
+  }
+
+  // Perf-section header — tighter margins
+  .wpc-advanced-settings-container-v4 .wpc-perf-section .tab-title-checkbox {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  // Perf-grid sub-cards — tighter padding
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-checkbox,
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-dropdown {
+    padding: 14px 16px;
+  }
+
+  // Dropdown cards — allow wrap + shrink the pill so everything fits
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-dropdown {
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .wpc-cf-select-dropdown,
+    .wpc-cf-select-button {
+      min-width: 100px !important; // FORCED: shrink below 150px desktop min
+    }
+  }
+
+  // Perf-grid titles — smaller to fit on one line at mobile
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid .wpc-checkbox-title-holder h4 {
+    font-size: 14px !important; // FORCED: fit long titles on one line
+    white-space: normal !important; // FORCED: allow wrap on narrow cards
+  }
+
+  // Font scanner — tighter padding on mobile
+  .wpc-advanced-settings-container-v4 .wpc-font-scan-form {
+    padding: 12px 16px 20px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-font-list {
+    padding: 0 16px 16px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-font-item {
+    padding: 12px 14px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-scan-btn {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  // CF wrapper + accordion — tighter on mobile
+  .wpc-cf-connect-wrapper {
+    padding: 0 16px 16px !important; // FORCED
+  }
+  .setup-accordion {
+    margin-left: 16px !important; // FORCED
+    margin-right: 16px !important; // FORCED
+  }
+
+  // Smart Optimization — stack hero vertically on mobile
+  .wpc-smart-opt-header { padding: 12px 16px 20px; }
+  .wpc-smart-opt-hero {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  .wpc-smart-monitor-img-animated { width: 64px; height: 64px; }
+  .wpc-smart-opt-title-row {
+    flex-direction: column;
+    align-items: center;
+    h4 { font-size: 15px; }
+  }
+  .wpc-smart-opt-title-area p { text-align: center; }
+  .wpc-smart-opt-counter { justify-content: center; }
+  .wpc-smart-opt-toolbar { padding: 0 16px 12px; }
+
+  // Export/Import/Reset — smaller buttons, shorter text
+  .wpc-export-import-buttons {
+    gap: 8px !important; // FORCED: tighter
+    flex-wrap: wrap !important; // FORCED: allow wrapping
+  }
+  #wpc-export-button,
+  #wpc-import-button,
+  #wpc-set-default-button {
+    padding: 0 16px !important; // FORCED: narrower
+    font-size: 12px !important; // FORCED: smaller
+    height: 38px !important; // FORCED: shorter
+    white-space: nowrap !important; // FORCED: prevent wrapping
+  }
+  #wpc-set-default-button {
+    margin-left: 0 !important; // FORCED: no auto push-right
+  }
+
+  // Smart Optimization table — stack rows on mobile
+  #optimizationTable .wpc-dropdown-row {
+    padding: 12px 16px;
+
+    .wpc-dropdown-row-header {
+      flex-wrap: wrap;
+
+      .wpc-dropdown-row-left-side { flex: 1 1 100%; margin-bottom: 8px; }
+      .wpc-dropdown-row-right-side {
+        flex: 1 1 100%;
+        text-align: left;
+
+        ul { justify-content: flex-start; }
+      }
+    }
+  }
+
+  #optimizationTable .exclude_dropdown_anchor {
+    width: 34px;
+    height: 34px;
+  }
+
+  // Permissions matrix — compact on mobile
+  .wpc-advanced-settings-container-v4 .wpc-permissions-matrix {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-perm-header,
+  .wpc-advanced-settings-container-v4 .wpc-perm-row {
+    grid-template-columns: 1fr 80px 80px;
+    padding: 12px 16px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-perm-header .wpc-perm-col .wpc-perm-col-icon {
+    display: none;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-role-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-role-name {
+    font-size: 13px;
+  }
+
+  // Hide configure label on mobile — gear icon is enough
+  .wpc-advanced-settings-container-v4 .wpc-configure-label {
+    display: none !important; // FORCED
+  }
+
+  // Popup tabs — compact on mobile
+  .wpc-popup-tabs {
+    margin: 0 16px 16px;
+    padding: 3px;
+
+    .wpc-popup-tab {
+      padding: 8px 14px;
+      font-size: 12px;
+      gap: 5px;
+
+      svg {
+        width: 12px;
+        height: 12px;
+      }
+    }
+  }
+
+  // Two-column grids → single column on mobile
+  .wpc-advanced-settings-container-v4 .wpc-two-col-rows .wpc-items-list-row,
+  .wpc-advanced-settings-container-v4 .wpc-categorized-card .wpc-two-col-grid {
+    grid-template-columns: 1fr !important; // FORCED: override 2-col
+  }
+
+  // Other Opt header — smaller on mobile
+  .wpc-advanced-settings-container-v4 .wpc-other-opt-header {
+    gap: 14px;
+    padding: 4px 4px 20px;
+
+    .wpc-other-opt-icon { width: 44px; height: 44px; svg { width: 22px; height: 22px; } }
+    h2 { font-size: 20px; }
+    p { font-size: 13px; }
+  }
+
+  // Spacer
+  .wpc-advanced-settings-container-v4 .wpc-spacer {
+    margin: @space-sm 0;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-items-list-row {
+    gap: @space-xs;
+  }
+
+  // Icon checkbox grid — single column, centered cards
+  .wpc-advanced-settings-container-v4 .wpc-items-list-row.real-time-optimization {
+    grid-template-columns: 1fr;
+    gap: @space-sm;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox {
+    padding: @space-md;
+    justify-content: center;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox-icon {
+    padding: @space-sm;
+    max-width: 48px;
+
+    img { width: 24px; height: 24px; }
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox-title {
+    font-size: @font-size-base;
+  }
+
+  // CDN bottom grid — tighter gap on tablet
+  .wpc-advanced-settings-container-v4 .wpc-cdn-bottom-grid {
+    gap: @space-md;
+  }
+
+  // CNAME + EU Routing cards — inherits centered stack from 768px block
+
+  // Chart
+  .wpc-advanced-settings-container-v4 .wp-compress-chart {
+    height: 220px;
+  }
+
+  .wpc-advanced-settings-container-v4 .wp-compress-pre-wrapper-v4 {
+    padding: @space-base;
+  }
+
+  .wpc-advanced-settings-container-v4 .wp-compress-pre-subheader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: @space-sm;
+
+    // Both columns go full-width when stacked
+    .col-6,
+    .col-6.last {
+      width: 100% !important; // FORCED: col-6 = 50%, must override in column mode
+      float: none !important; // FORCED: WP grid float
+    }
+
+    // Legend ul — single row, items side by side
+    .col-6.last ul {
+      display: flex !important; // FORCED: ensure flex row
+      flex-direction: row !important; // FORCED
+      flex-wrap: nowrap !important; // FORCED: one line only
+      gap: @space-sm;
+
+      li {
+        white-space: nowrap;
+        font-size: 10px !important; // FORCED: override footer-scripts.php
+        margin-left: 6px !important; // FORCED: less gap between items, override inline style
+      }
+    }
+  }
+
+  // Scan-fonts input group — prevent flex overflow
+  .wpc-advanced-settings-container-v4 .wpc-scan-input-group {
+    width: 100%;
+    box-sizing: border-box;
+
+    input[type="text"] {
+      min-width: 0; // allow shrink below natural size
+    }
+  }
+
+  // Modals — full width
+  .cdn-popup-top {
+    padding: @space-lg @space-md @space-md;
+
+    img {
+      width: 40px;
+      height: 40px;
+    }
+
+    h4 {
+      font-size: @font-size-md;
+    }
+  }
+
+  .cdn-popup-content {
+    padding: @space-md;
+
+    textarea {
+      min-height: 100px;
+    }
+  }
+
+  // Rounded boxes
+  .wpc-advanced-settings-container-v4 .wpc-rounded-box,
+  .wpc-advanced-settings-container-v4 .wpc-rounded-box-full {
+    padding: @space-base;
+    border-radius: @radius-input;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-rounded-box-half {
+    width: 100%;
+  }
+
+  // V2 cards — stack vertically
+  .wpc-advanced-settings-container-v4 .wpc-v2-section {
+    flex-direction: column;
+  }
+
+  // V2 stats row — stack
+  .wpc-advanced-settings-container-v4 .wpc-v2-stats-row {
+    flex-direction: column;
+    padding: @space-base;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-v2-card-header {
+    padding: @space-base;
+    flex-wrap: nowrap;
+    gap: @space-xs;
+
+    h3 {
+      font-size: 14px !important; // FORCED: compact at 375px
+    }
+
+    .wpc-stats-monitoring {
+      padding: 3px 7px !important; // FORCED: minimal badge at 375px
+      font-size: 10px !important; // FORCED
+    }
+  }
+
+  // V2 scores — stack Mobile/Desktop at mobile
+  .wpc-advanced-settings-container-v4 .wpc-v2-scores {
+    flex-direction: column;
+  }
+
+  // Smart Optimization header — stack vertically
+  body.wp-admin .wpc-optimization-status {
+    flex-direction: column !important; // FORCED: inline style
+    align-items: center !important; // FORCED: inline style
+    text-align: center;
+    margin-left: 0 !important; // FORCED: inline style
+    padding-left: 0 !important; // FORCED: inline style
+  }
+
+  body.wp-admin .wpc-smart-monitor-img {
+    min-width: 80px !important; // FORCED: inline style
+    min-height: 80px !important; // FORCED: inline style
+    background-size: contain;
+  }
+
+  body.wp-admin .wpc-smart-optimization-title {
+    font-size: @font-size-lg;
+  }
+
+  // Font scan input — prevent overflow
+  body.wp-admin #scan-fonts input[type="text"] {
+    max-width: 100%;
+  }
+}
+
+
+// ─── Small Mobile (≤375px) ───────────────────────────────────────────────
+@media screen and (max-width: 375px) {
+
+  // Layout — minimal edge padding
+  .wpc-advanced-settings-container-v4 {
+    padding: 8px;
+  }
+
+  // Header — ultra compact
+  .wpc-advanced-settings-container-v4 .wpc-header-left {
+    gap: @space-sm;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-header-logo img {
+    height: 22px;
+  }
+
+  // Section header
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .wpc-checkbox-description h4 {
+    font-size: @font-size-base;
+  }
+
+  // Setting rows
+  .wpc-advanced-settings-container-v4 .wpc-box-for-checkbox,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-dropdown,
+  .wpc-advanced-settings-container-v4 .wpc-box-for-input {
+    padding: @space-sm @space-md;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-checkbox-title-holder h4 {
+    font-size: @font-size-sm;
+  }
+
+  // Perf-grid sub-cards — minimal padding at 375px
+  .wpc-advanced-settings-container-v4 .wpc-perf-grid > .wpc-box-for-checkbox {
+    padding: 12px 14px;
+  }
+
+  // Icon checkbox grid — single column, centered
+  .wpc-advanced-settings-container-v4 .wpc-items-list-row.real-time-optimization {
+    grid-template-columns: 1fr;
+    gap: @space-sm;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox {
+    padding: @space-md;
+    justify-content: center;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox-icon {
+    padding: @space-xs;
+    max-width: 40px;
+
+    img { width: 18px; height: 18px; }
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox-title {
+    font-size: @font-size-xs;
+    padding-left: @space-sm;
+  }
+
+  .wpc-advanced-settings-container-v4 .wpc-iconcheckbox-toggle input[type="checkbox"] + label {
+    padding: @space-sm;
+  }
+
+  // Buttons
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox .form-check a,
+  .wpc-advanced-settings-container-v4 .tab-title-checkbox a.wpc-purge-action {
+    font-size: @font-size-xs;
+    padding: @space-xs @space-md;
+    min-height: 36px;
+  }
+
+  // EU Routing — stack on mobile
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-eu-routing {
+    flex-direction: column;
+    padding: @space-lg;
+    gap: @space-md;
+
+    .wpc-eu-routing-inner {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: @space-sm;
+    }
+
+    .wpc-eu-routing-toggle-row {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+
+  // CNAME card — stack on mobile
+  .wpc-advanced-settings-container-v4 .wpc-tab-content-cname {
+    padding: @space-lg;
+  }
+}
+
+
+// ─── WP Admin Sidebar Handling (≤782px) ──────────────────────────────────
+// WordPress admin sidebar collapses at 782px. We ONLY apply these resets
+// when our plugin container is present — never on other admin pages.
+@media screen and (max-width: 782px) {
+  // WP admin JS sets margin-left inline — body selector raises specificity
+  // Scoped via :has() so it only fires on OUR plugin pages
+  #wpcontent:has(.wpc-advanced-settings-container-v4),
+  #wpcontent:has(.wpc-lite-settings-container) {
+    margin-left: 0 !important; // FORCED: WP admin sets inline margin-left via JS
+    padding-left: 0 !important; // FORCED: clear any WP padding
+    padding-top: 46px !important; // FORCED: clear fixed WP admin bar (46px on mobile)
+    width: 100% !important; // FORCED: fill viewport
+  }
+
+  // Only hide WP sidebar when our plugin container is present
+  body.wp-admin:has(.wpc-advanced-settings-container-v4),
+  body.wp-admin:has(.wpc-lite-settings-container) {
+    #adminmenuwrap,
+    #adminmenuback {
+      display: none !important; // FORCED: hide WP sidebar completely
+      width: 0 !important; // FORCED
+    }
+  }
+}
+
+
+// ─── Desktop: hide mobile-only elements ──────────────────────────────────
+@media screen and (min-width: 769px) {
+  #wpc-mobile-menu-toggle,
+  #wpc-mobile-backdrop,
+  #wpc-drawer-header,
+  #wpc-drawer-footer {
+    display: none !important; // FORCED: hide JS-injected mobile elements on desktop
+  }
+}

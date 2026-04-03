@@ -18,8 +18,8 @@
                         echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Inline CSS</h3>
-                        <p>Add ID tags of scripts to be inlined.</p>
+                        <h3><?php echo esc_html__('Inline CSS', WPS_IC_TEXTDOMAIN); ?></h3>
+                        <p><?php echo esc_html__('Add ID tags of scripts to be inlined.', WPS_IC_TEXTDOMAIN); ?></p>
                     </div>
                 </div>
             </div>
@@ -28,13 +28,13 @@
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
                         <textarea name="wpc-excludes[inline_css]" data-setting-name="wpc-inline"
-                                  data-setting-subset="inline_css" class="exclude-list-textarea-value" placeholder="e.g. theme-style-css"></textarea>
+                                  data-setting-subset="inline_css" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. theme-style-css', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 
                     </div>
                 </div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
             </form>
         </div>
 

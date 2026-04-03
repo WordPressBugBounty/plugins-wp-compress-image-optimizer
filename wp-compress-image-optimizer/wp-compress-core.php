@@ -79,7 +79,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '6.60.47';
+        self::$version = '7.00.01';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -94,6 +94,9 @@ class wps_ic
                 self::$slug = $wlpl->get_slug();
             }
         }
+
+        // Load translations
+        load_plugin_textdomain('wp-compress-image-optimizer', false, dirname(plugin_basename(WPC_CC_PLUGIN_FILE)) . '/langs');
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
             //It has to be here, init() is too late
@@ -202,6 +205,23 @@ class wps_ic
 
                 // Update the stored version
                 update_option('wpc_core_version', self::$version);
+            }
+
+            // One-time: create CDN bypass rule + whitelist IPs for existing CF connections
+            if (empty(get_option('wpc_cf_bypass_v5'))) {
+                $cf = get_option(WPS_IC_CF);
+                if (!empty($cf['token']) && !empty($cf['zone'])) {
+                    require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                    $cfsdk = new WPC_CloudflareAPI($cf['token']);
+                    $result = $cfsdk->addCdnBypassRule($cf['zone']);
+                    $cfsdk->whitelistIPs($cf['zone']);
+                    if ($result && !is_wp_error($result)) {
+                        update_option('wpc_cf_bypass_v5', '1');
+                    }
+                } else {
+                    // No CF configured — nothing to migrate, mark done
+                    update_option('wpc_cf_bypass_v5', '1');
+                }
             }
         }
     }
@@ -421,7 +441,7 @@ class wps_ic
 
         // Check privileges
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
-        $call = wp_remote_get($url, ['timeout' => $api_timeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+        $call = wp_remote_get($url, ['timeout' => $api_timeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => self::$version]]);
 
         if (wp_remote_retrieve_response_code($call) == 200) {
 
@@ -1352,6 +1372,7 @@ class wps_ic
             $this::$settings = [];
         }
 
+
         if (empty($this::$options)) {
             $this::$options = [];
         }
@@ -1453,6 +1474,25 @@ class wps_ic
         }
 
         $this::$settings = $this->fillMissingSettings($this::$settings);
+
+        // Sync live-cdn from actual state: CF CDN or any CDN file type on
+        if (empty($this::$settings['live-cdn']) || $this::$settings['live-cdn'] != '1') {
+            $cfSettings = get_option(WPS_IC_CF);
+            if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
+                $this::$settings['live-cdn'] = '1';
+            } else {
+                $cdnOn = false;
+                if (!empty($this::$settings['serve'])) {
+                    foreach ($this::$settings['serve'] as $v) {
+                        if ($v == '1') { $cdnOn = true; break; }
+                    }
+                }
+                if (!$cdnOn && !empty($this::$settings['css']) && $this::$settings['css'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($this::$settings['js']) && $this::$settings['js'] == '1') $cdnOn = true;
+                if (!$cdnOn && !empty($this::$settings['fonts']) && $this::$settings['fonts'] == '1') $cdnOn = true;
+                if ($cdnOn) $this::$settings['live-cdn'] = '1';
+            }
+        }
 
         /**
          * Figure out ZoneName
@@ -1946,7 +1986,7 @@ class wps_ic
         //check if zone name needs fixing
         if (!empty($this::$options['api_key']) && empty($this::$zone_name) && get_option('wps_ic_allow_live') !== false) {
             $url = 'https://apiv3.wpcompress.com/api/site/credits';
-            $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $this::$options['api_key'],]]);
+            $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $this::$options['api_key'], 'plugin-version' => self::$version]]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
@@ -2139,7 +2179,7 @@ class wps_ic
             $requests = new wps_ic_requests();
 
             // Test
-            $args = ['url' => home_url(), 'version' => '6.60.60', 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
+            $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
             $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
 
             $body = wp_remote_retrieve_body($response);
@@ -2509,6 +2549,15 @@ add_filter('upgrader_post_install', [$wpsIc, 'deleteTests'], 1);
 add_action('upgrader_process_complete', ['wps_ic_cache', 'updateCSSHash'], 1);
 add_action('upgrader_process_complete', ['wps_ic_cache', 'purgeCDNUpdate'], 1);
 
+// One-time CF bypass rule migration (async via WP Cron)
+add_action('wpc_migrate_cf_bypass', function() {
+    $cf = get_option(WPS_IC_CF);
+    if (!empty($cf['token']) && !empty($cf['zone'])) {
+        $cfsdk = new WPC_CloudflareAPI($cf['token']);
+        $cfsdk->addCdnBypassRule($cf['zone']);
+    }
+});
+
 // Activation of Plugin
 add_action('activate_plugin', ['wps_ic_cache', 'updateCSSHash'], 1);
 add_action('activate_plugin', [$wpsIc, 'deleteTests'], 1);
@@ -2537,6 +2586,39 @@ add_action('rest_api_init', function () {
 // Fired when someone clicks "Deactivate (keep data)"
 add_action('admin_action_deactivate_and_disconnect', 'wpc_deactivate_delete_date');
 
+add_action( 'init', 'wps_ic_load_textdomain' );
+
+function wps_ic_load_textdomain() {
+    load_plugin_textdomain(
+            WPS_IC_TEXTDOMAIN,
+            false,
+            dirname( plugin_basename( __FILE__ ) ) . '/languages'
+    );
+}
+
+// Purge HTML cache when redirect plugins save rules (admin only)
+add_action('update_option_wf301_redirect_rules', 'wpc_purge_redirect_cache', 10, 2);
+add_action('update_option_301_redirects', 'wpc_purge_redirect_cache', 10, 2);
+add_action('update_option_ts_301_redirection', 'wpc_purge_redirect_cache', 10, 2);
+add_action('redirection_redirect_updated', 'wpc_purge_all_html_cache');
+add_action('srm_redirect_saved', 'wpc_purge_all_html_cache');
+
+function wpc_purge_redirect_cache($old_value, $new_value) {
+    if (!is_array($new_value)) return;
+    $url_key_class = new wps_ic_url_key();
+    foreach ($new_value as $rule) {
+        $source = isset($rule['url']) ? $rule['url'] : (isset($rule['request']) ? $rule['request'] : '');
+        if (empty($source)) continue;
+        $url_key = $url_key_class->setup(site_url($source));
+        if (is_dir(WPS_IC_CACHE . $url_key)) {
+            wps_ic_cache_integrations::purgeCacheFiles($url_key);
+        }
+    }
+}
+
+function wpc_purge_all_html_cache() {
+    wps_ic_cache_integrations::purgeCacheFiles();
+}
 
 function wpcUninstall()
 {
@@ -2581,7 +2663,7 @@ function wpcCheckCredits()
     }
 
     $url = 'https://apiv3.wpcompress.com/api/site/credits';
-    $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+    $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
     if (is_wp_error($call)) {
         return;

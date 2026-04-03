@@ -270,7 +270,7 @@ jQuery(document).ready(function ($) {
 
     $('.wpc-lite-locked-advanced').on('click', function (e) {
         e.preventDefault();
-        lockedPopup();
+        liteConnectPopup();
         return false;
     });
 

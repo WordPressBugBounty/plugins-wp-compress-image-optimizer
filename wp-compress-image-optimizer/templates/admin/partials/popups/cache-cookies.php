@@ -18,8 +18,8 @@
                         echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Cache Cookies Settings</h3>
-                        <p>Define the cookies we should monitor.</p>
+                        <h3><?php echo esc_html__('Cache Cookies Settings', WPS_IC_TEXTDOMAIN); ?></h3>
+                        <p><?php echo esc_html__('Define the cookies we should monitor.', WPS_IC_TEXTDOMAIN); ?></p>
                     </div>
                 </div>
             </div>
@@ -28,86 +28,68 @@
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
 
-                        <div style="display:flex;padding-left:40px;padding-right:80px;justify-content: space-between;">
-
-                            <h4 style="text-align: start;margin-bottom: 0;width:300px;">
-                                Cache cookies
-                            </h4>
-
-                            <h4 style="text-align: end;margin-bottom: 0;width:90px;">
-                                Defaults
-                            </h4>
-
+                        <div class="wpc-section-header-split">
+                            <h4 class="wpc-section-header"><?php echo esc_html__('Cache cookies', WPS_IC_TEXTDOMAIN); ?></h4>
+                            <h4 class="wpc-section-header"><?php echo esc_html__('Defaults', WPS_IC_TEXTDOMAIN); ?></h4>
                         </div>
 
-                        <div style="display:flex;padding-left:40px;padding-right:40px;justify-content: space-between;">
-
-                            <textarea name="wpc-cache-cookies" class="cache-cookies-textarea-value" style="font-size:13px;line-height:1.5;padding-top:0px;"></textarea>
-
-                            <div class="wps-example-list" style="display:flex;min-width:220px;">
-                                <div>
-                                    <div>
-                                        <p> cookie_notice_accepted<br>
-                                            allowed_cookies<br>
-                                            consent_types<br>
-                                            catAccCookies<br>
-                                            aelia_cs_recalculate_cart_totals<br>
-                                            aelia_cs_selected_currency<br>
-                                            aelia_customer_country<br>
-                                            aelia_customer_state<br>
-                                            aelia_tax_exempt<br>
-                                            wcml_client_currency<br>
-                                            wcml_client_currency_language<br>
-                                            wcml_client_country<br>
-                                            geot_rocket_<br>
-                                            pll_language<br></p>
-                                    </div>
-                                </div>
+                        <div class="wpc-hooks-container">
+                            <div class="wpc-hooks-textarea-wrap">
+                                <textarea name="wpc-cache-cookies" class="cache-cookies-textarea-value hooks-list-textarea-value" spellcheck="false"></textarea>
+                            </div>
+                            <div class="wpc-hooks-defaults-wrap">
+                                <button type="button" class="wpc-copy-defaults-btn" title="<?php echo esc_attr__('Copy all defaults', WPS_IC_TEXTDOMAIN); ?>">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    <span><?php echo esc_html__('Copy all', WPS_IC_TEXTDOMAIN); ?></span>
+                                </button>
+                                <div class="wpc-hooks-defaults-box">cookie_notice_accepted
+allowed_cookies
+consent_types
+catAccCookies
+aelia_cs_recalculate_cart_totals
+aelia_cs_selected_currency
+aelia_customer_country
+aelia_customer_state
+aelia_tax_exempt
+wcml_client_currency
+wcml_client_currency_language
+wcml_client_country
+geot_rocket_
+pll_language</div>
                             </div>
                         </div>
 
-                        <div class="wps-empty-row">&nbsp;</div>
+                        <hr class="wpc-section-divider">
 
-                        <div style="display:flex;padding-left:40px;padding-right:80px;justify-content: space-between;">
-
-                            <h4 style="text-align: start;margin-bottom: 0;width:300px;">
-                                Exclude cookies
-                            </h4>
-
-                            <h4 style="text-align: end;margin-bottom: 0;width:90px;">
-                                Defaults
-                            </h4>
-
+                        <div class="wpc-section-header-split">
+                            <h4 class="wpc-section-header"><?php echo esc_html__('Exclude cookies', WPS_IC_TEXTDOMAIN); ?></h4>
+                            <h4 class="wpc-section-header"><?php echo esc_html__('Defaults', WPS_IC_TEXTDOMAIN); ?></h4>
                         </div>
 
-
-                        <div style="display:flex;padding-left:40px;padding-right:40px;justify-content: space-between;">
-
-                            <textarea name="wpc-exclude-cookies" class="exclude-cookies-textarea-value" style="font-size:13px;line-height:1.5;padding-top:0px;"></textarea>
-
-                            <div class="wps-example-list" style="display:flex;min-width:220px;">
-                                <div>
-                                    <div>
-                                        <p></p>
-                                    </div>
-                                </div>
+                        <div class="wpc-hooks-container">
+                            <div class="wpc-hooks-textarea-wrap">
+                                <textarea name="wpc-exclude-cookies" class="exclude-cookies-textarea-value hooks-list-textarea-value" spellcheck="false"></textarea>
+                            </div>
+                            <div class="wpc-hooks-defaults-wrap">
+                                <div class="wpc-hooks-defaults-box"></div>
                             </div>
                         </div>
 
-                        <div class="wps-empty-row">&nbsp;</div>
+                    </div>
+                </div>
 
-                        <div class="wps-example-list">
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                    <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                    <div class="wps-example-list" style="display: none;">
+                        <div>
                             <div>
-                                <h3>Examples:</h3>
-                                <div>
-                                    <p>wp_compress would cache/exclude this particular cookie.</p>
-                                    <p>wp_compress_ is treated as a prefix and would cache/exclude all cookies with this prefix.</p>
-                                </div>
+                                <p><span class="wpc-example-chip">wp_compress</span> <?php echo esc_html__('would cache/exclude this particular cookie.', WPS_IC_TEXTDOMAIN); ?></p>
+                                <p><span class="wpc-example-chip">wp_compress_</span> <?php echo esc_html__('is treated as a prefix and would cache/exclude all cookies with this prefix.', WPS_IC_TEXTDOMAIN); ?></p>
                             </div>
                         </div>
                     </div>
                 </div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
             </form>
         </div>
 

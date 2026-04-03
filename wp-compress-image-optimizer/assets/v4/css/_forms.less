@@ -1,0 +1,652 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Forms & Inputs
+// ═══════════════════════════════════════════════════════════════════════════
+// Text inputs, textareas, dropdowns, icon checkbox grid, range sliders,
+// buttons (.cdn-popup-save-btn, .btn-exclude-save, Configure links)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// All selectors scoped under .wpc-advanced-settings-container-v4
+// for specificity (abbreviated as .wpc-v4 in comments)
+
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  // ─── Text Inputs (.wpc-input-holder) ─────────────────────────────────────
+  // Used in inputDescription_v4: "Skip [4] images"
+  .wpc-input-holder {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    padding: 0;
+
+    span {
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-secondary;
+      white-space: nowrap;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: @color-text-dark;
+      background: @color-white;
+      border: 1.5px solid @color-border;
+      border-radius: @radius-base;
+      padding: 5px 0;
+      margin: 0;
+      width: 40px;
+      text-align: center;
+      transition: @transition-fast;
+      outline: none;
+      height: auto;
+      min-height: auto;
+
+      &:focus {
+        border-color: var(--wpc-brand-primary, @color-blue);
+        box-shadow: 0 0 0 3px fade(@color-blue, 10%);
+      }
+
+      &::placeholder {
+        color: @color-gray-muted;
+      }
+    }
+  }
+
+  // No-change variant (CF connect form inputs)
+  .wpc-input-holder-no-change {
+    display: flex;
+    flex-direction: column;
+    gap: @space-xs;
+
+    label {
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      color: @color-text-dark;
+      display: flex;
+      align-items: center;
+      gap: @space-sm;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      font-family: @font-regular;
+      font-size: @font-size-base;
+      color: @color-text-dark;
+      background: @color-white;
+      border: 1px solid @color-border;
+      border-radius: @radius-md;
+      padding: @space-sm @space-base;
+      min-height: 42px;
+      width: 100%;
+      transition: @transition-fast;
+      outline: none;
+
+      &:focus {
+        border-color: var(--wpc-brand-primary-light, @color-primary);
+        box-shadow: @shadow-focus-ring;
+      }
+    }
+  }
+
+
+  // ─── Textareas (.wpc-box-for-textarea) ───────────────────────────────────
+  .wpc-box-for-textarea {
+    display: flex;
+    flex-direction: column;
+    gap: @space-md;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-input;
+    padding: @space-base @space-lg;
+  }
+
+  .wpc-box-textarea textarea {
+    font-family: @font-code;
+    font-size: @font-size-sm;
+    color: @color-text-dark;
+    background: @color-bg-frost;
+    border: 1px solid @color-border;
+    border-radius: @radius-md;
+    padding: @space-md;
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    outline: none;
+    transition: @transition-fast;
+    line-height: 1.6;
+
+    &:focus {
+      border-color: var(--wpc-brand-primary-light, @color-primary);
+      box-shadow: @shadow-focus-ring;
+      background: @color-white;
+    }
+  }
+
+
+  // ─── Dropdown (.wpc-cf-select-dropdown) ──────────────────────────────────
+  // Custom select used in dropdown() component
+  .wpc-cf-select-dropdown {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .wpc-cf-select-button {
+    font-family: @font-regular;
+    font-size: 14px;
+    color: @color-text-slate;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-full;
+    padding: 8px 16px;
+    min-height: 38px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    transition: @transition-fast;
+    white-space: nowrap;
+    position: relative;
+
+    // Chevron arrow
+    &::after {
+      content: '';
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid @color-gray-text;
+      margin-left: 2px;
+    }
+
+    &:hover {
+      border-color: @color-border-medium;
+      color: @color-text-dark;
+      background: @color-bg-frost;
+    }
+  }
+
+  // Dropdown menu
+  .wpc-cf-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    background: @color-white;
+    border: 1px solid @color-bg-frost;
+    border-radius: @radius-input;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    padding: 6px;
+    z-index: 100;
+    display: none; // JS toggles this
+
+    .wpc-cf-select-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-slate;
+      cursor: pointer;
+      transition: @transition-fast;
+      text-decoration: none;
+      border-radius: @radius-base;
+
+      &:hover {
+        background: @color-bg-frost;
+        color: @color-text-dark;
+      }
+
+      &.wpc-cf-active {
+        background: @color-bg-frost;
+        color: @color-text-dark;
+        font-family: @font-semibold;
+      }
+    }
+  }
+
+
+  // ─── Icon Checkbox Grid (.wpc-iconcheckbox) ──────────────────────────────
+  // World-class file-type toggle cards — FA Sharp Regular inline SVGs
+  // Dynamic coloring via currentColor, snappy checkbox animation
+  .wpc-items-list-row.real-time-optimization {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .wpc-iconcheckbox {
+    background-color: @color-white;
+    border: 1px solid @color-border; // clean 1px border — always visible
+    border-radius: @radius-input; // 12px
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+
+    &:hover {
+      border-color: fade(@color-blue, 35%);
+      box-shadow: 0 1px 4px fade(@color-blue, 8%);
+      .wpc-iconcheckbox-icon { color: @color-gray-dim; transition: color 0.15s ease; }
+      .wpc-iconcheckbox-title { color: @color-gray-dim; transition: color 0.15s ease; }
+    }
+
+    // ── Active: blue accent ──
+    &.active {
+      background: @color-white;
+      border-color: var(--wpc-brand-accent-light, @color-border-blue); // #bfdbfe
+
+      &:hover {
+        border-color: fade(@color-blue, 50%);
+        box-shadow: 0 1px 6px fade(@color-blue, 12%);
+      }
+
+      .wpc-iconcheckbox-icon {
+        background: var(--wpc-brand-tint, @color-bg-frost); // brand tint bg on active
+        color: var(--wpc-brand-primary, @color-blue); // brand color
+        img { opacity: 1; }
+      }
+
+      .wpc-iconcheckbox-title {
+        color: @color-text-body; // #374151
+      }
+    }
+  }
+
+  .wpc-iconcheckbox-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent; // no bg when inactive
+    border-radius: @radius-md; // 8px
+    transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+    color: @color-border; // #e2e8f0 — ghosted inactive (user prefers disabled look)
+
+    .wpc-iconcheckbox-svg {
+      width: 18px;
+      height: 18px;
+      transition: @transition-fast;
+    }
+
+    img {
+      width: 22px;
+      height: 22px;
+      opacity: 0.3;
+      transition: @transition-fast;
+    }
+  }
+
+  .wpc-iconcheckbox-title {
+    font-family: @font-semibold;
+    font-size: 13px;
+    color: @color-border-accent; // #c5d3e3 — ghosted "off" text
+    font-weight: 600;
+    flex-grow: 1;
+    padding-left: @space-md;
+    transition: color 0.2s ease;
+    letter-spacing: 0.01em;
+  }
+
+  // ── Toggle Checkbox ──────────────────────────────────────────────────────
+  // Rounded square, solid blue fill, CSS checkmark
+  .wpc-iconcheckbox-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding-left: @space-sm;
+
+    input[type="checkbox"] {
+      height: 0;
+      width: 0;
+      position: absolute;
+      pointer-events: none;
+      opacity: 0;
+      margin: 0;
+      padding: 0;
+    }
+
+    label {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 0;
+      padding: 0;
+    }
+
+    // Unchecked — subtle circle
+    input[type="checkbox"] + label > span {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 22px;
+      height: 22px;
+      background: fade(@color-bg-frost, 10%);
+      border: 1.5px solid fade(@color-border, 20%);
+      border-radius: @radius-circle; // circle
+      transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+      &::before, &::after { content: none; }
+    }
+
+    // Hover on unchecked — blue hint
+    input[type="checkbox"]:not(:checked) + label:hover > span {
+      border-color: fadeout(@color-blue, 40%);
+      background: fadeout(@color-blue, 92%);
+    }
+
+    // Checked — pure CSS: solid brand circle + white checkmark
+    input[type="checkbox"]:checked + label > span {
+      background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: brand color
+      border: none !important; // FORCED: no border on checked
+      border-radius: @radius-circle;
+      animation: shrink-bounce 180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+      &::before { content: none !important; }
+
+      // CSS checkmark — crisp at any DPI
+      &::after {
+        content: '' !important; // FORCED: enable pseudo
+        display: block;
+        width: 5px;
+        height: 9px;
+        border: solid @color-white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+        margin-top: -1px;
+      }
+    }
+  }
+
+  // Locked icon checkbox
+  .wpc-iconcheckbox.wpc-locked-checkbox-container {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  // Purge CDN cache icon (sits inside the grid)
+  .wpc-purge-icon.wpc-purge-cdn-cache {
+    display: none;
+  }
+
+
+  // ─── Standard Checkboxes (form-check) ────────────────────────────────────
+  .form-check-input {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid @color-border;
+    border-radius: @radius-sm;
+    background: @color-white;
+    cursor: pointer;
+    transition: @transition-fast;
+    position: relative;
+    margin: 0;
+
+    &:checked {
+      background: var(--wpc-brand-primary, @color-primary);
+      border-color: var(--wpc-brand-primary, @color-primary);
+
+      &::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 5px;
+        height: 9px;
+        border: solid @color-white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+    }
+  }
+
+
+  // ─── Range Slider (Select Modes Popup) ───────────────────────────────────
+  .wpc-select-bar {
+    padding: @space-base 0;
+  }
+
+  .wpc-select-bar-outter {
+    height: 6px;
+    background: @color-bg-frost;
+    border-radius: @radius-pill;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .wpc-select-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, @color-gradient-start, @color-gradient-end);
+    border-radius: @radius-pill;
+    transition: width 0.4s ease;
+
+    &.wpc-select-bar-width-1 { width: 33.3%; }
+    &.wpc-select-bar-width-2 { width: 66.6%; }
+    &.wpc-select-bar-width-3 { width: 100%; }
+  }
+
+
+  // ─── Popup Columns (Mode Selection) ──────────────────────────────────────
+  .wpc-popup-columns {
+    display: flex;
+    gap: @space-base;
+  }
+
+  .wpc-popup-column {
+    flex: 1;
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-input;
+    padding: @space-lg;
+    cursor: pointer;
+    transition: @transition-smooth;
+    text-align: center;
+
+    &:hover {
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+    }
+
+    &.wpc-active {
+      border-color: var(--wpc-brand-primary-light, @color-primary);
+      background: var(--wpc-brand-tint, @color-ice);
+      box-shadow: 0 0 0 2px rgba(92, 177, 255, 0.15);
+    }
+
+    .wpc-column-heading h3 {
+      font-family: @font-bold;
+      font-size: @font-size-md;
+      color: @color-text-dark;
+      margin-bottom: @space-sm;
+    }
+
+    .wpc-column-heading p {
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+      margin-bottom: @space-base;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      text-align: left;
+
+      li {
+        font-size: @font-size-sm;
+        color: @color-text-secondary;
+        padding: @space-xs 0;
+        border-bottom: 1px solid @color-bg-frost;
+
+        &.wpc-active {
+          color: @color-text-dark;
+          font-family: @font-semibold;
+        }
+
+        &:last-child {
+          border-bottom: none;
+        }
+      }
+    }
+  }
+
+
+  // ─── Buttons ─────────────────────────────────────────────────────────────
+
+  // CDN Popup Save Button
+  .cdn-popup-save-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: @space-sm;
+    background: linear-gradient(135deg, @color-gradient-start, @color-gradient-end);
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: @font-size-base;
+    padding: @space-md @space-2xl;
+    border-radius: @radius-md;
+    border: none;
+    cursor: pointer;
+    transition: @transition-fast;
+    min-height: 44px;
+    text-decoration: none;
+
+    img {
+      height: 18px;
+      filter: brightness(10); // make icon white
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(76, 137, 235, 0.3);
+      color: @color-white;
+    }
+  }
+
+  // Exclude Save Button (inside modals) — scoped copy
+  .btn-exclude-save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--wpc-brand-primary, @color-blue);
+    color: @color-white;
+    font-family: @font-semibold;
+    font-size: @font-size-base;
+    padding: @space-md @space-xl;
+    border-radius: @radius-md;
+    border: none;
+    cursor: pointer;
+    transition: @transition-fast;
+    min-height: 44px;
+    text-decoration: none;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
+      color: @color-white;
+    }
+  }
+
+  // Generic primary button
+  .btn-primary {
+    background: var(--wpc-brand-primary-light, @color-primary);
+    color: @color-white;
+    border: none;
+    border-radius: @radius-md;
+    padding: @space-sm @space-lg;
+    font-family: @font-semibold;
+    font-size: @font-size-base;
+    cursor: pointer;
+    transition: @transition-fast;
+    min-height: 40px;
+
+    &:hover {
+      background: var(--wpc-brand-primary-dark, darken(@color-primary, 8%));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px fade(@color-primary, 30%);
+    }
+  }
+
+  // Box button (Configure button in setting rows using buttonDescription_v4)
+  .wpc-box-button {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+
+    a {
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+      background: @color-bg-frost;
+      border: 1px solid @color-border;
+      border-radius: @radius-base;
+      padding: @space-sm @space-base;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      transition: @transition-fast;
+      min-height: 36px;
+      white-space: nowrap;
+
+      &:hover {
+        background: var(--wpc-brand-tint, @color-ice);
+        border-color: var(--wpc-brand-accent-light, @color-border-blue);
+        color: var(--wpc-brand-primary-dark, @color-blue-deep);
+      }
+    }
+  }
+
+  // Lock icon (for locked features)
+  .wpc-gray-lock {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: @space-xs;
+    opacity: 0.5;
+  }
+
+} // end .wpc-advanced-settings-container-v4
+
+
+// ─── Exclude Save Button — Global Selector ─────────────────────────────────
+// This also appears outside .wpc-v4 (e.g. in SweetAlert modals)
+.btn-exclude-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, @color-gradient-start, @color-gradient-end);
+  color: @color-white;
+  font-family: @font-semibold;
+  font-size: @font-size-base;
+  padding: @space-md @space-xl;
+  border-radius: @radius-md;
+  border: none;
+  cursor: pointer;
+  transition: @transition-fast;
+  min-height: 44px;
+  text-decoration: none;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(76, 137, 235, 0.3);
+    color: @color-white;
+  }
+}

@@ -56,8 +56,22 @@
         $stats = $gui::$stats_live;
     }
 
+    // Normalize: API returns {success, data: {...}} but sample returns just the data object
+    if ($stats && isset($stats->data) && is_object($stats->data)) {
+        $stats = $stats->data;
+    }
+
+    // If stats is still empty or has no date entries, fall back to sample data
+    if (empty($stats) || (is_object($stats) && count((array)$stats) === 0)) {
+        $statsclass = new wps_ic_stats();
+        $stats = $statsclass->fetch_sample_stats();
+    }
+
     if ($stats) {
+        $has_nonzero = false;
         foreach ($stats as $date => $value) {
+            if (!is_object($value) || !isset($value->original)) continue;
+            if ($value->original > 0 || $value->compressed > 0) $has_nonzero = true;
             $index = date('d-m-Y', strtotime($date));
             $labels[$index]['date'] = date('m/d/Y', strtotime($date));
             $labels[$index]['total_input'] = $value->original;
@@ -69,6 +83,26 @@
 
             if ($labels[$index]['total_output'] < 0) {
                 $labels[$index]['total_output'] = 0;
+            }
+        }
+
+        // All values are zero — show sample data instead of empty chart
+        if (!$has_nonzero) {
+            $labels = [];
+        }
+    }
+
+    // Final safety net — if labels is still empty, always show sample data
+    if (empty($labels)) {
+        $statsclass = new wps_ic_stats();
+        $stats = $statsclass->fetch_sample_stats();
+        if ($stats) {
+            foreach ($stats as $date => $value) {
+                if (!is_object($value) || !isset($value->original)) continue;
+                $index = date('d-m-Y', strtotime($date));
+                $labels[$index]['date'] = date('m/d/Y', strtotime($date));
+                $labels[$index]['total_input'] = $value->original;
+                $labels[$index]['total_output'] = $value->compressed;
             }
         }
     }
@@ -154,8 +188,8 @@
     var dataTotal   = []; // Total for tooltips
     var trafficSum  = ''; // For tooltip calculations
 
-    var labelBottom = "After Optimization";
-    var labelTop    = "Savings";
+    var labelBottom = "<?php echo esc_js(__('After Optimization', WPS_IC_TEXTDOMAIN)); ?>";
+    var labelTop    = "<?php echo esc_js(__('Savings', WPS_IC_TEXTDOMAIN)); ?>";
     var isCloudflareMode = false;
     var dataSource = '<?php echo $data_source; ?>'; // Track data source
 
@@ -194,10 +228,52 @@
     trafficSum  = <?php echo json_encode($traffic_sum_array); ?>.join(',');
 
     <?php if ($use_cloudflare) { ?>
-    labelBottom = "Cached Traffic";
-    labelTop = "Non-Cached";
+    labelBottom = "<?php echo esc_js(__('Cached Traffic', WPS_IC_TEXTDOMAIN)); ?>";
+    labelTop = "<?php echo esc_js(__('Non-Cached', WPS_IC_TEXTDOMAIN)); ?>";
     isCloudflareMode = true;
     <?php } ?>
+
+    // ============================================================
+    // BRAND-AWARE CHART COLOR HELPERS
+    // ============================================================
+    // Read brand color from CSS custom property (set by whitelabel ZIP)
+    // Ignore default plugin blue (#3b82f6) — only override for custom brand colors
+    var wpcBrandRaw = getComputedStyle(document.documentElement).getPropertyValue('--wpc-brand-primary').trim();
+    if (wpcBrandRaw === '#3b82f6') wpcBrandRaw = '';
+
+    // Convert hex to RGB components
+    function hexToRgb(hex) {
+        hex = hex.replace('#', '');
+        if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+        var n = parseInt(hex, 16);
+        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+    // Shade a hex color: amount > 0 = lighter, < 0 = darker
+    function shadeColor(hex, amount) {
+        var c = hexToRgb(hex);
+        var t = amount > 0 ? 255 : 0;
+        var p = Math.abs(amount);
+        return 'rgb(' +
+            Math.round((t - c.r) * p + c.r) + ',' +
+            Math.round((t - c.g) * p + c.g) + ',' +
+            Math.round((t - c.b) * p + c.b) + ')';
+    }
+
+    // Dark palette (cached/optimized bars) — brand or solid #2e3caa
+    var chartDarkBase  = wpcBrandRaw ? wpcBrandRaw : '#2e3caa';
+    var chartDarkLight = wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.15) : '#2e3caa';
+    var chartDarkMid   = wpcBrandRaw ? wpcBrandRaw : '#2e3caa';
+    var chartDarkBright= wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.10) : '#2e3caa';
+    var chartDarkHover1= wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.25) : '#232e88';
+    var chartDarkHover2= wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.05) : '#232e88';
+
+    // Light palette (non-cached/original bars) — brand tint or solid #51acf6
+    var chartLightBase = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#51acf6';
+    var chartLight1    = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.40) : '#51acf6';
+    var chartLightMid  = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#51acf6';
+    var chartLightBright=wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.50) : '#51acf6';
+    var chartLightHov1 = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.35) : '#3d9be8';
+    var chartLightHov2 = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#3d9be8';
 
     // ============================================================
     // PREMIUM ENTERPRISE CHART CONFIGURATION
@@ -211,20 +287,20 @@
                     label: labelBottom,
                     backgroundColor: function(context) {
                         if (!context.chart.chartArea) {
-                            return '#3c4cdf';
+                            return chartDarkBase;
                         }
                         const ctx = context.chart.ctx;
                         const gradient = ctx.createLinearGradient(0, context.chart.chartArea.bottom, 0, context.chart.chartArea.top);
-                        gradient.addColorStop(0, '#2d3ba8');
-                        gradient.addColorStop(0.5, '#3c4cdf');
-                        gradient.addColorStop(1, '#4e5ef0');
+                        gradient.addColorStop(0, chartDarkLight);
+                        gradient.addColorStop(0.5, chartDarkMid);
+                        gradient.addColorStop(1, chartDarkBright);
                         return gradient;
                     },
                     hoverBackgroundColor: function(context) {
                         const ctx = context.chart.ctx;
                         const gradient = ctx.createLinearGradient(0, context.chart.chartArea.bottom, 0, context.chart.chartArea.top);
-                        gradient.addColorStop(0, '#253096');
-                        gradient.addColorStop(1, '#4251d9');
+                        gradient.addColorStop(0, chartDarkHover1);
+                        gradient.addColorStop(1, chartDarkHover2);
                         return gradient;
                     },
                     borderColor: 'rgba(255, 255, 255, 0)',
@@ -244,20 +320,20 @@
                     label: labelTop,
                     backgroundColor: function(context) {
                         if (!context.chart.chartArea) {
-                            return '#64b5f6';
+                            return chartLightBase;
                         }
                         const ctx = context.chart.ctx;
                         const gradient = ctx.createLinearGradient(0, context.chart.chartArea.bottom, 0, context.chart.chartArea.top);
-                        gradient.addColorStop(0, '#42a5f5');
-                        gradient.addColorStop(0.5, '#64b5f6');
-                        gradient.addColorStop(1, '#81c9fa');
+                        gradient.addColorStop(0, chartLight1);
+                        gradient.addColorStop(0.5, chartLightMid);
+                        gradient.addColorStop(1, chartLightBright);
                         return gradient;
                     },
                     hoverBackgroundColor: function(context) {
                         const ctx = context.chart.ctx;
                         const gradient = ctx.createLinearGradient(0, context.chart.chartArea.bottom, 0, context.chart.chartArea.top);
-                        gradient.addColorStop(0, '#3a9ae8');
-                        gradient.addColorStop(1, '#72bdfa');
+                        gradient.addColorStop(0, chartLightHov1);
+                        gradient.addColorStop(1, chartLightHov2);
                         return gradient;
                     },
                     borderColor: 'rgba(255, 255, 255, 0)',
@@ -282,12 +358,30 @@
                 duration: 900,
                 easing: 'easeInOutCubic',
                 delay: function(context) {
-                    let delay = 0;
-                    if (context.type === 'data' && context.mode === 'default') {
-                        delay = context.dataIndex * 80 + context.datasetIndex * 40;
+                    // Stagger all render modes EXCEPT hover — hover must be instant
+                    if (context.type === 'data' && context.mode !== 'active') {
+                        return context.dataIndex * 80 + context.datasetIndex * 40;
                     }
-                    return delay;
+                    return 0;
                 }
+            },
+            animations: {
+                y: {
+                    duration: 900,
+                    easing: 'easeInOutCubic',
+                    from: function(context) {
+                        // Always grow bars from the x-axis baseline
+                        if (context.chart && context.chart.scales && context.chart.scales.y) {
+                            return context.chart.scales.y.getPixelForValue(0);
+                        }
+                        return 0;
+                    }
+                }
+            },
+            transitions: {
+                resize: { animation: { duration: 0 } },
+                show:   { animation: { duration: 0 } },
+                hide:   { animation: { duration: 0 } }
             },
             interaction: {
                 intersect: false,
@@ -329,8 +423,8 @@
                         const saved = parseFloat(dataTop[dataIndex]);
                         const percent = original > 0 ? ((saved / original) * 100).toFixed(1) : 0;
 
-                        const originalLabel = isCloudflareMode ? 'Total Traffic' : 'Original';
-                        const afterLabel = isCloudflareMode ? 'Cached Traffic' : 'After Optimization';
+                        const originalLabel = isCloudflareMode ? '<?php echo esc_js(__('Total Traffic', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Original', WPS_IC_TEXTDOMAIN)); ?>';
+                        const afterLabel = isCloudflareMode ? '<?php echo esc_js(__('Cached Traffic', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('After Optimization', WPS_IC_TEXTDOMAIN)); ?>';
 
                         // Format date as "Month Day" (e.g., "January 7")
                         const rawDate = tooltipModel.title[0];
@@ -369,8 +463,8 @@
                                 <div class="wpc-tooltip-divider"></div>
                                 <div class="wpc-tooltip-footer">
                                     <div class="wpc-tooltip-saved">
-                                        <span class="wpc-saved-icon">🎉</span>
-                                        <span class="wpc-saved-label">Saved</span>
+                                        <span class="wpc-saved-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="14" height="14" style="vertical-align:middle;fill:currentColor"><path d="M32 32a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM448 160a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32 256a32 32 0 1 1 0 64 32 32 0 1 1 0-64zM167 153c-9.4-9.4-9.4-24.6 0-33.9l8.3-8.3c16.7-16.7 27.2-38.6 29.8-62.1l3-27.4C209.6 8.2 221.5-1.3 234.7 .1s22.7 13.3 21.2 26.5l-3 27.4c-3.8 34.3-19.2 66.3-43.6 90.7L201 153c-9.4 9.4-24.6 9.4-33.9 0zM359 311l8.2-8.2c24.4-24.4 56.4-39.8 90.7-43.6l27.4-3c13.2-1.5 25 8 26.5 21.2s-8 25-21.2 26.5l-27.4 3c-23.5 2.6-45.4 13.1-62.1 29.8L393 345c-9.4 9.4-24.6 9.4-33.9 0s-9.4-24.6 0-33.9zM506.3 8.5c8.6 10.1 7.3 25.3-2.8 33.8l-10 8.5c-14.8 12.5-33.7 19.1-53 18.6-16.6-.4-30.6 12.4-31.6 29l-1.8 30c-2.5 42.5-38.3 75.3-80.8 74.2-7.6-.2-15 2.4-20.7 7.3l-10 8.5c-10.1 8.6-25.3 7.3-33.8-2.8s-7.3-25.3 2.8-33.8l10-8.5c14.8-12.5 33.7-19.1 53-18.6 16.6 .4 30.6-12.4 31.6-29l1.8-30c2.5-42.5 38.3-75.3 80.8-74.2 7.6 .2 15-2.4 20.7-7.3l10-8.5c10.1-8.6 25.3-7.3 33.8 2.8zM150.6 201.4l160 160c7.7 7.7 11 18.8 8.6 29.4s-9.9 19.4-20 23.2L259.5 428.9 83.1 252.5 98 212.8c3.8-10.2 12.6-17.7 23.2-20s21.7 1 29.4 8.6zM48.2 345.6l22.6-60.2 155.8 155.8-60.2 22.6-118.2-118.2zM35.9 378.5l97.6 97.6-90.3 33.8c-11.7 4.4-25 1.5-33.9-7.3S-2.4 480.5 2 468.8l33.8-90.3z"/></svg></span>
+                                        <span class="wpc-saved-label"><?php echo esc_js(__('Saved', WPS_IC_TEXTDOMAIN)); ?></span>
                                         <span class="wpc-saved-value">${savedStr}</span>
                                         <span class="wpc-saved-percent">(${percent}%)</span>
                                     </div>
@@ -450,6 +544,7 @@
                         dash: [4, 4]
                     },
                     ticks: {
+                        display: window.innerWidth > 480,
                         color: '#8393a9',
                         font: {
                             size: 12,
@@ -497,16 +592,29 @@
 <script type="text/javascript">
     jQuery(document).ready(function ($) {
         <?php if (!empty($labels) && !empty($stats)) { ?>
-        setTimeout(function () {
-            if ($('#wpc-canvas').length) {
+        // Defer chart creation until dashboard tab is visible
+        // Prevents bars animating from left when initialized while canvas is hidden
+        window.wpcInitChart = function(forceRecreate) {
+            var $canvas = $('#wpc-canvas');
+            if (!$canvas.length) return;
+            // On advanced settings, defer until the tab is visible; on lite/simple, canvas is always visible
+            var $tab = $canvas.closest('.wpc-tab-content');
+            if ($tab.length && !$tab.is(':visible')) return;
+
+            // Destroy existing chart if forcing recreate (tab switch scenario)
+            if (forceRecreate && window.myLine) {
+                window.myLine.destroy();
+                window.myLine = null;
+            }
+
+            if (!window.myLine) {
                 var ctx = document.getElementById("wpc-canvas").getContext("2d");
                 window.myLine = new Chartwpc(ctx, config);
-
-                // Optional: Log data source in console for debugging
-                if (window.console && console.log) {
-                    console.log('WP Compress Chart - Data Source: ' + dataSource);
-                }
             }
+        };
+
+        setTimeout(function() {
+            window.wpcInitChart();
         }, 200);
         <?php } ?>
     });
@@ -516,9 +624,6 @@
     /* ============================================================
        PREMIUM ENTERPRISE TOOLTIP - IMPROVED VERSION
        ============================================================ */
-
-    /* Premium font loading */
-    @import url('https://use.typekit.net/ixj5hkr.css');
 
     /* Data source notice */
     .wpc-data-notice {
@@ -617,11 +722,11 @@
     }
 
     .wpc-badge-dark {
-        background: linear-gradient(135deg, #2d3ba8 0%, #3c4cdf 50%, #4e5ef0 100%);
+        background: var(--wpc-brand-primary, linear-gradient(135deg, #2d3ba8 0%, #3c4cdf 50%, #4e5ef0 100%));
     }
 
     .wpc-badge-light {
-        background: linear-gradient(135deg, #42a5f5 0%, #64b5f6 50%, #81c9fa 100%);
+        background: var(--wpc-brand-primary-light, linear-gradient(135deg, #42a5f5 0%, #64b5f6 50%, #81c9fa 100%));
     }
 
     /* Content layout */
@@ -782,11 +887,11 @@
     }
 
     .wp-compress-pre-subheader .legend-after {
-        background: linear-gradient(135deg, #2d3ba8 0%, #3c4cdf 50%, #4e5ef0 100%);
+        background: var(--wpc-brand-primary, linear-gradient(135deg, #222d80 0%, #2e3caa 50%, #4a56be 100%));
     }
 
     .wp-compress-pre-subheader .legend-original {
-        background: linear-gradient(135deg, #42a5f5 0%, #64b5f6 50%, #81c9fa 100%);
+        background: var(--wpc-brand-primary-light, linear-gradient(135deg, #3d9be8 0%, #51acf6 50%, #74c0f9 100%));
     }
 
     .wp-compress-pre-subheader h3 {

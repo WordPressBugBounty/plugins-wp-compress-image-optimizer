@@ -1,0 +1,3244 @@
+# Copyright (C) 2026 WP Compress
+# This file is distributed under the same license as the WP Compress – Instant Performance & Speed Optimization plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Compress – Instant Performance & Speed Optimization 6.60.62\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wp-compress-image-optimizer\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-04-01T10:39:58+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+
+#. Plugin Name of the plugin
+#: wp-compress.php
+msgid "WP Compress – Instant Performance & Speed Optimization"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: wp-compress.php
+msgid "https://www.wpcompress.com"
+msgstr ""
+
+#. Description of the plugin
+#: wp-compress.php
+msgid "Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup."
+msgstr ""
+
+#. Author of the plugin
+#: wp-compress.php
+msgid "WP Compress"
+msgstr ""
+
+#: classes/ajax.class.php:2775
+#: classes/ajax.class.php:2898
+#: templates/admin/advanced_settings_v4.php:564
+#: templates/admin/debug_tool.php:752
+#: templates/admin/lite_settings.php:267
+#: templates/admin/partials/popups/advanced-cache-configuration.php:55
+#: templates/admin/partials/popups/cache-cookies.php:81
+#: templates/admin/partials/popups/cf-cdn.php:34
+#: templates/admin/partials/popups/cname.php:52
+#: templates/admin/partials/popups/cname.php:94
+#: templates/admin/partials/popups/css/exclude-css-combine.php:54
+#: templates/admin/partials/popups/css/exclude-css-minify.php:56
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:55
+#: templates/admin/partials/popups/css/inline-css.php:37
+#: templates/admin/partials/popups/exclude-adaptive.php:48
+#: templates/admin/partials/popups/exclude-advanced-caching.php:36
+#: templates/admin/partials/popups/exclude-cdn.php:38
+#: templates/admin/partials/popups/exclude-critical-css.php:55
+#: templates/admin/partials/popups/exclude-inline-css.php:55
+#: templates/admin/partials/popups/exclude-lazy.php:38
+#: templates/admin/partials/popups/exclude-minify-html.php:55
+#: templates/admin/partials/popups/exclude-simple-caching.php:41
+#: templates/admin/partials/popups/exclude-url.php:52
+#: templates/admin/partials/popups/exclude-webp.php:38
+#: templates/admin/partials/popups/js/delay-js-configuration.php:40
+#: templates/admin/partials/popups/js/exclude-js-combine.php:55
+#: templates/admin/partials/popups/js/exclude-js-defer.php:55
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:49
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:80
+#: templates/admin/partials/popups/js/exclude-js-delay.php:55
+#: templates/admin/partials/popups/js/exclude-js-minify.php:55
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:43
+#: templates/admin/partials/popups/js/inline-js.php:37
+#: templates/admin/partials/popups/purge-settings.php:103
+#: templates/admin/selectModes/popup.php:178
+msgid "Save"
+msgstr ""
+
+#: classes/ajax.class.php:2866
+#: templates/admin/lite_settings.php:379
+#: templates/admin/lite_settings.php:383
+msgid "CDN"
+msgstr ""
+
+#: classes/ajax.class.php:2866
+#: templates/admin/advanced_settings_v4.php:992
+msgid "Adaptive Images"
+msgstr ""
+
+#: classes/ajax.class.php:2866
+msgid "Advanced Cache"
+msgstr ""
+
+#: classes/ajax.class.php:2866
+#: templates/admin/advanced_settings_v4.php:805
+#: templates/admin/advanced_settings_v4.php:1477
+#: templates/admin/selectModes/popup.php:126
+msgid "Critical CSS"
+msgstr ""
+
+#: classes/ajax.class.php:2866
+#: templates/admin/advanced_settings_v4.php:940
+#: templates/admin/lite_settings.php:360
+msgid "JavaScript"
+msgstr ""
+
+#: classes/ajax.class.php:2884
+#, php-format
+msgid "Exclude from %s"
+msgstr ""
+
+#: classes/ajax.class.php:2885
+#: templates/admin/partials/popups/advanced-cache-configuration.php:22
+#: templates/admin/partials/popups/css/exclude-css-combine.php:23
+#: templates/admin/partials/popups/css/exclude-css-minify.php:22
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:22
+#: templates/admin/partials/popups/exclude-adaptive.php:22
+#: templates/admin/partials/popups/exclude-cdn.php:22
+#: templates/admin/partials/popups/exclude-inline-css.php:22
+#: templates/admin/partials/popups/exclude-lazy.php:22
+#: templates/admin/partials/popups/exclude-minify-html.php:22
+#: templates/admin/partials/popups/exclude-simple-caching.php:22
+#: templates/admin/partials/popups/exclude-webp.php:22
+#: templates/admin/partials/popups/js/exclude-js-combine.php:22
+#: templates/admin/partials/popups/js/exclude-js-defer.php:22
+#: templates/admin/partials/popups/js/exclude-js-delay.php:22
+#: templates/admin/partials/popups/js/exclude-js-minify.php:22
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:22
+msgid "List files or paths to exclude. Partial names work too — we match automatically."
+msgstr ""
+
+#: classes/ajax.class.php:2892
+#: templates/admin/partials/popups/advanced-cache-configuration.php:30
+#: templates/admin/partials/popups/css/exclude-css-combine.php:33
+#: templates/admin/partials/popups/css/exclude-css-minify.php:32
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:30
+#: templates/admin/partials/popups/exclude-adaptive.php:32
+#: templates/admin/partials/popups/exclude-cdn.php:32
+#: templates/admin/partials/popups/exclude-inline-css.php:30
+#: templates/admin/partials/popups/exclude-lazy.php:32
+#: templates/admin/partials/popups/exclude-minify-html.php:30
+#: templates/admin/partials/popups/exclude-simple-caching.php:30
+#: templates/admin/partials/popups/exclude-webp.php:32
+#: templates/admin/partials/popups/js/exclude-js-combine.php:30
+#: templates/admin/partials/popups/js/exclude-js-defer.php:30
+#: templates/admin/partials/popups/js/exclude-js-delay.php:30
+#: templates/admin/partials/popups/js/exclude-js-minify.php:30
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:30
+msgid "e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"
+msgstr ""
+
+#: classes/ajax.class.php:2900
+#: templates/admin/partials/popups/advanced-cache-configuration.php:57
+#: templates/admin/partials/popups/cache-cookies.php:83
+#: templates/admin/partials/popups/css/exclude-css-combine.php:56
+#: templates/admin/partials/popups/css/exclude-css-minify.php:58
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:57
+#: templates/admin/partials/popups/exclude-adaptive.php:50
+#: templates/admin/partials/popups/exclude-advanced-caching.php:38
+#: templates/admin/partials/popups/exclude-cdn.php:40
+#: templates/admin/partials/popups/exclude-critical-css.php:57
+#: templates/admin/partials/popups/exclude-inline-css.php:57
+#: templates/admin/partials/popups/exclude-lazy.php:40
+#: templates/admin/partials/popups/exclude-minify-html.php:57
+#: templates/admin/partials/popups/exclude-simple-caching.php:43
+#: templates/admin/partials/popups/exclude-url.php:54
+#: templates/admin/partials/popups/exclude-webp.php:40
+#: templates/admin/partials/popups/js/delay-js-configuration.php:42
+#: templates/admin/partials/popups/js/exclude-js-combine.php:57
+#: templates/admin/partials/popups/js/exclude-js-defer.php:57
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:51
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:82
+#: templates/admin/partials/popups/js/exclude-js-delay.php:57
+#: templates/admin/partials/popups/js/exclude-js-minify.php:57
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:45
+msgid "See Examples"
+msgstr ""
+
+#: classes/ajax.class.php:2903
+#: templates/admin/partials/popups/advanced-cache-configuration.php:61
+#: templates/admin/partials/popups/css/exclude-css-combine.php:60
+#: templates/admin/partials/popups/css/exclude-css-minify.php:62
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:61
+#: templates/admin/partials/popups/exclude-adaptive.php:54
+#: templates/admin/partials/popups/exclude-cdn.php:44
+#: templates/admin/partials/popups/exclude-inline-css.php:61
+#: templates/admin/partials/popups/exclude-lazy.php:44
+#: templates/admin/partials/popups/exclude-minify-html.php:61
+#: templates/admin/partials/popups/exclude-simple-caching.php:47
+#: templates/admin/partials/popups/exclude-webp.php:44
+#: templates/admin/partials/popups/js/exclude-js-combine.php:61
+#: templates/admin/partials/popups/js/exclude-js-defer.php:61
+#: templates/admin/partials/popups/js/exclude-js-delay.php:61
+#: templates/admin/partials/popups/js/exclude-js-minify.php:61
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:49
+msgid ".svg would exclude all assets with that extension"
+msgstr ""
+
+#: classes/ajax.class.php:2904
+#: templates/admin/partials/popups/advanced-cache-configuration.php:62
+#: templates/admin/partials/popups/css/exclude-css-combine.php:61
+#: templates/admin/partials/popups/css/exclude-css-minify.php:63
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:62
+#: templates/admin/partials/popups/exclude-adaptive.php:55
+#: templates/admin/partials/popups/exclude-cdn.php:45
+#: templates/admin/partials/popups/exclude-inline-css.php:62
+#: templates/admin/partials/popups/exclude-lazy.php:45
+#: templates/admin/partials/popups/exclude-minify-html.php:62
+#: templates/admin/partials/popups/exclude-simple-caching.php:48
+#: templates/admin/partials/popups/exclude-webp.php:45
+#: templates/admin/partials/popups/js/exclude-js-combine.php:62
+#: templates/admin/partials/popups/js/exclude-js-defer.php:62
+#: templates/admin/partials/popups/js/exclude-js-delay.php:62
+#: templates/admin/partials/popups/js/exclude-js-minify.php:62
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:50
+msgid "imagename would exclude any file with that name"
+msgstr ""
+
+#: classes/ajax.class.php:2905
+#: templates/admin/partials/popups/advanced-cache-configuration.php:63
+#: templates/admin/partials/popups/css/exclude-css-combine.php:62
+#: templates/admin/partials/popups/css/exclude-css-minify.php:64
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:63
+#: templates/admin/partials/popups/exclude-adaptive.php:56
+#: templates/admin/partials/popups/exclude-cdn.php:46
+#: templates/admin/partials/popups/exclude-inline-css.php:63
+#: templates/admin/partials/popups/exclude-lazy.php:46
+#: templates/admin/partials/popups/exclude-minify-html.php:63
+#: templates/admin/partials/popups/exclude-simple-caching.php:49
+#: templates/admin/partials/popups/exclude-webp.php:46
+#: templates/admin/partials/popups/js/exclude-js-combine.php:63
+#: templates/admin/partials/popups/js/exclude-js-defer.php:63
+#: templates/admin/partials/popups/js/exclude-js-delay.php:63
+#: templates/admin/partials/popups/js/exclude-js-minify.php:63
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:51
+msgid "/myplugin/image.jpg would exclude that specific file"
+msgstr ""
+
+#: classes/ajax.class.php:2906
+#: templates/admin/partials/popups/advanced-cache-configuration.php:64
+#: templates/admin/partials/popups/css/exclude-css-combine.php:63
+#: templates/admin/partials/popups/css/exclude-css-minify.php:65
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:64
+#: templates/admin/partials/popups/exclude-adaptive.php:57
+#: templates/admin/partials/popups/exclude-cdn.php:47
+#: templates/admin/partials/popups/exclude-inline-css.php:64
+#: templates/admin/partials/popups/exclude-lazy.php:47
+#: templates/admin/partials/popups/exclude-minify-html.php:64
+#: templates/admin/partials/popups/exclude-simple-caching.php:50
+#: templates/admin/partials/popups/exclude-webp.php:47
+#: templates/admin/partials/popups/js/delay-js-configuration.php:47
+#: templates/admin/partials/popups/js/exclude-js-combine.php:64
+#: templates/admin/partials/popups/js/exclude-js-defer.php:64
+#: templates/admin/partials/popups/js/exclude-js-delay.php:64
+#: templates/admin/partials/popups/js/exclude-js-minify.php:64
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:52
+msgid "/wp-content/myplugin/ would exclude everything using that path"
+msgstr ""
+
+#: classes/enqueues.class.php:621
+msgid "Deselect All"
+msgstr ""
+
+#: classes/enqueues.class.php:621
+msgid "Select All"
+msgstr ""
+
+#: classes/gui-v4.class.php:1665
+msgid "Preset Optimization Modes"
+msgstr ""
+
+#: classes/gui-v4.class.php:1668
+msgid "One-click configure recommended image optimization settings and performance tweaks based on your preferences and website compatibility."
+msgstr ""
+
+#: classes/gui-v4.class.php:1675
+#: templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:82
+msgid "Safe Mode"
+msgstr ""
+
+#: classes/gui-v4.class.php:1676
+#: templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:117
+msgid "Aggressive Mode"
+msgstr ""
+
+#: classes/gui-v4.class.php:1677
+#: templates/admin/advanced_settings_v4.php:524
+msgid "Custom"
+msgstr ""
+
+#: classes/gui-v4.class.php:1738
+#: classes/gui-v4.class.php:1751
+#: templates/admin/partials/popups/cf-cdn.php:21
+#: templates/admin/partials/popups/cname.php:27
+#: templates/admin/partials/popups/cname.php:72
+msgid "Custom CDN Domain"
+msgstr ""
+
+#: classes/gui-v4.class.php:1741
+#: classes/gui-v4.class.php:1754
+msgid "Connected Domain:"
+msgstr ""
+
+#: classes/gui-v4.class.php:1744
+#: classes/gui-v4.class.php:1757
+msgid "Use <strong>any domain</strong> you own to serve images and assets."
+msgstr ""
+
+#: classes/gui-v4.class.php:1768
+#: classes/gui-v4.class.php:1780
+#: templates/admin/scan-fonts.php:144
+msgid "Remove"
+msgstr ""
+
+#: classes/gui-v4.class.php:1769
+#: classes/gui-v4.class.php:1781
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:34
+msgid "Configure"
+msgstr ""
+
+#: classes/gui-v4.class.php:1774
+msgid "Optimize Plan Required"
+msgstr ""
+
+#: classes/gui-v4.class.php:1775
+msgid "Locked"
+msgstr ""
+
+#: classes/gui-v4.class.php:1902
+msgid "Recommended"
+msgstr ""
+
+#: classes/media_library_live.class.php:1201
+msgid "Image added to queue"
+msgid_plural "%s images added to queue."
+msgstr[0] ""
+msgstr[1] ""
+
+#: classes/media_library_live.class.php:1204
+msgid "Image removed from queue"
+msgid_plural "%s images removed from queue."
+msgstr[0] ""
+msgstr[1] ""
+
+#: classes/menu.class.php:84
+#: classes/menu.class.php:122
+msgid "Purge & Preload HTML Cache"
+msgstr ""
+
+#: classes/menu.class.php:87
+#: classes/menu.class.php:125
+#: templates/admin/advanced_settings_v4.php:1511
+msgid "Purge Critical CSS"
+msgstr ""
+
+#: classes/menu.class.php:96
+#: classes/menu.class.php:104
+#: classes/menu.class.php:135
+#: classes/menu.class.php:144
+#: templates/admin/advanced_settings_v4.php:944
+msgid "Purge CDN Cache"
+msgstr ""
+
+#: classes/menu.class.php:114
+#: templates/admin/selectModes/popup.php:91
+#: templates/admin/selectModes/popup.php:109
+msgid "Generate Critical CSS"
+msgstr ""
+
+#: classes/menu.class.php:117
+msgid "View as Visitor"
+msgstr ""
+
+#: classes/menu.class.php:154
+#: templates/admin/advanced_settings_v4.php:1167
+#: templates/admin/advanced_settings_v4.php:1693
+#: templates/admin/debug_tool.php:620
+msgid "Settings"
+msgstr ""
+
+#: classes/stats.class.php:144
+msgid "Unlock 24/7 Monitoring"
+msgstr ""
+
+#: classes/stats.class.php:148
+msgid "24/7 Monitoring Active"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:9
+#: templates/admin/lite_settings.php:10
+msgid "Forbidden."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:80
+#, php-format
+msgid "Something went wrong: %s"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:119
+msgid "No privileges to save options!"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:388
+msgid "CDN DNS: Domain DNS is not managed by Cloudflare"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:99
+msgid "Recommended Mode"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:544
+msgid "Unlimited"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:558
+#: templates/admin/lite_settings.php:261
+msgid "Unsaved changes"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:559
+#: templates/admin/lite_settings.php:262
+msgid "Please save your progress."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:576
+#: templates/admin/lite_settings.php:250
+msgid "Switch icon style"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:578
+#: templates/admin/lite_settings.php:252
+msgid "Style"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:586
+#: templates/admin/advanced_settings_v4.php:587
+#: templates/admin/advanced_settings_v4.php:593
+#: templates/admin/lite_settings.php:334
+#: templates/admin/lite_settings.php:336
+msgid "Advanced Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:593
+msgid "Simple Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:600
+#: templates/admin/bulk.php:28
+#: templates/admin/lite_settings.php:281
+msgid "Pause Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:606
+#: templates/admin/lite_settings.php:287
+msgid "Optimization in progress..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:612
+#: templates/admin/lite_settings.php:293
+msgid "Start Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:617
+#: templates/admin/lite_settings.php:298
+#: templates/admin/lite_settings.php:461
+#: templates/admin/lite_settings.php:838
+#: templates/admin/lite_settings.php:1071
+#: templates/admin/partials/boxes/stats-bar.php:193
+#: templates/admin/partials/boxes/stats-bar.php:204
+#: templates/admin/partials/boxes/stats-bar.php:309
+#: templates/admin/partials/lite/stats.php:258
+#: templates/admin/partials/v4/pageview-stats.php:189
+#: templates/admin/partials/v4/stats.php:115
+msgid "Optimized"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:622
+#: templates/admin/lite_settings.php:303
+#: templates/admin/lite_settings.php:627
+msgid "Preparing..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:627
+#: templates/admin/lite_settings.php:308
+msgid "Smart Optimization Locked"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:670
+msgid "Pause Local Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:680
+msgid "Pause Local Restore"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:707
+msgid "Dashboard"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:720
+msgid "CDN Delivery"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:733
+msgid "Image Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:744
+msgid "Performance Tweaks"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:755
+msgid "Font Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:768
+msgid "Other Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:779
+msgid "UX Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:790
+msgid "Smart Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:817
+msgid "Integrations"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:828
+#: templates/admin/advanced_settings_v4.php:1685
+msgid "Export / Import Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:842
+#: templates/admin/advanced_settings_v4.php:1731
+msgid "System Information"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:852
+msgid "Debug"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:862
+msgid "Logger"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:922
+msgid "Real-Time Optimization + CDN"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:922
+msgid "Optimize your images and scripts in real-time via our top-rated global CDN."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:929
+msgid "JPG/JPEG"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:931
+msgid "PNG"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:933
+msgid "GIF"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:935
+msgid "SVG"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:938
+#: templates/admin/lite_settings.php:357
+msgid "CSS"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:942
+#: templates/admin/debug_tool.php:731
+msgid "Fonts"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:965
+msgid "Data Privacy & Routing"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:966
+msgid "Strict EU Routing ensures that your data is processed and served exclusively through European data centers."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:971
+msgid "Enforce EU Routing"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:992
+msgid "Intelligently adapt images based on the incoming visitor's device, browser, and location on page."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:997
+msgid "Resize by Incoming Device"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:997
+msgid "Serve the ideal image based on the visitor's device to reduce file sizes, improve load times, and offer a better experience."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1000
+#: templates/admin/selectModes/popup.php:89
+#: templates/admin/selectModes/popup.php:106
+#: templates/admin/selectModes/popup.php:124
+msgid "Serve WebP Images"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1000
+msgid "Generate and serve next-generation WebP images to supported browsers and devices."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1003
+msgid "Serve Retina Images"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1003
+msgid "Deliver higher-resolution retina images so that your images look great on larger screens."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1006
+msgid "Background Images"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1006
+msgid "Serve background images over CDN with all the adaptive and quality options."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1021
+#: templates/admin/lite_settings.php:363
+msgid "Lazy Loading"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1021
+msgid "Intelligently lazy load images based on the viewport position."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1025
+msgid "Native Lazy"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1025
+msgid "Lazy load images using browser methods to save bandwidth and reduce overall page size."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1028
+msgid "Lazy Loading by Viewport"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1028
+msgid "Load additional images as the user scrolls to save bandwidth and reduce overall page size."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Skip Lazy Loading"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Enter how many images to skip lazy loading for on each page."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Skip"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "images"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1055
+msgid "Optimization Level"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1056
+msgid "Select your preferred image compression strength."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1064
+msgid "Lossless"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1065
+msgid "Intelligent"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1066
+msgid "Ultra"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1082
+msgid "Auto-Optimize on Upload"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1083
+msgid "Automatically compress new media library images as they're uploaded."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1100
+msgid "Optimize Media Library"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1101
+msgid "Optimize locally stored images directly in bulk."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1106
+msgid "Optimize Media"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1125
+msgid "Display Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1125
+msgid "Control which plugin elements are visible in your WordPress admin."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1129
+msgid "Hide in Admin Bar"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1129
+msgid "Remove the WP Compress icon and per-page tools from the WordPress admin bar."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1132
+msgid "Hide Cache Status"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1132
+msgid "Hide the cache status indicator from the admin bar on each page."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1135
+msgid "Hide Critical CSS Status"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1135
+msgid "Hide the critical CSS generation status from the admin bar."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1138
+msgid "Hide Preloading Status"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1138
+msgid "Hide the preloading status indicator from the admin bar."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1141
+msgid "Hide from WordPress"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1141
+msgid "Completely hide the plugin from the WordPress admin area."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1145
+msgid "Show in Media Library"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1145
+msgid "Add compress, exclude, and restore options to Media Library list view."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1152
+msgid "User Permissions"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1152
+msgid "Control which user roles can access plugin features."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1161
+#: templates/admin/scan-fonts.php:84
+msgid "Purge"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1162
+msgid "Clear CDN, HTML cache, Critical CSS & Cloudflare"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1168
+msgid "View and modify all plugin settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1181
+msgid "Role"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1233
+msgid "Advanced Caching"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1233
+msgid "Serve static versions of your pages for faster load times and lower server load."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1238
+msgid "Enable Caching"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1238
+msgid "Dramatically speed up your site by serving pre-built pages to every visitor."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1241
+msgid "Exclude URLs"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1241
+msgid "Prevent specific pages or URLs from being cached."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1244
+msgid "Ignore Server Cache Control"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1244
+msgid "Cache pages even when the server sends no-cache headers. Useful when hosting or plugins set overly strict rules."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1248
+msgid "Cache Logged-In Users"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1248
+msgid "Serve cached pages to logged-in users. Best for membership sites where frontend content rarely changes per user."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1252
+msgid "Cache Response Headers"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1252
+msgid "Store custom HTTP response headers alongside cached pages to preserve server behavior."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1256
+msgid "Auto-Purge on Update"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1256
+msgid "Automatically clear cache when you update plugins, themes, or edit content so visitors always see the latest version."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1260
+msgid "Cache by Cookie"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1260
+msgid "Serve different cached versions based on cookie values. Required for multi-currency, geo-targeting, or consent-based content."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1277
+msgid "Smart CSS"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1277
+msgid "Remove render-blocking CSS so your pages appear instantly."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1282
+msgid "Optimize CSS"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1282
+msgid "Automatically extracts critical styles and removes render-blocking CSS for instant page rendering."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1303
+msgid "Smart JavaScript"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1303
+msgid "Reduce script blocking so your pages load and respond faster."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1309
+msgid "Optimize JavaScript"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1309
+msgid "Automatically delays non-essential scripts so your pages load and respond faster."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1316
+#: templates/admin/advanced_settings_v4.php:1322
+msgid "Developer Mode"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1316
+msgid "Pause cache purging and Critical CSS generation while you make changes."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1322
+msgid "Stops automatic cache purging and Critical CSS regeneration to save resources while you're actively editing. Turn off when done."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1334
+msgid "Other Optimizations"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1334
+msgid "Fine-tune additional performance settings for media, scripts, and WordPress core."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1338
+msgid "Media & Assets"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1341
+msgid "Lazy Load iFrames"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1342
+msgid "Remove srcset"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1343
+msgid "Add Image Sizes"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1344
+msgid "Retina in srcset"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1345
+msgid "Optimize Metadata Images"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1346
+msgid ".htaccess WebP Rewrite"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1353
+msgid "WordPress Core & Plugins"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1356
+msgid "Disable Emoji"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1357
+msgid "Disable Dashicons"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1358
+msgid "Disable Block Editor"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1359
+msgid "Disable oEmbeds"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1360
+msgid "WooCommerce Tweaks"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1361
+msgid "Bypass Logged-In Users"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1368
+msgid "Scripts & Tracking"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1371
+msgid "Lazy Load Google Tag Manager"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1372
+msgid "Disable onLoad Event"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1373
+msgid "Optimize External URLs"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1374
+msgid "Filter Bot Traffic"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1375
+msgid "Set Fetch Priority"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1395
+msgid "Smart Optimization + Performance"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1398
+msgid "24/7 Monitoring"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1401
+#: templates/admin/advanced_settings_v4.php:1483
+msgid "No need to lift a finger -- your website is intelligently optimized around the clock based on demand."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1413
+#: templates/admin/advanced_settings_v4.php:1498
+msgid "Preparing"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1425
+msgid "Pages & Posts"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1426
+msgid "View optimization status for every page and post on your site."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1435
+msgid "Search pages, posts, URLs..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1438
+msgid "Filter by Type"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1509
+msgid "Generate Critical CSS for Home Page"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid "Cloudflare Integration"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid "Connect with Cloudflare for automated cache purging, edge caching, and uninterrupted access."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid "How to?"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1529
+#: templates/admin/mu-getting-started.php:32
+msgid "Connecting..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1532
+msgid "Connecting, this can take up to 1-2 minutes..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1537
+msgid "Login to Cloudflare:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1539
+#: templates/admin/advanced_settings_v4.php:1560
+msgid "Connect"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1546
+msgid "Select the website you wish to connect:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1549
+msgid "Select a zone"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1554
+msgid "Search zones..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1557
+msgid "No zones found"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1568
+msgid "Disconnecting, this can take up to 1-2 minutes..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1571
+msgid "Refreshing, this can take up to 1-2 minutes..."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1577
+#: templates/admin/lite_settings.php:498
+msgid "Connected"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1598
+msgid "Refresh Connection"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1599
+msgid "Disconnect"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1618
+msgid "HTML Edge Caching"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1618
+msgid "Cache homepage or full site for faster server response."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1619
+msgid "Static Assets Cache"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1619
+msgid "Caches CSS, JS, images, fonts, and more for fast global delivery."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1620
+msgid "Real-Time Adaptive Optimization"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1620
+msgid "Resize images on the fly, auto-convert to WebP, and optimize scripts (based on your plugin settings)."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1624
+msgid "Please make sure your permissions are updated to use the latest integration:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1626
+msgid "Configure API Token"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1630
+#: templates/admin/advanced_settings_v4.php:1645
+msgid "How To Get Your Cloudflare API Key"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1635
+#: templates/admin/advanced_settings_v4.php:1650
+msgid "Cloudflare Integration Setup Guide"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1666
+msgid "Other Integrations"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1666
+msgid "Third-party plugin compatibility settings."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1669
+msgid "Disable Elementor Triggers"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1669
+msgid "Can fix double animations, but may break menus and other Elementor elements."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1685
+msgid "Export your settings to a file to easily import to other sites."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1699
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:30
+msgid "Excludes"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1705
+#: templates/admin/partials/popups/purge-settings.php:21
+msgid "Cache Purge Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1711
+#: templates/admin/partials/popups/cache-cookies.php:21
+msgid "Cache Cookies Settings"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1717
+msgid "Export"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1718
+msgid "Import"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1719
+msgid "Reset to default"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1731
+msgid "Server environment, PHP version, and plugin diagnostics."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1748
+msgid "WP Version:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1753
+msgid "PHP Version:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1757
+#: templates/admin/debug_tool.php:407
+msgid "Site URL:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1761
+msgid "Home URL:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1765
+msgid "API Location:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1769
+msgid "Bulk Status:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1773
+msgid "Parsed Images:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1777
+msgid "Multisite:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1780
+msgid "True"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1782
+msgid "False"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1785
+msgid "Maximum upload size:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1789
+msgid "Memory limit:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1794
+msgid "Thumbnails:"
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1802
+msgid "file_get_contents function is available."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1804
+msgid "file_get_contents function is not available."
+msgstr ""
+
+#: templates/admin/advanced_settings_v4.php:1809
+msgid "URL changes:"
+msgstr ""
+
+#: templates/admin/bulk.php:32
+msgid "Pause Restore"
+msgstr ""
+
+#: templates/admin/bulk.php:35
+#: templates/admin/preload.php:27
+msgid "Return to Dashboard"
+msgstr ""
+
+#: templates/admin/bulk.php:101
+#, php-format
+msgid "You have %d images ready to be optimized."
+msgstr ""
+
+#: templates/admin/bulk.php:103
+msgid "You have 0 images to optimize."
+msgstr ""
+
+#: templates/admin/bulk.php:108
+#: templates/admin/bulk.php:110
+msgid "Compress Images"
+msgstr ""
+
+#: templates/admin/bulk.php:110
+msgid "You have no more images to compress!"
+msgstr ""
+
+#: templates/admin/bulk.php:130
+#, php-format
+msgid "You have %d images that can be restored."
+msgstr ""
+
+#: templates/admin/bulk.php:132
+msgid "You have 0 images that can be restored."
+msgstr ""
+
+#: templates/admin/bulk.php:138
+#: templates/admin/bulk.php:140
+msgid "Restore Images"
+msgstr ""
+
+#: templates/admin/bulk.php:140
+msgid "You have no more images to restore!"
+msgstr ""
+
+#: templates/admin/bulk.php:157
+msgid "Preparing to Optimize"
+msgstr ""
+
+#: templates/admin/bulk.php:180
+msgid "Preparing to Restore"
+msgstr ""
+
+#: templates/admin/bulk.php:195
+msgid "Images Restored"
+msgstr ""
+
+#: templates/admin/bulk.php:199
+msgid "Image Restore Complete!"
+msgstr ""
+
+#: templates/admin/bulk.php:200
+msgid "We have successfully restored all of your images."
+msgstr ""
+
+#: templates/admin/bulk.php:212
+msgid "Original Images"
+msgstr ""
+
+#: templates/admin/bulk.php:219
+#: templates/admin/partials/boxes/stats-bar.php:134
+msgid "Total Images"
+msgstr ""
+
+#: templates/admin/bulk.php:226
+msgid "Total Savings"
+msgstr ""
+
+#: templates/admin/bulk.php:233
+msgid "Average Savings"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:10
+#: templates/admin/connect/api-connect.php:86
+#: templates/admin/connect/api-connect.php:93
+#: templates/admin/connect/lite-api-connect.php:56
+#: templates/admin/connect/lite-api-connect.php:62
+#: templates/admin/connect/lite-api-connect.php:68
+#: templates/admin/connect/lite-api-locked.php:56
+#: templates/admin/connect/lite-api-locked.php:62
+#: templates/admin/connect/lite-api-upgrade.php:56
+#: templates/admin/connect/lite-api-upgrade.php:62
+#: templates/admin/connect/lite-url-changed.php:56
+#: templates/admin/connect/lite-url-changed.php:62
+#: templates/admin/connect/lite-url-changed.php:68
+msgid "We have encountered an error"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:14
+msgid "Error message"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:17
+#: templates/admin/connect/api-connect.php:89
+#: templates/admin/connect/api-connect.php:96
+#: templates/admin/connect/lite-api-connect.php:58
+#: templates/admin/connect/lite-api-connect.php:64
+#: templates/admin/connect/lite-api-connect.php:70
+#: templates/admin/connect/lite-api-locked.php:58
+#: templates/admin/connect/lite-api-locked.php:64
+#: templates/admin/connect/lite-api-upgrade.php:58
+#: templates/admin/connect/lite-api-upgrade.php:64
+#: templates/admin/connect/lite-url-changed.php:58
+#: templates/admin/connect/lite-url-changed.php:64
+#: templates/admin/connect/lite-url-changed.php:70
+msgid "Retry"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:18
+msgid "Contact support"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:28
+msgid "We're running a few quick tests"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:29
+msgid "It should only be a few moments..."
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:31
+msgid "API Key Validation"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:32
+msgid "Finalization"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:35
+msgid "Cancel"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:43
+msgid "Faster Loading Images on Autopilot"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:44
+msgid "We'll automatically optimize and serve your images from our lightning-fast global CDN for increased performance."
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:46
+#: templates/admin/connect/api-connect.php:155
+msgid "Start"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:47
+msgid "I want to use Legacy Mode"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:62
+msgid "Lightning Fast Load Times"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:63
+msgid "without lifting another finger past setup!"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:80
+#: templates/admin/connect/lite-api-connect.php:46
+#: templates/admin/connect/lite-api-locked.php:46
+#: templates/admin/connect/lite-api-upgrade.php:46
+#: templates/admin/connect/lite-url-changed.php:46
+msgid "Confirming Your Access Key"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:81
+#: templates/admin/connect/lite-api-connect.php:47
+#: templates/admin/connect/lite-api-connect.php:52
+#: templates/admin/connect/lite-api-locked.php:47
+#: templates/admin/connect/lite-api-locked.php:52
+#: templates/admin/connect/lite-api-upgrade.php:47
+#: templates/admin/connect/lite-api-upgrade.php:52
+#: templates/admin/connect/lite-url-changed.php:47
+#: templates/admin/connect/lite-url-changed.php:52
+msgid "You're so close to faster load times for life..."
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:87
+msgid "Your Access Key seems to be invalid"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:94
+msgid "Your site is already connected to a different API Key"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:110
+#: templates/admin/mu-getting-started.php:58
+#: templates/admin/selectModes/popup.php:65
+msgid "Select Your Optimization Mode"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:111
+#: templates/admin/mu-getting-started.php:59
+msgid "Ultra-Powerful performance at your fingertips as simple toggles"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:116
+#: templates/admin/mu-getting-started.php:63
+msgid "Real-Time Optimization"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:117
+#: templates/admin/mu-getting-started.php:64
+msgid "Optimize images and scripts in real-time based on the visitor's attributes."
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:118
+#: templates/admin/connect/api-connect.php:125
+#: templates/admin/mu-getting-started.php:65
+#: templates/admin/mu-getting-started.php:71
+msgid "Select"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:123
+#: templates/admin/mu-getting-started.php:69
+msgid "Traditional Compression"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:124
+#: templates/admin/mu-getting-started.php:70
+msgid "Compress images in your local media library without CDN delivery."
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:142
+msgid "Lite Version"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:144
+msgid "OR"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:146
+msgid "Pro Version"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:151
+msgid "Enter Your Access Key"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:158
+msgid "Create an Account"
+msgstr ""
+
+#: templates/admin/connect/api-connect.php:161
+msgid "Go to Portal"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:34
+#: templates/admin/connect/lite-api-upgrade.php:34
+msgid "Supercharge Your Site"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:35
+#: templates/admin/connect/lite-api-upgrade.php:35
+msgid "Join thousands of businesses experiencing lightning-fast load times."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:51
+#: templates/admin/connect/lite-api-locked.php:51
+#: templates/admin/connect/lite-api-upgrade.php:51
+#: templates/admin/connect/lite-url-changed.php:51
+msgid "Linking Your Account"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:57
+#: templates/admin/connect/lite-api-locked.php:57
+#: templates/admin/connect/lite-api-upgrade.php:57
+#: templates/admin/connect/lite-url-changed.php:57
+msgid "Your site is already connected to a different access key."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:63
+#: templates/admin/connect/lite-api-locked.php:63
+#: templates/admin/connect/lite-api-upgrade.php:63
+#: templates/admin/connect/lite-url-changed.php:63
+msgid "Your access key seems to be invalid."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:69
+#: templates/admin/connect/lite-url-changed.php:69
+msgid "This access key is already in use."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:80
+#: templates/admin/connect/lite-url-changed.php:80
+msgid "Communication Issue"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:81
+#: templates/admin/connect/lite-url-changed.php:81
+msgid "We're unable to connect to the API."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:83
+#: templates/admin/connect/lite-url-changed.php:83
+msgid "Something (like a firewall, security plugin, Cloudflare, or server setting) is blocking communication. Don't worry — this is easy to fix."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:86
+#: templates/admin/connect/lite-url-changed.php:86
+msgid "View Whitelisting Guide"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:89
+#: templates/admin/connect/lite-url-changed.php:89
+msgid "Retry Connection"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:95
+#: templates/admin/connect/lite-api-upgrade.php:70
+#: templates/admin/connect/lite-url-changed.php:95
+msgid "Plugin Activation"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:96
+#: templates/admin/connect/lite-api-locked.php:71
+#: templates/admin/connect/lite-api-upgrade.php:71
+msgid "Enter your unique access key to get started."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:103
+#: templates/admin/connect/lite-api-locked.php:78
+#: templates/admin/connect/lite-api-upgrade.php:78
+msgid "Unlock premium features including advanced configuration, image optimization, and global CDN access."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:106
+#: templates/admin/connect/lite-api-locked.php:81
+#: templates/admin/connect/lite-api-upgrade.php:81
+#: templates/admin/connect/lite-url-changed.php:106
+msgid "Please enter your API Key."
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:121
+#: templates/admin/connect/lite-api-locked.php:96
+#: templates/admin/connect/lite-api-upgrade.php:96
+#: templates/admin/connect/lite-url-changed.php:121
+msgid "e.g. wpc_1234567890abcdef"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:126
+#: templates/admin/connect/lite-api-locked.php:101
+#: templates/admin/connect/lite-api-upgrade.php:101
+#: templates/admin/connect/lite-url-changed.php:126
+msgid "Activate Plugin"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:131
+#: templates/admin/connect/lite-api-locked.php:106
+#: templates/admin/connect/lite-api-upgrade.php:106
+#: templates/admin/connect/lite-url-changed.php:131
+msgid "Or Continue with Lite Version"
+msgstr ""
+
+#: templates/admin/connect/lite-api-connect.php:136
+#: templates/admin/connect/lite-api-locked.php:111
+#: templates/admin/connect/lite-api-upgrade.php:111
+msgid "Don't have an access key? You may <a href=\"https://app.wpcompress.com/register/\" target=\"_blank\">create a free account</a> to unlock bonus performance features and portal access."
+msgstr ""
+
+#: templates/admin/connect/lite-api-locked.php:34
+msgid "Unlock Full Power"
+msgstr ""
+
+#: templates/admin/connect/lite-api-locked.php:35
+msgid "Premium optimization, global CDN, and advanced configuration await."
+msgstr ""
+
+#: templates/admin/connect/lite-api-locked.php:70
+msgid "Unlock Features"
+msgstr ""
+
+#: templates/admin/connect/lite-url-changed.php:34
+msgid "Reconnect Your Site"
+msgstr ""
+
+#: templates/admin/connect/lite-url-changed.php:35
+msgid "Your site URL has changed. Please re-enter your access key."
+msgstr ""
+
+#: templates/admin/connect/lite-url-changed.php:96
+msgid "Your site URL has changed — please reconnect with your access key."
+msgstr ""
+
+#: templates/admin/connect/lite-url-changed.php:103
+msgid "Looks like your site URL has changed, please reconnect with a new API key."
+msgstr ""
+
+#: templates/admin/debug_tool.php:128
+msgid "Copy Debug Results"
+msgstr ""
+
+#: templates/admin/debug_tool.php:134
+msgid "Check Name"
+msgstr ""
+
+#: templates/admin/debug_tool.php:135
+msgid "Value"
+msgstr ""
+
+#: templates/admin/debug_tool.php:136
+msgid "Status"
+msgstr ""
+
+#: templates/admin/debug_tool.php:137
+msgid "Action"
+msgstr ""
+
+#: templates/admin/debug_tool.php:142
+msgid "Use OLD Critical API"
+msgstr ""
+
+#: templates/admin/debug_tool.php:164
+msgid "Enable Old API"
+msgstr ""
+
+#: templates/admin/debug_tool.php:166
+msgid "Enable New API"
+msgstr ""
+
+#: templates/admin/debug_tool.php:169
+msgid "Enable Bunny Critical CSS API."
+msgstr ""
+
+#: templates/admin/debug_tool.php:174
+msgid "New CDN API Test"
+msgstr ""
+
+#: templates/admin/debug_tool.php:198
+#: templates/admin/debug_tool.php:223
+#: templates/admin/debug_tool.php:248
+#: templates/admin/debug_tool.php:269
+#: templates/admin/debug_tool.php:290
+#: templates/admin/debug_tool.php:310
+#: templates/admin/debug_tool.php:330
+#: templates/admin/debug_tool.php:351
+#: templates/admin/debug_tool.php:372
+#: templates/admin/debug_tool.php:391
+msgid "Enable"
+msgstr ""
+
+#: templates/admin/debug_tool.php:200
+#: templates/admin/debug_tool.php:225
+#: templates/admin/debug_tool.php:250
+#: templates/admin/debug_tool.php:271
+#: templates/admin/debug_tool.php:292
+#: templates/admin/debug_tool.php:312
+#: templates/admin/debug_tool.php:332
+#: templates/admin/debug_tool.php:353
+#: templates/admin/debug_tool.php:374
+#: templates/admin/debug_tool.php:393
+msgid "Disable"
+msgstr ""
+
+#: templates/admin/debug_tool.php:203
+msgid "Enable Bunny MC API."
+msgstr ""
+
+#: templates/admin/debug_tool.php:208
+msgid "New DelayJS DEBUG"
+msgstr ""
+
+#: templates/admin/debug_tool.php:228
+msgid "Enable console log debug."
+msgstr ""
+
+#: templates/admin/debug_tool.php:233
+msgid "Remove OptimizeJS"
+msgstr ""
+
+#: templates/admin/debug_tool.php:253
+#: templates/admin/debug_tool.php:274
+msgid "If you are having any sort of issues with optimize.js this will give you the debug version."
+msgstr ""
+
+#: templates/admin/debug_tool.php:258
+msgid "Enable OptimizeJS Debug"
+msgstr ""
+
+#: templates/admin/debug_tool.php:279
+msgid "Debug Log"
+msgstr ""
+
+#: templates/admin/debug_tool.php:299
+msgid "Plugin Development Mode"
+msgstr ""
+
+#: templates/admin/debug_tool.php:319
+msgid "Enable Critical CSS Debug"
+msgstr ""
+
+#: templates/admin/debug_tool.php:335
+msgid "If you are having any sort of issues with critical CSS."
+msgstr ""
+
+#: templates/admin/debug_tool.php:340
+msgid "Enable PageSpeed & Critical Debug"
+msgstr ""
+
+#: templates/admin/debug_tool.php:356
+#: templates/admin/debug_tool.php:377
+#: templates/admin/debug_tool.php:396
+msgid "If you are having any sort of issues with our plugin, enabling this option will give you some basic debug output in Console log of your browser."
+msgstr ""
+
+#: templates/admin/debug_tool.php:361
+msgid "Enable PHP Debug"
+msgstr ""
+
+#: templates/admin/debug_tool.php:382
+msgid "Enable JavaScript Debug"
+msgstr ""
+
+#: templates/admin/debug_tool.php:403
+msgid "Site Url"
+msgstr ""
+
+#: templates/admin/debug_tool.php:412
+msgid "Get site url:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:419
+msgid "Plugin Configuration"
+msgstr ""
+
+#: templates/admin/debug_tool.php:425
+msgid "Allow live:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:426
+msgid "Allow local:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:427
+msgid "Account Status:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:434
+msgid "Get JobID For Crit"
+msgstr ""
+
+#: templates/admin/debug_tool.php:446
+#: templates/admin/debug_tool.php:457
+msgid "Generate Ajax Params"
+msgstr ""
+
+#: templates/admin/debug_tool.php:492
+msgid "Thumbnails"
+msgstr ""
+
+#: templates/admin/debug_tool.php:496
+#, php-format
+msgid "Total Thumbs: %d"
+msgstr ""
+
+#: templates/admin/debug_tool.php:502
+msgid "Paths"
+msgstr ""
+
+#: templates/admin/debug_tool.php:505
+msgid "Debug Log:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:506
+msgid "Debug Log URI:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:511
+msgid "Excluded List"
+msgstr ""
+
+#: templates/admin/debug_tool.php:520
+msgid "API Key"
+msgstr ""
+
+#: templates/admin/debug_tool.php:529
+msgid "CDN Zone Name"
+msgstr ""
+
+#: templates/admin/debug_tool.php:537
+#: templates/admin/debug_tool.php:550
+msgid "Delete"
+msgstr ""
+
+#: templates/admin/debug_tool.php:542
+msgid "Custom CDN Zone Name"
+msgstr ""
+
+#: templates/admin/debug_tool.php:556
+msgid "Plugin Activated"
+msgstr ""
+
+#: templates/admin/debug_tool.php:568
+#: templates/admin/debug_tool.php:585
+#: templates/admin/debug_tool.php:606
+msgid "None"
+msgstr ""
+
+#: templates/admin/debug_tool.php:571
+msgid "PHP Version"
+msgstr ""
+
+#: templates/admin/debug_tool.php:588
+msgid "WP Version"
+msgstr ""
+
+#: templates/admin/debug_tool.php:610
+msgid "Options"
+msgstr ""
+
+#: templates/admin/debug_tool.php:612
+#: templates/admin/debug_tool.php:622
+msgid "Copy text"
+msgstr ""
+
+#: templates/admin/debug_tool.php:627
+msgid "Test API Connectivity"
+msgstr ""
+
+#: templates/admin/debug_tool.php:629
+msgid "Start Test"
+msgstr ""
+
+#: templates/admin/debug_tool.php:633
+msgid "Local server API"
+msgstr ""
+
+#: templates/admin/debug_tool.php:637
+msgid "Server:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:646
+msgid "Save Server"
+msgstr ""
+
+#: templates/admin/debug_tool.php:651
+msgid "Preloads Debug - Last Warmup"
+msgstr ""
+
+#: templates/admin/debug_tool.php:660
+msgid "Preloads Desktop"
+msgstr ""
+
+#: templates/admin/debug_tool.php:664
+msgid "Automatic Preloads found by API (can edit)"
+msgstr ""
+
+#: templates/admin/debug_tool.php:670
+msgid "Manual Desktop Preloads (can edit)"
+msgstr ""
+
+#: templates/admin/debug_tool.php:677
+msgid "Automatic Mobile Preloads found by API (can edit)"
+msgstr ""
+
+#: templates/admin/debug_tool.php:683
+msgid "Manual Mobile Preloads (can edit)"
+msgstr ""
+
+#: templates/admin/debug_tool.php:689
+msgid "Save Preloads"
+msgstr ""
+
+#: templates/admin/debug_tool.php:695
+msgid "Cache refresh time (minutes)"
+msgstr ""
+
+#: templates/admin/debug_tool.php:701
+msgid "Save cache refresh"
+msgstr ""
+
+#: templates/admin/debug_tool.php:707
+msgid "Elementor Skip Sections"
+msgstr ""
+
+#: templates/admin/debug_tool.php:711
+msgid "Configure how many Elementor sections to skip before applying lazy loading/optimization."
+msgstr ""
+
+#: templates/admin/debug_tool.php:715
+msgid "Desktop Skip Count:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:721
+msgid "Mobile Skip Count:"
+msgstr ""
+
+#: templates/admin/debug_tool.php:726
+msgid "Save Skip Settings"
+msgstr ""
+
+#: templates/admin/debug_tool.php:738
+msgid "Save Fonts"
+msgstr ""
+
+#: templates/admin/debug_tool.php:744
+msgid "Remove fonts from critical"
+msgstr ""
+
+#: templates/admin/debug_tool.php:773
+msgid "Copied to Clipboard"
+msgstr ""
+
+#: templates/admin/lite_settings.php:349
+msgid "Quick Optimizations"
+msgstr ""
+
+#: templates/admin/lite_settings.php:354
+msgid "Cache"
+msgstr ""
+
+#: templates/admin/lite_settings.php:368
+#: templates/admin/partials/boxes/stats-bar.php:127
+#: templates/admin/partials/v4/pageview-stats.php:151
+msgid "Images"
+msgstr ""
+
+#: templates/admin/lite_settings.php:397
+msgid "Unlock PRO Features"
+msgstr ""
+
+#: templates/admin/lite_settings.php:403
+#: templates/admin/lite_settings.php:404
+msgid "Instant Page Speed Boost"
+msgstr ""
+
+#: templates/admin/lite_settings.php:408
+#: templates/admin/lite_settings.php:409
+msgid "24/7 Smart Optimization"
+msgstr ""
+
+#: templates/admin/lite_settings.php:413
+#: templates/admin/lite_settings.php:414
+msgid "Adaptive Images + WebP"
+msgstr ""
+
+#: templates/admin/lite_settings.php:418
+#: templates/admin/lite_settings.php:419
+msgid "Ultra-Fast CDN Delivery"
+msgstr ""
+
+#: templates/admin/lite_settings.php:423
+msgid "Management & Reporting"
+msgstr ""
+
+#: templates/admin/lite_settings.php:428
+msgid "Enter Access Key"
+msgstr ""
+
+#: templates/admin/lite_settings.php:439
+msgid "This Month's Usage"
+msgstr ""
+
+#: templates/admin/lite_settings.php:440
+msgid "statistics updated hourly"
+msgstr ""
+
+#: templates/admin/lite_settings.php:454
+msgid "Total Assets"
+msgstr ""
+
+#: templates/admin/lite_settings.php:473
+msgid "Projected Usage"
+msgstr ""
+
+#: templates/admin/lite_settings.php:477
+msgid "Assets"
+msgstr ""
+
+#: templates/admin/lite_settings.php:481
+msgid "Data"
+msgstr ""
+
+#: templates/admin/lite_settings.php:496
+#: templates/admin/lite_settings.php:503
+msgid "Cloudflare"
+msgstr ""
+
+#: templates/admin/lite_settings.php:497
+msgid "Faster TTFB and auto-optimization at the edge."
+msgstr ""
+
+#: templates/admin/lite_settings.php:502
+msgid "Dismiss"
+msgstr ""
+
+#: templates/admin/lite_settings.php:504
+msgid "Connect for faster TTFB and auto-optimize at the edge."
+msgstr ""
+
+#: templates/admin/lite_settings.php:505
+msgid "Enable now"
+msgstr ""
+
+#: templates/admin/lite_settings.php:528
+#: templates/admin/lite_settings.php:898
+#: templates/admin/partials/lite/stats.php:81
+msgid "Optimization Stats"
+msgstr ""
+
+#: templates/admin/lite_settings.php:534
+#: templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:934
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:119
+msgid "Page Size"
+msgstr ""
+
+#: templates/admin/lite_settings.php:534
+#: templates/admin/lite_settings.php:934
+#: templates/admin/partials/lite/stats.php:119
+msgid "Smaller"
+msgstr ""
+
+#: templates/admin/lite_settings.php:537
+#: templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:935
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:120
+msgid "Requests"
+msgstr ""
+
+#: templates/admin/lite_settings.php:537
+#: templates/admin/lite_settings.php:935
+#: templates/admin/partials/lite/stats.php:120
+msgid "Less"
+msgstr ""
+
+#: templates/admin/lite_settings.php:540
+#: templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:936
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:121
+msgid "Server Speed"
+msgstr ""
+
+#: templates/admin/lite_settings.php:540
+#: templates/admin/lite_settings.php:936
+#: templates/admin/partials/lite/stats.php:121
+msgid "Faster"
+msgstr ""
+
+#: templates/admin/lite_settings.php:547
+#: templates/admin/lite_settings.php:975
+#: templates/admin/partials/lite/stats.php:160
+msgid "PageSpeed Score"
+msgstr ""
+
+#: templates/admin/lite_settings.php:552
+#: templates/admin/lite_settings.php:610
+#: templates/admin/lite_settings.php:613
+msgid "Running..."
+msgstr ""
+
+#: templates/admin/lite_settings.php:555
+#: templates/admin/lite_settings.php:563
+#: templates/admin/lite_settings.php:605
+#: templates/admin/lite_settings.php:616
+#: templates/admin/lite_settings.php:982
+#: templates/admin/partials/lite/stats.php:167
+msgid "Retest"
+msgstr ""
+
+#: templates/admin/lite_settings.php:560
+msgid "Error: connection to API failed."
+msgstr ""
+
+#: templates/admin/lite_settings.php:636
+#: templates/admin/lite_settings.php:655
+msgid "Usually takes about 10 minutes..."
+msgstr ""
+
+#: templates/admin/lite_settings.php:641
+msgid "Error: Connection to our API was blocked by a firewall on your server."
+msgstr ""
+
+#: templates/admin/lite_settings.php:642
+msgid "Whitelisting Tutorial"
+msgstr ""
+
+#: templates/admin/lite_settings.php:675
+#: templates/admin/lite_settings.php:676
+#: templates/admin/lite_settings.php:703
+#: templates/admin/lite_settings.php:765
+#: templates/admin/lite_settings.php:878
+#: templates/admin/lite_settings.php:879
+#: templates/admin/lite_settings.php:997
+#: templates/admin/lite_settings.php:1023
+#: templates/admin/partials/lite/stats.php:196
+msgid "Perfect Score"
+msgstr ""
+
+#: templates/admin/lite_settings.php:693
+msgid "Mobile GPS"
+msgstr ""
+
+#: templates/admin/lite_settings.php:696
+#: templates/admin/lite_settings.php:991
+#: templates/admin/partials/lite/stats.php:176
+msgid "Mobile"
+msgstr ""
+
+#: templates/admin/lite_settings.php:703
+#: templates/admin/lite_settings.php:765
+msgid "points"
+msgstr ""
+
+#: templates/admin/lite_settings.php:715
+#: templates/admin/lite_settings.php:777
+#: templates/admin/lite_settings.php:1030
+#: templates/admin/partials/lite/stats.php:217
+msgid "Before"
+msgstr ""
+
+#: templates/admin/lite_settings.php:735
+#: templates/admin/lite_settings.php:797
+#: templates/admin/lite_settings.php:1046
+#: templates/admin/partials/lite/stats.php:233
+msgid "After"
+msgstr ""
+
+#: templates/admin/lite_settings.php:755
+msgid "Desktop GPS"
+msgstr ""
+
+#: templates/admin/lite_settings.php:758
+#: templates/admin/lite_settings.php:992
+#: templates/admin/partials/lite/stats.php:177
+msgid "Desktop"
+msgstr ""
+
+#: templates/admin/lite_settings.php:818
+msgid "Unlock even more power with <strong>PRO</strong> Access!"
+msgstr ""
+
+#: templates/admin/lite_settings.php:826
+msgid "View Plans"
+msgstr ""
+
+#: templates/admin/lite_settings.php:837
+msgid "Woohoo! Your Website is Now Loading Faster!"
+msgstr ""
+
+#: templates/admin/lite_settings.php:849
+msgid "Oops! We had some issues testing your site. Please retry!"
+msgstr ""
+
+#: templates/admin/lite_settings.php:959
+msgid "was"
+msgstr ""
+
+#: templates/admin/lite_settings.php:1023
+#: templates/admin/partials/lite/stats.php:196
+msgid "Points"
+msgstr ""
+
+#: templates/admin/lite_settings.php:1067
+msgid "<strong>Woohoo!</strong> Your Website is Now Loading Faster!"
+msgstr ""
+
+#: templates/admin/lite_settings.php:1078
+#: templates/admin/partials/lite/stats.php:265
+msgid "Analyzing performance..."
+msgstr ""
+
+#: templates/admin/lite_settings.php:1093
+#: templates/admin/lite_settings.php:1096
+msgid "Go PRO for Portal Access"
+msgstr ""
+
+#: templates/admin/lite_settings.php:1097
+msgid "Get image optimization access, CDN Delivery, remote configuration and more by creating an account!"
+msgstr ""
+
+#: templates/admin/lite_settings.php:1104
+msgid "Add Access Key"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:24
+msgid "Multisite Connect"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:25
+msgid "Paste your multisite access key from the management portal"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:27
+msgid "Access Key"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:33
+msgid "Submit"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:37
+msgid "This form collects information we use to send your API Key, news, updates, promotions and special offers. We do not share or sell your information. You may unsubscribe at any time."
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:85
+msgid "Access Key Error!"
+msgstr ""
+
+#: templates/admin/mu-getting-started.php:86
+msgid "Access Key which you have entered is not found in our database."
+msgstr ""
+
+#: templates/admin/multisite-setup.php:12
+msgid "Default Settings"
+msgstr ""
+
+#: templates/admin/multisite-setup.php:13
+msgid "Manage Websites"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:37
+#: templates/admin/partials/boxes/stats-bar.php:240
+#: templates/admin/partials/v4/footer-scripts.php:192
+#: templates/admin/partials/v4/pageview-stats.php:76
+#: templates/admin/partials/v4/pageview-stats.php:224
+#: templates/admin/partials/v4/stats.php:69
+msgid "Savings"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:56
+#: templates/admin/partials/boxes/stats-bar.php:69
+#: templates/admin/partials/boxes/stats-bar.php:250
+#: templates/admin/partials/boxes/stats-bar.php:255
+#: templates/admin/partials/v4/pageview-stats.php:92
+#: templates/admin/partials/v4/stats.php:76
+#: templates/admin/partials/v4/stats.php:80
+msgid "You've Saved"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:60
+#: templates/admin/partials/boxes/stats-bar.php:65
+#: templates/admin/partials/v4/pageview-stats.php:97
+#: templates/admin/partials/v4/pageview-stats.php:102
+msgid "No Savings Yet!"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:97
+msgid "You have not yet optimized any images!"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:158
+#: templates/admin/partials/v4/chart.php:12
+#: templates/admin/partials/v4/pageview-stats.php:170
+msgid "Original Size"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:169
+#: templates/admin/partials/boxes/stats-bar.php:297
+#: templates/admin/partials/v4/footer-scripts.php:426
+#: templates/admin/partials/v4/stats.php:104
+msgid "Original"
+msgstr ""
+
+#: templates/admin/partials/boxes/stats-bar.php:321
+#: templates/admin/partials/v4/stats.php:125
+msgid "Assets Served"
+msgstr ""
+
+#: templates/admin/partials/footer-links.php:6
+msgid "Get More Credits"
+msgstr ""
+
+#: templates/admin/partials/footer-links.php:9
+msgid "Getting Started Guide"
+msgstr ""
+
+#: templates/admin/partials/footer-links.php:12
+msgid "Chat with Support"
+msgstr ""
+
+#: templates/admin/partials/footer-links.php:16
+msgid "Debug Tool"
+msgstr ""
+
+#: templates/admin/partials/footer-links.php:20
+msgid "Clear Account Cache"
+msgstr ""
+
+#: templates/admin/partials/lite/stats.php:144
+#, php-format
+msgid "was %s"
+msgstr ""
+
+#: templates/admin/partials/lite/stats.php:254
+msgid "Woohoo!"
+msgstr ""
+
+#: templates/admin/partials/lite/stats.php:254
+msgid "Your Website is Now Loading Faster!"
+msgstr ""
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:21
+#: templates/admin/partials/popups/js/exclude-js-delay.php:21
+msgid "Exclude from JS Delay"
+msgstr ""
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:35
+#: templates/admin/partials/popups/js/exclude-js-delay.php:35
+msgid "Exclude Third Party Scripts"
+msgstr ""
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:39
+#: templates/admin/partials/popups/css/exclude-css-combine.php:41
+#: templates/admin/partials/popups/css/exclude-css-minify.php:40
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:39
+#: templates/admin/partials/popups/exclude-inline-css.php:39
+#: templates/admin/partials/popups/exclude-minify-html.php:39
+#: templates/admin/partials/popups/js/exclude-js-combine.php:39
+#: templates/admin/partials/popups/js/exclude-js-defer.php:39
+#: templates/admin/partials/popups/js/exclude-js-delay.php:39
+#: templates/admin/partials/popups/js/exclude-js-minify.php:39
+msgid "Exclude Theme Files"
+msgstr ""
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:43
+#: templates/admin/partials/popups/css/exclude-css-combine.php:45
+#: templates/admin/partials/popups/css/exclude-css-minify.php:44
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:43
+#: templates/admin/partials/popups/exclude-inline-css.php:43
+#: templates/admin/partials/popups/exclude-minify-html.php:43
+#: templates/admin/partials/popups/js/exclude-js-combine.php:43
+#: templates/admin/partials/popups/js/exclude-js-defer.php:43
+#: templates/admin/partials/popups/js/exclude-js-delay.php:43
+#: templates/admin/partials/popups/js/exclude-js-minify.php:43
+msgid "Exclude Plugin Files"
+msgstr ""
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:47
+#: templates/admin/partials/popups/css/exclude-css-combine.php:49
+#: templates/admin/partials/popups/css/exclude-css-minify.php:48
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:47
+#: templates/admin/partials/popups/exclude-inline-css.php:47
+#: templates/admin/partials/popups/exclude-minify-html.php:47
+#: templates/admin/partials/popups/js/exclude-js-combine.php:47
+#: templates/admin/partials/popups/js/exclude-js-defer.php:47
+#: templates/admin/partials/popups/js/exclude-js-delay.php:47
+#: templates/admin/partials/popups/js/exclude-js-minify.php:47
+msgid "Exclude WordPress Files"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:16
+msgid "Compatibility Error!"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:17
+msgid "This feature is not compatible with Performance Lab's WebP Uploads option. Please disable it to use this feature."
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:18
+#: templates/admin/partials/popups/bulk/popups.php:33
+#: templates/admin/partials/popups/bulk/popups.php:48
+#: templates/admin/partials/popups/bulk/popups.php:63
+#: templates/admin/partials/popups/bulk/popups.php:78
+#: templates/admin/partials/popups/bulk/popups.php:93
+msgid "Contact Support"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:32
+msgid "Unknown error occurred!"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:47
+msgid "We were unable to contact WP Compress API!"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:62
+msgid "We were unable to communicate with your site!"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:77
+msgid "We were unable to start bulk process on your site!"
+msgstr ""
+
+#: templates/admin/partials/popups/bulk/popups.php:92
+msgid "We were unable to start bulk process on your site because of Bad ApiKey!"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:22
+msgid "Define the cookies we should monitor."
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:32
+msgid "Cache cookies"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:33
+#: templates/admin/partials/popups/cache-cookies.php:66
+#: templates/admin/partials/popups/purge-settings.php:56
+msgid "Defaults"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:41
+#: templates/admin/partials/popups/purge-settings.php:64
+msgid "Copy all defaults"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:43
+#: templates/admin/partials/popups/purge-settings.php:66
+msgid "Copy all"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:65
+msgid "Exclude cookies"
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:87
+msgid "wp_compress would cache/exclude this particular cookie."
+msgstr ""
+
+#: templates/admin/partials/popups/cache-cookies.php:88
+msgid "wp_compress_ is treated as a prefix and would cache/exclude all cookies with this prefix."
+msgstr ""
+
+#: templates/admin/partials/popups/cf-cdn.php:29
+msgid "Specify your CNAME."
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:9
+msgid "You need to insert your CNAME!"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:18
+msgid "Setting up your DNS&hellip; this can take up to 30 seconds."
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:33
+#: templates/admin/partials/popups/cname.php:78
+msgid "<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally."
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:34
+#: templates/admin/partials/popups/cname.php:79
+msgid "<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:35
+#: templates/admin/partials/popups/cname.php:80
+msgid "Click to copy"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:38
+#: templates/admin/partials/popups/cname.php:83
+msgid "<b>3. Enter the URL</b> you've pointed to below:"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:41
+#: templates/admin/partials/popups/cname.php:62
+msgid "<span class=\"icon-container close-toggle\"><i class=\"icon-cancel\"></i></span>According to our tests it seems like your DNS is either incorrect or still propagating globally. This standard process can take 24-48 hours to be globally available. If you link too soon you may have downtime in unpropagated regions."
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:50
+#: templates/admin/partials/popups/cname.php:92
+msgid "Example: cdn.mysite.com"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:58
+msgid "Custom Domain Configuration"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:59
+msgid "If you can see the celebration image on the following link, your custom domain is working!"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:60
+msgid "Check DNS"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:65
+msgid "I can't see the above Image"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:66
+msgid "All Good to Go!"
+msgstr ""
+
+#: templates/admin/partials/popups/cname.php:106
+msgid "Removing custom domain&hellip;"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:9
+#: templates/admin/partials/popups/compatibility-popups.php:46
+msgid "Please Confirm Compatibility"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:10
+msgid "Advanced features such as serving images with lazy load may conflict with your active themes, plugins or environment. If any issues occur after activating, you can simply toggle it off."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:24
+msgid "Hide Plugin from Admin Area"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:25
+msgid "This will remove WP Compress from the WordPress admin menu. To restore access, add the following query parameter to any wp-admin URL:"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:31
+msgid "Copied!"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:47
+msgid "Advanced features such as serving Adaptive Images may conflict with your active themes, plugins or environment. If any issues occur after activating, you can simply toggle it off."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:61
+msgid "Delaying the Javascript of certain theme or plugin files may break the functionality or design on your site."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:62
+#: templates/admin/partials/popups/compatibility-popups.php:110
+#: templates/admin/partials/popups/compatibility-popups.php:138
+msgid "If any issues occur, simply deactivating this setting will return your site to normal."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:67
+#: templates/admin/partials/popups/compatibility-popups.php:115
+#: templates/admin/partials/popups/compatibility-popups.php:143
+msgid "Get Expert Support"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:70
+#: templates/admin/partials/popups/compatibility-popups.php:118
+#: templates/admin/partials/popups/compatibility-popups.php:146
+msgid "Proceed with Caution"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:76
+#: templates/admin/partials/popups/compatibility-popups.php:124
+#: templates/admin/partials/popups/compatibility-popups.php:152
+msgid "Learn how to exclude problematic theme or plugin files from site optimization"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:88
+msgid "Some features are getting blocked!"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:89
+msgid "It seems that parts of the optimization process are currently being blocked by external security measures. This can happen if there are automated traffic protection systems on your website or server."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:94
+msgid "View Guide to Whitelist Services"
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:109
+msgid "Combining the Javascript of certain theme or plugin files may break the functionality or design on your site."
+msgstr ""
+
+#: templates/admin/partials/popups/compatibility-popups.php:137
+msgid "Combining the CSS of certain theme or plugin files may break the functionality or design on your site."
+msgstr ""
+
+#: templates/admin/partials/popups/css/exclude-css-combine.php:22
+msgid "Exclude from CSS Combine"
+msgstr ""
+
+#: templates/admin/partials/popups/css/exclude-css-combine.php:37
+#: templates/admin/partials/popups/css/exclude-css-minify.php:36
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:35
+#: templates/admin/partials/popups/exclude-critical-css.php:35
+#: templates/admin/partials/popups/exclude-inline-css.php:35
+#: templates/admin/partials/popups/exclude-minify-html.php:35
+#: templates/admin/partials/popups/exclude-simple-caching.php:34
+#: templates/admin/partials/popups/js/exclude-js-combine.php:35
+#: templates/admin/partials/popups/js/exclude-js-defer.php:35
+#: templates/admin/partials/popups/js/exclude-js-minify.php:35
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:35
+msgid "Disable Default Excludes"
+msgstr ""
+
+#: templates/admin/partials/popups/css/exclude-css-minify.php:21
+msgid "Exclude from CSS Minify"
+msgstr ""
+
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:21
+msgid "Exclude from CSS Render Blocking"
+msgstr ""
+
+#: templates/admin/partials/popups/css/inline-css.php:21
+#: templates/admin/selectModes/popup.php:108
+#: templates/admin/selectModes/popup.php:127
+msgid "Inline CSS"
+msgstr ""
+
+#: templates/admin/partials/popups/css/inline-css.php:22
+#: templates/admin/partials/popups/js/inline-js.php:22
+msgid "Add ID tags of scripts to be inlined."
+msgstr ""
+
+#: templates/admin/partials/popups/css/inline-css.php:31
+msgid "e.g. theme-style-css"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-adaptive.php:21
+msgid "Exclude from Adaptive"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-adaptive.php:41
+msgid "Minimum mobile image width"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-adaptive.php:44
+msgid "px"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-adaptive.php:58
+#: templates/admin/partials/popups/exclude-lazy.php:48
+#: templates/admin/partials/popups/exclude-webp.php:48
+msgid "#classname would exclude all files with that class"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:21
+msgid "Cache Exclusions"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:22
+msgid "Pages listed here will always be loaded fresh, bypassing the cache. One URL or pattern per line."
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:30
+msgid "e.g. /my-account/, /cart/, /checkout/"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:42
+msgid "/my-account/ would exclude the account page and all sub-pages"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:43
+msgid "/checkout/ would exclude just the checkout page"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:44
+msgid "cart would exclude any page with &quot;cart&quot; in the URL"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-cdn.php:21
+msgid "Exclude from CDN"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:21
+msgid "Critical CSS Exclusions"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:22
+msgid "Prevent specific stylesheets or paths from being processed by Critical CSS. Partial matches work automatically."
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:30
+msgid "e.g. theme-name/style.css, custom-fonts.css, /wp-content/plugins/my-plugin/"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:39
+msgid "Exclude Theme Stylesheets"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:43
+msgid "Exclude Plugin Stylesheets"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:47
+msgid "Exclude WordPress Core Styles"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:61
+msgid "style.css would exclude any stylesheet containing that name"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:62
+msgid "/my-plugin/css/custom.css would exclude that specific file"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-critical-css.php:63
+msgid "/wp-content/themes/my-theme/ would exclude all styles from that theme"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-inline-css.php:21
+msgid "Exclude from Inline CSS"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-lazy.php:21
+msgid "Exclude from Lazy"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-minify-html.php:21
+msgid "Exclude from HTML Minification"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-simple-caching.php:21
+msgid "Exclude from Simple Caching"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-url.php:29
+msgid "Add excluded URLs"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-url.php:46
+msgid "e.g. www.example.com example.com example.com/page1"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-url.php:58
+msgid "www.siteurl.com/page to exclude just the page"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-url.php:59
+msgid "www.siteurl.com/page/subpage to exclude just the subpage"
+msgstr ""
+
+#: templates/admin/partials/popups/exclude-webp.php:21
+msgid "Exclude from WebP"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:5
+msgid "Site Geo Location"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:22
+#, php-format
+msgid "We have detected that your server is located in %s, if that's not correct, please select the nearest region below."
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:27
+msgid "Automatic"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:28
+msgid "Europe"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:29
+msgid "United States"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:30
+msgid "Asia"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:31
+msgid "Oceania"
+msgstr ""
+
+#: templates/admin/partials/popups/geolocation.php:51
+msgid "Save Location"
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:21
+msgid "Configure JS Delay"
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:22
+msgid "List files or paths to manage. Partial names work too — we match automatically."
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:30
+msgid "Delay last"
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:31
+#: templates/admin/partials/popups/js/delay-js-configuration.php:36
+msgid "e.g. plugin-name/js/script.js, scripts.js"
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:35
+msgid "Defer"
+msgstr ""
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:46
+msgid "/myplugin/image.js would exclude that specific file"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-combine.php:21
+msgid "Exclude from JS Combine"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-defer.php:21
+msgid "Exclude from JS Defer"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:20
+msgid "Delay JavaScript"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:21
+msgid "Control which scripts are delayed, deferred, or excluded from optimization."
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:43
+msgid "e.g. analytics.js, /my-plugin/tracking.js, google-tag"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:55
+msgid "jquery would exclude any script containing \"jquery\" in the URL"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:56
+msgid "/my-plugin/app.js would exclude that specific script"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:57
+msgid "/wp-content/plugins/my-plugin/ would exclude all scripts from that plugin"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:70
+msgid "Scripts to Delay"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:71
+msgid "e.g. chat-widget.js, fb-pixel.js"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:75
+msgid "Scripts to Defer"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:76
+msgid "e.g. analytics.js, /plugins/slider/main.js"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:86
+msgid "chat-widget would match any script containing that name"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:87
+msgid "/my-plugin/tracking.js would target that specific file"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-js-minify.php:21
+msgid "Exclude from JS Minify"
+msgstr ""
+
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:21
+msgid "Exclude JavaScript from Moving to Footer"
+msgstr ""
+
+#: templates/admin/partials/popups/js/inline-js.php:21
+msgid "Inline JavaScript"
+msgstr ""
+
+#: templates/admin/partials/popups/js/inline-js.php:31
+msgid "e.g. jquery-core-js"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:22
+msgid "Fine tune the purging of cache files."
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:31
+msgid "Rules for Post Publish/Update"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:36
+msgid "All Pages"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:40
+msgid "Home Page"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:44
+msgid "Pages with Recent Posts Widget"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:48
+msgid "Archive Pages"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:55
+msgid "List of hooks to purge all pages"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:88
+msgid "Scheduled Purge"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:91
+msgid "Purge all cache every day at"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:93
+msgid "Disabled"
+msgstr ""
+
+#: templates/admin/partials/popups/purge-settings.php:98
+msgid "Your time:"
+msgstr ""
+
+#: templates/admin/partials/v4/chart.php:6
+msgid "Compression Report"
+msgstr ""
+
+#: templates/admin/partials/v4/chart.php:13
+#: templates/admin/partials/v4/footer-scripts.php:191
+#: templates/admin/partials/v4/footer-scripts.php:427
+msgid "After Optimization"
+msgstr ""
+
+#: templates/admin/partials/v4/footer-scripts.php:231
+#: templates/admin/partials/v4/footer-scripts.php:427
+msgid "Cached Traffic"
+msgstr ""
+
+#: templates/admin/partials/v4/footer-scripts.php:232
+msgid "Non-Cached"
+msgstr ""
+
+#: templates/admin/partials/v4/footer-scripts.php:426
+msgid "Total Traffic"
+msgstr ""
+
+#: templates/admin/partials/v4/footer-scripts.php:467
+msgid "Saved"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:129
+msgid "Leftover Pageviews"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:229
+msgid "Remaining"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:239
+msgid "Pageviews"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:259
+msgid "Optimized Pageviews"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:271
+msgid "Bandwidth Saved"
+msgstr ""
+
+#: templates/admin/partials/v4/pageview-stats.php:283
+msgid "Optimized Assets"
+msgstr ""
+
+#: templates/admin/preload.php:36
+msgid "Start Preload"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:25
+msgid "Font Display"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:25
+msgid "Controls how fonts render while loading. Swap shows text immediately using a fallback font — recommended for PageSpeed."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:28
+msgid "Text Font Display"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:28
+msgid "How browsers handle text font loading. Swap shows fallback text immediately — fixes the PageSpeed font-display warning. Icon fonts automatically use a separate display setting to prevent garbled characters — configure in Icon Fonts below."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:29
+#: templates/admin/scan-fonts.php:54
+msgid "Swap"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:30
+#: templates/admin/scan-fonts.php:79
+msgid "Off"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:31
+#: templates/admin/scan-fonts.php:55
+msgid "Auto (Browser Default)"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:32
+msgid "Block (FOIT)"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:33
+#: templates/admin/scan-fonts.php:56
+msgid "Fallback"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:34
+#: templates/admin/scan-fonts.php:57
+msgid "Optional"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:38
+msgid "Preload Critical Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:39
+msgid "Preload above-the-fold fonts for faster first paint. Limited to 4 to avoid bloat. Requires Critical CSS."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:48
+msgid "Icon Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:48
+msgid "Optimize loading of icon font libraries like Font Awesome, Material Icons, and other icon sets."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:52
+msgid "Icon Font Display"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:52
+msgid "How browsers handle icon font loading. Block (recommended) keeps icons invisible until loaded — prevents garbled characters that appear with swap. Override this if you prefer a different strategy."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:53
+msgid "Block"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:64
+msgid "Lazy Load Icon Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:64
+msgid "Load icon font stylesheets asynchronously to prevent render-blocking. Icons appear after a brief invisible flash instead of blocking page paint."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:66
+msgid "Remove Duplicate Icon Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:66
+msgid "Detect and remove duplicate Font Awesome stylesheets when multiple versions are loaded by different plugins."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:74
+msgid "Google Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:74
+msgid "Control how Google Fonts are loaded. Self-host for faster load times, better privacy and GDPR compliance."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:78
+msgid "Self-Host Google Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:78
+msgid "Off: Fonts load from Google servers — may share visitor data with Google. Local: Downloads and serves fonts from your own server for full GDPR compliance. Bunny Fonts (Recommended): Free, privacy-first Google Fonts alternative powered by bunny.net global CDN — lightning-fast delivery, zero tracking, fully GDPR compliant."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:80
+msgid "Local Fonts (GDPR)"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:81
+msgid "Bunny Fonts (GDPR + CDN)"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:84
+msgid "Purge & Rescan Font Cache"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:84
+msgid "Clear the font cache and re-scan your homepage to detect newly added or removed fonts."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:92
+msgid "Google Fonts Scanner"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:92
+msgid "Scan any page on your site to detect which Google Fonts are loaded."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:96
+msgid "https://yoursite.com/page-to-scan"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:99
+msgid "Scan"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:105
+msgid "Google Fonts detected! See results below."
+msgstr ""
+
+#: templates/admin/scan-fonts.php:124
+msgid "Detected Google Fonts"
+msgstr ""
+
+#: templates/admin/scan-fonts.php:125
+msgid "Google Fonts found on your site. Remove any you no longer need."
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:58
+msgid "We are setting up your DNS, this can take up to 30 seconds..."
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:66
+msgid "You may change your mode or customize advanced settings at any time!"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:83
+msgid "Start with no settings active,"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:83
+msgid "then customize as you wish"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:87
+#: templates/admin/selectModes/popup.php:104
+#: templates/admin/selectModes/popup.php:122
+msgid "Advanced Website Caching"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:88
+#: templates/admin/selectModes/popup.php:105
+#: templates/admin/selectModes/popup.php:123
+msgid "Resize Images by Device"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:90
+msgid "Lazy Load Images"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:92
+#: templates/admin/selectModes/popup.php:110
+msgid "Move JavaScript to Footer"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:93
+#: templates/admin/selectModes/popup.php:111
+#: templates/admin/selectModes/popup.php:128
+msgid "Delay JavaScript Files"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:100
+msgid "Our recommended blend of"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:100
+msgid "performance and compatibility"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:107
+msgid "Lazy Load Assets"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:118
+msgid "Squeeze out performance, may require"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:118
+msgid "excluding specific files from optimization"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:125
+msgid "Native Lazy Load Images"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:129
+msgid "Inline JavaScript Files"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:153
+msgid "Enable Real-Time Optimization + CDN"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:154
+msgid "Optimize and serve your website content across the globe"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:158
+msgid "<i class='wpc-sparkle-icon'></i> Optimize Plan Required"
+msgstr ""
+
+#: templates/admin/selectModes/popup.php:178
+msgid "Save Settings"
+msgstr ""

@@ -18,8 +18,8 @@
           echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
         </div>
         <div class="inline-heading-text">
-          <h3>Exclude from JS Combine</h3>
-          <p>Add excluded files or paths as desired as we use wildcard searching.</p>
+          <h3><?php echo esc_html__('Exclude from JS Combine', WPS_IC_TEXTDOMAIN); ?></h3>
+          <p><?php echo __('List files or paths to exclude. Partial names work too — we match automatically.', WPS_IC_TEXTDOMAIN); ?></p>
         </div>
       </div>
     </div>
@@ -27,24 +27,24 @@
     <form method="post" class="wpc-save-popup-data" action="#">
       <div class="cdn-popup-content-full">
         <div class="cdn-popup-content-inner">
-          <textarea name="wpc-excludes[combine_js]" data-setting-name="wpc-excludes" data-setting-subset="combine_js" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"></textarea>
+          <textarea name="wpc-excludes[combine_js]" data-setting-name="wpc-excludes" data-setting-subset="combine_js" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
             <div class="wps-default-excludes-container">
           <div class="wps-default-excludes-enabled-checkbox-container">
             <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-default-excludes">
-            <p>Disable Default Excludes</p>
+            <p><?php echo esc_html__('Disable Default Excludes', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
           <div class="wps-default-excludes-enabled-checkbox-container">
               <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-themes">
-              <p>Exclude Themes Files</p>
+              <p><?php echo esc_html__('Exclude Theme Files', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
           <div class="wps-default-excludes-enabled-checkbox-container">
               <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-plugins">
-              <p>Exclude Plugins Files</p>
+              <p><?php echo esc_html__('Exclude Plugin Files', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
           <div class="wps-default-excludes-enabled-checkbox-container">
               <input type="checkbox" class="wps-default-excludes-enabled-checkbox wps-exclude-wp">
-              <p>Exclude WordPress Files</p>
+              <p><?php echo esc_html__('Exclude WordPress Files', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
           </div>
 
@@ -52,18 +52,20 @@
 
         </div>
       </div>
-      <div class="wps-example-list">
+      <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <div class="wps-example-list" style="display: none;">
         <div>
-          <h3>Examples:</h3>
           <div>
-            <p>.svg would exclude all assets with that extension</p>
-            <p>imagename would exclude any file with that name</p>
-            <p>/myplugin/image.jpg would exclude that specific file</p>
-            <p>/wp-content/myplugin/ would exclude everything using that path</p>
+            <p><span class="wpc-example-chip">.svg</span> <?php echo esc_html__('would exclude all assets with that extension', WPS_IC_TEXTDOMAIN); ?></p>
+            <p><span class="wpc-example-chip">imagename</span> <?php echo esc_html__('would exclude any file with that name', WPS_IC_TEXTDOMAIN); ?></p>
+            <p><span class="wpc-example-chip">/myplugin/image.jpg</span> <?php echo esc_html__('would exclude that specific file', WPS_IC_TEXTDOMAIN); ?></p>
+            <p><span class="wpc-example-chip">/wp-content/myplugin/</span> <?php echo esc_html__('would exclude everything using that path', WPS_IC_TEXTDOMAIN); ?></p>
           </div>
         </div>
       </div>
-      <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                </div>
     </form>
     </div>
 

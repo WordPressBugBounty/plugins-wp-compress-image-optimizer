@@ -73,7 +73,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                 if ($savings) { ?>
                                     <h5><?php
                                       echo $user_savings . '%'; ?></h5>
-                                    <h4>Savings</h4>
+                                    <h4><?php esc_html_e('Savings', WPS_IC_TEXTDOMAIN); ?></h4>
                                   <?php
                                 } ?>
                               </div>
@@ -89,17 +89,17 @@ if (!empty($wps_ic::$settings['optimization'])) {
                             if (!empty($stats_live) || !empty($stats_local)) {
 
                               if (isset ($stats_local_sum->bytes->compressed) && $stats_local_sum->bytes->compressed > 0 && isset ($stats_local_sum->bytes->original) && $stats_local_sum->bytes->original > 0) {
-                                echo '<h3>You\'ve Saved</h3>';
+                                echo '<h3>' . esc_html__('You\'ve Saved', WPS_IC_TEXTDOMAIN) . '</h3>';
 
                                 $savings = $stats_local_sum->bytes->original - $stats_local_sum->bytes->compressed;
                                 $savings = wps_ic_size_format($savings, 0);
                                 if ($savings <= 0) {
-                                  echo '<h3 style="padding-right:20px;">No Savings Yet!</h3>';
+                                  echo '<h3 style="padding-right:20px;">' . esc_html__('No Savings Yet!', WPS_IC_TEXTDOMAIN) . '</h3>';
                                 } else {
                                   echo '<h4>' . $savings . '</h4>';
                                 }
                               } else {
-                                echo '<h3 style="padding-right:20px;">No Savings Yet!</h3>';
+                                echo '<h3 style="padding-right:20px;">' . esc_html__('No Savings Yet!', WPS_IC_TEXTDOMAIN) . '</h3>';
                               }
                               ?>
 
@@ -126,7 +126,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                               <?php
                             } else {
                               ?>
-                                <h3>Leftover Pageviews</h3>
+                                <h3><?php esc_html_e('Leftover Pageviews', WPS_IC_TEXTDOMAIN); ?></h3>
                               <?php
                             } ?>
                           </div>
@@ -148,7 +148,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                     } else {
                                       echo '0';
                                     } ?></h3>
-                                  <h5>Images</h5>
+                                  <h5><?php esc_html_e('Images', WPS_IC_TEXTDOMAIN); ?></h5>
                               </div>
                           </div>
 
@@ -167,7 +167,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                     }
                                     ?>
                                   </h3>
-                                  <h5>Original Size</h5>
+                                  <h5><?php esc_html_e('Original Size', WPS_IC_TEXTDOMAIN); ?></h5>
                               </div>
                           </div>
 
@@ -186,7 +186,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                     }
                                     ?>
                                   </h3>
-                                  <h5>Optimized</h5>
+                                  <h5><?php esc_html_e('Optimized', WPS_IC_TEXTDOMAIN); ?></h5>
                               </div>
                           </div>
 
@@ -221,12 +221,12 @@ if (!empty($wps_ic::$settings['optimization'])) {
                               <div class="dashboard-account-circle-text">
                                   <h5><?php
                                     echo $donut_text; ?>%</h5>
-                                  <h4>Savings</h4>
+                                  <h4><?php esc_html_e('Savings', WPS_IC_TEXTDOMAIN); ?></h4>
                               </div>
                               <!-- -35s == 35% -->
                           </div>
                           <div class="youve-saved">
-                              <h3 style="margin: 0 0 10px 0;text-align: center;color:#3c434a;font-weight: 400;">Remaining</h3>
+                              <h3 style="margin: 0 0 10px 0;text-align: center;color:#3c434a;font-weight: 400;"><?php esc_html_e('Remaining', WPS_IC_TEXTDOMAIN); ?></h3>
                               <div class="image-credits-remaining" style="margin-top: 0px;width: 100%;text-align: center">
                                     <a href="https://wpcompress.com/pricing" target="_blank"
                                        class="button button-primary local-requests-left" style="display: none;">
@@ -236,7 +236,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                     <a href="https://wpcompress.com/pricing" target="_blank"
                                        class="button button-primary requests-left" style="width: 100%;text-align: center">
                                         <h5><?php
-                                          echo $user_credits->formatted->leftover; ?> Pageviews</h5>
+                                          echo $user_credits->formatted->leftover; ?> <?php esc_html_e('Pageviews', WPS_IC_TEXTDOMAIN); ?></h5>
                                     </a>
 
                               </div>
@@ -256,7 +256,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                   <div class="stats-box-text-holder">
                                       <h3><?php
                                         echo $user_credits->formatted->usedPageviews; ?></h3>
-                                      <h5>Optimized Pageviews</h5>
+                                      <h5><?php esc_html_e('Optimized Pageviews', WPS_IC_TEXTDOMAIN); ?></h5>
                                   </div>
                               </div>
 
@@ -268,7 +268,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                   <div class="stats-box-text-holder">
                                       <h3><?php
                                         echo $user_credits->formatted->monthly['bytes']; ?></h3>
-                                      <h5>Bandwidth Saved</h5>
+                                      <h5><?php esc_html_e('Bandwidth Saved', WPS_IC_TEXTDOMAIN); ?></h5>
                                   </div>
                               </div>
 
@@ -280,7 +280,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                                   <div class="stats-box-text-holder">
                                       <h3><?php
                                         echo $user_credits->formatted->monthly['requests']; ?></h3>
-                                      <h5>Optimized Assets</h5>
+                                      <h5><?php esc_html_e('Optimized Assets', WPS_IC_TEXTDOMAIN); ?></h5>
                                   </div>
                               </div>
 

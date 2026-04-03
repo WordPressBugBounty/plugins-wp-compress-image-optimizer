@@ -34,7 +34,7 @@ if (empty($user_savings) || $user_savings == '') {
             if ($savings) { ?>
                 <h5><?php
                     echo $user_savings.'%'; ?></h5>
-                <h4>Savings</h4>
+                <h4><?php esc_html_e('Savings', WPS_IC_TEXTDOMAIN); ?></h4>
                 <?php
             } ?>
         </div>
@@ -53,20 +53,20 @@ if (empty($user_savings) || $user_savings == '') {
             if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
 
                 if (isset ($user_credits->bytes->local_compressed) && $user_credits->bytes->local_compressed > 0 && isset ($user_credits->bytes->local_original) && $user_credits->bytes->local_original > 0) {
-                    echo '<h3>You\'ve Saved</h3>';
+                    echo '<h3>' . esc_html__('You\'ve Saved', WPS_IC_TEXTDOMAIN) . '</h3>';
 
                     $savings = $user_credits->formatted->local_savings;
                     if ($savings<=0) {
-                      echo '<h3 style="padding-right:20px;">No Savings Yet!</h3>';
+                      echo '<h3 style="padding-right:20px;">' . esc_html__('No Savings Yet!', WPS_IC_TEXTDOMAIN) . '</h3>';
                     } else {
                       echo '<h4>'.$savings.'</h4>';
                     }
                 } else {
-                    echo '<h3 style="padding-right:20px;">No Savings Yet!</h3>';
+                    echo '<h3 style="padding-right:20px;">' . esc_html__('No Savings Yet!', WPS_IC_TEXTDOMAIN) . '</h3>';
                 }
 
             } else { ?>
-                <h3>You've Saved</h3>
+                <h3><?php esc_html_e('You\'ve Saved', WPS_IC_TEXTDOMAIN); ?></h3>
                 <h4><?php
                     echo $user_credits->formatted->bandwidth_savings_bytes; ?></h4>
                 <?php
@@ -94,7 +94,7 @@ if (empty($user_savings) || $user_savings == '') {
             <?php
         } else {
             ?>
-            <h3>You have not yet optimized any images!</h3>
+            <h3><?php esc_html_e('You have not yet optimized any images!', WPS_IC_TEXTDOMAIN); ?></h3>
             <a href="<?php
             echo admin_url('options-general.php?page='.$wps_ic::$slug.'&view=bulk'); ?>" class="button-primary button btn-start-optimization" style="margin-left: 10px;margin-right:10px;"><?php echo $accountQuota['live']; ?></a>
             <?php
@@ -124,14 +124,14 @@ if (empty($user_savings) || $user_savings == '') {
                             if (isset ($user_credits->bytes->local_requests)) {
                                 echo $user_credits->bytes->local_requests;
                             } ?></h3>
-                        <h5>Images</h5>
+                        <h5><?php esc_html_e('Images', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } else { ?>
                         <h3><?php
                             if (isset ($user_credits->formatted->cdn_requests)) {
                                 echo $user_credits->formatted->cdn_requests;
                             } ?></h3>
-                        <h5>Total Images</h5>
+                        <h5><?php esc_html_e('Total Images', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } ?>
                 </div>
@@ -155,7 +155,7 @@ if (empty($user_savings) || $user_savings == '') {
                             }
                             ?>
                         </h3>
-                        <h5>Original Size</h5>
+                        <h5><?php esc_html_e('Original Size', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } else { ?>
                         <h3>
@@ -166,7 +166,7 @@ if (empty($user_savings) || $user_savings == '') {
                                 echo $user_credits->formatted->original_bandwidth;
                             }
                             ?></h3>
-                        <h5>Original</h5>
+                        <h5><?php esc_html_e('Original', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } ?>
                 </div>
@@ -190,7 +190,7 @@ if (empty($user_savings) || $user_savings == '') {
                             }
                             ?>
                         </h3>
-                        <h5>Optimized</h5>
+                        <h5><?php esc_html_e('Optimized', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } else { ?>
                         <h3>
@@ -201,7 +201,7 @@ if (empty($user_savings) || $user_savings == '') {
                                 echo $user_credits->formatted->cdn_bandwidth;
                             }
                             ?></h3>
-                        <h5>Optimized</h5>
+                        <h5><?php esc_html_e('Optimized', WPS_IC_TEXTDOMAIN); ?></h5>
                         <?php
                     } ?>
                 </div>
@@ -237,7 +237,7 @@ else {
                 <div class="dashboard-account-circle-text">
                     <h5><?php
                         echo $donut_text; ?>%</h5>
-                    <h4>Savings</h4>
+                    <h4><?php esc_html_e('Savings', WPS_IC_TEXTDOMAIN); ?></h4>
                 </div>
                 <!-- -35s == 35% -->
             </div>
@@ -247,12 +247,12 @@ else {
             <div class="youve-saved">
                 <?php
                 if ( ! empty($stats_live)) { ?>
-                    <h3>You've Saved</h3>
+                    <h3><?php esc_html_e('You\'ve Saved', WPS_IC_TEXTDOMAIN); ?></h3>
                     <h4><?php
                         echo $user_credits->formatted->bandwidth_savings_bytes; ?></h4>
                     <?php
                 } else { ?>
-                    <h3>You've Saved</h3>
+                    <h3><?php esc_html_e('You\'ve Saved', WPS_IC_TEXTDOMAIN); ?></h3>
                     <h4><?php
                         echo 0 .' MB'; ?></h4>
                     <?php
@@ -294,7 +294,7 @@ else {
                     <div class="stats-box-text-holder">
                         <h3><?php
                             echo $user_credits->formatted->original_bandwidth; ?></h3>
-                        <h5>Original</h5>
+                        <h5><?php esc_html_e('Original', WPS_IC_TEXTDOMAIN); ?></h5>
                     </div>
                 </div>
 
@@ -306,7 +306,7 @@ else {
                     <div class="stats-box-text-holder">
                         <h3><?php
                             echo $user_credits->formatted->cdn_bandwidth; ?></h3>
-                        <h5>Optimized</h5>
+                        <h5><?php esc_html_e('Optimized', WPS_IC_TEXTDOMAIN); ?></h5>
                     </div>
                 </div>
 
@@ -318,7 +318,7 @@ else {
                     <div class="stats-box-text-holder">
                         <h3><?php
                             echo $user_credits->formatted->cdn_requests; ?></h3>
-                        <h5>Assets Served</h5>
+                        <h5><?php esc_html_e('Assets Served', WPS_IC_TEXTDOMAIN); ?></h5>
                     </div>
                 </div>
 

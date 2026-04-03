@@ -1,0 +1,2630 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Section Cards & Setting Rows
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Component hierarchy:
+//   .wpc-tab-content-box (section card — e.g. "Advanced Caching")
+//     .tab-title-checkbox (section header: icon + title + desc + master toggle)
+//       .wpc-checkbox-icon > img
+//       .wpc-checkbox-description > h4 + p
+//       .wpc-switch (master toggle)
+//       .form-check > a (Configure / Purge Cache links)
+//     .wpc-spacer
+//     .wpc-items-list-row (group of setting rows)
+//       .wpc-box-for-checkbox (individual setting)
+//         .wpc-box-content
+//           .wpc-checkbox-title-holder
+//             .circle-check
+//             h4 (title + optional cog icon + BETA badge)
+//           p (description)
+//         .wpc-box-check
+//           .wpc-switch (toggle)
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  // ─── Section Card (outer wrapper) ────────────────────────────────────────
+  .wpc-tab-content-box {
+    background: @color-white;
+    border: 1px solid fade(@color-border, 80%);
+    border-radius: @radius-card;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02),
+                0 10px 15px -3px rgba(0, 0, 0, 0.03),
+                0 20px 25px -5px rgba(0, 0, 0, 0.02);
+    padding: 24px 32px;
+    margin-bottom: @space-lg;
+    overflow: hidden;
+    opacity: 0;
+    animation: wpcSmoothSlideUp 0.4s @ease-entrance forwards;
+    animation-delay: 150ms;
+    transition: box-shadow 0.2s @ease-interactive,
+                border-color 0.2s @ease-interactive;
+
+    &:hover {
+      border-color: fade(@color-border, 100%);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03),
+                  0 12px 20px -4px rgba(0, 0, 0, 0.05);
+    }
+
+  }
+
+  // Cards with setting rows: zero padding — header + rows self-pad
+  &.wpc-card-rows {
+    padding: 0;
+
+    .tab-title-checkbox {
+      padding: 30px 40px;
+      border-bottom: 1px solid @color-bg-frost;
+    }
+
+    .wpc-spacer {
+      display: none;
+    }
+  }
+
+
+  // ─── Section Header (.tab-title-checkbox) ────────────────────────────────
+  // Row layout: icon left, title + desc middle, toggle/actions right
+  .tab-title-checkbox {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0; // inherits parent padding by default
+    border-bottom: none;
+    gap: 16px;
+
+    // .wpc-card-rows handles header padding + divider via the nested block above
+
+    // Icon — gradient badge when using inline SVG
+    .wpc-checkbox-icon {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-right: 0;
+
+      // Inline SVG → gradient badge (variable-driven for whitelabel)
+      &:has(> svg) {
+        width: 48px;
+        height: 48px;
+        box-sizing: border-box;
+        background: var(--wpc-icon-grad, linear-gradient(135deg, #60A5FA, #2563EB));
+        border: none;
+        border-radius: @radius-input;
+        color: @color-white;
+        box-shadow: 0 8px 16px -4px var(--wpc-icon-shadow, rgba(37, 99, 235, 0.4));
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+        svg {
+          width: 24px;
+          height: 24px;
+        }
+      }
+
+      // Image icon → show as-is (illustrative icons)
+      img {
+        width: auto;
+        height: 60px;
+        object-fit: contain;
+        margin-top: 5px;
+      }
+    }
+
+    // Title & description — middle column, takes remaining space
+    .wpc-checkbox-description {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      min-width: 0;
+
+      h4 {
+        font-family: @font-bold;
+        font-size: 19px;
+        color: @color-text-heading;
+        margin: 0 0 2px;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        font-family: @font-regular;
+        font-size: @font-size-sm;
+        color: @color-text-secondary;
+        line-height: 1.5;
+        margin: 0;
+      }
+    }
+
+    // Gear always visible on section headers
+    > .wpc-checkbox-description .wps-ic-configure-popup {
+      opacity: 0.5;
+      display: inline-flex;
+      align-items: center;
+      color: @color-gray-text;
+      text-decoration: none;
+      transition: @transition-fast;
+      border-radius: @radius-sm;
+      padding: 3px;
+
+      .wpc-gear-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      &:hover {
+        opacity: 1;
+        transform: translateY(-2px);
+        background-color: fade(@color-bg-frost, 63%);
+      }
+    }
+
+    // Master toggle in section header
+    .wpc-switch {
+      margin-top: @space-sm;
+    }
+
+    // Select All / Configure / Purge — right column
+    .form-check {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0;
+      margin-left: auto;
+
+      // Hide the native checkbox — button drives it via JS
+      input[type="checkbox"] {
+        height: 0;
+        width: 0;
+        position: absolute;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      // Select All / Deselect All button — matches Configure button style
+      .wpc-select-all-btn {
+        background: @color-white;
+        color: @color-text-secondary;
+        border: 1px solid @color-border;
+        border-radius: @radius-md;
+        padding: @space-sm @space-xl;
+        font-size: @font-size-sm;
+        font-family: @font-semibold;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: @transition-fast;
+        white-space: nowrap;
+        line-height: 1.4;
+
+        &:hover {
+          transform: translateY(-1px);
+          border-color: var(--wpc-brand-accent-light, @color-border-blue);
+          color: @color-text-dark;
+        }
+
+        &.active {
+          // No fill change — same outline style for both states
+        }
+
+        &.disabled {
+          opacity: 0.5;
+          pointer-events: none;
+        }
+      }
+
+      // Legacy label support (keep for non-button sections)
+      label.with-label {
+        display: none;
+      }
+    }
+
+    .form-check a,
+    a.wpc-purge-action {
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+      border: 1px solid @color-border;
+      border-radius: @radius-pill;
+      padding: @space-sm @space-lg;
+      background: @color-white;
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      text-decoration: none;
+      transition: @transition-fast;
+
+      &:hover {
+        background: var(--wpc-brand-tint, @color-ice);
+        border-color: var(--wpc-brand-accent-light, @color-border-blue);
+        color: var(--wpc-brand-primary-dark, @color-blue-deep);
+      }
+    }
+  }
+
+
+  // ─── Spacer ──────────────────────────────────────────────────────────────
+  .wpc-spacer {
+    height: 1px;
+    background: @color-border;
+    margin: @space-md 0 @space-sm;
+    opacity: 0.4;
+
+    // .wpc-card-rows hides spacer via the nested block above
+  }
+
+
+  // ─── Items List Row (group of setting rows) ──────────────────────────────
+  .wpc-items-list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+
+    // Icon checkbox grid (CDN tab) keeps its own gap
+    &.real-time-optimization {
+      gap: @space-sm;
+    }
+
+    // Staggered entrance for setting rows
+    > .wpc-box-for-checkbox,
+    > .wpc-box-for-dropdown,
+    > .wpc-box-for-input {
+      opacity: 0;
+      animation: wpcMaterialize 300ms @ease-entrance both;
+      &:nth-child(1)  { animation-delay: 120ms; }
+      &:nth-child(2)  { animation-delay: 145ms; }
+      &:nth-child(3)  { animation-delay: 170ms; }
+      &:nth-child(4)  { animation-delay: 195ms; }
+      &:nth-child(5)  { animation-delay: 220ms; }
+      &:nth-child(6)  { animation-delay: 245ms; }
+      &:nth-child(7)  { animation-delay: 270ms; }
+      &:nth-child(8)  { animation-delay: 295ms; }
+      &:nth-child(n+9) { animation-delay: 320ms; }
+    }
+  }
+
+
+  // ─── Setting Row (.wpc-box-for-checkbox) ─────────────────────────────────
+  .wpc-box-for-checkbox,
+  .wpc-box-for-dropdown,
+  .wpc-box-for-input {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: @space-lg;
+    background: @color-white;
+    border: none;
+    border-bottom: 1px solid fade(@color-bg-frost, 80%);
+    border-radius: 0;
+    padding: 20px 32px;
+    transition: background-color 0.2s ease;
+    position: relative;
+    cursor: pointer;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background-color: @color-bg-neutral;
+
+      // Show gear + configure on card hover
+      .wps-ic-configure-popup {
+        opacity: 1;
+        gap: 4px;
+
+        .wpc-configure-label {
+          max-width: 65px;
+          opacity: 1;
+        }
+      }
+    }
+
+    // Left edge blue highlight on hover
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background-color: var(--wpc-brand-primary-light, @color-primary);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover::before {
+      opacity: 1;
+    }
+
+    // No-description variant
+    &.no-description {
+      padding: 16px 32px;
+    }
+  }
+
+  // ─── Box Content (left side: title + description) ────────────────────────
+  .wpc-box-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // ─── Title Holder (circle-check + h4) ────────────────────────────────────
+  .wpc-checkbox-title-holder {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+
+    // Setting title
+    h4 {
+      font-family: @font-semibold;
+      font-size: 15px;
+      color: @color-text-dark;
+      margin: 0;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      display: inline;
+
+      // Gear / configure trigger
+      .wps-ic-configure-popup {
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        margin-left: 6px;
+        vertical-align: -1px;
+        color: @color-gray-text;
+        text-decoration: none;
+        opacity: 0.45;
+        flex-shrink: 1;
+        min-width: 0;
+        overflow: hidden;
+        transition: opacity 0.2s ease,
+                    gap 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                    transform 0.2s ease,
+                    background-color 0.2s ease;
+        border-radius: @radius-sm;
+        padding: 2px;
+
+        // Gray filter for the gear icon
+        img {
+          filter: brightness(0) saturate(100%) invert(76%) sepia(13%) saturate(263%) hue-rotate(179deg) brightness(88%) contrast(90%);
+        }
+
+        &:hover {
+          transform: translateY(-2px) !important; // FORCED: hover lift
+          background-color: fade(@color-bg-frost, 63%) !important; // FORCED: subtle bg
+          opacity: 1;
+        }
+
+        // Always visible when overrides exist
+        &.wpc-has-overrides {
+          opacity: 0.45;
+        }
+
+        .wpc-gear-icon {
+          width: 13px;
+          height: 13px;
+          flex-shrink: 0;
+        }
+
+        // "Configure" label — clips naturally if no room
+        .wpc-configure-label {
+          font-family: @font-regular;
+          font-size: 12px;
+          color: @color-text-secondary;
+          white-space: nowrap;
+          overflow: hidden;
+          max-width: 0;
+          opacity: 0;
+          transition: max-width 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                      opacity 0.2s ease;
+        }
+      }
+    }
+  }
+
+  // Status dot
+  .circle-check {
+    width: 8px !important; // FORCED: override WP admin
+    height: 8px !important; // FORCED: override WP admin
+    border-radius: @radius-circle !important; // FORCED: override WP admin
+    background-color: @color-border !important; // FORCED: off state — neutral grey
+    flex-shrink: 0 !important; // FORCED: override WP admin
+    transition: all 0.3s ease !important; // FORCED: override WP admin
+    margin-top: 6px !important; // FORCED: align with title text
+
+    &.active {
+      background-color: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: match dashboard dot color
+    }
+  }
+
+  // Blue pulse on row hover only — matches dashboard card behavior
+  .wpc-box-for-dropdown:hover .circle-check.active,
+  .wpc-box-for-checkbox:hover .circle-check.active,
+  .wpc-box-for-input:hover .circle-check.active {
+    animation: bluePulse 1.5s infinite !important; // FORCED: pulse on hover
+    transform: scale(1.1) !important; // FORCED
+  }
+
+  // Badge inside h4 — blue gradient pill
+  .wpc-checkbox-title-holder h4 .wpc-beta-badge,
+  .wpc-beta-badge {
+    display: inline-block;
+    font-family: @font-bold;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: var(--wpc-brand-primary, @color-blue);
+    color: @color-white;
+    padding: 2px 8px;
+    border-radius: @radius-sm;
+    margin-left: @space-sm;
+    vertical-align: middle;
+    line-height: 1.4;
+  }
+
+  // Refresh required badge (admin bar settings)
+  .wpc-refresh-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin-left: @space-sm;
+    font-family: @font-semibold;
+    font-size: 10px;
+    color: @color-warning;
+    background: fade(@color-warning, 10%);
+    border: 1px solid fade(@color-warning, 25%);
+    border-radius: @radius-pill;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  // Setting description
+  .wpc-box-content p {
+    font-family: @font-regular;
+    font-size: 14px;
+    color: @color-text-secondary;
+    line-height: 1.6;
+    margin: 0;
+    padding-left: 20px; // align with title text (past circle-check + gap)
+    max-width: 650px;
+  }
+
+
+  // ─── Box Check (right side: toggle or button) ────────────────────────────
+  .wpc-box-check {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+
+  // ─── Toggle Switch — Stripe/iOS Style ────────────────────────────────────
+  // 44×24, solid track, white thumb with shadow, no checkmark
+  .wpc-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    // Track — solid neutral off-state
+    .wpc-switch-slider {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: @color-border-medium;
+      border: none;
+      border-radius: 24px;
+      transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+      // Thumb — white circle with subtle shadow
+      &::before {
+        content: "";
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        left: 2px;
+        bottom: 2px;
+        background-color: @color-white;
+        border-radius: @radius-circle;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15),
+                    0 1px 2px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      // No checkmark — clean Stripe/iOS look
+      &::after {
+        display: none;
+      }
+    }
+
+    // Checked state — brand track, thumb slides right
+    input:checked + .wpc-switch-slider {
+      background-color: var(--wpc-brand-primary, @color-blue);
+
+      &::before {
+        transform: translateX(20px);
+      }
+    }
+
+    // Focus ring for keyboard accessibility
+    input:focus-visible + .wpc-switch-slider {
+      outline: 2px solid var(--wpc-brand-primary-light, @color-primary);
+      outline-offset: 2px;
+    }
+
+    // Disabled state
+    .wpc-switch-disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+
+  // ─── Locked Feature Overlay ──────────────────────────────────────────────
+  .wpc-locked {
+    opacity: 1;
+    pointer-events: auto;
+    position: relative;
+    cursor: default;
+
+    // Dim text
+    .wpc-checkbox-title-holder span,
+    .wpc-checkbox-description h4 {
+      color: @color-border-medium;
+    }
+
+    > * { pointer-events: none; }
+    .wpc-iconcheckbox-toggle { display: none; }
+
+    // Hide slider, turn switch into ghost PRO badge
+    .wpc-switch-slider { display: none !important; } // FORCED
+
+    .wpc-switch {
+      width: auto !important; // FORCED
+      height: 22px !important; // FORCED
+      display: flex !important; // FORCED
+      align-items: center !important; // FORCED
+      justify-content: center !important; // FORCED
+      gap: 4px;
+      padding: 0 8px !important; // FORCED
+      border: 1px solid @color-border !important; // FORCED
+      border-radius: 11px !important; // FORCED
+      cursor: default !important; // FORCED
+      box-sizing: border-box;
+      pointer-events: auto;
+      transition: border-color 0.2s ease;
+
+      // Lock icon — uses mask so color matches PRO text (brand-aware)
+      &::before {
+        content: "" !important; // FORCED
+        display: block !important; // FORCED
+        width: 9px !important; // FORCED
+        height: 9px !important; // FORCED
+        background-color: currentColor !important; // FORCED: inherits text color
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") !important; // FORCED
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E") !important; // FORCED
+        -webkit-mask-size: contain !important; // FORCED
+        mask-size: contain !important; // FORCED
+        -webkit-mask-repeat: no-repeat !important; // FORCED
+        mask-repeat: no-repeat !important; // FORCED
+        -webkit-mask-position: center !important; // FORCED
+        mask-position: center !important; // FORCED
+        position: static !important; // FORCED
+        border-radius: 0 !important; // FORCED
+        box-shadow: none !important; // FORCED
+        transform: none !important; // FORCED
+        margin-top: -1px;
+        color: #94a3b8;
+      }
+
+      &::after {
+        content: "PRO" !important; // FORCED
+        font-size: 9px;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        line-height: 1;
+        position: static !important; // FORCED
+        border: none !important; // FORCED
+        background: none !important; // FORCED
+        display: block !important; // FORCED
+        width: auto !important; // FORCED
+        height: auto !important; // FORCED
+        opacity: 1 !important; // FORCED
+      }
+    }
+
+    &:hover .wpc-switch {
+      border-color: var(--wpc-brand-accent-light, fade(@color-blue, 40%)) !important; // FORCED
+      background: var(--wpc-brand-tint, fade(@color-ice, 60%));
+
+      &::before {
+        color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: mask inherits color
+      }
+
+      &::after {
+        color: var(--wpc-brand-primary, @color-blue) !important; // FORCED
+      }
+    }
+  }
+
+  // ─── Rounded Boxes (generic card) ────────────────────────────────────────
+  .wpc-rounded-box {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    padding: @space-lg;
+    box-shadow: @shadow-card;
+    overflow: hidden;
+  }
+
+  .wpc-rounded-box-half {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    padding: @space-lg;
+    box-shadow: @shadow-card;
+    overflow: hidden;
+    width: calc(50% - @space-sm);
+  }
+
+  .wpc-rounded-box-full {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    padding: @space-lg;
+    box-shadow: @shadow-card;
+    overflow: hidden;
+    width: 100%;
+  }
+
+
+  // ─── Configure Button (standalone in setting rows) ───────────────────────
+  .wpc-box-for-checkbox .wpc-box-button a,
+  .wpc-box-for-input .wpc-box-button a {
+    font-family: @font-semibold;
+    font-size: @font-size-sm;
+    color: @color-text-secondary;
+    background: @color-bg-frost;
+    border: 1px solid @color-border;
+    border-radius: @radius-base;
+    padding: @space-sm @space-md;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: @transition-fast;
+    min-height: 36px;
+
+    &:hover {
+      background: var(--wpc-brand-tint, @color-ice);
+      border-color: var(--wpc-brand-accent-light, @color-border-blue);
+      color: var(--wpc-brand-primary-dark, @color-blue-deep);
+    }
+  }
+
+}
+
+
+// ─── CDN Bottom Grid (CNAME + EU Routing side-by-side) ───────────────────
+.wpc-advanced-settings-container-v4 {
+
+  .wpc-cdn-bottom-grid {
+    display: flex;
+    flex-direction: column;
+    gap: @space-lg; // 20px — generous breathing room between stacked cards
+
+    // Kill per-card margin so only grid gap controls spacing
+    .wpc-tab-content-box {
+      margin-bottom: 0;
+    }
+  }
+
+  // ── Custom CDN Domain Card ──────────────────────────────────────────────
+  .wpc-tab-content-cname {
+    display: flex;
+    align-items: center;
+    gap: @space-md;
+    padding: @space-xl @space-2xl; // 24px 32px — match Card 1
+    transition: background-color 0.15s @ease-interactive;
+
+    &:hover {
+      background-color: @color-bg-neutral;
+    }
+
+    // First child div holds icon + text
+    > div:first-child {
+      display: flex;
+      align-items: center;
+      gap: @space-md; // 12px — match icon margin-right
+      flex: 1;
+
+      // Icon pill — gradient badge (variable-driven for whitelabel)
+      .wpc-cname-icon {
+        width: 44px;
+        height: 44px;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: var(--wpc-icon-grad, linear-gradient(135deg, #c084fc, #9333ea));
+        border: none;
+        border-radius: @radius-input; // 12px
+        flex-shrink: 0;
+        color: @color-white;
+        box-shadow: 0 8px 16px -4px var(--wpc-icon-shadow, rgba(147, 51, 234, 0.4));
+
+        svg {
+          width: 22px;
+          height: 22px;
+        }
+      }
+    }
+
+    h4 {
+      font-family: @font-semibold;
+      font-size: @font-size-lg;
+      color: @color-text-dark;
+      margin: 0 0 2px !important; // FORCED: override PHP inline margin-bottom:10px
+    }
+
+    p {
+      font-family: @font-regular;
+      font-size: @font-size-sm;
+      color: @color-text-slate; // #475569
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    // Configure button — right side
+    > div:last-child {
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .wps-ic-configure-popup {
+      background: var(--wpc-brand-primary, @color-blue);
+      color: @color-white;
+      border: 1px solid transparent;
+      border-radius: @radius-pill;
+      padding: @space-sm @space-xl;
+      font-size: @font-size-sm;
+      font-family: @font-semibold;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: @transition-fast;
+      white-space: nowrap;
+      line-height: 1.4;
+      box-shadow: 0 2px 6px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
+
+      &:hover {
+        background: var(--wpc-brand-primary-dark, @color-blue-vivid);
+        color: @color-white;
+      }
+    }
+  }
+
+
+  // ── EU Routing Card — single row: icon pill, text, toggle ────────────
+  .wpc-tab-content-eu-routing {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: @space-md;
+    padding: @space-xl @space-2xl; // 24px 32px — match Card 1
+    transition: background-color 0.15s @ease-interactive;
+
+    &:hover {
+      background-color: @color-bg-neutral;
+    }
+    transition: @transition-smooth;
+
+    .wpc-eu-routing-inner {
+      display: flex;
+      align-items: center;
+      gap: @space-md; // 12px — match icon margin-right
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    .wpc-eu-routing-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      background: var(--wpc-icon-grad, linear-gradient(135deg, #34d399, #059669));
+      border: none;
+      border-radius: @radius-input; // 12px
+      color: @color-white;
+      box-shadow: 0 8px 16px -4px var(--wpc-icon-shadow, rgba(5, 150, 105, 0.4));
+
+      svg {
+        width: 22px;
+        height: 22px;
+      }
+    }
+
+    .wpc-eu-routing-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+
+      h4 {
+        font-family: @font-semibold;
+        font-size: @font-size-lg;
+        color: @color-text-dark;
+        margin: 0;
+      }
+
+      p {
+        font-family: @font-regular;
+        font-size: @font-size-sm;
+        color: @color-text-slate; // #475569
+        margin: 0;
+        line-height: 1.5;
+      }
+    }
+
+    // Toggle — just the switch, no label text
+    .wpc-eu-routing-toggle {
+      flex-shrink: 0;
+      margin-left: auto;
+      margin-top: 0;
+    }
+
+    .wpc-eu-routing-toggle-row {
+      display: flex;
+      align-items: center;
+      background: none;
+      border: none;
+      padding: 0;
+
+      // Hide the "Enforce EU Routing" text label (direct child span only)
+      > span {
+        display: none;
+      }
+    }
+  }
+
+  // ─── Other Optimizations — floating page header ──────────────────────────
+  .wpc-other-opt-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 8px 24px;
+
+    .wpc-other-opt-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: @radius-card;
+      background: @color-white;
+      border: 1px solid @color-border;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--wpc-brand-primary, @color-blue);
+      box-shadow: @shadow-sm;
+      flex-shrink: 0;
+
+      svg { width: 28px; height: 28px; }
+    }
+
+    h2 {
+      font-family: @font-bold;
+      font-size: 24px;
+      color: @color-text-heading;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      font-family: @font-regular;
+      font-size: 15px;
+      color: @color-text-secondary;
+      margin: 2px 0 0;
+      line-height: 1.4;
+    }
+  }
+
+  // ─── Categorized cards (Other Optimizations sections) ───────────────────
+  .wpc-categorized-card {
+    // Override wpc-card-rows padding
+    padding: 0 !important; // FORCED: override card-rows
+
+    .wpc-category-header {
+      padding: 12px 24px;
+      border-bottom: 1px solid @color-bg-frost;
+      background: fade(@color-bg-frost, 50%);
+      font-family: @font-semibold;
+      font-size: 13px;
+      color: @color-text-dark;
+      letter-spacing: 0.01em;
+    }
+
+    // Two-column compact grid
+    .wpc-two-col-grid {
+      display: grid !important; // FORCED: override flex
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      padding: 8px 16px;
+
+      .wpc-box-for-checkbox,
+      .wpc-box-for-dropdown,
+      .wpc-box-for-input {
+        padding: 10px 12px !important; // FORCED: compact
+        border: none !important; // FORCED: no individual borders
+        border-bottom: none !important; // FORCED
+        border-radius: @radius-base !important; // FORCED: subtle rounding
+        background: transparent;
+        cursor: pointer;
+
+        &::before { display: none; } // no left highlight
+
+        &:hover {
+          background: @color-bg-frost !important; // FORCED
+          transform: none;
+          box-shadow: none;
+        }
+
+        // Hide description — title only
+        .wpc-box-content p { display: none; }
+
+        // Tighter title
+        .wpc-checkbox-title-holder {
+          gap: 10px;
+          margin-bottom: 0;
+
+          h4 {
+            font-size: 14px;
+            font-family: @font-regular;
+            font-weight: 500;
+            color: @color-text-body;
+          }
+        }
+
+        // Smaller toggle in compact mode
+        .wpc-switch {
+          width: 36px;
+          height: 20px;
+
+          .wpc-switch-slider {
+            border-radius: 10px;
+
+            &::before {
+              width: 16px;
+              height: 16px;
+            }
+
+            &::after {
+              width: 5px;
+              height: 7px;
+              left: 7px;
+              bottom: 7px;
+            }
+          }
+
+          input:checked + .wpc-switch-slider::before {
+            transform: translateX(16px);
+          }
+
+          input:checked + .wpc-switch-slider::after {
+            left: 24px;
+            bottom: 7px;
+          }
+        }
+      }
+    }
+
+    // Hide spacer
+    .wpc-spacer { display: none; }
+    .tab-title-checkbox { display: none; } // header replaced by .wpc-category-header
+  }
+
+
+  // ─── Performance Tweaks — Section with Individual Item Cards ──────────────
+  .wpc-perf-section {
+    padding: 0 !important; // FORCED: override card-rows
+    overflow: visible !important; // FORCED: prevent clipping sub-cards
+
+    // Section cards — tight cascade, near-simultaneous wave
+    animation: wpcMaterialize 350ms cubic-bezier(0.36, 0.66, 0.04, 1) both;
+    &:nth-child(1) { animation-delay: 0ms; }
+    &:nth-child(2) { animation-delay: 60ms; }
+    &:nth-child(3) { animation-delay: 120ms; }
+    &:nth-child(4) { animation-delay: 180ms; }
+
+    .tab-title-checkbox {
+      padding: 16px 0 14px;
+      border-bottom: 1px solid @color-bg-frost;
+      margin: 15px 40px 0;
+    }
+
+    .wpc-spacer { display: none; }
+  }
+
+  // ─── Performance Tweaks — Individual Card Grid ───────────────────────────
+  // Each setting is its own sub-card inside the section card
+  .wpc-perf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    max-width: 100%;
+    gap: 12px 16px;
+    padding: 16px 40px 24px;
+
+    // Reduce top padding when consecutive grids are stacked
+    & + .wpc-perf-grid {
+      padding-top: 0;
+    }
+
+    // Cap at 2 columns — prevents 3-wide at large viewports
+    @media screen and (min-width: 769px) {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    // Stack to single column below desktop
+    @media screen and (max-width: 1220px) {
+      grid-template-columns: 1fr;
+    }
+
+    // Single-column variant for CSS/JS/Dev Mode
+    &.wpc-perf-grid-single {
+      grid-template-columns: 1fr;
+    }
+
+    // Title row — tight gap for icon + text + badges
+    > .wpc-box-for-checkbox,
+    > .wpc-box-for-input,
+    > .wpc-box-for-dropdown {
+      .wpc-checkbox-title-holder h4 {
+        display: flex !important; // FORCED
+        align-items: center !important; // FORCED
+        flex-wrap: nowrap !important; // FORCED
+        gap: 4px;
+      }
+    }
+
+    // Each setting becomes its own sub-card
+    > .wpc-box-for-checkbox,
+    > .wpc-box-for-input,
+    > .wpc-box-for-dropdown {
+      background: @color-white;
+      border: 1px solid fade(@color-border, 60%);
+      border-radius: @radius-card;
+      padding: 18px 24px;
+      cursor: default;
+      position: relative;
+      z-index: 1;
+
+      // Minimal resting shadow
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+
+      // Subtle bottom shelf
+      border-bottom: 1px solid fade(@color-border, 70%) !important; // FORCED
+
+      // Materialization — 30ms stagger, appears as a wave
+      opacity: 0;
+      animation: wpcMaterialize 350ms cubic-bezier(0.36, 0.66, 0.04, 1) both;
+      &:nth-child(1) { animation-delay: 30ms; }
+      &:nth-child(2) { animation-delay: 60ms; }
+      &:nth-child(3) { animation-delay: 90ms; }
+      &:nth-child(4) { animation-delay: 120ms; }
+      &:nth-child(5) { animation-delay: 150ms; }
+      &:nth-child(6) { animation-delay: 180ms; }
+      &:nth-child(7) { animation-delay: 210ms; }
+
+      // Interactive transitions — Linear curve
+      transition: transform 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                  box-shadow 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                  border-color 0.15s ease;
+
+      // No left highlight bar
+      &::before { display: none; }
+
+      // Title row — center dot + text + icons on one line
+      .wpc-checkbox-title-holder {
+        display: flex !important; // FORCED
+        align-items: center !important; // FORCED: center dot with text
+        margin-bottom: 0 !important; // FORCED
+        gap: 10px !important; // FORCED
+
+        .circle-check {
+          margin-top: 0 !important; // FORCED: override base 6px, flex centers it
+        }
+
+        h4 {
+          display: flex !important; // FORCED
+          align-items: center !important; // FORCED
+          flex-wrap: nowrap !important; // FORCED: prevent title line wrap
+          gap: 4px;
+          white-space: nowrap;
+        }
+      }
+
+      // Box content — flex row so button-action cards align Purge right
+      .wpc-box-content {
+        display: flex;
+        align-items: center;
+        width: 100%;
+
+        .wpc-checkbox-title-holder { flex: 1; }
+
+        .wpc-box-button {
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+
+        // Hide description <p> — tooltip JS handles it
+        > p { display: none; }
+      }
+
+      // Card hover — subtle lift + shadow growth
+      &:hover {
+        transform: translateY(-1px);
+        z-index: 10;
+        border-color: fade(@color-border-medium, 80%);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04),
+                    0 4px 12px -2px rgba(0, 0, 0, 0.06);
+
+        .wpc-info-trigger {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      // Tooltip appears instantly once card has been hovered 300ms (JS adds .wpc-tooltip-ready)
+      &.wpc-tooltip-ready .wpc-info-trigger:hover .wpc-info-tooltip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0) scale(1);
+        pointer-events: auto;
+        transition: opacity 0.15s ease,
+                    transform 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                    visibility 0s linear 0s;
+      }
+
+      // Dropdown open — lift sub-card so menu isn't clipped by grid siblings
+      &:has(.wpc-cf-select-dropdown.is-open) {
+        overflow: visible !important; // FORCED: show dropdown menu
+        z-index: 50 !important; // FORCED: above sibling cards
+      }
+
+      // Toggle — snappy thumb transition
+      .wpc-switch .wpc-switch-slider {
+        transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+        &::before {
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+      }
+
+      // ── Tooltip Trigger — SVG icon with tactile hover ──
+      .wpc-info-trigger {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        margin-left: 2px;
+        flex-shrink: 0;
+        border-radius: @radius-circle;
+        color: fade(@color-border-blue, 80%);
+        cursor: default;
+        opacity: 0;
+        transition: transform 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                    opacity 0.15s ease,
+                    color 0.15s ease,
+                    background-color 0.15s ease;
+
+        svg {
+          width: 17px;
+          height: 17px;
+        }
+
+        // Subtle scale on hover
+        &:hover {
+          color: var(--wpc-brand-primary, @color-blue);
+          background-color: fade(#eff6ff, 100%);
+          transform: scale(1.08);
+        }
+
+        // ── Dark Glass Tooltip ──
+        .wpc-info-tooltip {
+          position: absolute;
+          bottom: calc(100% + 14px);
+          left: 50%;
+          width: 340px;
+
+          // Glassmorphism
+          background-color: rgba(15, 23, 42, 0.96);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: #f8fafc;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: @radius-input;
+          padding: 12px 16px;
+          font-family: @font-system;
+          font-size: 13px;
+          font-weight: 500;
+          font-style: normal;
+          line-height: 1.6;
+          text-align: left;
+          z-index: 50;
+          pointer-events: none;
+          white-space: normal;
+          transform-origin: bottom center;
+
+          // Inset glow + deep ambient shadow
+          box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+                      0 10px 15px -3px rgba(0, 0, 0, 0.2),
+                      0 25px 50px -12px rgba(0, 0, 0, 0.3);
+
+          // Hidden
+          opacity: 0;
+          visibility: hidden;
+          transform: translateX(-50%) translateY(6px) scale(0.97);
+          transition: opacity 0.15s ease,
+                      transform 0.2s cubic-bezier(0.36, 0.66, 0.04, 1),
+                      visibility 0s linear 0.2s;
+
+          // Arrow — solid bg to prevent transparency overlap
+          &::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background-color: #0f172a;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom-right-radius: 2px;
+            transform: translateX(-50%) rotate(45deg);
+          }
+        }
+
+        // Tooltip visibility controlled by .wpc-tooltip-ready on parent card (see above)
+      }
+
+      // Configure button in card
+      .wpc-box-button a {
+        font-family: @font-semibold;
+        font-size: 12px;
+        text-transform: none;
+        letter-spacing: 0.01em;
+        color: @color-white;
+        background: var(--wpc-brand-primary, @color-blue);
+        border: none;
+        border-radius: @radius-pill;
+        padding: 7px 18px;
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
+        transition: @transition-fast;
+        white-space: nowrap;
+
+        &:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(76, 137, 235, 0.3);
+          color: @color-white;
+        }
+      }
+    }
+
+    // Input fields span full width (e.g. Skip Lazy Loading)
+    > .wpc-box-for-input {
+      grid-column: 1 / -1;
+    }
+  }
+
+
+  // ─── Performance Tweaks Summary Header ───────────────────────────────────
+  .wpc-perf-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px 20px;
+
+    h2 {
+      font-family: @font-bold;
+      font-size: 22px;
+      color: @color-text-heading;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    .wpc-perf-counter {
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-secondary;
+      margin: 2px 0 0;
+    }
+
+    .wpc-toggle-descriptions-btn {
+      font-family: @font-semibold;
+      font-size: 12px;
+      padding: 7px 14px;
+      border-radius: @radius-md;
+      background: @color-white;
+      border: 1px solid @color-border;
+      color: @color-text-secondary;
+      cursor: pointer;
+      transition: @transition-fast;
+      white-space: nowrap;
+
+      &:hover {
+        border-color: var(--wpc-brand-accent-light, @color-border-blue);
+        color: @color-text-dark;
+      }
+
+      &.active {
+        background: var(--wpc-brand-primary, @color-blue);
+        color: @color-white;
+        border-color: var(--wpc-brand-primary, @color-blue);
+      }
+    }
+  }
+
+  // ─── Section Counter Pill ──────────────────────────────────────────────
+  .wpc-section-counter {
+    font-family: @font-regular;
+    font-size: 12px;
+    color: @color-gray-muted;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  // ─── Compact Rows (Performance Tweaks) ──────────────────────────────────
+  .wpc-compact-rows {
+
+    // Rows — ~40px tall, no dots, no left highlight
+    .wpc-box-for-checkbox,
+    .wpc-box-for-dropdown,
+    .wpc-box-for-input {
+      padding: 11px 20px !important; // FORCED: ~40px rows
+      cursor: pointer;
+      gap: @space-sm !important; // FORCED
+
+      // No left blue highlight bar
+      &::before { display: none !important; } // FORCED
+
+      // No dots
+      .circle-check { display: none !important; } // FORCED
+
+      // Scannable list items
+      .wpc-checkbox-title-holder {
+        gap: 0;
+        margin-bottom: 0;
+
+        h4 {
+          font-size: 14px !important; // FORCED
+          font-family: @font-regular !important; // FORCED
+          font-weight: 500 !important; // FORCED: medium
+          letter-spacing: 0;
+          color: @color-text-body !important; // FORCED
+        }
+      }
+
+      // Description hidden
+      .wpc-box-content > p {
+        display: none;
+        margin: 3px 0 1px;
+        padding-left: 0;
+        font-size: 12px;
+        color: @color-gray-muted;
+        line-height: 1.4;
+      }
+
+      &.wpc-row-expanded .wpc-box-content > p {
+        display: block;
+      }
+
+      // Subtle hover
+      &:hover {
+        background: @color-bg-frost !important; // FORCED
+        transform: none !important; // FORCED: no lift
+        box-shadow: none !important; // FORCED
+      }
+    }
+
+    // Section header — compact, counter-ready
+    .tab-title-checkbox {
+      padding: 14px 20px !important; // FORCED
+      gap: 12px !important; // FORCED
+
+      .wpc-checkbox-icon {
+        &:has(> svg) {
+          width: 32px !important; // FORCED
+          height: 32px !important; // FORCED
+          border-radius: @radius-md !important; // FORCED
+
+          svg { width: 16px !important; height: 16px !important; } // FORCED
+        }
+
+        img { width: 24px !important; height: 24px !important; } // FORCED
+      }
+
+      .wpc-checkbox-description {
+        h4 {
+          font-size: 15px !important; // FORCED
+          font-family: @font-semibold !important; // FORCED
+          margin-bottom: 0 !important; // FORCED
+        }
+        p { display: none !important; } // FORCED: hide section description
+      }
+    }
+  }
+
+  // Global "show all descriptions" override
+  .wpc-show-descriptions .wpc-compact-rows {
+    .wpc-box-for-checkbox .wpc-box-content > p,
+    .wpc-box-for-dropdown .wpc-box-content > p,
+    .wpc-box-for-input .wpc-box-content > p {
+      display: block !important; // FORCED
+    }
+
+    .tab-title-checkbox .wpc-checkbox-description p {
+      display: block !important; // FORCED
+    }
+  }
+
+
+  // ─── Shared standalone card header layout ─────────────────────────────────
+  // Matches .tab-title-checkbox exactly: 48px icon, 16px gap, bold 19px title
+  .wpc-standalone-card-inner() {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+  }
+
+  .wpc-standalone-card-icon(@color1, @color2) {
+    width: 48px;
+    height: 48px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--wpc-icon-grad, linear-gradient(135deg, @color1, @color2));
+    border: none;
+    border-radius: @radius-input;
+    color: @color-white;
+    box-shadow: 0 8px 16px -4px var(--wpc-icon-shadow, fade(@color2, 40%));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    svg { width: 24px; height: 24px; }
+  }
+
+  .wpc-standalone-card-text() {
+    flex: 1;
+    h4 {
+      font-family: @font-semibold;
+      font-size: 16px;
+      color: @color-text-heading;
+      margin: 0 0 1px;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    p {
+      font-family: @font-regular;
+      font-size: @font-size-sm;
+      color: @color-text-secondary;
+      margin: 0;
+      line-height: 1.4;
+    }
+  }
+
+  // ─── Standalone Card Shared Hover ─────────────────────────────────────────
+  .wpc-optimization-level-card,
+  .wpc-auto-optimize-card,
+  .wpc-optimize-library-card {
+    transition: background-color 0.15s @ease-interactive;
+
+    &:hover {
+      background-color: @color-bg-neutral;
+    }
+  }
+
+  // ─── Optimization Level Card ──────────────────────────────────────────────
+  .wpc-optimization-level-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 30px 40px;
+    opacity: 0;
+    animation: wpcMaterialize 300ms @ease-entrance both;
+    animation-delay: 120ms;
+
+    .wpc-opt-level-header { .wpc-standalone-card-inner(); }
+    .wpc-opt-level-icon { .wpc-standalone-card-icon(#FF8A65, #E64A19); } // deep coral
+    .wpc-opt-level-text { .wpc-standalone-card-text(); }
+
+    .wpc-opt-level-slider {
+      flex-shrink: 0;
+      width: 280px;
+
+      .wpc-range-slider {
+        position: relative;
+        width: 100%;
+        height: 28px;
+
+        // Empty track (light blue outline)
+        &::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 0;
+          right: 0;
+          transform: translateY(-50%);
+          height: 10px;
+          background-color: #f0f6ff;
+          border: 1px solid #cce0ff;
+          border-radius: 6px;
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        // Filled track (solid blue)
+        &::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 0;
+          transform: translateY(-50%);
+          height: 10px;
+          width: var(--slider-pos, 50%);
+          background-color: var(--wpc-brand-primary, @color-blue);
+          border-radius: 6px;
+          z-index: 2;
+          pointer-events: none;
+          transition: width 0.2s ease;
+        }
+
+        input[type="range"] {
+          -webkit-appearance: none;
+          appearance: none;
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: transparent;
+          z-index: 3;
+          margin: 0;
+          cursor: pointer;
+          outline: none;
+
+          // Donut thumb — WebKit
+          &::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: @color-white;
+            border: 6px solid var(--wpc-brand-primary, @color-blue);
+            cursor: pointer;
+            box-shadow: 0 4px 10px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.4));
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+          }
+
+          &:hover::-webkit-slider-thumb,
+          &:active::-webkit-slider-thumb {
+            transform: scale(1.15);
+            box-shadow: 0 6px 14px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.5));
+          }
+
+          &:focus-visible::-webkit-slider-thumb {
+            outline: 2px solid var(--wpc-brand-primary, @color-blue);
+            outline-offset: 2px;
+          }
+
+          // Donut thumb — Firefox
+          &::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: @color-white;
+            border: 6px solid var(--wpc-brand-primary, @color-blue);
+            cursor: pointer;
+            box-shadow: 0 4px 10px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.4));
+          }
+
+          &::-moz-range-track {
+            background: transparent;
+            border: none;
+            height: 0;
+          }
+        }
+      }
+
+      .wpc-slider-text {
+        display: flex;
+        justify-content: space-between;
+        padding: 0;
+        margin-top: 12px;
+
+        div {
+          flex: 1;
+          font-family: @font-bold;
+          font-size: 12px;
+          color: @color-gray-muted;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          cursor: pointer;
+          transition: color 0.3s ease;
+          text-align: center;
+
+          &:first-child { text-align: left; }
+          &:last-child { text-align: right; }
+          &:hover { color: @color-text-dark; }
+          &.active { color: var(--wpc-brand-primary, @color-blue); }
+        }
+      }
+    }
+  }
+
+  // ─── Auto-Optimize Card ──────────────────────────────────────────────────
+  .wpc-auto-optimize-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 30px 40px;
+    opacity: 0;
+    animation: wpcMaterialize 300ms @ease-entrance both;
+    animation-delay: 145ms;
+
+    .wpc-auto-optimize-inner { .wpc-standalone-card-inner(); }
+    .wpc-auto-optimize-icon { .wpc-standalone-card-icon(#34D399, #059669); } // emerald
+    .wpc-auto-optimize-text { .wpc-standalone-card-text(); }
+
+    .wpc-auto-optimize-toggle {
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+  }
+
+  // ─── Optimize Media Library Card ─────────────────────────────────────────
+  .wpc-optimize-library-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 30px 40px;
+    opacity: 0;
+    animation: wpcMaterialize 300ms @ease-entrance both;
+    animation-delay: 170ms;
+
+    .wpc-optimize-library-inner { .wpc-standalone-card-inner(); }
+    .wpc-optimize-library-icon { .wpc-standalone-card-icon(#A78BFA, #7C3AED); } // amethyst
+    .wpc-optimize-library-text { .wpc-standalone-card-text(); }
+
+    .wpc-optimize-library-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--wpc-brand-primary, @color-blue);
+      color: @color-white;
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      text-decoration: none;
+      border-radius: @radius-md;
+      box-shadow: 0 2px 8px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
+      transition: @transition-fast;
+      white-space: nowrap;
+      flex-shrink: 0;
+
+      svg { flex-shrink: 0; }
+
+      &:hover {
+        box-shadow: 0 4px 14px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.4));
+        transform: translateY(-1px);
+        color: @color-white;
+      }
+
+      &:active {
+        transform: scale(0.97);
+        transition-duration: 0.06s;
+      }
+    }
+  }
+}
+
+
+// ─── Permissions Matrix ───────────────────────────────────────────────────
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  .wpc-permissions-matrix {
+    margin: 0 40px 24px;
+    border: 1px solid fade(@color-border, 60%);
+    border-radius: @radius-card;
+    overflow: hidden;
+  }
+
+  .wpc-perm-header {
+    display: grid;
+    grid-template-columns: 1fr 120px 120px;
+    align-items: center;
+    padding: 14px 24px;
+    background: @color-bg-frost;
+    border-bottom: 1px solid fade(@color-border, 60%);
+
+    .wpc-perm-role-col {
+      font-family: @font-semibold;
+      font-size: 11px;
+      color: @color-gray-muted;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .wpc-perm-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 2px;
+      position: relative;
+      cursor: default;
+
+      .wpc-perm-col-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        color: @color-gray-muted;
+
+        svg {
+          width: 14px;
+          height: 14px;
+        }
+      }
+
+      .wpc-perm-col-label {
+        font-family: @font-semibold;
+        font-size: 12px;
+        color: @color-text-dark;
+        letter-spacing: -0.01em;
+      }
+
+      // Description hidden by default — tooltip on hover
+      .wpc-perm-col-desc {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: @font-regular;
+        font-size: 12px;
+        color: @color-white;
+        background: @color-text-dark;
+        padding: 6px 12px;
+        border-radius: @radius-base;
+        line-height: 1.4;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.15s ease, visibility 0.15s ease;
+        pointer-events: none;
+        z-index: 10;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+        // Arrow
+        &::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border: 5px solid transparent;
+          border-top-color: @color-text-dark;
+        }
+      }
+
+      &:hover .wpc-perm-col-desc {
+        opacity: 1;
+        visibility: visible;
+      }
+    }
+  }
+
+  .wpc-perm-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 120px;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid fade(@color-border, 40%);
+    transition: @transition-fast;
+    opacity: 0;
+    animation: wpcMaterialize 300ms @ease-entrance both;
+    &:nth-child(2) { animation-delay: 120ms; } // first data row (header is :nth-child(1))
+    &:nth-child(3) { animation-delay: 145ms; }
+    &:nth-child(4) { animation-delay: 170ms; }
+    &:nth-child(5) { animation-delay: 195ms; }
+    &:nth-child(n+6) { animation-delay: 220ms; }
+
+    &:last-child { border-bottom: none; }
+
+    &:hover {
+      background: fade(@color-ice, 40%);
+    }
+
+    .wpc-perm-role-col {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .wpc-perm-col {
+      display: flex;
+      justify-content: center;
+    }
+  }
+
+  .wpc-role-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: @radius-circle;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: @font-bold;
+    font-size: 13px;
+    color: @color-white;
+    flex-shrink: 0;
+    letter-spacing: 0;
+  }
+
+  .wpc-role-name {
+    font-family: @font-semibold;
+    font-size: 14px;
+    color: @color-text-dark;
+    letter-spacing: -0.01em;
+  }
+}
+
+
+// ─── Reduced Motion — section cards visible immediately ──────────────────
+// ─── Reduced Motion — all entrance animations disabled ──────────────────
+@media (prefers-reduced-motion: reduce) {
+  .wpc-advanced-settings-container-v4,
+  .wpc-lite-settings-container {
+    .wpc-tab-content-box,
+    .wpc-items-list-row > .wpc-box-for-checkbox,
+    .wpc-items-list-row > .wpc-box-for-dropdown,
+    .wpc-items-list-row > .wpc-box-for-input,
+    .wpc-perf-grid > .wpc-box-for-checkbox,
+    .wpc-perf-grid > .wpc-box-for-input,
+    .wpc-perf-grid > .wpc-box-for-dropdown,
+    .wpc-optimization-level-card,
+    .wpc-auto-optimize-card,
+    .wpc-optimize-library-card,
+    .wpc-perm-row,
+    .wpc-font-item {
+      animation: none !important; // FORCED: accessibility
+      opacity: 1 !important; // FORCED: accessibility
+    }
+  }
+
+  #other-optimization-options .wpc-other-opt-grid .wpc-box-for-checkbox {
+    animation: none !important; // FORCED: accessibility
+    opacity: 1 !important; // FORCED: accessibility
+  }
+}
+
+// Global circle-check brand color (works outside .wpc-lite-settings-container too)
+.circle-check.active {
+  background-color: var(--wpc-brand-primary-light, @color-primary) !important; // FORCED: brand dot
+}
+
+// ─── Universal Dropdown Overflow Fix ─────────────────────────────────────
+// JS adds .wpc-dropdown-lifted to .wpc-tab-content-box when a dropdown opens.
+// This lifts the card above siblings so the menu isn't clipped by overflow:hidden.
+.wpc-tab-content-box.wpc-dropdown-lifted {
+  overflow: visible !important; // FORCED: dropdown must not clip
+  z-index: 50 !important; // FORCED: lift above sibling cards
+  position: relative;
+}
+
+// ─── Font Scanner — Search-style Input ──────────────────────────────────
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  .wpc-font-scan-form {
+    padding: 20px 40px 35px;
+
+    .wpc-scan-input-group {
+      display: flex;
+      gap: 0;
+      input[type="text"] {
+        flex: 1;
+        font-family: @font-regular;
+        font-size: 14px;
+        color: @color-text-dark;
+        background: @color-white;
+        border: 1.5px solid @color-border;
+        border-right: none;
+        border-radius: @radius-md 0 0 @radius-md;
+        padding: 10px 16px;
+        outline: none;
+        transition: @transition-fast;
+        height: auto;
+        min-height: auto;
+
+        &:focus {
+          border-color: var(--wpc-brand-primary, @color-blue);
+          box-shadow: 0 0 0 3px fade(@color-blue, 10%);
+          z-index: 1;
+        }
+
+        &::placeholder {
+          color: @color-gray-muted;
+        }
+      }
+
+      .wpc-scan-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 20px;
+        background: var(--wpc-brand-primary, @color-blue);
+        color: @color-white;
+        font-family: @font-semibold;
+        font-size: 13px;
+        border: none;
+        border-radius: 0 @radius-md @radius-md 0;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: @transition-fast;
+        overflow: hidden;
+
+        &:hover {
+          box-shadow: 0 4px 12px rgba(76, 137, 235, 0.3);
+        }
+
+        svg { flex-shrink: 0; }
+
+        // Simple spinner for scan button
+        .wpc-btn-spinner {
+          display: inline-block;
+          width: 12px;
+          height: 12px;
+          border: 2px solid rgba(255,255,255,0.3);
+          border-top-color: @color-white;
+          border-radius: 50%;
+          animation: spin 0.6s linear infinite;
+          flex-shrink: 0;
+        }
+
+        // White dots inside blue button (legacy)
+        .dot-pulse {
+          background-color: @color-white;
+          color: @color-white;
+          box-shadow: 9999px 0 0 -5px @color-white;
+
+          &::before,
+          &::after {
+            background-color: @color-white;
+            color: @color-white;
+          }
+
+          &::before {
+            box-shadow: 9984px 0 0 -5px @color-white;
+          }
+
+          &::after {
+            box-shadow: 10014px 0 0 -5px @color-white;
+          }
+        }
+      }
+    }
+  }
+
+  // ─── Font List — Detected Fonts ────────────────────────────────────────
+  .wpc-font-list {
+    padding: 0 40px 24px;
+
+    .wpc-font-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border: 1px solid fade(@color-border, 60%);
+      border-radius: @radius-md;
+      margin-bottom: 8px;
+      transition: @transition-fast;
+      opacity: 0;
+      animation: wpcMaterialize 300ms @ease-entrance both;
+      &:nth-child(1) { animation-delay: 120ms; }
+      &:nth-child(2) { animation-delay: 145ms; }
+      &:nth-child(3) { animation-delay: 170ms; }
+      &:nth-child(4) { animation-delay: 195ms; }
+      &:nth-child(n+5) { animation-delay: 220ms; }
+
+      &:last-child { margin-bottom: 0; }
+
+      &:hover {
+        border-color: fade(@color-border-medium, 80%);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      }
+    }
+
+    .wpc-font-item-name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+
+      .circle-check {
+        flex-shrink: 0;
+        margin-top: 0 !important; // FORCED: override global circle-check margin
+      }
+
+      .wpc-font-name {
+        font-family: @font-semibold;
+        font-size: 14px;
+        color: @color-text-dark;
+        white-space: nowrap;
+      }
+
+      .wpc-font-weights {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+      }
+
+      .wpc-font-weight-chip {
+        font-family: @font-code;
+        font-size: 10px;
+        color: @color-gray-text;
+        background: @color-bg-frost;
+        padding: 1px 5px;
+        border-radius: @radius-xs;
+        line-height: 1.4;
+      }
+    }
+
+    .wpc-font-remove-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-gray-muted;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: @radius-base;
+      transition: @transition-fast;
+
+      &:hover {
+        color: @color-error;
+        background: @color-error-bg;
+      }
+    }
+
+    .wpc-font-legend {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      padding: 10px 20px 0;
+      font-family: @font-regular;
+      font-size: 11px;
+      color: @color-gray-text;
+
+      .wpc-font-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .wpc-font-legend-divider {
+        color: @color-border-medium;
+      }
+    }
+
+    .wpc-font-empty {
+      padding: 20px;
+      text-align: center;
+
+      p {
+        font-family: @font-regular;
+        font-size: 14px;
+        color: @color-text-secondary;
+        margin: 0;
+      }
+    }
+  }
+}
+
+// ─── Other Optimization — Single Card, Flat Grid ─────────────────────────
+// One white card, category labels as lightweight dividers, 2-col flat grid
+#other-optimization-options {
+
+  .wpc-other-opt-single-card {
+    padding: 0;
+
+    // Header — generous padding, strong divider
+    .tab-title-checkbox {
+      padding: 32px;
+      border-bottom: 1px solid @color-border;
+    }
+
+    // Categories — full-width sections with border dividers
+    .wpc-other-opt-category {
+      padding: 28px 40px;
+
+      &:not(:last-child) {
+        border-bottom: 1px solid @color-border;
+      }
+    }
+
+    // Category label — uppercase muted heading
+    .wpc-other-opt-category-label {
+      padding: 0;
+      margin-bottom: 24px;
+      font-family: @font-bold;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: @color-gray-muted;
+    }
+
+    // 2-col grid — generous gaps, clean surface
+    .wpc-other-opt-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 48px;
+      row-gap: 12px;
+      padding: 0;
+
+      .wpc-box-for-checkbox,
+      .wpc-box-setting-option {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border: 1px solid @color-border !important; // FORCED
+        border-bottom: 1px solid @color-border !important; // FORCED
+        border-radius: @radius-card;
+        background: @color-white;
+        box-shadow: none;
+        cursor: pointer;
+        transition: @transition-fast;
+
+        // Staggered entrance
+        opacity: 0;
+        animation: wpcMaterialize 300ms @ease-entrance both;
+        .wpc-other-opt-category:nth-child(1) & { &:nth-child(odd) { animation-delay: 120ms; } &:nth-child(even) { animation-delay: 145ms; } }
+        .wpc-other-opt-category:nth-child(2) & { &:nth-child(odd) { animation-delay: 170ms; } &:nth-child(even) { animation-delay: 195ms; } }
+        .wpc-other-opt-category:nth-child(3) & { &:nth-child(odd) { animation-delay: 220ms; } &:nth-child(even) { animation-delay: 245ms; } }
+
+        &::before { display: none; }
+
+        &:hover {
+          border-color: var(--wpc-brand-accent-light, @color-border-blue);
+          background: @color-bg-frost;
+        }
+
+        // Hide descriptions
+        .wpc-box-content p { display: none; }
+
+        // Clean title — medium weight, readable size
+        .wpc-checkbox-title-holder {
+          gap: 10px;
+          margin-bottom: 0;
+
+          h4 {
+            font-size: 14.5px;
+            font-family: @font-regular;
+            color: @color-text-dark;
+          }
+        }
+
+        // Normal-sized toggles (44x24)
+        .wpc-box-check .wpc-switch {
+          width: 44px !important; // FORCED
+          height: 24px !important; // FORCED
+          min-width: 44px !important; // FORCED
+        }
+
+        .wpc-box-check .wpc-switch .wpc-switch-slider::before {
+          width: 18px !important; // FORCED
+          height: 18px !important; // FORCED
+          left: 3px !important; // FORCED
+          bottom: 3px !important; // FORCED
+        }
+
+        .wpc-box-check .wpc-switch input:checked + .wpc-switch-slider::before {
+          transform: translateX(20px) !important; // FORCED
+        }
+      }
+    }
+  }
+}
+
+// Responsive — Other Opt grid to 1-col on mobile
+@media screen and (max-width: 480px) {
+  #other-optimization-options .wpc-other-opt-grid {
+    grid-template-columns: 1fr !important; // FORCED
+  }
+}
+
+
+// ─── Popup Tabs (inside SweetAlert modals) ──────────────────────────────
+.wpc-popup-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 16px 25px 8px;
+  padding: 4px;
+  background-color: @color-bg-frost;
+  border-radius: @radius-md;
+
+  .wpc-popup-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 22px;
+    font-family: @font-semibold;
+    font-size: 13px;
+    color: @color-text-secondary;
+    text-decoration: none;
+    border-radius: @radius-base;
+    border: 1px solid transparent;
+    transition: @transition-fast;
+    flex: 1;
+    justify-content: center;
+
+    svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      opacity: 0.6;
+    }
+
+    &:hover {
+      color: @color-text-dark;
+      background-color: fade(@color-white, 60%);
+    }
+
+    &.active {
+      color: @color-text-dark;
+      background-color: @color-white;
+      border-color: @color-border;
+      box-shadow: @shadow-sm;
+
+      svg {
+        opacity: 1;
+        color: var(--wpc-brand-primary-light, @color-primary);
+      }
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BRAND COLOR SYSTEM — Whitelabel-ready CSS custom properties
+// ═══════════════════════════════════════════════════════════════════════════
+// Default WP Compress brand. Portal injects overrides via :root.
+
+:root {
+  --wpc-brand-primary: @color-blue;
+  --wpc-brand-primary-light: @color-primary;
+  --wpc-brand-primary-dark: @color-blue-vivid;
+  --wpc-brand-accent: @color-gradient-end;
+  --wpc-brand-accent-light: @color-gradient-start;
+  --wpc-brand-tint: @color-ice;
+  --wpc-brand-shadow: rgba(59, 130, 246, 0.4);
+}
+
+
+// ─── Brand A (Red) — preview class for WL testing ───────────────────────
+body.wpc-brand-a {
+  --wpc-brand-primary: #E11D48;
+  --wpc-brand-primary-light: #FB7185;
+  --wpc-brand-primary-dark: #BE123C;
+  --wpc-brand-accent: #E11D48;
+  --wpc-brand-accent-light: #FB7185;
+  --wpc-brand-tint: #FFE4E6;
+  --wpc-brand-shadow: rgba(225, 29, 72, 0.4);
+}
+
+// ─── Brand B (Green) — preview class for WL testing ─────────────────────
+body.wpc-brand-b {
+  --wpc-brand-primary: #059669;
+  --wpc-brand-primary-light: #34D399;
+  --wpc-brand-primary-dark: #047857;
+  --wpc-brand-accent: #059669;
+  --wpc-brand-accent-light: #34D399;
+  --wpc-brand-tint: #D1FAE5;
+  --wpc-brand-shadow: rgba(5, 150, 105, 0.4);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ICON STYLE MODES — Soft Tint & Brand overrides
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Soft Tint mode — pastel bg + colored icon
+body.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
+  background: var(--wpc-icon-tint-bg, #DBEAFE) !important; // FORCED: mode override
+  color: var(--wpc-icon-tint-color, #2563EB) !important; // FORCED: mode override
+  box-shadow: none !important; // FORCED: tint has no shadow
+}
+
+// Brand mode — all icons use whitelabel brand gradient
+body.wpc-icon-brand .wpc-checkbox-icon:has(> svg) {
+  background: linear-gradient(135deg, var(--wpc-brand-primary-light), var(--wpc-brand-primary-dark)) !important; // FORCED: brand override
+  box-shadow: 0 8px 16px -4px var(--wpc-brand-shadow) !important; // FORCED: brand shadow
+  color: #fff !important; // FORCED: white icon on brand bg
+}
+
+// Brand + Tint combo — brand tint bg + brand icon color
+body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
+  background: var(--wpc-brand-tint) !important; // FORCED: brand tint bg
+  color: var(--wpc-brand-primary) !important; // FORCED: brand icon color
+  box-shadow: none !important; // FORCED: no shadow
+}
+
+// ─── Standalone card icons — tint/brand mode support ───────────────────
+// These use mixin-generated classes, not .wpc-checkbox-icon
+.wpc-opt-level-icon,
+.wpc-auto-optimize-icon,
+.wpc-optimize-library-icon,
+.wpc-cname-icon,
+.wpc-eu-routing-icon {
+  // Soft Tint mode
+  body.wpc-icon-tint & {
+    background: var(--wpc-icon-tint-bg, #DBEAFE) !important; // FORCED: mode override
+    color: var(--wpc-icon-tint-color, #2563EB) !important; // FORCED: mode override
+    box-shadow: none !important; // FORCED: tint has no shadow
+  }
+
+  // Brand mode
+  body.wpc-icon-brand & {
+    background: linear-gradient(135deg, var(--wpc-brand-primary-light), var(--wpc-brand-primary-dark)) !important; // FORCED: brand override
+    box-shadow: 0 8px 16px -4px var(--wpc-brand-shadow) !important; // FORCED: brand shadow
+    color: #fff !important; // FORCED: white icon on brand bg
+  }
+
+  // Brand + Tint combo
+  body.wpc-icon-brand.wpc-icon-tint & {
+    background: var(--wpc-brand-tint) !important; // FORCED: brand tint bg
+    color: var(--wpc-brand-primary) !important; // FORCED: brand icon color
+    box-shadow: none !important; // FORCED: no shadow
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PER-SECTION GRADIENT ASSIGNMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+// Each section sets CSS variables via its unique parent ID.
+// Gradient direction: 135deg for premium depth.
+
+// 1. CDN — Trust Blue (Blue → Violet)
+#cdn-delivery-options > .wpc-tab-content-box {
+  --wpc-icon-grad: linear-gradient(135deg, #4776E6, #8E54E9);
+  --wpc-icon-shadow: rgba(142, 84, 233, 0.4);
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #7C3AED;
+
+  // CDN keeps auto-fill (can be 3+ wide)
+  .wpc-perf-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+// CNAME + Data Privacy — per-card tint colors
+.wpc-tab-content-cname {
+  --wpc-icon-tint-bg: #F3E8FF;
+  --wpc-icon-tint-color: #9333EA;
+}
+.wpc-tab-content-eu-routing {
+  --wpc-icon-tint-bg: #D1FAE5;
+  --wpc-icon-tint-color: #059669;
+  cursor: pointer;
+}
+
+// CNAME card — "Connected Domain:" label uses brand color
+.wpc-tab-content-cname .wpc-cname-label {
+  color: var(--wpc-brand-primary, @color-blue);
+}
+
+// 2. Adaptive Images — Royal Blue
+#adaptive-images {
+  --wpc-icon-grad: linear-gradient(135deg, #60A5FA, #2563EB);
+  --wpc-icon-shadow: rgba(37, 99, 235, 0.4);
+  --wpc-icon-tint-bg: #DBEAFE;
+  --wpc-icon-tint-color: #2563EB;
+}
+
+// 3. Lazy Loading — Amber Glow
+#lazy-images {
+  --wpc-icon-grad: linear-gradient(135deg, #FBBF24, #D97706);
+  --wpc-icon-shadow: rgba(217, 119, 6, 0.4);
+  --wpc-icon-tint-bg: #FEF3C7;
+  --wpc-icon-tint-color: #D97706;
+}
+
+// 4. Advanced Caching — Deep Indigo
+#caching-options {
+  --wpc-icon-grad: linear-gradient(135deg, #818CF8, #3730A3);
+  --wpc-icon-shadow: rgba(55, 48, 163, 0.4);
+  --wpc-icon-tint-bg: #E0E7FF;
+  --wpc-icon-tint-color: #3730A3;
+}
+
+// 5. Smart CSS — Electric Cyan
+#css-optimization-options {
+  --wpc-icon-grad: linear-gradient(135deg, #22D3EE, #0891B2);
+  --wpc-icon-shadow: rgba(8, 145, 178, 0.4);
+  --wpc-icon-tint-bg: #CFFAFE;
+  --wpc-icon-tint-color: #0891B2;
+}
+
+// 6. Smart JavaScript — Bright Teal
+#javascript-optimization-options {
+  --wpc-icon-grad: linear-gradient(135deg, #2DD4BF, #0D9488);
+  --wpc-icon-shadow: rgba(13, 148, 136, 0.4);
+  --wpc-icon-tint-bg: #CCFBF1;
+  --wpc-icon-tint-color: #0D9488;
+}
+
+// 7. Developer Mode — Cool Slate
+#developer-mode-options {
+  --wpc-icon-grad: linear-gradient(135deg, #94A3B8, #475569);
+  --wpc-icon-shadow: rgba(71, 85, 105, 0.35);
+  --wpc-icon-tint-bg: #F1F5F9;
+  --wpc-icon-tint-color: #475569;
+}
+
+// ─── Font Optimization Tab — Theme 6 "Fintech" palette ───
+
+// 8a. Font Display — Secure Vault (Purple → Indigo)
+#font-display-settings {
+  --wpc-icon-grad: linear-gradient(135deg, #8B5CF6, #4F46E5);
+  --wpc-icon-shadow: rgba(79, 70, 229, 0.4);
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #4F46E5;
+}
+
+// 8b. Icon Fonts — Copilot Action (Purple → Orange)
+#icon-font-settings {
+  --wpc-icon-grad: linear-gradient(135deg, #D946EF, #F97316);
+  --wpc-icon-shadow: rgba(249, 115, 22, 0.4);
+  --wpc-icon-tint-bg: #FDF4FF;
+  --wpc-icon-tint-color: #D946EF;
+}
+
+// 8c. Google Fonts — Global Network (Cyan → Blue)
+#font-configuration {
+  --wpc-icon-grad: linear-gradient(135deg, #06B6D4, #2563EB);
+  --wpc-icon-shadow: rgba(37, 99, 235, 0.4);
+  --wpc-icon-tint-bg: #CFFAFE;
+  --wpc-icon-tint-color: #0891B2;
+}
+
+// 9. Page Scanner — Verified Sync (Green → Cyan)
+#font-scan {
+  --wpc-icon-grad: linear-gradient(135deg, #10B981, #06B6D4);
+  --wpc-icon-shadow: rgba(6, 182, 212, 0.4);
+  --wpc-icon-tint-bg: #D1FAE5;
+  --wpc-icon-tint-color: #059669;
+}
+
+// 10. Detected Google Fonts — Secure Vault alt (lighter purple blend)
+#found-fonts {
+  --wpc-icon-grad: linear-gradient(135deg, #A78BFA, #6366F1);
+  --wpc-icon-shadow: rgba(99, 102, 241, 0.4);
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #6366F1;
+}
+
+// 11. Display Settings — Sky Blue
+#ux-display-settings {
+  --wpc-icon-grad: linear-gradient(135deg, #38BDF8, #0284C7);
+  --wpc-icon-shadow: rgba(2, 132, 199, 0.4);
+  --wpc-icon-tint-bg: #E0F2FE;
+  --wpc-icon-tint-color: #0284C7;
+}
+
+// 12. User Permissions — Amethyst
+#ux-permissions {
+  overflow: visible; // allow tooltips to render above card
+
+  .wpc-permissions-matrix { overflow: visible; }
+
+  --wpc-icon-grad: linear-gradient(135deg, #A78BFA, #7C3AED);
+  --wpc-icon-shadow: rgba(124, 58, 237, 0.4);
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #7C3AED;
+}
+
+// 13. Pages & Posts — Bass Purple
+#smart-opt-table {
+  --wpc-icon-grad: linear-gradient(135deg, #4A00E0, #8E2DE2);
+  --wpc-icon-shadow: rgba(142, 45, 226, 0.4);
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #7C3AED;
+}
+
+// 14. CF Integration — special case (brand logo, no gradient override)
+
+// 15. Other Integrations — Bright Teal
+#integrations .wpc-tab-content-box:not(#cf-connect-options) {
+  --wpc-icon-grad: linear-gradient(135deg, #2DD4BF, #0D9488);
+  --wpc-icon-shadow: rgba(13, 148, 136, 0.4);
+  --wpc-icon-tint-bg: #CCFBF1;
+  --wpc-icon-tint-color: #0D9488;
+}
+
+// 16. Export/Import — Cinema Lens
+#export_settings .wpc-tab-content-box {
+  --wpc-icon-grad: linear-gradient(135deg, #4568DC, #B06AB3);
+  --wpc-icon-shadow: rgba(176, 106, 179, 0.4);
+  --wpc-icon-tint-bg: #F3E8FF;
+  --wpc-icon-tint-color: #7C3AED;
+}
+
+// Standalone cards — per-card tint colors
+.wpc-optimization-level-card {
+  --wpc-icon-tint-bg: #FBE9E7;
+  --wpc-icon-tint-color: #E64A19;
+}
+.wpc-auto-optimize-card {
+  --wpc-icon-tint-bg: #D1FAE5;
+  --wpc-icon-tint-color: #059669;
+  cursor: pointer;
+}
+.wpc-optimize-library-card {
+  --wpc-icon-tint-bg: #EDE9FE;
+  --wpc-icon-tint-color: #7C3AED;
+}
+
+// 17. Other Optimizations — Zinc Metal
+#other-optimization-options .wpc-tab-content-box {
+  --wpc-icon-grad: linear-gradient(135deg, #A1A1AA, #52525B);
+  --wpc-icon-shadow: rgba(82, 82, 91, 0.35);
+  --wpc-icon-tint-bg: #F4F4F5;
+  --wpc-icon-tint-color: #52525B;
+}
+
+// 18. System Information — Zinc Metal
+#system-information .wpc-tab-content-box {
+  --wpc-icon-grad: linear-gradient(135deg, #A1A1AA, #52525B);
+  --wpc-icon-shadow: rgba(82, 82, 91, 0.4);
+  --wpc-icon-tint-bg: #F4F4F5;
+  --wpc-icon-tint-color: #52525B;
+}

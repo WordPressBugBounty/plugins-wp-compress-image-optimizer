@@ -18,8 +18,8 @@
                         echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
                     </div>
                     <div class="inline-heading-text">
-                        <h3>Configure JS Delay</h3>
-                        <p>Add files or paths as desired as we use wildcard searching.</p>
+                        <h3><?php echo esc_html__('Configure JS Delay', WPS_IC_TEXTDOMAIN); ?></h3>
+                        <p><?php echo __('List files or paths to manage. Partial names work too — we match automatically.', WPS_IC_TEXTDOMAIN); ?></p>
                     </div>
                 </div>
             </div>
@@ -27,26 +27,28 @@
             <form method="post" class="wpc-save-popup-data" action="#">
                 <div class="cdn-popup-content-full">
                     <div class="cdn-popup-content-inner">
-                        <h4>Delay last</h4>
-                        <textarea name="wpc-excludes[lastLoadScript]" data-setting-name="wpc-excludes" data-setting-subset="lastLoadScript" class="exclude-list-textarea-value" placeholder="e.g. plugin-name/js/script.js, scripts.js"></textarea>
+                        <h4><?php echo esc_html__('Delay last', WPS_IC_TEXTDOMAIN); ?></h4>
+                        <textarea name="wpc-excludes[lastLoadScript]" data-setting-name="wpc-excludes" data-setting-subset="lastLoadScript" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. plugin-name/js/script.js, scripts.js', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                         <div class="wps-empty-row">&nbsp;</div>
 
-                        <h4>Defer</h4>
-                        <textarea name="wpc-excludes[deferScript]" data-setting-name="wpc-excludes" data-setting-subset="deferScript" class="exclude-list-textarea-value-defer" placeholder="e.g. plugin-name/js/script.js, scripts.js"></textarea>
+                        <h4><?php echo esc_html__('Defer', WPS_IC_TEXTDOMAIN); ?></h4>
+                        <textarea name="wpc-excludes[deferScript]" data-setting-name="wpc-excludes" data-setting-subset="deferScript" class="exclude-list-textarea-value-defer" placeholder="<?php echo esc_attr__('e.g. plugin-name/js/script.js, scripts.js', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                     </div>
                 </div>
-                <div class="wps-example-list">
+                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save"><?php echo esc_html__('Save', WPS_IC_TEXTDOMAIN); ?></a>
+                <div class="wps-example-section">
+                <button type="button" class="wps-example-toggle-btn"><?php echo esc_html__('See Examples', WPS_IC_TEXTDOMAIN); ?> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <div class="wps-example-list" style="display: none;">
                     <div>
-                        <h3>Examples:</h3>
                         <div>
-                            <p>/myplugin/image.js would exclude that specific file</p>
-                            <p>/wp-content/myplugin/ would exclude everything using that path</p>
+                            <p><span class="wpc-example-chip">/myplugin/image.js</span> <?php echo esc_html__('would exclude that specific file', WPS_IC_TEXTDOMAIN); ?></p>
+                            <p><span class="wpc-example-chip">/wp-content/myplugin/</span> <?php echo esc_html__('would exclude everything using that path', WPS_IC_TEXTDOMAIN); ?></p>
                         </div>
                     </div>
                 </div>
-                <a href="#" class="btn btn-primary btn-active btn-save btn-exclude-save">Save</a>
+                </div>
             </form>
         </div>
 

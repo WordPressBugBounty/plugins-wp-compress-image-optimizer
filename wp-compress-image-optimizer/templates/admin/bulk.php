@@ -10,6 +10,13 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
     $live_cdn = true;
 }
+// Also check CF CDN setting
+if (!$live_cdn) {
+    $cfSettings = get_option(WPS_IC_CF);
+    if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
+        $live_cdn = true;
+    }
+}
 
 ?>
 <div class="wrap">
@@ -25,14 +32,14 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                 <ul>
                     <li>
                         <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-compress"
-                           style="display:none;"><i class="icon-pause"></i> Pause Optimization</a>
+                           style="display:none;"><i class="icon-pause"></i> <?php esc_html_e('Pause Optimization', WPS_IC_TEXTDOMAIN); ?></a>
                     </li>
                     <li>
                         <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>" class="wps-ic-stop-bulk-restore"
-                           style="display:none;"><i class="icon-pause"></i> Pause Restore</a>
+                           style="display:none;"><i class="icon-pause"></i> <?php esc_html_e('Pause Restore', WPS_IC_TEXTDOMAIN); ?></a>
                     </li>
                     <li>
-                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return">Return to Dashboard</a>
+                        <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug); ?>" class="wpc-btn-return"><?php esc_html_e('Return to Dashboard', WPS_IC_TEXTDOMAIN); ?></a>
                     </li>
                 </ul>
             </div>
@@ -98,16 +105,16 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                             </div>
                             <?php
                             if ($uncompressedImages > 0) {
-                                echo '<h3>You have ' . $uncompressedImages . ' images ready to be optimized.</h3>';
+                                echo '<h3>' . sprintf(esc_html__('You have %d images ready to be optimized.', WPS_IC_TEXTDOMAIN), $uncompressedImages) . '</h3>';
                             } else {
-                                echo '<h3>You have 0 images to optimize.</h3>';
+                                echo '<h3>' . esc_html__('You have 0 images to optimize.', WPS_IC_TEXTDOMAIN) . '</h3>';
                             }
                             ?>
                             <?php if ($uncompressedImages > 0) { ?>
                                 <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=compress'); ?>"
-                                   class="button button-primary button-start-bulk-compress">Compress Images</a>
+                                   class="button button-primary button-start-bulk-compress"><?php esc_html_e('Compress Images', WPS_IC_TEXTDOMAIN); ?></a>
                             <?php } else { ?>
-                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to compress!">Compress Images</a>
+                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="<?php esc_attr_e('You have no more images to compress!', WPS_IC_TEXTDOMAIN); ?>"><?php esc_html_e('Compress Images', WPS_IC_TEXTDOMAIN); ?></a>
                             <?php } ?>
                         </div>
                     </div>
@@ -127,17 +134,17 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                             </div>
                             <?php
                             if ($compressedImages > 0) {
-                                echo '<h3>You have ' . $compressedImages . ' images that can be restored.</h3>';
+                                echo '<h3>' . sprintf(esc_html__('You have %d images that can be restored.', WPS_IC_TEXTDOMAIN), $compressedImages) . '</h3>';
                             } else {
-                                echo '<h3>You have 0 images that can be restored.</h3>';
+                                echo '<h3>' . esc_html__('You have 0 images that can be restored.', WPS_IC_TEXTDOMAIN) . '</h3>';
                             }
                             ?>
 
                             <?php if ($compressedImages > 0) { ?>
                                 <a href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&action=restore'); ?>"
-                                   class="button button-primary button-start-bulk-restore">Restore Images</a>
+                                   class="button button-primary button-start-bulk-restore"><?php esc_html_e('Restore Images', WPS_IC_TEXTDOMAIN); ?></a>
                             <?php } else { ?>
-                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="You have no more images to restore!">Restore Images</a>
+                                <a href="#" class="button button-primary button-disabled ic-tooltip" title="<?php esc_attr_e('You have no more images to restore!', WPS_IC_TEXTDOMAIN); ?>"><?php esc_html_e('Restore Images', WPS_IC_TEXTDOMAIN); ?></a>
                             <?php } ?>
                         </div>
                     </div>
@@ -154,7 +161,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
                                 </div>
                             </div>
-                            <h3 class="wpc-preparing-message">Preparing to Optimize</h3>
+                            <h3 class="wpc-preparing-message"><?php esc_html_e('Preparing to Optimize', WPS_IC_TEXTDOMAIN); ?></h3>
                             <div class="wpc-ic-thin-placeholder" style="width:300px;"></div>
                             <div class="bulk-preparing-placholders" style="margin-top:60px;">
                                 <div class="left-side">
@@ -177,7 +184,7 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                     <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
                                 </div>
                             </div>
-                            <h3 class="wpc-preparing-message">Preparing to Restore</h3>
+                            <h3 class="wpc-preparing-message"><?php esc_html_e('Preparing to Restore', WPS_IC_TEXTDOMAIN); ?></h3>
                             <div class="wpc-ic-thin-placeholder" style="width:300px;"></div>
                         </div>
                         <div class="bulk-status" style="display: none;"></div>
@@ -192,12 +199,12 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                         <div class="bulk-restore-status-progress" style="display: none;">
                             <div class="bulk-images-restored">
                                 <h3>0/0</h3>
-                                <h5>Images Restored</h5>
+                                <h5><?php esc_html_e('Images Restored', WPS_IC_TEXTDOMAIN); ?></h5>
                             </div>
                         </div>
                         <div class="bulk-restore-status-container" style="display: none;">
-                            <h4>Image Restore Complete!</h4>
-                            <span>We have successfully restored all of your images.</span>
+                            <h4><?php esc_html_e('Image Restore Complete!', WPS_IC_TEXTDOMAIN); ?></h4>
+                            <span><?php esc_html_e('We have successfully restored all of your images.', WPS_IC_TEXTDOMAIN); ?></span>
                             <div class="bulk-status-progress-bar">
                                 <div class="progress-bar-outer">
                                     <div class="progress-bar-inner" style="width: 100%;"></div>
@@ -209,28 +216,28 @@ if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == 
                                 <div class="icon"></div>
                                 <div class="data">
                                     <h3>0/0</h3>
-                                    <h5>Original Images</h5>
+                                    <h5><?php esc_html_e('Original Images', WPS_IC_TEXTDOMAIN); ?></h5>
                                 </div>
                             </div>
                             <div class="bulk-thumbs-compressed">
                                 <div class="icon"></div>
                                 <div class="data">
                                     <h3>0/0</h3>
-                                    <h5>Total Images</h5>
+                                    <h5><?php esc_html_e('Total Images', WPS_IC_TEXTDOMAIN); ?></h5>
                                 </div>
                             </div>
                             <div class="bulk-total-savings">
                                 <div class="icon"></div>
                                 <div class="data">
                                     <h3>0.0MB</h3>
-                                    <h5>Total Savings</h5>
+                                    <h5><?php esc_html_e('Total Savings', WPS_IC_TEXTDOMAIN); ?></h5>
                                 </div>
                             </div>
                             <div class="bulk-avg-reduction">
                                 <div class="icon"></div>
                                 <div class="data">
                                     <h3>0%</h3>
-                                    <h5>Average Savings</h5>
+                                    <h5><?php esc_html_e('Average Savings', WPS_IC_TEXTDOMAIN); ?></h5>
                                 </div>
                             </div>
                         </div>

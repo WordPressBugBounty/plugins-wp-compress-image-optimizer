@@ -12,15 +12,7 @@ jQuery(document).ready(function ($) {
         maxWidth: '300', delay: 50,
     });
 
-    // Menu tooltips
-    if ($(window).width() < 1400) {
-        $('.wpc-menu-tooltip').tooltipster({
-            maxWidth: '300',
-            delay: 50,
-            position:'right',
-            theme:'shadow'
-        });
-    }
+    // Menu tooltips — disabled (full text labels always visible now)
 
     $('.wpc-custom-tooltip').hover(function (e) {
         var icon = $(this);
@@ -56,12 +48,12 @@ jQuery(document).ready(function ($) {
             $(tooltipBox).css({'top': Math.round(topPos), 'left': Math.round(leftPos)});
         }
 
-        $(tooltipBox).fadeIn(500);
+        $(tooltipBox).fadeIn(200);
     }, function (e) {
         var icon = $(this);
         var tooltipID = $(this).data('tooltip-id');
         var tooltipBox = $('#' + tooltipID);
-        $(tooltipBox).fadeOut(500);
+        $(tooltipBox).fadeOut(150);
     });
 
 

@@ -376,9 +376,9 @@ class wps_ic_enqueues extends wps_ic
 
         if (is_user_logged_in() && (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge'))) {
             // Required for Admin Bar
-            wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], '1.0.0');
+            wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
             wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-            wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+            wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
         }
 
         $optimizeRemove = get_option('wps_optimizejs_remove');
@@ -523,6 +523,36 @@ class wps_ic_enqueues extends wps_ic
     }
 
 
+    private function get_ajax_var_data()
+    {
+        return [
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('wps_ic_nonce_action'),
+            'deselectAll' => __('Deselect All', WPS_IC_TEXTDOMAIN),
+            'selectAll' => __('Select All', WPS_IC_TEXTDOMAIN),
+            'scanning' => __('Scanning…', WPS_IC_TEXTDOMAIN),
+            'noFontsDetected' => __('No Google Fonts detected on this page.', WPS_IC_TEXTDOMAIN),
+            'scanFailed' => __('Scan failed. Please try again.', WPS_IC_TEXTDOMAIN),
+            'active' => __('Active', WPS_IC_TEXTDOMAIN),
+            'disabled' => __('Disabled', WPS_IC_TEXTDOMAIN),
+            'updating' => __('Updating...', WPS_IC_TEXTDOMAIN),
+            'errorLoadingResults' => __('Error loading test results.', WPS_IC_TEXTDOMAIN),
+            'preparingOptimization' => __('Preparing optimization...', WPS_IC_TEXTDOMAIN),
+            'statusScanning' => __('Scanning for optimization opportunities...', WPS_IC_TEXTDOMAIN),
+            'statusWarmingCache' => __('Warming up the Cache...', WPS_IC_TEXTDOMAIN),
+            'statusFinalizing' => __('Finalizing Performance Optimizations...', WPS_IC_TEXTDOMAIN),
+            'statusVerifyingImages' => __('Verifying Real-Time Image Optimization...', WPS_IC_TEXTDOMAIN),
+            'statusAdaptive' => __('Analyzing Adaptive Performance...', WPS_IC_TEXTDOMAIN),
+            'statusMinifyHtml' => __('Minifying HTML...', WPS_IC_TEXTDOMAIN),
+            'statusServerResponse' => __('Enhancing Server Response time...', WPS_IC_TEXTDOMAIN),
+            'statusOptimizeCss' => __('Optimizing CSS Files...', WPS_IC_TEXTDOMAIN),
+            'statusOptimizeJs' => __('Optimizing JavaScript Files...', WPS_IC_TEXTDOMAIN),
+            'saving' => __('Saving...', WPS_IC_TEXTDOMAIN),
+            'saved' => __('Saved', WPS_IC_TEXTDOMAIN),
+            'refreshRequired' => __('Refresh required', WPS_IC_TEXTDOMAIN),
+        ];
+    }
+
     public function enqueue_all_scripts()
     {
         $screen = get_current_screen();
@@ -532,7 +562,8 @@ class wps_ic_enqueues extends wps_ic
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
         if (in_array($screen->base, $page_array)) {
             $this->enqueue_v4();
@@ -550,7 +581,7 @@ class wps_ic_enqueues extends wps_ic
         $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js?ver=' . $this::$version);
         $this->asset_style('menu-icon', 'css/menu.wp.css?ver=' . $this::$version);
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js?ver=' . $this::$version, ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js?ver=' . $this::$version, ['jquery'], '1.0.0');
 
@@ -569,17 +600,44 @@ class wps_ic_enqueues extends wps_ic
         wp_localize_script($this::$slug . '-admin-select-mode', 'wpc_ic_modes', ['showModes' => $this::$showModes]);
 
         $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js?ver=' . $this::$version);
-        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
         #$this->bootstrap();
         $gui = get_option(WPS_IC_GUI);
         if (!empty($gui) && $gui == 'lite') {
             $this->lite();
             wp_enqueue_style($this::$slug . '-v4-style-css', WPS_IC_URI . 'assets/v4/css/style.css', [], $this::$version);
+            wp_enqueue_script($this::$slug . '-scripts-v4-js', WPS_IC_URI . 'assets/v4/js/scripts.js', ['jquery'], $this::$version);
+            $this->inject_brand_colors();
         } else {
             $this->lite();
             $this->v4();
         }
+    }
+
+    private function inject_brand_colors()
+    {
+        if (!defined('WPC_BRAND_COLOR')) return;
+
+        $color = sanitize_hex_color(WPC_BRAND_COLOR);
+        if (empty($color)) return;
+
+        // Derive tint/light/dark variants from the brand color
+        $r = hexdec(substr($color, 1, 2));
+        $g = hexdec(substr($color, 3, 2));
+        $b = hexdec(substr($color, 5, 2));
+
+        $css = ":root, body.wp-admin {
+            --wpc-brand-primary: {$color};
+            --wpc-brand-primary-light: rgba({$r},{$g},{$b},0.7);
+            --wpc-brand-primary-dark: {$color};
+            --wpc-brand-accent: {$color};
+            --wpc-brand-accent-light: rgba({$r},{$g},{$b},0.3);
+            --wpc-brand-tint: rgba({$r},{$g},{$b},0.08);
+            --wpc-brand-shadow: rgba({$r},{$g},{$b},0.4);
+        }";
+
+        wp_add_inline_style($this::$slug . '-v4-style-css', $css);
     }
 
     public function asset_script($name, $filename)
@@ -598,8 +656,8 @@ class wps_ic_enqueues extends wps_ic
 
     public function lite()
     {
-        wp_enqueue_script($this::$slug . '-lite-js', WPS_IC_URI . 'assets/v4/js/lite.js', ['jquery'], $this::$version);
-        wp_localize_script($this::$slug . '-lite-js', 'ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_enqueue_script($this::$slug . '-lite-js', WPS_IC_URI . 'assets/v4/js/lite.js', ['jquery'], $this::$version, true);
+        wp_localize_script($this::$slug . '-lite-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
     }
 
 
@@ -615,9 +673,10 @@ class wps_ic_enqueues extends wps_ic
         wp_enqueue_script($this::$slug . '-tooltip-js', WPS_IC_URI . 'assets/v4/js/tooltip.js', ['jquery'], $this::$version);
         wp_enqueue_script($this::$slug . '-scripts-v4-js', WPS_IC_URI . 'assets/v4/js/scripts.js', ['jquery'], $this::$version);
 
-        wp_localize_script($this::$slug . '-scripts-v4-js', 'wpc_ajaxVar', ['nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-        wp_localize_script($this::$slug . '-popups-js', 'wpc_ajaxVar', ['nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-        wp_localize_script($this::$slug . '-tabs-v4-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-scripts-v4-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
+        wp_localize_script($this::$slug . '-popups-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
+        wp_localize_script($this::$slug . '-tabs-v4-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
+        $this->inject_brand_colors();
     }
 
     public function enqueue_all()
@@ -629,7 +688,7 @@ class wps_ic_enqueues extends wps_ic
 
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
         $page_array = ['upload', #'settings_page_' . $this::$slug,
                 'toplevel_page_' . $this::$slug . '-mu-network', #'toplevel_page_' . $this::$slug,
@@ -664,7 +723,7 @@ class wps_ic_enqueues extends wps_ic
                     $this->style('admin-mu', 'multisite.style.css');
 
                     // Vars
-                    wp_localize_script($this::$slug . '-admin-mu-connect', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+                    wp_localize_script($this::$slug . '-admin-mu-connect', 'wpc_ajaxVar', $this->get_ajax_var_data());
                 }
 
                 if ($screen->base == 'toplevel_page_' . $this::$slug || $screen->base == 'settings_page_' . $this::$slug) {
@@ -676,13 +735,12 @@ class wps_ic_enqueues extends wps_ic
                     $this->script('admin-settings', 'admin/settings.admin' . WPS_IC_MIN . '.js');
                     $this->script('admin-lottie-player', 'admin/lottie/lottie-player.min.js');
                     $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
-                    wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-                    wp_localize_script($this::$slug . '-admin-settings', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+                    wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
+                    wp_localize_script($this::$slug . '-admin-settings', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
                     if (is_multisite()) {
                         $this->script('admin-mu-settings', 'admin/mu-settings.admin' . WPS_IC_MIN . '.js');
-                        wp_localize_script($this::$slug . '-admin-mu-settings', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
-
+                        wp_localize_script($this::$slug . '-admin-mu-settings', 'wpc_ajaxVar', $this->get_ajax_var_data());
                     }
                 }
 
@@ -745,7 +803,7 @@ class wps_ic_enqueues extends wps_ic
     {
         $this->asset_style('menu-icon', 'css/menu.wp.css');
         wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
-        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
         // Icons
@@ -761,7 +819,7 @@ class wps_ic_enqueues extends wps_ic
 
 
         $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
-        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
         $this->bootstrap();
         $this->v3();
@@ -803,7 +861,7 @@ class wps_ic_enqueues extends wps_ic
         $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
         $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
-        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+        wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
     }
 
     public function v2()
@@ -835,7 +893,7 @@ class wps_ic_enqueues extends wps_ic
                     $this->script('admin-settings', 'admin/settings.admin' . WPS_IC_MIN . '.js');
                     $this->script('admin-lottie-player', 'admin/lottie/lottie-player.min.js');
                     $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
-                    wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', ['ajaxurl' => admin_url('admin-ajax.php'), 'nonce' => wp_create_nonce('wps_ic_nonce_action')]);
+                    wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
                     if (is_multisite()) {
                         $this->script('admin-mu-settings', 'admin/mu-settings.admin' . WPS_IC_MIN . '.js');

@@ -1,0 +1,3527 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: WP Compress – Instant Performance & Speed Optimization 6.60.62\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wp-compress-image-optimizer\n"
+"POT-Creation-Date: 2026-04-01T10:39:58+00:00\n"
+"PO-Revision-Date: 2026-04-01 12:00+0200\n"
+"Last-Translator: OpenAI ChatGPT\n"
+"Language-Team: Croatian\n"
+"Language: hr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+"X-Generator: WP-CLI 2.12.0\n"
+
+#. Plugin Name of the plugin
+#: wp-compress.php
+msgid "WP Compress – Instant Performance & Speed Optimization"
+msgstr "WP Compress – Trenutne performanse i optimizacija brzine"
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: wp-compress.php
+msgid "https://www.wpcompress.com"
+msgstr "https://www.wpcompress.com"
+
+#. Description of the plugin
+#: wp-compress.php
+msgid ""
+"Automatically compress and optimize images to shrink image file size, "
+"improve  times and boost SEO ranks - all without lifting a finger after "
+"setup."
+msgstr ""
+"Automatski komprimirajte i optimizirajte slike kako biste smanjili veličinu "
+"datoteka, poboljšali vremena učitavanja i povećali SEO rangove — bez ikakvog"
+" dodatnog rada nakon postavljanja."
+
+#. Author of the plugin
+#: wp-compress.php
+msgid "WP Compress"
+msgstr "WP Compress"
+
+#: classes/ajax.class.php:2775 classes/ajax.class.php:2898
+#: templates/admin/advanced_settings_v4.php:564
+#: templates/admin/debug_tool.php:752 templates/admin/lite_settings.php:267
+#: templates/admin/partials/popups/advanced-cache-configuration.php:55
+#: templates/admin/partials/popups/cache-cookies.php:81
+#: templates/admin/partials/popups/cf-cdn.php:34
+#: templates/admin/partials/popups/cname.php:52
+#: templates/admin/partials/popups/cname.php:94
+#: templates/admin/partials/popups/css/exclude-css-combine.php:54
+#: templates/admin/partials/popups/css/exclude-css-minify.php:56
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:55
+#: templates/admin/partials/popups/css/inline-css.php:37
+#: templates/admin/partials/popups/exclude-adaptive.php:48
+#: templates/admin/partials/popups/exclude-advanced-caching.php:36
+#: templates/admin/partials/popups/exclude-cdn.php:38
+#: templates/admin/partials/popups/exclude-critical-css.php:55
+#: templates/admin/partials/popups/exclude-inline-css.php:55
+#: templates/admin/partials/popups/exclude-lazy.php:38
+#: templates/admin/partials/popups/exclude-minify-html.php:55
+#: templates/admin/partials/popups/exclude-simple-caching.php:41
+#: templates/admin/partials/popups/exclude-url.php:52
+#: templates/admin/partials/popups/exclude-webp.php:38
+#: templates/admin/partials/popups/js/delay-js-configuration.php:40
+#: templates/admin/partials/popups/js/exclude-js-combine.php:55
+#: templates/admin/partials/popups/js/exclude-js-defer.php:55
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:49
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:80
+#: templates/admin/partials/popups/js/exclude-js-delay.php:55
+#: templates/admin/partials/popups/js/exclude-js-minify.php:55
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:43
+#: templates/admin/partials/popups/js/inline-js.php:37
+#: templates/admin/partials/popups/purge-settings.php:103
+#: templates/admin/selectModes/popup.php:178
+msgid "Save"
+msgstr "Spremi"
+
+#: classes/ajax.class.php:2866 templates/admin/lite_settings.php:379
+#: templates/admin/lite_settings.php:383
+msgid "CDN"
+msgstr "CDN"
+
+#: classes/ajax.class.php:2866 templates/admin/advanced_settings_v4.php:992
+msgid "Adaptive Images"
+msgstr "Prilagodljive slike"
+
+#: classes/ajax.class.php:2866
+msgid "Advanced Cache"
+msgstr "Napredno predmemoriranje"
+
+#: classes/ajax.class.php:2866 templates/admin/advanced_settings_v4.php:805
+#: templates/admin/advanced_settings_v4.php:1477
+#: templates/admin/selectModes/popup.php:126
+msgid "Critical CSS"
+msgstr "Kritični CSS"
+
+#: classes/ajax.class.php:2866 templates/admin/advanced_settings_v4.php:940
+#: templates/admin/lite_settings.php:360
+msgid "JavaScript"
+msgstr "JavaScript"
+
+#: classes/ajax.class.php:2884
+#, php-format
+msgid "Exclude from %s"
+msgstr "Izuzmi iz %s"
+
+#: classes/ajax.class.php:2885
+#: templates/admin/partials/popups/advanced-cache-configuration.php:22
+#: templates/admin/partials/popups/css/exclude-css-combine.php:23
+#: templates/admin/partials/popups/css/exclude-css-minify.php:22
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:22
+#: templates/admin/partials/popups/exclude-adaptive.php:22
+#: templates/admin/partials/popups/exclude-cdn.php:22
+#: templates/admin/partials/popups/exclude-inline-css.php:22
+#: templates/admin/partials/popups/exclude-lazy.php:22
+#: templates/admin/partials/popups/exclude-minify-html.php:22
+#: templates/admin/partials/popups/exclude-simple-caching.php:22
+#: templates/admin/partials/popups/exclude-webp.php:22
+#: templates/admin/partials/popups/js/exclude-js-combine.php:22
+#: templates/admin/partials/popups/js/exclude-js-defer.php:22
+#: templates/admin/partials/popups/js/exclude-js-delay.php:22
+#: templates/admin/partials/popups/js/exclude-js-minify.php:22
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:22
+msgid ""
+"List files or paths to exclude. Partial names work too — we match "
+"automatically."
+msgstr ""
+"Navedite datoteke ili putanje koje želite izuzeti. Djelomični nazivi također"
+" rade — automatski ih prepoznajemo."
+
+#: classes/ajax.class.php:2892
+#: templates/admin/partials/popups/advanced-cache-configuration.php:30
+#: templates/admin/partials/popups/css/exclude-css-combine.php:33
+#: templates/admin/partials/popups/css/exclude-css-minify.php:32
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:30
+#: templates/admin/partials/popups/exclude-adaptive.php:32
+#: templates/admin/partials/popups/exclude-cdn.php:32
+#: templates/admin/partials/popups/exclude-inline-css.php:30
+#: templates/admin/partials/popups/exclude-lazy.php:32
+#: templates/admin/partials/popups/exclude-minify-html.php:30
+#: templates/admin/partials/popups/exclude-simple-caching.php:30
+#: templates/admin/partials/popups/exclude-webp.php:32
+#: templates/admin/partials/popups/js/exclude-js-combine.php:30
+#: templates/admin/partials/popups/js/exclude-js-defer.php:30
+#: templates/admin/partials/popups/js/exclude-js-delay.php:30
+#: templates/admin/partials/popups/js/exclude-js-minify.php:30
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:30
+msgid "e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg"
+msgstr "npr. plugin-name/js/script.js, scripts.js, anyimage.jpg"
+
+#: classes/ajax.class.php:2900
+#: templates/admin/partials/popups/advanced-cache-configuration.php:57
+#: templates/admin/partials/popups/cache-cookies.php:83
+#: templates/admin/partials/popups/css/exclude-css-combine.php:56
+#: templates/admin/partials/popups/css/exclude-css-minify.php:58
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:57
+#: templates/admin/partials/popups/exclude-adaptive.php:50
+#: templates/admin/partials/popups/exclude-advanced-caching.php:38
+#: templates/admin/partials/popups/exclude-cdn.php:40
+#: templates/admin/partials/popups/exclude-critical-css.php:57
+#: templates/admin/partials/popups/exclude-inline-css.php:57
+#: templates/admin/partials/popups/exclude-lazy.php:40
+#: templates/admin/partials/popups/exclude-minify-html.php:57
+#: templates/admin/partials/popups/exclude-simple-caching.php:43
+#: templates/admin/partials/popups/exclude-url.php:54
+#: templates/admin/partials/popups/exclude-webp.php:40
+#: templates/admin/partials/popups/js/delay-js-configuration.php:42
+#: templates/admin/partials/popups/js/exclude-js-combine.php:57
+#: templates/admin/partials/popups/js/exclude-js-defer.php:57
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:51
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:82
+#: templates/admin/partials/popups/js/exclude-js-delay.php:57
+#: templates/admin/partials/popups/js/exclude-js-minify.php:57
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:45
+msgid "See Examples"
+msgstr "Pogledaj primjere"
+
+#: classes/ajax.class.php:2903
+#: templates/admin/partials/popups/advanced-cache-configuration.php:61
+#: templates/admin/partials/popups/css/exclude-css-combine.php:60
+#: templates/admin/partials/popups/css/exclude-css-minify.php:62
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:61
+#: templates/admin/partials/popups/exclude-adaptive.php:54
+#: templates/admin/partials/popups/exclude-cdn.php:44
+#: templates/admin/partials/popups/exclude-inline-css.php:61
+#: templates/admin/partials/popups/exclude-lazy.php:44
+#: templates/admin/partials/popups/exclude-minify-html.php:61
+#: templates/admin/partials/popups/exclude-simple-caching.php:47
+#: templates/admin/partials/popups/exclude-webp.php:44
+#: templates/admin/partials/popups/js/exclude-js-combine.php:61
+#: templates/admin/partials/popups/js/exclude-js-defer.php:61
+#: templates/admin/partials/popups/js/exclude-js-delay.php:61
+#: templates/admin/partials/popups/js/exclude-js-minify.php:61
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:49
+msgid ".svg would exclude all assets with that extension"
+msgstr ".svg bi izuzela sve resurse s tom ekstenzijom"
+
+#: classes/ajax.class.php:2904
+#: templates/admin/partials/popups/advanced-cache-configuration.php:62
+#: templates/admin/partials/popups/css/exclude-css-combine.php:61
+#: templates/admin/partials/popups/css/exclude-css-minify.php:63
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:62
+#: templates/admin/partials/popups/exclude-adaptive.php:55
+#: templates/admin/partials/popups/exclude-cdn.php:45
+#: templates/admin/partials/popups/exclude-inline-css.php:62
+#: templates/admin/partials/popups/exclude-lazy.php:45
+#: templates/admin/partials/popups/exclude-minify-html.php:62
+#: templates/admin/partials/popups/exclude-simple-caching.php:48
+#: templates/admin/partials/popups/exclude-webp.php:45
+#: templates/admin/partials/popups/js/exclude-js-combine.php:62
+#: templates/admin/partials/popups/js/exclude-js-defer.php:62
+#: templates/admin/partials/popups/js/exclude-js-delay.php:62
+#: templates/admin/partials/popups/js/exclude-js-minify.php:62
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:50
+msgid "imagename would exclude any file with that name"
+msgstr "imagename bi izuzeo bilo koju datoteku s tim nazivom"
+
+#: classes/ajax.class.php:2905
+#: templates/admin/partials/popups/advanced-cache-configuration.php:63
+#: templates/admin/partials/popups/css/exclude-css-combine.php:62
+#: templates/admin/partials/popups/css/exclude-css-minify.php:64
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:63
+#: templates/admin/partials/popups/exclude-adaptive.php:56
+#: templates/admin/partials/popups/exclude-cdn.php:46
+#: templates/admin/partials/popups/exclude-inline-css.php:63
+#: templates/admin/partials/popups/exclude-lazy.php:46
+#: templates/admin/partials/popups/exclude-minify-html.php:63
+#: templates/admin/partials/popups/exclude-simple-caching.php:49
+#: templates/admin/partials/popups/exclude-webp.php:46
+#: templates/admin/partials/popups/js/exclude-js-combine.php:63
+#: templates/admin/partials/popups/js/exclude-js-defer.php:63
+#: templates/admin/partials/popups/js/exclude-js-delay.php:63
+#: templates/admin/partials/popups/js/exclude-js-minify.php:63
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:51
+msgid "/myplugin/image.jpg would exclude that specific file"
+msgstr "/myplugin/image.jpg bi izuzeo tu određenu datoteku"
+
+#: classes/ajax.class.php:2906
+#: templates/admin/partials/popups/advanced-cache-configuration.php:64
+#: templates/admin/partials/popups/css/exclude-css-combine.php:63
+#: templates/admin/partials/popups/css/exclude-css-minify.php:65
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:64
+#: templates/admin/partials/popups/exclude-adaptive.php:57
+#: templates/admin/partials/popups/exclude-cdn.php:47
+#: templates/admin/partials/popups/exclude-inline-css.php:64
+#: templates/admin/partials/popups/exclude-lazy.php:47
+#: templates/admin/partials/popups/exclude-minify-html.php:64
+#: templates/admin/partials/popups/exclude-simple-caching.php:50
+#: templates/admin/partials/popups/exclude-webp.php:47
+#: templates/admin/partials/popups/js/delay-js-configuration.php:47
+#: templates/admin/partials/popups/js/exclude-js-combine.php:64
+#: templates/admin/partials/popups/js/exclude-js-defer.php:64
+#: templates/admin/partials/popups/js/exclude-js-delay.php:64
+#: templates/admin/partials/popups/js/exclude-js-minify.php:64
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:52
+msgid "/wp-content/myplugin/ would exclude everything using that path"
+msgstr "/wp-content/myplugin/ bi izuzeo sve što koristi tu putanju"
+
+#: classes/enqueues.class.php:621
+msgid "Deselect All"
+msgstr "Odznači sve"
+
+#: classes/enqueues.class.php:621
+msgid "Select All"
+msgstr "Označi sve"
+
+#: classes/gui-v4.class.php:1665
+msgid "Preset Optimization Modes"
+msgstr "Unaprijed postavljeni načini optimizacije"
+
+#: classes/gui-v4.class.php:1668
+msgid ""
+"One-click configure recommended image optimization settings and performance "
+"tweaks based on your preferences and website compatibility."
+msgstr ""
+"Jednim klikom postavite preporučene postavke optimizacije slika i prilagodbe"
+" performansi prema svojim željama i kompatibilnosti web-mjesta."
+
+#: classes/gui-v4.class.php:1675 templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:82
+msgid "Safe Mode"
+msgstr "Sigurni način"
+
+#: classes/gui-v4.class.php:1676 templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:117
+msgid "Aggressive Mode"
+msgstr "Agresivni način"
+
+#: classes/gui-v4.class.php:1677 templates/admin/advanced_settings_v4.php:524
+msgid "Custom"
+msgstr "Prilagođeno"
+
+#: classes/gui-v4.class.php:1738 classes/gui-v4.class.php:1751
+#: templates/admin/partials/popups/cf-cdn.php:21
+#: templates/admin/partials/popups/cname.php:27
+#: templates/admin/partials/popups/cname.php:72
+msgid "Custom CDN Domain"
+msgstr "Prilagođena CDN domena"
+
+#: classes/gui-v4.class.php:1741 classes/gui-v4.class.php:1754
+msgid "Connected Domain:"
+msgstr "Povezana domena:"
+
+#: classes/gui-v4.class.php:1744 classes/gui-v4.class.php:1757
+msgid "Use <strong>any domain</strong> you own to serve images and assets."
+msgstr ""
+"Koristite <strong>bilo koju domenu</strong> koju posjedujete za isporuku "
+"slika i resursa."
+
+#: classes/gui-v4.class.php:1768 classes/gui-v4.class.php:1780
+#: templates/admin/scan-fonts.php:144
+msgid "Remove"
+msgstr "Ukloni"
+
+#: classes/gui-v4.class.php:1769 classes/gui-v4.class.php:1781
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:34
+msgid "Configure"
+msgstr "Konfiguriraj"
+
+#: classes/gui-v4.class.php:1774
+msgid "Optimize Plan Required"
+msgstr "Potreban je plan Optimize"
+
+#: classes/gui-v4.class.php:1775
+msgid "Locked"
+msgstr "Zaključano"
+
+#: classes/gui-v4.class.php:1902
+msgid "Recommended"
+msgstr "Preporučeno"
+
+#: classes/media_library_live.class.php:1201
+msgid "Image added to queue"
+msgid_plural "%s images added to queue."
+msgstr[0] "Slika je dodana u red"
+msgstr[1] "%s slike dodane su u red."
+msgstr[2] "%s slika dodano je u red."
+
+#: classes/media_library_live.class.php:1204
+msgid "Image removed from queue"
+msgid_plural "%s images removed from queue."
+msgstr[0] "Slika je uklonjena iz reda"
+msgstr[1] "%s slike uklonjene su iz reda."
+msgstr[2] "%s slika uklonjeno je iz reda."
+
+#: classes/menu.class.php:84 classes/menu.class.php:122
+msgid "Purge & Preload HTML Cache"
+msgstr "Očisti i unaprijed učitaj HTML predmemoriju"
+
+#: classes/menu.class.php:87 classes/menu.class.php:125
+#: templates/admin/advanced_settings_v4.php:1511
+msgid "Purge Critical CSS"
+msgstr "Očisti kritični CSS"
+
+#: classes/menu.class.php:96 classes/menu.class.php:104
+#: classes/menu.class.php:135 classes/menu.class.php:144
+#: templates/admin/advanced_settings_v4.php:944
+msgid "Purge CDN Cache"
+msgstr "Očisti CDN predmemoriju"
+
+#: classes/menu.class.php:114 templates/admin/selectModes/popup.php:91
+#: templates/admin/selectModes/popup.php:109
+msgid "Generate Critical CSS"
+msgstr "Generiraj kritični CSS"
+
+#: classes/menu.class.php:117
+msgid "View as Visitor"
+msgstr "Prikaži kao posjetitelj"
+
+#: classes/menu.class.php:154 templates/admin/advanced_settings_v4.php:1167
+#: templates/admin/advanced_settings_v4.php:1693
+#: templates/admin/debug_tool.php:620
+msgid "Settings"
+msgstr "Postavke"
+
+#: classes/stats.class.php:144
+msgid "Unlock 24/7 Monitoring"
+msgstr "Otključaj 24/7 nadzor"
+
+#: classes/stats.class.php:148
+msgid "24/7 Monitoring Active"
+msgstr "24/7 nadzor je aktivan"
+
+#: templates/admin/advanced_settings_v4.php:9
+#: templates/admin/lite_settings.php:10
+msgid "Forbidden."
+msgstr "Zabranjeno."
+
+#: templates/admin/advanced_settings_v4.php:80
+#, php-format
+msgid "Something went wrong: %s"
+msgstr "Nešto je pošlo po zlu: %s"
+
+#: templates/admin/advanced_settings_v4.php:119
+msgid "No privileges to save options!"
+msgstr "Nemate ovlasti za spremanje opcija!"
+
+#: templates/admin/advanced_settings_v4.php:388
+msgid "CDN DNS: Domain DNS is not managed by Cloudflare"
+msgstr "CDN DNS: DNS domene ne upravlja Cloudflare"
+
+#: templates/admin/advanced_settings_v4.php:524
+#: templates/admin/selectModes/popup.php:99
+msgid "Recommended Mode"
+msgstr "Preporučeni način"
+
+#: templates/admin/advanced_settings_v4.php:544
+msgid "Unlimited"
+msgstr "Neograničeno"
+
+#: templates/admin/advanced_settings_v4.php:558
+#: templates/admin/lite_settings.php:261
+msgid "Unsaved changes"
+msgstr "Nespremljene promjene"
+
+#: templates/admin/advanced_settings_v4.php:559
+#: templates/admin/lite_settings.php:262
+msgid "Please save your progress."
+msgstr "Spremite svoj napredak."
+
+#: templates/admin/advanced_settings_v4.php:576
+#: templates/admin/lite_settings.php:250
+msgid "Switch icon style"
+msgstr "Promijeni stil ikone"
+
+#: templates/admin/advanced_settings_v4.php:578
+#: templates/admin/lite_settings.php:252
+msgid "Style"
+msgstr "Stil"
+
+#: templates/admin/advanced_settings_v4.php:586
+#: templates/admin/advanced_settings_v4.php:587
+#: templates/admin/advanced_settings_v4.php:593
+#: templates/admin/lite_settings.php:334 templates/admin/lite_settings.php:336
+msgid "Advanced Settings"
+msgstr "Napredne postavke"
+
+#: templates/admin/advanced_settings_v4.php:593
+msgid "Simple Settings"
+msgstr "Jednostavne postavke"
+
+#: templates/admin/advanced_settings_v4.php:600 templates/admin/bulk.php:28
+#: templates/admin/lite_settings.php:281
+msgid "Pause Optimization"
+msgstr "Pauziraj optimizaciju"
+
+#: templates/admin/advanced_settings_v4.php:606
+#: templates/admin/lite_settings.php:287
+msgid "Optimization in progress..."
+msgstr "Optimizacija je u tijeku..."
+
+#: templates/admin/advanced_settings_v4.php:612
+#: templates/admin/lite_settings.php:293
+msgid "Start Optimization"
+msgstr "Pokreni optimizaciju"
+
+#: templates/admin/advanced_settings_v4.php:617
+#: templates/admin/lite_settings.php:298 templates/admin/lite_settings.php:461
+#: templates/admin/lite_settings.php:838
+#: templates/admin/lite_settings.php:1071
+#: templates/admin/partials/boxes/stats-bar.php:193
+#: templates/admin/partials/boxes/stats-bar.php:204
+#: templates/admin/partials/boxes/stats-bar.php:309
+#: templates/admin/partials/lite/stats.php:258
+#: templates/admin/partials/v4/pageview-stats.php:189
+#: templates/admin/partials/v4/stats.php:115
+msgid "Optimized"
+msgstr "Optimizirano"
+
+#: templates/admin/advanced_settings_v4.php:622
+#: templates/admin/lite_settings.php:303 templates/admin/lite_settings.php:627
+msgid "Preparing..."
+msgstr "Priprema..."
+
+#: templates/admin/advanced_settings_v4.php:627
+#: templates/admin/lite_settings.php:308
+msgid "Smart Optimization Locked"
+msgstr "Pametna optimizacija je zaključana"
+
+#: templates/admin/advanced_settings_v4.php:670
+msgid "Pause Local Optimization"
+msgstr "Pauziraj lokalnu optimizaciju"
+
+#: templates/admin/advanced_settings_v4.php:680
+msgid "Pause Local Restore"
+msgstr "Pauziraj lokalni povrat"
+
+#: templates/admin/advanced_settings_v4.php:707
+msgid "Dashboard"
+msgstr "Nadzorna ploča"
+
+#: templates/admin/advanced_settings_v4.php:720
+msgid "CDN Delivery"
+msgstr "CDN isporuka"
+
+#: templates/admin/advanced_settings_v4.php:733
+msgid "Image Optimization"
+msgstr "Optimizacija slika"
+
+#: templates/admin/advanced_settings_v4.php:744
+msgid "Performance Tweaks"
+msgstr "Prilagodbe performansi"
+
+#: templates/admin/advanced_settings_v4.php:755
+msgid "Font Optimization"
+msgstr "Optimizacija fontova"
+
+#: templates/admin/advanced_settings_v4.php:768
+msgid "Other Optimization"
+msgstr "Ostala optimizacija"
+
+#: templates/admin/advanced_settings_v4.php:779
+msgid "UX Settings"
+msgstr "UX postavke"
+
+#: templates/admin/advanced_settings_v4.php:790
+msgid "Smart Optimization"
+msgstr "Pametna optimizacija"
+
+#: templates/admin/advanced_settings_v4.php:817
+msgid "Integrations"
+msgstr "Integracije"
+
+#: templates/admin/advanced_settings_v4.php:828
+#: templates/admin/advanced_settings_v4.php:1685
+msgid "Export / Import Settings"
+msgstr "Izvoz / uvoz postavki"
+
+#: templates/admin/advanced_settings_v4.php:842
+#: templates/admin/advanced_settings_v4.php:1731
+msgid "System Information"
+msgstr "Informacije o sustavu"
+
+#: templates/admin/advanced_settings_v4.php:852
+msgid "Debug"
+msgstr "Debug"
+
+#: templates/admin/advanced_settings_v4.php:862
+msgid "Logger"
+msgstr "Zapisnik"
+
+#: templates/admin/advanced_settings_v4.php:922
+msgid "Real-Time Optimization + CDN"
+msgstr "Optimizacija u stvarnom vremenu + CDN"
+
+#: templates/admin/advanced_settings_v4.php:922
+msgid ""
+"Optimize your images and scripts in real-time via our top-rated global CDN."
+msgstr ""
+"Optimizirajte svoje slike i skripte u stvarnom vremenu putem našeg vrhunskog"
+" globalnog CDN-a."
+
+#: templates/admin/advanced_settings_v4.php:929
+msgid "JPG/JPEG"
+msgstr "JPG/JPEG"
+
+#: templates/admin/advanced_settings_v4.php:931
+msgid "PNG"
+msgstr "PNG"
+
+#: templates/admin/advanced_settings_v4.php:933
+msgid "GIF"
+msgstr "GIF"
+
+#: templates/admin/advanced_settings_v4.php:935
+msgid "SVG"
+msgstr "SVG"
+
+#: templates/admin/advanced_settings_v4.php:938
+#: templates/admin/lite_settings.php:357
+msgid "CSS"
+msgstr "CSS"
+
+#: templates/admin/advanced_settings_v4.php:942
+#: templates/admin/debug_tool.php:731
+msgid "Fonts"
+msgstr "Fontovi"
+
+#: templates/admin/advanced_settings_v4.php:965
+msgid "Data Privacy & Routing"
+msgstr "Privatnost podataka i usmjeravanje"
+
+#: templates/admin/advanced_settings_v4.php:966
+msgid ""
+"Strict EU Routing ensures that your data is processed and served exclusively"
+" through European data centers."
+msgstr ""
+"Strogo EU usmjeravanje osigurava da se vaši podaci obrađuju i isporučuju "
+"isključivo kroz europske podatkovne centre."
+
+#: templates/admin/advanced_settings_v4.php:971
+msgid "Enforce EU Routing"
+msgstr "Prisilno uključi EU usmjeravanje"
+
+#: templates/admin/advanced_settings_v4.php:992
+msgid ""
+"Intelligently adapt images based on the incoming visitor's device, browser, "
+"and location on page."
+msgstr ""
+"Pametno prilagodite slike prema uređaju, pregledniku i položaju na stranici "
+"dolaznog posjetitelja."
+
+#: templates/admin/advanced_settings_v4.php:997
+msgid "Resize by Incoming Device"
+msgstr "Promijeni veličinu prema uređaju posjetitelja"
+
+#: templates/admin/advanced_settings_v4.php:997
+msgid ""
+"Serve the ideal image based on the visitor's device to reduce file sizes, "
+"improve load times, and offer a better experience."
+msgstr ""
+"Isporučite idealnu sliku prema uređaju posjetitelja kako biste smanjili "
+"veličinu datoteka, poboljšali vrijeme učitavanja i pružili bolje iskustvo."
+
+#: templates/admin/advanced_settings_v4.php:1000
+#: templates/admin/selectModes/popup.php:89
+#: templates/admin/selectModes/popup.php:106
+#: templates/admin/selectModes/popup.php:124
+msgid "Serve WebP Images"
+msgstr "Isporučuj WebP slike"
+
+#: templates/admin/advanced_settings_v4.php:1000
+msgid ""
+"Generate and serve next-generation WebP images to supported browsers and "
+"devices."
+msgstr ""
+"Generirajte i isporučujte WebP slike nove generacije podržanim preglednicima"
+" i uređajima."
+
+#: templates/admin/advanced_settings_v4.php:1003
+msgid "Serve Retina Images"
+msgstr "Isporučuj Retina slike"
+
+#: templates/admin/advanced_settings_v4.php:1003
+msgid ""
+"Deliver higher-resolution retina images so that your images look great on "
+"larger screens."
+msgstr ""
+"Isporučujte retina slike veće rezolucije kako bi vaše slike izgledale "
+"odlično na većim zaslonima."
+
+#: templates/admin/advanced_settings_v4.php:1006
+msgid "Background Images"
+msgstr "Pozadinske slike"
+
+#: templates/admin/advanced_settings_v4.php:1006
+msgid ""
+"Serve background images over CDN with all the adaptive and quality options."
+msgstr ""
+"Isporučujte pozadinske slike putem CDN-a sa svim prilagodljivim i "
+"kvalitetnim opcijama."
+
+#: templates/admin/advanced_settings_v4.php:1021
+#: templates/admin/lite_settings.php:363
+msgid "Lazy Loading"
+msgstr "Lijeno učitavanje"
+
+#: templates/admin/advanced_settings_v4.php:1021
+msgid "Intelligently lazy load images based on the viewport position."
+msgstr "Pametno lijeno učitavajte slike na temelju položaja u prikazu."
+
+#: templates/admin/advanced_settings_v4.php:1025
+msgid "Native Lazy"
+msgstr "Izvorno lijeno učitavanje"
+
+#: templates/admin/advanced_settings_v4.php:1025
+msgid ""
+"Lazy load images using browser methods to save bandwidth and reduce overall "
+"page size."
+msgstr ""
+"Lijeno učitavajte slike pomoću metoda preglednika kako biste uštedjeli "
+"propusnost i smanjili ukupnu veličinu stranice."
+
+#: templates/admin/advanced_settings_v4.php:1028
+msgid "Lazy Loading by Viewport"
+msgstr "Lijeno učitavanje prema prikazu"
+
+#: templates/admin/advanced_settings_v4.php:1028
+msgid ""
+"Load additional images as the user scrolls to save bandwidth and reduce "
+"overall page size."
+msgstr ""
+"Učitavajte dodatne slike dok korisnik pomiče stranicu kako biste uštedjeli "
+"propusnost i smanjili ukupnu veličinu stranice."
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Skip Lazy Loading"
+msgstr "Preskoči lijeno učitavanje"
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Enter how many images to skip lazy loading for on each page."
+msgstr ""
+"Unesite koliko slika na svakoj stranici treba preskočiti iz lijenog "
+"učitavanja."
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "Skip"
+msgstr "Preskoči"
+
+#: templates/admin/advanced_settings_v4.php:1031
+msgid "images"
+msgstr "slike"
+
+#: templates/admin/advanced_settings_v4.php:1055
+msgid "Optimization Level"
+msgstr "Razina optimizacije"
+
+#: templates/admin/advanced_settings_v4.php:1056
+msgid "Select your preferred image compression strength."
+msgstr "Odaberite željenu jačinu kompresije slika."
+
+#: templates/admin/advanced_settings_v4.php:1064
+msgid "Lossless"
+msgstr "Bez gubitaka"
+
+#: templates/admin/advanced_settings_v4.php:1065
+msgid "Intelligent"
+msgstr "Inteligentno"
+
+#: templates/admin/advanced_settings_v4.php:1066
+msgid "Ultra"
+msgstr "Ultra"
+
+#: templates/admin/advanced_settings_v4.php:1082
+msgid "Auto-Optimize on Upload"
+msgstr "Automatski optimiziraj pri prijenosu"
+
+#: templates/admin/advanced_settings_v4.php:1083
+msgid "Automatically compress new media library images as they're uploaded."
+msgstr ""
+"Automatski komprimiraj nove slike u medijskoj knjižnici prilikom prijenosa."
+
+#: templates/admin/advanced_settings_v4.php:1100
+msgid "Optimize Media Library"
+msgstr "Optimiziraj medijsku knjižnicu"
+
+#: templates/admin/advanced_settings_v4.php:1101
+msgid "Optimize locally stored images directly in bulk."
+msgstr "Skupno optimizirajte lokalno pohranjene slike izravno."
+
+#: templates/admin/advanced_settings_v4.php:1106
+msgid "Optimize Media"
+msgstr "Optimiziraj medije"
+
+#: templates/admin/advanced_settings_v4.php:1125
+msgid "Display Settings"
+msgstr "Postavke prikaza"
+
+#: templates/admin/advanced_settings_v4.php:1125
+msgid "Control which plugin elements are visible in your WordPress admin."
+msgstr ""
+"Odredite koji su elementi dodatka vidljivi u WordPress administraciji."
+
+#: templates/admin/advanced_settings_v4.php:1129
+msgid "Hide in Admin Bar"
+msgstr "Sakrij u administratorskoj traci"
+
+#: templates/admin/advanced_settings_v4.php:1129
+msgid ""
+"Remove the WP Compress icon and per-page tools from the WordPress admin bar."
+msgstr ""
+"Uklonite ikonu WP Compress i alate po stranici iz WordPress administratorske"
+" trake."
+
+#: templates/admin/advanced_settings_v4.php:1132
+msgid "Hide Cache Status"
+msgstr "Sakrij status predmemorije"
+
+#: templates/admin/advanced_settings_v4.php:1132
+msgid "Hide the cache status indicator from the admin bar on each page."
+msgstr ""
+"Sakrij indikator statusa predmemorije iz administratorske trake na svakoj "
+"stranici."
+
+#: templates/admin/advanced_settings_v4.php:1135
+msgid "Hide Critical CSS Status"
+msgstr "Sakrij status kritičnog CSS-a"
+
+#: templates/admin/advanced_settings_v4.php:1135
+msgid "Hide the critical CSS generation status from the admin bar."
+msgstr "Sakrij status generiranja kritičnog CSS-a iz administratorske trake."
+
+#: templates/admin/advanced_settings_v4.php:1138
+msgid "Hide Preloading Status"
+msgstr "Sakrij status prethodnog učitavanja"
+
+#: templates/admin/advanced_settings_v4.php:1138
+msgid "Hide the preloading status indicator from the admin bar."
+msgstr ""
+"Sakrij indikator statusa prethodnog učitavanja iz administratorske trake."
+
+#: templates/admin/advanced_settings_v4.php:1141
+msgid "Hide from WordPress"
+msgstr "Sakrij iz WordPressa"
+
+#: templates/admin/advanced_settings_v4.php:1141
+msgid "Completely hide the plugin from the WordPress admin area."
+msgstr "Potpuno sakrij dodatak iz WordPress administratorskog sučelja."
+
+#: templates/admin/advanced_settings_v4.php:1145
+msgid "Show in Media Library"
+msgstr "Prikaži u medijskoj knjižnici"
+
+#: templates/admin/advanced_settings_v4.php:1145
+msgid "Add compress, exclude, and restore options to Media Library list view."
+msgstr ""
+"Dodajte opcije komprimiranja, izuzimanja i vraćanja u prikaz popisa medijske"
+" knjižnice."
+
+#: templates/admin/advanced_settings_v4.php:1152
+msgid "User Permissions"
+msgstr "Korisničke dozvole"
+
+#: templates/admin/advanced_settings_v4.php:1152
+msgid "Control which user roles can access plugin features."
+msgstr "Odredite koje korisničke uloge mogu pristupiti mogućnostima dodatka."
+
+#: templates/admin/advanced_settings_v4.php:1161
+#: templates/admin/scan-fonts.php:84
+msgid "Purge"
+msgstr "Očisti"
+
+#: templates/admin/advanced_settings_v4.php:1162
+msgid "Clear CDN, HTML cache, Critical CSS & Cloudflare"
+msgstr "Očisti CDN, HTML predmemoriju, kritični CSS i Cloudflare"
+
+#: templates/admin/advanced_settings_v4.php:1168
+msgid "View and modify all plugin settings"
+msgstr "Pregledajte i izmijenite sve postavke dodatka"
+
+#: templates/admin/advanced_settings_v4.php:1181
+msgid "Role"
+msgstr "Uloga"
+
+#: templates/admin/advanced_settings_v4.php:1233
+msgid "Advanced Caching"
+msgstr "Napredno predmemoriranje"
+
+#: templates/admin/advanced_settings_v4.php:1233
+msgid ""
+"Serve static versions of your pages for faster load times and lower server "
+"load."
+msgstr ""
+"Poslužujte statične verzije svojih stranica za brže učitavanje i manje "
+"opterećenje poslužitelja."
+
+#: templates/admin/advanced_settings_v4.php:1238
+msgid "Enable Caching"
+msgstr "Omogući predmemoriranje"
+
+#: templates/admin/advanced_settings_v4.php:1238
+msgid ""
+"Dramatically speed up your site by serving pre-built pages to every visitor."
+msgstr ""
+"Znatno ubrzajte svoju stranicu posluživanjem unaprijed izrađenih stranica "
+"svakom posjetitelju."
+
+#: templates/admin/advanced_settings_v4.php:1241
+msgid "Exclude URLs"
+msgstr "Izuzmi URL-ove"
+
+#: templates/admin/advanced_settings_v4.php:1241
+msgid "Prevent specific pages or URLs from being cached."
+msgstr "Spriječite predmemoriranje određenih stranica ili URL-ova."
+
+#: templates/admin/advanced_settings_v4.php:1244
+msgid "Ignore Server Cache Control"
+msgstr "Zanemari kontrolu predmemorije poslužitelja"
+
+#: templates/admin/advanced_settings_v4.php:1244
+msgid ""
+"Cache pages even when the server sends no-cache headers. Useful when hosting"
+" or plugins set overly strict rules."
+msgstr ""
+"Predmemorirajte stranice čak i kada poslužitelj šalje no-cache zaglavlja. "
+"Korisno kada hosting ili dodaci postavljaju prestroga pravila."
+
+#: templates/admin/advanced_settings_v4.php:1248
+msgid "Cache Logged-In Users"
+msgstr "Predmemoriraj prijavljene korisnike"
+
+#: templates/admin/advanced_settings_v4.php:1248
+msgid ""
+"Serve cached pages to logged-in users. Best for membership sites where "
+"frontend content rarely changes per user."
+msgstr ""
+"Poslužujte predmemorirane stranice prijavljenim korisnicima. Najbolje za "
+"članske stranice gdje se sadržaj sučelja rijetko mijenja po korisniku."
+
+#: templates/admin/advanced_settings_v4.php:1252
+msgid "Cache Response Headers"
+msgstr "Predmemoriraj zaglavlja odgovora"
+
+#: templates/admin/advanced_settings_v4.php:1252
+msgid ""
+"Store custom HTTP response headers alongside cached pages to preserve server"
+" behavior."
+msgstr ""
+"Pohranite prilagođena HTTP zaglavlja odgovora uz predmemorirane stranice "
+"kako biste sačuvali ponašanje poslužitelja."
+
+#: templates/admin/advanced_settings_v4.php:1256
+msgid "Auto-Purge on Update"
+msgstr "Automatsko čišćenje pri ažuriranju"
+
+#: templates/admin/advanced_settings_v4.php:1256
+msgid ""
+"Automatically clear cache when you update plugins, themes, or edit content "
+"so visitors always see the latest version."
+msgstr ""
+"Automatski očistite predmemoriju kada ažurirate dodatke, teme ili uređujete "
+"sadržaj kako bi posjetitelji uvijek vidjeli najnoviju verziju."
+
+#: templates/admin/advanced_settings_v4.php:1260
+msgid "Cache by Cookie"
+msgstr "Predmemoriranje prema kolačiću"
+
+#: templates/admin/advanced_settings_v4.php:1260
+msgid ""
+"Serve different cached versions based on cookie values. Required for multi-"
+"currency, geo-targeting, or consent-based content."
+msgstr ""
+"Poslužujte različite predmemorirane verzije prema vrijednostima kolačića. "
+"Potrebno za više valuta, geo-ciljanje ili sadržaj temeljen na privoli."
+
+#: templates/admin/advanced_settings_v4.php:1277
+msgid "Smart CSS"
+msgstr "Pametni CSS"
+
+#: templates/admin/advanced_settings_v4.php:1277
+msgid "Remove render-blocking CSS so your pages appear instantly."
+msgstr ""
+"Uklonite CSS koji blokira prikazivanje kako bi se vaše stranice pojavile "
+"odmah."
+
+#: templates/admin/advanced_settings_v4.php:1282
+msgid "Optimize CSS"
+msgstr "Optimiziraj CSS"
+
+#: templates/admin/advanced_settings_v4.php:1282
+msgid ""
+"Automatically extracts critical styles and removes render-blocking CSS for "
+"instant page rendering."
+msgstr ""
+"Automatski izdvaja kritične stilove i uklanja CSS koji blokira prikazivanje "
+"za trenutačno učitavanje stranice."
+
+#: templates/admin/advanced_settings_v4.php:1303
+msgid "Smart JavaScript"
+msgstr "Pametni JavaScript"
+
+#: templates/admin/advanced_settings_v4.php:1303
+msgid "Reduce script blocking so your pages load and respond faster."
+msgstr ""
+"Smanjite blokiranje skripti kako bi se vaše stranice brže učitavale i "
+"reagirale."
+
+#: templates/admin/advanced_settings_v4.php:1309
+msgid "Optimize JavaScript"
+msgstr "Optimiziraj JavaScript"
+
+#: templates/admin/advanced_settings_v4.php:1309
+msgid ""
+"Automatically delays non-essential scripts so your pages load and respond "
+"faster."
+msgstr ""
+"Automatski odgađa nebitne skripte kako bi se vaše stranice brže učitavale i "
+"reagirale."
+
+#: templates/admin/advanced_settings_v4.php:1316
+#: templates/admin/advanced_settings_v4.php:1322
+msgid "Developer Mode"
+msgstr "Razvojni način"
+
+#: templates/admin/advanced_settings_v4.php:1316
+msgid ""
+"Pause cache purging and Critical CSS generation while you make changes."
+msgstr ""
+"Pauzirajte čišćenje predmemorije i generiranje kritičnog CSS-a dok radite "
+"promjene."
+
+#: templates/admin/advanced_settings_v4.php:1322
+msgid ""
+"Stops automatic cache purging and Critical CSS regeneration to save "
+"resources while you're actively editing. Turn off when done."
+msgstr ""
+"Zaustavlja automatsko čišćenje predmemorije i ponovno generiranje kritičnog "
+"CSS-a radi uštede resursa dok aktivno uređujete. Isključite kada završite."
+
+#: templates/admin/advanced_settings_v4.php:1334
+msgid "Other Optimizations"
+msgstr "Ostale optimizacije"
+
+#: templates/admin/advanced_settings_v4.php:1334
+msgid ""
+"Fine-tune additional performance settings for media, scripts, and WordPress "
+"core."
+msgstr ""
+"Fino prilagodite dodatne postavke performansi za medije, skripte i jezgru "
+"WordPressa."
+
+#: templates/admin/advanced_settings_v4.php:1338
+msgid "Media & Assets"
+msgstr "Mediji i resursi"
+
+#: templates/admin/advanced_settings_v4.php:1341
+msgid "Lazy Load iFrames"
+msgstr "Lijeno učitavanje iFrameova"
+
+#: templates/admin/advanced_settings_v4.php:1342
+msgid "Remove srcset"
+msgstr "Ukloni srcset"
+
+#: templates/admin/advanced_settings_v4.php:1343
+msgid "Add Image Sizes"
+msgstr "Dodaj veličine slika"
+
+#: templates/admin/advanced_settings_v4.php:1344
+msgid "Retina in srcset"
+msgstr "Retina u srcsetu"
+
+#: templates/admin/advanced_settings_v4.php:1345
+msgid "Optimize Metadata Images"
+msgstr "Optimiziraj slike metapodataka"
+
+#: templates/admin/advanced_settings_v4.php:1346
+msgid ".htaccess WebP Rewrite"
+msgstr ".htaccess WebP prepisivanje"
+
+#: templates/admin/advanced_settings_v4.php:1353
+msgid "WordPress Core & Plugins"
+msgstr "WordPress jezgra i dodaci"
+
+#: templates/admin/advanced_settings_v4.php:1356
+msgid "Disable Emoji"
+msgstr "Onemogući emoji"
+
+#: templates/admin/advanced_settings_v4.php:1357
+msgid "Disable Dashicons"
+msgstr "Onemogući Dashicons"
+
+#: templates/admin/advanced_settings_v4.php:1358
+msgid "Disable Block Editor"
+msgstr "Onemogući blok uređivač"
+
+#: templates/admin/advanced_settings_v4.php:1359
+msgid "Disable oEmbeds"
+msgstr "Onemogući oEmbedove"
+
+#: templates/admin/advanced_settings_v4.php:1360
+msgid "WooCommerce Tweaks"
+msgstr "WooCommerce prilagodbe"
+
+#: templates/admin/advanced_settings_v4.php:1361
+msgid "Bypass Logged-In Users"
+msgstr "Zaobiđi prijavljene korisnike"
+
+#: templates/admin/advanced_settings_v4.php:1368
+msgid "Scripts & Tracking"
+msgstr "Skripte i praćenje"
+
+#: templates/admin/advanced_settings_v4.php:1371
+msgid "Lazy Load Google Tag Manager"
+msgstr "Lijeno učitavanje Google Tag Managera"
+
+#: templates/admin/advanced_settings_v4.php:1372
+msgid "Disable onLoad Event"
+msgstr "Onemogući događaj onLoad"
+
+#: templates/admin/advanced_settings_v4.php:1373
+msgid "Optimize External URLs"
+msgstr "Optimiziraj vanjske URL-ove"
+
+#: templates/admin/advanced_settings_v4.php:1374
+msgid "Filter Bot Traffic"
+msgstr "Filtriraj bot promet"
+
+#: templates/admin/advanced_settings_v4.php:1375
+msgid "Set Fetch Priority"
+msgstr "Postavi prioritet dohvaćanja"
+
+#: templates/admin/advanced_settings_v4.php:1395
+msgid "Smart Optimization + Performance"
+msgstr "Pametna optimizacija + performanse"
+
+#: templates/admin/advanced_settings_v4.php:1398
+msgid "24/7 Monitoring"
+msgstr "24/7 nadzor"
+
+#: templates/admin/advanced_settings_v4.php:1401
+#: templates/admin/advanced_settings_v4.php:1483
+msgid ""
+"No need to lift a finger -- your website is intelligently optimized around "
+"the clock based on demand."
+msgstr ""
+"Ne morate ništa raditi — vaša je web-stranica inteligentno optimizirana "
+"cijelo vrijeme prema potrebi."
+
+#: templates/admin/advanced_settings_v4.php:1413
+#: templates/admin/advanced_settings_v4.php:1498
+msgid "Preparing"
+msgstr "Priprema"
+
+#: templates/admin/advanced_settings_v4.php:1425
+msgid "Pages & Posts"
+msgstr "Stranice i objave"
+
+#: templates/admin/advanced_settings_v4.php:1426
+msgid "View optimization status for every page and post on your site."
+msgstr ""
+"Pogledajte status optimizacije za svaku stranicu i objavu na svojoj web-"
+"stranici."
+
+#: templates/admin/advanced_settings_v4.php:1435
+msgid "Search pages, posts, URLs..."
+msgstr "Pretraži stranice, objave, URL-ove..."
+
+#: templates/admin/advanced_settings_v4.php:1438
+msgid "Filter by Type"
+msgstr "Filtriraj po vrsti"
+
+#: templates/admin/advanced_settings_v4.php:1509
+msgid "Generate Critical CSS for Home Page"
+msgstr "Generiraj kritični CSS za početnu stranicu"
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid "Cloudflare Integration"
+msgstr "Cloudflare integracija"
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid ""
+"Connect with Cloudflare for automated cache purging, edge caching, and "
+"uninterrupted access."
+msgstr ""
+"Povežite se s Cloudflareom za automatsko čišćenje predmemorije, edge "
+"predmemoriranje i neprekinut pristup."
+
+#: templates/admin/advanced_settings_v4.php:1521
+msgid "How to?"
+msgstr "Kako?"
+
+#: templates/admin/advanced_settings_v4.php:1529
+#: templates/admin/mu-getting-started.php:32
+msgid "Connecting..."
+msgstr "Povezivanje..."
+
+#: templates/admin/advanced_settings_v4.php:1532
+msgid "Connecting, this can take up to 1-2 minutes..."
+msgstr "Povezivanje, ovo može potrajati 1 – 2 minute..."
+
+#: templates/admin/advanced_settings_v4.php:1537
+msgid "Login to Cloudflare:"
+msgstr "Prijava u Cloudflare:"
+
+#: templates/admin/advanced_settings_v4.php:1539
+#: templates/admin/advanced_settings_v4.php:1560
+msgid "Connect"
+msgstr "Poveži"
+
+#: templates/admin/advanced_settings_v4.php:1546
+msgid "Select the website you wish to connect:"
+msgstr "Odaberite web-stranicu koju želite povezati:"
+
+#: templates/admin/advanced_settings_v4.php:1549
+msgid "Select a zone"
+msgstr "Odaberite zonu"
+
+#: templates/admin/advanced_settings_v4.php:1554
+msgid "Search zones..."
+msgstr "Pretraži zone..."
+
+#: templates/admin/advanced_settings_v4.php:1557
+msgid "No zones found"
+msgstr "Nije pronađena nijedna zona"
+
+#: templates/admin/advanced_settings_v4.php:1568
+msgid "Disconnecting, this can take up to 1-2 minutes..."
+msgstr "Prekidanje veze, ovo može potrajati 1 – 2 minute..."
+
+#: templates/admin/advanced_settings_v4.php:1571
+msgid "Refreshing, this can take up to 1-2 minutes..."
+msgstr "Osvježavanje, ovo može potrajati 1 – 2 minute..."
+
+#: templates/admin/advanced_settings_v4.php:1577
+#: templates/admin/lite_settings.php:498
+msgid "Connected"
+msgstr "Povezano"
+
+#: templates/admin/advanced_settings_v4.php:1598
+msgid "Refresh Connection"
+msgstr "Osvježi vezu"
+
+#: templates/admin/advanced_settings_v4.php:1599
+msgid "Disconnect"
+msgstr "Prekini vezu"
+
+#: templates/admin/advanced_settings_v4.php:1618
+msgid "HTML Edge Caching"
+msgstr "HTML edge predmemoriranje"
+
+#: templates/admin/advanced_settings_v4.php:1618
+msgid "Cache homepage or full site for faster server response."
+msgstr ""
+"Predmemorirajte početnu stranicu ili cijelu stranicu za brži odgovor "
+"poslužitelja."
+
+#: templates/admin/advanced_settings_v4.php:1619
+msgid "Static Assets Cache"
+msgstr "Predmemorija statičkih resursa"
+
+#: templates/admin/advanced_settings_v4.php:1619
+msgid "Caches CSS, JS, images, fonts, and more for fast global delivery."
+msgstr ""
+"Predmemorira CSS, JS, slike, fontove i drugo za brzu globalnu isporuku."
+
+#: templates/admin/advanced_settings_v4.php:1620
+msgid "Real-Time Adaptive Optimization"
+msgstr "Prilagodljiva optimizacija u stvarnom vremenu"
+
+#: templates/admin/advanced_settings_v4.php:1620
+msgid ""
+"Resize images on the fly, auto-convert to WebP, and optimize scripts (based "
+"on your plugin settings)."
+msgstr ""
+"Mijenjajte veličinu slika u hodu, automatski pretvarajte u WebP i "
+"optimizirajte skripte (prema postavkama dodatka)."
+
+#: templates/admin/advanced_settings_v4.php:1624
+msgid ""
+"Please make sure your permissions are updated to use the latest integration:"
+msgstr ""
+"Provjerite jesu li vaše dozvole ažurirane za korištenje najnovije "
+"integracije:"
+
+#: templates/admin/advanced_settings_v4.php:1626
+msgid "Configure API Token"
+msgstr "Konfiguriraj API token"
+
+#: templates/admin/advanced_settings_v4.php:1630
+#: templates/admin/advanced_settings_v4.php:1645
+msgid "How To Get Your Cloudflare API Key"
+msgstr "Kako dobiti Cloudflare API ključ"
+
+#: templates/admin/advanced_settings_v4.php:1635
+#: templates/admin/advanced_settings_v4.php:1650
+msgid "Cloudflare Integration Setup Guide"
+msgstr "Vodič za postavljanje Cloudflare integracije"
+
+#: templates/admin/advanced_settings_v4.php:1666
+msgid "Other Integrations"
+msgstr "Ostale integracije"
+
+#: templates/admin/advanced_settings_v4.php:1666
+msgid "Third-party plugin compatibility settings."
+msgstr "Postavke kompatibilnosti dodataka trećih strana."
+
+#: templates/admin/advanced_settings_v4.php:1669
+msgid "Disable Elementor Triggers"
+msgstr "Onemogući Elementor okidače"
+
+#: templates/admin/advanced_settings_v4.php:1669
+msgid ""
+"Can fix double animations, but may break menus and other Elementor elements."
+msgstr ""
+"Može popraviti dvostruke animacije, ali može pokvariti izbornike i druge "
+"Elementor elemente."
+
+#: templates/admin/advanced_settings_v4.php:1685
+msgid "Export your settings to a file to easily import to other sites."
+msgstr ""
+"Izvezite svoje postavke u datoteku kako biste ih lako uvezli na druge "
+"stranice."
+
+#: templates/admin/advanced_settings_v4.php:1699
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:30
+msgid "Excludes"
+msgstr "Izuzeci"
+
+#: templates/admin/advanced_settings_v4.php:1705
+#: templates/admin/partials/popups/purge-settings.php:21
+msgid "Cache Purge Settings"
+msgstr "Postavke čišćenja predmemorije"
+
+#: templates/admin/advanced_settings_v4.php:1711
+#: templates/admin/partials/popups/cache-cookies.php:21
+msgid "Cache Cookies Settings"
+msgstr "Postavke kolačića za predmemoriju"
+
+#: templates/admin/advanced_settings_v4.php:1717
+msgid "Export"
+msgstr "Izvoz"
+
+#: templates/admin/advanced_settings_v4.php:1718
+msgid "Import"
+msgstr "Uvoz"
+
+#: templates/admin/advanced_settings_v4.php:1719
+msgid "Reset to default"
+msgstr "Vrati na zadano"
+
+#: templates/admin/advanced_settings_v4.php:1731
+msgid "Server environment, PHP version, and plugin diagnostics."
+msgstr "Okruženje poslužitelja, PHP verzija i dijagnostika dodatka."
+
+#: templates/admin/advanced_settings_v4.php:1748
+msgid "WP Version:"
+msgstr "WP verzija:"
+
+#: templates/admin/advanced_settings_v4.php:1753
+msgid "PHP Version:"
+msgstr "PHP verzija:"
+
+#: templates/admin/advanced_settings_v4.php:1757
+#: templates/admin/debug_tool.php:407
+msgid "Site URL:"
+msgstr "URL stranice:"
+
+#: templates/admin/advanced_settings_v4.php:1761
+msgid "Home URL:"
+msgstr "Početni URL:"
+
+#: templates/admin/advanced_settings_v4.php:1765
+msgid "API Location:"
+msgstr "API lokacija:"
+
+#: templates/admin/advanced_settings_v4.php:1769
+msgid "Bulk Status:"
+msgstr "Status skupne obrade:"
+
+#: templates/admin/advanced_settings_v4.php:1773
+msgid "Parsed Images:"
+msgstr "Obrađene slike:"
+
+#: templates/admin/advanced_settings_v4.php:1777
+msgid "Multisite:"
+msgstr "Višestruka mreža:"
+
+#: templates/admin/advanced_settings_v4.php:1780
+msgid "True"
+msgstr "Da"
+
+#: templates/admin/advanced_settings_v4.php:1782
+msgid "False"
+msgstr "Ne"
+
+#: templates/admin/advanced_settings_v4.php:1785
+msgid "Maximum upload size:"
+msgstr "Maksimalna veličina prijenosa:"
+
+#: templates/admin/advanced_settings_v4.php:1789
+msgid "Memory limit:"
+msgstr "Ograničenje memorije:"
+
+#: templates/admin/advanced_settings_v4.php:1794
+msgid "Thumbnails:"
+msgstr "Sličice:"
+
+#: templates/admin/advanced_settings_v4.php:1802
+msgid "file_get_contents function is available."
+msgstr "Funkcija file_get_contents je dostupna."
+
+#: templates/admin/advanced_settings_v4.php:1804
+msgid "file_get_contents function is not available."
+msgstr "Funkcija file_get_contents nije dostupna."
+
+#: templates/admin/advanced_settings_v4.php:1809
+msgid "URL changes:"
+msgstr "Promjene URL-a:"
+
+#: templates/admin/bulk.php:32
+msgid "Pause Restore"
+msgstr "Pauziraj vraćanje"
+
+#: templates/admin/bulk.php:35 templates/admin/preload.php:27
+msgid "Return to Dashboard"
+msgstr "Povratak na nadzornu ploču"
+
+#: templates/admin/bulk.php:101
+#, php-format
+msgid "You have %d images ready to be optimized."
+msgstr "Imate %d slika spremnih za optimizaciju."
+
+#: templates/admin/bulk.php:103
+msgid "You have 0 images to optimize."
+msgstr "Imate 0 slika za optimizaciju."
+
+#: templates/admin/bulk.php:108 templates/admin/bulk.php:110
+msgid "Compress Images"
+msgstr "Komprimiraj slike"
+
+#: templates/admin/bulk.php:110
+msgid "You have no more images to compress!"
+msgstr "Nemate više slika za komprimiranje!"
+
+#: templates/admin/bulk.php:130
+#, php-format
+msgid "You have %d images that can be restored."
+msgstr "Imate %d slika koje se mogu vratiti."
+
+#: templates/admin/bulk.php:132
+msgid "You have 0 images that can be restored."
+msgstr "Imate 0 slika koje se mogu vratiti."
+
+#: templates/admin/bulk.php:138 templates/admin/bulk.php:140
+msgid "Restore Images"
+msgstr "Vrati slike"
+
+#: templates/admin/bulk.php:140
+msgid "You have no more images to restore!"
+msgstr "Nemate više slika za vraćanje!"
+
+#: templates/admin/bulk.php:157
+msgid "Preparing to Optimize"
+msgstr "Priprema za optimizaciju"
+
+#: templates/admin/bulk.php:180
+msgid "Preparing to Restore"
+msgstr "Priprema za vraćanje"
+
+#: templates/admin/bulk.php:195
+msgid "Images Restored"
+msgstr "Slike vraćene"
+
+#: templates/admin/bulk.php:199
+msgid "Image Restore Complete!"
+msgstr "Vraćanje slika je dovršeno!"
+
+#: templates/admin/bulk.php:200
+msgid "We have successfully restored all of your images."
+msgstr "Uspješno smo vratili sve vaše slike."
+
+#: templates/admin/bulk.php:212
+msgid "Original Images"
+msgstr "Izvorne slike"
+
+#: templates/admin/bulk.php:219
+#: templates/admin/partials/boxes/stats-bar.php:134
+msgid "Total Images"
+msgstr "Ukupno slika"
+
+#: templates/admin/bulk.php:226
+msgid "Total Savings"
+msgstr "Ukupna ušteda"
+
+#: templates/admin/bulk.php:233
+msgid "Average Savings"
+msgstr "Prosječna ušteda"
+
+#: templates/admin/connect/api-connect.php:10
+#: templates/admin/connect/api-connect.php:86
+#: templates/admin/connect/api-connect.php:93
+#: templates/admin/connect/lite-api-connect.php:56
+#: templates/admin/connect/lite-api-connect.php:62
+#: templates/admin/connect/lite-api-connect.php:68
+#: templates/admin/connect/lite-api-locked.php:56
+#: templates/admin/connect/lite-api-locked.php:62
+#: templates/admin/connect/lite-api-upgrade.php:56
+#: templates/admin/connect/lite-api-upgrade.php:62
+#: templates/admin/connect/lite-url-changed.php:56
+#: templates/admin/connect/lite-url-changed.php:62
+#: templates/admin/connect/lite-url-changed.php:68
+msgid "We have encountered an error"
+msgstr "Došlo je do pogreške"
+
+#: templates/admin/connect/api-connect.php:14
+msgid "Error message"
+msgstr "Poruka o pogrešci"
+
+#: templates/admin/connect/api-connect.php:17
+#: templates/admin/connect/api-connect.php:89
+#: templates/admin/connect/api-connect.php:96
+#: templates/admin/connect/lite-api-connect.php:58
+#: templates/admin/connect/lite-api-connect.php:64
+#: templates/admin/connect/lite-api-connect.php:70
+#: templates/admin/connect/lite-api-locked.php:58
+#: templates/admin/connect/lite-api-locked.php:64
+#: templates/admin/connect/lite-api-upgrade.php:58
+#: templates/admin/connect/lite-api-upgrade.php:64
+#: templates/admin/connect/lite-url-changed.php:58
+#: templates/admin/connect/lite-url-changed.php:64
+#: templates/admin/connect/lite-url-changed.php:70
+msgid "Retry"
+msgstr "Pokušaj ponovno"
+
+#: templates/admin/connect/api-connect.php:18
+msgid "Contact support"
+msgstr "Kontaktiraj podršku"
+
+#: templates/admin/connect/api-connect.php:28
+msgid "We're running a few quick tests"
+msgstr "Pokrećemo nekoliko brzih testova"
+
+#: templates/admin/connect/api-connect.php:29
+msgid "It should only be a few moments..."
+msgstr "To bi trebalo trajati samo nekoliko trenutaka..."
+
+#: templates/admin/connect/api-connect.php:31
+msgid "API Key Validation"
+msgstr "Provjera API ključa"
+
+#: templates/admin/connect/api-connect.php:32
+msgid "Finalization"
+msgstr "Dovršavanje"
+
+#: templates/admin/connect/api-connect.php:35
+msgid "Cancel"
+msgstr "Odustani"
+
+#: templates/admin/connect/api-connect.php:43
+msgid "Faster Loading Images on Autopilot"
+msgstr "Brže učitavanje slika na autopilotu"
+
+#: templates/admin/connect/api-connect.php:44
+msgid ""
+"We'll automatically optimize and serve your images from our lightning-fast "
+"global CDN for increased performance."
+msgstr ""
+"Automatski ćemo optimizirati i isporučivati vaše slike putem našeg iznimno "
+"brzog globalnog CDN-a za bolje performanse."
+
+#: templates/admin/connect/api-connect.php:46
+#: templates/admin/connect/api-connect.php:155
+msgid "Start"
+msgstr "Pokreni"
+
+#: templates/admin/connect/api-connect.php:47
+msgid "I want to use Legacy Mode"
+msgstr "Želim koristiti stari način rada"
+
+#: templates/admin/connect/api-connect.php:62
+msgid "Lightning Fast Load Times"
+msgstr "Munjevito brzo učitavanje"
+
+#: templates/admin/connect/api-connect.php:63
+msgid "without lifting another finger past setup!"
+msgstr "bez ikakvog dodatnog rada nakon postavljanja!"
+
+#: templates/admin/connect/api-connect.php:80
+#: templates/admin/connect/lite-api-connect.php:46
+#: templates/admin/connect/lite-api-locked.php:46
+#: templates/admin/connect/lite-api-upgrade.php:46
+#: templates/admin/connect/lite-url-changed.php:46
+msgid "Confirming Your Access Key"
+msgstr "Potvrđujemo vaš pristupni ključ"
+
+#: templates/admin/connect/api-connect.php:81
+#: templates/admin/connect/lite-api-connect.php:47
+#: templates/admin/connect/lite-api-connect.php:52
+#: templates/admin/connect/lite-api-locked.php:47
+#: templates/admin/connect/lite-api-locked.php:52
+#: templates/admin/connect/lite-api-upgrade.php:47
+#: templates/admin/connect/lite-api-upgrade.php:52
+#: templates/admin/connect/lite-url-changed.php:47
+#: templates/admin/connect/lite-url-changed.php:52
+msgid "You're so close to faster load times for life..."
+msgstr "Samo vas korak dijeli od trajno bržeg učitavanja..."
+
+#: templates/admin/connect/api-connect.php:87
+msgid "Your Access Key seems to be invalid"
+msgstr "Čini se da je vaš pristupni ključ nevažeći"
+
+#: templates/admin/connect/api-connect.php:94
+msgid "Your site is already connected to a different API Key"
+msgstr "Vaša je stranica već povezana s drugim API ključem"
+
+#: templates/admin/connect/api-connect.php:110
+#: templates/admin/mu-getting-started.php:58
+#: templates/admin/selectModes/popup.php:65
+msgid "Select Your Optimization Mode"
+msgstr "Odaberite način optimizacije"
+
+#: templates/admin/connect/api-connect.php:111
+#: templates/admin/mu-getting-started.php:59
+msgid "Ultra-Powerful performance at your fingertips as simple toggles"
+msgstr "Izuzetno snažne performanse nadohvat ruke kroz jednostavne prekidače"
+
+#: templates/admin/connect/api-connect.php:116
+#: templates/admin/mu-getting-started.php:63
+msgid "Real-Time Optimization"
+msgstr "Optimizacija u stvarnom vremenu"
+
+#: templates/admin/connect/api-connect.php:117
+#: templates/admin/mu-getting-started.php:64
+msgid ""
+"Optimize images and scripts in real-time based on the visitor's attributes."
+msgstr ""
+"Optimizirajte slike i skripte u stvarnom vremenu prema karakteristikama "
+"posjetitelja."
+
+#: templates/admin/connect/api-connect.php:118
+#: templates/admin/connect/api-connect.php:125
+#: templates/admin/mu-getting-started.php:65
+#: templates/admin/mu-getting-started.php:71
+msgid "Select"
+msgstr "Odaberi"
+
+#: templates/admin/connect/api-connect.php:123
+#: templates/admin/mu-getting-started.php:69
+msgid "Traditional Compression"
+msgstr "Tradicionalna kompresija"
+
+#: templates/admin/connect/api-connect.php:124
+#: templates/admin/mu-getting-started.php:70
+msgid "Compress images in your local media library without CDN delivery."
+msgstr "Komprimirajte slike u lokalnoj medijskoj knjižnici bez CDN isporuke."
+
+#: templates/admin/connect/api-connect.php:142
+msgid "Lite Version"
+msgstr "Lite verzija"
+
+#: templates/admin/connect/api-connect.php:144
+msgid "OR"
+msgstr "ILI"
+
+#: templates/admin/connect/api-connect.php:146
+msgid "Pro Version"
+msgstr "Pro verzija"
+
+#: templates/admin/connect/api-connect.php:151
+msgid "Enter Your Access Key"
+msgstr "Unesite svoj pristupni ključ"
+
+#: templates/admin/connect/api-connect.php:158
+msgid "Create an Account"
+msgstr "Izradi račun"
+
+#: templates/admin/connect/api-connect.php:161
+msgid "Go to Portal"
+msgstr "Idi na portal"
+
+#: templates/admin/connect/lite-api-connect.php:34
+#: templates/admin/connect/lite-api-upgrade.php:34
+msgid "Supercharge Your Site"
+msgstr "Unaprijedite svoju stranicu"
+
+#: templates/admin/connect/lite-api-connect.php:35
+#: templates/admin/connect/lite-api-upgrade.php:35
+msgid "Join thousands of businesses experiencing lightning-fast load times."
+msgstr ""
+"Pridružite se tisućama tvrtki koje uživaju u munjevito brzom učitavanju."
+
+#: templates/admin/connect/lite-api-connect.php:51
+#: templates/admin/connect/lite-api-locked.php:51
+#: templates/admin/connect/lite-api-upgrade.php:51
+#: templates/admin/connect/lite-url-changed.php:51
+msgid "Linking Your Account"
+msgstr "Povezivanje vašeg računa"
+
+#: templates/admin/connect/lite-api-connect.php:57
+#: templates/admin/connect/lite-api-locked.php:57
+#: templates/admin/connect/lite-api-upgrade.php:57
+#: templates/admin/connect/lite-url-changed.php:57
+msgid "Your site is already connected to a different access key."
+msgstr "Vaša je stranica već povezana s drugim pristupnim ključem."
+
+#: templates/admin/connect/lite-api-connect.php:63
+#: templates/admin/connect/lite-api-locked.php:63
+#: templates/admin/connect/lite-api-upgrade.php:63
+#: templates/admin/connect/lite-url-changed.php:63
+msgid "Your access key seems to be invalid."
+msgstr "Čini se da je vaš pristupni ključ nevažeći."
+
+#: templates/admin/connect/lite-api-connect.php:69
+#: templates/admin/connect/lite-url-changed.php:69
+msgid "This access key is already in use."
+msgstr "Ovaj pristupni ključ već je u upotrebi."
+
+#: templates/admin/connect/lite-api-connect.php:80
+#: templates/admin/connect/lite-url-changed.php:80
+msgid "Communication Issue"
+msgstr "Problem u komunikaciji"
+
+#: templates/admin/connect/lite-api-connect.php:81
+#: templates/admin/connect/lite-url-changed.php:81
+msgid "We're unable to connect to the API."
+msgstr "Ne možemo se povezati s API-jem."
+
+#: templates/admin/connect/lite-api-connect.php:83
+#: templates/admin/connect/lite-url-changed.php:83
+msgid ""
+"Something (like a firewall, security plugin, Cloudflare, or server setting) "
+"is blocking communication. Don't worry — this is easy to fix."
+msgstr ""
+"Nešto (poput vatrozida, sigurnosnog dodatka, Cloudflare-a ili postavke "
+"poslužitelja) blokira komunikaciju. Ne brinite — to se lako može riješiti."
+
+#: templates/admin/connect/lite-api-connect.php:86
+#: templates/admin/connect/lite-url-changed.php:86
+msgid "View Whitelisting Guide"
+msgstr "Pogledaj vodič za dopuštene adrese"
+
+#: templates/admin/connect/lite-api-connect.php:89
+#: templates/admin/connect/lite-url-changed.php:89
+msgid "Retry Connection"
+msgstr "Pokušaj ponovno povezivanje"
+
+#: templates/admin/connect/lite-api-connect.php:95
+#: templates/admin/connect/lite-api-upgrade.php:70
+#: templates/admin/connect/lite-url-changed.php:95
+msgid "Plugin Activation"
+msgstr "Aktivacija dodatka"
+
+#: templates/admin/connect/lite-api-connect.php:96
+#: templates/admin/connect/lite-api-locked.php:71
+#: templates/admin/connect/lite-api-upgrade.php:71
+msgid "Enter your unique access key to get started."
+msgstr "Unesite svoj jedinstveni pristupni ključ za početak."
+
+#: templates/admin/connect/lite-api-connect.php:103
+#: templates/admin/connect/lite-api-locked.php:78
+#: templates/admin/connect/lite-api-upgrade.php:78
+msgid ""
+"Unlock premium features including advanced configuration, image "
+"optimization, and global CDN access."
+msgstr ""
+"Otključajte premium mogućnosti uključujući naprednu konfiguraciju, "
+"optimizaciju slika i pristup globalnom CDN-u."
+
+#: templates/admin/connect/lite-api-connect.php:106
+#: templates/admin/connect/lite-api-locked.php:81
+#: templates/admin/connect/lite-api-upgrade.php:81
+#: templates/admin/connect/lite-url-changed.php:106
+msgid "Please enter your API Key."
+msgstr "Unesite svoj API ključ."
+
+#: templates/admin/connect/lite-api-connect.php:121
+#: templates/admin/connect/lite-api-locked.php:96
+#: templates/admin/connect/lite-api-upgrade.php:96
+#: templates/admin/connect/lite-url-changed.php:121
+msgid "e.g. wpc_1234567890abcdef"
+msgstr "npr. wpc_1234567890abcdef"
+
+#: templates/admin/connect/lite-api-connect.php:126
+#: templates/admin/connect/lite-api-locked.php:101
+#: templates/admin/connect/lite-api-upgrade.php:101
+#: templates/admin/connect/lite-url-changed.php:126
+msgid "Activate Plugin"
+msgstr "Aktiviraj dodatak"
+
+#: templates/admin/connect/lite-api-connect.php:131
+#: templates/admin/connect/lite-api-locked.php:106
+#: templates/admin/connect/lite-api-upgrade.php:106
+#: templates/admin/connect/lite-url-changed.php:131
+msgid "Or Continue with Lite Version"
+msgstr "Ili nastavite s Lite verzijom"
+
+#: templates/admin/connect/lite-api-connect.php:136
+#: templates/admin/connect/lite-api-locked.php:111
+#: templates/admin/connect/lite-api-upgrade.php:111
+msgid ""
+"Don't have an access key? You may <a "
+"href=\"https://app.wpcompress.com/register/\" target=\"_blank\">create a "
+"free account</a> to unlock bonus performance features and portal access."
+msgstr ""
+"Nemate pristupni ključ? Možete <a "
+"href=\"https://app.wpcompress.com/register/\" target=\"_blank\">izraditi "
+"besplatan račun</a> kako biste otključali dodatne mogućnosti performansi i "
+"pristup portalu."
+
+#: templates/admin/connect/lite-api-locked.php:34
+msgid "Unlock Full Power"
+msgstr "Otključaj puni potencijal"
+
+#: templates/admin/connect/lite-api-locked.php:35
+msgid "Premium optimization, global CDN, and advanced configuration await."
+msgstr ""
+"Premium optimizacija, globalni CDN i napredna konfiguracija vas čekaju."
+
+#: templates/admin/connect/lite-api-locked.php:70
+msgid "Unlock Features"
+msgstr "Otključaj mogućnosti"
+
+#: templates/admin/connect/lite-url-changed.php:34
+msgid "Reconnect Your Site"
+msgstr "Ponovno povežite svoju stranicu"
+
+#: templates/admin/connect/lite-url-changed.php:35
+msgid "Your site URL has changed. Please re-enter your access key."
+msgstr ""
+"URL vaše stranice se promijenio. Ponovno unesite svoj pristupni ključ."
+
+#: templates/admin/connect/lite-url-changed.php:96
+msgid "Your site URL has changed — please reconnect with your access key."
+msgstr ""
+"URL vaše stranice se promijenio — ponovno se povežite svojim pristupnim "
+"ključem."
+
+#: templates/admin/connect/lite-url-changed.php:103
+msgid ""
+"Looks like your site URL has changed, please reconnect with a new API key."
+msgstr ""
+"Izgleda da se URL vaše stranice promijenio, ponovno se povežite s novim API "
+"ključem."
+
+#: templates/admin/debug_tool.php:128
+msgid "Copy Debug Results"
+msgstr "Kopiraj debug rezultate"
+
+#: templates/admin/debug_tool.php:134
+msgid "Check Name"
+msgstr "Naziv provjere"
+
+#: templates/admin/debug_tool.php:135
+msgid "Value"
+msgstr "Vrijednost"
+
+#: templates/admin/debug_tool.php:136
+msgid "Status"
+msgstr "Status"
+
+#: templates/admin/debug_tool.php:137
+msgid "Action"
+msgstr "Radnja"
+
+#: templates/admin/debug_tool.php:142
+msgid "Use OLD Critical API"
+msgstr "Koristi STARI Critical API"
+
+#: templates/admin/debug_tool.php:164
+msgid "Enable Old API"
+msgstr "Omogući stari API"
+
+#: templates/admin/debug_tool.php:166
+msgid "Enable New API"
+msgstr "Omogući novi API"
+
+#: templates/admin/debug_tool.php:169
+msgid "Enable Bunny Critical CSS API."
+msgstr "Omogući Bunny Critical CSS API."
+
+#: templates/admin/debug_tool.php:174
+msgid "New CDN API Test"
+msgstr "Novi CDN API test"
+
+#: templates/admin/debug_tool.php:198 templates/admin/debug_tool.php:223
+#: templates/admin/debug_tool.php:248 templates/admin/debug_tool.php:269
+#: templates/admin/debug_tool.php:290 templates/admin/debug_tool.php:310
+#: templates/admin/debug_tool.php:330 templates/admin/debug_tool.php:351
+#: templates/admin/debug_tool.php:372 templates/admin/debug_tool.php:391
+msgid "Enable"
+msgstr "Omogući"
+
+#: templates/admin/debug_tool.php:200 templates/admin/debug_tool.php:225
+#: templates/admin/debug_tool.php:250 templates/admin/debug_tool.php:271
+#: templates/admin/debug_tool.php:292 templates/admin/debug_tool.php:312
+#: templates/admin/debug_tool.php:332 templates/admin/debug_tool.php:353
+#: templates/admin/debug_tool.php:374 templates/admin/debug_tool.php:393
+msgid "Disable"
+msgstr "Onemogući"
+
+#: templates/admin/debug_tool.php:203
+msgid "Enable Bunny MC API."
+msgstr "Omogući Bunny MC API."
+
+#: templates/admin/debug_tool.php:208
+msgid "New DelayJS DEBUG"
+msgstr "Novi DelayJS DEBUG"
+
+#: templates/admin/debug_tool.php:228
+msgid "Enable console log debug."
+msgstr "Omogući debug zapis u konzoli."
+
+#: templates/admin/debug_tool.php:233
+msgid "Remove OptimizeJS"
+msgstr "Ukloni OptimizeJS"
+
+#: templates/admin/debug_tool.php:253 templates/admin/debug_tool.php:274
+msgid ""
+"If you are having any sort of issues with optimize.js this will give you the"
+" debug version."
+msgstr ""
+"Ako imate bilo kakvih problema s optimize.js, ovo će vam dati debug verziju."
+
+#: templates/admin/debug_tool.php:258
+msgid "Enable OptimizeJS Debug"
+msgstr "Omogući OptimizeJS debug"
+
+#: templates/admin/debug_tool.php:279
+msgid "Debug Log"
+msgstr "Debug zapisnik"
+
+#: templates/admin/debug_tool.php:299
+msgid "Plugin Development Mode"
+msgstr "Razvojni način dodatka"
+
+#: templates/admin/debug_tool.php:319
+msgid "Enable Critical CSS Debug"
+msgstr "Omogući Critical CSS debug"
+
+#: templates/admin/debug_tool.php:335
+msgid "If you are having any sort of issues with critical CSS."
+msgstr "Ako imate bilo kakvih problema s kritičnim CSS-om."
+
+#: templates/admin/debug_tool.php:340
+msgid "Enable PageSpeed & Critical Debug"
+msgstr "Omogući PageSpeed i Critical debug"
+
+#: templates/admin/debug_tool.php:356 templates/admin/debug_tool.php:377
+#: templates/admin/debug_tool.php:396
+msgid ""
+"If you are having any sort of issues with our plugin, enabling this option "
+"will give you some basic debug output in Console log of your browser."
+msgstr ""
+"Ako imate bilo kakvih problema s našim dodatkom, uključivanje ove opcije "
+"pružit će osnovni debug ispis u konzoli vašeg preglednika."
+
+#: templates/admin/debug_tool.php:361
+msgid "Enable PHP Debug"
+msgstr "Omogući PHP debug"
+
+#: templates/admin/debug_tool.php:382
+msgid "Enable JavaScript Debug"
+msgstr "Omogući JavaScript debug"
+
+#: templates/admin/debug_tool.php:403
+msgid "Site Url"
+msgstr "URL stranice"
+
+#: templates/admin/debug_tool.php:412
+msgid "Get site url:"
+msgstr "Dohvati URL stranice:"
+
+#: templates/admin/debug_tool.php:419
+msgid "Plugin Configuration"
+msgstr "Konfiguracija dodatka"
+
+#: templates/admin/debug_tool.php:425
+msgid "Allow live:"
+msgstr "Dopusti live:"
+
+#: templates/admin/debug_tool.php:426
+msgid "Allow local:"
+msgstr "Dopusti lokalno:"
+
+#: templates/admin/debug_tool.php:427
+msgid "Account Status:"
+msgstr "Status računa:"
+
+#: templates/admin/debug_tool.php:434
+msgid "Get JobID For Crit"
+msgstr "Dohvati JobID za Crit"
+
+#: templates/admin/debug_tool.php:446 templates/admin/debug_tool.php:457
+msgid "Generate Ajax Params"
+msgstr "Generiraj Ajax parametre"
+
+#: templates/admin/debug_tool.php:492
+msgid "Thumbnails"
+msgstr "Sličice"
+
+#: templates/admin/debug_tool.php:496
+#, php-format
+msgid "Total Thumbs: %d"
+msgstr "Ukupno sličica: %d"
+
+#: templates/admin/debug_tool.php:502
+msgid "Paths"
+msgstr "Putanje"
+
+#: templates/admin/debug_tool.php:505
+msgid "Debug Log:"
+msgstr "Debug zapisnik:"
+
+#: templates/admin/debug_tool.php:506
+msgid "Debug Log URI:"
+msgstr "URI debug zapisnika:"
+
+#: templates/admin/debug_tool.php:511
+msgid "Excluded List"
+msgstr "Popis izuzetaka"
+
+#: templates/admin/debug_tool.php:520
+msgid "API Key"
+msgstr "API ključ"
+
+#: templates/admin/debug_tool.php:529
+msgid "CDN Zone Name"
+msgstr "Naziv CDN zone"
+
+#: templates/admin/debug_tool.php:537 templates/admin/debug_tool.php:550
+msgid "Delete"
+msgstr "Izbriši"
+
+#: templates/admin/debug_tool.php:542
+msgid "Custom CDN Zone Name"
+msgstr "Prilagođeni naziv CDN zone"
+
+#: templates/admin/debug_tool.php:556
+msgid "Plugin Activated"
+msgstr "Dodatak aktiviran"
+
+#: templates/admin/debug_tool.php:568 templates/admin/debug_tool.php:585
+#: templates/admin/debug_tool.php:606
+msgid "None"
+msgstr "Ništa"
+
+#: templates/admin/debug_tool.php:571
+msgid "PHP Version"
+msgstr "PHP verzija"
+
+#: templates/admin/debug_tool.php:588
+msgid "WP Version"
+msgstr "WP verzija"
+
+#: templates/admin/debug_tool.php:610
+msgid "Options"
+msgstr "Opcije"
+
+#: templates/admin/debug_tool.php:612 templates/admin/debug_tool.php:622
+msgid "Copy text"
+msgstr "Kopiraj tekst"
+
+#: templates/admin/debug_tool.php:627
+msgid "Test API Connectivity"
+msgstr "Testiraj API povezivost"
+
+#: templates/admin/debug_tool.php:629
+msgid "Start Test"
+msgstr "Pokreni test"
+
+#: templates/admin/debug_tool.php:633
+msgid "Local server API"
+msgstr "API lokalnog poslužitelja"
+
+#: templates/admin/debug_tool.php:637
+msgid "Server:"
+msgstr "Poslužitelj:"
+
+#: templates/admin/debug_tool.php:646
+msgid "Save Server"
+msgstr "Spremi poslužitelj"
+
+#: templates/admin/debug_tool.php:651
+msgid "Preloads Debug - Last Warmup"
+msgstr "Preloads debug - zadnje zagrijavanje"
+
+#: templates/admin/debug_tool.php:660
+msgid "Preloads Desktop"
+msgstr "Prethodna učitavanja za desktop"
+
+#: templates/admin/debug_tool.php:664
+msgid "Automatic Preloads found by API (can edit)"
+msgstr ""
+"Automatska prethodna učitavanja pronađena putem API-ja (može se uređivati)"
+
+#: templates/admin/debug_tool.php:670
+msgid "Manual Desktop Preloads (can edit)"
+msgstr "Ručna desktop prethodna učitavanja (može se uređivati)"
+
+#: templates/admin/debug_tool.php:677
+msgid "Automatic Mobile Preloads found by API (can edit)"
+msgstr ""
+"Automatska mobilna prethodna učitavanja pronađena putem API-ja (može se "
+"uređivati)"
+
+#: templates/admin/debug_tool.php:683
+msgid "Manual Mobile Preloads (can edit)"
+msgstr "Ručna mobilna prethodna učitavanja (može se uređivati)"
+
+#: templates/admin/debug_tool.php:689
+msgid "Save Preloads"
+msgstr "Spremi prethodna učitavanja"
+
+#: templates/admin/debug_tool.php:695
+msgid "Cache refresh time (minutes)"
+msgstr "Vrijeme osvježavanja predmemorije (minute)"
+
+#: templates/admin/debug_tool.php:701
+msgid "Save cache refresh"
+msgstr "Spremi osvježavanje predmemorije"
+
+#: templates/admin/debug_tool.php:707
+msgid "Elementor Skip Sections"
+msgstr "Elementor sekcije za preskakanje"
+
+#: templates/admin/debug_tool.php:711
+msgid ""
+"Configure how many Elementor sections to skip before applying lazy "
+"loading/optimization."
+msgstr ""
+"Odredite koliko Elementor sekcija treba preskočiti prije primjene lijenog "
+"učitavanja/optimizacije."
+
+#: templates/admin/debug_tool.php:715
+msgid "Desktop Skip Count:"
+msgstr "Broj preskakanja za desktop:"
+
+#: templates/admin/debug_tool.php:721
+msgid "Mobile Skip Count:"
+msgstr "Broj preskakanja za mobitel:"
+
+#: templates/admin/debug_tool.php:726
+msgid "Save Skip Settings"
+msgstr "Spremi postavke preskakanja"
+
+#: templates/admin/debug_tool.php:738
+msgid "Save Fonts"
+msgstr "Spremi fontove"
+
+#: templates/admin/debug_tool.php:744
+msgid "Remove fonts from critical"
+msgstr "Ukloni fontove iz kritičnog"
+
+#: templates/admin/debug_tool.php:773
+msgid "Copied to Clipboard"
+msgstr "Kopirano u međuspremnik"
+
+#: templates/admin/lite_settings.php:349
+msgid "Quick Optimizations"
+msgstr "Brze optimizacije"
+
+#: templates/admin/lite_settings.php:354
+msgid "Cache"
+msgstr "Predmemorija"
+
+#: templates/admin/lite_settings.php:368
+#: templates/admin/partials/boxes/stats-bar.php:127
+#: templates/admin/partials/v4/pageview-stats.php:151
+msgid "Images"
+msgstr "Slike"
+
+#: templates/admin/lite_settings.php:397
+msgid "Unlock PRO Features"
+msgstr "Otključaj PRO mogućnosti"
+
+#: templates/admin/lite_settings.php:403 templates/admin/lite_settings.php:404
+msgid "Instant Page Speed Boost"
+msgstr "Trenutačno povećanje brzine stranice"
+
+#: templates/admin/lite_settings.php:408 templates/admin/lite_settings.php:409
+msgid "24/7 Smart Optimization"
+msgstr "24/7 pametna optimizacija"
+
+#: templates/admin/lite_settings.php:413 templates/admin/lite_settings.php:414
+msgid "Adaptive Images + WebP"
+msgstr "Prilagodljive slike + WebP"
+
+#: templates/admin/lite_settings.php:418 templates/admin/lite_settings.php:419
+msgid "Ultra-Fast CDN Delivery"
+msgstr "Ultra-brza CDN isporuka"
+
+#: templates/admin/lite_settings.php:423
+msgid "Management & Reporting"
+msgstr "Upravljanje i izvještavanje"
+
+#: templates/admin/lite_settings.php:428
+msgid "Enter Access Key"
+msgstr "Unesite pristupni ključ"
+
+#: templates/admin/lite_settings.php:439
+msgid "This Month's Usage"
+msgstr "Korištenje ovog mjeseca"
+
+#: templates/admin/lite_settings.php:440
+msgid "statistics updated hourly"
+msgstr "statistika se ažurira svakih sat vremena"
+
+#: templates/admin/lite_settings.php:454
+msgid "Total Assets"
+msgstr "Ukupno resursa"
+
+#: templates/admin/lite_settings.php:473
+msgid "Projected Usage"
+msgstr "Predviđeno korištenje"
+
+#: templates/admin/lite_settings.php:477
+msgid "Assets"
+msgstr "Resursi"
+
+#: templates/admin/lite_settings.php:481
+msgid "Data"
+msgstr "Podaci"
+
+#: templates/admin/lite_settings.php:496 templates/admin/lite_settings.php:503
+msgid "Cloudflare"
+msgstr "Cloudflare"
+
+#: templates/admin/lite_settings.php:497
+msgid "Faster TTFB and auto-optimization at the edge."
+msgstr "Brži TTFB i automatska optimizacija na rubu mreže."
+
+#: templates/admin/lite_settings.php:502
+msgid "Dismiss"
+msgstr "Zatvori"
+
+#: templates/admin/lite_settings.php:504
+msgid "Connect for faster TTFB and auto-optimize at the edge."
+msgstr "Povežite se za brži TTFB i automatsku optimizaciju na rubu mreže."
+
+#: templates/admin/lite_settings.php:505
+msgid "Enable now"
+msgstr "Omogući sada"
+
+#: templates/admin/lite_settings.php:528 templates/admin/lite_settings.php:898
+#: templates/admin/partials/lite/stats.php:81
+msgid "Optimization Stats"
+msgstr "Statistika optimizacije"
+
+#: templates/admin/lite_settings.php:534 templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:934
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:119
+msgid "Page Size"
+msgstr "Veličina stranice"
+
+#: templates/admin/lite_settings.php:534 templates/admin/lite_settings.php:934
+#: templates/admin/partials/lite/stats.php:119
+msgid "Smaller"
+msgstr "Manje"
+
+#: templates/admin/lite_settings.php:537 templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:935
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:120
+msgid "Requests"
+msgstr "Zahtjevi"
+
+#: templates/admin/lite_settings.php:537 templates/admin/lite_settings.php:935
+#: templates/admin/partials/lite/stats.php:120
+msgid "Less"
+msgstr "Manje"
+
+#: templates/admin/lite_settings.php:540 templates/admin/lite_settings.php:913
+#: templates/admin/lite_settings.php:936
+#: templates/admin/partials/lite/stats.php:98
+#: templates/admin/partials/lite/stats.php:121
+msgid "Server Speed"
+msgstr "Brzina poslužitelja"
+
+#: templates/admin/lite_settings.php:540 templates/admin/lite_settings.php:936
+#: templates/admin/partials/lite/stats.php:121
+msgid "Faster"
+msgstr "Brže"
+
+#: templates/admin/lite_settings.php:547 templates/admin/lite_settings.php:975
+#: templates/admin/partials/lite/stats.php:160
+msgid "PageSpeed Score"
+msgstr "PageSpeed rezultat"
+
+#: templates/admin/lite_settings.php:552 templates/admin/lite_settings.php:610
+#: templates/admin/lite_settings.php:613
+msgid "Running..."
+msgstr "Pokretanje..."
+
+#: templates/admin/lite_settings.php:555 templates/admin/lite_settings.php:563
+#: templates/admin/lite_settings.php:605 templates/admin/lite_settings.php:616
+#: templates/admin/lite_settings.php:982
+#: templates/admin/partials/lite/stats.php:167
+msgid "Retest"
+msgstr "Ponovno testiraj"
+
+#: templates/admin/lite_settings.php:560
+msgid "Error: connection to API failed."
+msgstr "Pogreška: povezivanje s API-jem nije uspjelo."
+
+#: templates/admin/lite_settings.php:636 templates/admin/lite_settings.php:655
+msgid "Usually takes about 10 minutes..."
+msgstr "Obično traje oko 10 minuta..."
+
+#: templates/admin/lite_settings.php:641
+msgid "Error: Connection to our API was blocked by a firewall on your server."
+msgstr ""
+"Pogreška: povezivanje s našim API-jem blokirano je vatrozidom na vašem "
+"poslužitelju."
+
+#: templates/admin/lite_settings.php:642
+msgid "Whitelisting Tutorial"
+msgstr "Vodič za dopuštene adrese"
+
+#: templates/admin/lite_settings.php:675 templates/admin/lite_settings.php:676
+#: templates/admin/lite_settings.php:703 templates/admin/lite_settings.php:765
+#: templates/admin/lite_settings.php:878 templates/admin/lite_settings.php:879
+#: templates/admin/lite_settings.php:997
+#: templates/admin/lite_settings.php:1023
+#: templates/admin/partials/lite/stats.php:196
+msgid "Perfect Score"
+msgstr "Savršen rezultat"
+
+#: templates/admin/lite_settings.php:693
+msgid "Mobile GPS"
+msgstr "Mobilni GPS"
+
+#: templates/admin/lite_settings.php:696 templates/admin/lite_settings.php:991
+#: templates/admin/partials/lite/stats.php:176
+msgid "Mobile"
+msgstr "Mobilno"
+
+#: templates/admin/lite_settings.php:703 templates/admin/lite_settings.php:765
+msgid "points"
+msgstr "bodova"
+
+#: templates/admin/lite_settings.php:715 templates/admin/lite_settings.php:777
+#: templates/admin/lite_settings.php:1030
+#: templates/admin/partials/lite/stats.php:217
+msgid "Before"
+msgstr "Prije"
+
+#: templates/admin/lite_settings.php:735 templates/admin/lite_settings.php:797
+#: templates/admin/lite_settings.php:1046
+#: templates/admin/partials/lite/stats.php:233
+msgid "After"
+msgstr "Poslije"
+
+#: templates/admin/lite_settings.php:755
+msgid "Desktop GPS"
+msgstr "Desktop GPS"
+
+#: templates/admin/lite_settings.php:758 templates/admin/lite_settings.php:992
+#: templates/admin/partials/lite/stats.php:177
+msgid "Desktop"
+msgstr "Desktop"
+
+#: templates/admin/lite_settings.php:818
+msgid "Unlock even more power with <strong>PRO</strong> Access!"
+msgstr "Otključajte još više snage uz <strong>PRO</strong> pristup!"
+
+#: templates/admin/lite_settings.php:826
+msgid "View Plans"
+msgstr "Pogledaj planove"
+
+#: templates/admin/lite_settings.php:837
+msgid "Woohoo! Your Website is Now Loading Faster!"
+msgstr "Uhu! Vaša se web-stranica sada učitava brže!"
+
+#: templates/admin/lite_settings.php:849
+msgid "Oops! We had some issues testing your site. Please retry!"
+msgstr ""
+"Ups! Imali smo problema pri testiranju vaše stranice. Pokušajte ponovno!"
+
+#: templates/admin/lite_settings.php:959
+msgid "was"
+msgstr "bio je"
+
+#: templates/admin/lite_settings.php:1023
+#: templates/admin/partials/lite/stats.php:196
+msgid "Points"
+msgstr "Bodovi"
+
+#: templates/admin/lite_settings.php:1067
+msgid "<strong>Woohoo!</strong> Your Website is Now Loading Faster!"
+msgstr "<strong>Uhu!</strong> Vaša se web-stranica sada učitava brže!"
+
+#: templates/admin/lite_settings.php:1078
+#: templates/admin/partials/lite/stats.php:265
+msgid "Analyzing performance..."
+msgstr "Analiza performansi..."
+
+#: templates/admin/lite_settings.php:1093
+#: templates/admin/lite_settings.php:1096
+msgid "Go PRO for Portal Access"
+msgstr "Prijeđite na PRO za pristup portalu"
+
+#: templates/admin/lite_settings.php:1097
+msgid ""
+"Get image optimization access, CDN Delivery, remote configuration and more "
+"by creating an account!"
+msgstr ""
+"Izradom računa dobivate pristup optimizaciji slika, CDN isporuci, udaljenoj "
+"konfiguraciji i još mnogo toga!"
+
+#: templates/admin/lite_settings.php:1104
+msgid "Add Access Key"
+msgstr "Dodaj pristupni ključ"
+
+#: templates/admin/mu-getting-started.php:24
+msgid "Multisite Connect"
+msgstr "Povezivanje multisite mreže"
+
+#: templates/admin/mu-getting-started.php:25
+msgid "Paste your multisite access key from the management portal"
+msgstr "Zalijepite svoj multisite pristupni ključ iz upravljačkog portala"
+
+#: templates/admin/mu-getting-started.php:27
+msgid "Access Key"
+msgstr "Pristupni ključ"
+
+#: templates/admin/mu-getting-started.php:33
+msgid "Submit"
+msgstr "Pošalji"
+
+#: templates/admin/mu-getting-started.php:37
+msgid ""
+"This form collects information we use to send your API Key, news, updates, "
+"promotions and special offers. We do not share or sell your information. You"
+" may unsubscribe at any time."
+msgstr ""
+"Ovaj obrazac prikuplja informacije koje koristimo za slanje vašeg API "
+"ključa, novosti, ažuriranja, promocija i posebnih ponuda. Vaše podatke ne "
+"dijelimo niti prodajemo. U bilo kojem trenutku možete se odjaviti."
+
+#: templates/admin/mu-getting-started.php:85
+msgid "Access Key Error!"
+msgstr "Pogreška pristupnog ključa!"
+
+#: templates/admin/mu-getting-started.php:86
+msgid "Access Key which you have entered is not found in our database."
+msgstr "Pristupni ključ koji ste unijeli nije pronađen u našoj bazi podataka."
+
+#: templates/admin/multisite-setup.php:12
+msgid "Default Settings"
+msgstr "Zadane postavke"
+
+#: templates/admin/multisite-setup.php:13
+msgid "Manage Websites"
+msgstr "Upravljanje web-stranicama"
+
+#: templates/admin/partials/boxes/stats-bar.php:37
+#: templates/admin/partials/boxes/stats-bar.php:240
+#: templates/admin/partials/v4/footer-scripts.php:192
+#: templates/admin/partials/v4/pageview-stats.php:76
+#: templates/admin/partials/v4/pageview-stats.php:224
+#: templates/admin/partials/v4/stats.php:69
+msgid "Savings"
+msgstr "Ušteda"
+
+#: templates/admin/partials/boxes/stats-bar.php:56
+#: templates/admin/partials/boxes/stats-bar.php:69
+#: templates/admin/partials/boxes/stats-bar.php:250
+#: templates/admin/partials/boxes/stats-bar.php:255
+#: templates/admin/partials/v4/pageview-stats.php:92
+#: templates/admin/partials/v4/stats.php:76
+#: templates/admin/partials/v4/stats.php:80
+msgid "You've Saved"
+msgstr "Uštedjeli ste"
+
+#: templates/admin/partials/boxes/stats-bar.php:60
+#: templates/admin/partials/boxes/stats-bar.php:65
+#: templates/admin/partials/v4/pageview-stats.php:97
+#: templates/admin/partials/v4/pageview-stats.php:102
+msgid "No Savings Yet!"
+msgstr "Još nema uštede!"
+
+#: templates/admin/partials/boxes/stats-bar.php:97
+msgid "You have not yet optimized any images!"
+msgstr "Još niste optimizirali nijednu sliku!"
+
+#: templates/admin/partials/boxes/stats-bar.php:158
+#: templates/admin/partials/v4/chart.php:12
+#: templates/admin/partials/v4/pageview-stats.php:170
+msgid "Original Size"
+msgstr "Izvorna veličina"
+
+#: templates/admin/partials/boxes/stats-bar.php:169
+#: templates/admin/partials/boxes/stats-bar.php:297
+#: templates/admin/partials/v4/footer-scripts.php:426
+#: templates/admin/partials/v4/stats.php:104
+msgid "Original"
+msgstr "Izvorno"
+
+#: templates/admin/partials/boxes/stats-bar.php:321
+#: templates/admin/partials/v4/stats.php:125
+msgid "Assets Served"
+msgstr "Isporučeni resursi"
+
+#: templates/admin/partials/footer-links.php:6
+msgid "Get More Credits"
+msgstr "Nabavi više kredita"
+
+#: templates/admin/partials/footer-links.php:9
+msgid "Getting Started Guide"
+msgstr "Vodič za početak"
+
+#: templates/admin/partials/footer-links.php:12
+msgid "Chat with Support"
+msgstr "Razgovaraj s podrškom"
+
+#: templates/admin/partials/footer-links.php:16
+msgid "Debug Tool"
+msgstr "Debug alat"
+
+#: templates/admin/partials/footer-links.php:20
+msgid "Clear Account Cache"
+msgstr "Očisti predmemoriju računa"
+
+#: templates/admin/partials/lite/stats.php:144
+#, php-format
+msgid "was %s"
+msgstr "bio je %s"
+
+#: templates/admin/partials/lite/stats.php:254
+msgid "Woohoo!"
+msgstr "Uhu!"
+
+#: templates/admin/partials/lite/stats.php:254
+msgid "Your Website is Now Loading Faster!"
+msgstr "Vaša se web-stranica sada učitava brže!"
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:21
+#: templates/admin/partials/popups/js/exclude-js-delay.php:21
+msgid "Exclude from JS Delay"
+msgstr "Izuzmi iz JS odgode"
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:35
+#: templates/admin/partials/popups/js/exclude-js-delay.php:35
+msgid "Exclude Third Party Scripts"
+msgstr "Izuzmi skripte trećih strana"
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:39
+#: templates/admin/partials/popups/css/exclude-css-combine.php:41
+#: templates/admin/partials/popups/css/exclude-css-minify.php:40
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:39
+#: templates/admin/partials/popups/exclude-inline-css.php:39
+#: templates/admin/partials/popups/exclude-minify-html.php:39
+#: templates/admin/partials/popups/js/exclude-js-combine.php:39
+#: templates/admin/partials/popups/js/exclude-js-defer.php:39
+#: templates/admin/partials/popups/js/exclude-js-delay.php:39
+#: templates/admin/partials/popups/js/exclude-js-minify.php:39
+msgid "Exclude Theme Files"
+msgstr "Izuzmi datoteke teme"
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:43
+#: templates/admin/partials/popups/css/exclude-css-combine.php:45
+#: templates/admin/partials/popups/css/exclude-css-minify.php:44
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:43
+#: templates/admin/partials/popups/exclude-inline-css.php:43
+#: templates/admin/partials/popups/exclude-minify-html.php:43
+#: templates/admin/partials/popups/js/exclude-js-combine.php:43
+#: templates/admin/partials/popups/js/exclude-js-defer.php:43
+#: templates/admin/partials/popups/js/exclude-js-delay.php:43
+#: templates/admin/partials/popups/js/exclude-js-minify.php:43
+msgid "Exclude Plugin Files"
+msgstr "Izuzmi datoteke dodataka"
+
+#: templates/admin/partials/popups/advanced-cache-configuration.php:47
+#: templates/admin/partials/popups/css/exclude-css-combine.php:49
+#: templates/admin/partials/popups/css/exclude-css-minify.php:48
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:47
+#: templates/admin/partials/popups/exclude-inline-css.php:47
+#: templates/admin/partials/popups/exclude-minify-html.php:47
+#: templates/admin/partials/popups/js/exclude-js-combine.php:47
+#: templates/admin/partials/popups/js/exclude-js-defer.php:47
+#: templates/admin/partials/popups/js/exclude-js-delay.php:47
+#: templates/admin/partials/popups/js/exclude-js-minify.php:47
+msgid "Exclude WordPress Files"
+msgstr "Izuzmi WordPress datoteke"
+
+#: templates/admin/partials/popups/bulk/popups.php:16
+msgid "Compatibility Error!"
+msgstr "Pogreška kompatibilnosti!"
+
+#: templates/admin/partials/popups/bulk/popups.php:17
+msgid ""
+"This feature is not compatible with Performance Lab's WebP Uploads option. "
+"Please disable it to use this feature."
+msgstr ""
+"Ova mogućnost nije kompatibilna s opcijom WebP Uploads dodatka Performance "
+"Lab. Onemogućite je kako biste koristili ovu mogućnost."
+
+#: templates/admin/partials/popups/bulk/popups.php:18
+#: templates/admin/partials/popups/bulk/popups.php:33
+#: templates/admin/partials/popups/bulk/popups.php:48
+#: templates/admin/partials/popups/bulk/popups.php:63
+#: templates/admin/partials/popups/bulk/popups.php:78
+#: templates/admin/partials/popups/bulk/popups.php:93
+msgid "Contact Support"
+msgstr "Kontaktiraj podršku"
+
+#: templates/admin/partials/popups/bulk/popups.php:32
+msgid "Unknown error occurred!"
+msgstr "Dogodila se nepoznata pogreška!"
+
+#: templates/admin/partials/popups/bulk/popups.php:47
+msgid "We were unable to contact WP Compress API!"
+msgstr "Nismo uspjeli kontaktirati WP Compress API!"
+
+#: templates/admin/partials/popups/bulk/popups.php:62
+msgid "We were unable to communicate with your site!"
+msgstr "Nismo uspjeli komunicirati s vašom stranicom!"
+
+#: templates/admin/partials/popups/bulk/popups.php:77
+msgid "We were unable to start bulk process on your site!"
+msgstr "Nismo uspjeli pokrenuti skupni proces na vašoj stranici!"
+
+#: templates/admin/partials/popups/bulk/popups.php:92
+msgid ""
+"We were unable to start bulk process on your site because of Bad ApiKey!"
+msgstr ""
+"Nismo uspjeli pokrenuti skupni proces na vašoj stranici zbog neispravnog API"
+" ključa!"
+
+#: templates/admin/partials/popups/cache-cookies.php:22
+msgid "Define the cookies we should monitor."
+msgstr "Definirajte kolačiće koje trebamo pratiti."
+
+#: templates/admin/partials/popups/cache-cookies.php:32
+msgid "Cache cookies"
+msgstr "Kolačići za predmemoriju"
+
+#: templates/admin/partials/popups/cache-cookies.php:33
+#: templates/admin/partials/popups/cache-cookies.php:66
+#: templates/admin/partials/popups/purge-settings.php:56
+msgid "Defaults"
+msgstr "Zadano"
+
+#: templates/admin/partials/popups/cache-cookies.php:41
+#: templates/admin/partials/popups/purge-settings.php:64
+msgid "Copy all defaults"
+msgstr "Kopiraj sve zadane vrijednosti"
+
+#: templates/admin/partials/popups/cache-cookies.php:43
+#: templates/admin/partials/popups/purge-settings.php:66
+msgid "Copy all"
+msgstr "Kopiraj sve"
+
+#: templates/admin/partials/popups/cache-cookies.php:65
+msgid "Exclude cookies"
+msgstr "Izuzmi kolačiće"
+
+#: templates/admin/partials/popups/cache-cookies.php:87
+msgid "wp_compress would cache/exclude this particular cookie."
+msgstr "wp_compress bi predmemorirao/izuzeo baš ovaj kolačić."
+
+#: templates/admin/partials/popups/cache-cookies.php:88
+msgid ""
+"wp_compress_ is treated as a prefix and would cache/exclude all cookies with"
+" this prefix."
+msgstr ""
+"wp_compress_ se tretira kao prefiks i predmemorirao/izuzeo bi sve kolačiće s"
+" tim prefiksom."
+
+#: templates/admin/partials/popups/cf-cdn.php:29
+msgid "Specify your CNAME."
+msgstr "Navedite svoj CNAME."
+
+#: templates/admin/partials/popups/cname.php:9
+msgid "You need to insert your CNAME!"
+msgstr "Morate unijeti svoj CNAME!"
+
+#: templates/admin/partials/popups/cname.php:18
+msgid "Setting up your DNS&hellip; this can take up to 30 seconds."
+msgstr "Postavljanje vašeg DNS-a&hellip; ovo može trajati do 30 sekundi."
+
+#: templates/admin/partials/popups/cname.php:33
+#: templates/admin/partials/popups/cname.php:78
+msgid ""
+"<b>1. Create a subdomain</b> or domain that you wish to use. It can take up "
+"to 24h to propagate globally."
+msgstr ""
+"<b>1. Izradite poddomenu</b> ili domenu koju želite koristiti. Globalna "
+"propagacija može trajati do 24 sata."
+
+#: templates/admin/partials/popups/cname.php:34
+#: templates/admin/partials/popups/cname.php:79
+msgid ""
+"<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed "
+"at"
+msgstr ""
+"<b>2. Uredite DNS zapise</b> za domenu kako biste izradili novi CNAME koji "
+"pokazuje na"
+
+#: templates/admin/partials/popups/cname.php:35
+#: templates/admin/partials/popups/cname.php:80
+msgid "Click to copy"
+msgstr "Kliknite za kopiranje"
+
+#: templates/admin/partials/popups/cname.php:38
+#: templates/admin/partials/popups/cname.php:83
+msgid "<b>3. Enter the URL</b> you've pointed to below:"
+msgstr "<b>3. Unesite URL</b> na koji ste usmjerili ispod:"
+
+#: templates/admin/partials/popups/cname.php:41
+#: templates/admin/partials/popups/cname.php:62
+msgid ""
+"<span class=\"icon-container close-toggle\"><i class=\"icon-"
+"cancel\"></i></span>According to our tests it seems like your DNS is either "
+"incorrect or still propagating globally. This standard process can take "
+"24-48 hours to be globally available. If you link too soon you may have "
+"downtime in unpropagated regions."
+msgstr ""
+"<span class=\"icon-container close-toggle\"><i class=\"icon-"
+"cancel\"></i></span>Prema našim testovima čini se da je vaš DNS ili netočan "
+"ili se još uvijek globalno propagira. Ovaj standardni proces može trajati 24"
+" – 48 sati da postane globalno dostupan. Ako povežete prerano, može doći do "
+"zastoja u regijama gdje propagacija još nije završena."
+
+#: templates/admin/partials/popups/cname.php:50
+#: templates/admin/partials/popups/cname.php:92
+msgid "Example: cdn.mysite.com"
+msgstr "Primjer: cdn.mysite.com"
+
+#: templates/admin/partials/popups/cname.php:58
+msgid "Custom Domain Configuration"
+msgstr "Konfiguracija prilagođene domene"
+
+#: templates/admin/partials/popups/cname.php:59
+msgid ""
+"If you can see the celebration image on the following link, your custom "
+"domain is working!"
+msgstr ""
+"Ako možete vidjeti sliku proslave na sljedećoj poveznici, vaša prilagođena "
+"domena radi!"
+
+#: templates/admin/partials/popups/cname.php:60
+msgid "Check DNS"
+msgstr "Provjeri DNS"
+
+#: templates/admin/partials/popups/cname.php:65
+msgid "I can't see the above Image"
+msgstr "Ne mogu vidjeti gornju sliku"
+
+#: templates/admin/partials/popups/cname.php:66
+msgid "All Good to Go!"
+msgstr "Sve je spremno!"
+
+#: templates/admin/partials/popups/cname.php:106
+msgid "Removing custom domain&hellip;"
+msgstr "Uklanjanje prilagođene domene&hellip;"
+
+#: templates/admin/partials/popups/compatibility-popups.php:9
+#: templates/admin/partials/popups/compatibility-popups.php:46
+msgid "Please Confirm Compatibility"
+msgstr "Potvrdite kompatibilnost"
+
+#: templates/admin/partials/popups/compatibility-popups.php:10
+msgid ""
+"Advanced features such as serving images with lazy load may conflict with "
+"your active themes, plugins or environment. If any issues occur after "
+"activating, you can simply toggle it off."
+msgstr ""
+"Napredne mogućnosti poput isporuke slika uz lijeno učitavanje mogu biti u "
+"sukobu s vašim aktivnim temama, dodacima ili okruženjem. Ako se nakon "
+"aktivacije pojave problemi, jednostavno ih isključite."
+
+#: templates/admin/partials/popups/compatibility-popups.php:24
+msgid "Hide Plugin from Admin Area"
+msgstr "Sakrij dodatak iz administratorskog sučelja"
+
+#: templates/admin/partials/popups/compatibility-popups.php:25
+msgid ""
+"This will remove WP Compress from the WordPress admin menu. To restore "
+"access, add the following query parameter to any wp-admin URL:"
+msgstr ""
+"Ovo će ukloniti WP Compress iz WordPress administratorskog izbornika. Za "
+"vraćanje pristupa dodajte sljedeći parametar upita bilo kojem wp-admin "
+"URL-u:"
+
+#: templates/admin/partials/popups/compatibility-popups.php:31
+msgid "Copied!"
+msgstr "Kopirano!"
+
+#: templates/admin/partials/popups/compatibility-popups.php:47
+msgid ""
+"Advanced features such as serving Adaptive Images may conflict with your "
+"active themes, plugins or environment. If any issues occur after activating,"
+" you can simply toggle it off."
+msgstr ""
+"Napredne mogućnosti poput isporuke prilagodljivih slika mogu biti u sukobu s"
+" vašim aktivnim temama, dodacima ili okruženjem. Ako se nakon aktivacije "
+"pojave problemi, jednostavno ih isključite."
+
+#: templates/admin/partials/popups/compatibility-popups.php:61
+msgid ""
+"Delaying the Javascript of certain theme or plugin files may break the "
+"functionality or design on your site."
+msgstr ""
+"Odgoda JavaScripta određenih datoteka teme ili dodatka može narušiti "
+"funkcionalnost ili dizajn vaše stranice."
+
+#: templates/admin/partials/popups/compatibility-popups.php:62
+#: templates/admin/partials/popups/compatibility-popups.php:110
+#: templates/admin/partials/popups/compatibility-popups.php:138
+msgid ""
+"If any issues occur, simply deactivating this setting will return your site "
+"to normal."
+msgstr ""
+"Ako se pojave problemi, jednostavno isključivanje ove postavke vratit će "
+"vašu stranicu u normalno stanje."
+
+#: templates/admin/partials/popups/compatibility-popups.php:67
+#: templates/admin/partials/popups/compatibility-popups.php:115
+#: templates/admin/partials/popups/compatibility-popups.php:143
+msgid "Get Expert Support"
+msgstr "Zatraži stručnu podršku"
+
+#: templates/admin/partials/popups/compatibility-popups.php:70
+#: templates/admin/partials/popups/compatibility-popups.php:118
+#: templates/admin/partials/popups/compatibility-popups.php:146
+msgid "Proceed with Caution"
+msgstr "Nastavite oprezno"
+
+#: templates/admin/partials/popups/compatibility-popups.php:76
+#: templates/admin/partials/popups/compatibility-popups.php:124
+#: templates/admin/partials/popups/compatibility-popups.php:152
+msgid ""
+"Learn how to exclude problematic theme or plugin files from site "
+"optimization"
+msgstr ""
+"Saznajte kako izuzeti problematične datoteke teme ili dodatka iz "
+"optimizacije stranice"
+
+#: templates/admin/partials/popups/compatibility-popups.php:88
+msgid "Some features are getting blocked!"
+msgstr "Neke se mogućnosti blokiraju!"
+
+#: templates/admin/partials/popups/compatibility-popups.php:89
+msgid ""
+"It seems that parts of the optimization process are currently being blocked "
+"by external security measures. This can happen if there are automated "
+"traffic protection systems on your website or server."
+msgstr ""
+"Čini se da dijelove procesa optimizacije trenutno blokiraju vanjske "
+"sigurnosne mjere. To se može dogoditi ako na vašoj web-stranici ili "
+"poslužitelju postoje automatizirani sustavi zaštite prometa."
+
+#: templates/admin/partials/popups/compatibility-popups.php:94
+msgid "View Guide to Whitelist Services"
+msgstr "Pogledaj vodič za dopuštanje usluga"
+
+#: templates/admin/partials/popups/compatibility-popups.php:109
+msgid ""
+"Combining the Javascript of certain theme or plugin files may break the "
+"functionality or design on your site."
+msgstr ""
+"Kombiniranje JavaScripta određenih datoteka teme ili dodatka može narušiti "
+"funkcionalnost ili dizajn vaše stranice."
+
+#: templates/admin/partials/popups/compatibility-popups.php:137
+msgid ""
+"Combining the CSS of certain theme or plugin files may break the "
+"functionality or design on your site."
+msgstr ""
+"Kombiniranje CSS-a određenih datoteka teme ili dodatka može narušiti "
+"funkcionalnost ili dizajn vaše stranice."
+
+#: templates/admin/partials/popups/css/exclude-css-combine.php:22
+msgid "Exclude from CSS Combine"
+msgstr "Izuzmi iz CSS kombiniranja"
+
+#: templates/admin/partials/popups/css/exclude-css-combine.php:37
+#: templates/admin/partials/popups/css/exclude-css-minify.php:36
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:35
+#: templates/admin/partials/popups/exclude-critical-css.php:35
+#: templates/admin/partials/popups/exclude-inline-css.php:35
+#: templates/admin/partials/popups/exclude-minify-html.php:35
+#: templates/admin/partials/popups/exclude-simple-caching.php:34
+#: templates/admin/partials/popups/js/exclude-js-combine.php:35
+#: templates/admin/partials/popups/js/exclude-js-defer.php:35
+#: templates/admin/partials/popups/js/exclude-js-minify.php:35
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:35
+msgid "Disable Default Excludes"
+msgstr "Onemogući zadane izuzetke"
+
+#: templates/admin/partials/popups/css/exclude-css-minify.php:21
+msgid "Exclude from CSS Minify"
+msgstr "Izuzmi iz CSS minifikacije"
+
+#: templates/admin/partials/popups/css/exclude-css-render-blocking.php:21
+msgid "Exclude from CSS Render Blocking"
+msgstr "Izuzmi iz CSS blokiranja prikaza"
+
+#: templates/admin/partials/popups/css/inline-css.php:21
+#: templates/admin/selectModes/popup.php:108
+#: templates/admin/selectModes/popup.php:127
+msgid "Inline CSS"
+msgstr "Umetnuti CSS"
+
+#: templates/admin/partials/popups/css/inline-css.php:22
+#: templates/admin/partials/popups/js/inline-js.php:22
+msgid "Add ID tags of scripts to be inlined."
+msgstr "Dodajte ID oznake skripti koje treba umetnuti."
+
+#: templates/admin/partials/popups/css/inline-css.php:31
+msgid "e.g. theme-style-css"
+msgstr "npr. theme-style-css"
+
+#: templates/admin/partials/popups/exclude-adaptive.php:21
+msgid "Exclude from Adaptive"
+msgstr "Izuzmi iz prilagodljivog"
+
+#: templates/admin/partials/popups/exclude-adaptive.php:41
+msgid "Minimum mobile image width"
+msgstr "Minimalna širina slike za mobitel"
+
+#: templates/admin/partials/popups/exclude-adaptive.php:44
+msgid "px"
+msgstr "px"
+
+#: templates/admin/partials/popups/exclude-adaptive.php:58
+#: templates/admin/partials/popups/exclude-lazy.php:48
+#: templates/admin/partials/popups/exclude-webp.php:48
+msgid "#classname would exclude all files with that class"
+msgstr "#classname bi izuzeo sve datoteke s tom klasom"
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:21
+msgid "Cache Exclusions"
+msgstr "Izuzeci predmemorije"
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:22
+msgid ""
+"Pages listed here will always be loaded fresh, bypassing the cache. One URL "
+"or pattern per line."
+msgstr ""
+"Ovdje navedene stranice uvijek će se učitavati svježe, zaobilazeći "
+"predmemoriju. Jedan URL ili uzorak po retku."
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:30
+msgid "e.g. /my-account/, /cart/, /checkout/"
+msgstr "npr. /my-account/, /cart/, /checkout/"
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:42
+msgid "/my-account/ would exclude the account page and all sub-pages"
+msgstr "/my-account/ bi izuzeo stranicu računa i sve podstranice"
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:43
+msgid "/checkout/ would exclude just the checkout page"
+msgstr "/checkout/ bi izuzeo samo stranicu naplate"
+
+#: templates/admin/partials/popups/exclude-advanced-caching.php:44
+msgid "cart would exclude any page with &quot;cart&quot; in the URL"
+msgstr "cart bi izuzeo bilo koju stranicu s &quot;cart&quot; u URL-u"
+
+#: templates/admin/partials/popups/exclude-cdn.php:21
+msgid "Exclude from CDN"
+msgstr "Izuzmi iz CDN-a"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:21
+msgid "Critical CSS Exclusions"
+msgstr "Izuzeci kritičnog CSS-a"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:22
+msgid ""
+"Prevent specific stylesheets or paths from being processed by Critical CSS. "
+"Partial matches work automatically."
+msgstr ""
+"Spriječite obradu određenih stilskih datoteka ili putanja kroz Critical CSS."
+" Djelomična podudaranja rade automatski."
+
+#: templates/admin/partials/popups/exclude-critical-css.php:30
+msgid ""
+"e.g. theme-name/style.css, custom-fonts.css, /wp-content/plugins/my-plugin/"
+msgstr ""
+"npr. theme-name/style.css, custom-fonts.css, /wp-content/plugins/my-plugin/"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:39
+msgid "Exclude Theme Stylesheets"
+msgstr "Izuzmi stilske datoteke teme"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:43
+msgid "Exclude Plugin Stylesheets"
+msgstr "Izuzmi stilske datoteke dodataka"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:47
+msgid "Exclude WordPress Core Styles"
+msgstr "Izuzmi WordPress osnovne stilove"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:61
+msgid "style.css would exclude any stylesheet containing that name"
+msgstr "style.css bi izuzeo bilo koju stilsku datoteku koja sadrži taj naziv"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:62
+msgid "/my-plugin/css/custom.css would exclude that specific file"
+msgstr "/my-plugin/css/custom.css bi izuzeo tu određenu datoteku"
+
+#: templates/admin/partials/popups/exclude-critical-css.php:63
+msgid "/wp-content/themes/my-theme/ would exclude all styles from that theme"
+msgstr "/wp-content/themes/my-theme/ bi izuzeo sve stilove iz te teme"
+
+#: templates/admin/partials/popups/exclude-inline-css.php:21
+msgid "Exclude from Inline CSS"
+msgstr "Izuzmi iz umetnutog CSS-a"
+
+#: templates/admin/partials/popups/exclude-lazy.php:21
+msgid "Exclude from Lazy"
+msgstr "Izuzmi iz lijenog učitavanja"
+
+#: templates/admin/partials/popups/exclude-minify-html.php:21
+msgid "Exclude from HTML Minification"
+msgstr "Izuzmi iz HTML minifikacije"
+
+#: templates/admin/partials/popups/exclude-simple-caching.php:21
+msgid "Exclude from Simple Caching"
+msgstr "Izuzmi iz jednostavnog predmemoriranja"
+
+#: templates/admin/partials/popups/exclude-url.php:29
+msgid "Add excluded URLs"
+msgstr "Dodaj izuzete URL-ove"
+
+#: templates/admin/partials/popups/exclude-url.php:46
+msgid "e.g. www.example.com example.com example.com/page1"
+msgstr "npr. www.example.com example.com example.com/page1"
+
+#: templates/admin/partials/popups/exclude-url.php:58
+msgid "www.siteurl.com/page to exclude just the page"
+msgstr "www.siteurl.com/page za izuzimanje samo te stranice"
+
+#: templates/admin/partials/popups/exclude-url.php:59
+msgid "www.siteurl.com/page/subpage to exclude just the subpage"
+msgstr "www.siteurl.com/page/subpage za izuzimanje samo te podstranice"
+
+#: templates/admin/partials/popups/exclude-webp.php:21
+msgid "Exclude from WebP"
+msgstr "Izuzmi iz WebP-a"
+
+#: templates/admin/partials/popups/geolocation.php:5
+msgid "Site Geo Location"
+msgstr "Geolokacija stranice"
+
+#: templates/admin/partials/popups/geolocation.php:22
+#, php-format
+msgid ""
+"We have detected that your server is located in %s, if that's not correct, "
+"please select the nearest region below."
+msgstr ""
+"Otkrili smo da se vaš poslužitelj nalazi u %s. Ako to nije točno, odaberite "
+"najbližu regiju ispod."
+
+#: templates/admin/partials/popups/geolocation.php:27
+msgid "Automatic"
+msgstr "Automatski"
+
+#: templates/admin/partials/popups/geolocation.php:28
+msgid "Europe"
+msgstr "Europa"
+
+#: templates/admin/partials/popups/geolocation.php:29
+msgid "United States"
+msgstr "Sjedinjene Američke Države"
+
+#: templates/admin/partials/popups/geolocation.php:30
+msgid "Asia"
+msgstr "Azija"
+
+#: templates/admin/partials/popups/geolocation.php:31
+msgid "Oceania"
+msgstr "Oceanija"
+
+#: templates/admin/partials/popups/geolocation.php:51
+msgid "Save Location"
+msgstr "Spremi lokaciju"
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:21
+msgid "Configure JS Delay"
+msgstr "Konfiguriraj JS odgodu"
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:22
+msgid ""
+"List files or paths to manage. Partial names work too — we match "
+"automatically."
+msgstr ""
+"Navedite datoteke ili putanje kojima želite upravljati. Djelomični nazivi "
+"također rade — automatski ih prepoznajemo."
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:30
+msgid "Delay last"
+msgstr "Odgodi zadnje"
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:31
+#: templates/admin/partials/popups/js/delay-js-configuration.php:36
+msgid "e.g. plugin-name/js/script.js, scripts.js"
+msgstr "npr. plugin-name/js/script.js, scripts.js"
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:35
+msgid "Defer"
+msgstr "Odgodi izvršavanje"
+
+#: templates/admin/partials/popups/js/delay-js-configuration.php:46
+msgid "/myplugin/image.js would exclude that specific file"
+msgstr "/myplugin/image.js bi izuzeo tu određenu datoteku"
+
+#: templates/admin/partials/popups/js/exclude-js-combine.php:21
+msgid "Exclude from JS Combine"
+msgstr "Izuzmi iz JS kombiniranja"
+
+#: templates/admin/partials/popups/js/exclude-js-defer.php:21
+msgid "Exclude from JS Defer"
+msgstr "Izuzmi iz JS defera"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:20
+msgid "Delay JavaScript"
+msgstr "Odgodi JavaScript"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:21
+msgid ""
+"Control which scripts are delayed, deferred, or excluded from optimization."
+msgstr ""
+"Odredite koje se skripte odgađaju, deferiraju ili izuzimaju iz optimizacije."
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:43
+msgid "e.g. analytics.js, /my-plugin/tracking.js, google-tag"
+msgstr "npr. analytics.js, /my-plugin/tracking.js, google-tag"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:55
+msgid "jquery would exclude any script containing \"jquery\" in the URL"
+msgstr "jquery bi izuzeo bilo koju skriptu koja u URL-u sadrži \"jquery\""
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:56
+msgid "/my-plugin/app.js would exclude that specific script"
+msgstr "/my-plugin/app.js bi izuzeo tu određenu skriptu"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:57
+msgid ""
+"/wp-content/plugins/my-plugin/ would exclude all scripts from that plugin"
+msgstr "/wp-content/plugins/my-plugin/ bi izuzeo sve skripte iz tog dodatka"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:70
+msgid "Scripts to Delay"
+msgstr "Skripte za odgodu"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:71
+msgid "e.g. chat-widget.js, fb-pixel.js"
+msgstr "npr. chat-widget.js, fb-pixel.js"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:75
+msgid "Scripts to Defer"
+msgstr "Skripte za defer"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:76
+msgid "e.g. analytics.js, /plugins/slider/main.js"
+msgstr "npr. analytics.js, /plugins/slider/main.js"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:86
+msgid "chat-widget would match any script containing that name"
+msgstr "chat-widget bi odgovarao bilo kojoj skripti koja sadrži taj naziv"
+
+#: templates/admin/partials/popups/js/exclude-js-delay-v2.php:87
+msgid "/my-plugin/tracking.js would target that specific file"
+msgstr "/my-plugin/tracking.js bi ciljao tu određenu datoteku"
+
+#: templates/admin/partials/popups/js/exclude-js-minify.php:21
+msgid "Exclude from JS Minify"
+msgstr "Izuzmi iz JS minifikacije"
+
+#: templates/admin/partials/popups/js/exclude-scripts-to-footer.php:21
+msgid "Exclude JavaScript from Moving to Footer"
+msgstr "Izuzmi JavaScript iz premještanja u podnožje"
+
+#: templates/admin/partials/popups/js/inline-js.php:21
+msgid "Inline JavaScript"
+msgstr "Umetnuti JavaScript"
+
+#: templates/admin/partials/popups/js/inline-js.php:31
+msgid "e.g. jquery-core-js"
+msgstr "npr. jquery-core-js"
+
+#: templates/admin/partials/popups/purge-settings.php:22
+msgid "Fine tune the purging of cache files."
+msgstr "Fino prilagodite čišćenje datoteka predmemorije."
+
+#: templates/admin/partials/popups/purge-settings.php:31
+msgid "Rules for Post Publish/Update"
+msgstr "Pravila za objavu/ažuriranje objava"
+
+#: templates/admin/partials/popups/purge-settings.php:36
+msgid "All Pages"
+msgstr "Sve stranice"
+
+#: templates/admin/partials/popups/purge-settings.php:40
+msgid "Home Page"
+msgstr "Početna stranica"
+
+#: templates/admin/partials/popups/purge-settings.php:44
+msgid "Pages with Recent Posts Widget"
+msgstr "Stranice s widgetom nedavnih objava"
+
+#: templates/admin/partials/popups/purge-settings.php:48
+msgid "Archive Pages"
+msgstr "Arhivske stranice"
+
+#: templates/admin/partials/popups/purge-settings.php:55
+msgid "List of hooks to purge all pages"
+msgstr "Popis hookova za čišćenje svih stranica"
+
+#: templates/admin/partials/popups/purge-settings.php:88
+msgid "Scheduled Purge"
+msgstr "Zakazano čišćenje"
+
+#: templates/admin/partials/popups/purge-settings.php:91
+msgid "Purge all cache every day at"
+msgstr "Očisti svu predmemoriju svaki dan u"
+
+#: templates/admin/partials/popups/purge-settings.php:93
+msgid "Disabled"
+msgstr "Onemogućeno"
+
+#: templates/admin/partials/popups/purge-settings.php:98
+msgid "Your time:"
+msgstr "Vaše vrijeme:"
+
+#: templates/admin/partials/v4/chart.php:6
+msgid "Compression Report"
+msgstr "Izvješće o kompresiji"
+
+#: templates/admin/partials/v4/chart.php:13
+#: templates/admin/partials/v4/footer-scripts.php:191
+#: templates/admin/partials/v4/footer-scripts.php:427
+msgid "After Optimization"
+msgstr "Nakon optimizacije"
+
+#: templates/admin/partials/v4/footer-scripts.php:231
+#: templates/admin/partials/v4/footer-scripts.php:427
+msgid "Cached Traffic"
+msgstr "Predmemorirani promet"
+
+#: templates/admin/partials/v4/footer-scripts.php:232
+msgid "Non-Cached"
+msgstr "Bez predmemorije"
+
+#: templates/admin/partials/v4/footer-scripts.php:426
+msgid "Total Traffic"
+msgstr "Ukupan promet"
+
+#: templates/admin/partials/v4/footer-scripts.php:467
+msgid "Saved"
+msgstr "Ušteđeno"
+
+#: templates/admin/partials/v4/pageview-stats.php:129
+msgid "Leftover Pageviews"
+msgstr "Preostali pregledi stranica"
+
+#: templates/admin/partials/v4/pageview-stats.php:229
+msgid "Remaining"
+msgstr "Preostalo"
+
+#: templates/admin/partials/v4/pageview-stats.php:239
+msgid "Pageviews"
+msgstr "Pregledi stranica"
+
+#: templates/admin/partials/v4/pageview-stats.php:259
+msgid "Optimized Pageviews"
+msgstr "Optimizirani pregledi stranica"
+
+#: templates/admin/partials/v4/pageview-stats.php:271
+msgid "Bandwidth Saved"
+msgstr "Ušteđena propusnost"
+
+#: templates/admin/partials/v4/pageview-stats.php:283
+msgid "Optimized Assets"
+msgstr "Optimizirani resursi"
+
+#: templates/admin/preload.php:36
+msgid "Start Preload"
+msgstr "Pokreni prethodno učitavanje"
+
+#: templates/admin/scan-fonts.php:25
+msgid "Font Display"
+msgstr "Prikaz fonta"
+
+#: templates/admin/scan-fonts.php:25
+msgid ""
+"Controls how fonts render while loading. Swap shows text immediately using a"
+" fallback font — recommended for PageSpeed."
+msgstr ""
+"Određuje kako se fontovi prikazuju tijekom učitavanja. Swap odmah prikazuje "
+"tekst koristeći zamjenski font — preporučeno za PageSpeed."
+
+#: templates/admin/scan-fonts.php:28
+msgid "Text Font Display"
+msgstr "Prikaz tekstualnog fonta"
+
+#: templates/admin/scan-fonts.php:28
+msgid ""
+"How browsers handle text font loading. Swap shows fallback text immediately "
+"— fixes the PageSpeed font-display warning. Icon fonts automatically use a "
+"separate display setting to prevent garbled characters — configure in Icon "
+"Fonts below."
+msgstr ""
+"Određuje kako preglednici obrađuju učitavanje tekstualnih fontova. Swap "
+"odmah prikazuje zamjenski tekst — time se uklanja PageSpeed upozorenje za "
+"font-display. Ikonski fontovi automatski koriste zasebnu postavku prikaza "
+"kako bi se spriječili nečitki znakovi — konfigurirajte ih niže u odjeljku "
+"Ikonski fontovi."
+
+#: templates/admin/scan-fonts.php:29 templates/admin/scan-fonts.php:54
+msgid "Swap"
+msgstr "Swap"
+
+#: templates/admin/scan-fonts.php:30 templates/admin/scan-fonts.php:79
+msgid "Off"
+msgstr "Isključeno"
+
+#: templates/admin/scan-fonts.php:31 templates/admin/scan-fonts.php:55
+msgid "Auto (Browser Default)"
+msgstr "Auto (zadano u pregledniku)"
+
+#: templates/admin/scan-fonts.php:32
+msgid "Block (FOIT)"
+msgstr "Block (FOIT)"
+
+#: templates/admin/scan-fonts.php:33 templates/admin/scan-fonts.php:56
+msgid "Fallback"
+msgstr "Fallback"
+
+#: templates/admin/scan-fonts.php:34 templates/admin/scan-fonts.php:57
+msgid "Optional"
+msgstr "Opcionalno"
+
+#: templates/admin/scan-fonts.php:38
+msgid "Preload Critical Fonts"
+msgstr "Prethodno učitaj kritične fontove"
+
+#: templates/admin/scan-fonts.php:39
+msgid ""
+"Preload above-the-fold fonts for faster first paint. Limited to 4 to avoid "
+"bloat. Requires Critical CSS."
+msgstr ""
+"Prethodno učitajte fontove iznad pregiba za brži prvi prikaz. Ograničeno na "
+"4 kako bi se izbjeglo nepotrebno povećanje. Zahtijeva Critical CSS."
+
+#: templates/admin/scan-fonts.php:48
+msgid "Icon Fonts"
+msgstr "Ikonski fontovi"
+
+#: templates/admin/scan-fonts.php:48
+msgid ""
+"Optimize loading of icon font libraries like Font Awesome, Material Icons, "
+"and other icon sets."
+msgstr ""
+"Optimizirajte učitavanje biblioteka ikonskih fontova poput Font Awesomea, "
+"Material Icons i drugih skupova ikona."
+
+#: templates/admin/scan-fonts.php:52
+msgid "Icon Font Display"
+msgstr "Prikaz ikonskog fonta"
+
+#: templates/admin/scan-fonts.php:52
+msgid ""
+"How browsers handle icon font loading. Block (recommended) keeps icons "
+"invisible until loaded — prevents garbled characters that appear with swap. "
+"Override this if you prefer a different strategy."
+msgstr ""
+"Određuje kako preglednici obrađuju učitavanje ikonskih fontova. Block "
+"(preporučeno) drži ikone nevidljivima dok se ne učitaju — time se "
+"sprječavaju nečitki znakovi koji se mogu pojaviti sa swap opcijom. "
+"Promijenite ovo ako želite drugačiju strategiju."
+
+#: templates/admin/scan-fonts.php:53
+msgid "Block"
+msgstr "Block"
+
+#: templates/admin/scan-fonts.php:64
+msgid "Lazy Load Icon Fonts"
+msgstr "Lijeno učitavanje ikonskih fontova"
+
+#: templates/admin/scan-fonts.php:64
+msgid ""
+"Load icon font stylesheets asynchronously to prevent render-blocking. Icons "
+"appear after a brief invisible flash instead of blocking page paint."
+msgstr ""
+"Učitajte stilske datoteke ikonskih fontova asinkrono kako biste spriječili "
+"blokiranje prikaza. Ikone se pojavljuju nakon kratkog nevidljivog treptaja "
+"umjesto da blokiraju iscrtavanje stranice."
+
+#: templates/admin/scan-fonts.php:66
+msgid "Remove Duplicate Icon Fonts"
+msgstr "Ukloni duplicirane ikonske fontove"
+
+#: templates/admin/scan-fonts.php:66
+msgid ""
+"Detect and remove duplicate Font Awesome stylesheets when multiple versions "
+"are loaded by different plugins."
+msgstr ""
+"Otkriva i uklanja duplicirane Font Awesome stilske datoteke kada različiti "
+"dodaci učitavaju više verzija."
+
+#: templates/admin/scan-fonts.php:74
+msgid "Google Fonts"
+msgstr "Google fontovi"
+
+#: templates/admin/scan-fonts.php:74
+msgid ""
+"Control how Google Fonts are loaded. Self-host for faster load times, better"
+" privacy and GDPR compliance."
+msgstr ""
+"Odredite kako se Google fontovi učitavaju. Samostalni hosting omogućuje brže"
+" učitavanje, bolju privatnost i usklađenost s GDPR-om."
+
+#: templates/admin/scan-fonts.php:78
+msgid "Self-Host Google Fonts"
+msgstr "Hostaj Google fontove lokalno"
+
+#: templates/admin/scan-fonts.php:78
+msgid ""
+"Off: Fonts load from Google servers — may share visitor data with Google. "
+"Local: Downloads and serves fonts from your own server for full GDPR "
+"compliance. Bunny Fonts (Recommended): Free, privacy-first Google Fonts "
+"alternative powered by bunny.net global CDN — lightning-fast delivery, zero "
+"tracking, fully GDPR compliant."
+msgstr ""
+"Isključeno: fontovi se učitavaju s Google poslužitelja — to može dijeliti "
+"podatke posjetitelja s Googleom. Lokalno: preuzima i poslužuje fontove s "
+"vašeg vlastitog poslužitelja za potpunu usklađenost s GDPR-om. Bunny Fonts "
+"(preporučeno): besplatna alternativa Google fontovima usmjerena na "
+"privatnost, pokretana globalnim CDN-om bunny.net — munjevito brza isporuka, "
+"bez praćenja, potpuno usklađena s GDPR-om."
+
+#: templates/admin/scan-fonts.php:80
+msgid "Local Fonts (GDPR)"
+msgstr "Lokalni fontovi (GDPR)"
+
+#: templates/admin/scan-fonts.php:81
+msgid "Bunny Fonts (GDPR + CDN)"
+msgstr "Bunny Fonts (GDPR + CDN)"
+
+#: templates/admin/scan-fonts.php:84
+msgid "Purge & Rescan Font Cache"
+msgstr "Očisti i ponovno skeniraj predmemoriju fontova"
+
+#: templates/admin/scan-fonts.php:84
+msgid ""
+"Clear the font cache and re-scan your homepage to detect newly added or "
+"removed fonts."
+msgstr ""
+"Očistite predmemoriju fontova i ponovno skenirajte početnu stranicu kako "
+"biste otkrili novo dodane ili uklonjene fontove."
+
+#: templates/admin/scan-fonts.php:92
+msgid "Google Fonts Scanner"
+msgstr "Skener Google fontova"
+
+#: templates/admin/scan-fonts.php:92
+msgid "Scan any page on your site to detect which Google Fonts are loaded."
+msgstr ""
+"Skenirajte bilo koju stranicu na svojoj web-stranici kako biste otkrili koji"
+" su Google fontovi učitani."
+
+#: templates/admin/scan-fonts.php:96
+msgid "https://yoursite.com/page-to-scan"
+msgstr "https://yoursite.com/page-to-scan"
+
+#: templates/admin/scan-fonts.php:99
+msgid "Scan"
+msgstr "Skeniraj"
+
+#: templates/admin/scan-fonts.php:105
+msgid "Google Fonts detected! See results below."
+msgstr "Google fontovi su otkriveni! Pogledajte rezultate ispod."
+
+#: templates/admin/scan-fonts.php:124
+msgid "Detected Google Fonts"
+msgstr "Otkriveni Google fontovi"
+
+#: templates/admin/scan-fonts.php:125
+msgid "Google Fonts found on your site. Remove any you no longer need."
+msgstr ""
+"Na vašoj su stranici pronađeni Google fontovi. Uklonite one koji vam više "
+"nisu potrebni."
+
+#: templates/admin/selectModes/popup.php:58
+msgid "We are setting up your DNS, this can take up to 30 seconds..."
+msgstr "Postavljamo vaš DNS, to može potrajati do 30 sekundi..."
+
+#: templates/admin/selectModes/popup.php:66
+msgid "You may change your mode or customize advanced settings at any time!"
+msgstr ""
+"Svoj način rada možete promijeniti ili prilagoditi napredne postavke u bilo "
+"kojem trenutku!"
+
+#: templates/admin/selectModes/popup.php:83
+msgid "Start with no settings active,"
+msgstr "Započnite bez aktivnih postavki,"
+
+#: templates/admin/selectModes/popup.php:83
+msgid "then customize as you wish"
+msgstr "zatim prilagodite kako želite"
+
+#: templates/admin/selectModes/popup.php:87
+#: templates/admin/selectModes/popup.php:104
+#: templates/admin/selectModes/popup.php:122
+msgid "Advanced Website Caching"
+msgstr "Napredno predmemoriranje web-mjesta"
+
+#: templates/admin/selectModes/popup.php:88
+#: templates/admin/selectModes/popup.php:105
+#: templates/admin/selectModes/popup.php:123
+msgid "Resize Images by Device"
+msgstr "Promijeni veličinu slika prema uređaju"
+
+#: templates/admin/selectModes/popup.php:90
+msgid "Lazy Load Images"
+msgstr "Lijeno učitavanje slika"
+
+#: templates/admin/selectModes/popup.php:92
+#: templates/admin/selectModes/popup.php:110
+msgid "Move JavaScript to Footer"
+msgstr "Premjesti JavaScript u podnožje"
+
+#: templates/admin/selectModes/popup.php:93
+#: templates/admin/selectModes/popup.php:111
+#: templates/admin/selectModes/popup.php:128
+msgid "Delay JavaScript Files"
+msgstr "Odgodi JavaScript datoteke"
+
+#: templates/admin/selectModes/popup.php:100
+msgid "Our recommended blend of"
+msgstr "Naša preporučena ravnoteža između"
+
+#: templates/admin/selectModes/popup.php:100
+msgid "performance and compatibility"
+msgstr "performansi i kompatibilnosti"
+
+#: templates/admin/selectModes/popup.php:107
+msgid "Lazy Load Assets"
+msgstr "Lijeno učitavanje resursa"
+
+#: templates/admin/selectModes/popup.php:118
+msgid "Squeeze out performance, may require"
+msgstr "Izvucite maksimum performansi, može zahtijevati"
+
+#: templates/admin/selectModes/popup.php:118
+msgid "excluding specific files from optimization"
+msgstr "izuzimanje određenih datoteka iz optimizacije"
+
+#: templates/admin/selectModes/popup.php:125
+msgid "Native Lazy Load Images"
+msgstr "Izvorno lijeno učitavanje slika"
+
+#: templates/admin/selectModes/popup.php:129
+msgid "Inline JavaScript Files"
+msgstr "Ugrađene JavaScript datoteke"
+
+#: templates/admin/selectModes/popup.php:153
+msgid "Enable Real-Time Optimization + CDN"
+msgstr "Omogući optimizaciju u stvarnom vremenu + CDN"
+
+#: templates/admin/selectModes/popup.php:154
+msgid "Optimize and serve your website content across the globe"
+msgstr "Optimizirajte i isporučujte sadržaj svojeg web-mjesta diljem svijeta"
+
+#: templates/admin/selectModes/popup.php:158
+msgid "<i class='wpc-sparkle-icon'></i> Optimize Plan Required"
+msgstr "<i class='wpc-sparkle-icon'></i> Potreban je Optimize plan"
+
+#: templates/admin/selectModes/popup.php:178
+msgid "Save Settings"
+msgstr "Spremi postavke"

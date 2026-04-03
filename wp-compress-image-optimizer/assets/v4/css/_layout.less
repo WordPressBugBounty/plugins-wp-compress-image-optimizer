@@ -1,0 +1,100 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Layout & Containers
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// DOM hierarchy:
+//   .wpc-advanced-settings-container-v4
+//     form
+//       .wpc-header (see _header.less)
+//       .wpc-settings-body
+//         .wpc-settings-tabs
+//           .wpc-settings-tab-list (sidebar — see _sidebar-nav.less)
+//           .wpc-settings-tab-content
+//             .wpc-settings-tab-content-inner
+//               .wpc-tab-content#dashboard (see _dashboard.less)
+//               .wpc-tab-content#cdn-delivery-options
+//               ... (each tab's content)
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  // ─── Outermost Container ─────────────────────────────────────────────────
+  // No max-width here — background extends full-width edge to edge.
+  // Content is constrained by max-width on the inner form.
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: @space-lg;
+  background: @color-bg-neutral;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  // ─── Inner Form — constrains content width ─────────────────────────────
+  > form {
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+
+  // ─── Settings Body (below header) ────────────────────────────────────────
+  .wpc-settings-body {
+    display: flex;
+    flex-direction: column;
+    // Start invisible — JS adds .wpc-tabs-ready after resolving the correct tab
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+
+    &.wpc-tabs-ready {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  // ─── Settings Tabs Wrapper (sidebar + content) ───────────────────────────
+  .wpc-settings-tabs {
+    display: flex;
+    flex-direction: row;
+    gap: @sidebar-gap;
+    align-items: flex-start;
+  }
+
+  // ─── Tab Content Area (right of sidebar) ─────────────────────────────────
+  .wpc-settings-tab-content {
+    flex: 1;
+    min-width: 0; // prevent flex overflow
+  }
+
+  // ─── Individual Tab Panels ───────────────────────────────────────────────
+  // Each .wpc-tab-content is display:none by default (inline style from PHP)
+  // JS toggles visibility. We just ensure proper spacing.
+  // (.wpc-settings-tab-content-inner and .wpc-tab-content have no properties)
+
+  // ─── Settings Flex Body (dashboard inner layout) ─────────────────────────
+  // Used inside the dashboard tab for stats + sidebar widget layout
+  .wpc-settings-flex-body {
+    display: flex;
+    flex-direction: row;
+    gap: @sidebar-gap;
+    align-items: flex-start;
+  }
+
+  .wpc-settings-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .wpc-settings-content-inner {
+    margin-bottom: @space-lg;
+  }
+
+  // ─── Settings Sidebar (right sidebar on dashboard) ───────────────────────
+  // This is the DASHBOARD sidebar (promo boxes, advanced toggle), not the
+  // tab navigation sidebar (.wpc-settings-tab-list in _sidebar-nav.less).
+  .wpc-settings-sidebar {
+    width: @sidebar-width;
+    flex-shrink: 0;
+  }
+
+} // end .wpc-advanced-settings-container-v4 / .wpc-lite-settings-container

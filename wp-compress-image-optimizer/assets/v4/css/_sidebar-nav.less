@@ -1,0 +1,158 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// WP Compress — Sidebar Navigation (Tab List)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// DOM:
+//   .wpc-settings-tab-list
+//     ul
+//       li
+//         a[data-tab="dashboard"]
+//           span.wpc-icon-container > span.wpc-icon > img
+//           span.wpc-title
+//       li (x10+ tabs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-advanced-settings-container-v4 {
+
+  // ─── Tab List Container ──────────────────────────────────────────────────
+  .wpc-settings-tab-list {
+    width: 235px; // wider than @sidebar-width (220px) to prevent truncation
+    flex-shrink: 0;
+    overflow: hidden;
+    padding-left: @space-xs;
+    padding-right: @space-xs;
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    // ─── Tab Item ────────────────────────────────────────────────────────────
+    li {
+      margin: 0;
+
+      a {
+        display: flex;
+        align-items: center;
+        gap: @space-md;
+        padding: @space-md @space-base;
+        border-radius: @radius-md;
+        color: @color-text-secondary;
+        text-decoration: none;
+        font-family: @font-regular;
+        font-size: @font-size-base;
+        transition: @transition-fast;
+        position: relative;
+        outline: none; // remove browser focus ring (active state provides clear visual indicator)
+        &:focus, &:focus-visible { outline: none; box-shadow: none; }
+
+        // Stagger entrance animation
+        opacity: 0;
+        animation: wpcSmoothSlideUp 0.35s ease forwards;
+      }
+
+      // Stagger delays for tab items
+      &:nth-child(1) a { animation-delay: 50ms; }
+      &:nth-child(2) a { animation-delay: 80ms; }
+      &:nth-child(3) a { animation-delay: 110ms; }
+      &:nth-child(4) a { animation-delay: 140ms; }
+      &:nth-child(5) a { animation-delay: 170ms; }
+      &:nth-child(6) a { animation-delay: 200ms; }
+      &:nth-child(7) a { animation-delay: 230ms; }
+      &:nth-child(8) a { animation-delay: 260ms; }
+      &:nth-child(9) a { animation-delay: 290ms; }
+      &:nth-child(10) a { animation-delay: 320ms; }
+      &:nth-child(n+11) a { animation-delay: 350ms; }
+
+      // ─── Hover State ─────────────────────────────────────────────────────────
+      a:hover {
+        background: @color-bg-frost;
+        color: @color-text-dark;
+
+        .wpc-icon img {
+          opacity: 0.8;
+          filter: brightness(0);
+          transition: opacity 0.2s ease, filter 0.2s ease;
+        }
+      }
+
+      // ─── Active State — dark pill ───────────────────────────────────────────
+      a.active {
+        background: @color-text-dark;
+        color: @color-white;
+        font-family: @font-semibold;
+        border-radius: @radius-lg;
+
+        &::before {
+          display: none;
+        }
+
+        .wpc-icon-container {
+          background: rgba(255, 255, 255, 0.12);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: @radius-base;
+        }
+
+        .wpc-icon img {
+          opacity: 1;
+          filter: grayscale(0%) brightness(0) invert(1); // white icon
+        }
+      }
+    }
+
+    // ─── Icon Container ──────────────────────────────────────────────────────
+    .wpc-icon-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+
+    .wpc-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+
+      img {
+        width: 20px;
+        height: 20px;
+        transition: @transition-fast;
+        filter: brightness(0); // turns any color (including white SVGs) to black
+        opacity: 0.4;
+      }
+    }
+
+    // ─── Inline SVG Icons (replaces img for FA icons) ─────────────────────
+    .wpc-icon-svg {
+      svg {
+        width: 18px;
+        height: 18px;
+        opacity: 0.4;
+        transition: @transition-fast;
+      }
+    }
+
+    // Active state — white SVG
+    a.active .wpc-icon-svg svg {
+      opacity: 1;
+      color: @color-white;
+    }
+
+    // ─── Title ───────────────────────────────────────────────────────────────
+    .wpc-title {
+      font-size: @font-size-base;
+      white-space: nowrap;
+    }
+  }
+
+} // end .wpc-advanced-settings-container-v4
