@@ -147,6 +147,58 @@ class wps_local_compress
         self::$apiParams['url'] = '';
     }
 
+    /**
+     * Build optimization params for /optimize and /bulk-start service calls.
+     * Reads all Local Image Optimization settings and resolves Quality Override vs CDN level.
+     */
+    public static function buildOptimizeParams($imageID = null, $site_url = null, $settings = null)
+    {
+        if (!$settings) {
+            $settings = get_option(WPS_IC_SETTINGS);
+        }
+        if (!$site_url) {
+            $site_url = get_site_url();
+            if (is_ssl()
+                || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+                || strpos(home_url(), 'https://') === 0
+                || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos($_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+            ) {
+                $site_url = str_replace('http://', 'https://', $site_url);
+            }
+        }
+
+        $options = get_option(WPS_IC_OPTIONS);
+
+        // Quality Override: None (0) = use CDN Optimization Level, otherwise use local override
+        $local_quality = $settings['local_qualityLevel'] ?? '0';
+        $cdn_quality_map = ['1' => 'lossless', '2' => 'intelligent', '3' => 'ultra'];
+        $cdn_level = $cdn_quality_map[$settings['qualityLevel'] ?? '2'] ?? 'intelligent';
+        $resolved_level = ($local_quality === '0' || empty($local_quality))
+            ? $cdn_level
+            : ($cdn_quality_map[$local_quality] ?? $cdn_level);
+
+        // Hosting detection — shared if low memory or short execution time
+        $memory = wp_convert_hr_to_bytes(ini_get('memory_limit'));
+        $max_exec = (int) ini_get('max_execution_time');
+        $hosting = ($memory < 268435456 || $max_exec < 60) ? 'shared' : 'vps';
+
+        $params = [
+            'imageSite' => $site_url,
+            'apikey'    => $options['api_key'] ?? '',
+            'level'     => $resolved_level,
+            'webp'      => !empty($settings['generate_webp']) && $settings['generate_webp'] == '1' ? '1' : '0',
+            'avif'      => !empty($settings['picture_avif']) && $settings['picture_avif'] == '1' ? '1' : '0',
+            'maxWidth'  => $settings['maxWidth'] ?? $settings['local_maxWidth'] ?? '2560',
+            'hosting'   => $hosting,
+        ];
+
+        if ($imageID) {
+            $params['imageID'] = $imageID;
+        }
+
+        return $params;
+    }
+
     public function get_filesystem()
     {
         require_once(ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php');
@@ -390,9 +442,20 @@ class wps_local_compress
     {
         $options = get_option(WPS_IC_OPTIONS);
         $apikey = sanitize_text_field($_GET['apikey']) ?? '';
-        $expected_token = $options['api_key'];
+        $expected_token = !empty($options['api_key']) ? $options['api_key'] : '';
+
+        // Fallback: if object cache returned empty, read directly from database
+        if (empty($expected_token)) {
+            global $wpdb;
+            $row = $wpdb->get_var("SELECT option_value FROM {$wpdb->options} WHERE option_name = '" . WPS_IC_OPTIONS . "' LIMIT 1");
+            if ($row) {
+                $db_options = maybe_unserialize($row);
+                $expected_token = !empty($db_options['api_key']) ? $db_options['api_key'] : '';
+            }
+        }
 
         if (empty($apikey) || $apikey !== $expected_token) {
+            error_log('[WPC] Callback auth failed: received=' . substr($apikey, 0, 8) . '... expected=' . substr($expected_token, 0, 8) . '... URI=' . $_SERVER['REQUEST_URI']);
             wp_send_json_error('Unauthorized', 403);
         }
 
@@ -434,6 +497,17 @@ class wps_local_compress
                 wp_send_json_error('Invalid image ID', 400);
             }
 
+            // Skip excluded images — still advance bulk counter
+            if (get_post_meta($imageID, 'wps_ic_exclude_live', true) === 'true') {
+                $bulkStatus = get_option('wps_ic_BulkStatus');
+                if (empty($bulkStatus['restoredImageCount'])) {
+                    $bulkStatus['restoredImageCount'] = 0;
+                }
+                $bulkStatus['restoredImageCount'] += 1;
+                update_option('wps_ic_BulkStatus', $bulkStatus);
+                wp_send_json_success();
+            }
+
             $parsedImages = get_option('wps_ic_parsed_images');
 
             if (!$parsedImages) {
@@ -442,102 +516,111 @@ class wps_local_compress
                 $parsedImages['total']['compressed'] = 0;
             }
 
-            // Site URL where this plugin runs
-            $site_url = get_site_url();
+            if (!function_exists('download_url')) {
+                require_once(ABSPATH . "wp-admin" . '/includes/image.php');
+                require_once(ABSPATH . "wp-admin" . '/includes/file.php');
+                require_once(ABSPATH . "wp-admin" . '/includes/media.php');
+            }
 
-            // Build full API URL
-            $request_url = add_query_arg(array('imageID' => $imageID, 'imageSite' => $site_url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],), WPC_IC_LOCAL_RESTORE);
+            // Use same restore logic as single image (restoreV4 approach)
+            $restored = false;
+            $scaledPath = get_attached_file($imageID);
+            $unscaledPath = $scaledPath ? str_replace('-scaled.', '.', $scaledPath) : '';
 
-            // Make the GET request
-            $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
-
-            $body = wp_remote_retrieve_body($response);
-            $data = json_decode($body, true);
-            if (!empty($data['backupUrls'])) {
-
-                $parsedImages[$imageID]['unscaled']['original'] = '';
-
-
-                $unscaledUrl = null;
-
-                // Find the unscaled
-                foreach ($data['backupUrls'] as $file) {
-                    if ($file['sizeLabel'] === 'unscaled') {
-                        $unscaledUrl = $file['fileUrl'];
-
-
-                        $originalFilePath = get_attached_file($imageID);
-                        $filePath = str_replace(basename($originalFilePath), '', $originalFilePath);
-                        $unscaledBasename = basename($unscaledUrl);
-                        $unscaledPath = $filePath . $unscaledBasename;
-
-                        // Download to temp file
-                        $tmp = download_url($unscaledUrl);
-                        if (is_wp_error($tmp)) {
-                            continue;
+            // Priority 1: Local _bkp backup
+            $localBkpPaths = array_filter([$unscaledPath . '_bkp', $scaledPath . '_bkp']);
+            foreach ($localBkpPaths as $bkpPath) {
+                if ($bkpPath && file_exists($bkpPath) && filesize($bkpPath) > 0) {
+                    $targetPath = str_replace('_bkp', '', $bkpPath);
+                    if (@copy($bkpPath, $targetPath)) {
+                        @unlink($bkpPath);
+                        $isUnscaled = (strpos($targetPath, '-scaled.') === false && $unscaledPath === $targetPath);
+                        if ($isUnscaled) {
+                            remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
+                            $newMeta = wp_generate_attachment_metadata($imageID, $targetPath);
+                            if ($newMeta) wp_update_attachment_metadata($imageID, $newMeta);
                         }
-
-                        copy($tmp, $unscaledPath);
-                        @unlink($tmp);
-
+                        $restored = true;
                         break;
                     }
                 }
-
-
-                foreach ($data['backupUrls'] as $index => $backupFile) {
-                    $size = $backupFile['sizeLabel'];
-
-                    // We just require the original
-                    if ($size !== 'original') {
-                        continue;
-                    }
-
-                    $url = $backupFile['fileUrl'];
-
-                    // Download to temp file
-                    $tmp = download_url($url);
-                    if (is_wp_error($tmp)) {
-                        continue;
-                    }
-
-                    $originalFilePath = get_attached_file($imageID);
-                    if (!$originalFilePath) {
-                        @unlink($tmp);
-                        continue;
-                    }
-
-                    // Replace the file
-                    copy($tmp, $originalFilePath);
-                    @unlink($tmp);
-
-                    // Remove backup
-                    if (file_exists($originalFilePath . '_bkp')) {
-                        @unlink($originalFilePath . '_bkp');
-                    }
-
-                    // generira iz scaled verzije opet
-                    $unscaledPath = str_replace('-scaled.', '.', $originalFilePath);
-                    if (file_exists($unscaledPath)) {
-                        $originalFilePath = $unscaledPath;
-                    }
-
-                    $newMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
-
-                    if ($newMeta) {
-                        wp_update_attachment_metadata($imageID, $newMeta);
-                    }
-
-                    // Optional status flag
-                    delete_post_meta($imageID, 'ic_bulk_running');
-                    delete_post_meta($imageID, 'ic_compressing');
-                    delete_post_meta($imageID, 'wpc_images_compressed');
-                    delete_post_meta($imageID, 'ic_stats');
-                    update_post_meta($imageID, 'ic_status', 'restored');
-                }
-
-                set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
             }
+
+            // Priority 2: Download from service (prefer unscaled, fallback original)
+            if (!$restored) {
+                $site_url = get_site_url();
+                $request_url = add_query_arg(array('imageID' => $imageID, 'imageSite' => $site_url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']), WPC_IC_LOCAL_RESTORE);
+                $response = wp_remote_get($request_url, array('timeout' => 30, 'sslverify' => false));
+
+                if (!is_wp_error($response)) {
+                    $body = wp_remote_retrieve_body($response);
+                    $data = json_decode($body, true);
+
+                    if (!empty($data['backupUrls'])) {
+                        $restoreUrl = null;
+                        $restoreLabel = null;
+
+                        foreach ($data['backupUrls'] as $backupFile) {
+                            if ($backupFile['sizeLabel'] === 'unscaled') {
+                                $restoreUrl = $backupFile['fileUrl'];
+                                $restoreLabel = 'unscaled';
+                                break;
+                            }
+                            if ($backupFile['sizeLabel'] === 'original' && !$restoreUrl) {
+                                $restoreUrl = $backupFile['fileUrl'];
+                                $restoreLabel = 'original';
+                            }
+                        }
+
+                        if ($restoreUrl) {
+                            $tmp = download_url($restoreUrl, 60);
+                            if (!is_wp_error($tmp)) {
+                                if ($restoreLabel === 'unscaled') {
+                                    copy($tmp, $unscaledPath);
+                                    @unlink($tmp);
+                                    remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
+                                    $newMeta = wp_generate_attachment_metadata($imageID, $unscaledPath);
+                                    if ($newMeta) wp_update_attachment_metadata($imageID, $newMeta);
+                                } else {
+                                    if ($scaledPath) copy($tmp, $scaledPath);
+                                    @unlink($tmp);
+                                }
+                                $restored = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Always clean metadata (even if download failed — prevents stuck state)
+            if ($restored) {
+                // Clean leftover .webp and .avif files
+                $attachedFile = get_attached_file($imageID);
+                if ($attachedFile) {
+                    $dir = dirname($attachedFile);
+                    $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
+                    foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
+                    foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { @unlink($avif); }
+                }
+            }
+
+            // Mark image as parsed for heartbeat to pick up
+            $parsedImages[$imageID] = ['status' => $restored ? 'restored' : 'failed'];
+
+            // Clean all optimization metadata
+            delete_post_meta($imageID, 'ic_bulk_running');
+            delete_post_meta($imageID, 'ic_compressing');
+            delete_post_meta($imageID, 'wpc_images_compressed');
+            delete_post_meta($imageID, 'ic_stats');
+            delete_post_meta($imageID, 'ic_local_variants');
+            delete_post_meta($imageID, 'ic_savings');
+            delete_post_meta($imageID, 'ic_savings_format');
+            delete_post_meta($imageID, 'ic_savings_bytes');
+            delete_post_meta($imageID, 'ic_savings_baseline');
+            delete_post_meta($imageID, 'ic_skipped');
+            update_post_meta($imageID, 'ic_status', 'restored');
+
+            set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
             $bulkStatus = get_option('wps_ic_BulkStatus');
 
@@ -547,7 +630,6 @@ class wps_local_compress
 
             $bulkStatus['restoredImageCount'] += 1;
             update_option('wps_ic_BulkStatus', $bulkStatus);
-
 
             update_option('wps_ic_parsed_images', $parsedImages);
 
@@ -636,6 +718,18 @@ class wps_local_compress
             $imageID = absint($_GET['downloadImage']);
             if (!$imageID) {
                 wp_send_json_error('Invalid image ID', 400);
+            }
+
+            // Skip excluded images — but still advance bulk counter so progress completes
+            if (get_post_meta($imageID, 'wps_ic_exclude_live', true) === 'true') {
+                if ($isBulk) {
+                    $bulkStatus = get_option('wps_ic_BulkStatus');
+                    if ($bulkStatus) {
+                        $bulkStatus['compressedImageCount'] = ($bulkStatus['compressedImageCount'] ?? 0) + 1;
+                        update_option('wps_ic_BulkStatus', $bulkStatus);
+                    }
+                }
+                die('skipped');
             }
 
             // Get original image URL to extract filename
@@ -789,8 +883,17 @@ class wps_local_compress
 
                                 if ($image_data && @getimagesizefromstring($image_data)) {
 
+                                    // Local backup: copy original to _bkp before overwrite when backup includes local
+                                    $backupSetting = isset(self::$settings['backup']) ? self::$settings['backup'] : 'cloud';
+                                    if (($backupSetting === 'local' || $backupSetting === 'local-cloud') && file_exists($optimizedFilePath)) {
+                                        $pathInfo = pathinfo($optimizedFilePath);
+                                        $bkpPath = $pathInfo['dirname'] . '/' . $pathInfo['filename'] . '_bkp.' . $pathInfo['extension'];
+                                        if (!file_exists($bkpPath)) {
+                                            @copy($optimizedFilePath, $bkpPath);
+                                        }
+                                    }
 
-                                    // Rename original file
+                                    // Remove original file
                                     if (file_exists($optimizedFilePath)) {
                                         unlink($optimizedFilePath);
                                     }
@@ -862,6 +965,54 @@ class wps_local_compress
                         update_post_meta($imageID, 'ic_compressing', array('status' => 'compressed'));
                         update_post_meta($imageID, 'ic_stats', $stats);
                         set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
+
+                        // Store variant data for <picture> delivery and savings display
+                        $variants = [];
+                        foreach ($body->files as $variant) {
+                            $variants[$variant->label] = [
+                                'url'          => $variant->url,
+                                'originalSize' => $variant->originalSize,
+                                'size'         => $variant->optimizedSize,
+                                'savings'      => $variant->savingsPercent,
+                            ];
+                        }
+                        update_post_meta($imageID, 'ic_local_variants', $variants);
+
+                        // Compute real end-to-end savings:
+                        // Baseline = unscaled originalSize (what user uploaded), fallback to original
+                        $baseline = $variants['unscaled']['originalSize']
+                                 ?? $variants['original']['originalSize']
+                                 ?? 0;
+
+                        // Best result = smallest optimizedSize among original/original-webp/original-avif
+                        $best_optimized = PHP_INT_MAX;
+                        $best_format = 'jpeg';
+                        foreach (['original', 'original-webp', 'original-avif'] as $key) {
+                            if (isset($variants[$key]['size']) && $variants[$key]['size'] > 0 && $variants[$key]['size'] < $best_optimized) {
+                                $best_optimized = $variants[$key]['size'];
+                                if (strpos($key, 'avif') !== false) $best_format = 'avif';
+                                elseif (strpos($key, 'webp') !== false) $best_format = 'webp';
+                                else $best_format = 'jpeg';
+                            }
+                        }
+
+                        if ($baseline > 0 && $best_optimized < PHP_INT_MAX) {
+                            $best_savings = round(($baseline - $best_optimized) / $baseline * 100, 1);
+                            $saved_bytes = $baseline - $best_optimized;
+                        } else {
+                            $best_savings = 0;
+                            $saved_bytes = 0;
+                        }
+
+                        update_post_meta($imageID, 'ic_savings', $best_savings);
+                        update_post_meta($imageID, 'ic_savings_format', $best_format);
+                        update_post_meta($imageID, 'ic_savings_bytes', $saved_bytes);
+                        update_post_meta($imageID, 'ic_savings_baseline', $baseline);
+
+                        // Invalidate CDN coexistence cache
+                        if (function_exists('wpc_invalidate_local_cache')) {
+                            wpc_invalidate_local_cache();
+                        }
 
                         // Ovo je radilo probleme jer generira thumbove iz -scaled verzije slike, i onda generira nove thumbove koji su scaled
                         // Get full image path
@@ -945,15 +1096,21 @@ class wps_local_compress
         // List of allowed image MIME types
         $allowed_mimes = ['image/jpeg', 'image/png', 'image/gif'];
 
-        // First query just to get total count of images WITHOUT 'ic_stats'
-        $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => [['key' => 'ic_stats', 'compare' => 'EXISTS']],]);
+        $meta_query = [
+            'relation' => 'AND',
+            ['key' => 'ic_stats', 'compare' => 'EXISTS'],
+            ['key' => 'wps_ic_exclude_live', 'compare' => 'NOT EXISTS'],
+        ];
+
+        // First query just to get total count
+        $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => $meta_query]);
 
         $total_images = $initial_query->found_posts;
         $total_pages = ceil($total_images / $per_page);
 
         // Now loop through all pages
         for ($page = 1; $page <= $total_pages; $page++) {
-            $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => [['key' => 'ic_stats', 'compare' => 'EXISTS']],]);
+            $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => $meta_query]);
 
             $all_ids = array_merge($all_ids, $query->posts);
         }
@@ -974,15 +1131,21 @@ class wps_local_compress
         // List of allowed image MIME types
         $allowed_mimes = ['image/jpeg', 'image/png', 'image/gif'];
 
-        // First query just to get total count of images WITHOUT 'ic_stats'
-        $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => [['key' => 'ic_stats', 'compare' => 'NOT EXISTS']],]);
+        $meta_query = [
+            'relation' => 'AND',
+            ['key' => 'ic_stats', 'compare' => 'NOT EXISTS'],
+            ['key' => 'wps_ic_exclude_live', 'compare' => 'NOT EXISTS'],
+        ];
+
+        // First query just to get total count
+        $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => $meta_query]);
 
         $total_images = $initial_query->found_posts;
         $total_pages = ceil($total_images / $per_page);
 
         // Now loop through all pages
         for ($page = 1; $page <= $total_pages; $page++) {
-            $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => [['key' => 'ic_stats', 'compare' => 'NOT EXISTS']],]);
+            $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => $meta_query]);
 
             $all_ids = array_merge($all_ids, $query->posts);
         }
@@ -1132,15 +1295,29 @@ class wps_local_compress
             return $data;
         }
 
-        // Is the image already Compressed
+        // Is the image already compressed
         if ($this->is_already_compressed($imageID)) {
-            $this->writeLog('Image not supported ' . $imageID);
+            $this->writeLog('Image already compressed ' . $imageID);
             return $data;
         }
 
+        // Save original metadata for restore
         update_post_meta($imageID, 'wpc_old_meta', $data);
 
-        $this->singleCompressV4($imageID, false);
+        // Build optimize params and fire non-blocking request
+        // Don't delay the upload response — service calls back when done
+        $params = self::buildOptimizeParams($imageID);
+        $request_url = add_query_arg($params, WPC_IC_LOCAL_OPTIMIZE);
+
+        wp_remote_get($request_url, [
+            'timeout'   => 1,
+            'blocking'  => false,
+            'sslverify' => false,
+        ]);
+
+        // Mark as queued so media library shows status immediately
+        update_post_meta($imageID, 'ic_status', 'queued');
+        $this->writeLog('Queued for optimization (non-blocking) ' . $imageID);
 
         return $data;
     }
@@ -1198,17 +1375,48 @@ class wps_local_compress
         }
 
         // Prepare the request params WPC_IC_LOCAL_OPTIMIZE
-        // Site URL where this plugin runs
+        // Site URL — force HTTPS if any SSL indicator is present (fixes HTTP→HTTPS redirect callback issue)
         $site_url = get_site_url();
+        if (is_ssl()
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+            || strpos(home_url(), 'https://') === 0
+            || (!empty($_SERVER['HTTP_CF_VISITOR']) && strpos($_SERVER['HTTP_CF_VISITOR'], 'https') !== false)
+        ) {
+            $site_url = str_replace('http://', 'https://', $site_url);
+        }
 
-        // Build full API URL
-        $request_url = add_query_arg(array('imageID' => $imageID, 'imageSite' => $site_url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],), WPC_IC_LOCAL_OPTIMIZE);
+        // Build full API URL with all local optimization params
+        $settings = get_option(WPS_IC_SETTINGS);
+        $request_params = self::buildOptimizeParams($imageID, $site_url, $settings);
+        $request_url = add_query_arg($request_params, WPC_IC_LOCAL_OPTIMIZE);
+
+        // Increase timeout when AVIF enabled (large images + AVIF effort 6 can take 30-40s)
+        $optimize_timeout = (!empty($settings['picture_avif']) && $settings['picture_avif'] == '1') ? 45 : 15;
 
         // Make the GET request
-        $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
+        $response = wp_remote_get($request_url, array('timeout' => $optimize_timeout, 'sslverify' => false));
 
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        // Validate response — fail fast instead of leaving image in "compressing" state
+        if (is_wp_error($response)) {
+            error_log('[WPC] Local optimize failed for image ' . $imageID . ': ' . $response->get_error_message());
+            delete_transient('wps_ic_compress_' . $imageID);
+            delete_transient('wps_ic_queue_' . $imageID);
+            if ($output == 'json') {
+                wp_send_json_error(['msg' => 'unable-to-contact-api']);
+            }
+            return;
+        }
+
+        $http_code = wp_remote_retrieve_response_code($response);
+        if ($http_code < 200 || $http_code >= 300) {
+            error_log('[WPC] Local optimize HTTP ' . $http_code . ' for image ' . $imageID);
+            delete_transient('wps_ic_compress_' . $imageID);
+            delete_transient('wps_ic_queue_' . $imageID);
+            if ($output == 'json') {
+                wp_send_json_error(['msg' => 'unable-to-contact-api']);
+            }
+            return;
+        }
 
         if ($output == 'json') {
             wp_send_json_success();
@@ -1359,9 +1567,15 @@ class wps_local_compress
             delete_post_meta($imageID, 'ic_compressing');
             delete_post_meta($imageID, 'wpc_images_compressed');
             delete_post_meta($imageID, 'ic_stats');
+            delete_post_meta($imageID, 'ic_local_variants');
+            delete_post_meta($imageID, 'ic_savings');
+            delete_post_meta($imageID, 'ic_savings_format');
+            delete_post_meta($imageID, 'ic_savings_bytes');
+            delete_post_meta($imageID, 'ic_savings_baseline');
             update_post_meta($imageID, 'ic_status', 'restored');
             set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
-            die();
+            if (function_exists('wpc_invalidate_local_cache')) { wpc_invalidate_local_cache(); }
+            return true;
         }
 
         // Site URL where this plugin runs
@@ -1370,96 +1584,149 @@ class wps_local_compress
         // Build full API URL
         $request_url = add_query_arg(array('imageID' => $imageID, 'imageSite' => $site_url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'],), WPC_IC_LOCAL_RESTORE);
 
-        // Make the GET request
-        $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
+        // Make the GET request (30s timeout — large images need time)
+        $response = wp_remote_get($request_url, array('timeout' => 30, 'sslverify' => false));
+
+        // Handle service errors
+        if (is_wp_error($response)) {
+            return false;
+        }
 
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
-        if (!empty($data['backupUrls'])) {
 
-            $unscaledUrl = null;
+        if (empty($data['backupUrls'])) {
+            // Service returned no backup URLs — clear metadata anyway so image isn't stuck
+            delete_post_meta($imageID, 'ic_bulk_running');
+            delete_post_meta($imageID, 'ic_compressing');
+            delete_post_meta($imageID, 'wpc_images_compressed');
+            delete_post_meta($imageID, 'ic_stats');
+            delete_post_meta($imageID, 'ic_local_variants');
+            delete_post_meta($imageID, 'ic_savings');
+            delete_post_meta($imageID, 'ic_savings_format');
+            delete_post_meta($imageID, 'ic_savings_bytes');
+            delete_post_meta($imageID, 'ic_savings_baseline');
+            update_post_meta($imageID, 'ic_status', 'restored');
+            set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
+            if (function_exists('wpc_invalidate_local_cache')) { wpc_invalidate_local_cache(); }
+            return true;
+        }
 
-            // Find the unscaled
-            foreach ($data['backupUrls'] as $file) {
-                if ($file['sizeLabel'] === 'unscaled') {
-                    $unscaledUrl = $file['fileUrl'];
+        // Try local _bkp backup FIRST (most reliable — was copied before overwrite)
+        $restored = false;
+        $scaledPath = get_attached_file($imageID);
+        $unscaledPath = $scaledPath ? str_replace('-scaled.', '.', $scaledPath) : '';
 
+        // Check for local _bkp files (unscaled first, then scaled)
+        $localBkpPaths = array_filter([$unscaledPath . '_bkp', $scaledPath . '_bkp']);
+        foreach ($localBkpPaths as $bkpPath) {
+            if ($bkpPath && file_exists($bkpPath) && filesize($bkpPath) > 0) {
+                $targetPath = str_replace('_bkp', '', $bkpPath);
+                if (@copy($bkpPath, $targetPath)) {
+                    @unlink($bkpPath);
 
-                    $originalFilePath = get_attached_file($imageID);
-                    $filePath = str_replace(basename($originalFilePath), '', $originalFilePath);
-                    $unscaledBasename = basename($unscaledUrl);
-                    $unscaledPath = $filePath . $unscaledBasename;
-
-                    // Download to temp file
-                    $tmp = download_url($unscaledUrl);
-                    if (is_wp_error($tmp)) {
-                        continue;
+                    // If we restored the unscaled version, regenerate -scaled + thumbnails
+                    $isUnscaled = (strpos($targetPath, '-scaled.') === false && $unscaledPath === $targetPath);
+                    if ($isUnscaled) {
+                        remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
+                        $newMeta = wp_generate_attachment_metadata($imageID, $targetPath);
+                        if ($newMeta) {
+                            wp_update_attachment_metadata($imageID, $newMeta);
+                        }
                     }
 
-                    copy($tmp, $unscaledPath);
-                    @unlink($tmp);
-
+                    $restored = true;
                     break;
                 }
             }
-
-
-            foreach ($data['backupUrls'] as $index => $backupFile) {
-                $size = $backupFile['sizeLabel'];
-
-                // We just require the original
-                if ($size !== 'original') {
-                    continue;
-                }
-
-                $url = $backupFile['fileUrl'];
-
-                // Download to temp file
-                $tmp = download_url($url);
-                if (is_wp_error($tmp)) {
-                    continue;
-                }
-
-                $originalFilePath = get_attached_file($imageID);
-                if (!$originalFilePath) {
-                    @unlink($tmp);
-                    continue;
-                }
-
-                // Replace the file
-                copy($tmp, $originalFilePath);
-                @unlink($tmp);
-
-                // Remove backup
-                if (file_exists($originalFilePath . '_bkp')) {
-                    @unlink($originalFilePath . '_bkp');
-                }
-
-                // generira iz scaled verzije opet
-                $unscaledPath = str_replace('-scaled.', '.', $originalFilePath);
-                if (file_exists($unscaledPath)) {
-                    $originalFilePath = $unscaledPath;
-                }
-
-                $newMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
-
-                if ($newMeta) {
-                    wp_update_attachment_metadata($imageID, $newMeta);
-                }
-
-                // Optional status flag
-                delete_post_meta($imageID, 'ic_bulk_running');
-                delete_post_meta($imageID, 'ic_compressing');
-                delete_post_meta($imageID, 'wpc_images_compressed');
-                delete_post_meta($imageID, 'ic_stats');
-                update_post_meta($imageID, 'ic_status', 'restored');
-            }
-
-            set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
         }
 
+        // Fallback: download from service if no local backup
+        if (!$restored) {
+        $restoreUrl = null;
+        $restoreLabel = null;
 
-        die();
+        // Prefer unscaled (real camera upload), fall back to original (WP-scaled)
+        foreach ($data['backupUrls'] as $backupFile) {
+            if ($backupFile['sizeLabel'] === 'unscaled') {
+                $restoreUrl = $backupFile['fileUrl'];
+                $restoreLabel = 'unscaled';
+                break;
+            }
+            if ($backupFile['sizeLabel'] === 'original' && !$restoreUrl) {
+                $restoreUrl = $backupFile['fileUrl'];
+                $restoreLabel = 'original';
+            }
+        }
+
+        if ($restoreUrl) {
+            $tmp = download_url($restoreUrl, 60);
+            if (!is_wp_error($tmp)) {
+                if ($restoreLabel === 'unscaled') {
+                    // Unscaled = real original. Save to the unscaled path, then regenerate -scaled + thumbnails.
+                    $scaledPath = get_attached_file($imageID);
+                    $unscaledPath = str_replace('-scaled.', '.', $scaledPath);
+                    copy($tmp, $unscaledPath);
+                    @unlink($tmp);
+
+                    // Suppress auto-optimize hook during thumbnail regeneration
+                    remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
+                    $newMeta = wp_generate_attachment_metadata($imageID, $unscaledPath);
+                    if ($newMeta) {
+                        wp_update_attachment_metadata($imageID, $newMeta);
+                    }
+                } else {
+                    // Original (WP-scaled) fallback — just replace the file, skip regen
+                    $originalFilePath = get_attached_file($imageID);
+                    if ($originalFilePath) {
+                        copy($tmp, $originalFilePath);
+                    }
+                    @unlink($tmp);
+                }
+
+                // Remove local backup if exists
+                $attachedFile = get_attached_file($imageID);
+                if ($attachedFile && file_exists($attachedFile . '_bkp')) {
+                    @unlink($attachedFile . '_bkp');
+                }
+
+                $restored = true;
+            }
+        }
+        } // end if (!$restored) — service fallback
+
+        if ($restored) {
+            // Clean leftover .webp and .avif files from optimization
+            $attachedFile = get_attached_file($imageID);
+            if ($attachedFile) {
+                $dir = dirname($attachedFile);
+                $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
+                foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
+                foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { @unlink($avif); }
+            }
+
+            // Clean all optimization metadata
+            delete_post_meta($imageID, 'ic_bulk_running');
+            delete_post_meta($imageID, 'ic_compressing');
+            delete_post_meta($imageID, 'wpc_images_compressed');
+            delete_post_meta($imageID, 'ic_stats');
+            delete_post_meta($imageID, 'ic_local_variants');
+            delete_post_meta($imageID, 'ic_savings');
+            delete_post_meta($imageID, 'ic_savings_format');
+            delete_post_meta($imageID, 'ic_savings_bytes');
+            delete_post_meta($imageID, 'ic_savings_baseline');
+            delete_post_meta($imageID, 'ic_skipped');
+            update_post_meta($imageID, 'ic_status', 'restored');
+        }
+
+        set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
+
+        // Invalidate CDN coexistence cache
+        if (function_exists('wpc_invalidate_local_cache')) {
+            wpc_invalidate_local_cache();
+        }
+
+        return true;
 
 
         $this->writeLog('Started Image ID ' . $imageID);
@@ -1726,6 +1993,11 @@ class wps_local_compress
                         delete_post_meta($imageID, 'ic_compressed_images');
                         delete_post_meta($imageID, 'ic_compressed_thumbs');
                         delete_post_meta($imageID, 'ic_backup_images');
+                        delete_post_meta($imageID, 'ic_local_variants');
+                        delete_post_meta($imageID, 'ic_savings');
+                        delete_post_meta($imageID, 'ic_savings_format');
+                        delete_post_meta($imageID, 'ic_savings_bytes');
+                        delete_post_meta($imageID, 'ic_savings_baseline');
                         update_post_meta($imageID, 'ic_status', 'restored');
                         delete_post_meta($imageID, 'ic_bulk_running');
                         delete_transient('wps_ic_compress_' . $imageID);
@@ -1831,6 +2103,11 @@ class wps_local_compress
                     delete_post_meta($imageID, 'ic_compressed_images');
                     delete_post_meta($imageID, 'ic_compressed_thumbs');
                     delete_post_meta($imageID, 'ic_backup_images');
+                    delete_post_meta($imageID, 'ic_local_variants');
+                    delete_post_meta($imageID, 'ic_savings');
+                    delete_post_meta($imageID, 'ic_savings_format');
+                    delete_post_meta($imageID, 'ic_savings_bytes');
+                    delete_post_meta($imageID, 'ic_savings_baseline');
                     update_post_meta($imageID, 'ic_status', 'restored');
                     delete_post_meta($imageID, 'ic_bulk_running');
                     delete_transient('wps_ic_compress_' . $imageID);

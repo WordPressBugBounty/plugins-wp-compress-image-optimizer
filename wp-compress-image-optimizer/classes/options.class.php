@@ -57,6 +57,8 @@ class wps_ic_options
             'fonts' => 1,
             'generate_adaptive' => 1,
             'generate_webp' => 1,
+            'picture_webp' => 1,
+            'picture_avif' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
             'lazy' => 0,
@@ -65,7 +67,7 @@ class wps_ic_options
             'background-sizing' => 0,
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
-            'on-upload' => 0,
+            'on-upload' => 1,
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
@@ -115,7 +117,12 @@ class wps_ic_options
             'preload-crit-fonts' => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
-            'eu-routing' => '0'
+            'eu-routing' => '0',
+            // Local optimization defaults (Smart Optimization preset)
+            'picture_avif' => 1,
+            'backup' => 'local',
+            'maxWidth' => '2560',
+            'local_qualityLevel' => '0',
         ];
 
         $this::$safeSettings = [
@@ -132,7 +139,9 @@ class wps_ic_options
             'js' => '0',
             'fonts' => '0',
             'generate_adaptive' => '0',
-            'generate_webp' => '0',
+            'generate_webp' => '1',
+            'picture_webp' => '1',
+            'picture_avif' => '1',
             'retina' => '0',
             'retina-in-srcset' => '0',
             'lazy' => '0',
@@ -140,7 +149,7 @@ class wps_ic_options
             'background-sizing' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
-            'on-upload' => '0',
+            'on-upload' => '1',
             'emoji-remove' => '0',
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => '0',
@@ -189,7 +198,11 @@ class wps_ic_options
             'preload-crit-fonts' => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
-            'eu-routing' => '0'
+            'eu-routing' => '0',
+            // Local optimization defaults (Smart Optimization preset)
+            'backup' => 'local',
+            'maxWidth' => '2560',
+            'local_qualityLevel' => '0',
         ];
 
         $this::$liteSettings = [
@@ -207,6 +220,8 @@ class wps_ic_options
             'fonts' => '0',
             'generate_adaptive' => '1',
             'generate_webp' => '1',
+            'picture_webp' => '1',
+            'picture_avif' => '1',
             'retina' => '1',
             'retina-in-srcset' => '0',
             'nativeLazy' => '1',
@@ -215,7 +230,7 @@ class wps_ic_options
             'background-sizing' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
-            'on-upload' => 0,
+            'on-upload' => 1,
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
@@ -265,7 +280,12 @@ class wps_ic_options
             'preload-crit-fonts' => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
-            'eu-routing' => '0'
+            'eu-routing' => '0',
+            // Local optimization defaults (Smart Optimization preset)
+            'picture_avif' => 1,
+            'backup' => 'local',
+            'maxWidth' => '2560',
+            'local_qualityLevel' => '0',
         ];
 
         $this::$aggressiveSettings = [
@@ -286,6 +306,8 @@ class wps_ic_options
             'fonts' => 1,
             'generate_adaptive' => 1,
             'generate_webp' => 1,
+            'picture_webp' => 1,
+            'picture_avif' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
             'lazy' => 0,
@@ -294,7 +316,7 @@ class wps_ic_options
             'background-sizing' => 1,
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
-            'on-upload' => 0,
+            'on-upload' => 1,
             'emoji-remove' => 0,
             'remove-duplicated-fontawesome' => 0,
             'disable-oembeds' => 0,
@@ -345,7 +367,12 @@ class wps_ic_options
             'preload-crit-fonts'    => '0',
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
-            'eu-routing' => '0'
+            'eu-routing' => '0',
+            // Local optimization defaults (Smart Optimization preset)
+            'picture_avif' => 1,
+            'backup' => 'local',
+            'maxWidth' => '2560',
+            'local_qualityLevel' => '0',
         ];
 
         $this::$purgeRules = [

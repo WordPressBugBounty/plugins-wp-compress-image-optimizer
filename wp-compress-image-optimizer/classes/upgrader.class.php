@@ -72,7 +72,7 @@ class wps_ic_upgrader extends wps_ic
             'disable-oembeds' => '0',
             'disable-gutenber' => '0',
             'disable-dashicons' => '0',
-            'on-upload' => '0',
+            'on-upload' => '1',
             'defer-js' => '0',
             'serve' => ['jpg' => '1', 'png' => '1', 'gif' => '1', 'svg' => '1'],
             'search-through' => 'html',

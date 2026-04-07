@@ -1,6 +1,31 @@
 jQuery(document).ready(function ($) {
 
     var allowRefresh = true;
+
+    // ─── Action Queue — process one compress/restore at a time ────────────
+    var wpcActionQueue = [];
+    var wpcActionRunning = false;
+
+    function wpcEnqueue(fn) {
+        wpcActionQueue.push(fn);
+        wpcProcessQueue();
+    }
+
+    function wpcProcessQueue() {
+        if (wpcActionRunning || wpcActionQueue.length === 0) return;
+        wpcActionRunning = true;
+        var next = wpcActionQueue.shift();
+        // Safety timeout: unlock queue after 60s even if done() never called (network hang)
+        var safetyTimer = setTimeout(function () {
+            wpcActionRunning = false;
+            wpcProcessQueue();
+        }, 60000);
+        next(function () {
+            clearTimeout(safetyTimer);
+            wpcActionRunning = false;
+            setTimeout(wpcProcessQueue, 1500);
+        });
+    }
     $('.ic-tooltip').tooltipster({
         maxWidth: '300',
         delay: 100,
@@ -38,18 +63,31 @@ jQuery(document).ready(function ($) {
 
     /**
      * Media Library - Heartbeat
+     * Normal: 8s interval. After compress/restore: switches to 3s for 60s, then back to 8s.
      */
-    var WPCHeartbeat = setInterval(function () {
-        heartbeat();
-    }, 8000);
+    var wpcHBInterval = 8000;
+    var wpcHBTimer = null;
+    var wpcHBBurstTimeout = null;
+    var wpcHBRunning = false;
 
-    wpcHBCounter = 0;
+    function wpcStartHeartbeat(interval) {
+        if (wpcHBTimer) clearInterval(wpcHBTimer);
+        wpcHBInterval = interval;
+        wpcHBTimer = setInterval(heartbeat, interval);
+    }
+
+    // Start normal heartbeat
+    wpcStartHeartbeat(8000);
+
     var heartbeat = function () {
+        if (wpcHBRunning) return; // Prevent overlapping requests
+        wpcHBRunning = true;
         $.ajax({
             url: ajaxurl,
             type: 'POST',
             data: {action: 'wps_ic_media_library_heartbeat'},
             success: function (response) {
+                wpcHBRunning = false;
                 if (response.success == true) {
                     $.each(response.data.html, function (index, value) {
                         var parent = $('.wps-ic-media-actions-' + index);
@@ -61,18 +99,28 @@ jQuery(document).ready(function ($) {
                     $('.ic-tooltip').tooltipster({
                         maxWidth: '300',
                     });
-
-                    wpcHBCounter = 0;
-                } else {
-                    if (wpcHBCounter == 5) {
-                        console.log('Removing WPC Heartbeat');
-                        //clearInterval(WPCHeartbeat);
-                    }
-                    wpcHBCounter++;
                 }
+            },
+            error: function () {
+                wpcHBRunning = false;
             }
         });
     };
+
+    // Switch to fast polling for 60s after an action, then back to normal
+    function heartbeatBurst() {
+        if (wpcHBInterval !== 3000) {
+            wpcStartHeartbeat(3000);
+        }
+        // Reset the 60s countdown on each new action
+        if (wpcHBBurstTimeout) clearTimeout(wpcHBBurstTimeout);
+        wpcHBBurstTimeout = setTimeout(function () {
+            wpcStartHeartbeat(8000);
+            wpcHBBurstTimeout = null;
+        }, 60000);
+        // Immediate poll
+        heartbeat();
+    }
 
 
     /**
@@ -119,13 +167,16 @@ jQuery(document).ready(function ($) {
     });
 
     /**
-     * Restore Live
+     * Restore Live — queued, one at a time
      */
     $('body').on('click', '.wps-ic-restore-live', function (e) {
 
         e.preventDefault();
 
         var button = $(this);
+        if (button.hasClass('wpc-action-pending')) return;
+        button.addClass('wpc-action-pending');
+
         var attachment_id = $(button).data('attachment_id');
         var parent = $('.wps-ic-media-actions-' + attachment_id);
         var loading = $('.wps-ic-image-loading-' + attachment_id);
@@ -133,36 +184,40 @@ jQuery(document).ready(function ($) {
         $(parent).hide();
         $(loading).show();
 
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wps_ic_restore_live',
-                attachment_id: attachment_id,
-            },
-            success: function (response) {
-                heartbeat();
-            },
-            error: function (xhr, ajaxOptions, thrownError) {
-                $(parent).show();
-                $(loading).hide();
+        wpcEnqueue(function (done) {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                timeout: 90000,
+                data: {
+                    action: 'wps_ic_restore_live',
+                    attachment_id: attachment_id,
+                },
+                success: function (response) {
+                    heartbeatBurst();
+                    button.removeClass('wpc-action-pending');
+                    done();
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                    $(parent).show();
+                    $(loading).hide();
+                    button.removeClass('wpc-action-pending');
 
-                // Failure Pop Up
-                WPCSwal.fire({
-                    title: '',
-                    html: $('#' + response.data.msg).html(),
-                    width: 600,
-                    showCancelButton: false,
-                    showConfirmButton: false,
-                    confirmButtonText: 'Okay, I Understand',
-                    allowOutsideClick: true,
-                    customClass: {
-                        container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6',
-                    },
-                    onOpen: function () {
+                    var msg = '';
+                    try { msg = JSON.parse(xhr.responseText).data.msg; } catch(e) {}
+                    if (msg && $('#' + msg).length) {
+                        WPCSwal.fire({
+                            title: '',
+                            html: $('#' + msg).html(),
+                            width: 500,
+                            showConfirmButton: false,
+                            allowOutsideClick: true,
+                            customClass: { container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6' },
+                        });
                     }
-                });
-            }
+                    done();
+                }
+            });
         });
 
     });
@@ -245,13 +300,16 @@ jQuery(document).ready(function ($) {
     });
 
     /**
-     * Compress Live
+     * Compress Live — queued, one at a time
      */
     $('body').on('click', '.wps-ic-compress-live', function (e) {
         e.preventDefault();
 
-        allowRefresh = false;
         var button = $(this);
+        if (button.hasClass('wpc-action-pending')) return;
+        button.addClass('wpc-action-pending');
+
+        allowRefresh = false;
         var attachment_id = $(button).data('attachment_id');
         var parent = $('.wps-ic-media-actions-' + attachment_id);
         var loading = $('.wps-ic-image-loading-' + attachment_id);
@@ -259,64 +317,63 @@ jQuery(document).ready(function ($) {
         $(parent).hide();
         $(loading).show();
 
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'wps_ic_compress_live',
-                bulk: false,
-                attachment_id: attachment_id
-            },
-            success: function (response) {
+        wpcEnqueue(function (done) {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'wps_ic_compress_live',
+                    bulk: false,
+                    attachment_id: attachment_id
+                },
+                success: function (response) {
 
-                if (response.success) {
-                    if (response.data == 'no-credits') {
-                        // Load Popup
-                        WPCSwal.fire({
-                            title: '',
-                            html: $('#no-credits-popup').html(),
-                            width: 600,
-                            showCancelButton: false,
-                            showConfirmButton: false,
-                            confirmButtonText: 'Okay, I Understand',
-                            allowOutsideClick: true,
-                            customClass: {
-                                container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6',
-                            },
-                            onOpen: function () {
-                            }
-                        });
-                    } else {
-                        heartbeat();
-                    }
-                } else {
-                    $(loading).hide();
-                    $(parent).html(response.data.html).show();
-
-                    // Failure Pop Up
-                    WPCSwal.fire({
-                        title: '',
-                        html: $('#' + response.data.msg).html(),
-                        width: 600,
-                        showCancelButton: false,
-                        showConfirmButton: false,
-                        confirmButtonText: 'Okay, I Understand',
-                        allowOutsideClick: true,
-                        customClass: {
-                            container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6',
-                        },
-                        onOpen: function () {
+                    if (response.success) {
+                        if (response.data == 'no-credits') {
+                            WPCSwal.fire({
+                                title: '',
+                                html: $('#no-credits-popup').html(),
+                                width: 500,
+                                showConfirmButton: false,
+                                allowOutsideClick: true,
+                                customClass: { container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6' },
+                            });
+                        } else {
+                            heartbeatBurst();
                         }
-                    });
+                    } else {
+                        $(loading).hide();
+                        if (response.data && response.data.html) {
+                            $(parent).html(response.data.html).show();
+                        } else {
+                            $(parent).show();
+                        }
+
+                        var msg = (response.data && response.data.msg) ? response.data.msg : 'unknown-error';
+                        if ($('#' + msg).length) {
+                            WPCSwal.fire({
+                                title: '',
+                                html: $('#' + msg).html(),
+                                width: 500,
+                                showConfirmButton: false,
+                                allowOutsideClick: true,
+                                customClass: { container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6' },
+                            });
+                        }
 
 
+                    }
+                    button.removeClass('wpc-action-pending');
+                    done();
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                    allowRefresh = true;
+                    $(loading).hide();
+                    $(parent).show();
+                    button.removeClass('wpc-action-pending');
+                    done();
                 }
-            },
-            error: function (xhr, ajaxOptions, thrownError) {
-                allowRefresh = true;
-                $(loading).hide();
-                $(parent).html(response.data.html).show();
-            }
+            });
         });
 
     });

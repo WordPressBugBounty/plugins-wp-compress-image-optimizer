@@ -332,3 +332,59 @@
   }
 
 } // end .wpc-advanced-settings-container-v4 / .wpc-lite-settings-container
+
+// ─── Bulk Page — Return to Dashboard button ──────────────────────────────
+.wpc-btn-return {
+  border-radius: @radius-md;
+  background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: WP admin link overrides
+  display: inline-block;
+  padding: 16px 24px;
+  font-family: @font-regular;
+  font-size: 13px;
+  color: @color-white !important; // FORCED: WP admin link color overrides
+  text-decoration: none !important; // FORCED: WP admin link underline
+  transition: @transition-fast;
+  box-shadow: @shadow-sm;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.3));
+    filter: brightness(1.08);
+    color: @color-white !important; // FORCED: WP admin hover color
+    text-decoration: none !important; // FORCED: WP admin hover underline
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: @shadow-sm;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--wpc-brand-primary, @color-blue);
+    outline-offset: 2px;
+  }
+}
+
+// ─── Bulk Page — Compress / Restore action buttons ───────────────────────
+.wps_ic_settings_page {
+  .button-start-bulk-compress,
+  .button-start-bulk-restore {
+    background: var(--wpc-brand-primary, @color-blue) !important; // FORCED: WP button overrides
+    border-color: var(--wpc-brand-primary, @color-blue) !important; // FORCED: WP button border
+    color: @color-white !important; // FORCED: WP button text
+    border-radius: @radius-md;
+    font-family: @font-regular;
+    font-size: 13px;
+    padding: 8px 24px;
+    transition: @transition-fast;
+    box-shadow: none;
+
+    &:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.3));
+      color: @color-white !important; // FORCED: WP hover color
+    }
+  }
+}

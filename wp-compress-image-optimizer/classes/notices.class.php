@@ -140,10 +140,7 @@ class wps_ic_admin_notice {
               <div style="margin-left:auto">
                 <?php
                 if (!empty($support)) {
-	                global $whtlbl;
-	                $support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
-		                ? $whtlbl->author_url
-		                : 'https://www.wpcompress.com/support';
+	                $support_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://www.wpcompress.com/support') : 'https://www.wpcompress.com/support';
                   echo '<a href="'.$support_url.'" target="_blank" class="button-secondary wpc-notice-link" style="margin-right:5px;">Contact Support</a>';
                 }
                 if (!empty($info)) {

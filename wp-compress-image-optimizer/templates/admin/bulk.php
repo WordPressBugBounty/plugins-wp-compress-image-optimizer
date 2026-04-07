@@ -105,7 +105,7 @@ if (!$live_cdn) {
                             </div>
                             <?php
                             if ($uncompressedImages > 0) {
-                                echo '<h3>' . sprintf(esc_html__('You have %d images ready to be optimized.', WPS_IC_TEXTDOMAIN), $uncompressedImages) . '</h3>';
+                                echo '<h3>' . sprintf(esc_html(_n('You have %d image ready to be optimized.', 'You have %d images ready to be optimized.', $uncompressedImages, WPS_IC_TEXTDOMAIN)), $uncompressedImages) . '</h3>';
                             } else {
                                 echo '<h3>' . esc_html__('You have 0 images to optimize.', WPS_IC_TEXTDOMAIN) . '</h3>';
                             }
@@ -134,7 +134,7 @@ if (!$live_cdn) {
                             </div>
                             <?php
                             if ($compressedImages > 0) {
-                                echo '<h3>' . sprintf(esc_html__('You have %d images that can be restored.', WPS_IC_TEXTDOMAIN), $compressedImages) . '</h3>';
+                                echo '<h3>' . sprintf(esc_html(_n('You have %d image that can be restored.', 'You have %d images that can be restored.', $compressedImages, WPS_IC_TEXTDOMAIN)), $compressedImages) . '</h3>';
                             } else {
                                 echo '<h3>' . esc_html__('You have 0 images that can be restored.', WPS_IC_TEXTDOMAIN) . '</h3>';
                             }
@@ -158,7 +158,7 @@ if (!$live_cdn) {
                             <div class="wps-ic-bulk-preparing-logo-container">
                                 <div class="wps-ic-bulk-preparing-logo">
                                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-                                    <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
+                                    <svg class="bulk-preparing" xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid"><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-bg, #eff7ff)" stroke-width="5" fill="none"></circle><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-primary, #4c89eb)" stroke-width="3" stroke-linecap="round" fill="none"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="2s" values="0 50 50;180 50 50;720 50 50" keyTimes="0;0.5;1"></animateTransform><animate attributeName="stroke-dasharray" repeatCount="indefinite" dur="2s" values="18.85 169.65;94.25 94.25;18.85 169.65" keyTimes="0;0.5;1"></animate></circle></svg>
                                 </div>
                             </div>
                             <h3 class="wpc-preparing-message"><?php esc_html_e('Preparing to Optimize', WPS_IC_TEXTDOMAIN); ?></h3>
@@ -181,7 +181,7 @@ if (!$live_cdn) {
                             <div class="wps-ic-bulk-preparing-logo-container">
                                 <div class="wps-ic-bulk-preparing-logo">
                                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-                                    <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="bulk-preparing"/>
+                                    <svg class="bulk-preparing" xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid"><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-bg, #eff7ff)" stroke-width="5" fill="none"></circle><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-primary, #4c89eb)" stroke-width="3" stroke-linecap="round" fill="none"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="2s" values="0 50 50;180 50 50;720 50 50" keyTimes="0;0.5;1"></animateTransform><animate attributeName="stroke-dasharray" repeatCount="indefinite" dur="2s" values="18.85 169.65;94.25 94.25;18.85 169.65" keyTimes="0;0.5;1"></animate></circle></svg>
                                 </div>
                             </div>
                             <h3 class="wpc-preparing-message"><?php esc_html_e('Preparing to Restore', WPS_IC_TEXTDOMAIN); ?></h3>

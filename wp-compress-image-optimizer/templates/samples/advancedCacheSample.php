@@ -125,8 +125,11 @@ $prefix = '';
 $cache = new wps_advancedCache();
 
 $mobile = $cache->is_mobile();
+$webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
 
-if ($mobile) $prefix = 'mobile';
+if ($mobile && $webp) $prefix = 'mobile-webp';
+elseif ($mobile) $prefix = 'mobile';
+elseif ($webp) $prefix = 'webp';
 
 if (!$cache->byPass() && $cache->cacheExists($prefix)) {
   $isCacheExpired = $cache->cacheExpired();

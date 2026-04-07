@@ -1099,6 +1099,11 @@
       grid-template-columns: 1fr;
     }
 
+    // Full-width item spans entire grid
+    .wpc-grid-full-width {
+      grid-column: 1 / -1;
+    }
+
     // Title row — tight gap for icon + text + badges
     > .wpc-box-for-checkbox,
     > .wpc-box-for-input,
@@ -1718,6 +1723,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     padding: 30px 40px;
     opacity: 0;
     animation: wpcMaterialize 300ms @ease-entrance both;
@@ -1726,6 +1732,13 @@
     .wpc-optimize-library-inner { .wpc-standalone-card-inner(); }
     .wpc-optimize-library-icon { .wpc-standalone-card-icon(#A78BFA, #7C3AED); } // amethyst
     .wpc-optimize-library-text { .wpc-standalone-card-text(); }
+
+    .wpc-optimize-library-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
 
     .wpc-optimize-library-btn {
       display: inline-flex;
@@ -1756,6 +1769,665 @@
         transition-duration: 0.06s;
       }
     }
+
+    // Configure — ghost outline
+    .wpc-local-configure-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 20px;
+      min-height: 36px;
+      background: transparent;
+      color: @color-text-secondary;
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      border: 1.5px solid @color-border;
+      border-radius: @radius-md;
+      cursor: pointer;
+      transition: @transition-fast;
+      white-space: nowrap;
+      flex-shrink: 0;
+      outline: none;
+
+      &:hover {
+        border-color: @color-border-medium;
+        color: @color-text-body;
+        background: @color-bg-frost;
+      }
+
+      &:active {
+        transform: scale(0.97);
+        transition-duration: 0.06s;
+      }
+    }
+
+    // Mode pill — ghost outline with dropdown arrow
+    .wpc-local-mode-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      min-height: 36px;
+      background: transparent;
+      border: 1.5px solid var(--wpc-brand-primary, @color-blue);
+      border-radius: @radius-md;
+      color: var(--wpc-brand-primary, @color-blue);
+      font-family: @font-semibold;
+      font-size: @font-size-sm;
+      cursor: pointer;
+      transition: @transition-fast;
+      box-shadow: none;
+      outline: none;
+      flex-shrink: 0;
+
+      &:hover {
+        background: var(--wpc-brand-primary, @color-blue);
+        color: @color-white;
+        box-shadow: 0 2px 8px var(--wpc-brand-shadow, rgba(59, 130, 246, 0.25));
+
+        &::after {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+      }
+
+      &::after {
+        content: "";
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234273f0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+        opacity: 0.85;
+      }
+    }
+
+    // Collapsible body — full width below header
+    .wpc-local-opt-body {
+      flex-basis: 100%;
+      padding: 16px 0 0;
+      border-top: 1px solid fade(@color-border, 40%);
+      margin-top: 20px;
+    }
+
+    // Optimization Goal card (inside body)
+    .wpc-local-goal-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      margin: 0 40px 4px;
+      box-shadow: none;
+
+      .wpc-local-goal-inner { .wpc-standalone-card-inner(); }
+      .wpc-local-goal-icon {
+        width: 48px;
+        height: 48px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: #F5F5F5;
+        border: none;
+        border-radius: @radius-input;
+        color: var(--wpc-brand-primary, @color-blue);
+        box-shadow: none;
+
+        svg { width: 24px; height: 24px; }
+      }
+      .wpc-local-goal-text { .wpc-standalone-card-text(); }
+    }
+
+  }
+}
+
+// ─── Local Image Optimization — Mobile ────────────────────────────────
+@media screen and (max-width: 768px) {
+  body.wp-admin .wpc-optimize-library-card.wpc-local-optimization-card {
+    .wpc-optimize-library-actions {
+      width: 100%;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .wpc-local-opt-body {
+      padding: 12px 0 0;
+    }
+
+    .wpc-local-goal-card {
+      margin: 0 0 4px;
+      padding: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+
+      .wpc-local-goal-inner { flex: 1 1 auto; min-width: 0; }
+      .wpc-local-mode-pill { flex-shrink: 0; }
+    }
+
+    .wpc-perf-grid {
+      padding: 12px 0;
+    }
+
+    .wpc-local-opt-stats-row {
+      padding: 12px 0;
+    }
+  }
+}
+
+@media screen and (max-width: 480px) {
+  body.wp-admin .wpc-advanced-settings-container-v4 .wpc-optimize-library-card.wpc-local-optimization-card {
+    padding: 24px 74px;
+
+    .wpc-optimize-library-actions {
+      flex-direction: column;
+      gap: 8px;
+
+      .wpc-local-configure-btn,
+      .wpc-optimize-library-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 14px 20px;
+      }
+    }
+
+    .wpc-local-goal-card {
+      flex-direction: column;
+      text-align: center;
+      align-items: center;
+
+      .wpc-local-goal-inner {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  }
+}
+
+// ─── Local Image Optimization — inner setting styles ─────────────────────
+// These live inside .wpc-optimize-library-card.wpc-local-optimization-card
+.wpc-advanced-settings-container-v4,
+.wpc-lite-settings-container {
+
+  .wpc-local-optimization-card {
+
+    // Number input
+    .wpc-local-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+
+      input[type="number"] {
+        width: 72px;
+        padding: 6px 10px;
+        border: 1px solid @color-border;
+        border-radius: @radius-base;
+        font-family: @font-regular;
+        font-size: 13px;
+        color: @color-text-dark;
+        text-align: right;
+        -moz-appearance: textfield;
+
+        &::-webkit-inner-spin-button,
+        &::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+
+        &:focus {
+          outline: none;
+          border-color: var(--wpc-brand-primary, @color-blue);
+          box-shadow: @shadow-focus-ring;
+        }
+      }
+
+      .wpc-input-suffix {
+        font-family: @font-regular;
+        font-size: 12px;
+        color: @color-gray-muted;
+      }
+    }
+
+    // Custom dropdown
+    // Custom dropdown — matches CF select dropdown style
+    .wpc-custom-dropdown {
+      position: relative;
+      flex-shrink: 0;
+
+      .wpc-custom-dropdown-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border: 1px solid @color-border;
+        border-radius: @radius-full;
+        background: @color-white;
+        font-family: @font-regular;
+        font-size: 14px;
+        font-weight: 500;
+        color: @color-text-slate;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        outline: none;
+        white-space: nowrap;
+
+        svg {
+          flex-shrink: 0;
+          color: @color-gray-text;
+          transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        &:hover {
+          border-color: @color-border-medium;
+          background: @color-bg-frost;
+          color: @color-text-dark;
+        }
+      }
+
+      &.wpc-open .wpc-custom-dropdown-trigger {
+        border-color: @color-border-medium;
+        background: @color-bg-frost;
+
+        svg { transform: rotate(180deg); }
+      }
+
+      .wpc-custom-dropdown-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        min-width: 14em;
+        background: @color-white;
+        border: 1px solid @color-bg-frost;
+        border-radius: @radius-card;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08),
+                    0 8px 10px -6px rgba(0, 0, 0, 0.04);
+        z-index: 100;
+        padding: 8px;
+      }
+
+      &.wpc-open .wpc-custom-dropdown-menu {
+        display: block;
+      }
+
+      .wpc-custom-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        margin-bottom: 2px;
+        font-family: @font-regular;
+        font-size: 14px;
+        font-weight: 500;
+        color: @color-text-secondary;
+        cursor: pointer;
+        border-radius: @radius-base;
+        transition: all 0.15s ease-in-out;
+        white-space: nowrap;
+
+        .wpc-dropdown-check {
+          width: 18px;
+          height: 18px;
+          text-align: center;
+          line-height: 18px;
+          color: var(--wpc-brand-primary, @color-blue-vivid);
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        &:last-child { margin-bottom: 0; }
+
+        &:hover {
+          background: @color-bg-neutral;
+          color: @color-text-dark;
+        }
+
+        &.wpc-active {
+          background: @color-bg-frost;
+          color: @color-text-dark;
+          font-weight: 600;
+        }
+
+        .wpc-dropdown-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          margin-left: 4px;
+          font-size: 11px;
+          font-family: @font-semibold;
+          color: @color-primary;
+          background: fade(@color-primary, 10%);
+          border-radius: @radius-default;
+          line-height: 1.4;
+          vertical-align: middle;
+        }
+      }
+    }
+
+    // Auto-optimize toggle row
+    .wpc-local-opt-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 40px;
+      border-top: 1px solid fade(@color-border, 40%);
+
+      .wpc-local-opt-toggle-label {
+        font-family: @font-semibold;
+        font-size: 14px;
+        color: @color-text-dark;
+      }
+    }
+
+    // Stats row
+    .wpc-local-opt-stats-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 40px;
+      border-top: 1px solid fade(@color-border, 40%);
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-secondary;
+
+      .wpc-stats-row-icon {
+        color: @color-border-medium;
+        flex-shrink: 0;
+      }
+
+      small {
+        color: @color-gray-muted;
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+// ─── Local Preset Card Elements (inside popup columns) ───────────────────
+
+// Icon badge square at top of each preset card
+.wpc-preset-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: @radius-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: @color-white;
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  &.wpc-preset-icon-recommended {
+    background: linear-gradient(135deg, #34D399, #059669);
+    box-shadow: 0 6px 12px -3px fade(#059669, 35%);
+  }
+
+  &.wpc-preset-icon-save-space {
+    background: linear-gradient(135deg, @color-primary, @color-blue-deep);
+    box-shadow: 0 6px 12px -3px fade(@color-blue-deep, 35%);
+  }
+
+  &.wpc-preset-icon-maximum {
+    background: linear-gradient(135deg, #FF8A65, #E64A19);
+    box-shadow: 0 6px 12px -3px fade(#E64A19, 35%);
+  }
+
+  &.wpc-preset-icon-custom {
+    background: linear-gradient(135deg, @color-gray-muted, @color-gray-dim);
+    box-shadow: 0 6px 12px -3px fade(@color-gray-dim, 35%);
+  }
+}
+
+// Goal popup — save button centered below cards
+.wpc-local-goal-popup {
+  .cdn-popup-content-full {
+    padding-top: 10px;
+  }
+
+  .wpc-goal-popup-footer {
+    display: flex;
+    justify-content: center;
+    padding: 24px 20px 10px;
+    margin-top: 20px;
+    border-top: 1px solid fade(@color-border, 50%);
+
+    .cdn-popup-save-btn {
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+}
+
+// Card header (icon + title + subtitle inside the ul card)
+.wpc-preset-card-header {
+  text-align: left;
+  padding-bottom: 14px !important; // FORCED: override li padding
+  margin-bottom: 6px;
+
+  &::before { display: none !important; } // FORCED: hide the dot
+
+  h3 {
+    font-family: @font-bold;
+    font-size: 17px;
+    margin: 0 0 4px;
+  }
+
+  p {
+    font-family: @font-regular;
+    font-size: 13px;
+    margin: 0;
+    opacity: 0.7;
+  }
+}
+
+// Footer meta inside the card
+.wpc-preset-card-footer {
+  padding-top: 14px !important; // FORCED: override li padding
+  margin-top: 6px;
+  border-top: 1px solid fade(@color-border, 40%);
+
+  &::before { display: none !important; } // FORCED: hide the dot
+
+  strong {
+    display: block;
+    font-family: @font-semibold;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+
+  span {
+    font-family: @font-regular;
+    font-size: 12px;
+    opacity: 0.7;
+  }
+}
+
+// Active column overrides for header/footer text
+.wpc-popup-column.wpc-active {
+  .wpc-preset-card-header {
+    h3 { color: @color-white !important; } // FORCED: dark theme
+    p { color: fade(@color-white, 70%) !important; } // FORCED: dark theme
+  }
+
+  .wpc-preset-card-footer {
+    border-top-color: fade(@color-white, 15%);
+
+    strong { color: @color-white !important; } // FORCED: dark theme
+    span { color: fade(@color-white, 60%) !important; } // FORCED: dark theme
+  }
+
+  .wpc-preset-icon-badge {
+    background: fade(@color-white, 15%);
+    box-shadow: none;
+  }
+}
+
+
+// ─── Custom Column Inline Settings ──────────────────────────────────────
+.wpc-custom-settings {
+  padding: 12px 16px 4px;
+  border-top: 1px solid fade(@color-border, 40%);
+
+  .wpc-custom-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 0;
+
+    & + .wpc-custom-setting-row {
+      border-top: 1px solid fade(@color-border, 25%);
+    }
+
+    > label:first-child {
+      font-family: @font-semibold;
+      font-size: 12.5px;
+      color: @color-text-dark;
+      white-space: nowrap;
+      margin: 0;
+    }
+  }
+
+  // Smaller switch for inline settings
+  .wpc-switch-sm {
+    transform: scale(0.8);
+    transform-origin: right center;
+  }
+
+  // Slider inside Custom column
+  .wpc-custom-slider-wrap {
+    flex: 1;
+    max-width: 160px;
+
+    input[type="range"] {
+      width: 100%;
+      margin: 0;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: @color-border;
+      border-radius: @radius-pill;
+      outline: none;
+
+      &::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: @radius-circle;
+        background: var(--wpc-brand-primary, @color-blue);
+        cursor: pointer;
+        box-shadow: 0 2px 6px fade(@color-blue, 30%);
+      }
+    }
+
+    .wpc-custom-slider-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+
+      span {
+        font-family: @font-regular;
+        font-size: 10px;
+        color: @color-gray-muted;
+      }
+    }
+  }
+
+  // Number input
+  .wpc-custom-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    input[type="number"] {
+      width: 72px;
+      padding: 5px 8px;
+      border: 1px solid @color-border;
+      border-radius: @radius-base;
+      font-family: @font-regular;
+      font-size: 12.5px;
+      color: @color-text-dark;
+      text-align: right;
+      -moz-appearance: textfield;
+
+      &::-webkit-inner-spin-button,
+      &::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      &:focus {
+        outline: none;
+        border-color: var(--wpc-brand-primary, @color-blue);
+        box-shadow: @shadow-focus-ring;
+      }
+    }
+
+    .wpc-input-suffix {
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-gray-muted;
+    }
+  }
+
+  // Backup select
+  select {
+    padding: 5px 28px 5px 10px;
+    border: 1px solid @color-border;
+    border-radius: @radius-base;
+    font-family: @font-regular;
+    font-size: 12.5px;
+    color: @color-text-dark;
+    background: @color-white;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+
+    &:focus {
+      outline: none;
+      border-color: var(--wpc-brand-primary, @color-blue);
+      box-shadow: @shadow-focus-ring;
+    }
+  }
+}
+
+// Active column overrides for custom settings
+.wpc-popup-column.wpc-active .wpc-custom-settings {
+  border-top-color: fade(@color-white, 15%);
+
+  .wpc-custom-setting-row {
+    > label:first-child { color: @color-white; }
+
+    & + .wpc-custom-setting-row {
+      border-top-color: fade(@color-white, 12%);
+    }
+  }
+
+  .wpc-custom-slider-wrap {
+    .wpc-custom-slider-labels span { color: fade(@color-white, 50%); }
+  }
+
+  .wpc-custom-input-wrap {
+    input[type="number"] {
+      background: fade(@color-white, 10%);
+      border-color: fade(@color-white, 20%);
+      color: @color-white;
+    }
+    .wpc-input-suffix { color: fade(@color-white, 50%); }
+  }
+
+  select {
+    background-color: fade(@color-white, 10%);
+    border-color: fade(@color-white, 20%);
+    color: @color-white;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23fff'/%3E%3C/svg%3E");
   }
 }
 
@@ -1947,11 +2619,17 @@
 }
 
 // ─── Universal Dropdown Overflow Fix ─────────────────────────────────────
-// JS adds .wpc-dropdown-lifted to .wpc-tab-content-box when a dropdown opens.
+// JS adds .wpc-dropdown-open to ancestors when a dropdown opens.
 // This lifts the card above siblings so the menu isn't clipped by overflow:hidden.
-.wpc-tab-content-box.wpc-dropdown-lifted {
+.wpc-dropdown-open {
   overflow: visible !important; // FORCED: dropdown must not clip
+}
+.wpc-tab-content-box.wpc-dropdown-open {
   z-index: 50 !important; // FORCED: lift above sibling cards
+  position: relative;
+}
+.wpc-box-for-checkbox.wpc-dropdown-open {
+  z-index: 60 !important; // FORCED: lift grid item above siblings when dropdown open
   position: relative;
 }
 

@@ -251,8 +251,11 @@ class wps_ic_local
 
     public function sendBulkToApi()
     {
+        // Build params with all local optimization settings
+        $params = wps_local_compress::buildOptimizeParams(null, self::$siteUrl);
+
         // Build full API URL
-        $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_START);
+        $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_START);
 
         // Make the GET request
         $response = wp_remote_get($request_url, array('timeout' => 80, 'sslverify' => false));
@@ -262,7 +265,7 @@ class wps_ic_local
 
             if ($body == 'queue-prepared') {
                 // all ok! call to run!
-                $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RUN);
+                $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_RUN);
 
                 // Make the GET request
                 $response = wp_remote_get($request_url, array('timeout' => 60, 'sslverify' => false));
@@ -329,7 +332,7 @@ class wps_ic_local
         $mime3 = 'image/gif';
         $meta_key = 'ic_stats';
 
-        // UNCOMPRESSED
+        // UNCOMPRESSED (exclude excluded images)
         $queryUncompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -343,6 +346,10 @@ class wps_ic_local
             WHERE meta.post_id = posts.ID
             AND meta.meta_key = %s
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM {$wpdb->postmeta} ex
+            WHERE ex.post_id = posts.ID AND ex.meta_key = 'wps_ic_exclude_live'
+        )
         ",
                 $post_type,
                 $mime1, $mime2, $mime3,
@@ -350,7 +357,7 @@ class wps_ic_local
             )
         );
 
-        // COMPRESSED
+        // COMPRESSED (exclude excluded images)
         $queryCompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -364,6 +371,10 @@ class wps_ic_local
             WHERE meta.post_id = posts.ID
             AND meta.meta_key = %s
         )
+        AND NOT EXISTS (
+            SELECT 1 FROM {$wpdb->postmeta} ex
+            WHERE ex.post_id = posts.ID AND ex.meta_key = 'wps_ic_exclude_live'
+        )
         ",
                 $post_type,
                 $mime1, $mime2, $mime3,
@@ -374,6 +385,7 @@ class wps_ic_local
 
         $bulkStatus['foundImageCount'] = 0;
         $bulkStatus['foundThumbCount'] = 0;
+        $bulkStatus['restoredImageCount'] = 0;
 
         if ($queryUncompressed) {
             foreach ($queryUncompressed as $image) {
@@ -384,6 +396,8 @@ class wps_ic_local
 
         if ($queryCompressed) {
             foreach ($queryCompressed as $image) {
+                $imageID = $image->ID;
+                self::$compressedImages[$imageID] = $imageID;
                 $bulkStatus['foundImageCount'] += 1;
             }
         }
@@ -425,6 +439,10 @@ class wps_ic_local
            AND s.meta_key = 'ic_stats'
         WHERE p.post_type = 'attachment'
           AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+          AND NOT EXISTS (
+              SELECT 1 FROM {$wpdb->postmeta} ex
+              WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
+          )
         GROUP BY f.meta_value
         HAVING SUM(CASE WHEN s.meta_id IS NULL THEN 0 ELSE 1 END) = 0
         ORDER BY id ASC
@@ -459,6 +477,10 @@ class wps_ic_local
               AND EXISTS (
                   SELECT 1 FROM {$wpdb->postmeta} meta
                   WHERE meta.post_id = posts.ID AND meta.meta_key = 'ic_stats'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM {$wpdb->postmeta} ex
+                  WHERE ex.post_id = posts.ID AND ex.meta_key = 'wps_ic_exclude_live'
               )
             LIMIT %d OFFSET %d
         ", $batch_size, $offset));

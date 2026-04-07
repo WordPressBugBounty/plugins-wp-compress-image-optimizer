@@ -204,21 +204,15 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                 $.ajax({
                     url: ajaxurl,
                     type: 'POST',
-                    data: {
-                        action: 'wps_fetchInitialTest',
-                    },
+                    data: { action: 'wps_fetchInitialTest' },
                     success: function (response) {
                         if (response.success) {
                             clearInterval(checkFetch);
-                            setTimeout(function () {
-                                window.location.reload();
-                            }, 2000);
-                        } else if (response.success == false) {
-                            // Nothing
+                            window.location.reload();
                         }
                     }
                 });
-            }, 10000);
+            }, 5000);
         });
     </script>
 <?php } ?>
@@ -595,7 +589,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         $lastRun = $date->format('F jS, Y \a\t g:i A');
                                         ?>
                                         <div class="wpc-box-title-right">
-                                            <span><?php echo $lastRun; ?></span>
+                                            <span class="wpc-local-date" data-utc="<?php echo $initialPageSpeedScore['lastRun']; ?>"></span>
                                             <a href="#" class="wps-ic-initial-retest">
                                                 <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
                                                 <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
@@ -972,7 +966,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 </div>
                                 <?php if ($v2_hasGPS) { ?>
                                 <div class="wpc-v2-header-meta">
-                                    <span class="wpc-v2-meta-date"><?php echo $v2_lastRun; ?></span>
+                                    <span class="wpc-v2-meta-date wpc-local-date" data-utc="<?php echo $v2_gps['lastRun']; ?>"></span>
                                     <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
                                         <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
                                         <?php echo esc_html__('Retest', WPS_IC_TEXTDOMAIN); ?>
@@ -1111,6 +1105,22 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
         </form>
     </div>
+<script>
+(function(){
+    document.querySelectorAll('.wpc-local-date[data-utc]').forEach(function(el){
+        var ts = parseInt(el.getAttribute('data-utc'));
+        if (!ts) return;
+        var d = new Date(ts * 1000);
+        var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        var day = d.getDate();
+        var suffix = (day===1||day===21||day===31)?'st':(day===2||day===22)?'nd':(day===3||day===23)?'rd':'th';
+        var h = d.getHours(), m = d.getMinutes(), ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        m = m < 10 ? '0' + m : m;
+        el.textContent = months[d.getMonth()] + ' ' + day + suffix + ', ' + d.getFullYear() + ' at ' + h + ':' + m + ' ' + ampm;
+    });
+})();
+</script>
 <?php include WPS_IC_DIR . 'templates/admin/partials/v4/footer-scripts.php'; ?>
 <?php include WPS_IC_DIR . 'templates/admin/connect/lite-api-locked.php'; ?>
 <?php include WPS_IC_DIR . 'templates/admin/connect/lite-api-upgrade.php'; ?>

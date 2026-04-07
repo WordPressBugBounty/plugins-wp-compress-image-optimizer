@@ -2339,4 +2339,257 @@ jQuery(document).ready(function ($) {
         });
     })();
 
+    // ─── Local Optimization Card — Mode Pill + SweetAlert Popup ──────────
+    var localModePresets = {
+        'recommended': { quality: 2, webp: 1, avif: 1, backup: 'local', label: 'Smart Optimization' },
+        'save-space':  { quality: 2, webp: 0, avif: 0, backup: 'cloud', label: 'Disk Saver' },
+        'custom':      { quality: null, webp: null, avif: null, backup: null, label: 'Custom' }
+    };
+
+    function saveLocalSettings(changes, callback) {
+        if (!changes.length) { if (callback) callback(); return; }
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'wps_ic_ajax_v2_checkbox_batch',
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                changes: JSON.stringify(changes)
+            },
+            success: function () { if (callback) callback(); },
+            error: function () { if (callback) callback(); }
+        });
+    }
+
+    function updateModePill(preset) {
+        var data = localModePresets[preset];
+        if (!data) return;
+        $('.wpc-local-mode-pill-label').text(data.label);
+        $('.wpc-local-mode-pill').data('current', preset);
+        $('#local-image-optimization').attr('data-current-mode', preset);
+    }
+
+    // Detect if current settings match a preset (ignoring maxWidth and backup)
+    function detectCurrentMode() {
+        var quality = parseInt($('#localQualityLevel').val(), 10) || 2;
+        var webp = $('input[name="options[generate_webp]"]').is(':checked') ? 1 : 0;
+        var avif = $('input[name="options[picture_avif]"]').is(':checked') ? 1 : 0;
+
+        for (var key in localModePresets) {
+            var p = localModePresets[key];
+            if (p.quality !== null && p.quality === quality && p.webp === webp && p.avif === avif) {
+                return key;
+            }
+        }
+        return 'custom';
+    }
+
+    function syncModePill() {
+        updateModePill(detectCurrentMode());
+    }
+
+    // Configure button — toggle settings body
+    $(document).on('click', '.wpc-local-configure-btn', function (e) {
+        e.preventDefault();
+        var $body = $(this).closest('.wpc-local-optimization-card').find('.wpc-local-opt-body');
+        $body.slideToggle(250);
+    });
+
+    // Mode pill click — open SweetAlert popup
+    $(document).on('click', '.wpc-local-mode-pill', function (e) {
+        e.preventDefault();
+        var currentMode = $(this).data('current') || 'recommended';
+
+        WPCSwal.fire({
+            title: '',
+            position: 'center',
+            html: jQuery('#local-preset-mode').html(),
+            width: 1050,
+            showCloseButton: true,
+            showCancelButton: false,
+            showConfirmButton: false,
+            allowOutsideClick: true,
+            customClass: {
+                container: 'no-padding-popup-bottom-bg switch-legacy-popup',
+            },
+            onOpen: function () {
+                var popup = $('.swal2-container .ajax-settings-popup');
+
+                // Set initial active column
+                $('.wpc-popup-column', popup).removeClass('wpc-active');
+                $('.wpc-popup-column[data-preset="' + currentMode + '"]', popup).addClass('wpc-active');
+
+                // Column click
+                $('.wpc-popup-column', popup).on('click', function (e) {
+                    e.preventDefault();
+                    $('.wpc-popup-column', popup).removeClass('wpc-active');
+                    $(this).addClass('wpc-active');
+                });
+
+                // Save button
+                $('.wpc-local-preset-save-btn', popup).on('click', function (e) {
+                    e.preventDefault();
+                    var $btn = $(this);
+                    var selected = $('.wpc-popup-column.wpc-active', popup).data('preset');
+                    if (!selected) return;
+
+                    // If same mode, just close — don't reset toggles
+                    if (selected === currentMode) {
+                        WPCSwal.close();
+                        return;
+                    }
+
+                    $btn.css('opacity', '0.6').css('pointer-events', 'none');
+
+                    var presetData = localModePresets[selected];
+                    if (presetData && presetData.quality) {
+                        // Apply preset values — update quality dropdown
+                        $('#localQualityLevel').val(presetData.quality);
+                        var $qdd = $('.wpc-custom-dropdown[data-target="localQualityLevel"]');
+                        $qdd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
+                        var $qItem = $qdd.find('.wpc-custom-dropdown-item[data-value="' + presetData.quality + '"]');
+                        $qItem.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
+                        $qdd.find('.wpc-custom-dropdown-label').text($qItem.clone().children('.wpc-dropdown-check').remove().end().text().trim());
+
+                        // Update toggles on the page
+                        var $webp = $('input[name="options[generate_webp]"]');
+                        var $avif = $('input[name="options[picture_avif]"]');
+                        if ($webp.length) $webp.prop('checked', presetData.webp == 1).trigger('change');
+                        if ($avif.length) $avif.prop('checked', presetData.avif == 1).trigger('change');
+
+                        // Apply backup if preset specifies one
+                        if (presetData.backup) {
+                            $('#localBackup').val(presetData.backup);
+                            // Update custom dropdown UI
+                            var $dd = $('.wpc-custom-dropdown[data-target="localBackup"]');
+                            $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
+                            var $item = $dd.find('.wpc-custom-dropdown-item[data-value="' + presetData.backup + '"]');
+                            $item.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
+                            $dd.find('.wpc-custom-dropdown-label').text($item.clone().children('.wpc-dropdown-check').remove().end().text().trim());
+                        }
+
+                        var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
+                        var changes = [
+                            { name: 'local_qualityLevel', value: String(presetData.quality) },
+                            { name: 'local_optimization', value: optMap[presetData.quality] || 'none' },
+                            { name: 'generate_webp', value: String(presetData.webp) },
+                            { name: 'picture_avif', value: String(presetData.avif) }
+                        ];
+                        if (presetData.backup) {
+                            changes.push({ name: 'backup', value: presetData.backup });
+                        }
+                        saveLocalSettings(changes);
+                    }
+
+                    updateModePill(selected);
+                    WPCSwal.close();
+                });
+            }
+        });
+
+        return false;
+    });
+
+    // Settings — save on change
+    $(document).on('change', '#localQualityLevel', function () {
+        var val = parseInt($(this).val(), 10);
+        var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
+        syncModePill();
+        saveLocalSettings([
+            { name: 'local_qualityLevel', value: String(val) },
+            { name: 'local_optimization', value: optMap[val] || 'none' }
+        ]);
+        $('.save-button').fadeIn(400);
+    });
+
+    $(document).on('change', 'input[name="options[generate_webp]"]', function () {
+        syncModePill();
+    });
+
+    $(document).on('change', 'input[name="options[picture_avif]"]', function () {
+        syncModePill();
+    });
+
+    $(document).on('change', '#localMaxWidth', function () {
+        var val = parseInt($(this).val(), 10);
+        if (val >= 800 && val <= 6000) {
+            saveLocalSettings([{ name: 'maxWidth', value: String(val) }]);
+            $('.save-button').fadeIn(400);
+        }
+    });
+
+    // Debounced input event — saves as user types (800ms delay)
+    var maxWidthDebounce = null;
+    $(document).on('input', '#localMaxWidth', function () {
+        clearTimeout(maxWidthDebounce);
+        var $input = $(this);
+        maxWidthDebounce = setTimeout(function () {
+            var val = parseInt($input.val(), 10);
+            if (val >= 800 && val <= 6000) {
+                saveLocalSettings([{ name: 'maxWidth', value: String(val) }]);
+                $('.save-button').fadeIn(400);
+            }
+        }, 800);
+    });
+
+    $(document).on('change', '#localBackup', function () {
+        saveLocalSettings([{ name: 'backup', value: $(this).val() }]);
+        $('.save-button').fadeIn(400);
+    });
+
+    // ─── Custom Dropdown Component ──────────────────────────────────────────
+    function liftOverflow($dd, lift) {
+        var cls = 'wpc-dropdown-open';
+        $dd.parents('.wpc-box-for-checkbox, .wpc-local-opt-body, .wpc-tab-content-box, .wpc-perf-grid, .wpc-local-optimization-card').toggleClass(cls, lift);
+    }
+
+    // Toggle open/close
+    $(document).on('click', '.wpc-custom-dropdown-trigger', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $dd = $(this).closest('.wpc-custom-dropdown');
+        var wasOpen = $dd.hasClass('wpc-open');
+
+        // Close any other open dropdowns first
+        $('.wpc-custom-dropdown.wpc-open').not($dd).each(function () {
+            $(this).removeClass('wpc-open');
+            liftOverflow($(this), false);
+        });
+
+        $dd.toggleClass('wpc-open');
+        liftOverflow($dd, !wasOpen);
+    });
+
+    // Select item
+    $(document).on('click', '.wpc-custom-dropdown-item', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $dd = $(this).closest('.wpc-custom-dropdown');
+        var val = $(this).data('value');
+        var label = $(this).clone().children('.wpc-dropdown-check, .wpc-dropdown-badge').remove().end().text().trim();
+        var targetId = $dd.data('target');
+
+        // Update active state
+        $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
+        $(this).addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
+
+        // Update label + hidden input
+        $dd.find('.wpc-custom-dropdown-label').text(label);
+        if (targetId) {
+            $('#' + targetId).val(val).trigger('change');
+        }
+
+        // Close
+        $dd.removeClass('wpc-open');
+        liftOverflow($dd, false);
+    });
+
+    // Close on outside click
+    $(document).on('click', function () {
+        $('.wpc-custom-dropdown.wpc-open').each(function () {
+            $(this).removeClass('wpc-open');
+            liftOverflow($(this), false);
+        });
+    });
+
 });

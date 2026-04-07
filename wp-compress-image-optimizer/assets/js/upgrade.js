@@ -84,8 +84,16 @@ jQuery(document).ready(function ($) {
                         timeout: 60000
                     }, function (response) {
                         if (response.success) {
-                            // Connect
-                            $('.wps-ic-connect-inner').addClass('padded');
+                            // Inject full-page overlay so Lite dashboard never shows during reload
+                            $('body').append(
+                                '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
+                                '<div>' +
+                                '<div style="width:48px;height:48px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;margin:0 auto 24px;animation:wpcActSpin 1s linear infinite;"></div>' +
+                                '<h2 style="font-family:proxima_semibold,sans-serif;font-size:20px;color:#1e293b;margin:0 0 8px;">Setting Up Your Dashboard</h2>' +
+                                '<p style="font-family:proxima_regular,sans-serif;font-size:15px;color:#64748b;margin:0;">This will only take a moment...</p>' +
+                                '</div></div>' +
+                                '<style>@keyframes wpcActSpin{to{transform:rotate(360deg)}}</style>'
+                            );
                             WPCSwal.close();
                             window.location.reload();
                         } else {
@@ -220,8 +228,16 @@ jQuery(document).ready(function ($) {
                         timeout: 60000
                     }, function (response) {
                         if (response.success) {
-                            // Connect
-                            $('.wps-ic-connect-inner').addClass('padded');
+                            // Inject full-page overlay so Lite dashboard never shows during reload
+                            $('body').append(
+                                '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
+                                '<div>' +
+                                '<div style="width:48px;height:48px;border:3px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;margin:0 auto 24px;animation:wpcActSpin 1s linear infinite;"></div>' +
+                                '<h2 style="font-family:proxima_semibold,sans-serif;font-size:20px;color:#1e293b;margin:0 0 8px;">Setting Up Your Dashboard</h2>' +
+                                '<p style="font-family:proxima_regular,sans-serif;font-size:15px;color:#64748b;margin:0;">This will only take a moment...</p>' +
+                                '</div></div>' +
+                                '<style>@keyframes wpcActSpin{to{transform:rotate(360deg)}}</style>'
+                            );
                             WPCSwal.close();
                             window.location.reload();
                         } else {

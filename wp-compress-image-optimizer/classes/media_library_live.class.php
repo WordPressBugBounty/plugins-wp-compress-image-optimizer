@@ -152,149 +152,62 @@ class wps_ic_media_library_live extends wps_ic
 
 	public static function popups()
 	{
-		// Get support URL - check for whitelabel first, fallback to default
-		global $whtlbl;
-		$support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
-			? $whtlbl->author_url
-			: 'https://www.wpcompress.com/';
+		$support_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url() : 'https://www.wpcompress.com/';
+		$pricing_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://www.wpcompress.com/pricing') : 'https://www.wpcompress.com/pricing';
 
-		$pricing_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
-			? $whtlbl->author_url
-			: 'https://www.wpcompress.com/pricing';
+		$warn_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+		$info_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
 
-		echo '<div id="no-credits-popup" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+		$popup = function($id, $icon, $title, $desc = '', $btn_label = '', $btn_url = '') {
+			$html = '<div id="' . esc_attr($id) . '" style="display:none;"><div class="wpc-error-popup"><div class="wpc-error-popup-icon">' . $icon . '</div>';
+			$html .= '<h3>' . $title . '</h3>';
+			if ($desc) $html .= '<p>' . $desc . '</p>';
+			if ($btn_label) $html .= '<a href="' . esc_url($btn_url) . '" target="_blank" class="wpc-error-popup-btn">' . esc_html($btn_label) . '</a>';
+			$html .= '</div></div>';
+			echo $html;
+		};
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
+		$popup('no-credits-popup', $warn_icon,
+			esc_html__('No quota remaining', WPS_IC_TEXTDOMAIN),
+			esc_html__('Your account has exhausted all credits and has reverted to Local mode.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Get Credits', WPS_IC_TEXTDOMAIN), $pricing_url);
 
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>Ooops, you have no quota left.</h3>
-          <p>Seems like your account has exhausted all credits and it automatically reverted to "Local" Mode to prevent CDN Issues.</p>
-          <a href="' . $pricing_url . '" target="_blank" class="button button-primary">Get Credits</a>
-        </div>
+		$popup('file-already-compressed', $info_icon,
+			esc_html__('Already compressed', WPS_IC_TEXTDOMAIN),
+			esc_html__('This image has already been optimized. Restore it first to re-compress.', WPS_IC_TEXTDOMAIN));
 
-      </div>
-    </div>';
+		$popup('file-not-supported', $info_icon,
+			esc_html__('File type not supported', WPS_IC_TEXTDOMAIN),
+			esc_html__('Only JPEG, PNG, and GIF images can be optimized.', WPS_IC_TEXTDOMAIN));
 
-		echo '<div id="file-already-compressed" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+		$popup('file-in-bulk', $info_icon,
+			esc_html__('Already queued', WPS_IC_TEXTDOMAIN),
+			esc_html__('This image is already in the bulk optimization queue.', WPS_IC_TEXTDOMAIN));
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
+		$popup('unable-to-contact-api', $warn_icon,
+			esc_html__('Unable to reach the optimization service', WPS_IC_TEXTDOMAIN),
+			esc_html__('The request timed out. Please try again in a moment.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Contact Support', WPS_IC_TEXTDOMAIN), $support_url);
 
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>This image appears to have already been compressed.</h3>
-          <p>If you think this is an error, please don\'t hesitate to contact us  for further assistance.</p>
-        </div>
+		$popup('failed-to-get-backup', $warn_icon,
+			esc_html__('Backup not found', WPS_IC_TEXTDOMAIN),
+			esc_html__('We couldn\'t retrieve the backup file for this image.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Contact Support', WPS_IC_TEXTDOMAIN), $support_url);
 
-      </div>
-    </div>';
+		$popup('missing-apikey', $warn_icon,
+			esc_html__('API key missing', WPS_IC_TEXTDOMAIN),
+			esc_html__('Your API key could not be retrieved. Please reconnect the plugin.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Contact Support', WPS_IC_TEXTDOMAIN), $support_url);
 
-		echo '<div id="file-not-supported" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+		$popup('empty-site-url', $warn_icon,
+			esc_html__('Site URL missing', WPS_IC_TEXTDOMAIN),
+			esc_html__('The API could not determine your site URL. Please check your WordPress settings.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Contact Support', WPS_IC_TEXTDOMAIN), $support_url);
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>Sorry, we don\'t support this file type!</h3>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="file-in-bulk" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>File is already added to bulk!</h3>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="unable-to-contact-api" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>We were unable to contact WP Compress API!</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="failed-to-get-backup" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>We were unable to retrieve your backup file!</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="missing-apikey" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>Our API was unable to retrieve your API Key!</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="empty-site-url" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>Our API was unable to retrieve Site URL!</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
-        </div>
-
-      </div>
-    </div>';
-
-		echo '<div id="apikey-not-matching" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>Our API was unable to match your API Key!</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">Contact Support</a>
-        </div>
-
-      </div>
-    </div>';
+		$popup('apikey-not-matching', $warn_icon,
+			esc_html__('API key mismatch', WPS_IC_TEXTDOMAIN),
+			esc_html__('Your API key doesn\'t match. Please reconnect the plugin or contact support.', WPS_IC_TEXTDOMAIN),
+			esc_html__('Contact Support', WPS_IC_TEXTDOMAIN), $support_url);
 
 
 		echo '<div id="api-blocked-by-firewall" style="display: none;">
@@ -814,15 +727,28 @@ class wps_ic_media_library_live extends wps_ic
         }
 
         if ((!empty($compressing['status']) && $compressing['status'] == 'compressed') || !empty($stats)) {
-            $original = $stats['original']['original']['size'];
-            $compressed = $stats['original']['compressed']['size'];
+            // Use stored end-to-end savings (unscaled upload → best variant)
+            $ic_savings = get_post_meta($imageID, 'ic_savings', true);
+            $ic_bytes   = get_post_meta($imageID, 'ic_savings_bytes', true);
+            $ic_base    = get_post_meta($imageID, 'ic_savings_baseline', true);
 
-            if ($original > 0 && $compressed > 0 && $original != $compressed) {
-                $savings_percent = number_format((1 - ($compressed / $original)) * 100, 1);
+            if (!empty($ic_savings) && !empty($ic_base) && $ic_base > 0) {
+                $savings_percent = number_format(floatval($ic_savings), 1);
+                $original = intval($ic_base);
+                $compressed = $original - intval($ic_bytes);
                 $savings_kb = round($compressed);
             } else {
-                $savings_percent = '0';
-                $savings_kb = 0;
+                // Fallback to ic_stats for images compressed before this update
+                $original = $stats['original']['original']['size'];
+                $compressed = $stats['original']['compressed']['size'];
+
+                if ($original > 0 && $compressed > 0 && $original != $compressed) {
+                    $savings_percent = number_format((1 - ($compressed / $original)) * 100, 1);
+                    $savings_kb = round($compressed);
+                } else {
+                    $savings_percent = '0';
+                    $savings_kb = 0;
+                }
             }
 
 
@@ -929,14 +855,14 @@ class wps_ic_media_library_live extends wps_ic
         } else {
             $filedata = get_attached_file($imageID);
 
-            // Get scaled file size
-            $filesize = filesize($filedata);
-            $wpScaledFilesize = wps_ic_format_bytes($filesize, null, null, false);
-
-            // Get original filesize
+            // Get the unscaled original file size (real upload), fall back to scaled
             $originalFilepath = wp_get_original_image_path($imageID);
-            $originalFilesize = filesize($originalFilepath);
-            $originalFilesize = wps_ic_format_bytes($originalFilesize, null, null, false);
+            if ($originalFilepath && file_exists($originalFilepath) && $originalFilepath !== $filedata) {
+                $originalFilesize = wps_ic_format_bytes(filesize($originalFilepath), null, null, false);
+            } else {
+                $originalFilesize = wps_ic_format_bytes(filesize($filedata), null, null, false);
+            }
+            $wpScaledFilesize = wps_ic_format_bytes(filesize($filedata), null, null, false);
 
             $basename = sanitize_title(basename($filedata));
 

@@ -35,8 +35,7 @@ class wps_ic_cloudflare extends wps_ic_integrations {
             $zone = $cfSettings['zone'];
             $cfapi = new WPC_CloudflareAPI($cfSettings['token']);
             if ($cfapi) {
-                $cfapi->purgeCache($zone);
-                sleep(3);
+                $cfapi->purgeCacheAsync($zone);
             }
         }
     }

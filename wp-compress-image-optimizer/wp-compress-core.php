@@ -10,6 +10,203 @@ include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
 //TRAITS
 include WPS_IC_DIR . 'traits/excludes.php';
 
+// ─── Local Optimization Helpers ──────────────────────────────────────────
+
+/**
+ * Get all locally-optimized attachment IDs as a flipped array for O(1) lookup.
+ * Uses transient cache (5 min) + static cache per request.
+ */
+function wpc_get_local_optimized_ids() {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $cache = get_transient('wpc_local_optimized_ids');
+    if ($cache !== false) return $cache;
+
+    global $wpdb;
+    $ids = $wpdb->get_col(
+        "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = 'ic_status' AND meta_value = 'compressed'"
+    );
+    $cache = array_flip($ids);
+    set_transient('wpc_local_optimized_ids', $cache, 300);
+    return $cache;
+}
+
+/**
+ * Resolve an image URL to its WordPress attachment ID.
+ * Strips size suffixes (-300x200) to find the base attachment.
+ * Static cache per request to avoid repeated DB lookups.
+ */
+function wpc_url_to_attachment_id($url) {
+    static $id_cache = [];
+
+    // Normalize URL — strip query strings and fragments
+    $clean_url = strtok($url, '?#');
+
+    // Strip size suffix to get base URL (e.g., photo-300x200.jpg → photo.jpg)
+    $base_url = preg_replace('/-\d+x\d+(?=\.\w{3,4}$)/', '', $clean_url);
+
+    if (isset($id_cache[$base_url])) return $id_cache[$base_url];
+
+    $id = attachment_url_to_postid($base_url);
+    $id_cache[$base_url] = $id ?: false;
+    return $id_cache[$base_url];
+}
+
+/**
+ * Invalidate the local optimized IDs cache.
+ * Call this whenever ic_status changes (optimize, restore, delete).
+ */
+function wpc_invalidate_local_cache() {
+    delete_transient('wpc_local_optimized_ids');
+}
+
+/**
+ * Get whitelabel support URL. Checks WL plugin header, then $whtlbl global, then default.
+ */
+function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    if (class_exists('wps_ic') && !empty(wps_ic::$slug)) {
+        $wl_file = WP_PLUGIN_DIR . '/' . wps_ic::$slug . '/whitelabel.php';
+        if (file_exists($wl_file)) {
+            if (!function_exists('get_plugin_data')) {
+                require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            }
+            $wl_data = get_plugin_data($wl_file, false, false);
+            if (!empty($wl_data['AuthorURI'])) {
+                $cached = $wl_data['AuthorURI'];
+                return $cached;
+            }
+        }
+    }
+
+    global $whtlbl;
+    if (isset($whtlbl) && property_exists($whtlbl, 'author_url') && !empty($whtlbl->author_url)) {
+        $cached = $whtlbl->author_url;
+        return $cached;
+    }
+
+    $cached = $fallback;
+    return $cached;
+}
+
+/**
+ * Wrap locally-optimized <img> tags in <picture> elements with WebP/AVIF sources.
+ * Runs on the_content filter at low priority (after other plugins).
+ */
+function wpc_inject_picture_tags($content) {
+    if (is_admin() || empty($content)) return $content;
+
+    // Respect "Use Picture Tags" toggle — same setting controls CDN and local mode
+    $settings = get_option(WPS_IC_SETTINGS);
+    if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return $content;
+
+    // Already processed — guard against double-wrapping (caching plugins, REST API, nested filters)
+    if (strpos($content, 'wpc-picture') !== false) return $content;
+
+    $optimized = wpc_get_local_optimized_ids();
+    if (empty($optimized)) return $content;
+
+    // Protect existing <picture> blocks — strip them before processing, restore after
+    // Prevents nesting our <picture> inside third-party <picture> (Performance Lab, ShortPixel, etc.)
+    $picture_placeholders = [];
+    $content = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$picture_placeholders) {
+        $key = '<!--WPC_PICTURE_' . count($picture_placeholders) . '-->';
+        $picture_placeholders[$key] = $m[0];
+        return $key;
+    }, $content);
+
+    // Match <img> tags with wp-image-{ID} class (WordPress standard)
+    $content = preg_replace_callback(
+        '/<img\b[^>]*class="[^"]*wp-image-(\d+)[^"]*"[^>]*>/i',
+        function ($matches) use ($optimized) {
+            $img_tag = $matches[0];
+            $attachment_id = (int) $matches[1];
+
+            if (!isset($optimized[$attachment_id])) return $img_tag;
+
+            // Skip SVG, GIF, ICO — matches CDN behavior (rewriteLogic.php:2759)
+            if (preg_match('/\.(svg|gif|ico)[\s"\'?]/i', $img_tag)) return $img_tag;
+
+            $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
+            if (empty($variants) || !is_array($variants)) return $img_tag;
+
+            // Detect lazy-load: use data-srcset if img uses data-srcset (matches CDN behavior, rewriteLogic.php:2769)
+            $srcsetAttr = (strpos($img_tag, 'data-srcset=') !== false) ? 'data-srcset' : 'srcset';
+
+            // Build srcset per format: group all -webp variants, all -avif variants
+            $webp_srcset = [];
+            $avif_srcset = [];
+
+            foreach ($variants as $label => $data) {
+                if (empty($data['url'])) continue;
+
+                // Extract width from filename: -WIDTHxHEIGHT.ext or -scaled.ext
+                $width = 0;
+                if (preg_match('/-(\d+)x\d+\.\w+$/', $data['url'], $wm)) {
+                    $width = (int) $wm[1];
+                } elseif (preg_match('/-scaled\.\w+$/', $data['url'])) {
+                    $width = 2560;
+                } elseif ($label === 'unscaled-webp' || $label === 'unscaled-avif' || $label === 'unscaled') {
+                    $meta = wp_get_attachment_metadata($attachment_id);
+                    $width = !empty($meta['width']) ? (int) $meta['width'] : 4000;
+                }
+
+                if ($width <= 0) continue;
+
+                $entry = esc_url($data['url']) . ' ' . $width . 'w';
+
+                if (strpos($label, '-avif') !== false) {
+                    $avif_srcset[$width] = $entry;
+                } elseif (strpos($label, '-webp') !== false) {
+                    $webp_srcset[$width] = $entry;
+                }
+            }
+
+            if (empty($webp_srcset) && empty($avif_srcset)) return $img_tag;
+
+            // Extract sizes from <img> tag, pass through to <source>
+            $sizes = '100vw';
+            if (preg_match('/sizes="([^"]*)"/', $img_tag, $sz)) {
+                $sizes = $sz[1];
+            }
+
+            $sources = '';
+            if (!empty($avif_srcset)) {
+                ksort($avif_srcset);
+                $sources .= '<source type="image/avif" ' . $srcsetAttr . '="' . implode(', ', $avif_srcset) . '" sizes="' . esc_attr($sizes) . '">';
+            }
+            if (!empty($webp_srcset)) {
+                ksort($webp_srcset);
+                $sources .= '<source type="image/webp" ' . $srcsetAttr . '="' . implode(', ', $webp_srcset) . '" sizes="' . esc_attr($sizes) . '">';
+            }
+
+            return '<picture class="wpc-picture">' . $sources . $img_tag . '</picture>';
+        },
+        $content
+    );
+
+    // Restore protected <picture> blocks
+    if (!empty($picture_placeholders)) {
+        $content = str_replace(array_keys($picture_placeholders), array_values($picture_placeholders), $content);
+    }
+
+    return $content;
+}
+add_filter('the_content', 'wpc_inject_picture_tags', 999);
+
+// Inline CSS for <picture> tags — inherit img dimensions, prevent layout shifts
+function wpc_picture_tag_css() {
+    $settings = get_option(WPS_IC_SETTINGS);
+    if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return;
+    // display:contents makes <picture> invisible to layout — child <img> inherits all parent CSS as if <picture> isn't there
+    // Fallback for older browsers: display:inline-block matches <img> default behavior
+    echo '<style>.wpc-picture{display:contents;}</style>' . "\n";
+}
+add_action('wp_head', 'wpc_picture_tag_css', 1);
+
 //CUSTOM_INCLUDE_HERE
 spl_autoload_register(function ($class_name) {
     if (strpos($class_name, 'wps_ic_') !== false) {
@@ -79,7 +276,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.00.01';
+        self::$version = '7.00.03';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -205,6 +402,13 @@ class wps_ic
 
                 // Update the stored version
                 update_option('wpc_core_version', self::$version);
+
+                // Auto-enable picture_webp for existing users who have WebP enabled
+                $migrateSettings = get_option(WPS_IC_SETTINGS);
+                if (!empty($migrateSettings['generate_webp']) && $migrateSettings['generate_webp'] == '1' && !isset($migrateSettings['picture_webp'])) {
+                    $migrateSettings['picture_webp'] = '1';
+                    update_option(WPS_IC_SETTINGS, $migrateSettings);
+                }
             }
 
             // One-time: create CDN bypass rule + whitelist IPs for existing CF connections
@@ -213,15 +417,11 @@ class wps_ic
                 if (!empty($cf['token']) && !empty($cf['zone'])) {
                     require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
                     $cfsdk = new WPC_CloudflareAPI($cf['token']);
-                    $result = $cfsdk->addCdnBypassRule($cf['zone']);
+                    $cfsdk->addCdnBypassRule($cf['zone']);
                     $cfsdk->whitelistIPs($cf['zone']);
-                    if ($result && !is_wp_error($result)) {
-                        update_option('wpc_cf_bypass_v5', '1');
-                    }
-                } else {
-                    // No CF configured — nothing to migrate, mark done
-                    update_option('wpc_cf_bypass_v5', '1');
                 }
+                // Always mark done — don't retry on failure (CF API errors would block every admin page load)
+                update_option('wpc_cf_bypass_v5', '1');
             }
         }
     }
@@ -437,7 +637,7 @@ class wps_ic
         $saved_credits_call = get_option('wps_ic_credits_call');
 
         // Set timeout based on whether we have saved results
-        $api_timeout = !empty($saved_credits_call) ? 2 : 30;
+        $api_timeout = !empty($saved_credits_call) ? 2 : 5;
 
         // Check privileges
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
@@ -2180,18 +2380,8 @@ class wps_ic
 
             // Test
             $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
-            $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 20, 'blocking' => true, 'headers' => array('Content-Type' => 'application/json')]);
-
-            $body = wp_remote_retrieve_body($response);
-            $data = json_decode($body, true);
-
-            if (isset($data['jobId'])) {
-                $job_id = $data['jobId'];
-                set_transient(WPS_IC_JOB_TRANSIENT, $job_id, 60 * 10);
-                //wp_send_json_success('started');
-            } else {
-                set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
-            }
+            // Fire-and-forget: the PageSpeed server calls back with results via ?fetchTest={jobId}
+            $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
         }
     }
 
@@ -2472,11 +2662,11 @@ function wps_ic_format_bytes($bytes, $force_unit = null, $format = null, $si = f
 
     // IEC prefixes (binary)
     if (!$si or strpos($force_unit, 'i') !== false) {
-        $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
+        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $mod = 1000;
     } // SI prefixes (decimal)
     else {
-        $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
+        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $mod = 1000;
     }
     // Determine unit to use
@@ -2663,7 +2853,7 @@ function wpcCheckCredits()
     }
 
     $url = 'https://apiv3.wpcompress.com/api/site/credits';
-    $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
+    $call = wp_remote_get($url, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
     if (is_wp_error($call)) {
         return;

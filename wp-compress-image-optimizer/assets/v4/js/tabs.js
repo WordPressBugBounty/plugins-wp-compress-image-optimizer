@@ -373,45 +373,31 @@ jQuery(document).ready(function ($) {
         var optLevel = $('#optimizationLevel').val();
         var optLevelImg = $('#optimizationLevel_img').val();
 
-        // Batch save all settings
-        var completed = 0;
-        var total = changes.length;
+        // Batch save all settings in a single request (prevents race conditions)
         var hadError = false;
 
-        if (total === 0) {
+        if (changes.length === 0) {
             // Nothing changed — dismiss pill without saving or purging
-
             $btn.removeClass('wpc-saving saving').css('pointer-events', '');
             $btn.html(btnOrigHTML);
             $pill.fadeOut(300);
             return false;
         }
 
-
         var changeKeys = changes.map(function(c) { return c.name; });
         var saveStartTime = Date.now();
 
-        changes.forEach(function(change) {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                timeout: 120000,
-                data: {
-                    action: 'wps_ic_ajax_v2_checkbox',
-                    optionName: change.name,
-                    optionValue: change.value,
-                    wps_ic_nonce: wpc_ajaxVar.nonce
-                },
-                success: function() {
-                    completed++;
-                    if (completed === total) onAllSaved();
-                },
-                error: function() {
-                    hadError = true;
-                    completed++;
-                    if (completed === total) onAllSaved();
-                }
-            });
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            timeout: 120000,
+            data: {
+                action: 'wps_ic_ajax_v2_checkbox_batch',
+                changes: JSON.stringify(changes),
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            },
+            success: function() { onAllSaved(); },
+            error: function() { hadError = true; onAllSaved(); }
         });
 
         function onAllSaved() {
@@ -557,6 +543,7 @@ jQuery(document).ready(function ($) {
             updateSlider(range);
             range.addEventListener('input', function() { updateSlider(range); });
         }
+        // localQualityLevel is now a custom dropdown, no slider init needed
     })();
 
     /**
@@ -565,11 +552,13 @@ jQuery(document).ready(function ($) {
     $('.wpc-slider-text>div').on('click', function (e) {
         e.preventDefault();
         var selectedValue = $(this).data('value');
-        var range = document.getElementById('optimizationLevel');
+        var $slider = $(this).closest('.wpc-opt-level-slider');
+        var range = $slider.find('input[type="range"]')[0] || document.getElementById('optimizationLevel');
 
         if (range) {
             range.value = selectedValue;
             updateSlider(range);
+            $(range).trigger('change');
         }
 
         // Legacy support

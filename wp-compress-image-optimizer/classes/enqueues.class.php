@@ -747,6 +747,7 @@ class wps_ic_enqueues extends wps_ic
                 if (!empty($apikey)) {
                     if ($screen->base == 'settings_page_' . $this::$slug && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
+                        wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
                     }
 
@@ -903,6 +904,7 @@ class wps_ic_enqueues extends wps_ic
                 if (!empty($apikey)) {
                     if (in_array($screen->base, $page_array) && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
+                        wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
                     }
 

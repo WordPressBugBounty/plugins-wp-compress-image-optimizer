@@ -23,6 +23,8 @@ class wps_rewriteLogic
     public static $emojiRemove;
     public static $preloaderAPI;
     public static $replaceAllLinks;
+    public static $pictureWebpEnabled = false;
+    public static $pictureAvifEnabled = false;
 
     // CSS / JS Variables
     public static $fonts;
@@ -2280,6 +2282,8 @@ SCRIPT;
         }
 
         $original_img_tag['original_src'] = $image_source;
+        $original_img_tag['original_srcset'] = !empty($original_img_tag['original_tags']['srcset'])
+            ? $original_img_tag['original_tags']['srcset'] : '';
 
         /**
          * Fetch image actual size
@@ -2748,6 +2752,85 @@ SCRIPT;
         $build_image_tag .= 'alt="' . $original_img_tag['original_tags']['alt'] . '" ';
 
         $build_image_tag .= '/>';
+
+        // Wrap in <picture> for bulletproof WebP delivery
+        if (self::$pictureWebpEnabled && strpos($build_image_tag, '/wp:1/') !== false) {
+            $lowerSrc = strtolower($image_source);
+            $skipFormats = (strpos($lowerSrc, '.svg') !== false
+                         || strpos($lowerSrc, '.gif') !== false
+                         || strpos($lowerSrc, '.ico') !== false);
+
+            if (!$skipFormats) {
+                // Create non-WebP fallback — safe regex: only replaces /wp:1/ inside URLs (after ://)
+                $fallbackTag = preg_replace('#(://[^"\'>\s]*/wp):1/#', '$1:0/', $build_image_tag);
+
+                // Extract srcset for <source> (WebP version with /wp:1/)
+                $sourceSrcset = '';
+                if (preg_match('/(data-)?srcset="([^"]*)"/', $build_image_tag, $srcsetMatch)) {
+                    $srcsetAttr = $srcsetMatch[1] ? 'data-srcset' : 'srcset';
+                    $sourceSrcset = ' ' . $srcsetAttr . '="' . $srcsetMatch[2] . '"';
+                }
+
+                // Fallback: use src for images without srcset
+                if (empty($sourceSrcset)) {
+                    $srcAttrName = (strpos($build_image_tag, 'data-src="') !== false) ? 'data-srcset' : 'srcset';
+                    if (preg_match('/(data-)?src="([^"]*)"/', $build_image_tag, $srcMatch)) {
+                        $sourceSrcset = ' ' . $srcAttrName . '="' . $srcMatch[2] . '"';
+                    }
+                }
+
+                // Extract sizes (required by spec when srcset uses width descriptors)
+                $sourceSizes = '';
+                if (preg_match('/sizes="([^"]*)"/', $build_image_tag, $sizesMatch)) {
+                    $sourceSizes = ' sizes="' . $sizesMatch[1] . '"';
+                }
+
+                // AVIF source — locally generated, served as asset via CDN (no MC processing)
+                $avifSource = '';
+                if (self::$pictureAvifEnabled && !empty($image_source)) {
+                    $cleanSource = preg_replace('/\?.*$/', '', $image_source);
+                    $avifUrl = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $cleanSource);
+                    $avifSiteUrl = trailingslashit(site_url());
+                    $avifPath = str_replace($avifSiteUrl, trailingslashit(ABSPATH), $avifUrl);
+
+                    if (file_exists($avifPath)) {
+                        $avifApiBase = 'https://' . self::$zoneName . '/m:0/a:';
+
+                        if (!empty($original_img_tag['original_srcset'])) {
+                            $avifEntries = [];
+                            $srcsetParts = explode(',', $original_img_tag['original_srcset']);
+
+                            foreach ($srcsetParts as $part) {
+                                $part = trim($part);
+                                if (preg_match('/^(\S+)\s+(.+)$/', $part, $m)) {
+                                    $srcUrl = preg_replace('/\?.*$/', '', $m[1]);
+                                    $descriptor = $m[2];
+                                    $avifSrcUrl = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $srcUrl);
+                                    $avifSizePath = str_replace($avifSiteUrl, trailingslashit(ABSPATH), $avifSrcUrl);
+
+                                    if (file_exists($avifSizePath)) {
+                                        $avifEntries[] = $avifApiBase . self::reformatUrl($avifSrcUrl) . ' ' . $descriptor;
+                                    }
+                                }
+                            }
+
+                            if (!empty($avifEntries)) {
+                                $avifSource = '<source srcset="' . implode(', ', $avifEntries) . '"' . $sourceSizes . ' type="image/avif">';
+                            }
+                        } else {
+                            $avifCdnUrl = $avifApiBase . self::reformatUrl($avifUrl);
+                            $avifSource = '<source srcset="' . $avifCdnUrl . '"' . $sourceSizes . ' type="image/avif">';
+                        }
+                    }
+                }
+
+                $build_image_tag = '<picture class="wpc-picture">'
+                    . $avifSource
+                    . '<source' . $sourceSrcset . $sourceSizes . ' type="image/webp">'
+                    . $fallbackTag
+                    . '</picture>';
+            }
+        }
 
         if (!empty($_GET['dbgAjaxEnd'])) {
             return print_r([$_POST, $_GET, wp_doing_ajax(), self::$isAjax, $image[0]], true);

@@ -81,11 +81,11 @@ if (empty($user_savings) || $user_savings == '') {
                     $local_requests_left = 'display:none;';
                 }
                 ?>
-                <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary local-requests-left" style="<?php
+                <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary local-requests-left" style="<?php
                 echo $local_requests_left; ?>">
                     <h5><?php echo $accountQuota['local']; ?></h5>
                 </a>
-                <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary requests-left" style="<?php
+                <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary requests-left" style="<?php
                 echo $requests_left; ?>">
                     <h5><?php echo $accountQuota['live']; ?></h5>
                 </a>
@@ -261,21 +261,21 @@ else {
 
                     <?php
                     if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') { ?>
-                        <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary local-requests-left">
+                        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary local-requests-left">
                             <h5><?php
                                 echo $accountQuota['local']; ?></h5>
                         </a>
-                        <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary requests-left" style="display: none;">
+                        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary requests-left" style="display: none;">
                             <h5><?php
                                 echo $accountQuota['live']; ?></h5>
                         </a>
                         <?php
                     } else { ?>
-                        <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary local-requests-left" style="display: none;">
+                        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary local-requests-left" style="display: none;">
                             <h5><?php
                                 echo $accountQuota['local']; ?></h5>
                         </a>
-                        <a href="https://wpcompress.com/pricing" target="_blank" class="button button-primary requests-left">
+                        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://wpcompress.com/pricing') : 'https://wpcompress.com/pricing'); ?>" target="_blank" class="button button-primary requests-left">
                             <h5><?php
                                 echo $accountQuota['live']; ?></h5>
                         </a>

@@ -1026,7 +1026,22 @@ class wps_cdn_rewrite
                 $html = $htmlBefore;
             }
 
+            // Protect existing <picture> blocks from double-wrapping
+            $wpcLocalPictureBlocks = [];
+            if (self::$rewriteLogic::$pictureWebpEnabled) {
+                $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function($m) use (&$wpcLocalPictureBlocks) {
+                    $i = count($wpcLocalPictureBlocks);
+                    $wpcLocalPictureBlocks[$i] = $m[0];
+                    return '<!--WPC_LOCAL_PICTURE_' . $i . '-->';
+                }, $html);
+            }
+
             $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [$this, 'local_image_tags'], $html);
+
+            // Restore protected <picture> blocks
+            foreach ($wpcLocalPictureBlocks as $i => $block) {
+                $html = str_replace('<!--WPC_LOCAL_PICTURE_' . $i . '-->', $block, $html);
+            }
 
             if (self::$fonts == 1) {
                 $html = self::$rewriteLogic->fonts($html);
@@ -1719,6 +1734,11 @@ class wps_cdn_rewrite
         return false;
     }
 
+    public static function is_webp_request()
+    {
+        return isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false;
+    }
+
     public function checkCache_plugins_loaded()
     {
         // Weglot rewrites $_SERVER['REQUEST_URI'] at plugins_loaded priority 10,
@@ -2165,6 +2185,15 @@ class wps_cdn_rewrite
         self::$adaptive_enabled = self::$settings['generate_adaptive'];
         self::$webp_enabled = self::$settings['generate_webp'];
         self::$retina_enabled = self::$settings['retina'];
+
+        // Picture tag WebP/AVIF delivery
+        self::$rewriteLogic::$pictureWebpEnabled = !empty(self::$settings['picture_webp']) && self::$settings['picture_webp'] == '1' && !empty(self::$webp_enabled) && self::$webp_enabled == '1';
+        self::$rewriteLogic::$pictureAvifEnabled = !empty(self::$settings['picture_avif']) && self::$settings['picture_avif'] == '1';
+
+        // Skip picture wrapping for JSON responses
+        if (function_exists('wp_is_json_request') && wp_is_json_request()) {
+            self::$rewriteLogic::$pictureWebpEnabled = false;
+        }
 
         if (isset(self::$page_excludes['adaptive'])) {
             //self::$lazy_enabled = self::$page_excludes['adaptive'];
@@ -2959,11 +2988,11 @@ class wps_cdn_rewrite
 
         if ($cacheActive) {
             if ((!self::isExcludedFromCache($html) && $this->doCacheCombine())) {
-                if (!self::is_mobile()) {
-                    return self::$cacheHtml->saveCache($html);
-                } else {
-                    return self::$cacheHtml->saveCache($html, 'mobile');
-                }
+                $prefix = '';
+                if (self::is_mobile()) $prefix .= 'mobile';
+                if (self::is_webp_request()) $prefix .= ($prefix ? '-' : '') . 'webp';
+
+                return self::$cacheHtml->saveCache($html, $prefix);
             }
         }
         return $html;
@@ -3085,6 +3114,7 @@ class wps_cdn_rewrite
             self::$retina_enabled = '0';
             self::$settings['delay-js'] = '0';
             self::$settings['inline-js'] = '0';
+            self::$rewriteLogic::$pictureWebpEnabled = false; // AMP doesn't allow <picture>
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'action') {
@@ -3233,8 +3263,23 @@ class wps_cdn_rewrite
             return $html;
         }
 
+        // Protect existing <picture> blocks from double-wrapping by picture_webp feature
+        $wpcPictureBlocks = [];
+        if (self::$rewriteLogic::$pictureWebpEnabled) {
+            $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function($m) use (&$wpcPictureBlocks) {
+                $i = count($wpcPictureBlocks);
+                $wpcPictureBlocks[$i] = $m[0];
+                return '<!--WPC_PICTURE_' . $i . '-->';
+            }, $html);
+        }
+
         // Replace <img> tags
         $html = self::$rewriteLogic->replaceImageTags($html);
+
+        // Restore protected <picture> blocks
+        foreach ($wpcPictureBlocks as $i => $block) {
+            $html = str_replace('<!--WPC_PICTURE_' . $i . '-->', $block, $html);
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replaceImageTags2') {
             return $html;
@@ -3251,7 +3296,7 @@ class wps_cdn_rewrite
             $html = str_replace('<!--WPC_INSERT_PRELOAD_MAIN-->', $preloadLCP, $html);
         }
 
-        // Replace <picture> tags
+        // Replace <picture> tags (both original restored ones and new wpc-picture ones)
         $html = self::$rewriteLogic->replacePictureTags($html);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replaceImageTags3') {
@@ -3977,6 +4022,17 @@ class wps_cdn_rewrite
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
 
+                // Skip CDN MC for locally-optimized images — they're served via <picture> tags instead
+                if (function_exists('wpc_url_to_attachment_id') && function_exists('wpc_get_local_optimized_ids')) {
+                    $local_att_id = wpc_url_to_attachment_id($url);
+                    if ($local_att_id) {
+                        $optimized_ids = wpc_get_local_optimized_ids();
+                        if (isset($optimized_ids[$local_att_id])) {
+                            return $this->maybe_slash($originalUrl, $addslashes);
+                        }
+                    }
+                }
+
                 if (strpos($url, '.jpg') !== false || strpos($url, '.gif') !== false || strpos($url, '.png') !== false) {
                     $ext = '';
                     if (strpos($url, '.jpg') !== false) {
@@ -4322,6 +4378,12 @@ class wps_cdn_rewrite
         $inject .= '<!--WPC_INSERT_CRITICAL-->';
         $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
         $inject .= '<!--WPC_INSERT_PRELOAD-->';
+
+        // Picture tag CSS safety net — makes <picture> transparent to CSS layout
+        if (self::$rewriteLogic::$pictureWebpEnabled) {
+            $inject .= '<style id="wpc-picture-css">picture.wpc-picture{display:contents}</style>';
+        }
+
         $inject .= $this->get_ga_script();
 
         return $inject;
@@ -4781,6 +4843,8 @@ JS;
         $class_Addon = '';
         $image_tag = $image[0];
         $image_source = '';
+        $webP = false;
+        $isLazy = false;
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'local_start') {
             return print_r($image, true);
@@ -4885,6 +4949,8 @@ JS;
         if (!empty(self::$lazy_enabled) && self::$lazy_enabled == '1' && !self::$lazy_override) {
 
             if (self::$lazyLoadedImages >= self::$lazyLoadSkipFirstImages) {
+                $isLazy = true;
+
                 // If Logo remove wps-ic-lazy-image
                 if (strpos($image_source, 'logo') !== false) {
                     $image_tag = 'src="' . $image_source . '"';
@@ -4941,7 +5007,9 @@ JS;
         $image_tag .= ' data-count-lazy="' . self::$lazyLoadedImages . '"';
 
         if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-            $image_tag .= ' fetchpriority="high" decoding="async"';
+            if (self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
+                $image_tag .= ' fetchpriority="high" decoding="async"';
+            }
         }
 
 
@@ -4989,7 +5057,8 @@ JS;
             unset($original_img_tag['original_tags']['srcset']);
         } else {
             if (!empty($srcset_att)) {
-                $image_tag .= ' srcset="' . $srcset_att . '" ';
+                $srcsetAttr = $isLazy ? 'data-srcset' : 'srcset';
+                $image_tag .= ' ' . $srcsetAttr . '="' . $srcset_att . '" ';
                 unset($original_img_tag['original_tags']['srcset']);
             }
         }
@@ -5012,7 +5081,54 @@ JS;
             }
         }
 
-        return '<img ' . $image_tag . ' />';
+        $finalTag = '<img ' . $image_tag . ' />';
+
+        // Wrap in <picture> for bulletproof WebP delivery (local mode)
+        if (self::$rewriteLogic::$pictureWebpEnabled && $webP !== false) {
+            $lowerSrc = strtolower($original_img_tag['original_src']);
+            $skipFormats = (strpos($lowerSrc, '.svg') !== false
+                         || strpos($lowerSrc, '.gif') !== false
+                         || strpos($lowerSrc, '.ico') !== false
+                         || strpos($lowerSrc, '.webp') !== false);
+
+            if (!$skipFormats) {
+                // Build fallback tag with original (non-webp) URLs
+                // Replace srcset FIRST (before src), otherwise src replacement corrupts the srcset match
+                $fallbackTag = $finalTag;
+                if (!empty($srcset_att) && !empty($original_img_tag['srcset'])) {
+                    // When lazy, attribute is data-srcset — match that
+                    $srcsetAttrInTag = $isLazy ? 'data-srcset' : 'srcset';
+                    $fallbackTag = str_replace($srcsetAttrInTag . '="' . $srcset_att . '"', $srcsetAttrInTag . '="' . $original_img_tag['srcset'] . '"', $fallbackTag);
+                }
+                $fallbackTag = str_replace($image_source, $original_img_tag['original_src'], $fallbackTag);
+
+                // WebP source — use data-srcset when lazy loading to prevent immediate load
+                $srcsetKey = $isLazy ? 'data-srcset' : 'srcset';
+                $sourceSrcset = !empty($srcset_att) ? ' ' . $srcsetKey . '="' . $srcset_att . '"' : ' ' . $srcsetKey . '="' . $image_source . '"';
+                $sourceSizes = '';
+                if (preg_match('/sizes="([^"]*)"/', $finalTag, $szMatch)) {
+                    $sourceSizes = ' sizes="' . $szMatch[1] . '"';
+                }
+
+                // AVIF source — only if local .avif file exists
+                $avifSource = '';
+                if (self::$rewriteLogic::$pictureAvifEnabled) {
+                    $avifPath = str_replace(['.webp', '.jpeg', '.jpg', '.png'], '.avif', $image_path);
+                    if (file_exists($avifPath)) {
+                        $avifSrcset = str_replace('.webp', '.avif', $sourceSrcset);
+                        $avifSource = '<source' . $avifSrcset . $sourceSizes . ' type="image/avif">';
+                    }
+                }
+
+                $finalTag = '<picture class="wpc-picture">'
+                    . $avifSource
+                    . '<source' . $sourceSrcset . $sourceSizes . ' type="image/webp">'
+                    . $fallbackTag
+                    . '</picture>';
+            }
+        }
+
+        return $finalTag;
     }
 
     public function getAllTags($image, $ignore_tags = ['src', 'srcset', 'data-src', 'data-srcset'])

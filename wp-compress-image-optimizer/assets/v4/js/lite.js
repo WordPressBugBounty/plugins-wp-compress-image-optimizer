@@ -227,9 +227,15 @@ jQuery(document).ready(function ($) {
                 nonce: wpc_ajaxVar.nonce,
             },
             success: function (response) {
-                setTimeout(function () {
-                    window.location.reload();
-                }, 1000);
+                // Poll for results instead of blocking reload
+                var retestPoll = setInterval(function() {
+                    $.post(ajaxurl, { action: 'wps_fetchInitialTest' }, function(res) {
+                        if (res.success) {
+                            clearInterval(retestPoll);
+                            window.location.reload();
+                        }
+                    });
+                }, 5000);
             }
         });
         return false;

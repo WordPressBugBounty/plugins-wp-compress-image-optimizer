@@ -81,7 +81,7 @@
 
     </div>
     <div class="cdn-popup-footer-info">
-        <a href="https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/" target="_blank">
+        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/') : 'https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/'); ?>" target="_blank">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             <?php echo esc_html__('Learn how to exclude problematic theme or plugin files from site optimization', WPS_IC_TEXTDOMAIN); ?>
         </a>
@@ -141,7 +141,7 @@
 
     </div>
     <div class="cdn-popup-footer-info">
-        <a href="https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/" target="_blank">
+        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/') : 'https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/'); ?>" target="_blank">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             <?php echo esc_html__('Learn how to exclude problematic theme or plugin files from site optimization', WPS_IC_TEXTDOMAIN); ?>
         </a>
@@ -178,7 +178,7 @@
 
     </div>
     <div class="cdn-popup-footer-info">
-        <a href="https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/" target="_blank">
+        <a href="<?php echo esc_url(function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url('https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/') : 'https://help.wpcompress.com/en-us/article/how-can-i-exclude-an-image-asset-or-script-1r1vqwu/'); ?>" target="_blank">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             <?php echo esc_html__('Learn how to exclude problematic theme or plugin files from site optimization', WPS_IC_TEXTDOMAIN); ?>
         </a>

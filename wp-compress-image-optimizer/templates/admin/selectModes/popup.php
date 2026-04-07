@@ -1,3 +1,4 @@
+<?php if (!defined('WPS_IC_TEXTDOMAIN')) return; ?>
 <div id="select-mode" style="display: none;">
     <div id="select-mode-popup-inner" class="ajax-settings-popup bottom-border">
 

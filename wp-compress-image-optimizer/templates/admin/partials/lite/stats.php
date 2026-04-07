@@ -57,8 +57,8 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
     $v2_mobileAfterGPS = $v2_result['mobile']['after']['performanceScore'] / 100;
     $v2_desktopDiff = $v2_result['desktop']['after']['performanceScore'] - $v2_result['desktop']['before']['performanceScore'];
     $v2_mobileDiff = $v2_result['mobile']['after']['performanceScore'] - $v2_result['mobile']['before']['performanceScore'];
-    if ($v2_desktopDiff <= 0) { $v2_desktopDiff = 'Perfect Score'; } else { $v2_desktopDiff = '+' . $v2_desktopDiff; }
-    if ($v2_mobileDiff <= 0) { $v2_mobileDiff = 'Perfect Score'; } else { $v2_mobileDiff = '+' . $v2_mobileDiff; }
+    if ($v2_result['desktop']['after']['performanceScore'] == 100) { $v2_desktopDiff = 'Perfect Score'; } elseif ($v2_desktopDiff == 0) { $v2_desktopDiff = 'No Change'; } elseif ($v2_desktopDiff > 0) { $v2_desktopDiff = '+' . $v2_desktopDiff; } else { $v2_desktopDiff = $v2_desktopDiff; }
+    if ($v2_result['mobile']['after']['performanceScore'] == 100) { $v2_mobileDiff = 'Perfect Score'; } elseif ($v2_mobileDiff == 0) { $v2_mobileDiff = 'No Change'; } elseif ($v2_mobileDiff > 0) { $v2_mobileDiff = '+' . $v2_mobileDiff; } else { $v2_mobileDiff = $v2_mobileDiff; }
     $v2_date = new DateTime();
     $v2_tz = get_option('timezone_string');
     if (!$v2_tz) {
@@ -162,7 +162,24 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
             </div>
             <?php if ($v2_hasGPS) { ?>
             <div class="wpc-v2-header-meta">
-                <span class="wpc-v2-meta-date"><?php echo $v2_lastRun; ?></span>
+                <span class="wpc-v2-meta-date" data-utc="<?php echo $v2_gps['lastRun']; ?>"></span>
+                <script>
+                (function(){
+                    var el = document.querySelector('.wpc-v2-meta-date[data-utc]');
+                    if (el) {
+                        var d = new Date(parseInt(el.getAttribute('data-utc')) * 1000);
+                        var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                        var day = d.getDate();
+                        var suffix = (day === 1 || day === 21 || day === 31) ? 'st' : (day === 2 || day === 22) ? 'nd' : (day === 3 || day === 23) ? 'rd' : 'th';
+                        var hours = d.getHours();
+                        var mins = d.getMinutes();
+                        var ampm = hours >= 12 ? 'PM' : 'AM';
+                        hours = hours % 12 || 12;
+                        mins = mins < 10 ? '0' + mins : mins;
+                        el.textContent = months[d.getMonth()] + ' ' + day + suffix + ', ' + d.getFullYear() + ' at ' + hours + ':' + mins + ' ' + ampm;
+                    }
+                })();
+                </script>
                 <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
                     <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
                     <?php esc_html_e('Retest', WPS_IC_TEXTDOMAIN); ?>
@@ -181,6 +198,7 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
             foreach ($v2_devices as $v2_dev) {
                 if ($v2_di > 0) echo '<div class="wpc-v2-score-sep"></div>';
                 $isPerfect = ($v2_dev['diff'] === 'Perfect Score');
+                $isNoChange = ($v2_dev['diff'] === 'No Change');
                 ?>
                 <div class="wpc-v2-score-col">
                     <div class="wpc-v2-device-header">
@@ -188,13 +206,15 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
                             <img src="<?php echo $v2_dev['icon']; ?>" alt="<?php echo $v2_dev['name']; ?>" />
                         </div>
                         <span class="wpc-v2-device-name"><?php echo $v2_dev['name']; ?></span>
-                        <div class="wpc-v2-score-pill<?php echo $isPerfect ? ' wpc-v2-pill-perfect' : ''; ?>">
+                        <div class="wpc-v2-score-pill<?php echo $isPerfect ? ' wpc-v2-pill-perfect' : ($isNoChange ? ' wpc-v2-pill-nochange' : ''); ?>">
                             <?php if ($isPerfect) { ?>
                                 <svg class="wpc-v2-pill-icon" viewBox="0 0 576 512" fill="currentColor"><path d="M318.3 82.1c6.1-7 9.7-16.1 9.7-26.1 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 10 3.7 19.1 9.7 26.1L184.1 192.6 95 145.1c.7-2.9 1-5.9 1-9.1 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 20.2 15 36.9 34.4 39.6L86.8 375.7c7.6 41.8 44.1 72.3 86.6 72.3l229.2 0c42.5 0 79-30.4 86.6-72.3l36.4-200.1c19.5-2.7 34.4-19.4 34.4-39.6 0-22.1-17.9-40-40-40s-40 17.9-40 40c0 3.1 .4 6.1 1 9.1l-89.1 47.5-73.6-110.4zM212 237.3l76-114 76 114c6.8 10.3 20.4 13.7 31.3 7.9l76.2-40.6-29.6 162.6c-3.5 19-20 32.8-39.4 32.8l-229.2 0c-19.3 0-35.9-13.8-39.4-32.8l-29.6-162.6 76.2 40.6c10.9 5.8 24.4 2.4 31.3-7.9z"/></svg>
+                            <?php } elseif ($isNoChange) { ?>
+                                <svg class="wpc-v2-pill-icon" viewBox="0 0 512 512" fill="currentColor"><path d="M464 256A208 208 0 1 0 48 256a208 208 0 1 0 416 0zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zm256-96a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/></svg>
                             <?php } else { ?>
                                 <svg class="wpc-v2-pill-icon" viewBox="0 0 576 512" fill="currentColor"><path d="M352 120c0-13.3 10.7-24 24-24l176 0c13.3 0 24 10.7 24 24l0 176c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-118.1-191 191c-9.4 9.4-24.6 9.4-33.9 0L192 257.9 41 409c-9.4 9.4-24.6 9.4-33.9 0S-2.3 384.4 7 375L175 207c9.4-9.4 24.6-9.4 33.9 0L320 318.1 494.1 144 376 144c-13.3 0-24-10.7-24-24z"/></svg>
                             <?php } ?>
-                            <span><?php echo $isPerfect ? esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN) : $v2_dev['diff'] . ' ' . esc_html__('Points', WPS_IC_TEXTDOMAIN); ?></span>
+                            <span><?php echo $isPerfect ? esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN) : ($isNoChange ? esc_html__('No Change', WPS_IC_TEXTDOMAIN) : $v2_dev['diff'] . ' ' . esc_html__('Points', WPS_IC_TEXTDOMAIN)); ?></span>
                         </div>
                     </div>
                     <?php

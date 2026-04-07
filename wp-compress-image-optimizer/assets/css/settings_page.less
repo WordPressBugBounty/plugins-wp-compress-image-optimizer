@@ -2,9 +2,16 @@
   width:8px;
   height:8px;
   content:'';
-  background:url('../images/bulk/circle.svg') center center no-repeat;
+  background: var(--wpc-brand-primary, #5CB1FF);
+  border-radius: 50%;
   display: inline-block;
   margin-right:8px;
+  animation: restoreDotPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes restoreDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 .bulk-preparing-restore {
   padding:30px 0px;
@@ -18,8 +25,8 @@
 
   .badge {
     display: inline-block;
-    background: #EFF7FF;
-    color: #5CB1FF;
+    background: var(--wpc-brand-bg, #EFF7FF);
+    color: var(--wpc-brand-primary, #5CB1FF);
     border-radius: 5px;
     padding: 10px 15px 10px 10px;
     font-weight: bold;
@@ -879,20 +886,50 @@ td.wps_ic_actions {
     flex: 1;
     padding: 25px 25px;
     border: 1px solid #dcdcdc;
-    /*margin: 0px 30px;*/
     border-radius: 5px;
-    /*border-right: 0px;*/
-    /*
-        &:first-child {
-          border-top-left-radius: 10px;
-          border-bottom-left-radius: 10px;
-        }
+  }
+}
 
-        &:last-child {
-          border-right: 1px solid #dcdcdc !important;
-          border-top-right-radius: 10px;
-          border-bottom-right-radius: 10px;
-        }*/
+// ─── Completion Screen Stats ─────────────────────────────────────────────
+.wpc-completion-stats {
+  display: flex;
+  gap: 16px;
+  margin: 20px 0 0 0;
+  padding: 0 30px;
+
+  .wpc-completion-stat {
+    flex: 1;
+    padding: 24px 20px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fafbfc;
+    text-align: center;
+    min-width: 150px;
+    margin: 20px 0 10px;
+
+    .wpc-completion-icon {
+      margin-bottom: 10px;
+
+      img {
+        width: 28px;
+        height: 28px;
+        opacity: 0.7;
+      }
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 22px;
+      font-family: 'proxima_bold', sans-serif;
+      color: #1e293b;
+    }
+
+    h5 {
+      margin: 4px 0 0 0;
+      font-size: 13px;
+      color: #64748b;
+      font-family: 'proxima_regular', sans-serif;
+    }
   }
 }
 

@@ -167,6 +167,22 @@ class WPC_CloudflareAPI
     }
 
     /**
+     * Purge all cache asynchronously (fire-and-forget)
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     */
+    public function purgeCacheAsync($zoneId)
+    {
+        $url = $this->apiBase . "zones/$zoneId/purge_cache";
+        wp_remote_post($url, [
+            'headers'  => $this->getHeaders(),
+            'body'     => json_encode(['purge_everything' => true]),
+            'blocking' => false,
+            'timeout'  => 0.01,
+        ]);
+    }
+
+    /**
      * Send a POST request to the Cloudflare API
      *
      * @param string $endpoint API endpoint

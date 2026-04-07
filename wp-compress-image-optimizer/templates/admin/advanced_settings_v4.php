@@ -1024,6 +1024,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4(__('Serve WebP Images', WPS_IC_TEXTDOMAIN), __('Generate and serve next-generation WebP images to supported browsers and devices.', WPS_IC_TEXTDOMAIN), false, '0', 'generate_webp', $adaptiveLocked, 'right', 'exclude-webp-popup'); ?>
 
                                             <?php
+                                            echo $gui::checkboxDescription_v4(__('Use Picture Tags', WPS_IC_TEXTDOMAIN), __('Wrap images in &lt;picture&gt; elements for improved next-gen format delivery to all browsers.', WPS_IC_TEXTDOMAIN), false, '0', 'picture_webp', $adaptiveLocked, 'right'); ?>
+
+                                            <?php
+                                            echo $gui::checkboxDescription_v4(__('Smart AVIF Images', WPS_IC_TEXTDOMAIN), __('Automatically serve AVIF when it beats both the original and WebP file size. Only uses locally compressed images.', WPS_IC_TEXTDOMAIN), false, '0', 'picture_avif', $adaptiveLocked, 'right', false, false, 'left', true); ?>
+
+                                            <?php
                                             echo $gui::checkboxDescription_v4(__('Serve Retina Images', WPS_IC_TEXTDOMAIN), __('Deliver higher-resolution retina images so that your images look great on larger screens.', WPS_IC_TEXTDOMAIN), false, '0', 'retina', $adaptiveLocked, 'right'); ?>
 
                                             <?php
@@ -1093,54 +1099,265 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         </div>
 
                                         <?php
-                                        // Auto-Optimize on Upload — EU Routing style
-                                        $onUploadActive = (isset($gui::$options['on-upload']) && $gui::$options['on-upload'] == '1');
-                                        $onUploadChecked = $onUploadActive ? 'checked' : '';
-                                        ?>
-                                        <div class="wpc-tab-content-box wpc-auto-optimize-card">
-                                            <div class="wpc-auto-optimize-inner">
-                                                <div class="wpc-auto-optimize-icon">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M248 328l0 24-48 0 0-270.1c-49.7 49.7-76.4 76.4-80 80l-33.9-33.9 17-17 104-104 17-17 17 17 104 104 17 17-33.9 33.9c-3.6-3.6-30.3-30.3-80-80L248 328zm-96-8l-104 0 0 112 352 0 0-112-104 0 0-48 152 0 0 208-448 0 0-208 152 0 0 48zm168 56a24 24 0 1 1 48 0 24 24 0 1 1 -48 0z"/></svg>
-                                                </div>
-                                                <div class="wpc-auto-optimize-text">
-                                                    <h4><?php echo esc_html__('Auto-Optimize on Upload', WPS_IC_TEXTDOMAIN); ?></h4>
-                                                    <p><?php echo esc_html__('Automatically compress new media library images as they\'re uploaded.', WPS_IC_TEXTDOMAIN); ?></p>
-                                                </div>
-                                            </div>
-                                            <div class="wpc-auto-optimize-toggle">
-                                                <label class="wpc-switch">
-                                                    <input type="checkbox" class="wps-ic-settings-v2-checkbox" name="options[on-upload]" value="1" data-option-name="options[on-upload]" data-recommended="0" data-safe="0" <?php echo $onUploadChecked; ?>>
-                                                    <div class="wpc-switch-slider"></div>
-                                                </label>
-                                            </div>
-                                        </div>
+                                        // Local Image Optimization — preset detection
+                                        $webpActive = (!empty($gui::$options['generate_webp']) && $gui::$options['generate_webp'] == '1');
+                                        $avifActive = (!empty($gui::$options['picture_avif']) && $gui::$options['picture_avif'] == '1');
 
-                                        <div class="wpc-tab-content-box wpc-optimize-library-card">
+                                        $currentPreset = 'custom';
+                                        if ($qualityLevel == 2 && $webpActive && $avifActive) {
+                                            $currentPreset = 'recommended';
+                                        } elseif ($qualityLevel == 2 && !$webpActive && !$avifActive) {
+                                            $currentPreset = 'save-space';
+                                        }
+
+                                        global $wpdb;
+                                        $totalImages = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_mime_type LIKE 'image/%'");
+                                        $optimizedImages = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'ic_status' AND meta_value = 'compressed'");
+
+                                        $modeLabels = [
+                                            'recommended' => __('Smart Optimization', WPS_IC_TEXTDOMAIN),
+                                            'save-space'  => __('Disk Saver', WPS_IC_TEXTDOMAIN),
+                                            'custom'      => __('Custom', WPS_IC_TEXTDOMAIN),
+                                        ];
+                                        ?>
+                                        <div class="wpc-tab-content-box wpc-optimize-library-card wpc-local-optimization-card wpc-card-rows" id="local-image-optimization" data-current-mode="<?php echo esc_attr($currentPreset); ?>">
                                             <div class="wpc-optimize-library-inner">
                                                 <div class="wpc-optimize-library-icon">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                                 </div>
                                                 <div class="wpc-optimize-library-text">
-                                                    <h4><?php echo esc_html__('Optimize Media Library', WPS_IC_TEXTDOMAIN); ?></h4>
-                                                    <p><?php echo esc_html__('Optimize locally stored images directly in bulk.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                    <h4><?php echo esc_html__('Local Image Optimization', WPS_IC_TEXTDOMAIN); ?></h4>
+                                                    <p><?php echo esc_html__('Compress and optimize images stored on your server', WPS_IC_TEXTDOMAIN); ?></p>
                                                 </div>
                                             </div>
-                                            <a class="wpc-optimize-library-btn" href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk'); ?>">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                                                <?php echo esc_html__('Optimize Media', WPS_IC_TEXTDOMAIN); ?>
-                                            </a>
+                                            <div class="wpc-optimize-library-actions">
+                                                <button type="button" class="wpc-local-configure-btn">
+                                                    <?php echo esc_html__('Configure', WPS_IC_TEXTDOMAIN); ?>
+                                                </button>
+                                                <a class="wpc-optimize-library-btn" href="<?php echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk'); ?>">
+                                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                                    <?php echo esc_html__('Optimize Media Library', WPS_IC_TEXTDOMAIN); ?>
+                                                </a>
+                                            </div>
+
+                                            <!-- Collapsible settings content -->
+                                            <div class="wpc-local-opt-body" style="display:none;">
+
+                                                <!-- Optimization Goal card -->
+                                                <div class="wpc-tab-content-box wpc-local-goal-card">
+                                                    <div class="wpc-local-goal-inner">
+                                                        <div class="wpc-local-goal-icon">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 2.5L12 7l4.5 1.5L12 10l-1.5 4.5L9 10 4.5 8.5 9 7l1.5-4.5zM17 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"/></svg>
+                                                        </div>
+                                                        <div class="wpc-local-goal-text">
+                                                            <h4><?php echo esc_html__('Optimization Goal', WPS_IC_TEXTDOMAIN); ?></h4>
+                                                            <p><?php echo esc_html__('Choose a preset that matches your needs.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                        </div>
+                                                    </div>
+                                                    <button type="button" class="wpc-local-mode-pill" data-current="<?php echo esc_attr($currentPreset); ?>">
+                                                        <span class="wpc-local-mode-pill-label"><?php echo esc_html($modeLabels[$currentPreset] ?? $modeLabels['recommended']); ?></span>
+                                                    </button>
+                                                </div>
+
+                                                <div class="wpc-perf-grid">
+
+                                                    <?php echo $gui::checkboxDescription_v4(
+                                                        __('Generate WebP', WPS_IC_TEXTDOMAIN),
+                                                        __('WebP versions for modern browsers, typically 30-50% smaller than JPEG with no visible difference.', WPS_IC_TEXTDOMAIN),
+                                                        false, '0', 'generate_webp', false, 'right'
+                                                    ); ?>
+
+                                                    <?php echo $gui::checkboxDescription_v4(
+                                                        __('Generate Smart AVIF', WPS_IC_TEXTDOMAIN),
+                                                        __('Only created when smaller than WebP. Saves an extra 10-20% for supported browsers.', WPS_IC_TEXTDOMAIN),
+                                                        false, '0', 'picture_avif', false, 'right'
+                                                    ); ?>
+
+                                                    <div class="wpc-box-for-checkbox">
+                                                        <div class="wpc-box-content">
+                                                            <div class="wpc-checkbox-title-holder">
+                                                                <div class="circle-check active"></div>
+                                                                <h4><?php esc_html_e('Backup Originals', WPS_IC_TEXTDOMAIN); ?></h4>
+                                                            </div>
+                                                        </div>
+                                                        <?php
+                                                        $backupVal = isset($gui::$options['backup']) ? $gui::$options['backup'] : 'local';
+                                                        $backupTriggerLabels = [
+                                                            'local' => __('Local', WPS_IC_TEXTDOMAIN),
+                                                            'cloud' => __('Cloud', WPS_IC_TEXTDOMAIN),
+                                                            'local-cloud' => __('Local + Cloud', WPS_IC_TEXTDOMAIN),
+                                                        ];
+                                                        ?>
+                                                        <input type="hidden" id="localBackup" value="<?php echo esc_attr($backupVal); ?>">
+                                                        <div class="wpc-custom-dropdown" data-target="localBackup">
+                                                            <button type="button" class="wpc-custom-dropdown-trigger">
+                                                                <span class="wpc-custom-dropdown-label"><?php echo esc_html($backupTriggerLabels[$backupVal] ?? $backupTriggerLabels['local']); ?></span>
+                                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                                            </button>
+                                                            <div class="wpc-custom-dropdown-menu">
+                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'local' ? ' wpc-active' : ''; ?>" data-value="local">
+                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'local' ? '&#10003;' : ''; ?></span>
+                                                                    <?php esc_html_e('Local', WPS_IC_TEXTDOMAIN); ?>
+                                                                </div>
+                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'cloud' ? ' wpc-active' : ''; ?>" data-value="cloud">
+                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'cloud' ? '&#10003;' : ''; ?></span>
+                                                                    <?php esc_html_e('Cloud', WPS_IC_TEXTDOMAIN); ?> <span class="wpc-dropdown-badge">60 Days</span>
+                                                                </div>
+                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'local-cloud' ? ' wpc-active' : ''; ?>" data-value="local-cloud">
+                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'local-cloud' ? '&#10003;' : ''; ?></span>
+                                                                    <?php esc_html_e('Local + Cloud', WPS_IC_TEXTDOMAIN); ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="wpc-box-for-checkbox">
+                                                        <div class="wpc-box-content">
+                                                            <div class="wpc-checkbox-title-holder">
+                                                                <div class="circle-check active"></div>
+                                                                <h4><?php esc_html_e('Local Quality Override', WPS_IC_TEXTDOMAIN); ?></h4>
+                                                            </div>
+                                                        </div>
+                                                        <?php
+                                                        $localQuality = isset($gui::$options['local_qualityLevel']) ? $gui::$options['local_qualityLevel'] : '0';
+                                                        $qualityLabels = [
+                                                            '0' => __('None', WPS_IC_TEXTDOMAIN),
+                                                            '1' => __('Lossless', WPS_IC_TEXTDOMAIN),
+                                                            '2' => __('Intelligent', WPS_IC_TEXTDOMAIN),
+                                                            '3' => __('Ultra', WPS_IC_TEXTDOMAIN),
+                                                        ];
+                                                        ?>
+                                                        <input type="hidden" id="localQualityLevel" value="<?php echo esc_attr($localQuality); ?>">
+                                                        <div class="wpc-custom-dropdown" data-target="localQualityLevel">
+                                                            <button type="button" class="wpc-custom-dropdown-trigger">
+                                                                <span class="wpc-custom-dropdown-label"><?php echo esc_html($qualityLabels[$localQuality] ?? $qualityLabels['0']); ?></span>
+                                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                                            </button>
+                                                            <div class="wpc-custom-dropdown-menu">
+                                                                <?php foreach ($qualityLabels as $val => $label) : ?>
+                                                                    <div class="wpc-custom-dropdown-item<?php echo $localQuality == $val ? ' wpc-active' : ''; ?>" data-value="<?php echo esc_attr($val); ?>">
+                                                                        <span class="wpc-dropdown-check"><?php echo $localQuality == $val ? '&#10003;' : ''; ?></span>
+                                                                        <?php echo esc_html($label); ?>
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="wpc-box-for-checkbox">
+                                                        <div class="wpc-box-content">
+                                                            <div class="wpc-checkbox-title-holder">
+                                                                <div class="circle-check active"></div>
+                                                                <h4><?php esc_html_e('Max Image Size', WPS_IC_TEXTDOMAIN); ?></h4>
+                                                            </div>
+                                                        </div>
+                                                        <div class="wpc-local-input-wrap">
+                                                            <input type="number" id="localMaxWidth" value="<?php echo esc_attr(isset($gui::$options['maxWidth']) ? $gui::$options['maxWidth'] : '2560'); ?>" min="800" max="6000" step="1">
+                                                            <span class="wpc-input-suffix">px</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <?php echo $gui::checkboxDescription_v4(
+                                                        __('Auto-Optimize on Upload', WPS_IC_TEXTDOMAIN),
+                                                        __('Compress new images as they\'re uploaded.', WPS_IC_TEXTDOMAIN),
+                                                        false, '0', 'on-upload', false, 'right'
+                                                    ); ?>
+
+                                                </div>
+
+                                                <!-- Stats row -->
+                                                <?php
+                                                $avgSavings = 0;
+                                                if ($optimizedImages > 0) {
+                                                    $avgSavings = (float) $wpdb->get_var("SELECT AVG(CAST(meta_value AS DECIMAL(5,1))) FROM {$wpdb->postmeta} WHERE meta_key = 'ic_savings' AND meta_value > 0");
+                                                }
+                                                ?>
+                                                <div class="wpc-local-opt-stats-row">
+                                                    <svg class="wpc-stats-row-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                                    <span><?php echo esc_html(number_format($totalImages) . ' ' . __('images', WPS_IC_TEXTDOMAIN)); ?></span>
+                                                    &bull;
+                                                    <span><?php echo esc_html(number_format($optimizedImages) . ' ' . __('optimized', WPS_IC_TEXTDOMAIN)); ?></span>
+                                                    <?php if ($avgSavings > 0) { ?>
+                                                        &bull;
+                                                        <span><?php echo esc_html(round($avgSavings) . '% ' . __('avg savings', WPS_IC_TEXTDOMAIN)); ?></span>
+                                                    <?php } ?>
+                                                </div>
+                                            </div><!-- /.wpc-local-opt-body -->
+
                                         </div>
 
+                                        <!-- Hidden popup template for mode selector -->
+                                        <div id="local-preset-mode" style="display:none;">
+                                            <div class="ajax-settings-popup wpc-local-goal-popup">
+                                                <div class="cdn-popup-content">
+                                                    <div class="cdn-popup-content-full">
+                                                        <div class="wpc-popup-columns wpc-three-columns">
+                                                            <div class="wpc-popup-column <?php echo $currentPreset === 'save-space' ? 'wpc-active' : ''; ?>" data-preset="save-space">
+                                                                <div class="wpc-column-heading"></div>
+                                                                <ul>
+                                                                    <li class="wpc-preset-card-header">
+                                                                        <div class="wpc-preset-icon-badge wpc-preset-icon-save-space">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                                                        </div>
+                                                                        <h3><?php esc_html_e('Disk Saver', WPS_IC_TEXTDOMAIN); ?></h3>
+                                                                        <p><?php esc_html_e('Compress your images without adding extra files. Your disk gets smaller, not bigger.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                                    </li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Intelligent compression', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Visually identical to originals', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li><?php esc_html_e('No WebP or AVIF files created', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('15–25% less disk space', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-preset-card-footer"><span><?php esc_html_e('Best for: limited hosting storage', WPS_IC_TEXTDOMAIN); ?></span></li>
+                                                                </ul>
+                                                            </div>
+                                                            <div class="wpc-popup-column <?php echo ($currentPreset === 'recommended') ? 'wpc-active' : ''; ?>" data-preset="recommended">
+                                                                <div class="wpc-column-heading"></div>
+                                                                <ul>
+                                                                    <li class="wpc-preset-card-header">
+                                                                        <div class="wpc-preset-icon-badge wpc-preset-icon-recommended">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                                                        </div>
+                                                                        <h3><?php esc_html_e('Smart Optimization', WPS_IC_TEXTDOMAIN); ?></h3>
+                                                                        <p><?php esc_html_e('The best balance of quality, speed and file size. Zero visible quality loss with next-gen formats for modern browsers.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                                    </li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Intelligent compression', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Visually identical to originals', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('WebP for 93% of browsers', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Smart AVIF (only when smaller)', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('40–60% smaller for visitors', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-preset-card-footer"><span><?php esc_html_e('Best for: most websites', WPS_IC_TEXTDOMAIN); ?></span></li>
+                                                                </ul>
+                                                            </div>
+                                                            <div class="wpc-popup-column <?php echo $currentPreset === 'custom' ? 'wpc-active' : ''; ?>" data-preset="custom">
+                                                                <div class="wpc-column-heading"></div>
+                                                                <ul>
+                                                                    <li class="wpc-preset-card-header">
+                                                                        <div class="wpc-preset-icon-badge wpc-preset-icon-custom">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                                                                        </div>
+                                                                        <h3><?php esc_html_e('Custom', WPS_IC_TEXTDOMAIN); ?></h3>
+                                                                        <p><?php esc_html_e('Full control over quality, formats, and backup settings.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                                    </li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Choose your compression level', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Toggle WebP &amp; AVIF separately', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Set max image dimensions', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-active"><?php esc_html_e('Choose your backup strategy', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                    <li class="wpc-preset-card-footer"><span><?php esc_html_e('Best for: agencies & power users', WPS_IC_TEXTDOMAIN); ?></span></li>
+                                                                </ul>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wpc-goal-popup-footer">
+                                                        <a href="#" class="cdn-popup-save-btn wpc-local-preset-save-btn">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke-linejoin="round"/></svg>
+                                                            <?php esc_html_e('Save Goal', WPS_IC_TEXTDOMAIN); ?>
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
                                         <?php
                                     } ?>
-
-
-                                    <?php
-                                    /*
-                                                                   <div class="wpc-tab-content-box">
-                                                                     <?php echo $gui::checkboxDescription('Local Backups', 'Backup original images on your local server.', 'tab-icons/backup-local.svg', '', ['backup', 'local']); ?>
-                                                                   </div> */ ?>
 
                                 </div>
                                 <div class="wpc-tab-content" id="ux-settings-options" style="display:none;">

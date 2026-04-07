@@ -77,7 +77,7 @@ function runLazy() {
                         imgWidth = Math.round(parseInt(imageStyle.width));
 
                         if (typeof imgWidth == 'undefined' || !imgWidth || imgWidth == 0 || isNaN(imgWidth)) {
-                            imgWidth = 1;
+                            imgWidth = window.innerWidth || 1;
                         }
 
                         if (listHas(lazyImage.classList, 'slide')) {

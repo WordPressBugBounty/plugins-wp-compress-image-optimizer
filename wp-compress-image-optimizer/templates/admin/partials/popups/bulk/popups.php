@@ -1,97 +1,49 @@
 <?php
 
-global $whtlbl;
-$support_url = (isset($whtlbl) && property_exists($whtlbl, 'author_url'))
-	? $whtlbl->author_url
-	: 'https://www.wpcompress.com/';
+$support_url = function_exists('wpc_get_whitelabel_url') ? wpc_get_whitelabel_url() : 'https://www.wpcompress.com/';
 
-echo '<div id="performance-lab-compatibility" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+$warn_icon = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('Compatibility Error!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <p>' . esc_html__('This feature is not compatible with Performance Lab\'s WebP Uploads option. Please disable it to use this feature.', WPS_IC_TEXTDOMAIN) . '</p>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
-
+$error_template = function($id, $title, $desc = '') use ($warn_icon, $support_url) {
+    $html = '<div id="' . esc_attr($id) . '" style="display:none;">
+      <div class="wpc-error-popup">
+        <div class="wpc-error-popup-icon">' . $warn_icon . '</div>
+        <h3>' . esc_html($title) . '</h3>';
+    if ($desc) {
+        $html .= '<p>' . esc_html($desc) . '</p>';
+    }
+    $html .= '<a href="' . esc_url($support_url) . '" target="_blank" class="wpc-error-popup-btn">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
       </div>
     </div>';
+    echo $html;
+};
 
-echo '<div id="unknown-error" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+$error_template('performance-lab-compatibility',
+    __('Compatibility Error', WPS_IC_TEXTDOMAIN),
+    __('This feature is not compatible with Performance Lab\'s WebP Uploads option. Please disable it to continue.', WPS_IC_TEXTDOMAIN)
+);
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
+$error_template('unknown-error',
+    __('Something went wrong', WPS_IC_TEXTDOMAIN),
+    __('An unexpected error occurred. Please try again or contact support if the issue persists.', WPS_IC_TEXTDOMAIN)
+);
 
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('Unknown error occurred!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
+$error_template('unable-to-contact-api',
+    __('Unable to reach the optimization service', WPS_IC_TEXTDOMAIN),
+    __('The request timed out. This can happen with multiple simultaneous requests. Please try again.', WPS_IC_TEXTDOMAIN)
+);
 
-      </div>
-    </div>';
+$error_template('failed-to-get-site-images',
+    __('Unable to communicate with your site', WPS_IC_TEXTDOMAIN),
+    __('We couldn\'t retrieve your image list. Please check your site\'s connectivity and try again.', WPS_IC_TEXTDOMAIN)
+);
 
-echo '<div id="unable-to-contact-api" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
+$error_template('bulk-process-failed',
+    __('Bulk process failed to start', WPS_IC_TEXTDOMAIN),
+    __('The bulk optimization couldn\'t be started. Please try again or use the single-image optimizer.', WPS_IC_TEXTDOMAIN)
+);
 
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('We were unable to contact WP Compress API!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
-
-      </div>
-    </div>';
-
-echo '<div id="failed-to-get-site-images" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('We were unable to communicate with your site!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
-
-      </div>
-    </div>';
-
-echo '<div id="bulk-process-failed" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('We were unable to start bulk process on your site!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
-
-      </div>
-    </div>';
-
-echo '<div id="bulk-process-bad-apikey" style="display: none;">
-      <div id="cdn-popup-inner" class="ic-compress-all-popup">
-
-        <div class="cdn-popup-top">
-          <img class="popup-icon" src="' . WPS_IC_URI . 'assets/v4/images/warning-icon.svg"/>
-        </div>
-
-        <div class="cdn-popup-content" style="padding-bottom: 50px;">
-          <h3>' . esc_html__('We were unable to start bulk process on your site because of Bad ApiKey!', WPS_IC_TEXTDOMAIN) . '</h3>
-          <a href="' . $support_url . '" target="_blank" class="button button-primary button-wpc-popup-primary">' . esc_html__('Contact Support', WPS_IC_TEXTDOMAIN) . '</a>
-        </div>
-
-      </div>
-    </div>';
+$error_template('bulk-process-bad-apikey',
+    __('Invalid API Key', WPS_IC_TEXTDOMAIN),
+    __('Your API key could not be verified. Please reconnect the plugin or contact support.', WPS_IC_TEXTDOMAIN)
+);

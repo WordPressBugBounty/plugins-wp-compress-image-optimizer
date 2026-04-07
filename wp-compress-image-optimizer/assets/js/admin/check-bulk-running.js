@@ -198,7 +198,7 @@ jQuery(document).ready(function ($) {
 
                         setTimeout(function(){
                             $.ajax({
-                                url: ajaxurl, type: 'POST', data: {action: 'wps_ic_getBulkStats', type: 'compress', in:'bulkRestore'}, success: function (response) {
+                                url: ajaxurl, type: 'POST', data: {action: 'wps_ic_getBulkStats', type: 'restore', in:'bulkRestore'}, success: function (response) {
                                     $('.bulk-preparing-optimize').hide();
                                     $('.bulk-preparing-restore').hide();
 

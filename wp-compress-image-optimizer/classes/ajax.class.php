@@ -120,6 +120,7 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_get_default_settings');
 
                 $this->add_ajax('wps_ic_ajax_v2_checkbox');
+                $this->add_ajax('wps_ic_ajax_v2_checkbox_batch');
                 $this->add_ajax('wps_ic_purge_after_save');
                 $this->add_ajax('wps_ic_ajax_checkbox');
 
@@ -734,11 +735,16 @@ class wps_ic_ajax extends wps_ic
 
         $settings = get_option(WPS_IC_SETTINGS);
 
-        // If it was checked then set to false as it's unchecked then
-        if ($setting_checked == 'false') {
-            $settings[$setting_name] = '0';
+        $value = ($setting_checked == 'false') ? '0' : '1';
+
+        // Parse "options[key]" or "options[key1][key2]" format from HTML name attribute
+        preg_match_all('/\[([^\]]+)\]/', $setting_name, $matches);
+        $keys = !empty($matches[1]) ? $matches[1] : [$setting_name];
+
+        if (count($keys) === 2) {
+            $settings[$keys[0]][$keys[1]] = $value;
         } else {
-            $settings[$setting_name] = '1';
+            $settings[$keys[0]] = $value;
         }
 
         if ($settings['live-cdn'] == '0') {
@@ -766,7 +772,7 @@ class wps_ic_ajax extends wps_ic
             do_action('wphb_clear_page_cache');
         }
 
-        wp_send_json_success(['new_value' => $settings[$setting_name], 'setting_name' => $setting_name, 'value' => $setting_value]);
+        wp_send_json_success(['new_value' => $value, 'setting_name' => $setting_name, 'value' => $setting_value]);
     }
 
     /**
@@ -1074,9 +1080,10 @@ class wps_ic_ajax extends wps_ic
             // Recalculate live-cdn when any serve option changes
             if ($optionName[0] === 'serve') {
                 $cdnOn = false;
+                $imageServeKeys = ['jpg', 'png', 'gif', 'svg'];
                 if (isset($options['serve'])) {
-                    foreach ($options['serve'] as $v) {
-                        if ($v == '1') { $cdnOn = true; break; }
+                    foreach ($imageServeKeys as $k) {
+                        if (!empty($options['serve'][$k]) && $options['serve'][$k] == '1') { $cdnOn = true; break; }
                     }
                 }
                 if (!$cdnOn && !empty($options['css']) && $options['css'] == '1') $cdnOn = true;
@@ -1107,9 +1114,10 @@ class wps_ic_ajax extends wps_ic
             // Recalculate live-cdn when css, js, or fonts changes
             if (in_array($optionName, ['css', 'js', 'fonts'])) {
                 $cdnOn = false;
+                $imageServeKeys = ['jpg', 'png', 'gif', 'svg'];
                 if (!empty($options['serve'])) {
-                    foreach ($options['serve'] as $v) {
-                        if ($v == '1') { $cdnOn = true; break; }
+                    foreach ($imageServeKeys as $k) {
+                        if (!empty($options['serve'][$k]) && $options['serve'][$k] == '1') { $cdnOn = true; break; }
                     }
                 }
                 if (!$cdnOn && !empty($options['css']) && $options['css'] == '1') $cdnOn = true;
@@ -1122,6 +1130,97 @@ class wps_ic_ajax extends wps_ic
         }
 
         wp_send_json_success(['newValue' => $newValue, 'optionName' => $optionName]);
+    }
+
+    /**
+     * Batch save — applies all checkbox changes in a single DB read/write cycle.
+     * Fixes race condition where parallel per-checkbox AJAX calls overwrite each other.
+     */
+    public function wps_ic_ajax_v2_checkbox_batch()
+    {
+        if (!isset($_POST['wps_ic_nonce']) || !check_ajax_referer('wps_ic_nonce_action', 'wps_ic_nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce'], 403);
+            wp_die();
+        }
+
+        if (!current_user_can('manage_wpc_settings')) {
+            wp_send_json_error(['message' => 'Permission denied'], 403);
+            wp_die();
+        }
+
+        $changes = json_decode(stripslashes($_POST['changes']), true);
+        if (empty($changes) || !is_array($changes)) {
+            wp_send_json_error(['message' => 'No changes provided']);
+            wp_die();
+        }
+
+        $options = get_option(WPS_IC_SETTINGS);
+        $cf = null;
+        $serveChanged = false;
+        $assetChanged = false;
+
+        foreach ($changes as $change) {
+            $optionName = explode(',', sanitize_text_field($change['name']));
+            $optionValue = sanitize_text_field($change['value']);
+
+            if (count($optionName) > 1 && $optionName[0] === 'cf') {
+                // CF settings stored in WPS_IC_CF['settings']
+                if ($cf === null) {
+                    $cf = get_option(WPS_IC_CF);
+                    if (!empty($cf) && !isset($cf['settings'])) {
+                        $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
+                    }
+                }
+                if (!empty($cf)) {
+                    $cf['settings'][$optionName[1]] = $optionValue;
+                }
+            } elseif (count($optionName) > 1) {
+                $options[$optionName[0]][$optionName[1]] = $optionValue;
+                if ($optionName[0] === 'serve') $serveChanged = true;
+            } else {
+                $name = $optionName[0];
+                $options[$name] = $optionValue;
+                if (in_array($name, ['css', 'js', 'fonts'])) $assetChanged = true;
+
+                // Auto-scan homepage when Local font hosting is first enabled
+                if ($name === 'replace-fonts' && $optionValue === 'local') {
+                    $fontsMap = get_option(WPS_IC_FONTS_MAP);
+                    if (empty($fontsMap)) {
+                        $fonts = new wps_ic_fonts();
+                        $response = $fonts->callAPI(site_url());
+                        $found = $fonts->scanForFonts($response);
+                        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+                        if ($hasGoogleFonts) {
+                            $fonts->readGoogleStylesheet($found);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recalculate live-cdn ONCE with all changes applied
+        if ($serveChanged || $assetChanged) {
+            $cdnOn = false;
+            // Only check image serve keys (css/js/fonts in serve array are stale legacy values)
+            $imageServeKeys = ['jpg', 'png', 'gif', 'svg'];
+            if (!empty($options['serve'])) {
+                foreach ($imageServeKeys as $k) {
+                    if (!empty($options['serve'][$k]) && $options['serve'][$k] == '1') { $cdnOn = true; break; }
+                }
+            }
+            if (!$cdnOn && !empty($options['css']) && $options['css'] == '1') $cdnOn = true;
+            if (!$cdnOn && !empty($options['js']) && $options['js'] == '1') $cdnOn = true;
+            if (!$cdnOn && !empty($options['fonts']) && $options['fonts'] == '1') $cdnOn = true;
+            $options['live-cdn'] = $cdnOn ? '1' : '0';
+        }
+
+        update_option(WPS_IC_SETTINGS, $options);
+
+        if ($cf !== null) {
+            update_option(WPS_IC_CF, $cf);
+        }
+
+        wp_send_json_success(['saved' => count($changes)]);
     }
 
     /**
@@ -1695,13 +1794,11 @@ class wps_ic_ajax extends wps_ic
 
         if ($isDone) {
             $output = [];
-            //
             $bulkStatus = get_option('wps_ic_BulkStatus');
-            // Total Images in Restore Queue
-            $imagesInRestoreQueue = $bulkStatus['foundImageCount'];
-            $imagesRestored = $bulkStatus['restoredImageCount'];
-            $progressBar = round(($imagesRestored / $imagesInRestoreQueue) * 100);
-            //
+            $imagesInRestoreQueue = !empty($bulkStatus['foundImageCount']) ? $bulkStatus['foundImageCount'] : 0;
+            $imagesRestored = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
+            $progressBar = ($imagesInRestoreQueue > 0) ? round(($imagesRestored / $imagesInRestoreQueue) * 100) : 100;
+
             $output['status'] = 'done';
             $output['finished'] = $imagesRestored;
             $output['total'] = $imagesInRestoreQueue;
@@ -1712,16 +1809,16 @@ class wps_ic_ajax extends wps_ic
         }
 
         // Total Images in Restore Queue
-        $imagesInRestoreQueue = $bulkStatus['foundImageCount'];
-        $imagesRestored = $bulkStatus['restoredImageCount'];
+        $imagesInRestoreQueue = !empty($bulkStatus['foundImageCount']) ? $bulkStatus['foundImageCount'] : 0;
+        $imagesRestored = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
 
 
         // Not ready for output, nothing is done yet
         if (empty($parsedImages)) {
-            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $imagesInRestoreQueue . ' images to restore...']);
+            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $imagesInRestoreQueue . ($imagesInRestoreQueue == 1 ? ' image' : ' images') . ' to restore...']);
         }
 
-        $progressBar = round(($imagesRestored / $imagesInRestoreQueue) * 100);
+        $progressBar = ($imagesInRestoreQueue > 0) ? round(($imagesRestored / $imagesInRestoreQueue) * 100) : 0;
 
         // Visual Patch so that user can see some progress
         if ($progressBar == 0) {
@@ -1732,11 +1829,17 @@ class wps_ic_ajax extends wps_ic
         $onlyImages = $parsedImages;
         unset($onlyImages['total']);
 
+        $lastID = null;
         if (!empty($onlyImages)) {
             $lastID = array_key_last($onlyImages);
         }
 
-        $lastProgress = $_POST['lastProgress'];
+        // If no images processed yet, return parsing status
+        if ($lastID === null) {
+            wp_send_json_success(['status' => 'parsing', 'message' => 'Restoring images...', 'finished' => $imagesRestored, 'total' => $imagesInRestoreQueue, 'progress' => $progressBar]);
+        }
+
+        $lastProgress = isset($_POST['lastProgress']) ? $_POST['lastProgress'] : 0;
 
         $output = [];
         $output['status'] = 'working';
@@ -1745,7 +1848,7 @@ class wps_ic_ajax extends wps_ic
         $output['finished'] = $imagesRestored;
         $output['total'] = $imagesInRestoreQueue;
         $output['progress'] = $progressBar;
-        $output['parsedImage'] = $parsedImages[$lastID];
+        $output['parsedImage'] = isset($parsedImages[$lastID]) ? $parsedImages[$lastID] : [];
 
         if ($imagesRestored >= $imagesInRestoreQueue) {
             delete_option('wps_ic_bulk_process');
@@ -1759,23 +1862,33 @@ class wps_ic_ajax extends wps_ic
     {
         $output = '';
 
-        $thumbnail = $full = wp_get_attachment_image_src($imageID, 'full');
+        // Use wp_get_attachment_url (DB-only, works even while file is being restored)
+        $thumbUrl = wp_get_attachment_url($imageID);
+        if (empty($thumbUrl)) $thumbUrl = '';
 
-        $image_full_filename = basename($full[0]);
+        $image_full_filename = $thumbUrl ? basename($thumbUrl) : ('Image #' . $imageID);
         $filedata = get_attached_file($imageID);
 
         $originalPath = wp_get_original_image_path($imageID);
-        $original_filesize = filesize($originalPath);
+        $original_filesize = ($originalPath && file_exists($originalPath)) ? @filesize($originalPath) : 0;
 
         $output .= '<div class="wps-ic-bulk-html-wrapper">';
 
         $output .= '<div class="bulk-restore-container">';
 
-        $output .= '<div class="bulk-restore-preview-container">';
-        $output .= '<div class="bulk-restore-preview-inner">';
-        $output .= '<div class="bulk-restore-preview-image-holder">';
-        $output .= '<div class="image-holder-inner">';
-        $output .= '<div style="background-image:url(' . $thumbnail[0] . ');" class="image-holder-bg"></div>';
+        if ($thumbUrl) {
+            $output .= '<div class="bulk-restore-preview-container">';
+            $output .= '<div class="bulk-restore-preview-inner">';
+            $output .= '<div class="bulk-restore-preview-image-holder">';
+            $output .= '<div class="image-holder-inner">';
+            $output .= '<div style="background-image:url(' . esc_url($thumbUrl) . ');" class="image-holder-bg"></div>';
+        } else {
+            $output .= '<div class="bulk-restore-preview-container">';
+            $output .= '<div class="bulk-restore-preview-inner">';
+            $output .= '<div class="bulk-restore-preview-image-holder">';
+            $output .= '<div class="image-holder-inner" style="background:#f1f5f9;display:flex;align-items:center;justify-content:center;">';
+            $output .= '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+        }
         $output .= '</div>';
         $output .= '</div>';
         $output .= '</div>';
@@ -1787,14 +1900,18 @@ class wps_ic_ajax extends wps_ic
         $output .= '<span class="badge"><i class="icon icon-check"></i> Restored</span>';
         $output .= '</div>';
 
+        $bulkStatus = get_option('wps_ic_BulkStatus');
+        $restoredCount = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
+        $totalCount = !empty($bulkStatus['foundImageCount']) ? $bulkStatus['foundImageCount'] : 0;
         $output .= '<div class="bulk-restore-status-top-right">';
-        $output .= '<h3>16 / 16</h3>';
+        $output .= '<h3>' . $restoredCount . ' / ' . $totalCount . '</h3>';
         $output .= '<h5>Images Restored</h5>';
         $output .= '</div>';
 
         $output .= '<div class="bulk-restore-status-container">';
         $output .= '<h4>' . $image_full_filename . '</h4>';
-        $output .= '<span><i class="restore-bullet"></i> ' . wps_ic_format_bytes($original_filesize, null, null, false) . '</span>';
+        $sizeDisplay = $original_filesize > 0 ? wps_ic_format_bytes($original_filesize, null, null, false) : 'Restoring...';
+        $output .= '<span><i class="restore-bullet"></i> ' . $sizeDisplay . '</span>';
         $output .= '<div class="bulk-status-progress-bar">
               <div class="progress-bar-outer">
                 <div class="progress-bar-inner" style="width: ' . $lastProgress . '%;"></div>
@@ -1833,7 +1950,7 @@ class wps_ic_ajax extends wps_ic
 
         // Nothing done yet
         if (empty($onlyImages)) {
-            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $totalImagesFound . ' images to optimize...']);
+            wp_send_json_success(['status' => 'parsing', 'message' => 'We have found ' . $totalImagesFound . ($totalImagesFound == 1 ? ' image' : ' images') . ' to optimize...']);
         }
 
         if (!empty($onlyImages)) {
@@ -1842,8 +1959,8 @@ class wps_ic_ajax extends wps_ic
 
         // Stats for the last optimized image
         $stats = get_post_meta($lastID, 'ic_stats', true);
-        $original_filesize = $stats['original']['original']['size'];
-        $compressed_filesize = $stats['original']['compressed']['size'];
+        $original_filesize = isset($stats['original']['original']['size']) ? $stats['original']['original']['size'] : 0;
+        $compressed_filesize = isset($stats['original']['compressed']['size']) ? $stats['original']['compressed']['size'] : 0;
 
         // Check if negative savings
         $savedKB = wps_ic_format_bytes($original_filesize - $compressed_filesize) . ' Saved';
@@ -1861,19 +1978,19 @@ class wps_ic_ajax extends wps_ic
         $status .= '</ul>';
 
         // ProgressBar for overall Optimization (compressed images / total images to compress)
-        $progressBar = round(($compressedImages / $totalImagesFound) * 100);
+        $progressBar = ($totalImagesFound > 0) ? round(($compressedImages / $totalImagesFound) * 100) : 0;
 
         // Full Image Name
         $full = wp_get_original_image_url($lastID);
-        $imageFileName = basename($full);
+        $imageFileName = $full ? basename($full) : ('Image #' . $lastID);
 
         // Savings Calc
-        $originalSize = $parsedImages['total']['original'];
-        $compressedSize = $parsedImages['total']['compressed'];
-        $imagesAndThumbs = $bulkStatus['compressedImageCount'] + $bulkStatus['compressedThumbs'];
+        $originalSize = isset($parsedImages['total']['original']) ? $parsedImages['total']['original'] : 0;
+        $compressedSize = isset($parsedImages['total']['compressed']) ? $parsedImages['total']['compressed'] : 0;
+        $imagesAndThumbs = (!empty($bulkStatus['compressedImageCount']) ? $bulkStatus['compressedImageCount'] : 0) + (!empty($bulkStatus['compressedThumbs']) ? $bulkStatus['compressedThumbs'] : 0);
 
         // Avg Savings
-        $avgReduction = (1 - (($compressedSize / $imagesAndThumbs) / ($originalSize / $imagesAndThumbs))) * 100;
+        $avgReduction = ($originalSize > 0 && $imagesAndThumbs > 0) ? (1 - ($compressedSize / $originalSize)) * 100 : 0;
         $avgReduction = number_format($avgReduction, 1);
         $avgReductionHTML = '<h3>' . $avgReduction . '%</h3><h5>Average Savings</h5>';
 
@@ -1911,121 +2028,6 @@ class wps_ic_ajax extends wps_ic
         }
 
         wp_send_json_success($output);
-
-        // OLD CODE BELOW
-        die();
-
-        $isDone = get_transient('wps_ic_bulk_done');
-        $parsedImages = get_option('wps_ic_parsed_images');
-        $bulkStatus = get_option('wps_ic_BulkStatus');
-        $bulkProcess = get_option('wps_ic_bulk_process');
-        $counter = get_option('wps_ic_bulk_counter');
-
-        if ($bulkProcess && $bulkProcess['status'] != 'compressing') {
-            wp_send_json_error(['msg' => 'bulk-process-failed']);
-        }
-
-        if ($isDone) {
-            $output = [];
-            //
-            $output['status'] = 'done';
-            //
-            delete_option('wps_ic_bulk_process');
-            delete_transient('wps_ic_stuck_check');
-            delete_option('wps_ic_bulk_counter');
-            //
-            wp_send_json_success($output);
-        }
-
-        // Not ready for output, nothing is done yet
-        if (empty($parsedImages)) {
-            wp_send_json_success(['status' => 'parsing']);
-        }
-
-        // Bugfix, remove total index
-        $onlyImages = $parsedImages;
-        unset($onlyImages['total']);
-        if (!empty($onlyImages)) {
-            $lastID = array_key_last($onlyImages);
-        }
-
-        // Total Images Found
-        $totalImagesFound = $bulkStatus['foundImageCount'];
-        $totalThumbsFound = $bulkStatus['foundThumbCount'];
-
-        // All Images Data
-        $originalSize = $parsedImages['total']['original'];
-        $compressedSize = $parsedImages['total']['compressed'];
-        $imagesAndThumbs = $counter['imagesAndThumbs'];
-        $imagesOnly = $counter['images'];
-
-        // Last Image Data
-        $lastImageOriginal = $parsedImages[$lastID]['total']['original'];
-        $lastImageCompressed = $parsedImages[$lastID]['total']['compressed'];
-        $savingsKb = $lastImageOriginal - $lastImageCompressed;
-
-        // Avg Savings
-        $avgReduction = (1 - (($compressedSize / $imagesAndThumbs) / ($originalSize / $imagesAndThumbs))) * 100;
-        $avgReduction = number_format($avgReduction, 1);
-        $avgReductionHTML = '<h3>' . $avgReduction . '%</h3><h5>Average Savings</h5>';
-
-        // Total Savings
-        $bulkSavings = wps_ic_format_bytes($originalSize - $compressedSize, null, null, false);
-        $bulkSavingsHTML = '<h3>' . $bulkSavings . '</h3><h5>Total Savings</h5>';
-
-        // Compressed Images
-        $CompressedImagesHTML = '<h3>' . $imagesOnly . '/' . $totalImagesFound . '</h3><h5>Original Images</h5>';
-        $CompressedThumbsHTML = '<h3>' . $imagesAndThumbs . '/' . $totalThumbsFound . '</h3><h5>Total Images</h5>';
-
-        $stats = get_post_meta($lastID, 'ic_stats', true);
-        $original_filesize = $stats['original']['original']['size'];
-        $compressed_filesize = $stats['original']['compressed']['size'];
-
-        $status = '<ul class="wps-icon-list">';
-        $status .= '<li><i class="wps-icon saved"></i> ' . wps_ic_format_bytes($original_filesize - $compressed_filesize) . ' Saved</li>';
-        $status .= '<li><i class="wps-icon quality"></i> ' . ucfirst(self::$settings['optimization']) . ' Mode</li>';
-        if (self::$settings['generate_webp'] == '1') {
-            $status .= '<li><i class="wps-icon webp"></i> WebP Generated</li>';
-        }
-        $status .= '</ul>';
-
-        $full = wp_get_original_image_url($lastID);
-        $imageFileName = basename($full);
-
-        $progressBar = round(($imagesOnly / $totalImagesFound) * 100);
-
-        $output = [];
-
-        $stuck_check = get_transient('wps_ic_stuck_check');
-        if ($stuck_check['last_image'] == $imageFileName) {
-            $stuck_check['count']++;
-            if ($stuck_check['count'] > 10) {
-                self::$local->restartCompressWorker();
-                $stuck_check['count'] = 0;
-            }
-        } else {
-            $stuck_check['last_image'] = $imageFileName;
-            $stuck_check['count'] = 0;
-        }
-        set_transient('wps_ic_stuck_check', $stuck_check, 120);
-
-        $output['parsedImages'] = $parsedImages;
-        $output['html'] = $this->bulkCompressHtml($lastID);
-        $output['status'] = $status;
-        $output['progress'] = $progressBar;
-        $output['parsedImage'] = $parsedImages[$lastID];
-        $output['lastFileName'] = $imageFileName;
-        $output['progressAvgReduction'] = $avgReductionHTML;
-        $output['progressTotalSavings'] = $bulkSavingsHTML;
-        $output['progressCompressedImages'] = $CompressedImagesHTML;
-        $output['progressCompressedThumbs'] = $CompressedThumbsHTML;
-
-        if ($imagesOnly >= $totalImagesFound) {
-            delete_option('wps_ic_bulk_process');
-            set_transient('wps_ic_bulk_done', true, 60);
-        }
-
-        wp_send_json_success($output);
     }
 
     public function bulkCompressHtml($imageID)
@@ -2035,34 +2037,44 @@ class wps_ic_ajax extends wps_ic
         $thumbnail = wp_get_attachment_image_src($imageID, 'large');
         $full = wp_get_attachment_image_src($imageID, 'full');
 
-        $backup_images = get_post_meta($imageID, 'ic_backup_images', true);
-        $stats = get_post_meta($imageID, 'ic_stats', true);
-        if (empty($stats)) {
-            $uploadfile = get_attached_file($imageID);
-            $stats['original']['original']['size'] = filesize($uploadfile);
-        }
-
         $image_filename = basename($thumbnail[0]);
         $image_full_filename = basename($full[0]);
 
-        // Does the backup exist, if not replace with original
+        // Use the same savings data as single image (unscaled baseline → best variant)
+        $ic_savings = get_post_meta($imageID, 'ic_savings', true);
+        $ic_baseline = get_post_meta($imageID, 'ic_savings_baseline', true);
+        $ic_saved_bytes = get_post_meta($imageID, 'ic_savings_bytes', true);
+
+        // Before = unscaled original, After = baseline minus saved bytes
+        if ($ic_baseline > 0) {
+            $original_filesize = wps_ic_format_bytes($ic_baseline, null, null, false);
+            $after_size = $ic_baseline - $ic_saved_bytes;
+            $compressed_filesize = wps_ic_format_bytes($after_size, null, null, false);
+            $savings = floatval($ic_savings);
+        } else {
+            // Fallback to ic_stats if ic_savings not yet available
+            $stats = get_post_meta($imageID, 'ic_stats', true);
+            if (empty($stats)) {
+                $uploadfile = get_attached_file($imageID);
+                $stats['original']['original']['size'] = @filesize($uploadfile) ?: 0;
+                $stats['original']['compressed']['size'] = 0;
+            }
+            $original_filesize = wps_ic_format_bytes($stats['original']['original']['size'], null, null, false);
+            $compressed_filesize = wps_ic_format_bytes($stats['original']['compressed']['size'], null, null, false);
+            $savings = ($stats['original']['original']['size'] > 0 && $stats['original']['compressed']['size'] > 0)
+                ? round((1 - ($stats['original']['compressed']['size'] / $stats['original']['original']['size'])) * 100, 1)
+                : 0;
+        }
+
+        // Original image URL for the before preview
+        $backup_images = get_post_meta($imageID, 'ic_backup_images', true);
         if (!empty($backup_images['full']) && !file_exists($backup_images['full'])) {
             $original_image = $thumbnail[0];
         } else {
             $original_image = $full[0];
         }
 
-
-        $original_filesize = wps_ic_format_bytes($stats['original']['original']['size'], null, null, false);
-        $compressed_filesize = wps_ic_format_bytes($stats['original']['compressed']['size'], null, null, false);
-
-        if ($stats['original']['original']['size'] > 0 && $stats['original']['compressed']['size'] > 0) {
-            $savings = 1 - ($stats['original']['compressed']['size'] / $stats['original']['original']['size']);
-            $savings = round($savings * 100, 1);
-        }
-
         $savingsHTML = '';
-        // Check if savings are less than 0.9%
         if ($savings <= 0.9) {
             $savingsHTML = 'No further savings';
         } else {
@@ -2091,7 +2103,7 @@ class wps_ic_ajax extends wps_ic
         $output .= '<div class="wps-ic-bulk-preparing-logo-container">
         <div class="wps-ic-bulk-preparing-logo">
           <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-          <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
+          <svg class="bulk-preparing" xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid"><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-bg, #eff7ff)" stroke-width="5" fill="none"></circle><circle cx="50" cy="50" r="30" stroke="var(--wpc-brand-primary, #4c89eb)" stroke-width="3" stroke-linecap="round" fill="none"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="2s" values="0 50 50;180 50 50;720 50 50" keyTimes="0;0.5;1"></animateTransform><animate attributeName="stroke-dasharray" repeatCount="indefinite" dur="2s" values="18.85 169.65;94.25 94.25;18.85 169.65" keyTimes="0;0.5;1"></animate></circle></svg>
         </div>
       </div>';
         $output .= '</div>';
@@ -2149,10 +2161,12 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_getBulkStats()
     {
+        $bulkStatus = get_option('wps_ic_BulkStatus');
+        $parsedImages = get_option('wps_ic_parsed_images');
+
         $output = '<div class="wps-ic-bulk-html-wrapper">';
         $output .= '<div class="wps-ic-bulk-header">';
         $output .= '<div class="wps-ic-bulk-logo">';
-
 
         $output .= '<div class="logo-holder">';
         $output .= '<img src="' . WPS_IC_URI . 'assets/images/bulk/compress-complete.svg' . '">';
@@ -2162,10 +2176,56 @@ class wps_ic_ajax extends wps_ic
             $output .= '<div class="wps-ic-percent-savings">';
             $output .= '<h2>Image Compression Complete!</h2>';
             $output .= '</div>';
+
+            // Show stats for compress completion
+            if (!empty($bulkStatus)) {
+                $totalImages = !empty($bulkStatus['compressedImageCount']) ? $bulkStatus['compressedImageCount'] : 0;
+                $totalThumbs = !empty($bulkStatus['compressedThumbs']) ? $bulkStatus['compressedThumbs'] : 0;
+                $originalSize = !empty($bulkStatus['total']['original']['size']) ? $bulkStatus['total']['original']['size'] : 0;
+                $compressedSize = !empty($bulkStatus['total']['compressed']['size']) ? $bulkStatus['total']['compressed']['size'] : 0;
+                $savings = $originalSize - $compressedSize;
+                $avgReduction = ($originalSize > 0 && $totalThumbs > 0) ? round((1 - ($compressedSize / $originalSize)) * 100, 1) : 0;
+
+                $output .= '<div class="wpc-completion-stats">';
+
+                $output .= '<div class="wpc-completion-stat">';
+                $output .= '<div class="wpc-completion-icon"><img src="' . WPS_IC_URI . 'assets/icons/bulk/original-images.svg" /></div>';
+                $output .= '<h3>' . $totalImages . '</h3><h5>Original Images</h5>';
+                $output .= '</div>';
+
+                $output .= '<div class="wpc-completion-stat">';
+                $output .= '<div class="wpc-completion-icon"><img src="' . WPS_IC_URI . 'assets/icons/bulk/total-images.svg" /></div>';
+                $output .= '<h3>' . $totalThumbs . '</h3><h5>Total Images</h5>';
+                $output .= '</div>';
+
+                $output .= '<div class="wpc-completion-stat">';
+                $output .= '<div class="wpc-completion-icon"><img src="' . WPS_IC_URI . 'assets/icons/bulk/total-savings.svg" /></div>';
+                $output .= '<h3>' . wps_ic_format_bytes($savings, null, null, false) . '</h3><h5>Total Savings</h5>';
+                $output .= '</div>';
+
+                $output .= '<div class="wpc-completion-stat">';
+                $output .= '<div class="wpc-completion-icon"><img src="' . WPS_IC_URI . 'assets/icons/bulk/average-savings.svg" /></div>';
+                $output .= '<h3>' . $avgReduction . '%</h3><h5>Average Savings</h5>';
+                $output .= '</div>';
+
+                $output .= '</div>';
+            }
         } else {
             $output .= '<div class="wps-ic-percent-savings" style="margin-bottom:40px;">';
             $output .= '<h2>Image Restore Complete</h2>';
             $output .= '</div>';
+
+            // Show stats for restore completion
+            if (!empty($bulkStatus)) {
+                $restoredCount = !empty($bulkStatus['restoredImageCount']) ? $bulkStatus['restoredImageCount'] : 0;
+                $output .= '<div class="bulk-restore-status-progress" style="display:flex;justify-content:center;margin-top:10px;">';
+                $output .= '<div class="bulk-images-restored" style="text-align:center;padding:20px 40px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">';
+                $output .= '<div style="margin-bottom:8px;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22b73a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>';
+                $output .= '<h3 style="font-size:28px;font-weight:700;margin:0 0 4px;">' . $restoredCount . '</h3>';
+                $output .= '<h5 style="margin:0;color:#64748b;font-size:13px;">Images Restored</h5>';
+                $output .= '</div>';
+                $output .= '</div>';
+            }
         }
 
         $output .= '</div>';
@@ -2247,7 +2307,6 @@ class wps_ic_ajax extends wps_ic
         if ($send['status'] == 'success') {
             update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
             set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
-
 
             // Send restore call
             $local = new wps_ic_local();

@@ -174,7 +174,7 @@ class wps_ic_integrations extends wps_ic
             }
         }
 
-        set_transient('wps_ic_conflicts_check', true, 15 * MINUTE_IN_SECONDS);
+        set_transient('wps_ic_conflicts_check', true, 6 * HOUR_IN_SECONDS);
     }
 
     public function add_admin_hooks()

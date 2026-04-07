@@ -78,6 +78,15 @@ function lazyLoad() {
                     lazyImage.src = lazyImage.dataset.src;
                 }
 
+                // Handle <picture> <source> lazy loading
+                var parentPicture = lazyImage.closest('picture');
+                if (parentPicture) {
+                    parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
+                        s.srcset = s.dataset.srcset;
+                        s.removeAttribute('data-srcset');
+                    });
+                }
+
                 var imageSrc = lazyImage.src;
                 //imageSrc = imageSrc.replace(/\.jpeg|\.jpg/g, '.webp');
                 //lazyImage.src = imageSrc;
