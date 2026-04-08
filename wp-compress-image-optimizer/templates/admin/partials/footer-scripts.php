@@ -19,6 +19,7 @@
 
     // Calculate offset
     $item = 0;
+    $is_sample_data = false;
 
     // Live CDN is OFF
     if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
@@ -27,6 +28,7 @@
           $statsclass = new wps_ic_stats();
             $stats = $statsclass->fetch_sample_stats();
             $stats = $stats->data;
+            $is_sample_data = true;
         } else {
             $stats = $stats_local;
             unset($stats->total);
@@ -38,6 +40,7 @@
           $statsclass = new wps_ic_stats();
             $stats = $statsclass->fetch_sample_stats();
             $stats = $stats->data;
+            $is_sample_data = true;
         } else {
             $stats = $stats_live;
         }
@@ -305,5 +308,10 @@
             }
         }, 200);
         <?php } ?>
+
+        <?php if ($is_sample_data): ?>
+        var wpcSampleBadge = document.querySelector('.wpc-sample-badge');
+        if (wpcSampleBadge) wpcSampleBadge.style.display = '';
+        <?php endif; ?>
     });
 </script>

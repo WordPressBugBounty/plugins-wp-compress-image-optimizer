@@ -2621,10 +2621,12 @@
 // ─── Universal Dropdown Overflow Fix ─────────────────────────────────────
 // JS adds .wpc-dropdown-open to ancestors when a dropdown opens.
 // This lifts the card above siblings so the menu isn't clipped by overflow:hidden.
-.wpc-dropdown-open {
+.wpc-dropdown-open,
+.wpc-dropdown-lifted {
   overflow: visible !important; // FORCED: dropdown must not clip
 }
-.wpc-tab-content-box.wpc-dropdown-open {
+.wpc-tab-content-box.wpc-dropdown-open,
+.wpc-tab-content-box.wpc-dropdown-lifted {
   z-index: 50 !important; // FORCED: lift above sibling cards
   position: relative;
 }

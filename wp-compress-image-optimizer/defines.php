@@ -68,8 +68,10 @@ define('WPS_IC_PRELOADER_API_URL', 'https://preloader.wpcompress.com/v2/index.ph
 define('WPS_IC_IN_BULK', 'wps_ic_in_bulk');
 define('WPS_IC_MU_SETTINGS', 'wps_ic_mu_settings');
 
+
 // How many tests can fail before it's marked as failuire?
 define('WPS_IC_TEST_FAILURES', 80);
+
 
 define('WPS_IC_TESTS', 'wpc-tests');
 define('WPS_IC_LITE_GPS_HISTORY', 'wps_ic_initial_gps_history');

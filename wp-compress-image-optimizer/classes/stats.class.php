@@ -350,12 +350,15 @@ class wps_ic_stats
         set_transient('ic_sample_data_live', 'true', 60);
         $sample = file_get_contents(WPS_IC_DIR . 'sample-data-live.json');
         $sample = json_decode($sample);
-        $currentYear = date('Y');
+
+        // Map sample values onto the past 7 days (today → 6 days ago)
+        $values = array_values((array)$sample->data);
         $updated = new stdClass();
         $updated->data = [];
-        foreach ($sample->data as $date => $val) {
-            $newDate = str_replace('2022', $currentYear, $date);
-            $updated->data[$newDate] = $val;
+        for ($i = 6; $i >= 0; $i--) {
+            $date = date('d-m-Y', strtotime("-{$i} days"));
+            $val = isset($values[6 - $i]) ? $values[6 - $i] : $values[0];
+            $updated->data[$date] = $val;
         }
         return $updated->data;
     }

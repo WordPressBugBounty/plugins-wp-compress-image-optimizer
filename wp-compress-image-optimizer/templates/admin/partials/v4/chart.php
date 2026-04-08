@@ -3,7 +3,7 @@
         <div class="col-6">
             <ul>
                 <li>
-                    <h3><?php echo esc_html__('Compression Report', WPS_IC_TEXTDOMAIN); ?></h3>
+                    <h3><?php echo esc_html__('Compression Report', WPS_IC_TEXTDOMAIN); ?> <span class="wpc-sample-badge" style="display:none;"><?php echo esc_html__('SAMPLE DATA', WPS_IC_TEXTDOMAIN); ?><span class="wpc-sample-tooltip"><?php echo esc_html__('Currently showing sample data, live stats will appear automatically within 1–2 hours.', WPS_IC_TEXTDOMAIN); ?></span></span></h3>
                 </li>
             </ul>
         </div>

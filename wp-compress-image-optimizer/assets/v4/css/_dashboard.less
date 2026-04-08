@@ -139,6 +139,46 @@
     canvas { width: 100% !important; height: 100% !important; } // FORCED: Chart.js inline
   }
 
+  // ─── Sample Data Badge ─────────────────────────────────────────────────
+  .wpc-sample-badge {
+    font-size: 10px;
+    font-family: @font-bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-variant: jis78;
+    color: @color-gray-text;
+    background: @color-bg-frost;
+    padding: 5px 10px;
+    border-radius: @radius-base;
+    vertical-align: middle;
+    margin-left: 8px;
+    position: relative;
+    cursor: pointer;
+
+    .wpc-sample-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: @color-text-dark;
+      color: @color-white;
+      font-size: 13px;
+      font-family: @font-regular;
+      letter-spacing: 0;
+      text-transform: none;
+      padding: 8px 12px;
+      border-radius: @radius-md;
+      white-space: nowrap;
+      z-index: 100;
+      box-shadow: @shadow-card;
+    }
+
+    &:hover .wpc-sample-tooltip {
+      display: block;
+    }
+  }
+
 
   // ─── Preset Modes ──────────────────────────────────────────────────────
   .wpc-tab-content-box:has(.wpc-preset-modes-container) {

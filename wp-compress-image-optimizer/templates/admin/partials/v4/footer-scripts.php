@@ -27,6 +27,7 @@
     $stats = false;
     $use_cloudflare = false;
     $data_source = 'none'; // For debugging/logging
+    $is_sample_data = false;
 
     // Check if Cloudflare is connected
     $cf = get_option(WPS_IC_CF);
@@ -43,6 +44,7 @@
             $use_cloudflare = false;
             if (empty($gui::$stats_live)) {
                 $stats = $statsclass->fetch_sample_stats();
+                $is_sample_data = true;
             } else {
                 $stats = $gui::$stats_live;
             }
@@ -51,6 +53,7 @@
         // No CF, use sample data
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
+        $is_sample_data = true;
     } else {
         // Use live stats
         $stats = $gui::$stats_live;
@@ -65,6 +68,7 @@
     if (empty($stats) || (is_object($stats) && count((array)$stats) === 0)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
+        $is_sample_data = true;
     }
 
     if ($stats) {
@@ -96,6 +100,7 @@
     if (empty($labels)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
+        $is_sample_data = true;
         if ($stats) {
             foreach ($stats as $date => $value) {
                 if (!is_object($value) || !isset($value->original)) continue;
@@ -178,6 +183,11 @@
     $labels_js = rtrim($labels_js, ',');
 
     ?>
+
+    <?php if ($is_sample_data): ?>
+    var wpcSampleBadge = document.querySelector('.wpc-sample-badge');
+    if (wpcSampleBadge) wpcSampleBadge.style.display = '';
+    <?php endif; ?>
 
     // ============================================================
     // CHART DATA SETUP
