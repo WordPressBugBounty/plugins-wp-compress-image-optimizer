@@ -1,4 +1,4 @@
-<div id="exclude-advanced-caching-popup" style="display: none;">
+<div id="exclude-from-plugin-popup" style="display: none;">
   <div id="" class="cdn-popup-inner ajax-settings-popup bottom-border exclude-list-popup">
 
     <div class="cdn-popup-loading">
@@ -18,8 +18,8 @@
           echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
         </div>
         <div class="inline-heading-text">
-          <h3><?php echo esc_html__('Exclude from Cache', WPS_IC_TEXTDOMAIN); ?></h3>
-          <p><?php echo esc_html__('Pages listed here always serve fresh content (cache is skipped), but plugin optimizations still apply.', WPS_IC_TEXTDOMAIN); ?></p>
+          <h3><?php echo esc_html__('Exclude from Plugin', WPS_IC_TEXTDOMAIN); ?></h3>
+          <p><?php echo esc_html__('URLs listed here completely bypass ALL optimizations. The plugin will not touch these pages — useful for checkout, account pages, or anything that may cause issues with optimization.', WPS_IC_TEXTDOMAIN); ?></p>
         </div>
       </div>
     </div>
@@ -27,7 +27,7 @@
     <form method="post" class="wpc-save-popup-data" action="#">
       <div class="cdn-popup-content-full">
         <div class="cdn-popup-content-inner">
-          <textarea name="wpc-excludes[cache]" data-setting-name="wpc-excludes" data-setting-subset="cache" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. /my-account/, /cart/, /checkout/', WPS_IC_TEXTDOMAIN); ?>"></textarea>
+          <textarea name="wpc-url-excludes[exclude-url-from-all]" data-setting-name="wpc-url-excludes" data-setting-subset="exclude-url-from-all" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. /checkout, /my-account, /offer/di-premium', WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
           <div class="wps-empty-row">&nbsp;</div>
 
@@ -39,10 +39,10 @@
                 <div class="wps-example-list" style="display: none;">
         <div>
             <div>
-                <p><span class="wpc-example-chip">/my-account</span> <?php echo esc_html__('would exclude the account page and all sub-pages from cache', WPS_IC_TEXTDOMAIN); ?></p>
-                <p><span class="wpc-example-chip">/checkout</span> <?php echo esc_html__('would exclude checkout and all sub-pages from cache', WPS_IC_TEXTDOMAIN); ?></p>
-                <p><span class="wpc-example-chip">/cart</span> <?php echo esc_html__('would exclude the cart page from cache', WPS_IC_TEXTDOMAIN); ?></p>
-                <p><span class="wpc-example-chip">cart</span> <?php echo __('would exclude any page with &quot;cart&quot; in the URL', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/checkout</span> <?php echo esc_html__('would bypass plugin on checkout and all sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/my-account</span> <?php echo esc_html__('would bypass plugin on account pages and all sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/offer/di-premium</span> <?php echo esc_html__('would bypass plugin on that offer page and any sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">cart</span> <?php echo __('would bypass plugin on any URL containing &quot;cart&quot;', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
         </div>
       </div>

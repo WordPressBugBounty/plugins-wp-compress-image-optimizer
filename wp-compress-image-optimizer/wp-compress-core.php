@@ -40,6 +40,42 @@ if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
     }, E_WARNING | E_NOTICE | E_DEPRECATED);
 }
 
+// WPC URL Pattern Matcher — shared by dontRunif() and advanced-cache.php
+// Wildcard syntax: * = single path segment, ** = any depth, ? = single char,
+// plain text = case-insensitive substring (backwards compatible with old exact entries)
+if (!function_exists('wpc_url_matches_pattern')) {
+    function wpc_url_matches_pattern($url, $pattern) {
+        $pattern = trim($pattern);
+        if ($pattern === '' || $pattern[0] === '#') return false;
+
+        // Strip leading slash for normalization (URL has host prefix, patterns may not)
+        $pattern = ltrim($pattern, '/');
+
+        // Wildcard pattern → build regex
+        if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
+            // Escape regex meta chars first, then convert wildcards back
+            $regex = preg_quote($pattern, '#');
+            $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
+            return (bool) @preg_match('#' . $regex . '#i', $url);
+        }
+
+        // No wildcards → case-insensitive substring match
+        return stripos($url, $pattern) !== false;
+    }
+}
+
+if (!function_exists('wpc_url_is_excluded')) {
+    function wpc_url_is_excluded($currentUrl, $patterns) {
+        if (empty($patterns) || !is_array($patterns)) return false;
+        foreach ($patterns as $pattern) {
+            if (wpc_url_matches_pattern($currentUrl, $pattern)) {
+                return $pattern; // Return matched pattern for logging
+            }
+        }
+        return false;
+    }
+}
+
 include_once __DIR__ . '/debug.php';
 include_once __DIR__ . '/defines.php';
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
@@ -418,7 +454,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.00.06';
+        self::$version = '7.00.07';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -625,7 +661,7 @@ class wps_ic
 
         if ($data->account->quotaType == 'requests' || $data->account->quotaType == 'requests-combined') {
             // Requests
-            $liveCredits = $data->account->leftover . ' Requests Left';
+            $liveCredits = ($data->account->leftover ?? 0) . ' Requests Left';
 
             if (empty($data->liveCredits)) {
                 $data->liveCredits = (object)['formatted' => '', 'value' => 0];
@@ -1448,13 +1484,15 @@ class wps_ic
 
             // Multisite Settings
             $settings = get_option(WPS_IC_MU_SETTINGS);
+            if (!is_array($settings)) $settings = [];
             $settings['hide_compress'] = 0;
             update_option(WPS_IC_MU_SETTINGS, $settings);
 
             // Remove from active on API
             $options = get_option(WPS_IC_OPTIONS);
+            if (!is_array($options)) $options = [];
             $site = site_url();
-            $apikey = $options['api_key'];
+            $apikey = $options['api_key'] ?? '';
 
             $newOptions = $options;
             $newOptions['regExUrl'] = '';

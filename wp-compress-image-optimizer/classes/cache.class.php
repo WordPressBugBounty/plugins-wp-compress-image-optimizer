@@ -393,6 +393,7 @@ class wps_ic_cache
         $cache = new wps_ic_cache_integrations();
 
         $oldOptions= $options = get_option(WPS_IC_OPTIONS);
+        if (!is_array($options)) $oldOptions = $options = [];
 
         $cacheLogic->purgeObjectCache();
 
@@ -425,7 +426,7 @@ class wps_ic_cache
 
         set_transient('wps_ic_purging_cdn', 'true', 30);
 
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key']]);
+        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key'] ?? '']);
 
         // Clear cache.
         if (function_exists('rocket_clean_domain')) {

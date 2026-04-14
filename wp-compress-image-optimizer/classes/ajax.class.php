@@ -2834,18 +2834,21 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'file-already-compressed']);
         }
 
-        // If loopback is working → queue + fire-and-forget (async)
+        // If loopback is working → fire dedicated per-image worker (parallel, no queue wait)
         $loopbackStatus = get_option('wpc_loopback_status', '');
         if ($loopbackStatus !== 'fail') {
             set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'queued', 'time' => time()], 300);
 
-            $queue = get_option('wpc_compress_queue', []);
-            if (!in_array($imageID, $queue)) {
-                $queue[] = $imageID;
-                update_option('wpc_compress_queue', $queue, false);
-            }
-
-            self::$local->fireQueueWorker();
+            // Fire per-image worker — bypasses global queue lock, processes in parallel with other manual compresses
+            $apiOptions = get_option(WPS_IC_OPTIONS);
+            $apiKey = !empty($apiOptions['api_key']) ? $apiOptions['api_key'] : '';
+            wp_remote_post(rest_url('wpc/v1/compress-single'), [
+                'blocking'  => false,
+                'timeout'   => 0.01,
+                'headers'   => ['x-api-key' => $apiKey],
+                'body'      => ['imageID' => $imageID],
+                'sslverify' => false,
+            ]);
 
             global $wps_ic;
             $html = $wps_ic->media_library->compress_details($imageID);

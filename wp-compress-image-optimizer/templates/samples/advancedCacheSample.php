@@ -111,9 +111,58 @@ if (!empty($_SERVER['REQUEST_METHOD'])) {
     }
 }
 
-// Don't cache if critical combine or cache disable headers are present
-if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC'])) {
+// Don't cache if critical combine, cache disable headers, or disableWPC GET param are present
+if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC']) || !empty($_GET['disableWPC'])) {
     return;
+}
+
+// URL bypass — cache exclude (wpc-excludes['cache']) AND full plugin bypass (wpc-url-excludes)
+// Inline matcher because WordPress isn't fully loaded yet (no plugin functions available)
+if (isset($GLOBALS['wpdb'])) {
+    $check_url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    $check_url = explode('?', $check_url)[0];
+
+    $wpc_match_pattern = function ($url, $pattern) {
+        $pattern = trim($pattern);
+        if ($pattern === '' || $pattern[0] === '#') return false;
+        $pattern = ltrim($pattern, '/');
+        if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
+            $regex = preg_quote($pattern, '#');
+            $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
+            return (bool) @preg_match('#' . $regex . '#i', $url);
+        }
+        return stripos($url, $pattern) !== false;
+    };
+
+    // Check 1: Full plugin bypass (wpc-url-excludes)
+    $wpc_url_excludes_raw = $GLOBALS['wpdb']->get_var(
+        "SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-url-excludes'"
+    );
+    if (!empty($wpc_url_excludes_raw)) {
+        $wpc_url_excludes = @maybe_unserialize($wpc_url_excludes_raw);
+        if (!empty($wpc_url_excludes['exclude-url-from-all']) && is_array($wpc_url_excludes['exclude-url-from-all'])) {
+            foreach ($wpc_url_excludes['exclude-url-from-all'] as $pattern) {
+                if ($wpc_match_pattern($check_url, $pattern)) {
+                    return; // Bypass cache (plugin will also be bypassed via dontRunif)
+                }
+            }
+        }
+    }
+
+    // Check 2: Cache-only exclude (wpc-excludes['cache']) — existing UI, now wildcard-aware
+    $wpc_cache_excludes_raw = $GLOBALS['wpdb']->get_var(
+        "SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-excludes'"
+    );
+    if (!empty($wpc_cache_excludes_raw)) {
+        $wpc_cache_excludes = @maybe_unserialize($wpc_cache_excludes_raw);
+        if (!empty($wpc_cache_excludes['cache']) && is_array($wpc_cache_excludes['cache'])) {
+            foreach ($wpc_cache_excludes['cache'] as $pattern) {
+                if ($wpc_match_pattern($check_url, $pattern)) {
+                    return; // Skip cache for this URL (plugin still optimizes)
+                }
+            }
+        }
+    }
 }
 
 // Don't cache if DONOTCACHEPAGE constant is defined

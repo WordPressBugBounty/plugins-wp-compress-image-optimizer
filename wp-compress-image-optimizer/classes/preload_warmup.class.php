@@ -233,6 +233,7 @@ class wps_ic_preload_warmup
         $exclude_id = [];
 
         $post_info = get_transient('wpc-post-info');
+        if (!is_array($post_info)) $post_info = [];
         $warmup_errors = get_option('wpc-warmup-errors');
 
         if ($post_type == 'any' || empty($post_type)) {

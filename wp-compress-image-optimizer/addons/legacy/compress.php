@@ -251,6 +251,48 @@ class wps_local_compress
     }
 
     /**
+     * Build sizes JSON mapping size labels → file size in bytes on disk.
+     * Sent to service v1.17.3+ so it uses WP's actual on-disk bytes as the regression baseline
+     * (instead of comparing against its own q95 intermediate). Required for accurate savingsPercent
+     * and to prevent variants being silently skipped when output > intermediate but < WP file.
+     * Backward compatible: pre-v1.17.3 services ignore this field.
+     */
+    public static function buildSizesJson($imageID) {
+        $sizes = [];
+
+        // Unscaled original
+        $unscaled = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : null;
+        if ($unscaled && file_exists($unscaled)) {
+            $sizes['original'] = filesize($unscaled);
+        }
+
+        $main = get_attached_file($imageID);
+        if ($main && file_exists($main)) {
+            $meta = wp_get_attachment_metadata($imageID);
+
+            // -scaled.jpg: WP 5.3+ big-image-auto-scale
+            if (!empty($meta['file']) && strpos($meta['file'], '-scaled') !== false) {
+                $sizes['scaled'] = filesize($main);
+            }
+
+            // Sized crops (thumbnail, medium, medium_large, large, etc.)
+            if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
+                $baseDir = dirname($main);
+                foreach ($meta['sizes'] as $sizeName => $info) {
+                    if (!empty($info['file'])) {
+                        $path = $baseDir . '/' . $info['file'];
+                        if (file_exists($path)) {
+                            $sizes[$sizeName] = filesize($path);
+                        }
+                    }
+                }
+            }
+        }
+
+        return json_encode($sizes);
+    }
+
+    /**
      * Send image to service via POST (file upload) with GET fallback.
      * POST is 3-6x faster than GET because the service doesn't need to download from the site.
      *
@@ -291,6 +333,7 @@ class wps_local_compress
             'hosting'   => $params['hosting'] ?? 'shared',
             'crops'     => self::buildCropsJson(),
             'filenames' => self::buildFilenamesJson($imageID),
+            'sizes'     => self::buildSizesJson($imageID), // v1.17.3+: WP-real baseline for accurate savings
             'image'     => new CURLFile($upload_path, (function_exists('mime_content_type') ? mime_content_type($upload_path) : false) ?: 'image/jpeg', basename($upload_path)),
         ];
 
@@ -451,6 +494,103 @@ class wps_local_compress
             'callback'            => [$this, 'wpc_handle_async_compress'],
             'permission_callback' => [$this, 'wpc_permission_api_key'],
         ]);
+
+        // Per-image worker — bypasses global queue/lock, runs one image in parallel with others
+        register_rest_route('wpc/v1', '/compress-single', [
+            'methods'             => \WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'wpc_handle_single_compress'],
+            'permission_callback' => [$this, 'wpc_permission_api_key'],
+        ]);
+    }
+
+    /**
+     * Per-image worker for manual single compress clicks.
+     * - Concurrency cap (default 2): protects PHP worker pool + service from overload
+     * - Fallback to sequential queue: if cap exceeded OR compression fails, image routes to queue for retry
+     * - Heartbeat refresh on failure: UI exits spinner state if queue retry also fails
+     *
+     * Override cap with: define('WPC_MAX_CONCURRENT_COMPRESS', 5) in wp-config.php
+     */
+    public function wpc_handle_single_compress(\WP_REST_Request $request) {
+        // Suppress auto-compress hook to prevent recursion
+        remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
+
+        $imageID = intval($request->get_param('imageID'));
+        if (!$imageID) {
+            return rest_ensure_response(['success' => false, 'reason' => 'no-image-id']);
+        }
+
+        // Per-image lock — prevents double-compressing same image
+        $perImageLock = 'wpc_compress_lock_' . $imageID;
+        if (get_transient($perImageLock)) {
+            return rest_ensure_response(['success' => false, 'reason' => 'already-processing']);
+        }
+
+        // Concurrency cap — prevents PHP worker pool exhaustion + service overload
+        // Default 2 (safe across all hosting). Override via WPC_MAX_CONCURRENT_COMPRESS constant.
+        $maxConcurrent = defined('WPC_MAX_CONCURRENT_COMPRESS') ? max(1, (int) WPC_MAX_CONCURRENT_COMPRESS) : 2;
+        $currentCount = (int) get_transient('wpc_single_concurrent');
+
+        if ($currentCount >= $maxConcurrent) {
+            // At cap — route to sequential queue instead of running another parallel worker
+            $this->routeToQueue($imageID);
+            error_log('[WPC Single] image=' . $imageID . ' routed-to-queue (concurrent=' . $currentCount . '/' . $maxConcurrent . ')');
+            return rest_ensure_response(['success' => true, 'fallback' => 'queued-cap-reached']);
+        }
+
+        // Acquire slot — increment counter (transient TTL is safety valve if worker dies)
+        set_transient('wpc_single_concurrent', $currentCount + 1, 300);
+        set_transient($perImageLock, time(), 300);
+
+        if (function_exists('ini_set')) {
+            @ini_set('memory_limit', '2048M');
+            @set_time_limit(180);
+        }
+
+        $start = microtime(true);
+        $backupOk = $this->backup_all_sizes($imageID);
+        if ($backupOk) {
+            $this->singleCompressV4($imageID, 'silent');
+        }
+        $elapsed = round(microtime(true) - $start, 2);
+
+        // Decrement concurrency counter (with safety floor at 0)
+        $now = (int) get_transient('wpc_single_concurrent');
+        set_transient('wpc_single_concurrent', max(0, $now - 1), 300);
+
+        // Release per-image lock
+        delete_transient($perImageLock);
+
+        // Check if compression actually succeeded
+        $newStatus = get_post_meta($imageID, 'ic_status', true);
+
+        if ($newStatus === 'compressed') {
+            error_log('[WPC Single] image=' . $imageID . ' time=' . $elapsed . 's status=success');
+            delete_transient('wps_ic_compress_' . $imageID);
+            return rest_ensure_response(['success' => true, 'time' => $elapsed]);
+        }
+
+        // Compression failed (service drop, download error, etc.) — route to sequential queue for retry
+        error_log('[WPC Single] image=' . $imageID . ' time=' . $elapsed . 's status=failed -> routing to queue for retry');
+        $this->routeToQueue($imageID);
+
+        // Keep wps_ic_compress_ transient so UI stays on "queued" state during queue retry.
+        // If queue worker also fails, ITS heartbeat fix sets status=restored to clear UI.
+
+        return rest_ensure_response(['success' => true, 'fallback' => 'queued-after-failure', 'time' => $elapsed]);
+    }
+
+    /**
+     * Add an image to the sequential queue and fire the queue worker.
+     * Used by both the cap-exceeded path and the failure-retry path.
+     */
+    private function routeToQueue($imageID) {
+        $queue = get_option('wpc_compress_queue', []);
+        if (!in_array($imageID, $queue)) {
+            $queue[] = $imageID;
+            update_option('wpc_compress_queue', $queue, false);
+        }
+        $this->fireQueueWorker();
     }
 
     /**

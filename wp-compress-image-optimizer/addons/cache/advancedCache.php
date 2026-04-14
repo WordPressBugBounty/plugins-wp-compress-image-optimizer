@@ -349,8 +349,9 @@ class wps_advancedCache
 
         $excludes = get_option('wpc-excludes');
         $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        if (!empty($excludes) && !empty($excludes['cache'])) {
-            if (in_array($url, $excludes['cache'])) {
+        $url = explode('?', $url)[0];
+        if (!empty($excludes) && !empty($excludes['cache']) && function_exists('wpc_url_is_excluded')) {
+            if (wpc_url_is_excluded($url, $excludes['cache']) !== false) {
                 return $buffer;
             }
         }

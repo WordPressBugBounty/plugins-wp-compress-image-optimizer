@@ -79,7 +79,14 @@ class wps_ic_js_delay_v2
 
         $this->userExcludes = new wps_ic_excludes();
 
-        $this->deferPatterns = [];
+        // Auto-defer WPC's own scripts — no inline dependencies, safe on all sites
+        $this->deferPatterns = [
+            'optimizer.adaptive',
+            'optimizer.pixel',
+            'optimizer.local',
+            'optimizer.min',
+            'wpcompress-aio',
+        ];
         $this->userDeferScripts = $this->userExcludes->deferScripts();
     }
 
@@ -321,6 +328,12 @@ class wps_ic_js_delay_v2
         $attributes = $this->parse_script_attributes($full_script);
 
         if ($this->should_exclude_script($attributes, $script_content)) {
+            // Excluded from delay — but still add defer if user opted in via "Scripts to Defer"
+            if ($this->should_defer_script($attributes)) {
+                if (strpos($full_script, 'defer') === false && strpos($full_script, 'async') === false) {
+                    return str_replace('<script ', '<script defer ', $full_script);
+                }
+            }
             return $full_script;
         }
 

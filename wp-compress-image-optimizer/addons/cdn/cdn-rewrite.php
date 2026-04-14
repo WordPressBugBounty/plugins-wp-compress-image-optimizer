@@ -240,14 +240,14 @@ class wps_cdn_rewrite
 
     public static function dontRunif()
     {
-
-        // is url excluded?
-        if (!empty(self::$settings['exclude-url-from-all']) && self::$settings['exclude-url-from-all'] == 1) {
+        // URL exclusions (wildcard support) — auto-enabled when patterns exist
+        $url_excludes = get_option('wpc-url-excludes');
+        if (!empty($url_excludes['exclude-url-from-all']) && function_exists('wpc_url_is_excluded')) {
             $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-            $url = explode('?', $url);
-            $url = $url[0];
-            $url_excludes = get_option('wpc-url-excludes');
-            if (!empty($url_excludes['exclude-url-from-all']) && in_array($url, $url_excludes['exclude-url-from-all'])) {
+            $url = explode('?', $url)[0];
+            $matched = wpc_url_is_excluded($url, $url_excludes['exclude-url-from-all']);
+            if ($matched !== false) {
+                error_log('[WPC Bypass] url=' . $url . ' matched_pattern=' . $matched);
                 return false;
             }
         }
@@ -2459,7 +2459,7 @@ class wps_cdn_rewrite
 
     public function add_font_display_swap_to_url($src, $handle)
     {
-        if (strpos($src, 'fonts.googleapis.com') !== false) {
+        if (strpos($src, 'fonts.googleapis.com') !== false && !empty(self::$settings['font-display'])) {
             $src = add_query_arg('display', self::$settings['font-display'], $src);
         }
         return $src;
@@ -2561,7 +2561,7 @@ class wps_cdn_rewrite
             $content = preg_replace('/font-display\s*:\s*[^;]+;?/i', '', $content);
 
             // Detect icon fonts by font-family name — use block to prevent garbled characters
-            $fontDisplayValue = self::$settings['font-display'];
+            $fontDisplayValue = self::$settings['font-display'] ?? 'swap';
             if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $content, $familyMatch)) {
                 $family = strtolower(trim($familyMatch[1]));
                 if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $family)) {

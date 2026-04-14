@@ -17,7 +17,10 @@ class wps_ic_modes extends wps_ic {
 
 
   public function showPopup() {
-    include WPS_IC_TEMPLATES . '/admin/selectModes/popup.php';
+    $path = rtrim(WPS_IC_TEMPLATES, '/') . '/admin/selectModes/popup.php';
+    if (file_exists($path)) {
+      include $path;
+    }
   }
 
 

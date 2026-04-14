@@ -33,6 +33,22 @@ class wps_ic_cloudways extends wps_ic_integrations {
         return false;
     }
 
+    /**
+     * Per-request check: is Varnish actually proxying THIS request?
+     * Used by add_varnish_ip() and enable_varnish_purge() to guard against
+     * adding varnish IPs / purges on Cloudways accounts where Varnish is disabled
+     * or for non-frontend requests (admin, cron, CLI) that don't go through Varnish.
+     */
+    private function is_varnish_running() {
+        if (!isset($_SERVER['HTTP_X_VARNISH'])) {
+            return false;
+        }
+        if (!isset($_SERVER['HTTP_X_APPLICATION'])) {
+            return false;
+        }
+        return ('varnishpass' !== trim(strtolower($_SERVER['HTTP_X_APPLICATION'])));
+    }
+
     public function do_admin_filters() {
         return [
             'wps_ic_varnish_ips' => [

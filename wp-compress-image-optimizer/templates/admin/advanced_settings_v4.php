@@ -1513,7 +1513,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             echo $gui::checkboxDescription_v4(__('Enable Caching', WPS_IC_TEXTDOMAIN), __('Dramatically speed up your site by serving pre-built pages to every visitor.', WPS_IC_TEXTDOMAIN), '', '', ['cache', 'advanced'], $cacheLocked, '', ''); ?>
 
                                             <?php
-                                            echo $gui::buttonDescription_v4(__('Exclude URLs', WPS_IC_TEXTDOMAIN), __('Prevent specific pages or URLs from being cached.', WPS_IC_TEXTDOMAIN), '', '', ['wpc-excludes', 'cache'], $cacheLocked, '', 'exclude-advanced-caching-popup'); ?>
+                                            echo $gui::buttonDescription_v4(__('Exclude from Cache', WPS_IC_TEXTDOMAIN), __('URLs listed here always load fresh (skip cache). Plugin optimizations like CDN, lazy load, and critical CSS still apply.', WPS_IC_TEXTDOMAIN), '', '', ['wpc-excludes', 'cache'], $cacheLocked, '', 'exclude-advanced-caching-popup'); ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Ignore Server Cache Control', WPS_IC_TEXTDOMAIN), __('Cache pages even when the server sends no-cache headers. Useful when hosting or plugins set overly strict rules.', WPS_IC_TEXTDOMAIN), '', '', ['cache', 'ignore-server-control'], $cacheLocked, '', '');
@@ -1591,10 +1591,14 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         echo $gui::checkboxTabTitle(__('Developer Mode', WPS_IC_TEXTDOMAIN), __('Pause cache purging and Critical CSS generation while you make changes.', WPS_IC_TEXTDOMAIN), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="currentColor" d="M369.5 16.9l7.1-22.9 45.8 14.2-7.1 22.9-144 464-7.1 22.9-45.8-14.2 7.1-22.9 144-464zM194.4 152l-17 17-87 87 87 87 17 17-33.9 33.9-17-17-104-104-17-17 17-17 104-104 17-17 33.9 33.9zm252.1 0l33.9-33.9 17 17 104 104 17 17-17 17-104 104-17 17-33.9-33.9 17-17 87-87-87-87-17-17z"/></svg>', '', '', false, '1', false, false, 'left');
                                         ?>
 
-                                        <div class="wpc-perf-grid wpc-perf-grid-single">
+                                        <div class="wpc-perf-grid">
 
                                         <?php
                                         echo $gui::checkboxDescription_v4(__('Developer Mode', WPS_IC_TEXTDOMAIN), __('Stops automatic cache purging and Critical CSS regeneration to save resources while you\'re actively editing. Turn off when done.', WPS_IC_TEXTDOMAIN), false, '', 'developer_mode', false, 'right', false, false, false);
+                                        ?>
+
+                                        <?php
+                                        echo $gui::buttonDescription_v4(__('Exclude from Plugin', WPS_IC_TEXTDOMAIN), __('URLs listed here completely bypass ALL optimizations. The plugin will not touch these pages — useful for checkout, account pages, or anything that may cause issues with optimization.', WPS_IC_TEXTDOMAIN), '', '', ['wpc-url-excludes', 'exclude-url-from-all'], false, '', 'exclude-from-plugin-popup');
                                         ?>
 
                                         </div>
@@ -2156,6 +2160,7 @@ include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-simple-caching.php
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-advanced-caching.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/purge-settings.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/cache-cookies.php';
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-from-plugin.php';
 
 include WPS_IC_DIR . 'templates/admin/partials/popups/import-export.php';
 

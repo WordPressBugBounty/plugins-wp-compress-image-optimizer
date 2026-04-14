@@ -11277,21 +11277,21 @@ label[for="wpc-cf-token"] {
   color: #991b1b;
   animation: popupErrorFadeIn 0.3s ease;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   padding: 32px !important;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-top {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-top {
   padding: 0 0 24px;
   margin-bottom: 24px;
   border-bottom: 1px solid #e2e8f0;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading {
   display: flex;
   align-items: flex-start;
   gap: 16px;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon {
   flex-shrink: 0;
   width: 56px;
   height: 56px;
@@ -11304,19 +11304,19 @@ label[for="wpc-cf-token"] {
   border-radius: 12px;
   border: 1px solid var(--wpc-brand-accent-light, #bfdbfe);
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon img {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon img {
   width: 32px;
   height: 32px;
   object-fit: contain;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text {
   flex: 1;
   text-align: left;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text h3 {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text h3 {
   margin: 0 0 4px;
   font-size: 18px;
   font-weight: 600;
@@ -11325,17 +11325,17 @@ label[for="wpc-cf-token"] {
   text-align: left;
   -webkit-font-smoothing: antialiased;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text p {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text p {
   margin: 0;
   font-size: 14px;
   color: #64748b;
   line-height: 1.5;
   text-align: left;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-full {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-full {
   padding: 0;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner h4 {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner h4 {
   font-size: 15px;
   font-weight: 600;
   color: #374151;
@@ -11343,7 +11343,7 @@ label[for="wpc-cf-token"] {
   width: auto !important;
   text-align: start !important;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea {
   width: 100%;
   min-height: 110px;
   padding: 16px;
@@ -11361,12 +11361,12 @@ label[for="wpc-cf-token"] {
   margin-bottom: 10px;
   visibility: visible !important;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea:focus {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea:focus {
   outline: none;
   border-color: var(--wpc-brand-primary, #3b82f6) !important;
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea::placeholder {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) textarea::placeholder {
   color: #a0aab6;
 }
 :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-advanced-caching-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-per-page-settings, .popup-purge-settings) .wps-default-excludes-container {
@@ -11442,7 +11442,7 @@ label[for="wpc-cf-token"] {
   padding-left: 10px !important;
   padding-right: 10px !important;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-section,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-section,
 .popup-per-page-excludes .wps-example-section {
   position: relative;
   margin-top: 32px;
@@ -11453,14 +11453,14 @@ label[for="wpc-cf-token"] {
   padding: 0;
   text-align: center;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-section.wps-examples-visible,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-section.wps-examples-visible,
 .popup-per-page-excludes .wps-example-section.wps-examples-visible {
   margin-top: 36px;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   padding: 28px 24px 20px;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn,
 .popup-per-page-excludes .wps-example-toggle-btn {
   position: absolute;
   top: -14px;
@@ -11483,26 +11483,26 @@ label[for="wpc-cf-token"] {
   z-index: 1;
   white-space: nowrap;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn::after,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn::after,
 .popup-per-page-excludes .wps-example-toggle-btn::after {
   display: none;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn svg,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn svg,
 .popup-per-page-excludes .wps-example-toggle-btn svg {
   width: 14px;
   height: 14px;
   transition: transform 0.25s ease;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn:hover,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn:hover,
 .popup-per-page-excludes .wps-example-toggle-btn:hover {
   background: var(--wpc-brand-tint, #eff7ff);
   border-color: var(--wpc-brand-primary, #3b82f6);
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn.wps-example-open svg,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-toggle-btn.wps-example-open svg,
 .popup-per-page-excludes .wps-example-toggle-btn.wps-example-open svg {
   transform: rotate(180deg);
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list {
   text-align: left;
   display: flex;
   flex-direction: column;
@@ -11514,16 +11514,16 @@ label[for="wpc-cf-token"] {
   margin: 0;
   min-width: 0;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list h3 {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list h3 {
   display: none;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list > div {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list > div {
   display: contents;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list > div > div {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list > div > div {
   display: contents;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list p {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-example-list p {
   margin: 0;
   font-size: 13px;
   color: #475569;
@@ -11533,18 +11533,18 @@ label[for="wpc-cf-token"] {
   padding-left: 12px;
   border-left: 2px solid var(--wpc-brand-tint, rgba(59, 130, 246, 0.15));
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-empty-row {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wps-empty-row {
   height: 8px;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wpc-save-popup-data {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .wpc-save-popup-data {
   margin: 0;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .bottom-border {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .bottom-border {
   border-radius: 12px;
   overflow: hidden;
   background: #ffffff;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text h3 {
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-text h3 {
   font-family: 'proxima_semibold', sans-serif;
 }
 .popup-purge-settings.swal2-popup,
@@ -11573,7 +11573,7 @@ label[for="wpc-cf-token"] {
   font-weight: 400;
   margin: 5px 0;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save,
 .popup-per-page-settings .btn-exclude-pages-save,
 .popup-per-page-excludes .btn-exclude-pages-save {
   display: block !important;
@@ -11597,20 +11597,20 @@ label[for="wpc-cf-token"] {
   box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2), 0 2px 4px -1px rgba(59, 130, 246, 0.1);
   box-sizing: border-box;
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save:hover,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save:hover,
 .popup-per-page-settings .btn-exclude-pages-save:hover,
 .popup-per-page-excludes .btn-exclude-pages-save:hover {
   background: var(--wpc-brand-primary-dark, #2563eb) !important;
   transform: translateY(-1px);
   box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.3), 0 4px 6px -1px rgba(59, 130, 246, 0.2);
 }
-:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save:active,
+:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save:active,
 .popup-per-page-settings .btn-exclude-pages-save:active,
 .popup-per-page-excludes .btn-exclude-pages-save:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px -1px rgba(59, 130, 246, 0.15);
 }
-.no-padding-popup-bottom-bg.swal2-container .swal2-popup:not(:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings)) {
+.no-padding-popup-bottom-bg.swal2-container .swal2-popup:not(:is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings)) {
   max-width: 1050px !important;
   width: 1050px !important;
 }
@@ -13468,23 +13468,23 @@ label[for="wpc-cf-token"] {
   transform: translateY(-1px) !important;
 }
 @media (max-width: 640px) {
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-top {
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-top {
     padding: 24px 20px 20px;
   }
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-full {
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-full {
     padding: 20px;
   }
   :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-advanced-caching-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-per-page-settings, .popup-purge-settings) .wps-default-excludes-container {
     grid-template-columns: 1fr;
   }
-  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list {
+  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list {
     padding: 16px 20px;
   }
-  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list > div {
+  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list > div {
     flex-direction: column;
     gap: 12px;
   }
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save,
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .btn-exclude-save,
   .popup-per-page-settings .btn-exclude-pages-save,
   .popup-per-page-excludes .btn-exclude-pages-save {
     max-width: none !important;
@@ -13495,14 +13495,14 @@ label[for="wpc-cf-token"] {
     padding: 11px 28px !important;
     box-shadow: 0 2px 8px rgba(66, 115, 240, 0.25), 0 -4px 12px rgba(0, 0, 0, 0.06);
   }
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .swal2-close {
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .swal2-close {
     width: 44px !important;
     height: 44px !important;
     font-size: 28px !important;
     line-height: 44px !important;
     margin: 8px !important;
   }
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner h4 {
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner h4 {
     width: auto !important;
     max-width: 100% !important;
   }
@@ -13562,7 +13562,7 @@ label[for="wpc-cf-token"] {
     min-height: 44px !important;
     max-height: none !important;
   }
-  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon {
+  :is(.popup-cache-cookies, .popup-cf-cdn, .popup-custom-cdn, .popup-delay-js, .popup-delay-js-configuration, .popup-combine-js, .popup-combine-css, .popup-connectivity, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-settings, .popup-per-page-excludes, .popup-purge-settings) .inline-heading-icon {
     width: 60px !important;
     height: 60px !important;
     padding: 12px !important;
@@ -13571,11 +13571,11 @@ label[for="wpc-cf-token"] {
     min-width: 0 !important;
     width: 100% !important;
   }
-  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list > div {
+  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list > div {
     flex-direction: column !important;
     gap: 8px !important;
   }
-  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list div > div p {
+  :is(.popup-cache-cookies, .popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes, .popup-purge-settings) .cdn-popup-content-inner > .wps-example-list div > div p {
     margin-left: 0 !important;
     word-break: break-word !important;
     overflow-wrap: anywhere !important;
@@ -13584,7 +13584,7 @@ label[for="wpc-cf-token"] {
     flex-wrap: wrap !important;
     gap: 8px !important;
   }
-  :is(.popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes) .wps-example-list {
+  :is(.popup-delay-js-configuration, .popup-exclude-adaptive-popup, .popup-exclude-advanced-caching-popup, .popup-exclude-cdn-popup, .popup-exclude-critical-css, .popup-exclude-from-plugin-popup, .popup-exclude-js-delay-v2, .popup-exclude-lazy-popup, .popup-exclude-webp-popup, .popup-per-page-excludes) .wps-example-list {
     margin: 0 !important;
     box-sizing: border-box !important;
   }
