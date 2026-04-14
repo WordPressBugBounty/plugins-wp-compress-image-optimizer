@@ -12,6 +12,8 @@ class wps_ic_js_delay_v2
     private $priority_run;
 
     private $userExcludes;
+    private $deferPatterns;
+    private $userDeferScripts;
     public static $settings;
     public function __construct()
     {
@@ -26,8 +28,47 @@ class wps_ic_js_delay_v2
           'document.write',
           'wpc-ga-bot-shield',
           'sourcebuster', //woo script, incompatible with delay
-          'SR7.' // Slider Revolution inline scripts, load ugly if delayed
+          'SR7.', // Slider Revolution inline scripts, load ugly if delayed
+          // GDPR / Cookie consent plugins — must run immediately to show/hide banners
+          'gdpr-cookie-consent', // WP Cookie Consent (GDPR Cookie Consent)
+          'cookie-law-info', // CookieYes / Cookie Law Info
+          'cookieyes', // CookieYes
+          'complianz', // Complianz GDPR
+          'cmplz', // Complianz shorthand
+          'cookie-notice', // Cookie Notice by dFactory
+          'cookie-consent', // Generic cookie consent
+          'moove_gdpr', // Moove GDPR Cookie Compliance
+          'osano', // Osano Cookie Consent
+          'termly', // Termly Consent
+          'iubenda', // iubenda Cookie Solution
+          'wpl_cookie_consent', // WP Legal Pages cookie consent
+          'wpl_viewed_cookie', // WP Cookie Consent inline check
+          'CookieConsent', // Cookiebot / CookieConsent
+          'cookiebot', // Cookiebot
+          'tarteaucitron', // tarteaucitron.js
+          'onetrust', // OneTrust
+          'quantcast', // Quantcast Choice
+          'usercentrics', // Usercentrics
         ];
+
+        // If a cookie consent plugin is active, also exclude jQuery (their dependency).
+        // Only done conditionally to avoid impacting sites without cookie plugins.
+        $cookiePlugins = [
+            'gdpr-cookie-consent/gdpr-cookie-consent.php',
+            'cookie-law-info/cookie-law-info.php',
+            'cookie-notice/cookie-notice.php',
+            'complianz-gdpr/complianz-gpdr.php',
+            'complianz-gdpr-premium/complianz-gpdr.php',
+            'iubenda-cookie-law-solution/iubenda_cookie_solution.php',
+            'moove-gdpr-cookie-compliance/moove-gdpr-cookie-compliance.php',
+        ];
+        foreach ($cookiePlugins as $plugin) {
+            if (is_plugin_active($plugin)) {
+                $this->excludes[] = 'jquery.min.js';
+                $this->excludes[] = 'jquery.js';
+                break;
+            }
+        }
 
 	    if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '0') {
 		    $this->excludes[] = 'gtag';
@@ -37,6 +78,9 @@ class wps_ic_js_delay_v2
         $this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
 
         $this->userExcludes = new wps_ic_excludes();
+
+        $this->deferPatterns = [];
+        $this->userDeferScripts = $this->userExcludes->deferScripts();
     }
 
 
@@ -280,6 +324,13 @@ class wps_ic_js_delay_v2
             return $full_script;
         }
 
+        if ($this->should_defer_script($attributes)) {
+            if (strpos($full_script, 'defer') === false && strpos($full_script, 'async') === false) {
+                return str_replace('<script ', '<script defer ', $full_script);
+            }
+            return $full_script;
+        }
+
         $script_data = array('id' => 'delayed-script-' . $this->script_id++, 'src' => isset($attributes['src']) ? base64_encode(html_entity_decode($attributes['src'])) : '', 'content' => !empty($attributes['src']) ? '' : base64_encode($script_content), 'type' => isset($attributes['type']) ? $attributes['type'] : 'text/javascript', 'encoded' => true, 'attributes' => array());
 
         foreach ($attributes as $attr => $value) {
@@ -354,6 +405,25 @@ class wps_ic_js_delay_v2
 
         // User excludes
         if ($this->userExcludes->excludedFromDelayV2($content)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function should_defer_script($attributes)
+    {
+        if (empty($attributes['src'])) {
+            return false;
+        }
+
+        $src = $attributes['src'];
+
+        if ($this->checkKeyword($src, $this->deferPatterns)) {
+            return true;
+        }
+
+        if (!empty($this->userDeferScripts) && $this->checkKeyword($src, $this->userDeferScripts)) {
             return true;
         }
 

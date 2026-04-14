@@ -293,6 +293,13 @@ class wps_ic_cache
             $cache_integrations->purgeVarnish(0);
         }
 
+        // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
+        static $integrations_fired = false;
+        if (!$integrations_fired) {
+            $integrations_fired = true;
+            do_action('wps_ic_purge_all_cache', is_int($post_id) ? get_permalink($post_id) : false);
+        }
+
         // Was causing problems with save_post function? because we call there wpc_purgecf?
 //        if (!self::is_cf_cache_cleared()) {
 //            //since it clears all cache, we dont have to call it multiple times in a request

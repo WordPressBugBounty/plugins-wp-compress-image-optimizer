@@ -84,8 +84,8 @@ pll_language</div>
                     <div class="wps-example-list" style="display: none;">
                         <div>
                             <div>
-                                <p><span class="wpc-example-chip">wp_compress</span> <?php echo esc_html__('would cache/exclude this particular cookie.', WPS_IC_TEXTDOMAIN); ?></p>
-                                <p><span class="wpc-example-chip">wp_compress_</span> <?php echo esc_html__('is treated as a prefix and would cache/exclude all cookies with this prefix.', WPS_IC_TEXTDOMAIN); ?></p>
+                                <p><span class="wpc-example-chip">my_cookie</span> <?php echo esc_html__('would cache/exclude this particular cookie.', WPS_IC_TEXTDOMAIN); ?></p>
+                                <p><span class="wpc-example-chip">my_cookie_</span> <?php echo esc_html__('is treated as a prefix and would cache/exclude all cookies with this prefix.', WPS_IC_TEXTDOMAIN); ?></p>
                             </div>
                         </div>
                     </div>

@@ -504,21 +504,17 @@ jQuery(document).ready(function ($) {
 
     $('#optimizationLevel').on('change', function (e) {
         e.preventDefault();
-
         $('.action-buttons').fadeOut(500, function () {
-            $('.save-button').fadeIn(500);
+            if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(500); }
         });
-
         return false;
     });
 
     $('#optimizationLevel_img').on('change', function (e) {
         e.preventDefault();
-
         $('.action-buttons').fadeOut(500, function () {
-            $('.save-button').fadeIn(500);
+            if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(500); }
         });
-
         return false;
     });
 
@@ -540,11 +536,11 @@ jQuery(document).ready(function ($) {
 
         var isNowChecked = $(this).attr('checked') === 'checked';
 
-        // Show save pill
-        $('.save-button').fadeIn(400);
-
         // Emit change event for AJAX save tracking
         $(document).trigger('wpc-setting-changed', [optionName, isNowChecked]);
+
+        // Check if anything actually changed
+        if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
 
         // Set preset to custom
         $('input[name="wpc_preset_mode"]').val('custom');
@@ -2449,7 +2445,8 @@ jQuery(document).ready(function ($) {
                         $qdd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
                         var $qItem = $qdd.find('.wpc-custom-dropdown-item[data-value="' + presetData.quality + '"]');
                         $qItem.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
-                        $qdd.find('.wpc-custom-dropdown-label').text($qItem.clone().children('.wpc-dropdown-check').remove().end().text().trim());
+                        var $qLabel = $qItem.find('.wpc-dropdown-item-label');
+                        $qdd.find('.wpc-custom-dropdown-label').text($qLabel.length ? $qLabel.clone().children('.wpc-dropdown-badge').remove().end().text().trim() : $qItem.clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim());
 
                         // Update toggles on the page
                         var $webp = $('input[name="options[generate_webp]"]');
@@ -2465,7 +2462,8 @@ jQuery(document).ready(function ($) {
                             $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
                             var $item = $dd.find('.wpc-custom-dropdown-item[data-value="' + presetData.backup + '"]');
                             $item.addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
-                            $dd.find('.wpc-custom-dropdown-label').text($item.clone().children('.wpc-dropdown-check').remove().end().text().trim());
+                            var $bLabel = $item.find('.wpc-dropdown-item-label');
+                            $dd.find('.wpc-custom-dropdown-label').text($bLabel.length ? $bLabel.clone().children('.wpc-dropdown-badge').remove().end().text().trim() : $item.clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim());
                         }
 
                         var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
@@ -2490,16 +2488,10 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Settings — save on change
+    // Settings — check for unsaved changes on change
     $(document).on('change', '#localQualityLevel', function () {
-        var val = parseInt($(this).val(), 10);
-        var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
         syncModePill();
-        saveLocalSettings([
-            { name: 'local_qualityLevel', value: String(val) },
-            { name: 'local_optimization', value: optMap[val] || 'none' }
-        ]);
-        $('.save-button').fadeIn(400);
+        if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
     });
 
     $(document).on('change', 'input[name="options[generate_webp]"]', function () {
@@ -2510,31 +2502,8 @@ jQuery(document).ready(function ($) {
         syncModePill();
     });
 
-    $(document).on('change', '#localMaxWidth', function () {
-        var val = parseInt($(this).val(), 10);
-        if (val >= 800 && val <= 6000) {
-            saveLocalSettings([{ name: 'maxWidth', value: String(val) }]);
-            $('.save-button').fadeIn(400);
-        }
-    });
-
-    // Debounced input event — saves as user types (800ms delay)
-    var maxWidthDebounce = null;
-    $(document).on('input', '#localMaxWidth', function () {
-        clearTimeout(maxWidthDebounce);
-        var $input = $(this);
-        maxWidthDebounce = setTimeout(function () {
-            var val = parseInt($input.val(), 10);
-            if (val >= 800 && val <= 6000) {
-                saveLocalSettings([{ name: 'maxWidth', value: String(val) }]);
-                $('.save-button').fadeIn(400);
-            }
-        }, 800);
-    });
-
     $(document).on('change', '#localBackup', function () {
-        saveLocalSettings([{ name: 'backup', value: $(this).val() }]);
-        $('.save-button').fadeIn(400);
+        if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
     });
 
     // ─── Custom Dropdown Component ──────────────────────────────────────────
@@ -2566,7 +2535,10 @@ jQuery(document).ready(function ($) {
         e.stopPropagation();
         var $dd = $(this).closest('.wpc-custom-dropdown');
         var val = $(this).data('value');
-        var label = $(this).clone().children('.wpc-dropdown-check, .wpc-dropdown-badge').remove().end().text().trim();
+        var $labelEl = $(this).find('.wpc-dropdown-item-label');
+        var label = $labelEl.length
+            ? $labelEl.clone().children('.wpc-dropdown-badge').remove().end().text().trim()
+            : $(this).clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim();
         var targetId = $dd.data('target');
 
         // Update active state
@@ -2577,6 +2549,13 @@ jQuery(document).ready(function ($) {
         $dd.find('.wpc-custom-dropdown-label').text(label);
         if (targetId) {
             $('#' + targetId).val(val).trigger('change');
+        }
+
+        // Check if anything actually changed from initial state
+        if (typeof checkUnsavedChanges === 'function') {
+            checkUnsavedChanges();
+        } else {
+            $('.save-button').fadeIn(500);
         }
 
         // Close

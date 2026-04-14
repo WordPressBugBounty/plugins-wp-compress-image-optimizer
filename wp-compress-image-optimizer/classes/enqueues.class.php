@@ -531,6 +531,12 @@ class wps_ic_enqueues extends wps_ic
             'deselectAll' => __('Deselect All', WPS_IC_TEXTDOMAIN),
             'selectAll' => __('Select All', WPS_IC_TEXTDOMAIN),
             'scanning' => __('Scanning…', WPS_IC_TEXTDOMAIN),
+            'statusQueued' => __('Queued', WPS_IC_TEXTDOMAIN),
+            'statusOptimizing' => __('Optimizing', WPS_IC_TEXTDOMAIN),
+            'statusRestoring' => __('Restoring', WPS_IC_TEXTDOMAIN),
+            'statusTakingLonger' => __('Taking longer than expected', WPS_IC_TEXTDOMAIN),
+            'statusTimedOut' => __('Timed out', WPS_IC_TEXTDOMAIN),
+            'statusRetry' => __('Retry', WPS_IC_TEXTDOMAIN),
             'noFontsDetected' => __('No Google Fonts detected on this page.', WPS_IC_TEXTDOMAIN),
             'scanFailed' => __('Scan failed. Please try again.', WPS_IC_TEXTDOMAIN),
             'active' => __('Active', WPS_IC_TEXTDOMAIN),
@@ -550,6 +556,9 @@ class wps_ic_enqueues extends wps_ic
             'saving' => __('Saving...', WPS_IC_TEXTDOMAIN),
             'saved' => __('Saved', WPS_IC_TEXTDOMAIN),
             'refreshRequired' => __('Refresh required', WPS_IC_TEXTDOMAIN),
+            'purging_html' => __('Purging HTML Cache...', WPS_IC_TEXTDOMAIN),
+            'purging_critical' => __('Purging Critical CSS...', WPS_IC_TEXTDOMAIN),
+            'purging_cdn' => __('Purging CDN Cache...', WPS_IC_TEXTDOMAIN),
         ];
     }
 
@@ -761,6 +770,7 @@ class wps_ic_enqueues extends wps_ic
                         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
                         $this->script('media-library', 'admin/media-library-actions' . WPS_IC_MIN . '.js');
+                        wp_localize_script($this::$slug . '-media-library', 'wpc_ajaxVar', $this->get_ajax_var_data());
                     }
 
                     if ($screen->base == 'toplevel_page_' . $this::$slug || $screen->base == 'upload' || $screen->base == 'media_page_' . $this::$slug . '_optimize' || $screen->base == 'plugins' || $screen->base == 'media_page_' . $this::$slug . '_restore' || $screen->base == 'media_page_wp_hard_restore_bulk' || $screen->base == 'settings_page_' . $this::$slug) {
@@ -918,6 +928,7 @@ class wps_ic_enqueues extends wps_ic
                         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
                         $this->script('media-library', 'admin/media-library-actions' . WPS_IC_MIN . '.js');
+                        wp_localize_script($this::$slug . '-media-library', 'wpc_ajaxVar', $this->get_ajax_var_data());
                     }
 
 

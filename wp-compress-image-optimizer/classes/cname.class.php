@@ -69,6 +69,10 @@ class wps_ic_cname
 								// Wait for SSL?
 								sleep(6);
 
+								wps_ic_cache_integrations::purgeAll(false, true, false, true, true);
+								wps_ic_cache_integrations::purgeCombinedFiles();
+								wps_ic_cache_integrations::purgeCriticalFiles();
+
 								wp_send_json_success(['image' => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg', 'configured' => 'Connected Domain: <strong>' . $cname . '</strong>']);
 							}
 						}

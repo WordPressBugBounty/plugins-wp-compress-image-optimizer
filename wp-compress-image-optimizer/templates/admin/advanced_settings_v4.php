@@ -126,7 +126,10 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
 
     // EU Routing — call API when changed
     $options = get_option(WPS_IC_SETTINGS);
-    if (isset($submittedOptions['eu-routing']) && ($options['eu-routing'] ?? '0') !== $submittedOptions['eu-routing']) {
+    if (!isset($options['eu-routing'])) {
+        $options['eu-routing'] = '0';
+    }
+    if (isset($submittedOptions['eu-routing']) && $options['eu-routing'] !== $submittedOptions['eu-routing']) {
         $region = 'all';
         if ($submittedOptions['eu-routing'] == '1') {
             $region = 'eu';
@@ -1035,6 +1038,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Background Images', WPS_IC_TEXTDOMAIN), __('Serve background images over CDN with all the adaptive and quality options.', WPS_IC_TEXTDOMAIN), false, '0', 'background-sizing', $adaptiveLocked, 'right'); ?>
 
+                                            <?php /* Hidden for 7.00.06 — LCP srcset needs both rewrite pipelines
+                                            echo $gui::checkboxDescription_v4(__('Optimize LCP Images', WPS_IC_TEXTDOMAIN), __('Serve responsive sizes for above-fold images. Reduces download size without affecting visual quality.', WPS_IC_TEXTDOMAIN), false, '0', 'optimize-lcp', false, 'right', false, false, 'left', 'BETA'); */ ?>
+
                                         </div>
 
                                     </div>
@@ -1181,32 +1187,55 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                             </div>
                                                         </div>
                                                         <?php
-                                                        $backupVal = isset($gui::$options['backup']) ? $gui::$options['backup'] : 'local';
-                                                        $backupTriggerLabels = [
-                                                            'local' => __('Local', WPS_IC_TEXTDOMAIN),
-                                                            'cloud' => __('Cloud', WPS_IC_TEXTDOMAIN),
-                                                            'local-cloud' => __('Local + Cloud', WPS_IC_TEXTDOMAIN),
+                                                        $backupVal = isset($gui::$options['backup']) ? $gui::$options['backup'] : 'full';
+                                                        // Map legacy values
+                                                        if ($backupVal === 'local' || $backupVal === 'local-cloud') $backupVal = 'full';
+                                                        $backupOptions = [
+                                                            'full' => [
+                                                                'label' => __('Full Backup', WPS_IC_TEXTDOMAIN),
+                                                                'chip'  => 'Recommended',
+                                                                'chipClass' => 'wpc-chip--success',
+                                                                'tip'   => __('Backs up all files — originals, scaled, and thumbnails. Instant restore.', WPS_IC_TEXTDOMAIN),
+                                                            ],
+                                                            'originals' => [
+                                                                'label' => __('Originals Only', WPS_IC_TEXTDOMAIN),
+                                                                'chip'  => 'Saves Space',
+                                                                'chipClass' => 'wpc-chip--info',
+                                                                'tip'   => __('Only backs up the unscaled original. Thumbnails regenerate on restore.', WPS_IC_TEXTDOMAIN),
+                                                            ],
+                                                            'cloud' => [
+                                                                'label' => __('Cloud Only', WPS_IC_TEXTDOMAIN),
+                                                                'chip'  => '60 Days',
+                                                                'chipClass' => 'wpc-chip--info',
+                                                                'tip'   => __('No local backup. Restores download from cloud. Zero disk overhead.', WPS_IC_TEXTDOMAIN),
+                                                            ],
+                                                            'off' => [
+                                                                'label' => __('Off', WPS_IC_TEXTDOMAIN),
+                                                                'chip'  => 'None',
+                                                                'chipClass' => 'wpc-chip--danger',
+                                                                'tip'   => __('No backup. Compression cannot be undone.', WPS_IC_TEXTDOMAIN),
+                                                            ],
                                                         ];
                                                         ?>
                                                         <input type="hidden" id="localBackup" value="<?php echo esc_attr($backupVal); ?>">
                                                         <div class="wpc-custom-dropdown" data-target="localBackup">
                                                             <button type="button" class="wpc-custom-dropdown-trigger">
-                                                                <span class="wpc-custom-dropdown-label"><?php echo esc_html($backupTriggerLabels[$backupVal] ?? $backupTriggerLabels['local']); ?></span>
+                                                                <span class="wpc-custom-dropdown-label"><?php echo esc_html($backupOptions[$backupVal]['label'] ?? $backupOptions['full']['label']); ?></span>
                                                                 <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                                             </button>
                                                             <div class="wpc-custom-dropdown-menu">
-                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'local' ? ' wpc-active' : ''; ?>" data-value="local">
-                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'local' ? '&#10003;' : ''; ?></span>
-                                                                    <?php esc_html_e('Local', WPS_IC_TEXTDOMAIN); ?>
+                                                                <?php foreach ($backupOptions as $val => $opt) : ?>
+                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === $val ? ' wpc-active' : ''; ?>" data-value="<?php echo esc_attr($val); ?>">
+                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === $val ? '&#10003;' : ''; ?></span>
+                                                                    <span class="wpc-dropdown-item-content">
+                                                                        <span class="wpc-dropdown-item-label">
+                                                                            <?php echo esc_html($opt['label']); ?>
+                                                                            <span class="wpc-dropdown-badge <?php echo esc_attr($opt['chipClass']); ?>"><?php echo esc_html($opt['chip']); ?></span>
+                                                                        </span>
+                                                                        <span class="wpc-dropdown-tooltip"><?php echo esc_html($opt['tip']); ?></span>
+                                                                    </span>
                                                                 </div>
-                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'cloud' ? ' wpc-active' : ''; ?>" data-value="cloud">
-                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'cloud' ? '&#10003;' : ''; ?></span>
-                                                                    <?php esc_html_e('Cloud', WPS_IC_TEXTDOMAIN); ?> <span class="wpc-dropdown-badge">60 Days</span>
-                                                                </div>
-                                                                <div class="wpc-custom-dropdown-item<?php echo $backupVal === 'local-cloud' ? ' wpc-active' : ''; ?>" data-value="local-cloud">
-                                                                    <span class="wpc-dropdown-check"><?php echo $backupVal === 'local-cloud' ? '&#10003;' : ''; ?></span>
-                                                                    <?php esc_html_e('Local + Cloud', WPS_IC_TEXTDOMAIN); ?>
-                                                                </div>
+                                                                <?php endforeach; ?>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1221,7 +1250,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                         <?php
                                                         $localQuality = isset($gui::$options['local_qualityLevel']) ? $gui::$options['local_qualityLevel'] : '0';
                                                         $qualityLabels = [
-                                                            '0' => __('None', WPS_IC_TEXTDOMAIN),
+                                                            '0' => __('Global', WPS_IC_TEXTDOMAIN),
                                                             '1' => __('Lossless', WPS_IC_TEXTDOMAIN),
                                                             '2' => __('Intelligent', WPS_IC_TEXTDOMAIN),
                                                             '3' => __('Ultra', WPS_IC_TEXTDOMAIN),
@@ -1251,9 +1280,11 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                                                 <h4><?php esc_html_e('Max Image Size', WPS_IC_TEXTDOMAIN); ?></h4>
                                                             </div>
                                                         </div>
-                                                        <div class="wpc-local-input-wrap">
-                                                            <input type="number" id="localMaxWidth" value="<?php echo esc_attr(isset($gui::$options['maxWidth']) ? $gui::$options['maxWidth'] : '2560'); ?>" min="800" max="6000" step="1">
-                                                            <span class="wpc-input-suffix">px</span>
+                                                        <div class="wpc-box-check">
+                                                            <div class="wpc-input-holder">
+                                                                <input type="text" name="options[maxWidth]" id="localMaxWidth" value="<?php echo esc_attr(isset($gui::$options['maxWidth']) ? $gui::$options['maxWidth'] : '2560'); ?>" inputmode="numeric" pattern="[0-9]*" placeholder="2560" style="padding:8px 12px; width:7ch;">
+                                                                <span>px</span>
+                                                            </div>
                                                         </div>
                                                     </div>
 

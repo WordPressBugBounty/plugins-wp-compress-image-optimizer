@@ -89,52 +89,63 @@ class wps_ic_preload
      */
     public function get_registered()
     {
+        add_action('wp_footer', function () {
+            global $wp_scripts;
+            $scripts = [];
 
-        add_action('wp_footer',
-            function () {
-                global $wp_scripts;
-                $scripts = [];
-                foreach ($wp_scripts->registered as $script) {
-                    //check if is url
-                    $check = filter_var($script->src, FILTER_SANITIZE_URL);
-                    if ($check) {
-                        $url = $script->src;
-                        $path = '';
-                    } else {
-                        //else is local
-                        $url = get_home_url() . '/' . $script->src;
-                        $path = $script->src;
-                    }
+            foreach ($wp_scripts->registered as $script) {
+                $src = (string) $script->src;
 
-                    $scripts += [$script->handle => ['src' => $url, 'path' => $path]];
+                // Absolute URL?
+                if (filter_var($src, FILTER_VALIDATE_URL)) {
+                    $url = $src;
+                    $path = '';
+                } else {
+                    // Local / relative path
+                    $url = trailingslashit(get_home_url()) . ltrim($src, '/');
+                    $path = $src;
                 }
-                update_option('wps_ic_registered_scripts', ['files' => $scripts, 'count' => count($scripts)]);
+
+                $scripts[$script->handle] = [
+                    'src'  => $url,
+                    'path' => $path,
+                ];
             }
-        , PHP_INT_MAX);
 
-        add_action('wp_footer',
-            function () {
-                global $wp_styles;
-                $styles = [];
-                foreach ($wp_styles->registered as $style) {
+            update_option('wps_ic_registered_scripts', [
+                'files' => $scripts,
+                'count' => count($scripts),
+            ]);
+        }, PHP_INT_MAX);
 
-                    //check if is url
-                    $check = filter_var($style->src, FILTER_SANITIZE_URL);
-                    if ($check) {
-                        $url = $style->src;
-                        $path = '';
-                    } else {
-                        //else is local
-                        $url = get_home_url() . '/' . $style->src;
-                        $path = $style->src;
-                    }
+        add_action('wp_footer', function () {
+            global $wp_styles;
+            $styles = [];
 
-                    $styles += [$style->handle => ['src' => $url, 'path' => $path]];
+            foreach ($wp_styles->registered as $style) {
+                $src = (string) $style->src;
+
+                // Absolute URL?
+                if (filter_var($src, FILTER_VALIDATE_URL)) {
+                    $url = $src;
+                    $path = '';
+                } else {
+                    // Local / relative path
+                    $url = trailingslashit(get_home_url()) . ltrim($src, '/');
+                    $path = $src;
                 }
-                update_option('wps_ic_registered_styles', ['files' => $styles, 'count' => count($styles)]);
-            }
-        , PHP_INT_MAX);
 
+                $styles[$style->handle] = [
+                    'src'  => $url,
+                    'path' => $path,
+                ];
+            }
+
+            update_option('wps_ic_registered_styles', [
+                'files' => $styles,
+                'count' => count($styles),
+            ]);
+        }, PHP_INT_MAX);
     }
 
     /**

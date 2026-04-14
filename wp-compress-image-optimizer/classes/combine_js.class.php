@@ -358,7 +358,14 @@ class wps_ic_combine_js
             $path = ltrim($path, '/');
         }
 
-        $content = file_get_contents(ABSPATH . $path);
+        $path = urldecode($path);
+        $fullPath = ABSPATH . $path;
+
+        if (!file_exists($fullPath)) {
+            return false;
+        }
+
+        $content = @file_get_contents($fullPath);
 
         if (!$content) {
             return false;

@@ -89,17 +89,19 @@ class wps_ic_media_library_live extends wps_ic
                 add_action('admin_footer', [$this, 'popups']);
                 add_filter('wps_ic_debug_log_link', [$this, 'debug_log_link'], 10, 1);
                 add_action('pre_get_posts', [$this, 'do_wps_ic_filters']);
+                add_filter('attachment_fields_to_edit', [$this, 'add_grid_view_fields'], 10, 2);
                 global $pagenow;
                 if ($pagenow !== 'upload.php') {
                     return;
                 }
                 add_action('restrict_manage_posts', [$this, 'add_wps_ic_filters']);
                 wp_enqueue_script('wps-ic-filters', WPS_IC_URI . '/assets/js/admin/media-filters.min.js', ['media-editor', 'media-views']);
-                wp_localize_script('wps-ic-filters', 'WpsIcFilters', ['filters' => $this->get_filters(), 'filter_all' => 'WP Compress Filters']);
+                $plugin_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
+                wp_localize_script('wps-ic-filters', 'WpsIcFilters', ['filters' => $this->get_filters(), 'filter_all' => $plugin_name . ' ' . __('Filters', WPS_IC_TEXTDOMAIN)]);
                 add_filter('ajax_query_attachments_args', [$this, 'do_wps_ic_ajax_filters']);
 
-                //Add compress bulk action to list view
-                //$this->add_bulk_actions_list();
+                // Bulk actions disabled — queue processor not yet implemented
+                // $this->add_bulk_actions_list();
                 add_action('admin_notices', [$this, 'custom_bulk_admin_notices']);
             } else {
                 add_action('pre_current_active_plugins', [$this, 'wps_ic_hide_compress_plugin_list']);
@@ -334,7 +336,8 @@ class wps_ic_media_library_live extends wps_ic
 
         $totalThumbs = count($stats);
 
-        $output = '<h4 style="margin:10px 0px 10px 10px;">WP Compress Stats</h4>';
+        $plugin_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
+        $output = '<h4 style="margin:10px 0px 10px 10px;">' . esc_html($plugin_name . ' ' . __('Stats', WPS_IC_TEXTDOMAIN)) . '</h4>';
         $output .= '<div class="misc-pub-section misc-pub-dimensions">Total thumbnails:';
         $output .= '<strong><span id="media-dims-52">' . $totalThumbs . '</span> </strong>';
         $output .= '</div>';
@@ -353,7 +356,7 @@ class wps_ic_media_library_live extends wps_ic
         //Uncompressed view
         if ($filter == 'uncompressed' || $filter == 'all' || !isset($_GET['wps-ic-filters'])) {
             add_filter('bulk_actions-upload', function ($bulk_actions) {
-                $bulk_actions['wps_ic_compress_in_background'] = 'Compress in Background';
+                $bulk_actions['wps_ic_compress_in_background'] = __('Compress Images', 'wp-compress-image-optimizer');
                 return $bulk_actions;
             });
             add_filter('handle_bulk_actions-upload', [$this, 'start_bulk_in_background'], 10, 3);
@@ -362,7 +365,7 @@ class wps_ic_media_library_live extends wps_ic
         //Queue view
         if ($filter == 'in_queue' || $filter == 'all' || !isset($_GET['wps-ic-filters'])) {
             add_filter('bulk_actions-upload', function ($bulk_actions) {
-                $bulk_actions['wps_ic_remove_from_queue'] = 'Remove from Queue';
+                $bulk_actions['wps_ic_remove_from_queue'] = __('Remove from Queue', 'wp-compress-image-optimizer');
                 return $bulk_actions;
             });
             add_filter('handle_bulk_actions-upload', [$this, 'remove_from_queue'], 10, 3);
@@ -425,7 +428,7 @@ class wps_ic_media_library_live extends wps_ic
         }
         ?>
         <select id="wps-ic-filters" name="wps-ic-filters" class="attachment-filters">
-            <option value="all">WP Compress Filters</option>
+            <option value="all"><?php echo esc_html((function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : 'WP Compress') . ' ' . __('Filters', WPS_IC_TEXTDOMAIN)); ?></option>
             <?php foreach ($this->get_filters() as $key => $value) { ?>
                 <option value="<?php echo esc_attr($key); ?>" <?php selected($filter, $key); ?>>
                     <?php echo esc_html($value); ?>
@@ -560,18 +563,57 @@ class wps_ic_media_library_live extends wps_ic
 
     public function wps_compress_column($cols)
     {
-        $old = $cols;
-        $cols = [];
-        $cols['cb'] = $old['cb'];
-        $cols['title'] = $old['title'];
-        #$cols["wps_ic_all"]     = "";
-        $cols["wps_ic_actions"] = "";
-        $cols['author'] = $old['author'];
-        $cols['parent'] = $old['parent'];
-        $cols['comments'] = $old['comments'];
-        $cols['date'] = $old['date'];
-
+        $cols['wps_ic_actions'] = __('Optimization', 'wp-compress-image-optimizer');
         return $cols;
+    }
+
+    /**
+     * Add compression status field to grid view attachment modal.
+     */
+    public function add_grid_view_fields($form_fields, $post)
+    {
+        $type = wp_check_filetype(get_attached_file($post->ID));
+        if (empty($type['ext']) || !in_array(strtolower($type['ext']), self::$allowed_types)) {
+            return $form_fields;
+        }
+
+        $plugin_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', 'wp-compress-image-optimizer');
+        $stats = get_post_meta($post->ID, 'ic_stats', true);
+        $status = get_post_meta($post->ID, 'ic_status', true);
+        $excluded = !empty(self::$exclude_list) && in_array($post->ID, self::$exclude_list);
+
+        if ($excluded) {
+            $html = '<span style="color:#94a3b8;">' . esc_html__('Excluded', 'wp-compress-image-optimizer') . '</span>';
+        } elseif ((!empty($status) && $status === 'compressed') || !empty($stats)) {
+            $ic_savings  = get_post_meta($post->ID, 'ic_savings', true);
+            $ic_base     = get_post_meta($post->ID, 'ic_savings_baseline', true);
+            $savings_pct = 0;
+
+            if (!empty($ic_savings) && !empty($ic_base) && $ic_base > 0) {
+                $savings_pct = floatval($ic_savings);
+            } elseif (!empty($stats['original']['original']['size']) && !empty($stats['original']['compressed']['size'])) {
+                $orig = $stats['original']['original']['size'];
+                $comp = $stats['original']['compressed']['size'];
+                if ($orig > 0 && $comp > 0 && $orig != $comp) {
+                    $savings_pct = round((1 - ($comp / $orig)) * 100, 1);
+                }
+            }
+
+            $html = '<span style="color:#22b73a;font-weight:600;">' . esc_html__('Compressed', 'wp-compress-image-optimizer') . '</span>';
+            if ($savings_pct > 0) {
+                $html .= ' <span style="color:#64748b;">(' . number_format($savings_pct, 1) . '% ' . esc_html__('savings', 'wp-compress-image-optimizer') . ')</span>';
+            }
+        } else {
+            $html = '<span style="color:#94a3b8;">' . esc_html__('Not Compressed', 'wp-compress-image-optimizer') . '</span>';
+        }
+
+        $form_fields['wps_ic_status'] = [
+            'label' => esc_html($plugin_name),
+            'input' => 'html',
+            'html'  => $html,
+        ];
+
+        return $form_fields;
     }
 
 
@@ -629,37 +671,106 @@ class wps_ic_media_library_live extends wps_ic
 
             }
 
-            #$output .= '<div class="wps-ic-image-loading-' . $id . ' wps-ic-image-loading-container" id="wp-ic-image-loading-' . $id . '" style="display:none;"><img src="' . self::$load_spinner . '" /></div>';
-            $output .= '<div class="wps-ic-image-loading-' . $id . ' wps-ic-image-loading-container" id="wp-ic-image-loading-' . $id . '" style="display:none;"><div class="wps-ic-bulk-preparing-logo-container-media-lib">
-        <div class="wps-ic-bulk-preparing-logo-media-lib">
-          <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-          <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
-        </div>
-      </div></div>';
+            $output .= '<div class="wps-ic-image-loading-' . $id . ' wps-ic-image-loading-container" id="wp-ic-image-loading-' . $id . '" style="display:none;"></div>';
             echo $output;
 
         }
     }
 
 
+    // ─── Icon stack: idle (with exclude badge), success, engines ────
+    private static function icon_stack() {
+        $idle = self::icon_idle();
+        $success = self::icon_success_check();
+        $sparkle_core = '<svg viewBox="0 0 512 512" fill="currentColor"><path d="M278.5 15.6C275 6.2 266 0 256 0s-19 6.2-22.5 15.6L174.2 174.2 15.6 233.5C6.2 237 0 246 0 256s6.2 19 15.6 22.5l158.6 59.4 59.4 158.6C237 505.8 246 512 256 512s19-6.2 22.5-15.6l59.4-158.6 158.6-59.4C505.8 275 512 266 512 256s-6.2-19-15.6-22.5L337.8 174.2 278.5 15.6z"/></svg>';
+        $engine = '<div class="wpc-engine wpc-engine-compress"><div class="wpc-comet"><div class="wpc-comet-track"></div><div class="wpc-comet-tail"></div></div><div class="wpc-comet-core">' . $sparkle_core . '</div></div>';
+        $engine_restore = '<div class="wpc-engine wpc-engine-restore"><div class="wpc-comet"><div class="wpc-comet-track"></div><div class="wpc-comet-tail"></div></div><div class="wpc-comet-core">' . $sparkle_core . '</div></div>';
+        return '<div class="wpc-ml-card-icon">' . $idle . $success . $engine . $engine_restore . '</div>';
+    }
+
+    // Idle icon: FA Regular image with exclude badge overlay
+    private static function icon_idle() {
+        return '<svg class="main-icon icon-idle" viewBox="0 0 448 512" fill="currentColor">'
+            . '<path d="M64 80c-8.8 0-16 7.2-16 16l0 320c0 8.8 7.2 16 16 16l320 0c8.8 0 16-7.2 16-16l0-320c0-8.8-7.2-16-16-16L64 80zM0 96C0 60.7 28.7 32 64 32l320 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zm128 32a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm136 72c8.5 0 16.4 4.5 20.7 11.8l80 136c4.4 7.4 4.4 16.6 .1 24.1S352.6 384 344 384l-240 0c-8.9 0-17.2-5-21.3-12.9s-3.5-17.5 1.6-24.8l56-80c4.5-6.4 11.8-10.2 19.7-10.2s15.2 3.8 19.7 10.2l17.2 24.6 46.5-79c4.3-7.3 12.2-11.8 20.7-11.8z"/>'
+            . '<g class="exclude-badge">'
+            . '<circle cx="370" cy="430" r="78" fill="#f8fafc" stroke="none"/>'
+            . '<circle cx="370" cy="430" r="55" fill="#cbd5e1" stroke="none"/>'
+            . '<line x1="348" y1="408" x2="392" y2="452" stroke="#fff" stroke-width="16" stroke-linecap="round"/>'
+            . '<line x1="392" y1="408" x2="348" y2="452" stroke="#fff" stroke-width="16" stroke-linecap="round"/>'
+            . '</g>'
+            . '</svg>';
+    }
+
+    // Success icon: FA Duotone Solid sparkles (compressed)
+    private static function icon_success_check() {
+        return '<svg class="main-icon icon-success" viewBox="0 0 576 512" fill="currentColor"><path opacity=".4" d="M352 448c0 4.8 3 9.1 7.5 10.8L416 480 437.2 536.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L480 480 536.5 458.8c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L480 416 458.8 359.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L416 416 359.5 437.2c-4.5 1.7-7.5 6-7.5 10.8zM384 64c0 4.8 3 9.1 7.5 10.8L448 96 469.2 152.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L512 96 568.5 74.8c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L512 32 490.8-24.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L448 32 391.5 53.2c-4.5 1.7-7.5 6-7.5 10.8z"/><path d="M205.1 73.3c-2.6-5.7-8.3-9.3-14.5-9.3s-11.9 3.6-14.5 9.3L123.4 187.4 9.3 240C3.6 242.6 0 248.3 0 254.6s3.6 11.9 9.3 14.5L123.4 321.8 176 435.8c2.6 5.7 8.3 9.3 14.5 9.3s11.9-3.6 14.5-9.3l52.7-114.1 114.1-52.7c5.7-2.6 9.3-8.3 9.3-14.5s-3.6-11.9-9.3-14.5L257.8 187.4 205.1 73.3z"/></svg>';
+    }
+
+    // Excluded icon: FA Duotone Solid image-circle-xmark
+    private static function icon_excluded_ban() {
+        return '<svg class="main-icon icon-excluded" viewBox="0 0 640 512" fill="currentColor"><path opacity=".4" d="M64 96c0-35.3 28.7-64 64-64l320 0c35.3 0 64 28.7 64 64l0 80.7c-5.3-.4-10.6-.7-16-.7-54.8 0-104.3 23-139.3 59.9l-.2-.4c-4.4-7.1-12.1-11.5-20.5-11.5s-16.1 4.4-20.5 11.5L254.1 336 227.7 298.2c-4.5-6.4-11.8-10.2-19.7-10.2s-15.2 3.8-19.7 10.2l-56 80c-5.1 7.3-5.8 16.9-1.6 24.8S143.1 416 152 416l158 0c6 23.3 16.3 45 30 64l-212 0c-35.3 0-64-28.7-64-64L64 96zm80 64a48 48 0 1 0 96 0 48 48 0 1 0 -96 0z"/><path d="M352 368a144 144 0 1 1 288 0 144 144 0 1 1 -288 0zm203.3-59.3c-6.2-6.2-16.4-6.2-22.6 0l-36.7 36.7-36.7-36.7c-6.2-6.2-16.4-6.2-22.6 0s-6.2 16.4 0 22.6l36.7 36.7-36.7 36.7c-6.2 6.2-6.2 16.4 0 22.6s16.4 6.2 22.6 0l36.7-36.7 36.7 36.7c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-36.7-36.7 36.7-36.7c6.2-6.2 6.2-16.4 0-22.6z"/></svg>';
+    }
+
+    // Inline SVG action icons (12px stroke icons)
+    private static function svg_bolt() {
+        return '<svg viewBox="0 0 448 512" fill="currentColor"><path d="M341.2-12.1c9.1 6 13 17.3 9.6 27.6L292 192 412.9 192c19.4 0 35.1 15.7 35.1 35.1 0 10-4.2 19.5-11.7 26.1L136 521.9c-8.1 7.3-20.1 8.2-29.2 2.2s-13-17.3-9.6-27.6L156 320 35.1 320C15.7 320 0 304.3 0 284.9 0 275 4.2 265.5 11.7 258.8L312-9.9c8.1-7.3 20.1-8.1 29.2-2.2zM68.9 272l120.4 0c7.7 0 15 3.7 19.5 10s5.7 14.3 3.3 21.6L171.3 425.9 379.1 240 258.7 240c-7.7 0-15-3.7-19.5-10s-5.7-14.3-3.3-21.6L276.7 86.1 68.9 272z"/></svg>';
+    }
+    private static function svg_x() {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+    }
+    private static function svg_plus() {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    }
+    private static function svg_chart() {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>';
+    }
+    private static function svg_undo() {
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>';
+    }
+
+    // ─── FA Sharp Light SVG icons (12px inline) ─────────────────
+    private static function icon_brand() {
+        if (class_exists('whtlbl_whitelabel_plugin')) {
+            return '<svg width="20" height="20" viewBox="0 0 640 512" fill="currentColor"><path d="M528-16l-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-64zM288 320c80.6-35.8 128.6-57.2 144-64-15.4-6.8-63.4-28.2-144-64-35.8-80.6-57.2-128.6-64-144-6.8 15.4-28.2 63.4-64 144-80.6 35.8-128.6 57.2-144 64 15.4 6.8 63.4 28.2 144 64 35.8 80.6 57.2 128.6 64 144 6.8-15.4 28.2-63.4 64-144zm-64 65.2l-34.8-78.2-5-11.2-11.2-5-78.2-34.8 78.2-34.8 11.2-5 5-11.2 34.8-78.2 34.8 78.2 5 11.2 11.2 5 78.2 34.8-78.2 34.8-11.2 5-5 11.2-34.8 78.2zM496 384l0-16-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-48z"/></svg>';
+        }
+        return '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><path d="M322.4 192C358.9 59.4 379.4-15.3 384-32L340.9 3.9 38.4 256 0 288 198.4 288 189.6 320c-36.5 132.6-57 207.3-61.6 224l43.1-35.9 302.5-252.1 38.4-32-198.4 0 8.8-32zm101.2 64L185.9 454.1c34.3-124.6 52.4-190.6 54.5-198.1l-152 0 237.7-198.1C291.8 182.5 273.7 248.5 271.6 256l152 0z"/></svg>';
+    }
+    // FA Sharp Light Bolt
+    private static function icon_compress() {
+        return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M322.4 192C358.9 59.4 379.4-15.3 384-32L340.9 3.9 38.4 256 0 288 198.4 288 189.6 320c-36.5 132.6-57 207.3-61.6 224l43.1-35.9 302.5-252.1 38.4-32-198.4 0 8.8-32zm101.2 64L185.9 454.1c34.3-124.6 52.4-190.6 54.5-198.1l-152 0 237.7-198.1C291.8 182.5 273.7 248.5 271.6 256l152 0z"/></svg>';
+    }
+    // FA Sharp Light Rotate Left
+    private static function icon_restore() {
+        return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M0-16l0 192 192 0c-17.6-17.6-46.4-46.4-86.2-86.2 87.9-79.6 223.8-77 308.6 7.8 39.9 39.9 61.6 91.2 65.1 143.5l0 0c3.5 51.5-10.7 104.4-44 149-74 99.1-214.4 119.5-313.5 45.5-31.9-23.8-55.6-54.5-70.7-88.4l-29.2 13c17.2 38.8 44.4 73.9 80.8 101 113.3 84.6 273.7 61.3 358.3-51.9 38-50.9 54.3-111.4 50.3-170.2-4-59.7-28.8-118.3-74.4-164-97.3-97.3-253.4-99.9-353.9-7.8L0-16zM32 61.3l82.7 82.7-82.7 0 0-82.7z"/></svg>';
+    }
+    // FA Sharp Light Ban
+    private static function icon_exclude() {
+        return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M402.7 425.3l-316-316c-34.1 39.3-54.7 90.6-54.7 146.7 0 123.7 100.3 224 224 224 56.1 0 107.4-20.6 146.7-54.7zm22.6-22.6c34.1-39.3 54.7-90.6 54.7-146.7 0-123.7-100.3-224-224-224-56.1 0-107.4 20.6-146.7 54.7l316 316zM0 256a256 256 0 1 1 512 0 256 256 0 1 1 -512 0z"/></svg>';
+    }
+    // FA Sharp Light Chart Bar
+    private static function icon_stats() {
+        return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M32 48l0-16-32 0 0 448 512 0 0-32-480 0 0-400zM368 96l16 0 0-32-256 0 0 32 240 0zM144 192l-16 0 0 32 192 0 0-32-176 0zm0 128l-16 0 0 32 320 0 0-32-304 0z"/></svg>';
+    }
+    // FA Sharp Light Circle Check
+    private static function icon_include() {
+        return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zm0-480a224 224 0 1 0 0 448 224 224 0 1 0 0-448zM374.3 172.5l-9.4 12.9-128 176-11 15.2-88.6-88.6 22.6-22.6 62.1 62.1 117-160.8 9.4-12.9 25.9 18.8z"/></svg>';
+    }
+
     public function excluded_details($imageID)
     {
-        $output = '<div class="wps-ic-compressed-logo">';
-        $output .= '<img src="' . self::$logo_excluded . '" />';
-        $output .= '</div>';
+        $filedata = get_attached_file($imageID);
+        $originalFilepath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
+        $scaled_size = ($filedata && file_exists($filedata)) ? filesize($filedata) : 0;
+        $orig_size = ($originalFilepath && file_exists($originalFilepath)) ? filesize($originalFilepath) : 0;
+        $filesize = wps_ic_format_bytes(max($scaled_size, $orig_size), null, null, false);
 
-        $output .= '<div class="wps-ic-compressed-info">';
-
-        $output .= '<div class="wpc-info-box wpc-excluded-box">';
-        $output .= '<h5>Excluded</h5>';
-
-        $output .= '<ul class="wpc-inline-list">';
-        $output .= '<li><a class="wps-ic-exclude-live" data-attachment_id="' . $imageID . '">Include</a></li>';
-        $output .= '</ul>';
-
+        $output = '<div class="wpc-ml-card wpc-ml-card--excluded is-excluded">';
+        $output .= self::icon_stack();
+        $output .= '<div class="wpc-ml-body">';
+        $output .= '<div class="wpc-ml-title">' . esc_html__('Excluded', 'wp-compress-image-optimizer') . '</div>';
+        $output .= '<div class="wpc-ml-subtitle">' . $filesize . '<a class="wpc-ml-action wps-ic-exclude-live" data-action="include" data-attachment_id="' . $imageID . '">' . self::svg_plus() . ' ' . esc_html__('Include', 'wp-compress-image-optimizer') . '</a></div>';
         $output .= '</div>';
         $output .= '</div>';
-
         return $output;
     }
 
@@ -696,227 +807,85 @@ class wps_ic_media_library_live extends wps_ic
             }
         }
 
-        if ($imageStatus) {
-            $output .= '<div class="wps-ic-bulk-preparing-logo-container-media-lib">
-                <div class="wps-ic-bulk-preparing-logo-media-lib">
-                  <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-                  <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
-                </div>
-              </div>';
-            return $output;
-        }
-
-        if ($isBulkCompressRunning && empty($stats)) {
-            $output .= '<div class="wps-ic-bulk-preparing-logo-container-media-lib">
-                <div class="wps-ic-bulk-preparing-logo-media-lib">
-                  <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-                  <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
-                </div>
-              </div>';
-            return $output;
-        } else if ($isBulkRestoreRunning && !empty($stats)) {
-            if (empty(self::$parsedImages[$imageID])) {
-                $output .= '<div class="wps-ic-bulk-preparing-logo-container-media-lib">
-                <div class="wps-ic-bulk-preparing-logo-media-lib">
-                  <img src="' . WPS_IC_URI . 'assets/images/logo/blue-icon.svg" class="bulk-logo-prepare"/>
-                  <img src="' . WPS_IC_URI . 'assets/preparing.svg" class="bulk-preparing"/>
-                </div>
-              </div>';
-                return $output;
+        // ─── Loading / bulk states ─────────────────────
+        // Failsafe: if transient is stale AND image is not in the queue AND no worker is running → clear it
+        if ($imageStatus && is_array($imageStatus) && !empty($imageStatus['time'])) {
+            $age = time() - intval($imageStatus['time']);
+            $inQueue = in_array($imageID, get_option('wpc_compress_queue', []));
+            $workerRunning = (bool) get_transient('wpc_compress_lock');
+            if ($age > 120 && !$inQueue && !$workerRunning) {
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_queue_' . $imageID);
+                $imageStatus = false;
             }
         }
 
-        if ((!empty($compressing['status']) && $compressing['status'] == 'compressed') || !empty($stats)) {
-            // Use stored end-to-end savings (unscaled upload → best variant)
+        if ($imageStatus || ($isBulkCompressRunning && empty($stats)) || ($isBulkRestoreRunning && !empty($stats) && empty(self::$parsedImages[$imageID]))) {
+            $output .= '<div class="wpc-ml-card is-compressing">';
+            $output .= self::icon_stack();
+            $output .= '<div class="wpc-ml-body"><div class="fade-in-up"><div class="wpc-ml-title">' . esc_html__('Optimizing', 'wp-compress-image-optimizer') . '</div><div class="wpc-skeleton"><div class="wpc-skeleton-bar w-long"></div><div class="wpc-skeleton-bar w-short"></div></div></div></div>';
+            $output .= '</div>';
+            return $output;
+        }
+
+        // ─── Compressed state ─────────────────────
+        if ((!empty($compressing['status']) && ($compressing['status'] == 'compressed' || $compressing['status'] == 'no-further')) || !empty($stats)) {
             $ic_savings = get_post_meta($imageID, 'ic_savings', true);
             $ic_bytes   = get_post_meta($imageID, 'ic_savings_bytes', true);
             $ic_base    = get_post_meta($imageID, 'ic_savings_baseline', true);
 
             if (!empty($ic_savings) && !empty($ic_base) && $ic_base > 0) {
                 $savings_percent = number_format(floatval($ic_savings), 1);
-                $original = intval($ic_base);
-                $compressed = $original - intval($ic_bytes);
-                $savings_kb = round($compressed);
+                $saved_bytes = intval($ic_bytes);
             } else {
-                // Fallback to ic_stats for images compressed before this update
-                $original = $stats['original']['original']['size'];
-                $compressed = $stats['original']['compressed']['size'];
-
+                $original = isset($stats['original']['original']['size']) ? $stats['original']['original']['size'] : 0;
+                $compressed = isset($stats['original']['compressed']['size']) ? $stats['original']['compressed']['size'] : 0;
                 if ($original > 0 && $compressed > 0 && $original != $compressed) {
                     $savings_percent = number_format((1 - ($compressed / $original)) * 100, 1);
-                    $savings_kb = round($compressed);
+                    $saved_bytes = $original - $compressed;
                 } else {
                     $savings_percent = '0';
-                    $savings_kb = 0;
+                    $saved_bytes = 0;
                 }
             }
 
-
-            if ($savings_kb <= 0) {
-                $filesize = parent::get_wp_filesize($imageID);
-
-                $output .= '<div class="wps-ic-compressed-logo">';
-                $output .= '<img src="' . self::$logo_compressed . '" />';
-                $output .= '</div>';
-
-                $output .= '<div class="wps-ic-compressed-info">';
-
-                $output .= '<div class="wpc-info-box">';
-                $output .= '<h5>No further savings</h5>';
-                $output .= '</div>';
-
-                $output .= '<div>';
-                $output .= '<ul class="wpc-inline-list">';
-
-                $output .= '<li><div class="wpc-savings-tag">' . $filesize . '</div></li>';
-                $output .= '<li><a class="wps-ic-restore-live ic-tooltip" title="Restore" data-attachment_id="' . $imageID . '"></a></li>';
-                $output .= '<li>' . apply_filters('wps_ic_debug_log_link', $imageID) . '</li>';
-
-                $output .= '</ul>';
-                $output .= '</div>';
-
-                $output .= '</div>';
-
+            $output .= '<div class="wpc-ml-card wpc-ml-card--compressed">';
+            $output .= self::icon_stack();
+            $output .= '<div class="wpc-ml-body">';
+            if ($saved_bytes > 0) {
+                $output .= '<div class="wpc-ml-title">' . $savings_percent . '% ' . esc_html__('Saved', 'wp-compress-image-optimizer') . '</div>';
+                $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wpc-stats-trigger" data-attachment_id="' . $imageID . '">' . self::svg_chart() . ' ' . esc_html__('Details', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-restore-live" data-attachment_id="' . $imageID . '">' . self::svg_undo() . ' ' . esc_html__('Restore', 'wp-compress-image-optimizer') . '</a></div>';
             } else {
-
-                // Original
-                $originalFilesize = round($original);
-                $originalFilesize = wps_ic_format_bytes($originalFilesize);
-
-                // Scaled
-                $wpScaledFilesize = round($compressed);
-                $wpScaledFilesize = wps_ic_format_bytes($wpScaledFilesize);
-
-                // Saved
-                $savedFileSize = round($original) - round($compressed);
-                $savedFileSize = wps_ic_format_bytes($savedFileSize);
-
-                $output .= '<div class="wps-ic-compressed-logo">';
-                $output .= '<img src="' . self::$logo_compressed . '" />';
-                $output .= '</div>';
-
-                $output .= '<div class="wps-ic-compressed-info">';
-
-                $output .= '<div class="wpc-info-box">';
-                $output .= '<h5>' . $savings_percent . '% Savings</h5>';
-                $output .= '</div>';
-
-                $output .= '<div>';
-
-                $output .= '<ul class="wpc-inline-list">';
-                #$output .= '<li><div class="wpc-savings-tag">Original: ' . $originalFilesize . '</div></li>';
-                #$output .= '<li><div class="wpc-savings-tag">Compressed: ' . $wpScaledFilesize . '</div></li>';
-                $output .= '<li><div class="wpc-savings-tag">' . $savedFileSize . ' Saved</div></li>';
-                if (!empty($_GET['dbgMediaLibrary'])) {
-                    $output .= '<li><div class="wpc-savings-tag">' . wps_ic_format_bytes($original) . ' Before Compression</div></li>';
-                    $output .= '<li><div class="wpc-savings-tag">' . wps_ic_format_bytes($compressed) . ' After Compression</div></li>';
-                }
-
-                $output .= '<li class="li-dropdown">';
-                $output .= '<a class="wpc-dropdown-btn wps-ic-restore-live ic-tooltip" title="Restore" data-attachment_id="' . $imageID . '"></a>';
-                $output .= '</li>';
-
-                $output .= '</ul>';
-                $output .= '</div>';
-
-                $output .= '<div class="wps-ic-compress-details-popup-' . $imageID . '" style="display:none;">';
-                $output .= '</div>';
-                $output .= '</div>';
-
+                $output .= '<div class="wpc-ml-title">' . esc_html__('Compressed', 'wp-compress-image-optimizer') . '</div>';
+                $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wpc-stats-trigger" data-attachment_id="' . $imageID . '">' . self::svg_chart() . ' ' . esc_html__('Details', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-restore-live" data-attachment_id="' . $imageID . '">' . self::svg_undo() . ' ' . esc_html__('Restore', 'wp-compress-image-optimizer') . '</a></div>';
             }
-
-        } else if (!empty($compressing['status']) && $compressing['status'] == 'no-further') {
-
-            $filesize = parent::get_wp_filesize($imageID);
-
-            $output .= '<div class="wps-ic-compressed-logo">';
-            $output .= '<img src="' . self::$logo_compressed . '" />';
+            $output .= '</div>';
             $output .= '</div>';
 
-            $output .= '<div class="wps-ic-compressed-info">';
-
-            $output .= '<div class="wpc-info-box">';
-            $output .= '<h5>No further savings</h5>';
-            $output .= '</div>';
-
-            $output .= '<div>';
-            $output .= '<ul class="wpc-inline-list">';
-
-            $output .= '<li><div class="wpc-savings-tag">' . $filesize . '</div></li>';
-            $output .= '<li><a class="wps-ic-restore-live ic-tooltip" title="Restore" data-attachment_id="' . $imageID . '"></a></li>';
-            $output .= '<li>' . apply_filters('wps_ic_debug_log_link', $imageID) . '</li>';
-
-            $output .= '</ul>';
-            $output .= '</div>';
-
-            $output .= '</div>';
-
-
+        // ─── Not compressed / excluded state ─────────────────────
         } else {
+            clearstatcache(true);
             $filedata = get_attached_file($imageID);
-
-            // Get the unscaled original file size (real upload), fall back to scaled
-            $originalFilepath = wp_get_original_image_path($imageID);
-            if ($originalFilepath && file_exists($originalFilepath) && $originalFilepath !== $filedata) {
-                $originalFilesize = wps_ic_format_bytes(filesize($originalFilepath), null, null, false);
-            } else {
-                $originalFilesize = wps_ic_format_bytes(filesize($filedata), null, null, false);
-            }
-            $wpScaledFilesize = wps_ic_format_bytes(filesize($filedata), null, null, false);
-
-            $basename = sanitize_title(basename($filedata));
+            $originalFilepath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
+            $scaled_size = ($filedata && file_exists($filedata)) ? filesize($filedata) : 0;
+            $orig_size = ($originalFilepath && file_exists($originalFilepath)) ? filesize($originalFilepath) : 0;
+            $filesize = wps_ic_format_bytes(max($scaled_size, $orig_size), null, null, false);
 
             if (get_post_meta($imageID, 'wps_ic_exclude_live', true) == 'true') {
-                $output .= '<div class="wps-ic-compressed-logo">';
-                $output .= '<img src="' . self::$logo_excluded . '" />';
+                $output .= '<div class="wpc-ml-card wpc-ml-card--excluded is-excluded">';
+                $output .= self::icon_stack();
+                $output .= '<div class="wpc-ml-body">';
+                $output .= '<div class="wpc-ml-title">' . esc_html__('Excluded', 'wp-compress-image-optimizer') . '</div>';
+                $output .= '<div class="wpc-ml-subtitle">' . $filesize . '<a class="wpc-ml-action wps-ic-exclude-live" data-action="include" data-attachment_id="' . $imageID . '">' . self::svg_plus() . ' ' . esc_html__('Include', 'wp-compress-image-optimizer') . '</a></div>';
                 $output .= '</div>';
-
-                $output .= '<div class="wps-ic-compressed-info">';
-
-                $output .= '<div class="wpc-info-box">';
-                $output .= '<h5>Excluded</h5>';
-                $output .= '</div>';
-
-                $output .= '<div>';
-                $output .= '<ul class="wpc-inline-list">';
-
-                $output .= '<li><div class="wpc-savings-tag">' . $originalFilesize . '</div></li>';
-
-                $output .= '<li>';
-                $output .= '<a class="wpc-dropdown-btn wps-ic-include-live ic-tooltip" title="Include" data-action="include" data-attachment_id="' . $imageID . '"></a>';
-                $output .= '</li>';
-
-                $output .= '</ul>';
-                $output .= '</div>';
-
                 $output .= '</div>';
             } else {
-                $output .= '<div class="wps-ic-compressed-logo">';
-                $output .= '<img src="' . self::$logo_uncompressed . '" />';
+                $output .= '<div class="wpc-ml-card wpc-ml-card--uncompressed">';
+                $output .= self::icon_stack();
+                $output .= '<div class="wpc-ml-body">';
+                $output .= '<div class="wpc-ml-title">' . $filesize . '</div>';
+                $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '">' . self::svg_bolt() . ' ' . esc_html__('Compress', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a></div>';
                 $output .= '</div>';
-
-                $output .= '<div class="wps-ic-compressed-info">';
-
-                $output .= '<div class="wpc-info-box">';
-                $output .= '<h5>Not Compressed</h5>';
-                $output .= '</div>';
-
-                $output .= '<div>';
-                $output .= '<ul class="wpc-inline-list">';
-
-                $output .= '<li><div class="wpc-savings-tag">' . $originalFilesize . '</div></li>';
-                #$output .= '<li><div class="wpc-savings-tag">After: ' . $wpScaledFilesize . '</div></li>';
-
-                $output .= '<li>';
-                $output .= '<a class="wpc-dropdown-btn wps-ic-compress-live ic-tooltip" title="Compress" data-attachment_id="' . $imageID . '"></a>';
-                $output .= '</li>';
-                $output .= '<li>';
-                $output .= '<a class="wpc-dropdown-btn wps-ic-exclude-live ic-tooltip" title="Exclude" data-action="exclude" data-attachment_id="' . $imageID . '"></a>';
-                $output .= '</li>';
-
-                $output .= '</ul>';
-                $output .= '</div>';
-
                 $output .= '</div>';
             }
         }

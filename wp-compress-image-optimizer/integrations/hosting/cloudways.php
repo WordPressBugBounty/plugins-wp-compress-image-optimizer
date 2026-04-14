@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) {
 class wps_ic_cloudways extends wps_ic_integrations {
 
     public function is_active() {
-        return $this->is_varnish_running();
+        return $this->is_cloudways_server();
     }
 
     public function do_checks() {
@@ -17,16 +17,20 @@ class wps_ic_cloudways extends wps_ic_integrations {
         // No specific fixes needed
     }
 
-    private function is_varnish_running() {
-        if (!isset($_SERVER['HTTP_X_VARNISH'])) {
-            return false;
+    /**
+     * Detect Cloudways hosting via filesystem path.
+     * The old HTTP_X_VARNISH header check only worked in frontend requests,
+     * not during admin/AJAX where integration scanning runs.
+     */
+    private function is_cloudways_server() {
+        if (defined('ABSPATH') && strpos(ABSPATH, 'cloudwaysapps.com') !== false) {
+            return true;
         }
-
-        if (!isset($_SERVER['HTTP_X_APPLICATION'])) {
-            return false;
+        $doc_root = isset($_SERVER['DOCUMENT_ROOT']) ? $_SERVER['DOCUMENT_ROOT'] : '';
+        if (!empty($doc_root) && strpos($doc_root, 'cloudwaysapps.com') !== false) {
+            return true;
         }
-
-        return ('varnishpass' !== trim(strtolower($_SERVER['HTTP_X_APPLICATION'])));
+        return false;
     }
 
     public function do_admin_filters() {

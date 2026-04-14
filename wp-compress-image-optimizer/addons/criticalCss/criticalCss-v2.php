@@ -14,11 +14,53 @@ class wps_criticalCss
     public $urlKey;
     public $serverRequest;
     public $url_key_class;
+    /**
+     * Normalize a URL to use the public-facing hostname from home_url().
+     * On reverse proxy / Kinsta sites, HTTP_HOST and get_permalink() return the
+     * origin hostname. This rewrites it to the public domain so keys match.
+     * On normal sites (HTTP_HOST === home_url host), returns URL unchanged.
+     */
+    private function normalizeUrl($url) {
+        $homeUrl = rtrim(home_url(), '/');
+        $homeHost = parse_url($homeUrl, PHP_URL_HOST);
+        $httpHost = $_SERVER['HTTP_HOST'] ?? '';
+
+        if (!$homeHost || !$httpHost || $httpHost === $homeHost) {
+            // Same host — no proxy, return as-is (99% of sites)
+            if (strpos($url, 'http') !== 0 && strpos($url, '/') === 0) {
+                return $homeUrl . $url;
+            }
+            return $url;
+        }
+
+        // Proxy detected: HTTP_HOST differs from home_url host
+        $parsed = parse_url($url);
+
+        if (!empty($parsed['scheme']) && !empty($parsed['host'])) {
+            // Full URL with scheme
+            if ($parsed['host'] === $homeHost) {
+                // Already correct host — return as-is
+                return $url;
+            }
+            // Wrong host → replace with home_url
+            return $homeUrl . ($parsed['path'] ?? '/') . (!empty($parsed['query']) ? '?' . $parsed['query'] : '');
+        }
+
+        // No scheme (e.g. "origin.host.com/path") → strip origin hostname, prepend home_url
+        $path = $url;
+        if (strpos($path, $httpHost) === 0) {
+            $path = substr($path, strlen($httpHost));
+        }
+        return $homeUrl . '/' . ltrim($path, '/');
+    }
+
     public function __construct($url = '')
     {
         if (empty($url)) {
             $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
         }
+
+        $url = $this->normalizeUrl($url);
 
         self::$url = $url;
 
@@ -53,7 +95,7 @@ class wps_criticalCss
 				$homePage = get_option('page_on_front');
 
 				if (!$homePage) {
-					$url = site_url();
+					$url = home_url();
 				} else {
 					$url = get_permalink($homePage);
 				}
@@ -62,7 +104,7 @@ class wps_criticalCss
 			}
 		}
 
-        $running = get_transient('wpc_critical_key_' . md5($url));
+        $running = get_transient('wpc_critical_key_' . $this->url_key_class->setup($url));
         if (empty($running) || !$running) {
             return false;
         } else {
@@ -79,7 +121,7 @@ class wps_criticalCss
                 $blogPage = get_option('page_for_posts');
 
                 if (!$homePage) {
-                    $url = site_url();
+                    $url = home_url();
                 } else {
                     $url = get_permalink($homePage);
                 }
@@ -171,13 +213,27 @@ class wps_criticalCss
             return false;
         }
 
-        // Use md5() or sha1() for a predictable short hash.
-        $url_key = md5($url);
+        // Normalize URL + recompute key so ALL downstream code uses the public domain
+        $url = $this->normalizeUrl($url);
+        $url_key = $this->url_key_class->setup($url);
 
         // Poll /status for any in-flight request for this URL
         $needsPush = true;
         $uuid_key    = 'wpc_critical_uuid_' . $url_key;
         $pendingUuid = get_transient($uuid_key);
+
+        // Fallback: if object cache (Redis) lost the transient, read directly from DB
+        if (!$pendingUuid) {
+            global $wpdb;
+            $dbVal = $wpdb->get_var($wpdb->prepare(
+                "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
+                '_transient_' . $uuid_key
+            ));
+            if ($dbVal) {
+                $pendingUuid = maybe_unserialize($dbVal);
+            }
+        }
+
 
         if ($pendingUuid) {
             $statusUrl = str_replace('/generate', '/status', WPS_IC_CRITICAL_API_URL) . '?uuid=' . urlencode($pendingUuid);
@@ -189,19 +245,36 @@ class wps_criticalCss
 
                     if (!empty($data['status']) && $data['status'] === 'success') {
                         $criticalCSS = new wps_criticalCss();
-                        $criticalCSS->saveCriticalCss($url_key, [
+                        $saveResult = $criticalCSS->saveCriticalCss($url_key, [
                             'url' => [
                                 'desktop' => $data['desktop_url'],
                                 'mobile'  => $data['mobile_url'],
                             ]
                         ]);
+
+                        // Purge caches so next visit gets fresh HTML with critical CSS injected
+                        // 1. WPC HTML cache — per-page only (preserves other pages + critical CSS files)
+                        $pageUrlKey = (new wps_ic_url_key())->setup($url);
+                        wps_ic_cache_integrations::purgeCacheFiles($pageUrlKey);
+
+                        // 2. Kinsta edge cache — per-URL if available, full if not
+                        if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)) {
+                            if (method_exists($GLOBALS['kinsta_cache']->kinsta_cache_purge, 'purge_url')) {
+                                $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_url($url);
+                            } else {
+                                $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_complete_caches();
+                            }
+                        }
+
+                        // 3. Other hosts (WP Engine, SiteGround, Cloudflare, Varnish, etc.)
+                        do_action('wps_ic_purge_all_cache', $pageUrlKey);
+
                         delete_transient($uuid_key);
                         delete_transient('wpc_critical_key_' . $url_key);
                         return false;
                     }
 
                     if (!empty($data['status']) && $data['status'] === 'not_found') {
-                        // POST never reached API — clear transients so next page load retries
                         delete_transient($uuid_key);
                         delete_transient('wpc_critical_key_' . $url_key);
                     }
@@ -218,24 +291,22 @@ class wps_criticalCss
                         delete_transient('wpc_critical_key_' . $url_key);
                     }
                 }
+            } else {
             }
         }
 
-        $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
+        $transient_name = 'wpc_critical_key_' . $url_key;
         $critTransient = get_transient($transient_name);
 
         if (!empty($critTransient) && empty($_GET['forceCritical'])) {
-            // Die, already running!
             return true;
         }
 
-        // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 5);
 
         $uuid     = wp_generate_uuid4();
         $uuid_key = 'wpc_critical_uuid_' . $url_key;
         set_transient($uuid_key, $uuid, 60 * 5);
-
         $options = get_option(WPS_IC_OPTIONS);
         $apikey  = $options['api_key'] ?? '';
         $forcePull = isset($_GET['pushMode']) && sanitize_key($_GET['pushMode']) === 'false';
@@ -332,7 +403,7 @@ class wps_criticalCss
                 $blogPage = get_option('page_for_posts');
 
                 if (!$homePage) {
-                    $url = site_url();
+                    $url = home_url();
                 } else {
                     $url = get_permalink($homePage);
                 }
@@ -570,7 +641,7 @@ class wps_criticalCss
             if (!$homePage) {
                 $post['post_name'] = 'Home';
                 $post = (object)$post;
-                $url = site_url();
+                $url = home_url();
             } else {
                 $post = get_post($homePage);
                 $url = get_permalink($homePage);
@@ -629,6 +700,7 @@ class wps_criticalCss
         $jobStatus = [];
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
+
 
         if (is_array($CSS)) {
             $json = $CSS;

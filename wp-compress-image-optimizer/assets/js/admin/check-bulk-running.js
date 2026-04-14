@@ -52,101 +52,10 @@ jQuery(document).ready(function ($) {
         $('.wps-ic-stop-bulk-compress').show();
         $('.bulk-area-inner').show();
         $('#bulk-start-container').hide();
-        $('.bulk-preparing-optimize').show();
+        $('.bulk-preparing-optimize').hide();
+        $('.bulk-status').show();
 
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {action: 'wps_ic_bulkCompressHeartbeat'},
-            error: function(response) {
-                clearInterval(heartbeatBulkCompress);
-
-                // Stop everything, show popup
-                $('.bulk-status-progress-bar').hide();
-                $('.wps-ic-stop-bulk-compress').hide();
-                $('.bulk-status-settings').hide();
-                $('.bulk-status').hide();
-                //
-                $('.wps-ic-stop-bulk-compress').hide();
-                $('.bulk-area-inner').hide();
-                $('#bulk-start-container').show();
-                $('.bulk-preparing-optimize').hide();
-
-                // Failure Pop Up
-                WPCSwal.fire({
-                    title: '',
-                    html: $('#' + response.data.msg).html(),
-                    width: 600,
-                    showCancelButton: false,
-                    showConfirmButton: false,
-                    confirmButtonText: 'Okay, I Understand',
-                    allowOutsideClick: true,
-                    customClass: {
-                        container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6',
-                    },
-                    onOpen: function () {
-                    }
-                });
-            },
-            success: function (response) {
-
-                if (response.data.status != 'done' && response.data.status != 'parsing') {
-                    $('.bulk-compress-status-progress-prepare').hide();
-                    $('.bulk-preparing-placholders').hide();
-                    $('.bulk-preparing-optimize').hide();
-                    $('.bulk-compress-status-progress-prepare').hide();
-                    $('.bulk-status-settings').html(response.data.status).fadeIn(300);
-                    $('.bulk-status').html(response.data.html);
-                    $('.bulk-process-file-name').html(response.data.lastFileName);
-                    //$('.bulk-process-status').html(response.data.progress + '%');
-                    $('.wps-ic-bulk-before img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                    $('.wps-ic-bulk-after img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                    $('.bulk-status').fadeIn(300);
-
-                    var progress = $('.bulk-compress-status-progress');
-                    var compressedImages = $('.bulk-images-compressed>div.data', progress);
-                    var compressedThumbs = $('.bulk-thumbs-compressed>div.data', progress);
-                    var totalSavings = $('.bulk-total-savings>div.data', progress);
-                    var thumbSavings = $('.bulk-thumbs-savings>div.data', progress);
-                    var avgReduction = $('.bulk-avg-reduction>div.data', progress);
-
-                    $(compressedImages).html(response.data.progressCompressedImages);
-                    $(compressedThumbs).html(response.data.progressCompressedThumbs);
-                    $(totalSavings).html(response.data.progressTotalSavings);
-                    $(avgReduction).html(response.data.progressAvgReduction);
-                    $(progress).show();
-
-                } else {
-                    clearInterval(heartbeatBulkCompress);
-                    var bulkFinished = $('.bulk-finished');
-
-                    setTimeout(function () {
-                        $.ajax({
-                            url: ajaxurl,
-                            type: 'POST',
-                            data: {
-                                action: 'wps_ic_getBulkStats',
-                                type: 'compress',
-                                in:'fetchData'
-                            },
-                            success: function (response) {
-                                $('.bulk-preparing-optimize').hide();
-                                $('.bulk-preparing-restore').hide();
-
-                                $('.bulk-status-progress-bar').hide();
-                                $('.wps-ic-stop-bulk-compress').hide();
-                                $('.bulk-status-settings').hide();
-                                $('.bulk-status').fadeOut(600, function () {
-                                    $(bulkFinished).hide().html(response.data.html).fadeIn(800);
-                                });
-                            }
-                        });
-                    }, 1500);
-                }
-
-            }
-        });
-
+        // Resume the queue-based compress flow
         bulkCompressHeartbeat();
     }
 
@@ -242,52 +151,40 @@ jQuery(document).ready(function ($) {
 
 
     function bulkCompressHeartbeat() {
-        var heartbeatBulkCompress = setInterval(function(){
-            $.ajax({
-                url: ajaxurl, type: 'POST', data: {action: 'wps_ic_bulkCompressHeartbeat'}, success: function (response) {
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            timeout: 180000,
+            data: {action: 'wps_ic_doBulkCompress', nonce: ajaxVar.nonce},
+            success: function (response) {
+                if (response.success == false) return;
 
-                    if (response.data.status != 'done' && response.data.status != 'parsing') {
-                        $('.bulk-compress-status-progress-prepare').hide();
-                        $('.bulk-preparing-placholders').hide();
-                        $('.bulk-preparing-optimize').hide();
-                        $('.bulk-compress-status-progress-prepare').hide();
-                        $('.bulk-status-settings').html(response.data.status).fadeIn(300);
-                        $('.bulk-status').html(response.data.html);
-                        $('.bulk-process-file-name').html(response.data.lastFileName);
-                        //$('.bulk-process-status').html(response.data.progress + '%');
-                        $('.wps-ic-bulk-before img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                        $('.wps-ic-bulk-after img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                        $('.bulk-status').fadeIn(300);
-
-                        updateCompressStatusProgressCount(response.data);
-
-                        // Modify Design
-                        //clearInterval(heartbeatBulkCompress);
-
-                    } else {
-                        clearInterval(heartbeatBulkCompress);
-                        var bulkFinished = $('.bulk-finished');
-
-                        setTimeout(function(){
-                            $.ajax({
-                                url: ajaxurl, type: 'POST', data: {action: 'wps_ic_getBulkStats', type: 'compress', in:'bulkCompress'}, success: function (response) {
-                                    $('.bulk-preparing-optimize').hide();
-                                    $('.bulk-preparing-restore').hide();
-
-                                    $('.bulk-status-progress-bar').hide();
-                                    $('.wps-ic-stop-bulk-compress').hide();
-                                    $('.bulk-status-settings').hide();
-                                    $('.bulk-status').fadeOut(600, function () {
-                                        $(bulkFinished).hide().html(response.data.html).fadeIn(800);
-                                    });
-                                }
+                if (response.data.finished === true) {
+                    var bulkFinished = $('.bulk-finished');
+                    $.ajax({
+                        url: ajaxurl, type: 'POST',
+                        data: {action: 'wps_ic_getBulkStats', type: 'compress'},
+                        success: function (r) {
+                            $('.bulk-preparing-optimize').hide();
+                            $('.bulk-status-progress-bar').hide();
+                            $('.wps-ic-stop-bulk-compress').hide();
+                            $('.bulk-status-settings').hide();
+                            $('.bulk-status').fadeOut(600, function () {
+                                $(bulkFinished).hide().html(r.data.html).fadeIn(800);
                             });
-                        }, 1500);
-                    }
-
+                        }
+                    });
+                    return;
                 }
-            });
-        }, 5000);
+
+                $('.bulk-preparing-optimize').hide();
+                $('.bulk-status').show();
+                setTimeout(bulkCompressHeartbeat, 200);
+            },
+            error: function () {
+                setTimeout(bulkCompressHeartbeat, 3000);
+            }
+        });
     }
 
     function updateCompressStatusProgressCount(data) {

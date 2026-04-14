@@ -47,3 +47,8 @@ $error_template('bulk-process-bad-apikey',
     __('Invalid API Key', WPS_IC_TEXTDOMAIN),
     __('Your API key could not be verified. Please reconnect the plugin or contact support.', WPS_IC_TEXTDOMAIN)
 );
+
+$error_template('local-not-authorized',
+    __('Local Optimization Not Available', WPS_IC_TEXTDOMAIN),
+    __('Local image optimization is not available on your current plan. Please upgrade or contact support to enable this feature.', WPS_IC_TEXTDOMAIN)
+);

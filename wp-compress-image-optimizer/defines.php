@@ -46,6 +46,7 @@ define('WPS_IC_FONTS_URL', WP_CONTENT_URL . '/cache/wp-cio-fonts/');
 define('WPS_IC_FONTS_MAP', 'wps_ic_fonts_map');
 
 // Local API
+define('WPS_IC_LOCAL_API', 'https://frankfurt.zapwp.net/local/v3/index.php');
 define('WPS_IC_API_USERAGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
 
 define('WPS_IC_APIURL', 'https://legacy-eu.wpcompress.com/');
@@ -62,6 +63,8 @@ define('WPS_IC_PAGESPEED_API_URL', 'http://pagespeed.zapwp.net/run-pagespeed');
 define('WPS_IC_PAGESPEED_RESULTS', 'http://pagespeed.zapwp.net/get-results/');
 define('WPS_IC_JOB_TRANSIENT', 'wps_ic_job_transient');
 
+
+define('WPS_IC_CRITICAL_API_HOMEPAGE_URL', 'https://loadbalancer-critical.zapwp.net/pagespeed.php');
 define('WPS_IC_CRITICAL_API_ASSETS_URL', 'https://loadbalancer-critical.zapwp.net/assets.php');
 define('WPS_IC_PRELOADER_API_URL', 'https://preloader.wpcompress.com/v2/index.php');
 

@@ -180,14 +180,20 @@ class wps_ic_combine_css
 
                 if (strpos($cleanHref, self::$site_url) !== false) {
                     $path = str_replace([self::$site_url, $this->zone_name, 'https:///m:0/a:', 'https://' . $this->zone_name . '/m:0/a:','https:///m:1/a:', 'https://' . $this->zone_name . '/m:1/a:'], '', $cleanHref);
-                    $path = ltrim($path, '/');
+                    $path = urldecode(ltrim($path, '/'));
+
+                    // Skip if CDN URL patterns leaked through the str_replace
+                    if (preg_match('#^https?://#i', $path)) {
+                        continue;
+                    }
+
                     $relativePath = ABSPATH . $path;
 
-                    try {
-                        $content = file_get_contents($relativePath);
-                    } catch (Exception $e) {
-                        //suppress the warning
+                    if (!file_exists($relativePath)) {
+                        continue;
                     }
+
+                    $content = @file_get_contents($relativePath);
 
                     if (!empty($content)) {
                         // Get the filename
@@ -400,16 +406,14 @@ class wps_ic_combine_css
 
                 if (strpos($cleanHref, self::$site_url) !== false) {
                     $path = str_replace(self::$site_url, '', $cleanHref);
-                    $path = ltrim($path, '/');
+                    $path = urldecode(ltrim($path, '/'));
                     $relativePath = ABSPATH . '/' . $path;
 
                     if (!file_exists($relativePath)) {
-                        // do nothing
                         continue;
                     }
 
-                    // get the file content
-                    $content = file_get_contents($relativePath);
+                    $content = @file_get_contents($relativePath);
 
                     if (!empty($content)) {
                         // Check if it's valid CSS
@@ -749,7 +753,7 @@ class wps_ic_combine_css
                         $removeRelative = str_replace('./', '', $foundUrls);
 
                         // Once again, check if the file exists in figured out path
-                        return 'url("' . $cssUrlPath . $removeRelative . '")';
+                        return 'url("' . $this->cssPath . '/' . $removeRelative . '")';
                     } elseif (strpos($foundUrls, '/wp-content') !== false && strpos($foundUrls, '/wp-content') == 0) {
 
                         $foundUrls = str_replace('("', '', $foundUrls);

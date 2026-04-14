@@ -2,6 +2,7 @@ jQuery(document).ready(function ($) {
 
     $('.wps-ic-stop-bulk-restore,.wps-ic-stop-bulk-compress').on('click', function (e) {
         e.preventDefault();
+        bulkCompressStopped = true;
 
         $.ajax({
             url: ajaxurl,
@@ -201,98 +202,97 @@ jQuery(document).ready(function ($) {
     }
 
 
+    var bulkCompressStopped = false;
+
     function bulkCompressHeartbeat() {
-        var heartbeatBulkCompress = setInterval(function () {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {action: 'wps_ic_bulkCompressHeartbeat'},
+        if (bulkCompressStopped) return;
 
-                success: function (response) {
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            timeout: 180000,
+            data: {action: 'wps_ic_doBulkCompress', nonce: ajaxVar.nonce},
+            success: function (response) {
+                if (bulkCompressStopped) return;
 
-                    if (response.success == false) {
-                        clearInterval(heartbeatBulkCompress);
+                if (response.success == false) {
+                    // Error — show popup
+                    $('.bulk-status-progress-bar').hide();
+                    $('.wps-ic-stop-bulk-compress').hide();
+                    $('.bulk-status-settings').hide();
+                    $('.bulk-status').hide();
+                    $('.bulk-area-inner').hide();
+                    $('#bulk-start-container').show();
+                    $('.bulk-preparing-optimize').hide();
 
-                        // Stop everything, show popup
-                        $('.bulk-status-progress-bar').hide();
-                        $('.wps-ic-stop-bulk-compress').hide();
-                        $('.bulk-status-settings').hide();
-                        $('.bulk-status').hide();
-                        //
-                        $('.wps-ic-stop-bulk-compress').hide();
-                        $('.bulk-area-inner').hide();
-                        $('#bulk-start-container').show();
-                        $('.bulk-preparing-optimize').hide();
-
-                        // Failure Pop Up
+                    if (response.data && response.data.msg) {
                         WPCSwal.fire({
                             title: '',
                             html: $('#' + response.data.msg).html(),
                             width: 600,
-                            showCancelButton: false,
                             showConfirmButton: false,
-                            confirmButtonText: 'Okay, I Understand',
                             allowOutsideClick: true,
-                            customClass: {
-                                container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6',
-                            },
-                            onOpen: function () {
+                            customClass: { container: 'no-padding-popup-bottom-bg switch-legacy-popup wpc-popup-v6' },
+                        });
+                    }
+                    return;
+                }
+
+                if (response.data.finished === true) {
+                    // All done — show final stats
+                    var bulkFinished = $('.bulk-finished');
+                    setTimeout(function () {
+                        $.ajax({
+                            url: ajaxurl,
+                            type: 'POST',
+                            data: { action: 'wps_ic_getBulkStats', type: 'compress' },
+                            success: function (statsResponse) {
+                                $('.bulk-preparing-optimize').hide();
+                                $('.bulk-compress-status-progress-prepare').hide();
+                                $('.bulk-compress-status-progress').hide();
+                                $('.bulk-status-progress-bar').hide();
+                                $('.wps-ic-stop-bulk-compress').hide();
+                                $('.bulk-status-settings').hide();
+                                $('.bulk-status').fadeOut(600, function () {
+                                    $(bulkFinished).hide().html(statsResponse.data.html).fadeIn(800);
+                                });
                             }
                         });
-
-                        return;
-                    }
-
-                    if (response.data.status == 'parsing') {
-                        // Nothing...
-
-                        $('.wpc-preparing-message').html(response.data.message);
-
-                    } else if (response.data.status != 'done') {
-                        $('.bulk-compress-status-progress-prepare').hide();
-                        $('.bulk-preparing-placholders').hide();
-                        $('.bulk-preparing-optimize').hide();
-                        $('.bulk-status-settings').html(response.data.status).fadeIn(300);
-                        $('.bulk-status').html(response.data.html);
-                        $('.bulk-process-file-name').html(response.data.lastFileName);
-                        //$('.bulk-process-status').html(response.data.progress + '%');
-                        $('.wps-ic-bulk-before img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                        $('.wps-ic-bulk-after img', '.wps-ic-bulk-html-wrapper').animate({opacity: 1});
-                        $('.bulk-status').fadeIn(300);
-
-                        //updateStatusProgressBar(response.data.progress);
-                        updateCompressStatusProgressCount(response.data);
-
-                    } else {
-                        clearInterval(heartbeatBulkCompress);
-                        var bulkFinished = $('.bulk-finished');
-
-                        setTimeout(function () {
-                            $.ajax({
-                                url: ajaxurl,
-                                type: 'POST',
-                                data: {
-                                    action: 'wps_ic_getBulkStats',
-                                    type: 'compress'
-                                },
-                                success: function (response) {
-                                    $('.bulk-preparing-optimize').hide();
-                                    $('.bulk-compress-status-progress-prepare').hide();
-                                    $('.bulk-compress-status-progress').hide();
-                                    $('.bulk-status-progress-bar').hide();
-                                    $('.wps-ic-stop-bulk-compress').hide();
-                                    $('.bulk-status-settings').hide();
-                                    $('.bulk-status').fadeOut(600, function () {
-                                        $(bulkFinished).hide().html(response.data.html).fadeIn(800);
-                                    });
-                                }
-                            });
-                        }, 1500);
-                    }
-
+                    }, 500);
+                    return;
                 }
-            });
-        }, 5000);
+
+                // Update progress UI
+                $('.bulk-compress-status-progress-prepare').hide();
+                $('.bulk-preparing-placholders').hide();
+                $('.bulk-preparing-optimize').hide();
+
+                var d = response.data;
+                updateCompressStatusProgressCount({
+                    progressCompressedImages: d.finished_count,
+                    progressTotalSavings: '',
+                    progressAvgReduction: (d.savings || '0') + '%',
+                    progressCompressedThumbs: ''
+                });
+
+                // Update progress bar
+                updateStatusProgressBar(d.progress);
+
+                // Show current image info
+                if (d.title) {
+                    $('.bulk-process-file-name').html(d.title);
+                }
+                $('.bulk-status').show();
+
+                // Process next image (setTimeout breaks call stack)
+                setTimeout(bulkCompressHeartbeat, 200);
+            },
+            error: function () {
+                if (bulkCompressStopped) return;
+                // Network error — retry after 3s
+                setTimeout(bulkCompressHeartbeat, 3000);
+            }
+        });
     }
 
 

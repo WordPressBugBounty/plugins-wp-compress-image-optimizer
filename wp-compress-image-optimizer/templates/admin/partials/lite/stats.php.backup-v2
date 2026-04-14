@@ -1,0 +1,238 @@
+<?php
+
+global $wps_ic;
+
+$user_credits = self::$user_credits;
+$stats_live = self::$stats_live;
+$stats_local = self::$stats_local;
+$stats_local_sum = self::$stats_local_sum;
+
+/**
+ * Quick fix for PHP undefined notices
+ */
+$wps_ic_active_settings['optimization']['lossless'] = '';
+$wps_ic_active_settings['optimization']['intelligent'] = '';
+$wps_ic_active_settings['optimization']['ultra'] = '';
+
+/**
+ * Decides which setting is active
+ */
+if (!empty($wps_ic::$settings['optimization'])) {
+    if ($wps_ic::$settings['optimization'] == 'lossless') {
+        $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
+    } elseif ($wps_ic::$settings['optimization'] == 'intelligent') {
+        $wps_ic_active_settings['optimization']['intelligent'] = 'class="current"';
+    } else {
+        $wps_ic_active_settings['optimization']['ultra'] = 'class="current"';
+    }
+} else {
+    $wps_ic_active_settings['optimization']['intelligent'] = 'class="current"';
+}
+
+// Lite
+$options = get_option(WPS_IC_OPTIONS);
+$gui = new wpc_gui_v4();
+$stats = new wps_ic_stats();
+$apiStats = $stats->getApiStats();
+$optimizedStats = $stats->getOptimizedStats();
+$optimizationStatus = $stats->getLiteOptimizationStatus($optimizedStats);
+
+$settings = get_option(WPS_IC_SETTINGS);
+$initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
+$initialTestRunning = get_transient('wpc_initial_test');
+$option = get_option(WPS_IC_OPTIONS);
+
+$warmup_class = new wps_ic_preload_warmup();
+$warmupFailing = $warmup_class->isWarmupFailing();
+
+// ─── V2 Data Setup ───
+$v2_gps = get_option(WPS_IC_LITE_GPS);
+$v2_hasGPS = false;
+if (!empty($v2_gps) && !empty($v2_gps['result'])) {
+    $v2_hasGPS = true;
+    $v2_result = $v2_gps['result'];
+    $v2_beforeGPS = $v2_result['desktop']['before']['performanceScore'] / 100;
+    $v2_afterGPS = $v2_result['desktop']['after']['performanceScore'] / 100;
+    $v2_mobileBeforeGPS = $v2_result['mobile']['before']['performanceScore'] / 100;
+    $v2_mobileAfterGPS = $v2_result['mobile']['after']['performanceScore'] / 100;
+    $v2_desktopDiff = $v2_result['desktop']['after']['performanceScore'] - $v2_result['desktop']['before']['performanceScore'];
+    $v2_mobileDiff = $v2_result['mobile']['after']['performanceScore'] - $v2_result['mobile']['before']['performanceScore'];
+    if ($v2_desktopDiff <= 0) { $v2_desktopDiff = 'Perfect Score'; } else { $v2_desktopDiff = '+' . $v2_desktopDiff; }
+    if ($v2_mobileDiff <= 0) { $v2_mobileDiff = 'Perfect Score'; } else { $v2_mobileDiff = '+' . $v2_mobileDiff; }
+    $v2_date = new DateTime();
+    $v2_tz = get_option('timezone_string');
+    if (!$v2_tz) {
+        $v2_offset = get_option('gmt_offset');
+        $v2_tz = $v2_offset == 0 ? 'UTC' : timezone_name_from_abbr('', $v2_offset * 3600, 0);
+        if (!$v2_tz) $v2_tz = 'UTC';
+    }
+    try { $v2_date->setTimezone(new DateTimeZone($v2_tz)); } catch (Exception $e) { $v2_date->setTimezone(new DateTimeZone('UTC')); }
+    $v2_date->setTimestamp($v2_gps['lastRun']);
+    $v2_lastRun = $v2_date->format('M j, Y \a\t g:i A');
+}
+?>
+
+<div class="wpc-settings-content-inner wpc-v2-section">
+    <!-- ─── Performance Overview ─── -->
+    <div class="wpc-v2-card">
+        <div class="wpc-v2-card-header">
+            <div class="wpc-v2-title">
+                <span class="wpc-v2-dot"></span>
+                <h3>Optimization Stats</h3>
+            </div>
+            <?php echo $optimizationStatus; ?>
+        </div>
+        <div class="wpc-v2-stats-row">
+            <?php
+            $v2_stats = array(
+                array('label' => 'Page Size', 'value' => $optimizedStats['totalPageSizeAfter'], 'badge' => $optimizedStats['pageSizeSavingsPercentage'] . ' Smaller', 'arrow' => 'down', 'before' => $optimizedStats['totalPageSizeBefore']),
+                array('label' => 'Requests', 'value' => $optimizedStats['totalRequestsAfter'], 'badge' => $optimizedStats['totalRequestsSavings'] . ' Less', 'arrow' => 'down', 'before' => $optimizedStats['totalRequestsBefore']),
+                array('label' => 'Server Speed', 'value' => $optimizedStats['totalTtfbAfter'], 'badge' => $optimizedStats['ttfbLess'] . ' Faster', 'arrow' => 'up', 'before' => $optimizedStats['totalTtfbBefore']),
+            );
+            $v2_i = 0;
+            foreach ($v2_stats as $v2_stat) {
+                // no divider between boxes
+                preg_match('/([0-9.]+)\s*([a-zA-Z%]*)/', $v2_stat['value'], $v2_m);
+                $v2_arrow = $v2_stat['arrow'] === 'down'
+                    ? '<img src="' . WPS_IC_ASSETS . '/lite/images/arrow-down.svg" />'
+                    : '<img src="' . WPS_IC_ASSETS . '/lite/images/arrow-up.svg" />';
+                ?>
+                <div class="wpc-v2-stat-box">
+                    <span class="wpc-v2-stat-label"><?php echo $v2_stat['label']; ?></span>
+                    <div class="wpc-v2-stat-value">
+                        <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/stats-speed.svg" class="wpc-v2-stat-icon" />
+                        <span class="wpc-v2-stat-num"><?php echo isset($v2_m[1]) ? $v2_m[1] : $v2_stat['value']; ?></span>
+                        <?php if (!empty($v2_m[2])) { ?><span class="wpc-v2-stat-unit"><?php echo $v2_m[2]; ?></span><?php } ?>
+                    </div>
+                    <div class="wpc-v2-badge">
+                        <?php echo $v2_arrow; ?>
+                        <span><?php echo $v2_stat['badge']; ?></span>
+                    </div>
+                    <div class="wpc-v2-stat-sep"></div>
+                    <div class="wpc-v2-stat-before">
+                        <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-before.svg" />
+                        <span>was <?php echo $v2_stat['before']; ?></span>
+                    </div>
+                </div>
+                <?php
+                $v2_i++;
+            }
+            ?>
+        </div>
+    </div>
+
+    <!-- ─── Performance Score ─── -->
+    <div class="wpc-v2-card">
+        <div class="wpc-v2-card-header">
+            <div class="wpc-v2-title">
+                <span class="wpc-v2-dot wpc-v2-dot-green"></span>
+                <h3>PageSpeed Score</h3>
+            </div>
+            <?php if ($v2_hasGPS) { ?>
+            <div class="wpc-v2-header-meta">
+                <span class="wpc-v2-meta-date"><?php echo $v2_lastRun; ?></span>
+                <a href="#" class="wps-ic-initial-retest wpc-v2-retest-btn">
+                    <img src="<?php echo WPS_IC_URI; ?>assets/lite/images/refresh.svg"/>
+                    Retest
+                </a>
+            </div>
+            <?php } ?>
+        </div>
+        <?php if ($v2_hasGPS) { ?>
+        <div class="wpc-v2-scores">
+            <?php
+            $v2_devices = array(
+                array('name' => 'Mobile', 'icon' => WPS_IC_ASSETS . '/lite/images/mobile-icon.svg', 'before' => $v2_mobileBeforeGPS, 'after' => $v2_mobileAfterGPS, 'diff' => $v2_mobileDiff),
+                array('name' => 'Desktop', 'icon' => WPS_IC_ASSETS . '/lite/images/desktop-icon.svg', 'before' => $v2_beforeGPS, 'after' => $v2_afterGPS, 'diff' => $v2_desktopDiff),
+            );
+            $v2_di = 0;
+            foreach ($v2_devices as $v2_dev) {
+                if ($v2_di > 0) echo '<div class="wpc-v2-score-sep"></div>';
+                $isPerfect = ($v2_dev['diff'] === 'Perfect Score');
+                ?>
+                <div class="wpc-v2-score-col">
+                    <div class="wpc-v2-device-header">
+                        <div class="wpc-v2-device-ico">
+                            <img src="<?php echo $v2_dev['icon']; ?>" alt="<?php echo $v2_dev['name']; ?>" />
+                        </div>
+                        <span class="wpc-v2-device-name"><?php echo $v2_dev['name']; ?></span>
+                        <div class="wpc-v2-score-pill<?php echo $isPerfect ? ' wpc-v2-pill-perfect' : ''; ?>">
+                            <?php if ($isPerfect) { ?>
+                                <svg width="10" height="10" viewBox="0 0 448 512" fill="currentColor"><path d="M338.8-9.9c11.9 8.6 16.3 24.2 10.9 37.8L271.3 224 416 224c13.5 0 25.5 8.4 30.1 21.1s.7 26.9-9.6 35.5l-288 240c-11.3 9.4-27.4 9.9-39.3 1.3s-16.3-24.2-10.9-37.8L176.7 288 32 288c-13.5 0-25.5-8.4-30.1-21.1s-.7-26.9 9.6-35.5l288-240c11.3-9.4 27.4-9.9 39.3-1.3z"/></svg>
+                            <?php } else { ?>
+                                <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/arrow-up.svg" />
+                            <?php } ?>
+                            <span><?php echo $isPerfect ? 'Perfect Score' : $v2_dev['diff'] . ' Points'; ?></span>
+                        </div>
+                    </div>
+                    <?php
+                    $beforeScore = round($v2_dev['before'] * 100);
+                    $afterScore = round($v2_dev['after'] * 100);
+                    // SVG circle math
+                    $smSize = 50; $smR = 21; $smStroke = 3.5; $smCirc = 2 * M_PI * $smR;
+                    $lgSize = 50; $lgR = 21; $lgStroke = 3.5; $lgCirc = 2 * M_PI * $lgR;
+                    $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
+                    $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
+                    // Color by score
+                    $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
+                    $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
+                    $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');
+                    $lgBg = $afterScore <= 55 ? '#fee2e2' : ($afterScore <= 89 ? '#fef3c7' : '#dcfce7');
+                    ?>
+                    <div class="wpc-v2-circles">
+                        <div class="wpc-v2-circle wpc-v2-circle-sm">
+                            <div class="wpc-v2-label-before">
+                                <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-before.svg" />
+                                <span>Before</span>
+                            </div>
+                            <div class="wpc-v2-ring">
+                                <svg width="<?php echo $smSize; ?>" height="<?php echo $smSize; ?>" viewBox="0 0 <?php echo $smSize; ?> <?php echo $smSize; ?>">
+                                    <circle cx="<?php echo $smSize/2; ?>" cy="<?php echo $smSize/2; ?>" r="<?php echo $smR; ?>" fill="none" stroke="<?php echo $smBg; ?>" stroke-width="<?php echo $smStroke; ?>"/>
+                                    <circle cx="<?php echo $smSize/2; ?>" cy="<?php echo $smSize/2; ?>" r="<?php echo $smR; ?>" fill="none" stroke="<?php echo $smColor; ?>" stroke-width="<?php echo $smStroke; ?>" stroke-linecap="round" stroke-dasharray="<?php echo $smCirc; ?>" stroke-dashoffset="<?php echo $smOffset; ?>" transform="rotate(-90 <?php echo $smSize/2; ?> <?php echo $smSize/2; ?>)"/>
+                                </svg>
+                                <div class="wpc-v2-ring-text"><span><?php echo $beforeScore; ?></span></div>
+                            </div>
+                        </div>
+                        <div class="wpc-v2-circle-arrow">
+                            <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/small-arrow.svg" />
+                        </div>
+                        <div class="wpc-v2-circle wpc-v2-circle-lg">
+                            <div class="wpc-v2-label-after">
+                                <img src="<?php echo WPS_IC_ASSETS; ?>/lite/images/gps-after.svg" />
+                                <span>After</span>
+                            </div>
+                            <div class="wpc-v2-ring wpc-v2-ring-hero">
+                                <svg width="<?php echo $lgSize; ?>" height="<?php echo $lgSize; ?>" viewBox="0 0 <?php echo $lgSize; ?> <?php echo $lgSize; ?>">
+                                    <circle cx="<?php echo $lgSize/2; ?>" cy="<?php echo $lgSize/2; ?>" r="<?php echo $lgR; ?>" fill="none" stroke="<?php echo $lgBg; ?>" stroke-width="<?php echo $lgStroke; ?>"/>
+                                    <circle cx="<?php echo $lgSize/2; ?>" cy="<?php echo $lgSize/2; ?>" r="<?php echo $lgR; ?>" fill="none" stroke="<?php echo $lgColor; ?>" stroke-width="<?php echo $lgStroke; ?>" stroke-linecap="round" stroke-dasharray="<?php echo $lgCirc; ?>" stroke-dashoffset="<?php echo $lgOffset; ?>" transform="rotate(-90 <?php echo $lgSize/2; ?> <?php echo $lgSize/2; ?>)"/>
+                                </svg>
+                                <div class="wpc-v2-ring-text"><span><?php echo $afterScore; ?></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php
+                $v2_di++;
+            }
+            ?>
+        </div>
+        <?php if (!empty($option['version']) && $option['version'] != 'lite') { ?>
+        <div class="wpc-v2-score-footer">
+            <div class="wpc-v2-footer-msg">
+                <img src="<?php echo WPS_IC_ASSETS . '/lite/images/wohoo.png'; ?>" alt="" />
+                <strong>Woohoo!</strong> Your Website is Now Loading Faster!
+            </div>
+            <div class="wpc-v2-footer-pill">
+                <img src="<?php echo WPS_IC_ASSETS . '/lite/images/checkbox-link.svg'; ?>" />
+                <span>Site Optimized</span>
+            </div>
+        </div>
+        <?php } ?>
+        <?php } else { ?>
+        <div class="wpc-v2-scores-loading">
+            <img src="<?php echo WPS_IC_URI; ?>assets/images/live/bars.svg"/>
+            <span>Analyzing performance...</span>
+        </div>
+        <?php } ?>
+    </div>
+</div>

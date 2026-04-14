@@ -1,6 +1,87 @@
 <?php
 global $wps_ic, $wpdb;
 
+// Critical CSS debug transients removed in 7.00.05 — disk scanner below is retained for support
+
+// ─── Critical CSS on-disk scanner ─────────────────────
+$critDir = defined('WPS_IC_CRITICAL') ? WPS_IC_CRITICAL : WP_CONTENT_DIR . '/cache/critical/';
+if (is_dir($critDir)) {
+    $dirs = glob($critDir . '*/critical_desktop.css');
+    echo '<div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+    echo '<strong style="font-size:14px;">Critical CSS Files on Disk (' . count($dirs) . ' pages)</strong><br><br>';
+    if (empty($dirs)) {
+        echo '<em>No critical CSS files found on disk.</em>';
+    } else {
+        echo '<table style="width:100%;border-collapse:collapse;">';
+        echo '<tr style="text-align:left;border-bottom:1px solid #d1fae5;"><th style="padding:4px 8px;">Page Key</th><th style="padding:4px 8px;">Desktop</th><th style="padding:4px 8px;">Mobile</th></tr>';
+        foreach ($dirs as $file) {
+            $dirName = basename(dirname($file));
+            $desktopSize = file_exists($file) ? round(filesize($file) / 1024, 1) . 'KB' : '—';
+            $mobileFile = dirname($file) . '/critical_mobile.css';
+            $mobileSize = file_exists($mobileFile) ? round(filesize($mobileFile) / 1024, 1) . 'KB' : '—';
+            echo '<tr style="border-bottom:1px solid #f0fdf4;">';
+            echo '<td style="padding:4px 8px;max-width:400px;overflow:hidden;text-overflow:ellipsis;">' . esc_html($dirName) . '</td>';
+            echo '<td style="padding:4px 8px;color:#16a34a;">' . $desktopSize . '</td>';
+            echo '<td style="padding:4px 8px;color:#16a34a;">' . $mobileSize . '</td>';
+            echo '</tr>';
+        }
+        echo '</table>';
+    }
+    echo '</div>';
+} else {
+    echo '<div style="background:#fef2f2;border:1px solid #fecaca;padding:12px 16px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+    echo '<strong>Critical CSS directory does not exist:</strong> ' . esc_html($critDir);
+    echo '</div>';
+}
+
+// ─── Purge Debug Log (stored in DB, works on all hosts) ─────────────────────
+$purgeLog = get_option('wpc_purge_debug_log', []);
+echo '<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+echo '<strong style="font-size:14px;">Purge Debug Log (last 20 events)</strong><br><br>';
+if (empty($purgeLog)) {
+    echo '<em>No purge events yet. Change a setting and save to see entries.</em>';
+} else {
+    echo '<div style="max-height:300px;overflow:auto;white-space:pre-wrap;line-height:1.8;">';
+    foreach (array_reverse($purgeLog) as $line) {
+        $color = '#334155';
+        if (strpos($line, 'html=YES') !== false || strpos($line, 'HTML purge') !== false) $color = '#2563eb';
+        if (strpos($line, 'WPE=YES') !== false) $color = '#16a34a';
+        if (strpos($line, 'html=NO') !== false) $color = '#f59e0b';
+        echo '<div style="color:' . $color . ';">' . esc_html($line) . '</div>';
+    }
+    echo '</div>';
+}
+echo '</div>';
+
+// ─── PHP Error Log (WPC errors only) ─────────────────────
+$errorLog = get_option('wpc_error_debug_log', []);
+echo '<div style="background:#fef2f2;border:1px solid #fecaca;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+echo '<strong style="font-size:14px;">PHP Errors (last 50, WPC files only)</strong>';
+echo ' <a href="' . esc_url(admin_url('admin-post.php?action=wpc_clear_error_log&_wpnonce=' . wp_create_nonce('wpc_clear_error_log'))) . '" style="margin-left:12px;font-size:11px;color:#dc2626;">Clear Log</a>';
+echo '<br><br>';
+if (empty($errorLog)) {
+    echo '<em style="color:#16a34a;">No PHP errors captured. Browse the site to trigger error collection.</em>';
+} else {
+    echo '<div style="max-height:400px;overflow:auto;white-space:pre-wrap;line-height:1.8;">';
+    foreach (array_reverse($errorLog) as $line) {
+        $color = '#991b1b';
+        if (strpos($line, 'NOTICE') !== false) $color = '#92400e';
+        if (strpos($line, 'DEPRECATED') !== false) $color = '#6b21a8';
+        echo '<div style="color:' . $color . ';border-bottom:1px solid #fee2e2;padding:2px 0;">' . esc_html($line) . '</div>';
+    }
+    echo '</div>';
+}
+echo '</div>';
+
+// ─── Current optimization setting ─────────────────────
+echo '<div style="background:#f5f3ff;border:1px solid #ddd6fe;padding:12px 16px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+$_s = get_option(WPS_IC_SETTINGS);
+echo '<strong>qualityLevel:</strong> ' . esc_html($_s['qualityLevel'] ?? 'not set');
+echo ' &nbsp;|&nbsp; <strong>optimization:</strong> ' . esc_html($_s['optimization'] ?? 'not set');
+echo ' &nbsp;|&nbsp; <strong>local_qualityLevel:</strong> ' . esc_html($_s['local_qualityLevel'] ?? 'not set');
+echo ' &nbsp;|&nbsp; <strong>local_optimization:</strong> ' . esc_html($_s['local_optimization'] ?? 'not set');
+echo '</div>';
+
 if (!empty($_POST['wps_settings'])) {
     $settings = stripslashes($_POST['wps_settings']);
     $settings = json_decode($settings, true, JSON_UNESCAPED_SLASHES);

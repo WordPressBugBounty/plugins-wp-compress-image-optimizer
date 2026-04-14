@@ -145,6 +145,26 @@ class wps_ic_cache_integrations
         return true;
     }
 
+    /**
+     * Bump CSS/JS cache-bust hashes without purging any files.
+     * Use when you need browsers to fetch fresh CSS but don't want to clear HTML cache.
+     */
+    public static function bumpHashes($purgeJS = false) {
+        $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+        $options['css_hash'] = substr(md5(microtime(true)), 0, 6);
+        if ($purgeJS) {
+            $options['js_hash'] = strrev($options['css_hash']);
+        }
+
+        if (!class_exists('wps_ic_log')) {
+            include_once WPS_IC_DIR . 'classes/log.class.php';
+        }
+        $log = new wps_ic_log();
+        $log->logCachePurging($oldOptions, $options, 'bumpHashes');
+
+        update_option(WPS_IC_OPTIONS, $options);
+    }
+
     public static function removeDirectory($path)
     {
         $path = rtrim($path, '/');
@@ -219,6 +239,9 @@ class wps_ic_cache_integrations
         // Action hook for all integrations to clear their cache
         do_action('wps_ic_purge_all_cache', $url_key);
 
+        // Direct hosting purge (reliable fallback — integration hooks may not register on AJAX)
+        self::purgeHostingCaches();
+
         // Varnish
         if ($varnish) {
             self::purgeVarnish();
@@ -250,6 +273,40 @@ class wps_ic_cache_integrations
                     unlink($file);
                 }
             }
+        }
+    }
+
+    /**
+     * Direct hosting cache purge — called from purgeAll() as a reliable fallback.
+     * Integration hooks may not register during AJAX, so we call hosting methods directly.
+     */
+    public static function purgeHostingCaches()
+    {
+        // WP Engine (memcached + varnish + CDN/Cloudflare)
+        if (class_exists('WpeCommon')) {
+            if (method_exists('WpeCommon', 'purge_memcached')) WpeCommon::purge_memcached();
+            if (method_exists('WpeCommon', 'purge_varnish_cache')) WpeCommon::purge_varnish_cache();
+            if (method_exists('WpeCommon', 'clear_cdn_cache')) WpeCommon::clear_cdn_cache();
+        }
+        // Kinsta
+        if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)) {
+            $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_complete_caches();
+        }
+        // SiteGround
+        if (function_exists('sg_cachepress_purge_everything')) {
+            sg_cachepress_purge_everything();
+        }
+        // LiteSpeed
+        if (defined('LSCWP_V')) {
+            do_action('litespeed_purge_all');
+        }
+        // WP Rocket
+        if (function_exists('rocket_clean_domain')) {
+            rocket_clean_domain();
+        }
+        // Generic object cache
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
         }
     }
 

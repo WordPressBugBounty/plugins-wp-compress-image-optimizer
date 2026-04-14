@@ -1,6 +1,45 @@
 <?php
 global $ic_running;
 global $wps_ic_cdn_instance;
+
+// WPC Error Capture — logs plugin PHP warnings to DB for debug tool
+// SAFETY: wrapped in try/catch, returns false (never swallows errors),
+// only captures OUR files, deduplicates, caps at 50 entries, no autoload
+if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
+    set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+        try {
+            // ONLY capture errors from our plugin directory — skip everything else
+            if (strpos($errfile, 'wp-compress') === false) {
+                return false;
+            }
+            $types = [E_WARNING => 'WARNING', E_NOTICE => 'NOTICE', E_DEPRECATED => 'DEPRECATED'];
+            if (!isset($types[$errno])) {
+                return false;
+            }
+
+            // Deduplicate: same file+line+message per request = skip
+            static $seen = [];
+            $key = $errfile . ':' . $errline . ':' . $errstr;
+            if (isset($seen[$key])) {
+                return false;
+            }
+            $seen[$key] = true;
+
+            // Cap static array at 50 to prevent memory growth on long requests
+            if (count($seen) > 50) {
+                return false;
+            }
+
+            $log = get_option('wpc_error_debug_log', []);
+            $log[] = date('Y-m-d H:i:s') . ' | ' . $types[$errno] . ' | ' . basename($errfile) . ':' . $errline . ' | ' . $errstr;
+            update_option('wpc_error_debug_log', array_slice($log, -50), false);
+        } catch (\Throwable $e) {
+            // Never let the error handler itself cause issues
+        }
+        return false; // CRITICAL: always return false = PHP still handles error normally
+    }, E_WARNING | E_NOTICE | E_DEPRECATED);
+}
+
 include_once __DIR__ . '/debug.php';
 include_once __DIR__ . '/defines.php';
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
@@ -62,6 +101,67 @@ function wpc_invalidate_local_cache() {
 }
 
 /**
+ * Purge CDN cache for a specific image and all its thumbnails.
+ * Calls the MC pod per-URL purge endpoint + Cloudflare purge if connected.
+ * Non-blocking — does not slow down the restore flow.
+ */
+function wpc_purge_cdn_urls($attachment_id) {
+    $options = get_option(WPS_IC_OPTIONS);
+    if (empty($options['api_key'])) return;
+
+    $path = get_post_meta($attachment_id, '_wp_attached_file', true);
+    if (!$path) return;
+
+    // Collect all URLs to purge: original + unscaled + all thumbnails
+    $urls_to_purge = ["/wp-content/uploads/{$path}"];
+
+    // Unscaled version (if exists)
+    $unscaled_path = str_replace('-scaled.', '.', $path);
+    if ($unscaled_path !== $path) {
+        $urls_to_purge[] = "/wp-content/uploads/{$unscaled_path}";
+    }
+
+    // All thumbnail sizes
+    $metadata = wp_get_attachment_metadata($attachment_id);
+    if (!empty($metadata['sizes'])) {
+        $base_dir = dirname($path);
+        foreach ($metadata['sizes'] as $data) {
+            $urls_to_purge[] = "/wp-content/uploads/{$base_dir}/{$data['file']}";
+        }
+    }
+
+    // Also purge WebP/AVIF variants
+    foreach ($urls_to_purge as $url) {
+        $pathinfo = pathinfo($url);
+        $webp = $pathinfo['dirname'] . '/' . $pathinfo['filename'] . '.webp';
+        $avif = $pathinfo['dirname'] . '/' . $pathinfo['filename'] . '.avif';
+        if (!in_array($webp, $urls_to_purge)) $urls_to_purge[] = $webp;
+        if (!in_array($avif, $urls_to_purge)) $urls_to_purge[] = $avif;
+    }
+
+    // Purge MC pod cache — per-URL, non-blocking
+    foreach ($urls_to_purge as $url) {
+        wp_remote_get(
+            "https://cdn-mc.zapwp.net/health/cache-purge?apikey=" . urlencode($options['api_key']) . "&url=" . urlencode($url),
+            ['timeout' => 5, 'blocking' => false, 'sslverify' => false]
+        );
+    }
+
+    // Purge Cloudflare (if connected)
+    $cf = get_option(WPS_IC_CF);
+    if (!empty($cf['token']) && !empty($cf['zone'])) {
+        $site_url = site_url();
+        $full_urls = array_map(function($u) use ($site_url) {
+            return $site_url . $u;
+        }, $urls_to_purge);
+        if (class_exists('WPC_CloudflareAPI')) {
+            $cfsdk = new WPC_CloudflareAPI($cf['token']);
+            $cfsdk->purgeFiles($cf['zone'], $full_urls);
+        }
+    }
+}
+
+/**
  * Get whitelabel support URL. Checks WL plugin header, then $whtlbl global, then default.
  */
 function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
@@ -93,6 +193,28 @@ function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
 }
 
 /**
+ * Get the whitelabel-aware plugin display name.
+ * Reads from the Settings submenu (which whitelabel plugins override), falls back to 'WP Compress'.
+ */
+function wpc_get_plugin_name() {
+    static $cached = null;
+    if ($cached !== null) return $cached;
+
+    global $submenu;
+    if (isset($submenu['options-general.php']) && class_exists('wps_ic')) {
+        foreach ($submenu['options-general.php'] as $item) {
+            if (isset($item[2]) && $item[2] === wps_ic::$slug) {
+                $cached = wp_strip_all_tags($item[0]);
+                return $cached;
+            }
+        }
+    }
+
+    $cached = __('WP Compress', 'wp-compress-image-optimizer');
+    return $cached;
+}
+
+/**
  * Wrap locally-optimized <img> tags in <picture> elements with WebP/AVIF sources.
  * Runs on the_content filter at low priority (after other plugins).
  */
@@ -109,6 +231,13 @@ function wpc_inject_picture_tags($content) {
     $optimized = wpc_get_local_optimized_ids();
     if (empty($optimized)) return $content;
 
+    // Determine CDN zone for edge delivery of variant URLs
+    $cdn_zone = '';
+    if (!empty($settings['live-cdn']) && $settings['live-cdn'] == '1') {
+        $custom_cname = get_option('ic_custom_cname');
+        $cdn_zone = !empty($custom_cname) ? $custom_cname : get_option('ic_cdn_zone_name');
+    }
+
     // Protect existing <picture> blocks — strip them before processing, restore after
     // Prevents nesting our <picture> inside third-party <picture> (Performance Lab, ShortPixel, etc.)
     $picture_placeholders = [];
@@ -121,7 +250,7 @@ function wpc_inject_picture_tags($content) {
     // Match <img> tags with wp-image-{ID} class (WordPress standard)
     $content = preg_replace_callback(
         '/<img\b[^>]*class="[^"]*wp-image-(\d+)[^"]*"[^>]*>/i',
-        function ($matches) use ($optimized) {
+        function ($matches) use ($optimized, $cdn_zone) {
             $img_tag = $matches[0];
             $attachment_id = (int) $matches[1];
 
@@ -140,14 +269,20 @@ function wpc_inject_picture_tags($content) {
             $webp_srcset = [];
             $avif_srcset = [];
 
+            // Get upload directory info for building local URLs from filenames
+            $upload_dir = wp_get_upload_dir();
+            $attached_file = get_post_meta($attachment_id, '_wp_attached_file', true);
+            $upload_subdir = $attached_file ? dirname($attached_file) : '';
+
             foreach ($variants as $label => $data) {
                 if (empty($data['url'])) continue;
 
                 // Extract width from filename: -WIDTHxHEIGHT.ext or -scaled.ext
+                $filename = basename($data['url']);
                 $width = 0;
-                if (preg_match('/-(\d+)x\d+\.\w+$/', $data['url'], $wm)) {
+                if (preg_match('/-(\d+)x\d+\.\w+$/', $filename, $wm)) {
                     $width = (int) $wm[1];
-                } elseif (preg_match('/-scaled\.\w+$/', $data['url'])) {
+                } elseif (preg_match('/-scaled\.\w+$/', $filename)) {
                     $width = 2560;
                 } elseif ($label === 'unscaled-webp' || $label === 'unscaled-avif' || $label === 'unscaled') {
                     $meta = wp_get_attachment_metadata($attachment_id);
@@ -156,7 +291,14 @@ function wpc_inject_picture_tags($content) {
 
                 if ($width <= 0) continue;
 
-                $entry = esc_url($data['url']) . ' ' . $width . 'w';
+                // Build local URL from filename (variant URLs in postmeta are service download URLs, not local paths)
+                $local_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $filename;
+
+                // If CDN active, serve via CDN natural URL (passthrough edge delivery)
+                if ($cdn_zone) {
+                    $local_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $local_url);
+                }
+                $entry = esc_url($local_url) . ' ' . $width . 'w';
 
                 if (strpos($label, '-avif') !== false) {
                     $avif_srcset[$width] = $entry;
@@ -276,7 +418,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.00.04';
+        self::$version = '7.00.06';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -334,6 +476,14 @@ class wps_ic
         $this->integrations = new wps_ic_integrations();
         $this->integrations->add_admin_hooks();
         $this->integrations->apply_admin_filters();
+
+        if (class_exists('WpeCommon')) {
+            add_action('wpe_cache_flush', function() {
+                $log = get_option('wpc_purge_debug_log', []);
+                $log[] = date('Y-m-d H:i:s') . ' | WPE "Clear all caches" fired (wpe_cache_flush)';
+                update_option('wpc_purge_debug_log', array_slice($log, -20), false);
+            });
+        }
 
         $preload = new wps_ic_preload_warmup();
         $preload->setupCronPreload();
@@ -1134,8 +1284,40 @@ class wps_ic
     /**
      * Activation of the plugin
      */
+    /**
+     * Snapshot of active feature toggles — sent with PageSpeed test requests
+     * so the MC can correlate score deltas with enabled features.
+     */
+    public static function getActiveFeatures() {
+        $settings = get_option(WPS_IC_SETTINGS);
+        $options  = get_option(WPS_IC_OPTIONS);
+        $cf       = get_option(WPS_IC_CF);
+
+        return [
+            'critical_css'    => !empty($settings['critical']) && !empty($settings['critical']['css']),
+            'delay_js'        => !empty($settings['delay-js-v2']) || !empty($settings['delay-js']),
+            'cdn'             => !empty($settings['live-cdn']) || !empty($settings['cdn']),
+            'lazy_load'       => !empty($settings['lazy']),
+            'native_lazy'     => !empty($settings['nativeLazy']),
+            'webp'            => !empty($settings['generate_webp']) || !empty($settings['picture_webp']),
+            'avif'            => !empty($settings['picture_avif']),
+            'minify_css'      => !empty($settings['css_minify']),
+            'combine_css'     => !empty($settings['css_combine']),
+            'minify_js'       => !empty($settings['js_minify']),
+            'combine_js'      => !empty($settings['js_combine']),
+            'defer_js'        => !empty($settings['js_defer']),
+            'cloudflare'      => !empty($cf['zone']),
+            'cache'           => !empty($settings['cache']) && !empty($settings['cache']['advanced']),
+            'local_compress'  => !empty($settings['local']) && !empty($settings['local']['media-library']),
+            'plugin_version'  => self::$version,
+        ];
+    }
+
     public static function activation()
     {
+        // Reset loopback status so it re-tests on next upload
+        delete_option('wpc_loopback_status');
+
         // Purge Object Cache
         $cache = new wps_ic_cache();
         $cache->purgeObjectCache();
@@ -2380,6 +2562,7 @@ class wps_ic
 
             // Test
             $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
+            $args['features'] = self::getActiveFeatures();
             // Fire-and-forget: the PageSpeed server calls back with results via ?fetchTest={jobId}
             $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
         }
@@ -2767,11 +2950,67 @@ register_uninstall_hook(WPC_CC_PLUGIN_FILE, 'wpcUninstall');
 
 // Register API Hooks
 add_action('rest_api_init', function () {
-    // Rest API
     $local = new wps_local_compress();
     $local->registerEndpoints();
 });
 
+// Re-test loopback whenever plugin settings change
+add_action('update_option_' . WPS_IC_SETTINGS, function () {
+    delete_option('wpc_loopback_status');
+});
+
+// Test loopback once on admin load (non-blocking, cached after first run)
+add_action('admin_init', function () {
+    if (get_option('wpc_loopback_status', '') !== '') return;
+    $local = new wps_local_compress();
+    $local->testLoopback();
+}, 99);
+
+
+// ─── Backup cleanup: delete files older than 30 days ─────────────
+// TODO: Enable when backup cleanup is a toggle in plugin settings
+/*
+add_action('wpc_cleanup_backups', 'wpc_do_cleanup_backups');
+if (!wp_next_scheduled('wpc_cleanup_backups')) {
+    wp_schedule_event(time(), 'daily', 'wpc_cleanup_backups');
+}
+*/
+
+function wpc_do_cleanup_backups() {
+    $backupDir = WP_CONTENT_DIR . '/wpc-backups/';
+    if (!is_dir($backupDir)) return;
+
+    $maxAge = 30 * DAY_IN_SECONDS;
+    $now = time();
+    $deleted = 0;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($backupDir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($iterator as $file) {
+        if ($file->isFile() && ($now - $file->getMTime()) > $maxAge) {
+            @unlink($file->getPathname());
+            $deleted++;
+        }
+    }
+
+    // Clean up empty directories
+    $dirs = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($backupDir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($dirs as $dir) {
+        if ($dir->isDir()) {
+            @rmdir($dir->getPathname()); // Only removes if empty
+        }
+    }
+
+    if ($deleted > 0) {
+        error_log('[WPC Cleanup] Deleted ' . $deleted . ' backup files older than 30 days');
+    }
+}
 
 // Fired when someone clicks "Deactivate (keep data)"
 add_action('admin_action_deactivate_and_disconnect', 'wpc_deactivate_delete_date');

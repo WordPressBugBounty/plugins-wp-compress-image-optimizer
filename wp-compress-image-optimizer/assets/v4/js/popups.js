@@ -132,6 +132,8 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             return false;
                         });
+
+                        setTimeout(function() { window.location.reload(); }, 1500);
                     }, 1000);
                 }
                 else {

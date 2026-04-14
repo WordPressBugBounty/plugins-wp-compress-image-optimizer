@@ -4,7 +4,7 @@ class wps_ic_excludes extends wps_ic
 {
 
     private static $defaultDelayJSExcludes;
-		private static $defaultDelayJSExcludesV2;
+    private static $defaultDelayJSExcludesV2;
     private static $defaultCombineJSExcludes;
     private static $defaultCombineCSSExcludes;
     private static $defaultCriticalCSSExcludes;
@@ -13,7 +13,7 @@ class wps_ic_excludes extends wps_ic
     private static $defaultWebpExcludes;
     private static $defaultAdaptiveExcludes;
     private static $excludesDelayJSOption;
-		private static $excludesDelayJSOptionV2;
+    private static $excludesDelayJSOptionV2;
     private static $excludesCombineJSOption;
     private static $excludesCombineCSSOption;
     private static $excludesToFooterOption;
@@ -51,7 +51,7 @@ class wps_ic_excludes extends wps_ic
         if (!empty($id)) {
             self::$pageExcludesFiles = !empty(self::$excludesOption['page_excludes_files'][$id]) ? self::$excludesOption['page_excludes_files'][$id] : [];
             self::$excludesDelayJSOption = !empty(self::$excludesOption['delay_js']) ? self::$excludesOption['delay_js'] : [];
-	          self::$excludesDelayJSOptionV2 = !empty(self::$excludesOption['delay_js_v2']) ? self::$excludesOption['delay_js_v2'] : [];
+            self::$excludesDelayJSOptionV2 = !empty(self::$excludesOption['delay_js_v2']) ? self::$excludesOption['delay_js_v2'] : [];
             self::$excludesCombineJSOption = !empty(self::$excludesOption['combine_js']) ? self::$excludesOption['combine_js'] : [];
             self::$excludesCombineCSSOption = !empty(self::$excludesOption['css_combine']) ? self::$excludesOption['css_combine'] : [];
             self::$excludesCriticalCSSOption = !empty(self::$excludesOption['critical_css']) ? self::$excludesOption['critical_css'] : [];
@@ -74,9 +74,7 @@ class wps_ic_excludes extends wps_ic
             self::$excludesWebpOption = [];
         }
 
-        self::$defaultLazyExcludes = [
-            'show-on-hover'
-        ];
+        self::$defaultLazyExcludes = ['show-on-hover'];
 
         self::$defaultAdaptiveExcludes = [
 
@@ -86,54 +84,14 @@ class wps_ic_excludes extends wps_ic
 
         ];
 
-        self::$defaultDelayJSExcludes = [
-            'gtranslate',
-            'gformRedirect()',
-            'wpgb_settings',
-            'latepoint_helper',
-            'wc-order-attribution-js-extra',
-            'mailchimp_public_data',
-            'porto-theme-js-extra',
-            'porto-live-search-js-extra',
-            'yith-wcan-shortcodes-js-extra',
-            'jqueryParams',
-            '/plugins/elementor-pro/assets/js/page-transitions',
-            'hbspt.forms',
-            'js.hsforms',
-            'var directorist',
-            'g5plus_variable',
-            'mhcookie',
-            'must-have-cookie/assets/js/script.js',
-            'application/ld+json',
-            'wpforms_settings',
-            'var jnewsoption',
-            'var VPData'
-        ];
+        self::$defaultDelayJSExcludes = ['gtranslate', 'gformRedirect()', 'wpgb_settings', 'latepoint_helper', 'wc-order-attribution-js-extra', 'mailchimp_public_data', 'porto-theme-js-extra', 'porto-live-search-js-extra', 'yith-wcan-shortcodes-js-extra', 'jqueryParams', '/plugins/elementor-pro/assets/js/page-transitions', 'hbspt.forms', 'js.hsforms', 'var directorist', 'g5plus_variable', 'mhcookie', 'must-have-cookie/assets/js/script.js', 'application/ld+json', 'wpforms_settings', 'var jnewsoption', 'var VPData'];
 
-		    self::$defaultDelayJSExcludesV2 = [];
+        self::$defaultDelayJSExcludesV2 = [];
 
-        self::$defaultCombineJSExcludes = [
-            'visitor_mode.min.js',
-            'jquery.min.js',
-            'jquery.js',
-            'jquery-migrate',
-            'lazy.min.js',
-            'wp-i18',
-            'wp.i18',
-            'dashicon',
-            'i18',
-            'hooks',
-            'lazy',
-            'all',
-            'optimizer',
-            'delay-js',
-            'application/ld+json'
-        ];
+        self::$defaultCombineJSExcludes = ['visitor_mode.min.js', 'jquery.min.js', 'jquery.js', 'jquery-migrate', 'lazy.min.js', 'wp-i18', 'wp.i18', 'dashicon', 'i18', 'hooks', 'lazy', 'all', 'optimizer', 'delay-js', 'application/ld+json'];
 
-        self::$defaultCombineCSSExcludes = [
-            #'responsive', //responsive stuff
-            'dashicons',
-            'wps-inline', //our inline CSS option
+        self::$defaultCombineCSSExcludes = [#'responsive', //responsive stuff
+            'dashicons', 'wps-inline', //our inline CSS option
             'wpc-critical-css', //our critical
             'wpc-critical-css-mobile', //our mobile critical
             'rs-plugin', // revolution slider causing JS errors if inline is missing
@@ -141,13 +99,10 @@ class wps_ic_excludes extends wps_ic
             'media="print"', 'media=\'print\'' //styles only for printing
         ];
 
-        self::$defaultCriticalCSSExcludes = [
-            'frontend-layer',
-            'xlink=css' //oxygen theme css
+        self::$defaultCriticalCSSExcludes = ['frontend-layer', 'xlink=css' //oxygen theme css
         ];
 
-        self::$defaultInlineCSSExcludes = [
-        ];
+        self::$defaultInlineCSSExcludes = [];
 
         //Check if default excludes are disabled
         if (!empty(self::$excludesOption['delay_js_default_excludes_disabled']) && self::$excludesOption['delay_js_default_excludes_disabled'] == '1') {
@@ -186,25 +141,18 @@ class wps_ic_excludes extends wps_ic
     public function inlineCSSExcludes()
     {
 
-        self::$defaultInlineCSSExcludes = array_merge(
-            isset(self::$defaultInlineCSSExcludes) ? self::$defaultInlineCSSExcludes : [],
-            isset(self::$excludesInlineCSSOption) ? self::$excludesInlineCSSOption : [],
-            isset(self::$pageExcludesFiles['inline_css']) ? self::$pageExcludesFiles['inline_css'] : []
-        );
+        self::$defaultInlineCSSExcludes = array_merge(isset(self::$defaultInlineCSSExcludes) ? self::$defaultInlineCSSExcludes : [], isset(self::$excludesInlineCSSOption) ? self::$excludesInlineCSSOption : [], isset(self::$pageExcludesFiles['inline_css']) ? self::$pageExcludesFiles['inline_css'] : []);
 
 
-        if (!empty(self::$excludesOption['inline_css_exclude_themes']) &&
-            self::$excludesOption['inline_css_exclude_themes'] == '1') {
+        if (!empty(self::$excludesOption['inline_css_exclude_themes']) && self::$excludesOption['inline_css_exclude_themes'] == '1') {
             self::$defaultInlineCSSExcludes[] = 'wp-content/themes';
         }
 
-        if (!empty(self::$excludesOption['inline_css_exclude_plugins']) &&
-            self::$excludesOption['inline_css_exclude_plugins'] == '1') {
+        if (!empty(self::$excludesOption['inline_css_exclude_plugins']) && self::$excludesOption['inline_css_exclude_plugins'] == '1') {
             self::$defaultInlineCSSExcludes[] = 'wp-content/plugins';
         }
 
-        if (!empty(self::$excludesOption['inline_css_exclude_wp']) &&
-            self::$excludesOption['inline_css_exclude_wp'] == '1') {
+        if (!empty(self::$excludesOption['inline_css_exclude_wp']) && self::$excludesOption['inline_css_exclude_wp'] == '1') {
             self::$defaultInlineCSSExcludes[] = 'wp-includes';
         }
 
@@ -227,18 +175,15 @@ class wps_ic_excludes extends wps_ic
             self::$defaultCombineCSSExcludes = array_merge(self::$defaultCombineCSSExcludes, self::$excludesCombineCSSOption);
         }
 
-        if (!empty(self::$excludesOption['combine_css_exclude_themes']) &&
-            self::$excludesOption['combine_css_exclude_themes'] == '1') {
+        if (!empty(self::$excludesOption['combine_css_exclude_themes']) && self::$excludesOption['combine_css_exclude_themes'] == '1') {
             self::$defaultCombineCSSExcludes[] = 'wp-content/themes';
         }
 
-        if (!empty(self::$excludesOption['combine_css_exclude_plugins']) &&
-            self::$excludesOption['combine_css_exclude_plugins'] == '1') {
+        if (!empty(self::$excludesOption['combine_css_exclude_plugins']) && self::$excludesOption['combine_css_exclude_plugins'] == '1') {
             self::$defaultCombineCSSExcludes[] = 'wp-content/plugins';
         }
 
-        if (!empty(self::$excludesOption['combine_css_exclude_wp']) &&
-            self::$excludesOption['combine_css_exclude_wp'] == '1') {
+        if (!empty(self::$excludesOption['combine_css_exclude_wp']) && self::$excludesOption['combine_css_exclude_wp'] == '1') {
             self::$defaultCombineCSSExcludes[] = 'wp-includes';
         }
 
@@ -253,25 +198,18 @@ class wps_ic_excludes extends wps_ic
     public function criticalCSSExcludes()
     {
 
-        self::$defaultCriticalCSSExcludes = array_merge(
-            isset(self::$defaultCriticalCSSExcludes) ? self::$defaultCriticalCSSExcludes : [],
-            isset(self::$excludesCriticalCSSOption) ? self::$excludesCriticalCSSOption : [],
-            isset(self::$pageExcludesFiles['critical_css']) ? self::$pageExcludesFiles['critical_css'] : []
-        );
+        self::$defaultCriticalCSSExcludes = array_merge(isset(self::$defaultCriticalCSSExcludes) ? self::$defaultCriticalCSSExcludes : [], isset(self::$excludesCriticalCSSOption) ? self::$excludesCriticalCSSOption : [], isset(self::$pageExcludesFiles['critical_css']) ? self::$pageExcludesFiles['critical_css'] : []);
 
 
-        if (!empty(self::$excludesOption['critical_css_exclude_themes']) &&
-            self::$excludesOption['critical_css_exclude_themes'] == '1') {
+        if (!empty(self::$excludesOption['critical_css_exclude_themes']) && self::$excludesOption['critical_css_exclude_themes'] == '1') {
             self::$defaultCriticalCSSExcludes[] = 'wp-content/themes';
         }
 
-        if (!empty(self::$excludesOption['critical_css_exclude_plugins']) &&
-            self::$excludesOption['critical_css_exclude_plugins'] == '1') {
+        if (!empty(self::$excludesOption['critical_css_exclude_plugins']) && self::$excludesOption['critical_css_exclude_plugins'] == '1') {
             self::$defaultCriticalCSSExcludes[] = 'wp-content/plugins';
         }
 
-        if (!empty(self::$excludesOption['critical_css_exclude_wp']) &&
-            self::$excludesOption['critical_css_exclude_wp'] == '1') {
+        if (!empty(self::$excludesOption['critical_css_exclude_wp']) && self::$excludesOption['critical_css_exclude_wp'] == '1') {
             self::$defaultCriticalCSSExcludes[] = 'wp-includes';
         }
 
@@ -284,18 +222,15 @@ class wps_ic_excludes extends wps_ic
             self::$defaultCombineJSExcludes = array_merge(self::$defaultCombineJSExcludes, self::$excludesCombineJSOption);
         }
 
-        if (!empty(self::$excludesOption['combine_js_exclude_themes']) &&
-            self::$excludesOption['combine_js_exclude_themes'] == '1') {
+        if (!empty(self::$excludesOption['combine_js_exclude_themes']) && self::$excludesOption['combine_js_exclude_themes'] == '1') {
             self::$defaultCombineJSExcludes[] = 'wp-content/themes';
         }
 
-        if (!empty(self::$excludesOption['combine_js_exclude_plugins']) &&
-            self::$excludesOption['combine_js_exclude_plugins'] == '1') {
+        if (!empty(self::$excludesOption['combine_js_exclude_plugins']) && self::$excludesOption['combine_js_exclude_plugins'] == '1') {
             self::$defaultCombineJSExcludes[] = 'wp-content/plugins';
         }
 
-        if (!empty(self::$excludesOption['combine_js_exclude_wp']) &&
-            self::$excludesOption['combine_js_exclude_wp'] == '1') {
+        if (!empty(self::$excludesOption['combine_js_exclude_wp']) && self::$excludesOption['combine_js_exclude_wp'] == '1') {
             self::$defaultCombineJSExcludes[] = 'wp-includes';
         }
 
@@ -335,8 +270,7 @@ class wps_ic_excludes extends wps_ic
             return true;
         }
 
-        if (isset(self::$pageExcludesFiles['adaptive']) && $this->strInArray($class,
-                self::$pageExcludesFiles['adaptive'])) {
+        if (isset(self::$pageExcludesFiles['adaptive']) && $this->strInArray($class, self::$pageExcludesFiles['adaptive'])) {
             //per page excludes
             return true;
         }
@@ -442,73 +376,24 @@ class wps_ic_excludes extends wps_ic
         return false;
     }
 
-	public function excludedFromDelayV2($tag)
-	{
-		if ($this->strInArray($tag, $this->delayJSExcludesV2())) {
-			return true;
-		}
-
-		/* We should be able to delay everything
-		if (!empty(self::$excludesOption['delay_js_exclude_third']) && self::$excludesOption['delay_js_exclude_third'] == '1' && $this->is_external($tag) === true) {
-			return true;
-		}
-		*/
-
-		return false;
-	}
-
     public function delayJSExcludes()
     {
-        self::$defaultDelayJSExcludes = array_merge(
-            isset(self::$defaultDelayJSExcludes) ? self::$defaultDelayJSExcludes : [],
-            isset(self::$excludesDelayJSOption) ? self::$excludesDelayJSOption : [],
-            isset(self::$pageExcludesFiles['delay_js']) ? self::$pageExcludesFiles['delay_js'] : []
-        );
+        self::$defaultDelayJSExcludes = array_merge(isset(self::$defaultDelayJSExcludes) ? self::$defaultDelayJSExcludes : [], isset(self::$excludesDelayJSOption) ? self::$excludesDelayJSOption : [], isset(self::$pageExcludesFiles['delay_js']) ? self::$pageExcludesFiles['delay_js'] : []);
 
-        if (!empty(self::$excludesOption['delay_js_exclude_themes']) &&
-            self::$excludesOption['delay_js_exclude_themes'] == '1') {
+        if (!empty(self::$excludesOption['delay_js_exclude_themes']) && self::$excludesOption['delay_js_exclude_themes'] == '1') {
             self::$defaultDelayJSExcludes[] = 'wp-content/themes';
         }
 
-        if (!empty(self::$excludesOption['delay_js_exclude_plugins']) &&
-            self::$excludesOption['delay_js_exclude_plugins'] == '1') {
+        if (!empty(self::$excludesOption['delay_js_exclude_plugins']) && self::$excludesOption['delay_js_exclude_plugins'] == '1') {
             self::$defaultDelayJSExcludes[] = 'wp-content/plugins';
         }
 
-        if (!empty(self::$excludesOption['delay_js_exclude_wp']) &&
-            self::$excludesOption['delay_js_exclude_wp'] == '1') {
+        if (!empty(self::$excludesOption['delay_js_exclude_wp']) && self::$excludesOption['delay_js_exclude_wp'] == '1') {
             self::$defaultDelayJSExcludes[] = 'wp-includes';
         }
 
         return self::$defaultDelayJSExcludes;
     }
-
-	public function delayJSExcludesV2()
-	{
-		self::$defaultDelayJSExcludesV2 = array_merge(
-			isset(self::$excludesDelayJSOptionV2) ? self::$excludesDelayJSOptionV2 : [],
-			isset(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []
-		);
-
-		/* Not used
-		if (!empty(self::$excludesOption['delay_js_exclude_themes']) &&
-		    self::$excludesOption['delay_js_exclude_themes'] == '1') {
-			self::$defaultDelayJSExcludes[] = 'wp-content/themes';
-		}
-
-		if (!empty(self::$excludesOption['delay_js_exclude_plugins']) &&
-		    self::$excludesOption['delay_js_exclude_plugins'] == '1') {
-			self::$defaultDelayJSExcludes[] = 'wp-content/plugins';
-		}
-
-		if (!empty(self::$excludesOption['delay_js_exclude_wp']) &&
-		    self::$excludesOption['delay_js_exclude_wp'] == '1') {
-			self::$defaultDelayJSExcludes[] = 'wp-includes';
-		}
-		*/
-
-		return self::$defaultDelayJSExcludesV2;
-	}
 
     public function is_external($tag)
     {
@@ -530,14 +415,51 @@ class wps_ic_excludes extends wps_ic
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
             // Image on site
             return false;
-        } else if ((strpos($url, $site_url) === false || strpos($url, '//') === 0) || (strpos($url, $site_url) !== false
-                && strpos($url, $site_url) >=
-                strpos($url, '?'))) {
+        } else if ((strpos($url, $site_url) === false || strpos($url, '//') === 0) || (strpos($url, $site_url) !== false && strpos($url, $site_url) >= strpos($url, '?'))) {
             // Image not on site
             return true;
         } else {
             // Image on site
             return false;
         }
+    }
+
+    public function excludedFromDelayV2($tag)
+    {
+        if ($this->strInArray($tag, $this->delayJSExcludesV2())) {
+            return true;
+        }
+
+        /* We should be able to delay everything
+        if (!empty(self::$excludesOption['delay_js_exclude_third']) && self::$excludesOption['delay_js_exclude_third'] == '1' && $this->is_external($tag) === true) {
+            return true;
+        }
+        */
+
+        return false;
+    }
+
+    public function delayJSExcludesV2()
+    {
+        self::$defaultDelayJSExcludesV2 = array_merge(isset(self::$excludesDelayJSOptionV2) ? self::$excludesDelayJSOptionV2 : [], isset(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []);
+
+        /* Not used
+        if (!empty(self::$excludesOption['delay_js_exclude_themes']) &&
+            self::$excludesOption['delay_js_exclude_themes'] == '1') {
+            self::$defaultDelayJSExcludes[] = 'wp-content/themes';
+        }
+
+        if (!empty(self::$excludesOption['delay_js_exclude_plugins']) &&
+            self::$excludesOption['delay_js_exclude_plugins'] == '1') {
+            self::$defaultDelayJSExcludes[] = 'wp-content/plugins';
+        }
+
+        if (!empty(self::$excludesOption['delay_js_exclude_wp']) &&
+            self::$excludesOption['delay_js_exclude_wp'] == '1') {
+            self::$defaultDelayJSExcludes[] = 'wp-includes';
+        }
+        */
+
+        return self::$defaultDelayJSExcludesV2;
     }
 }

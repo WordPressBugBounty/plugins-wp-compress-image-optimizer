@@ -308,6 +308,24 @@ jQuery(document).ready(function ($) {
         var name = $(this).attr('name');
         if (name) wpcAdvInitialStates[name] = $(this).val();
     });
+    // Capture optimization level slider initial value
+    var $optSlider = $('#optimizationLevel');
+    if ($optSlider.length) wpcAdvInitialStates['optimizationLevel'] = $optSlider.val();
+    // Capture text/number inputs
+    $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+        var name = $(this).attr('name') || $(this).attr('id');
+        if (name) wpcAdvInitialStates[name] = $(this).val();
+    });
+    // Capture local optimization initial states
+    var $lq = $('#localQualityLevel');
+    if ($lq.length) wpcAdvInitialStates['localQualityLevel'] = $lq.val();
+    var $lb = $('#localBackup');
+    if ($lb.length) wpcAdvInitialStates['localBackup'] = $lb.val();
+
+    // Check for unsaved changes when text/number inputs change
+    $(document).on('input change', '.wpc-settings-body input[type="text"], .wpc-settings-body input[type="number"]', function() {
+        window.checkUnsavedChanges();
+    });
 
     // Track changes from v2 checkbox toggles
     $(document).on('wpc-setting-changed', function(e, name, isChecked) {
@@ -369,17 +387,52 @@ jQuery(document).ready(function ($) {
             }
         });
 
-        // Also grab quality levels
+        // Also grab quality levels — range inputs aren't caught by checkbox/dropdown collectors
         var optLevel = $('#optimizationLevel').val();
         var optLevelImg = $('#optimizationLevel_img').val();
+        if (optLevel && wpcAdvInitialStates['optimizationLevel'] !== optLevel) {
+            changes.push({ name: 'qualityLevel', value: optLevel, checked: 'false' });
+        }
+
+        // Collect text/number inputs (lazySkipCount, maxWidth, etc.)
+        $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+            var name = $(this).attr('name');
+            var value = $(this).val();
+            if (name && value !== '') {
+                var ajaxName = name.replace(/^options\[/, '').replace(/\]/g, '').replace(/\[/g, ',');
+                var initialValue = wpcAdvInitialStates[name] || wpcAdvInitialStates[$(this).attr('id')];
+                if (initialValue === undefined || initialValue !== value) {
+                    changes.push({ name: ajaxName, value: value, checked: 'false' });
+                }
+            }
+        });
+
+        // Collect local optimization settings (quality slider, max width, backup)
+        var $localQuality = $('#localQualityLevel');
+        if ($localQuality.length) {
+            var localVal = $localQuality.val();
+            if (wpcAdvInitialStates['localQualityLevel'] !== localVal) {
+                var optMap = { 0: 'none', 1: 'lossless', 2: 'intelligent', 3: 'ultra' };
+                changes.push({ name: 'local_qualityLevel', value: localVal, checked: 'false' });
+                changes.push({ name: 'local_optimization', value: optMap[parseInt(localVal)] || 'none', checked: 'false' });
+            }
+        }
+        var $localBackup = $('#localBackup');
+        if ($localBackup.length) {
+            var bkVal = $localBackup.val();
+            if (wpcAdvInitialStates['localBackup'] !== bkVal) {
+                changes.push({ name: 'backup', value: bkVal, checked: 'false' });
+            }
+        }
 
         // Batch save all settings in a single request (prevents race conditions)
         var hadError = false;
 
         if (changes.length === 0) {
-            // Nothing changed — dismiss pill without saving or purging
+            // Nothing changed — dismiss pill and restore page
             $btn.removeClass('wpc-saving saving').css('pointer-events', '');
             $btn.html(btnOrigHTML);
+            $('.wpc-settings-body').css('pointer-events', '').css('opacity', '');
             $pill.fadeOut(300);
             return false;
         }
@@ -418,6 +471,17 @@ jQuery(document).ready(function ($) {
                 var name = $(this).attr('name');
                 if (name) wpcAdvInitialStates[name] = $(this).val();
             });
+            // Refresh text/number input initial states
+            $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+                var name = $(this).attr('name') || $(this).attr('id');
+                if (name) wpcAdvInitialStates[name] = $(this).val();
+            });
+            // Refresh local optimization initial states
+            var $lqr = $('#localQualityLevel');
+            if ($lqr.length) wpcAdvInitialStates['localQualityLevel'] = $lqr.val();
+            var $lbr = $('#localBackup');
+            if ($lbr.length) wpcAdvInitialStates['localBackup'] = $lbr.val();
+            if ($optSlider.length) wpcAdvInitialStates['optimizationLevel'] = $optSlider.val();
             setSettingsState();
 
             // Show refresh badge for admin bar settings
@@ -482,7 +546,58 @@ jQuery(document).ready(function ($) {
     });
 
 
-    function showSaveButton() {
+    window.hasUnsavedChanges = function() {
+        var changed = false;
+        // Checkboxes
+        $('.wpc-ic-settings-v2-checkbox, .wpc-ic-settings-v4-iconcheckbox, .wpc-ic-settings-v4-checkbox, .wpc-eu-routing-checkbox').each(function() {
+            var name = $(this).data('option-name') || $(this).attr('name');
+            if (name && wpcAdvInitialStates[name] !== undefined && $(this).prop('checked') !== wpcAdvInitialStates[name]) {
+                changed = true;
+                return false;
+            }
+        });
+        if (changed) return true;
+        // Hidden dropdown inputs
+        $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+            var name = $(this).attr('name');
+            if (name && wpcAdvInitialStates[name] !== undefined && $(this).val() !== wpcAdvInitialStates[name]) {
+                changed = true;
+                return false;
+            }
+        });
+        if (changed) return true;
+        // Text/number inputs
+        $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+            var name = $(this).attr('name') || $(this).attr('id');
+            if (name && wpcAdvInitialStates[name] !== undefined && $(this).val() !== wpcAdvInitialStates[name]) {
+                changed = true;
+                return false;
+            }
+        });
+        if (changed) return true;
+        // Quality slider
+        if ($optSlider.length && wpcAdvInitialStates['optimizationLevel'] !== undefined && $optSlider.val() !== wpcAdvInitialStates['optimizationLevel']) return true;
+        // Local settings
+        var $lq = $('#localQualityLevel');
+        if ($lq.length && wpcAdvInitialStates['localQualityLevel'] !== undefined && $lq.val() !== wpcAdvInitialStates['localQualityLevel']) return true;
+        var $lb = $('#localBackup');
+        if ($lb.length && wpcAdvInitialStates['localBackup'] !== undefined && $lb.val() !== wpcAdvInitialStates['localBackup']) return true;
+        return false;
+    };
+
+    window.checkUnsavedChanges = function() {
+        if (window.hasUnsavedChanges()) {
+            wpcSaveActive = true;
+            $('.save-button').fadeIn(400);
+            startPillWatch();
+        } else {
+            wpcSaveActive = false;
+            $('.save-button').fadeOut(300);
+            stopPillWatch();
+        }
+    };
+
+    window.showSaveButton = function() {
         wpcSaveActive = true;
         $('.save-button').fadeIn(500);
         startPillWatch();

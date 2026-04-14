@@ -6,7 +6,10 @@ if (!defined('ABSPATH')) {
 class wps_ic_wordpresscom extends wps_ic_integrations {
 
     public function is_active() {
-        return defined('IS_WPCOM') && IS_WPCOM;
+        if (defined('IS_WPCOM') && IS_WPCOM) return true;
+        if (defined('ATOMIC_SITE_ID')) return true;
+        if (isset($_SERVER['ATOMIC_SITE_ID'])) return true;
+        return false;
     }
 
     public function do_checks() {

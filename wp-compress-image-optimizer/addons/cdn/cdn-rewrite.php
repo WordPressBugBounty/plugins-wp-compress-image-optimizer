@@ -11,6 +11,7 @@ include_once WPS_IC_DIR . 'addons/cache/cacheHtml.php';
 class wps_cdn_rewrite
 {
 
+
     public static $settings;
     public static $options;
     public static $lazy_excluded_list;
@@ -237,6 +238,199 @@ class wps_cdn_rewrite
         return true;
     }
 
+    public static function dontRunif()
+    {
+
+        // is url excluded?
+        if (!empty(self::$settings['exclude-url-from-all']) && self::$settings['exclude-url-from-all'] == 1) {
+            $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+            $url = explode('?', $url);
+            $url = $url[0];
+            $url_excludes = get_option('wpc-url-excludes');
+            if (!empty($url_excludes['exclude-url-from-all']) && in_array($url, $url_excludes['exclude-url-from-all'])) {
+                return false;
+            }
+        }
+
+
+        if (!empty($_GET['pagelayer-live'])) {
+            return false;
+        }
+
+        // Any hide login plugins active?
+        if (self::hiddenAdminArea()) {
+            return false;
+        }
+
+        //WP User Frontend check
+        if (class_exists('WP_User_Frontend')) {
+            $content = get_post_field('post_content', get_the_ID());
+
+            // Check if the content contains wpuf shorcode
+            if (preg_match('/\[wpuf/', $content)) {
+                return false;
+            }
+        }
+
+        if (self::MediaActions()) {
+            return false;
+        }
+
+        if (strpos($_SERVER['REQUEST_URI'], 'jm-ajax') !== false) {
+            return false;
+        }
+
+        if (isset($_GET['woo_ajax']) || isset($_POST['woo_ajax']) || (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'woo_ajax') !== false))) {
+            return false;
+        }
+
+        if (defined('DOING_AUTOSAVE')) {
+            return false;
+        }
+
+        if (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false || strpos($_SERVER['REQUEST_URI'], 'sitemap') !== false)) {
+            return false;
+        }
+
+        if (!empty($_POST['_cs_nonce'])) { //cornerstone
+            return false;
+        }
+
+        if (is_admin() || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false) {
+            return false;
+        }
+
+        if (!empty($_SERVER['REQUEST_URI'])) {
+            if (strpos($_SERVER['REQUEST_URI'], 'wp-json') || strpos($_SERVER['REQUEST_URI'], 'rest_route')) {
+                return false;
+            }
+        }
+
+        if (isset($_GET['brizy-edit-iframe']) || isset($_GET['brizy-edit']) || isset($_GET['preview'])) {
+            return false;
+        }
+
+        if (!empty($_GET['page']) && $_GET['page'] == 'bwc') {
+            return false;
+        }
+
+
+        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['bwc']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['elementor-preview']) || !empty($_GET['PageSpeed']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['et_fb']) || !empty($_GET['tatsu']) || !empty($_GET['tatsu-header']) || !empty($_GET['tatsu-footer']) || !empty($_GET['tve']) || !empty($_GET['is-editor-iframe']) || !empty
+            ($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
+            return false;
+        }
+
+        if ((!empty($_GET['action']) && $_GET['action'] == 'edit#op-builder') || !empty($_GET['op3editor'])) {
+            //optimizePress builder fix
+            return false;
+        }
+
+        if (!empty($_POST['pp_action'])) {
+            //power pack for beaver builder ajax get posts fix
+            return false;
+        }
+
+        if (!empty($_POST['add-to-cart'])) {
+            //woo on some themes slow add to cart fix
+            return false;
+        }
+
+        if (!empty($_GET['wc-ajax']) && $_GET['wc-ajax'] == 'get_refreshed_fragments') {
+            return false;
+        }
+
+        if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
+            return false;
+        }
+
+        if (!empty($_GET['lc_action_launch_editing'])) {
+            return false;
+        }
+
+        //GiveWP routes
+        if (isset($_GET['givewp-route'])) {
+            return false;
+        }
+
+        //Groundhogg calendar
+        if (!empty($_SERVER['REQUEST_URI'])) {
+            if (strpos($_SERVER['REQUEST_URI'], '/gh/calendar')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function hiddenAdminArea()
+    {
+
+        // AIOS
+        if (class_exists('AIO_WP_Security')) {
+            // Hide Login Exists
+            $configs = get_option('aio_wp_security_configs');
+            if (!empty($configs['aiowps_login_page_slug'])) {
+                if (strpos($_SERVER['REQUEST_URI'], $configs['aiowps_login_page_slug']) !== false) {
+                    return true;
+                }
+            }
+        }
+
+        // WPS Hide Login
+        if (class_exists('WPS\WPS_Hide_Login\Plugin')) {
+            // Hide Login Exists
+            $loginPage = get_option('whl_page');
+            if (!empty($loginPage)) {
+                if (strpos($_SERVER['REQUEST_URI'], '/' . $loginPage) !== false) {
+                    return true;
+                }
+            }
+        }
+
+        // Hide My WP - Ghost
+        if (class_exists('HMWP_Classes_ObjController')) {
+            $option = get_option('hmwp_options');
+
+            if (!empty($option)) {
+                $option = json_decode($option, true);
+                $loginPage = $option['hmwp_login_url'];
+                if (!empty($loginPage)) {
+                    if (strpos($_SERVER['REQUEST_URI'], $loginPage) !== false) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+    }
+
+    public static function MediaActions()
+    {
+        if (!empty($_GET['preloadCache'])) {
+            return true;
+        }
+
+        if (!empty($_GET['getAllImages'])) {
+            return true;
+        }
+
+        if (!empty($_POST['getImageByID']) || !empty($_GET['getImageByID'])) {
+            return true;
+        }
+
+        if (!empty($_POST['deliverSingleImage']) || !empty($_GET['deliverSingleImage'])) {
+            return true;
+        }
+
+        if (!empty($_POST['deliverImages']) || !empty($_GET['deliverImages'])) {
+            return true;
+        }
+
+        if (!empty($_POST['restoreImages']) || !empty($_GET['restoreImages'])) {
+            return true;
+        }
+    }
+
     public static function favicon_replace($url)
     {
         if (empty($url)) {
@@ -380,6 +574,10 @@ class wps_cdn_rewrite
 
     public function buffer_local_go()
     {
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return true;
+        }
+
         if (self::$isAjax) {
             $wps_ic_cdn = new wps_cdn_rewrite();
         }
@@ -807,6 +1005,8 @@ class wps_cdn_rewrite
         return $html;
     }
 
+    // TODO: IMPORANT! If you don't want to run it needs to return false!
+
     public function adjust_style_tag($html, $handle, $href, $media)
     {
 
@@ -960,13 +1160,11 @@ class wps_cdn_rewrite
         return $src;
     }
 
-    // TODO: IMPORANT! If you don't want to run it needs to return false!
-
     public function buffer_local_callback($html)
     {
 
-	    $isUserLoggedIn = is_user_logged_in();
-		
+        $isUserLoggedIn = is_user_logged_in();
+
         if (!self::dontRunif()) {
             return $html;
         }
@@ -1001,7 +1199,7 @@ class wps_cdn_rewrite
 
         // Add preload="none" to video tags — prevents browser from downloading video until play
         if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
-            $html = preg_replace_callback('/<video\b([^>]*)>/i', function($matches) {
+            $html = preg_replace_callback('/<video\b([^>]*)>/i', function ($matches) {
                 $attrs = $matches[1];
                 if (preg_match('/\bpreload\s*=/i', $attrs)) {
                     return $matches[0];
@@ -1029,7 +1227,7 @@ class wps_cdn_rewrite
             // Protect existing <picture> blocks from double-wrapping
             $wpcLocalPictureBlocks = [];
             if (self::$rewriteLogic::$pictureWebpEnabled) {
-                $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function($m) use (&$wpcLocalPictureBlocks) {
+                $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$wpcLocalPictureBlocks) {
                     $i = count($wpcLocalPictureBlocks);
                     $wpcLocalPictureBlocks[$i] = $m[0];
                     return '<!--WPC_LOCAL_PICTURE_' . $i . '-->';
@@ -1296,198 +1494,6 @@ class wps_cdn_rewrite
         return $html;
     }
 
-    public static function dontRunif()
-    {
-        // is url excluded?
-        if (!empty(self::$settings['exclude-url-from-all']) && self::$settings['exclude-url-from-all'] == 1) {
-            $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-            $url = explode('?', $url);
-            $url = $url[0];
-            $url_excludes = get_option('wpc-url-excludes');
-            if (!empty($url_excludes['exclude-url-from-all']) && in_array($url, $url_excludes['exclude-url-from-all'])) {
-                return false;
-            }
-        }
-
-
-        if (!empty($_GET['pagelayer-live'])) {
-            return false;
-        }
-
-        // Any hide login plugins active?
-        if (self::hiddenAdminArea()) {
-            return false;
-        }
-
-        //WP User Frontend check
-        if (class_exists('WP_User_Frontend')) {
-            $content = get_post_field('post_content', get_the_ID());
-
-            // Check if the content contains wpuf shorcode
-            if (preg_match('/\[wpuf/', $content)) {
-                return false;
-            }
-        }
-
-        if (self::MediaActions()) {
-            return false;
-        }
-
-        if (strpos($_SERVER['REQUEST_URI'], 'jm-ajax') !== false) {
-            return false;
-        }
-
-        if (isset($_GET['woo_ajax']) || isset($_POST['woo_ajax']) || (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'woo_ajax') !== false))) {
-            return false;
-        }
-
-        if (defined('DOING_AUTOSAVE')) {
-            return false;
-        }
-
-        if (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false || strpos($_SERVER['REQUEST_URI'], 'sitemap') !== false)) {
-            return false;
-        }
-
-        if (!empty($_POST['_cs_nonce'])) { //cornerstone
-            return false;
-        }
-
-        if (is_admin() || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false) {
-            return false;
-        }
-
-        if (!empty($_SERVER['REQUEST_URI'])) {
-            if (strpos($_SERVER['REQUEST_URI'], 'wp-json') || strpos($_SERVER['REQUEST_URI'], 'rest_route')) {
-                return false;
-            }
-        }
-
-        if (isset($_GET['brizy-edit-iframe']) || isset($_GET['brizy-edit']) || isset($_GET['preview'])) {
-            return false;
-        }
-
-        if (!empty($_GET['page']) && $_GET['page'] == 'bwc') {
-            return false;
-        }
-
-
-        if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['bwc']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['elementor-preview']) || !empty($_GET['PageSpeed']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['et_fb']) || !empty($_GET['tatsu']) || !empty($_GET['tatsu-header']) || !empty($_GET['tatsu-footer']) || !empty($_GET['tve']) || !empty($_GET['is-editor-iframe']) || !empty
-            ($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
-            return false;
-        }
-
-        if ((!empty($_GET['action']) && $_GET['action'] == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-            //optimizePress builder fix
-            return false;
-        }
-
-        if (!empty($_POST['pp_action'])) {
-            //power pack for beaver builder ajax get posts fix
-            return false;
-        }
-
-        if (!empty($_POST['add-to-cart'])) {
-            //woo on some themes slow add to cart fix
-            return false;
-        }
-
-        if (!empty($_GET['wc-ajax']) && $_GET['wc-ajax'] == 'get_refreshed_fragments') {
-            return false;
-        }
-
-        if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
-            return false;
-        }
-
-        if (!empty($_GET['lc_action_launch_editing'])) {
-            return false;
-        }
-
-        //GiveWP routes
-        if (isset($_GET['givewp-route'])) {
-            return false;
-        }
-
-        //Groundhogg calendar
-        if (!empty($_SERVER['REQUEST_URI'])) {
-            if (strpos($_SERVER['REQUEST_URI'], '/gh/calendar')) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public static function hiddenAdminArea()
-    {
-
-        // AIOS
-        if (class_exists('AIO_WP_Security')) {
-            // Hide Login Exists
-            $configs = get_option('aio_wp_security_configs');
-            if (!empty($configs['aiowps_login_page_slug'])) {
-                if (strpos($_SERVER['REQUEST_URI'], $configs['aiowps_login_page_slug']) !== false) {
-                    return true;
-                }
-            }
-        }
-
-        // WPS Hide Login
-        if (class_exists('WPS\WPS_Hide_Login\Plugin')) {
-            // Hide Login Exists
-            $loginPage = get_option('whl_page');
-            if (!empty($loginPage)) {
-                if (strpos($_SERVER['REQUEST_URI'], '/' . $loginPage) !== false) {
-                    return true;
-                }
-            }
-        }
-
-        // Hide My WP - Ghost
-        if (class_exists('HMWP_Classes_ObjController')) {
-            $option = get_option('hmwp_options');
-
-            if (!empty($option)) {
-                $option = json_decode($option, true);
-                $loginPage = $option['hmwp_login_url'];
-                if (!empty($loginPage)) {
-                    if (strpos($_SERVER['REQUEST_URI'], $loginPage) !== false) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-    }
-
-    public static function MediaActions()
-    {
-        if (!empty($_GET['preloadCache'])) {
-            return true;
-        }
-
-        if (!empty($_GET['getAllImages'])) {
-            return true;
-        }
-
-        if (!empty($_POST['getImageByID']) || !empty($_GET['getImageByID'])) {
-            return true;
-        }
-
-        if (!empty($_POST['deliverSingleImage']) || !empty($_GET['deliverSingleImage'])) {
-            return true;
-        }
-
-        if (!empty($_POST['deliverImages']) || !empty($_GET['deliverImages'])) {
-            return true;
-        }
-
-        if (!empty($_POST['restoreImages']) || !empty($_GET['restoreImages'])) {
-            return true;
-        }
-    }
-
     public function doCacheCombine()
     {
         //used to check if we should do cache or criticalCombine
@@ -1734,11 +1740,6 @@ class wps_cdn_rewrite
         return false;
     }
 
-    public static function is_webp_request()
-    {
-        return isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false;
-    }
-
     public function checkCache_plugins_loaded()
     {
         // Weglot rewrites $_SERVER['REQUEST_URI'] at plugins_loaded priority 10,
@@ -1810,6 +1811,10 @@ class wps_cdn_rewrite
 
     public function buffer_callback_v3()
     {
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return true;
+        }
+
         if (is_feed() || is_admin()) {
             return true;
         }
@@ -3036,6 +3041,11 @@ class wps_cdn_rewrite
         return false;
     }
 
+    public static function is_webp_request()
+    {
+        return isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false;
+    }
+
     public function cdnRewriter($html)
     {
 
@@ -3070,7 +3080,7 @@ class wps_cdn_rewrite
             return 'no-cdn-rewriter';
         }
 
-        if (!empty($_GET['ignore_ic']) || !self::dontRunif()) {
+        if (!empty($_GET['ignore_ic'])) {
             return $html;
         }
 
@@ -3173,7 +3183,7 @@ class wps_cdn_rewrite
 
         // Add preload="none" to video tags — prevents browser from downloading video until play
         if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
-            $html = preg_replace_callback('/<video\b([^>]*)>/i', function($matches) {
+            $html = preg_replace_callback('/<video\b([^>]*)>/i', function ($matches) {
                 $attrs = $matches[1];
                 if (preg_match('/\bpreload\s*=/i', $attrs)) {
                     return $matches[0];
@@ -3266,7 +3276,7 @@ class wps_cdn_rewrite
         // Protect existing <picture> blocks from double-wrapping by picture_webp feature
         $wpcPictureBlocks = [];
         if (self::$rewriteLogic::$pictureWebpEnabled) {
-            $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function($m) use (&$wpcPictureBlocks) {
+            $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$wpcPictureBlocks) {
                 $i = count($wpcPictureBlocks);
                 $wpcPictureBlocks[$i] = $m[0];
                 return '<!--WPC_PICTURE_' . $i . '-->';
@@ -3674,17 +3684,17 @@ class wps_cdn_rewrite
 
 
         #if (!empty($_GET['replaceFonts'])) {
-            #return print_r(self::$settings['replace-fonts'],true);
-            if (!empty(self::$settings['replace-fonts'])) {
-                if (self::$settings['replace-fonts'] == 'local') {
-                    $fonts = new wps_ic_fonts();
-                    $html = $fonts->replaceFrontend($html);
-                } else if (self::$settings['replace-fonts'] == 'bunny') {
-                    // Bunny Fonts is a GDPR-compliant drop-in replacement for Google Fonts
-                    $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
-                    $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
-                }
+        #return print_r(self::$settings['replace-fonts'],true);
+        if (!empty(self::$settings['replace-fonts'])) {
+            if (self::$settings['replace-fonts'] == 'local') {
+                $fonts = new wps_ic_fonts();
+                $html = $fonts->replaceFrontend($html);
+            } else if (self::$settings['replace-fonts'] == 'bunny') {
+                // Bunny Fonts is a GDPR-compliant drop-in replacement for Google Fonts
+                $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
+                $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
             }
+        }
         #}
 
         return $html;
@@ -3819,11 +3829,7 @@ class wps_cdn_rewrite
             return $this->maybe_slash($url, $addslashes);
         }
 
-        $matchCount = preg_match_all(
-            '/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/',
-            $url,
-            $srcset_links
-        );
+        $matchCount = preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/', $url, $srcset_links);
 
         if ((strpos($url, ' ') !== false || strpos($url, '%20') !== false) && $matchCount === 0) {
             return $url;
@@ -3867,11 +3873,7 @@ class wps_cdn_rewrite
                 $hadTrailingEscapedQuoteSlash = true;
                 $url = substr($url, 0, -1);
 
-                $matchCount = preg_match_all(
-                    '/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/',
-                    $url,
-                    $srcset_links
-                );
+                $matchCount = preg_match_all('/((https?\:\/\/|\/\/)[^\s]+\S+\.(' . self::$findImages . '))\s(\d{1,5}+[wx])/', $url, $srcset_links);
             }
 
             foreach ($srcset_links[0] as $i => $srcset) {
@@ -4769,8 +4771,8 @@ JS;
                     $attValues[$i] = 'lazy';
                     $escapedValue = $attValues[$i];
                 } else if ($attName == 'data-src') {
-                    $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]); }
-                else {
+                    $escapedValue = $this->conditionallyEscapeUrl($attValues[$i]);
+                } else {
                     $escapedValue = htmlspecialchars($attValues[$i], ENT_QUOTES, 'UTF-8');
                 }
 
@@ -5086,10 +5088,7 @@ JS;
         // Wrap in <picture> for bulletproof WebP delivery (local mode)
         if (self::$rewriteLogic::$pictureWebpEnabled && $webP !== false) {
             $lowerSrc = strtolower($original_img_tag['original_src']);
-            $skipFormats = (strpos($lowerSrc, '.svg') !== false
-                         || strpos($lowerSrc, '.gif') !== false
-                         || strpos($lowerSrc, '.ico') !== false
-                         || strpos($lowerSrc, '.webp') !== false);
+            $skipFormats = (strpos($lowerSrc, '.svg') !== false || strpos($lowerSrc, '.gif') !== false || strpos($lowerSrc, '.ico') !== false || strpos($lowerSrc, '.webp') !== false);
 
             if (!$skipFormats) {
                 // Build fallback tag with original (non-webp) URLs
@@ -5120,11 +5119,7 @@ JS;
                     }
                 }
 
-                $finalTag = '<picture class="wpc-picture">'
-                    . $avifSource
-                    . '<source' . $sourceSrcset . $sourceSizes . ' type="image/webp">'
-                    . $fallbackTag
-                    . '</picture>';
+                $finalTag = '<picture class="wpc-picture">' . $avifSource . '<source' . $sourceSrcset . $sourceSizes . ' type="image/webp">' . $fallbackTag . '</picture>';
             }
         }
 
@@ -5220,11 +5215,7 @@ JS;
         }
 
         if (!empty($variation['image']['srcset'])) {
-            $variation['image']['srcset'] = preg_replace_callback(
-                '/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i',
-                [self::$rewriteLogic, 'replaceSourceSrcset'],
-                $variation['image']['srcset']
-            );
+            $variation['image']['srcset'] = preg_replace_callback('/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i', [self::$rewriteLogic, 'replaceSourceSrcset'], $variation['image']['srcset']);
         }
 
         return $variation;
