@@ -899,12 +899,13 @@ class wps_ic_ajax extends wps_ic
         }
 
         $option = get_option($option_name);
-        $value = $option[$option_subset];
-        $default_excludes = $option[$option_subset . '_default_excludes_disabled'];
-        $exclude_themes = $option[$option_subset . '_exclude_themes'];
-        $exclude_plugins = $option[$option_subset . '_exclude_plugins'];
-        $exclude_wp = $option[$option_subset . '_exclude_wp'];
-        $exclude_third = $option[$option_subset . '_exclude_third'];
+        if (!is_array($option)) $option = [];
+        $value = $option[$option_subset] ?? '';
+        $default_excludes = $option[$option_subset . '_default_excludes_disabled'] ?? '';
+        $exclude_themes = $option[$option_subset . '_exclude_themes'] ?? '';
+        $exclude_plugins = $option[$option_subset . '_exclude_plugins'] ?? '';
+        $exclude_wp = $option[$option_subset . '_exclude_wp'] ?? '';
+        $exclude_third = $option[$option_subset . '_exclude_third'] ?? '';
         $min_mobile_width = get_option('wpc-min-mobile-width');
 
         if (empty($value)) {
@@ -976,6 +977,7 @@ class wps_ic_ajax extends wps_ic
                 $wpc_excludes['deferScript'] = $defer;
             }
 
+            $updated1 = false;
             if ($min_mobile_width !== 'false') {
                 $updated1 = update_option('wpc-min-mobile-width', $min_mobile_width);
             }

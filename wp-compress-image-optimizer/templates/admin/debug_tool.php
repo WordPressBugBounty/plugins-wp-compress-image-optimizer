@@ -1,6 +1,267 @@
 <?php
 global $wps_ic, $wpdb;
 
+// ─── URL Exclusions diagnostic + force-fix panel ─────────────────────
+// Lets admins verify the "Exclude from Plugin" feature end-to-end without SSH.
+// Handles 3 actions: regen advanced-cache.php, purge all caches, test a URL against the matcher.
+
+if (isset($_POST['wpc_excl_action']) && current_user_can('manage_options') && check_admin_referer('wpc_excl_diag')) {
+    $action = sanitize_text_field($_POST['wpc_excl_action']);
+    $exclMessages = [];
+
+    if ($action === 'regen') {
+        if (!class_exists('wps_ic_htaccess')) {
+            @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+        }
+        if (class_exists('wps_ic_htaccess')) {
+            $h = new wps_ic_htaccess();
+            $h->setWPCache(true);
+            $h->setAdvancedCache();
+
+            // Force opcache to drop the stale wp-config.php bytecode, otherwise PHP-FPM
+            // keeps serving the OLD constant value even after we wrote the new one.
+            if (function_exists('opcache_invalidate')) {
+                $cfgPath = ABSPATH . 'wp-config.php';
+                if (!file_exists($cfgPath) && file_exists(dirname(ABSPATH) . '/wp-config.php')) {
+                    $cfgPath = dirname(ABSPATH) . '/wp-config.php';
+                }
+                @opcache_invalidate($cfgPath, true);
+                @opcache_invalidate(ABSPATH . 'wp-content/advanced-cache.php', true);
+            }
+
+            $exclMessages[] = ['ok', 'Regenerated advanced-cache.php, re-asserted WP_CACHE in wp-config.php, and invalidated opcache.'];
+        } else {
+            $exclMessages[] = ['err', 'wps_ic_htaccess class not found.'];
+        }
+    }
+
+    if ($action === 'purge') {
+        if (class_exists('wps_ic_cache_integrations')) {
+            wps_ic_cache_integrations::purgeAll(false, true, false, true, true);
+            $exclMessages[] = ['ok', 'Purged page cache, object cache, and CDN.'];
+        }
+        wp_cache_flush();
+        // Also wipe disk cache directly
+        $cacheDirs = [
+            WP_CONTENT_DIR . '/cache/wpc',
+            WP_CONTENT_DIR . '/wpc-content/cache',
+        ];
+        foreach ($cacheDirs as $cd) {
+            if (is_dir($cd)) {
+                $files = glob($cd . '/*');
+                if ($files) {
+                    foreach ($files as $f) {
+                        if (is_file($f)) @unlink($f);
+                    }
+                }
+            }
+        }
+        $exclMessages[] = ['ok', 'Wiped on-disk cache directories.'];
+    }
+}
+
+$urlExcludes = get_option('wpc-url-excludes', []);
+$pluginPatterns = (is_array($urlExcludes) && !empty($urlExcludes['exclude-url-from-all'])) ? $urlExcludes['exclude-url-from-all'] : [];
+$cacheExcludes = get_option('wpc-excludes', []);
+$cachePatterns = (is_array($cacheExcludes) && !empty($cacheExcludes['cache'])) ? $cacheExcludes['cache'] : [];
+
+$advCachePath = ABSPATH . 'wp-content/advanced-cache.php';
+$advCacheExists = file_exists($advCachePath);
+$advCacheHasWildcard = false;
+$advCacheModified = '—';
+if ($advCacheExists) {
+    $advCacheBody = @file_get_contents($advCachePath);
+    $advCacheHasWildcard = ($advCacheBody !== false && strpos($advCacheBody, 'wpc-url-excludes') !== false);
+    $advCacheModified = date('Y-m-d H:i:s', filemtime($advCachePath));
+}
+
+$wpConfigPath = ABSPATH . 'wp-config.php';
+if (!file_exists($wpConfigPath) && file_exists(dirname(ABSPATH) . '/wp-config.php')) {
+    $wpConfigPath = dirname(ABSPATH) . '/wp-config.php';
+}
+$wpConfigWritable = file_exists($wpConfigPath) && is_writable($wpConfigPath);
+
+// Pull all WP_CACHE-related lines from wp-config.php so we can SEE what's there
+$wpCacheLines = [];
+if (file_exists($wpConfigPath)) {
+    $cfgBody = @file_get_contents($wpConfigPath);
+    if ($cfgBody !== false) {
+        $allLines = preg_split('/\r\n|\r|\n/', $cfgBody);
+        foreach ($allLines as $i => $line) {
+            if (stripos($line, 'WP_CACHE') !== false) {
+                $wpCacheLines[] = ($i + 1) . ': ' . $line;
+            }
+        }
+    }
+}
+
+// Detect opcache so we can warn if it's likely caching wp-config.php
+// Many hosts (WP Engine, Kinsta, others) restrict the opcache API via `restrict_api`
+// configuration. The check below tolerates that case without emitting warnings.
+$opcacheActive = false;
+if (function_exists('opcache_get_status')) {
+    try {
+        $prevLevel = error_reporting(0);
+        $status = @opcache_get_status(false);
+        error_reporting($prevLevel);
+        $opcacheActive = ($status !== false);
+    } catch (\Throwable $e) {
+        $opcacheActive = false;
+    }
+}
+
+// URL tester runs entirely in the browser (see JS at bottom of panel) so WAFs
+// don't block POSTs containing URL-shaped values.
+
+echo '<div style="background:#fffbeb;border:2px solid #fbbf24;padding:18px 22px;margin:10px 0;border-radius:8px;font-family:-apple-system,sans-serif;font-size:13px;">';
+echo '<strong style="font-size:15px;color:#92400e;">URL Exclusions Diagnostic</strong>';
+echo '<div style="color:#78350f;font-size:11px;margin-top:2px;">Use this to verify "Exclude from Plugin" / "Exclude from Cache" are wired correctly.</div>';
+echo '<br>';
+
+if (!empty($exclMessages)) {
+    foreach ($exclMessages as $m) {
+        $bg = $m[0] === 'ok' ? '#dcfce7' : '#fee2e2';
+        $bd = $m[0] === 'ok' ? '#86efac' : '#fca5a5';
+        $cl = $m[0] === 'ok' ? '#166534' : '#991b1b';
+        echo '<div style="background:' . $bg . ';border:1px solid ' . $bd . ';color:' . $cl . ';padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:12px;">' . esc_html($m[1]) . '</div>';
+    }
+}
+
+echo '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+echo '<tr><td style="padding:5px 8px;color:#78350f;width:260px;">Plugin exclude patterns saved:</td><td style="padding:5px 8px;font-family:monospace;">' . (empty($pluginPatterns) ? '<span style="color:#991b1b;">(none — feature inactive)</span>' : '<span style="color:#166534;">' . count($pluginPatterns) . ' pattern(s): ' . esc_html(implode(', ', $pluginPatterns)) . '</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">Cache exclude patterns saved:</td><td style="padding:5px 8px;font-family:monospace;">' . (empty($cachePatterns) ? '<span style="color:#6b7280;">(none)</span>' : '<span style="color:#166534;">' . count($cachePatterns) . ' pattern(s): ' . esc_html(implode(', ', $cachePatterns)) . '</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">advanced-cache.php exists:</td><td style="padding:5px 8px;font-family:monospace;">' . ($advCacheExists ? '<span style="color:#166534;">YES</span>' : '<span style="color:#991b1b;">NO</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">…has wildcard URL exclusion code:</td><td style="padding:5px 8px;font-family:monospace;">' . ($advCacheHasWildcard ? '<span style="color:#166534;">YES (new template)</span>' : '<span style="color:#991b1b;">NO — drop-in is stale, click "Regenerate" below</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">…last modified:</td><td style="padding:5px 8px;font-family:monospace;">' . esc_html($advCacheModified) . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">WP_CACHE constant:</td><td style="padding:5px 8px;font-family:monospace;">' . (defined('WP_CACHE') && WP_CACHE ? '<span style="color:#166534;">true</span>' : '<span style="color:#991b1b;">false &mdash; advanced-cache.php is ignored! Click "Regenerate" below or add <code>define(\'WP_CACHE\', true);</code> to wp-config.php manually.</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">wp-config.php writable:</td><td style="padding:5px 8px;font-family:monospace;">' . ($wpConfigWritable ? '<span style="color:#166534;">YES</span>' : '<span style="color:#991b1b;">NO &mdash; we cannot auto-set WP_CACHE; you must add <code>define(\'WP_CACHE\', true);</code> manually</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">wp-config.php path:</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">' . esc_html($wpConfigPath) . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;vertical-align:top;">WP_CACHE lines in wp-config.php:</td><td style="padding:5px 8px;font-family:monospace;font-size:11px;">';
+if (empty($wpCacheLines)) {
+    echo '<span style="color:#991b1b;">(none found &mdash; setWPCache() never wrote, or wrote to wrong file)</span>';
+} else {
+    foreach ($wpCacheLines as $ln) {
+        echo '<div>' . esc_html($ln) . '</div>';
+    }
+    if (count($wpCacheLines) > 1) {
+        echo '<div style="color:#991b1b;margin-top:4px;">\u26A0 Multiple definitions found &mdash; the LAST one wins. Make sure none of them say <code>false</code>.</div>';
+    }
+}
+echo '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">PHP opcache active:</td><td style="padding:5px 8px;font-family:monospace;">' . ($opcacheActive ? '<span style="color:#92400e;">YES &mdash; new wp-config.php may be cached. Click "Regenerate" (now invalidates opcache too) then refresh this page.</span>' : '<span style="color:#6b7280;">no</span>') . '</td></tr>';
+echo '<tr><td style="padding:5px 8px;color:#78350f;">wpc_url_is_excluded() helper:</td><td style="padding:5px 8px;font-family:monospace;">' . (function_exists('wpc_url_is_excluded') ? '<span style="color:#166534;">loaded</span>' : '<span style="color:#991b1b;">MISSING</span>') . '</td></tr>';
+echo '</table>';
+
+echo '<form method="post" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">';
+wp_nonce_field('wpc_excl_diag');
+echo '<button type="submit" name="wpc_excl_action" value="regen" style="background:#ca8a04;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:12px;cursor:pointer;">Regenerate advanced-cache.php</button>';
+echo '<button type="submit" name="wpc_excl_action" value="purge" style="background:#dc2626;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:12px;cursor:pointer;">Purge ALL caches</button>';
+echo '</form>';
+
+echo '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #fbbf24;">';
+echo '<strong style="color:#92400e;">Test a URL against your saved patterns:</strong>';
+echo '<div style="color:#78350f;font-size:11px;margin-top:2px;">Runs entirely in your browser — no server request, no WAF involved.</div>';
+echo '<div style="margin-top:8px;display:flex;gap:6px;">';
+echo '<input type="text" id="wpc-excl-test-input" placeholder="https://yoursite.com/offer/di-premium/?source=foo" style="flex:1;padding:8px 10px;border:1px solid #fbbf24;border-radius:6px;font-family:monospace;font-size:12px;">';
+echo '<button type="button" id="wpc-excl-test-btn" style="background:#0f172a;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;">Test</button>';
+echo '</div>';
+echo '<div id="wpc-excl-test-result" style="display:none;margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #fde68a;border-radius:6px;font-family:monospace;font-size:12px;"></div>';
+echo '</div>';
+
+// Inject patterns for the in-browser tester (matcher logic lives in clean heredoc below)
+$jsPluginPatterns = wp_json_encode(array_values($pluginPatterns));
+$jsCachePatterns  = wp_json_encode(array_values($cachePatterns));
+?>
+<script>
+(function(){
+    var WPC_PLUGIN_PATTERNS = <?php echo $jsPluginPatterns; ?> || [];
+    var WPC_CACHE_PATTERNS  = <?php echo $jsCachePatterns; ?> || [];
+
+    // Mirrors wpc_url_matches_pattern() from wp-compress-core.php — char-by-char to avoid
+    // any string-escape nightmares with regex metacharacters.
+    function wpcMatches(url, pattern) {
+        pattern = (pattern || '').trim();
+        if (!pattern || pattern.charAt(0) === '#') return false;
+        pattern = pattern.replace(/^\/+/, '');
+        // No wildcards → case-insensitive substring match
+        if (pattern.indexOf('*') === -1 && pattern.indexOf('?') === -1) {
+            return url.toLowerCase().indexOf(pattern.toLowerCase()) !== -1;
+        }
+        // Has wildcards → build regex character-by-character
+        var rx = '';
+        var meta = '.+^${}()|[]\\';
+        for (var i = 0; i < pattern.length; i++) {
+            var c = pattern.charAt(i);
+            if (c === '*') {
+                if (pattern.charAt(i + 1) === '*') { rx += '.*'; i++; }
+                else { rx += '[^/]*'; }
+            } else if (c === '?') {
+                rx += '.';
+            } else if (meta.indexOf(c) !== -1) {
+                rx += '\\' + c;
+            } else {
+                rx += c;
+            }
+        }
+        try { return new RegExp(rx, 'i').test(url); } catch (e) { return false; }
+    }
+
+    function wpcFirstMatch(url, list) {
+        for (var i = 0; i < list.length; i++) {
+            if (wpcMatches(url, list[i])) return list[i];
+        }
+        return false;
+    }
+
+    function wpcEsc(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    var btn = document.getElementById('wpc-excl-test-btn');
+    var input = document.getElementById('wpc-excl-test-input');
+    var box = document.getElementById('wpc-excl-test-result');
+
+    if (btn && input && box) {
+        btn.addEventListener('click', function() {
+            var raw = input.value.trim();
+            if (!raw) return;
+            var normalized = raw.replace(/^https?:\/\//i, '').split('?')[0];
+            var p = wpcFirstMatch(normalized, WPC_PLUGIN_PATTERNS);
+            var c = wpcFirstMatch(normalized, WPC_CACHE_PATTERNS);
+            var html = '<div style="color:#6b7280;">Normalized URL: <code>' + wpcEsc(normalized) + '</code></div>';
+            html += p
+                ? '<div style="color:#16a34a;margin-top:6px;">\u2713 <strong>EXCLUDED FROM PLUGIN</strong> \u2014 matched pattern: <code>' + wpcEsc(p) + '</code> \u2192 no optimizations will run on this URL.</div>'
+                : '<div style="color:#dc2626;margin-top:6px;">\u2717 Not excluded from plugin (no matching pattern in <code>wpc-url-excludes</code>)</div>';
+            html += c
+                ? '<div style="color:#16a34a;margin-top:4px;">\u2713 Excluded from cache \u2014 matched: <code>' + wpcEsc(c) + '</code></div>'
+                : '<div style="color:#6b7280;margin-top:4px;">\u2014 Not excluded from cache</div>';
+            box.style.display = 'block';
+            box.innerHTML = html;
+        });
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                btn.click();
+            }
+        });
+    }
+})();
+</script>
+<?php
+
+echo '<details style="margin-top:14px;font-size:11px;color:#78350f;"><summary style="cursor:pointer;">If patterns ARE saved but page still shows optimizations, check this</summary>';
+echo '<ol style="margin:8px 0;padding-left:20px;line-height:1.7;">';
+echo '<li><strong>Click "Regenerate advanced-cache.php"</strong> above (if "has wildcard code" shows NO).</li>';
+echo '<li><strong>Click "Purge ALL caches"</strong> — old optimized HTML may still be cached on disk/CDN.</li>';
+echo '<li>If on Cloudflare → also purge from CF dashboard, or wait ~30s for edge to expire.</li>';
+echo '<li>Hit the URL with a fresh browser (incognito) to bypass browser cache.</li>';
+echo '<li>If still optimized → check the URL above with the live tester. If it says "Not excluded from plugin", your pattern doesn\'t actually match — adjust it.</li>';
+echo '<li>If pattern matches but page is still optimized → there\'s a host-level cache (Cloudways Varnish, LiteSpeed, etc.) serving the old HTML. Purge from hosting panel.</li>';
+echo '</ol>';
+echo '</details>';
+
+echo '</div>';
+
 // Critical CSS debug transients removed in 7.00.05 — disk scanner below is retained for support
 
 // ─── Critical CSS on-disk scanner ─────────────────────
@@ -37,7 +298,10 @@ if (is_dir($critDir)) {
 // ─── Purge Debug Log (stored in DB, works on all hosts) ─────────────────────
 $purgeLog = get_option('wpc_purge_debug_log', []);
 echo '<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
-echo '<strong style="font-size:14px;">Purge Debug Log (last 20 events)</strong><br><br>';
+echo '<strong style="font-size:14px;">Purge Debug Log (last 20 events)</strong><br>';
+echo '<div style="color:#1e40af;font-size:11px;margin:4px 0 8px 0;line-height:1.5;">';
+echo '<strong>Note:</strong> WP Engine and CloudFlare-backed CDNs take <strong>30&ndash;60 seconds</strong> to propagate purges at the edge. If HTML still looks stale right after saving settings, wait ~1 minute and retest, or append a cache-busting query string (e.g. <code>?v=123</code>) to bypass the edge cache entirely.';
+echo '</div>';
 if (empty($purgeLog)) {
     echo '<em>No purge events yet. Change a setting and save to see entries.</em>';
 } else {
@@ -48,6 +312,62 @@ if (empty($purgeLog)) {
         if (strpos($line, 'WPE=YES') !== false) $color = '#16a34a';
         if (strpos($line, 'html=NO') !== false) $color = '#f59e0b';
         echo '<div style="color:' . $color . ';">' . esc_html($line) . '</div>';
+    }
+    echo '</div>';
+}
+echo '</div>';
+
+// ─── 7.00.08 Diagnostic Log (LCP BETA + cookie-plugin interactions + vars preservation) ─────────────────────
+// Clear action
+if (isset($_GET['wpc_clear_diagnostic_log']) && current_user_can('manage_options') && wp_verify_nonce($_GET['_wpnonce'] ?? '', 'wpc_clear_diagnostic_log')) {
+    delete_option('wpc_diagnostic_log');
+    echo '<div style="background:#dcfce7;border:1px solid #86efac;color:#166534;padding:8px 12px;border-radius:6px;margin:10px 0;font-size:12px;">Diagnostic log cleared.</div>';
+}
+
+$diagLog = get_option('wpc_diagnostic_log', []);
+if (!is_array($diagLog)) $diagLog = [];
+
+// Summarize by tag so users see what's active at a glance
+$tagCounts = [];
+foreach ($diagLog as $line) {
+    if (preg_match('/\| ([A-Z_]+) \|/', $line, $m)) {
+        $tagCounts[$m[1]] = ($tagCounts[$m[1]] ?? 0) + 1;
+    }
+}
+
+echo '<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+echo '<strong style="font-size:14px;color:#1e40af;">7.00.08 Tracking Log (last 100 events)</strong>';
+echo ' <a href="' . esc_url(add_query_arg(['wpc_clear_diagnostic_log' => '1', '_wpnonce' => wp_create_nonce('wpc_clear_diagnostic_log')])) . '" style="margin-left:12px;font-size:11px;color:#dc2626;">Clear Log</a>';
+echo '<br>';
+echo '<div style="color:#1e3a8a;font-size:11px;margin-top:2px;">Records when new 7.00.08 features fire: LCP BETA srcset generation, cookie-plugin detection, WPC inline-vars preservation. Browse the frontend to collect entries.</div>';
+echo '<br>';
+
+// Legend showing which features are actually firing
+echo '<div style="background:#fff;border:1px solid #dbeafe;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-size:11px;">';
+$legend = [
+    'LCP_BETA' => ['Optimize LCP Images (BETA) — device-independent srcset stamped on a lazy-skipped image', $tagCounts['LCP_BETA'] ?? 0],
+    'COOKIE_PLUGIN_DETECTED' => ['Cookie-consent plugin detected — jQuery ecosystem excluded from delay', $tagCounts['COOKIE_PLUGIN_DETECTED'] ?? 0],
+    'VARS_PRESERVED' => ['WPC inline vars (wp_localize_script output) preserved from delay — script runs at parse time', $tagCounts['VARS_PRESERVED'] ?? 0],
+    'DELAY_EXCLUDE_JQ' => ['jQuery/WooCommerce/blockUI script excluded from delay — avoids jQuery-is-not-defined race', $tagCounts['DELAY_EXCLUDE_JQ'] ?? 0],
+];
+foreach ($legend as $tag => [$desc, $count]) {
+    $color = $count > 0 ? '#16a34a' : '#6b7280';
+    $badge = $count > 0 ? '✓' : '○';
+    echo '<div style="padding:2px 0;color:' . $color . ';">' . $badge . ' <strong>' . $tag . '</strong> (' . $count . ')&nbsp;— ' . esc_html($desc) . '</div>';
+}
+echo '</div>';
+
+if (empty($diagLog)) {
+    echo '<em style="color:#6b7280;">No events captured yet. Visit the frontend (or toggle Optimize LCP Images BETA and reload) to populate this log.</em>';
+} else {
+    echo '<div style="max-height:400px;overflow:auto;white-space:pre-wrap;line-height:1.8;">';
+    foreach (array_reverse($diagLog) as $line) {
+        $color = '#334155';
+        if (strpos($line, 'LCP_BETA') !== false) $color = '#0891b2';
+        if (strpos($line, 'COOKIE_PLUGIN_DETECTED') !== false) $color = '#ca8a04';
+        if (strpos($line, 'VARS_PRESERVED') !== false) $color = '#16a34a';
+        if (strpos($line, 'DELAY_EXCLUDE_JQ') !== false) $color = '#2563eb';
+        echo '<div style="color:' . $color . ';border-bottom:1px solid #eff6ff;padding:2px 0;">' . esc_html($line) . '</div>';
     }
     echo '</div>';
 }

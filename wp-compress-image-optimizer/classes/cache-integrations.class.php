@@ -214,11 +214,18 @@ class wps_ic_cache_integrations
 
         // Change CSS Hash
         $oldOptions = $options = get_option(WPS_IC_OPTIONS);
+        if (!is_array($options)) $oldOptions = $options = [];
 
         $CSSHash = substr(md5(microtime(true)), 0, 6);
         $JSHash = strrev($CSSHash);
+        // HTML content version — bumped on every purge so we have a debugging marker
+        // for "was this HTML generated before or after this purge?" investigations.
+        // Doesn't bust edge CDN cache on its own (CDN keys off URL), but pairs with
+        // purgeHostingCaches() to give support a timeline to correlate against.
+        $HTMLHash = substr(md5(microtime(true) . 'html'), 0, 6);
 
         $options['css_hash'] = $CSSHash;
+        $options['html_hash'] = $HTMLHash;
 
         if ($purgeJS) {
             $options['js_hash'] = $JSHash;
@@ -283,10 +290,46 @@ class wps_ic_cache_integrations
     public static function purgeHostingCaches()
     {
         // WP Engine (memcached + varnish + CDN/Cloudflare)
+        // The CDN purge call returns immediately but CloudFlare propagation takes 30–60s —
+        // that's a platform characteristic, not fixable from PHP. We log the methods fired
+        // so support can correlate purge timing to observed behavior.
         if (class_exists('WpeCommon')) {
-            if (method_exists('WpeCommon', 'purge_memcached')) WpeCommon::purge_memcached();
-            if (method_exists('WpeCommon', 'purge_varnish_cache')) WpeCommon::purge_varnish_cache();
-            if (method_exists('WpeCommon', 'clear_cdn_cache')) WpeCommon::clear_cdn_cache();
+            $wpeMethods = [];
+            if (method_exists('WpeCommon', 'purge_memcached')) {
+                WpeCommon::purge_memcached();
+                $wpeMethods[] = 'memcached';
+            }
+            if (method_exists('WpeCommon', 'purge_varnish_cache')) {
+                WpeCommon::purge_varnish_cache();
+                $wpeMethods[] = 'varnish';
+            }
+            if (method_exists('WpeCommon', 'clear_cdn_cache')) {
+                WpeCommon::clear_cdn_cache();
+                $wpeMethods[] = 'cdn-async-30-60s';
+            }
+            if (!empty($wpeMethods)) {
+                if (function_exists('wpc_diagnostic_log')) {
+                    wpc_diagnostic_log('WPE_PURGE', 'methods=' . implode(',', $wpeMethods));
+                }
+                // Also write to the purge debug log so it's visible alongside other purge events
+                $plog = get_option('wpc_purge_debug_log', []);
+                if (!is_array($plog)) $plog = [];
+                $plog[] = date('Y-m-d H:i:s') . ' | WPE purged directly: ' . implode(', ', $wpeMethods);
+                update_option('wpc_purge_debug_log', array_slice($plog, -20), false);
+            }
+        }
+
+        // WPC's own drop-in cache files — belt-and-suspenders on top of purgeCacheFiles().
+        // Ensures every HTML cache layer we control is nuked on each purgeAll.
+        foreach ([WP_CONTENT_DIR . '/cache/wpc', WP_CONTENT_DIR . '/wpc-content/cache'] as $dir) {
+            if (is_dir($dir)) {
+                $files = glob($dir . '/*');
+                if ($files) {
+                    foreach ($files as $f) {
+                        if (is_file($f)) @unlink($f);
+                    }
+                }
+            }
         }
         // Kinsta
         if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)) {

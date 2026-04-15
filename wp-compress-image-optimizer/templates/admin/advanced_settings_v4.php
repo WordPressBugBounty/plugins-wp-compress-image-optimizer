@@ -1038,8 +1038,8 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Background Images', WPS_IC_TEXTDOMAIN), __('Serve background images over CDN with all the adaptive and quality options.', WPS_IC_TEXTDOMAIN), false, '0', 'background-sizing', $adaptiveLocked, 'right'); ?>
 
-                                            <?php /* Hidden for 7.00.06 — LCP srcset needs both rewrite pipelines
-                                            echo $gui::checkboxDescription_v4(__('Optimize LCP Images', WPS_IC_TEXTDOMAIN), __('Serve responsive sizes for above-fold images. Reduces download size without affecting visual quality.', WPS_IC_TEXTDOMAIN), false, '0', 'optimize-lcp', false, 'right', false, false, 'left', 'BETA'); */ ?>
+                                            <?php
+                                            echo $gui::checkboxDescription_v4(__('Optimize LCP Images', WPS_IC_TEXTDOMAIN), __('Serve a responsive srcset for above-the-fold images so phones download mobile-sized variants instead of the full-size original. Improves LCP and "Properly size images" PageSpeed audits.', WPS_IC_TEXTDOMAIN), false, '0', 'optimize-lcp', false, 'right', false, false, 'left', 'BETA'); ?>
 
                                         </div>
 

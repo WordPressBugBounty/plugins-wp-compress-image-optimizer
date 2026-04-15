@@ -8,6 +8,12 @@ global $wps_ic_cdn_instance;
 if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
     set_error_handler(function ($errno, $errstr, $errfile, $errline) {
         try {
+            // Honor @-operator suppression. When a caller writes @something(),
+            // PHP sets error_reporting() to 0 for the duration of that call.
+            // We should NOT log errors the developer explicitly suppressed.
+            if (error_reporting() === 0) {
+                return false;
+            }
             // ONLY capture errors from our plugin directory — skip everything else
             if (strpos($errfile, 'wp-compress') === false) {
                 return false;
@@ -73,6 +79,44 @@ if (!function_exists('wpc_url_is_excluded')) {
             }
         }
         return false;
+    }
+}
+
+/**
+ * WPC diagnostic logger — captures info-level tracking events for 7.00.08 features
+ * (LCP BETA, cookie-plugin interactions, vars-block preservation).
+ *
+ * Writes to `wpc_diagnostic_log` option, capped at 100 entries, no autoload.
+ * Surfaces in Debug Tool so customers can verify feature operation without SSH.
+ *
+ * Dedupe: same tag+detail within same request = skip (prevents flooding).
+ * Sampled: only first N of any tag per request to avoid blowing up the log on high-image pages.
+ */
+if (!function_exists('wpc_diagnostic_log')) {
+    function wpc_diagnostic_log($tag, $detail = '') {
+        try {
+            static $seen = [];
+            static $tagCounts = [];
+
+            // Per-tag sample cap: only log first 5 of each tag per request
+            $tagCounts[$tag] = ($tagCounts[$tag] ?? 0) + 1;
+            if ($tagCounts[$tag] > 5) return;
+
+            // Per-request dedupe on exact tag+detail
+            $key = $tag . '|' . $detail;
+            if (isset($seen[$key])) return;
+            $seen[$key] = true;
+
+            // Hard memory cap
+            if (count($seen) > 100) return;
+
+            $log = get_option('wpc_diagnostic_log', []);
+            if (!is_array($log)) $log = [];
+            $log[] = date('Y-m-d H:i:s') . ' | ' . $tag . ' | ' . $detail;
+            update_option('wpc_diagnostic_log', array_slice($log, -100), false);
+        } catch (\Throwable $e) {
+            // Never let diagnostic logging itself break things
+        }
     }
 }
 
@@ -454,7 +498,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.00.07';
+        self::$version = '7.00.08';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -585,6 +629,20 @@ class wps_ic
                 // Purge Object Cache
                 $cacheObject = new wps_ic_cache();
                 $cacheObject->purgeObjectCache();
+
+                // Force regen of wp-content/advanced-cache.php from the (possibly updated) template
+                // so new features (e.g. URL exclusions) take effect immediately on upgrade
+                // without requiring the user to save settings first.
+                // Also (re-)assert WP_CACHE = true in wp-config.php; some upgrade paths (uploader,
+                // managed-host snapshots) bypass activation() so the constant can drift to false.
+                if (!class_exists('wps_ic_htaccess')) {
+                    @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+                }
+                if (class_exists('wps_ic_htaccess')) {
+                    $htaccess = new wps_ic_htaccess();
+                    $htaccess->setWPCache(true);
+                    $htaccess->setAdvancedCache();
+                }
 
                 // Update the stored version
                 update_option('wpc_core_version', self::$version);

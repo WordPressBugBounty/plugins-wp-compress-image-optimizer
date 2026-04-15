@@ -21,7 +21,8 @@ class wps_ic_js_delay_v2
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode', // dark mode switcher
-          'n489D_var',
+          'n489D_var', // WPC js_delay config vars (inline block must run at parse time)
+          'ngf298gh738qwbdh0s87v_vars', // WPC adaptive optimizer config vars (inline wp_localize_script output)
           'wpcRunningCritical',
           'trustLogo', // css safety service, uses document.write
           'turnstile', // had delayed loading detection, throws error
@@ -53,19 +54,57 @@ class wps_ic_js_delay_v2
 
         // If a cookie consent plugin is active, also exclude jQuery (their dependency).
         // Only done conditionally to avoid impacting sites without cookie plugins.
+        // NOTE: historical typos (complianz-gpdr.php) caused Complianz sites to silently skip
+        // the jQuery exclusion block for years. Both the correct AND typo'd paths are listed
+        // so sites that upgraded before the typo fix still work.
         $cookiePlugins = [
             'gdpr-cookie-consent/gdpr-cookie-consent.php',
             'cookie-law-info/cookie-law-info.php',
             'cookie-notice/cookie-notice.php',
-            'complianz-gdpr/complianz-gpdr.php',
-            'complianz-gdpr-premium/complianz-gpdr.php',
+            'complianz-gdpr/complianz-gdpr.php',            // correct path
+            'complianz-gdpr-premium/complianz-gdpr.php',    // correct path (premium)
+            'complianz-gdpr/complianz-gpdr.php',            // legacy typo fallback
+            'complianz-gdpr-premium/complianz-gpdr.php',    // legacy typo fallback (premium)
             'iubenda-cookie-law-solution/iubenda_cookie_solution.php',
             'moove-gdpr-cookie-compliance/moove-gdpr-cookie-compliance.php',
         ];
         foreach ($cookiePlugins as $plugin) {
             if (is_plugin_active($plugin)) {
-                $this->excludes[] = 'jquery.min.js';
-                $this->excludes[] = 'jquery.js';
+                // Full jQuery + WooCommerce dependency chain — all must load eagerly when
+                // a cookie-consent plugin is active, otherwise we get cascading
+                // "X is not defined" ReferenceErrors as each script references the next.
+                //
+                // Order matters: jQuery → js-cookie → jquery.blockUI → woocommerce.min.js
+                // → wc-add-to-cart → wc-checkout. Any one missing kills the chain.
+                $cookieEcosystem = [
+                    'jquery.min.js',
+                    'jquery.js',
+                    'jquery-migrate',
+                    'jquery-ui',
+                    'jquery.blockUI',
+                    'js-cookie',        // enqueue handle
+                    'js.cookie',        // filename (js.cookie.min.js — provides window.Cookies)
+                    'woocommerce.min.js',
+                    'wc-cart-fragments',
+                    'wc-add-to-cart',
+                    'wc-checkout',
+                ];
+                // Exclude from delay (must load eagerly for Complianz / consent gates)
+                foreach ($cookieEcosystem as $script) {
+                    $this->excludes[] = $script;
+                }
+                // ALSO defer them — otherwise they're render-blocking in the critical path.
+                // `defer` lets them download in parallel with HTML parsing, executing in document
+                // order after parse completes but before DOMContentLoaded. Complianz, WC, etc.
+                // only reference each other via DOMContentLoaded handlers, so load order is
+                // preserved. Gets these scripts OUT of the LCP critical path (PageSpeed wins).
+                foreach ($cookieEcosystem as $script) {
+                    $this->deferPatterns[] = $script;
+                }
+
+                if (function_exists('wpc_diagnostic_log')) {
+                    wpc_diagnostic_log('COOKIE_PLUGIN_DETECTED', basename($plugin) . ' → jQuery/WooCommerce ecosystem excluded-from-delay AND deferred (non-blocking)');
+                }
                 break;
             }
         }
@@ -403,6 +442,13 @@ class wps_ic_js_delay_v2
 
         if (!empty($attributes['src'])) {
             if ($this->checkKeyword($attributes['src'], $this->excludes)) {
+                // Diagnostic: capture when jQuery-ecosystem or WPC vars fire on the exclude path
+                if (function_exists('wpc_diagnostic_log')) {
+                    $src = $attributes['src'];
+                    if (stripos($src, 'jquery') !== false || stripos($src, 'blockui') !== false || stripos($src, 'woocommerce') !== false || stripos($src, 'wc-') !== false) {
+                        wpc_diagnostic_log('DELAY_EXCLUDE_JQ', basename($src));
+                    }
+                }
                 return true;
             }
 
@@ -413,6 +459,14 @@ class wps_ic_js_delay_v2
         }
 
         if (!empty($content) && $this->checkKeyword($content, $this->excludes)) {
+            // Diagnostic: capture when WPC inline vars are preserved (not delayed)
+            if (function_exists('wpc_diagnostic_log')) {
+                if (stripos($content, 'ngf298gh738qwbdh0s87v_vars') !== false) {
+                    wpc_diagnostic_log('VARS_PRESERVED', 'ngf298gh738qwbdh0s87v_vars (adaptive optimizer)');
+                } elseif (stripos($content, 'n489D_var') !== false) {
+                    wpc_diagnostic_log('VARS_PRESERVED', 'n489D_var (js_delay config)');
+                }
+            }
             return true;
         }
 

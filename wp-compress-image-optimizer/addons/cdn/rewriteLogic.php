@@ -895,6 +895,50 @@ class wps_rewriteLogic
         return $Width;
     }
 
+
+    /**
+     * Build a device-independent multi-candidate srcset for LCP (lazy-skipped) images.
+     *
+     * Unlike rewriteSrcset() — which bails on mobile to support device-split page caches —
+     * this function emits the SAME multi-width ladder regardless of the requesting device.
+     * The browser picks the appropriate candidate from `srcset` at render time based on
+     * actual viewport and DPR, so output is safe under any cache-split strategy.
+     *
+     * Capped at the user's `maxWidth` setting (default 2560). Ladder: 400, 800, 1200, 1600, 2048, 2560.
+     *
+     * CDN-mode only — local/non-CDN sites should preserve WordPress's native `srcset` instead.
+     */
+    public static function buildLcpSrcset($imageUrl)
+    {
+        $maxW = !empty(self::$settings['maxWidth']) ? (int) self::$settings['maxWidth'] : 2560;
+        if ($maxW < 100) $maxW = 2560; // guard against bad setting values
+
+        // Finer-grained ladder to minimize over-fetching.
+        // Common breakpoints from real-world use: 400 (small mobile), 480 (mobile), 640 (large
+        // mobile / small container), 720 (tablet portrait), 800 (tablet / small desktop col),
+        // 960 (medium col), 1200 (standard content), 1600 (wide), 2048 (retina content), 2560 (hero max).
+        // Browsers pick the smallest candidate ≥ the required width, so tighter spacing = less waste.
+        $widths = [400, 480, 640, 720, 800, 960, 1200, 1600, 2048, 2560];
+        $widths = array_unique(array_map(function ($w) use ($maxW) {
+            return min($w, $maxW);
+        }, $widths));
+        sort($widths);
+
+        // Build the /wp:X segment matching the format used elsewhere in this file
+        // (e.g. line 485). Respect per-URL webp exclusion.
+        $webpSegment = '/wp:' . self::$webp;
+        if (self::isExcludedFrom('webp', $imageUrl)) {
+            $webpSegment = '';
+        }
+
+        $candidates = [];
+        foreach ($widths as $w) {
+            $candidates[] = self::$apiUrl . '/r:' . self::$isRetina . $webpSegment . '/w:' . $w . '/u:' . self::reformatUrl($imageUrl) . ' ' . $w . 'w';
+        }
+
+        return implode(', ', $candidates);
+    }
+
     public function favIcon($html)
     {
         $html = preg_replace_callback('/<link\s+([^>]+[\s\'"])?rel\s*=\s*[\'"]icon[\'"]/is', [__CLASS__, 'checkFavIcon'], $html);
@@ -2025,8 +2069,16 @@ SCRIPT;
             //$html[0] = preg_replace('/(<(?:source|img)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
 
             //todo: above was breaking images without src, only srcset
-            // Only remove srcset if src attribute exists
-            $html[0] = preg_replace('/(<(?:source|img)\b(?=[^>]*\ssrc=)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+            // Only remove srcset if src attribute exists.
+            // LCP BETA: exempt images with `wpc-lcp-optimized` class. Those carry an
+            // intentionally device-INDEPENDENT multi-candidate srcset (buildLcpSrcset)
+            // — stripping it on mobile would force a single size and defeat the whole
+            // purpose of the feature (cache-poisoning-safe responsive delivery).
+            if (!empty(self::$settings['optimize-lcp'])) {
+                $html[0] = preg_replace('/(<(?:source|img)\b(?=[^>]*\ssrc=)(?![^>]*wpc-lcp-optimized)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+            } else {
+                $html[0] = preg_replace('/(<(?:source|img)\b(?=[^>]*\ssrc=)[^>]*)\s+srcset="[^"]*"([^>]*>)/i', '$1$2', $html[0]);
+            }
         }
 
         $html = preg_replace_callback('/(?:https?:\/\/|\/)[^\s]+\.(jpg|jpeg|png|gif|svg|webp)/i', [__CLASS__, 'replaceSourceSrcset'], $html);
@@ -2488,9 +2540,66 @@ SCRIPT;
                 $original_img_tag['additional_tags']['fetchpriority'] = 'high';
             }
 
-            #$original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
-            $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped3';
-            $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
+            // BETA: Optimize LCP Images — replace exclude-adaptive behavior with a real
+            // device-independent multi-candidate srcset so hero images download at
+            // appropriate size per viewport (instead of full original for every device).
+            // Gated behind 'optimize-lcp' setting, default off. Safe because:
+            //   - Only affects lazy-skipped images (first N)
+            //   - Output is identical across devices → works under device-split page caches
+            //   - CDN-mode stamps buildLcpSrcset(); local-mode preserves WP-generated srcset
+            if (!empty(self::$settings['optimize-lcp'])) {
+                $mode = !empty(self::$zoneName) ? 'cdn' : 'local';
+                if ($mode === 'cdn') {
+                    // CDN mode — device-independent, cache-poisoning-safe LCP image:
+                    //  • Multi-candidate srcset on <img> (6-ladder: 400..2560)
+                    //  • `sizes="auto, 100vw"` — modern browsers (Chrome 117+, FF 123+, Safari 18.4+)
+                    //    auto-calculate the rendered size from actual layout; older browsers
+                    //    fall back to `100vw`. This is the true container-aware signal.
+                    //  • Fallback `src` at user's configured maxWidth — highest quality for the
+                    //    rare browsers that can't use srcset. Value is settings-derived, so
+                    //    output is identical across devices → safe under device-split page caches.
+                    $fallbackWidth = !empty(self::$settings['maxWidth']) ? (int) self::$settings['maxWidth'] : 2560;
+                    if ($fallbackWidth < 400) $fallbackWidth = 400; // sanity guard against nonsense settings
+                    $original_img_tag['src'] = self::$apiUrl . '/r:' . self::$isRetina . $webp . '/w:' . $fallbackWidth . '/u:' . self::reformatUrl($image_source);
+                    $original_img_tag['original_tags']['srcset'] = self::buildLcpSrcset($image_source);
+                    // Preserve any existing `sizes` attribute (WP-generated ones are typically
+                    // more specific and should win). Only add our default if absent.
+                    //
+                    // For images with a declared `width` attribute smaller than viewport-ish width,
+                    // use the width as a sizes hint. This prevents small-container images (logos,
+                    // thumbnails) from being picked at 100vw on mobile browsers that don't yet
+                    // support `sizes="auto"` (Chrome <117, Safari <18.4).
+                    //
+                    // `auto` is still listed first so modern browsers use actual layout measurement
+                    // (most accurate); the width-hint is a fallback that prevents "logo downloads
+                    // at 1600w on retina phone" waste on older browsers.
+                    if (empty($original_img_tag['original_tags']['sizes'])) {
+                        $imgWidth = !empty($original_img_tag['original_tags']['width']) ? (int) $original_img_tag['original_tags']['width'] : 0;
+                        if ($imgWidth > 0 && $imgWidth < 1200) {
+                            // Small image: width-hint fallback (logos, thumbnails, cards)
+                            $original_img_tag['original_tags']['sizes'] = 'auto, (max-width: ' . $imgWidth . 'px) 100vw, ' . $imgWidth . 'px';
+                        } else {
+                            // Large/hero image or unknown width: full viewport
+                            $original_img_tag['original_tags']['sizes'] = 'auto, 100vw';
+                        }
+                    }
+                    if (function_exists('wpc_diagnostic_log')) {
+                        wpc_diagnostic_log('LCP_BETA', 'cdn-mode img#' . self::$lazyLoadedImages . ' src=' . basename(parse_url($image_source, PHP_URL_PATH) ?: $image_source) . ' fallback-w=' . $fallbackWidth);
+                    }
+                } else {
+                    // local mode: leave original_tags['srcset'] untouched — WP's native srcset persists
+                    // src is the raw local URL already, not device-dependent, no override needed
+                    if (function_exists('wpc_diagnostic_log')) {
+                        wpc_diagnostic_log('LCP_BETA', 'local-mode img#' . self::$lazyLoadedImages . ' src=' . basename(parse_url($image_source, PHP_URL_PATH) ?: $image_source));
+                    }
+                }
+                $original_img_tag['original_tags']['class'] .= ' wpc-lcp-optimized wpc-lazy-skipped3';
+                // Don't stamp wpc-data: excluded-adaptive — this image IS adaptive now
+            } else {
+                #$original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
+                $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive wpc-lazy-skipped3';
+                $original_img_tag['additional_tags']['wpc-data'] = 'excluded-adaptive';
+            }
             unset($original_img_tag['additional_tags']['data-wpc-loaded'], $original_img_tag['original_tags']['data-src'], $original_img_tag['data-src']);
         }
 
@@ -2543,10 +2652,24 @@ SCRIPT;
 		    $original_img_tag['original_tags']['data-srcset'] = '';
 	    }
 
-        if (!self::$excludes_class->isAdaptiveExcluded($image_source, $original_img_tag['original_tags']['class'])) {
+        // LCP BETA: if this image was just stamped with wpc-lcp-optimized, our
+        // buildLcpSrcset() output is already in original_tags['srcset']. Do NOT run it
+        // through rewriteSrcset() because that function bails to empty on mobile (device-
+        // split cache safety) — and that would erase our device-independent multi-candidate
+        // ladder right after we built it. Skip to preserve our output.
+        $isLcpOptimized = !empty(self::$settings['optimize-lcp'])
+            && strpos($original_img_tag['original_tags']['class'], 'wpc-lcp-optimized') !== false;
+
+        if (!$isLcpOptimized && !self::$excludes_class->isAdaptiveExcluded($image_source, $original_img_tag['original_tags']['class'])) {
             $original_img_tag['original_tags']['srcset'] = $this->rewriteSrcset($original_img_tag, $original_img_tag['original_tags']['srcset']);
             //here
             $original_img_tag['original_tags']['data-srcset'] = $this->cdnSrcsetOnly($original_img_tag['original_tags']['data-srcset']);
+        } elseif ($isLcpOptimized) {
+            // Also process data-srcset if any, but preserve the main srcset
+            $original_img_tag['original_tags']['data-srcset'] = $this->cdnSrcsetOnly($original_img_tag['original_tags']['data-srcset']);
+            if (function_exists('wpc_diagnostic_log')) {
+                wpc_diagnostic_log('LCP_SRCSET_PRESERVED', 'bypassed rewriteSrcset mobile-bail for ' . basename(parse_url($image_source, PHP_URL_PATH) ?: $image_source));
+            }
         } else {
             // TODO: For some reason this was commented out (class)
             $original_img_tag['original_tags']['class'] .= ' wpc-excluded-adaptive';

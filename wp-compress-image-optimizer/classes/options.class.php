@@ -147,6 +147,7 @@ class wps_ic_options
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
+            'optimize-lcp' => '0', // BETA — device-independent LCP srcset (7.00.08+)
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => '1',
@@ -228,6 +229,7 @@ class wps_ic_options
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
+            'optimize-lcp' => '0', // BETA — device-independent LCP srcset (7.00.08+)
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => 1,

@@ -240,6 +240,13 @@ class wps_cdn_rewrite
 
     public static function dontRunif()
     {
+        // Hard bypass via ?disableWPC=true OR HTTP_DISABLEWPC header
+        // Mirrors the plugin-entry-point check in wp-compress.php so any code path
+        // that reaches here also respects the runtime kill switch.
+        if (!empty($_GET['disableWPC']) || isset($_SERVER['HTTP_DISABLEWPC'])) {
+            return false;
+        }
+
         // URL exclusions (wildcard support) — auto-enabled when patterns exist
         $url_excludes = get_option('wpc-url-excludes');
         if (!empty($url_excludes['exclude-url-from-all']) && function_exists('wpc_url_is_excluded')) {
@@ -715,6 +722,10 @@ class wps_cdn_rewrite
 
     public function dnsPrefetch()
     {
+        // Honor "Exclude from Plugin" — skip DNS prefetch / preconnect injection on excluded URLs
+        if (!self::dontRunif()) {
+            return;
+        }
         if (strlen(trim(self::$zone_name)) > 0) {
             if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
                 if (!empty($_GET['custom_server'])) {
@@ -1812,6 +1823,13 @@ class wps_cdn_rewrite
     public function buffer_callback_v3()
     {
         if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return true;
+        }
+
+        // URL exclusions (Exclude from Plugin) — bail BEFORE starting the output buffer
+        // so cdnRewriter / injectPreloadImages / dnsPrefetch / etc. never even fire.
+        // dontRunif() returns false when the URL is excluded.
+        if (!self::dontRunif()) {
             return true;
         }
 
@@ -5030,7 +5048,10 @@ JS;
 
                         if (!empty($src_w)) {
                             $real_src = $src_w[0];
-                            $real_src_width = $src_w[1];
+                            // Guard against malformed srcset entries missing the width descriptor
+                            // (we don't control upstream srcset formatting, e.g. from theme/plugins)
+                            $real_src_width = $src_w[1] ?? '';
+                            if ($real_src_width === '') continue;
 
                             $image_path = str_replace(self::$site_url . '/', '', $real_src);
                             $image_path_webP = ABSPATH . $image_path;
@@ -5052,7 +5073,7 @@ JS;
 
 
         if (empty($srcset_att)) {
-            $srcset_att = $original_img_tag['srcset'];
+            $srcset_att = $original_img_tag['srcset'] ?? '';
         }
 
         if (!empty(self::$removeSrcset) && self::$removeSrcset == '1') {
