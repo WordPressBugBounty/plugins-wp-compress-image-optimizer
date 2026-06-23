@@ -4,7 +4,7 @@ jQuery(document).ready(function ($) {
 
         $('.wps-ic-tag-'+id).slideUp();
 
-        $.post(ajaxurl, {action: 'wps_ic_dismiss_notice', id: id}, function () {
+        $.post(ajaxurl, {action: 'wps_ic_dismiss_notice', id: id, nonce: wps_ic_notices_vars.nonce}, function () {
 
         });
     });
@@ -17,7 +17,7 @@ jQuery(document).ready(function ($) {
 
         $('.wps-ic-tag-'+id).slideUp();
 
-        $.post(ajaxurl, {action: 'wps_ic_fix_notice', setting: setting, plugin: plugin}, function () {
+        $.post(ajaxurl, {action: 'wps_ic_fix_notice', setting: setting, plugin: plugin, nonce: wps_ic_notices_vars.nonce}, function () {
 
         });
     });

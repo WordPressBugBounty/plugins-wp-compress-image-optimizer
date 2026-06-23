@@ -150,6 +150,14 @@ class wps_ic_connect extends wps_ic
                     update_option('ic_cdn_zone_name', $zone_name);
                 }
 
+                // v7.08.53 — Cache the numeric Bunny Pull-Zone id when orch returns it on connect, so
+                // /v2/config can PATCH-target the literal PZ with no /v2/zone round-trip. Numeric only
+                // (a Bunny PZ id is an integer); anything else is ignored and the admin_init /v2/zone
+                // auto-resolver fills it in. Never overwrites with a non-numeric value.
+                if (isset($call->data->zone_id) && ctype_digit((string) $call->data->zone_id)) {
+                    update_option('wpc_v2_zone_id', (string) $call->data->zone_id, false);
+                }
+
                 $settings = get_option(WPS_IC_SETTINGS);
 
                 if (empty($settings) || count($settings) >= 3) {
@@ -172,6 +180,14 @@ class wps_ic_connect extends wps_ic
                 $cache = new wps_ic_cache_integrations();
                 $cache::purgeAll();
                 delete_option('wps_ic_url_changed');
+
+                // v7.02.07 — re-arm auto-provisioning on (re)connect. Clearing the environment
+                // fingerprint makes the admin_init self-heal treat the next admin pageview as a fresh
+                // environment → it re-fires /v2/config (provision + CF cname) for this site. Fixes
+                // "reconnect didn't re-provision" — the prior connect reset NO provisioning state.
+                // Option-writes only; no HTTP here.
+                delete_option('wpc_v2_provisioned_fingerprint');
+                update_option('wpc_v2_force_provision', 1, false);
 
                 wp_send_json_success(['liveMode' => $call->data->liveMode, 'localMode' => $call->data->localMode]);
             }

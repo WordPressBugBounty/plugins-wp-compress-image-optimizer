@@ -1,4 +1,5 @@
 jQuery(document).ready(function ($) {
+    var ajaxurl = (typeof wpc_ajaxVar !== 'undefined' && wpc_ajaxVar.ajaxurl) ? wpc_ajaxVar.ajaxurl : (window.ajaxurl || '');
 
 
     $('.wpc-lite-toggle-advanced').on('click', function (e) {
@@ -219,17 +220,24 @@ jQuery(document).ready(function ($) {
             }
         }
 
+        var isAgency = wpc_ajaxVar.apikey ? true : false;
+        var resetAction  = isAgency ? 'wpc_agency_reset_test'  : 'wps_ic_resetTest';
+        var pollAction   = isAgency ? 'wpc_agency_fetch_gps'   : 'wps_fetchInitialTest';
+        var resetPayload = isAgency
+            ? { action: resetAction, apikey: wpc_ajaxVar.apikey }
+            : { action: resetAction, nonce: wpc_ajaxVar.nonce };
+
         $.ajax({
             url: ajaxurl,
             type: 'POST',
-            data: {
-                action: 'wps_ic_resetTest',
-                nonce: wpc_ajaxVar.nonce,
-            },
+            data: resetPayload,
             success: function (response) {
                 // Poll for results instead of blocking reload
                 var retestPoll = setInterval(function() {
-                    $.post(ajaxurl, { action: 'wps_fetchInitialTest' }, function(res) {
+                    var pollPayload = isAgency
+                        ? { action: pollAction, apikey: wpc_ajaxVar.apikey }
+                        : { action: pollAction, nonce: wpc_ajaxVar.nonce };
+                    $.post(ajaxurl, pollPayload, function(res) {
                         if (res.success) {
                             clearInterval(retestPoll);
                             window.location.reload();

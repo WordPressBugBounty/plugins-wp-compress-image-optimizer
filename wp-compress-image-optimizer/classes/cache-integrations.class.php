@@ -111,6 +111,11 @@ class wps_ic_cache_integrations
 
         update_option(WPS_IC_OPTIONS, $options);
 
+        // v7.02.07 — clear the provisioning witnesses so a later reconnect re-provisions cleanly for
+        // this host (the env fingerprint + host baseline shouldn't survive a disconnect).
+        delete_option('wpc_v2_provisioned_fingerprint');
+        delete_option('wpc_v2_provisioned_site_url');
+
         self::purgeCombinedFiles(false);
         self::purgeAll(false, true);
         return true;
@@ -145,26 +150,6 @@ class wps_ic_cache_integrations
         return true;
     }
 
-    /**
-     * Bump CSS/JS cache-bust hashes without purging any files.
-     * Use when you need browsers to fetch fresh CSS but don't want to clear HTML cache.
-     */
-    public static function bumpHashes($purgeJS = false) {
-        $oldOptions = $options = get_option(WPS_IC_OPTIONS);
-        $options['css_hash'] = substr(md5(microtime(true)), 0, 6);
-        if ($purgeJS) {
-            $options['js_hash'] = strrev($options['css_hash']);
-        }
-
-        if (!class_exists('wps_ic_log')) {
-            include_once WPS_IC_DIR . 'classes/log.class.php';
-        }
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'bumpHashes');
-
-        update_option(WPS_IC_OPTIONS, $options);
-    }
-
     public static function removeDirectory($path)
     {
         $path = rtrim($path, '/');
@@ -180,7 +165,31 @@ class wps_ic_cache_integrations
         }
     }
 
-    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false)
+    /**
+     * Remove a directory's contents EXCEPT named top-level entries (kept verbatim). The root dir
+     * itself is kept (it holds the preserved subdir). Used by the plugin-update purge to clear
+     * cached HTML pages under wp-cio/ while PRESERVING the content-addressed optimized CSS
+     * (wp-cio/css): cached HTML at ANY layer (CF/Varnish/local) may still reference those exact
+     * filenames, so deleting them on update while that HTML lives = a 404 until the page is purged.
+     * Stale preserved assets are content-addressed (a real CSS change = a new filename) and are
+     * harmless; GC them by age separately if needed.
+     */
+    public static function removeDirectoryExcept($path, $except = [])
+    {
+        $path = rtrim($path, '/');
+        $except = array_map('strval', (array) $except);
+        $files = glob($path . '/*');
+        if (!empty($files)) {
+            foreach ($files as $file) {
+                if (in_array(basename($file), $except, true)) {
+                    continue;
+                }
+                is_dir($file) ? self::removeDirectory($file) : unlink($file);
+            }
+        }
+    }
+
+    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false, $preserve_assets = false)
     {
         // Deduplicate: skip if this url_key (or full site) was already purged in this request
         if ($url_key === false) {
@@ -214,18 +223,11 @@ class wps_ic_cache_integrations
 
         // Change CSS Hash
         $oldOptions = $options = get_option(WPS_IC_OPTIONS);
-        if (!is_array($options)) $oldOptions = $options = [];
 
         $CSSHash = substr(md5(microtime(true)), 0, 6);
         $JSHash = strrev($CSSHash);
-        // HTML content version — bumped on every purge so we have a debugging marker
-        // for "was this HTML generated before or after this purge?" investigations.
-        // Doesn't bust edge CDN cache on its own (CDN keys off URL), but pairs with
-        // purgeHostingCaches() to give support a timeline to correlate against.
-        $HTMLHash = substr(md5(microtime(true) . 'html'), 0, 6);
 
         $options['css_hash'] = $CSSHash;
-        $options['html_hash'] = $HTMLHash;
 
         if ($purgeJS) {
             $options['js_hash'] = $JSHash;
@@ -240,14 +242,11 @@ class wps_ic_cache_integrations
 
         update_option(WPS_IC_OPTIONS, $options);
 
-        // Purge internal cache files
-        self::purgeCacheFiles($url_key);
+        // Purge internal cache files (preserve content-addressed optimized CSS/JS on plugin update)
+        self::purgeCacheFiles($url_key, $preserve_assets);
 
         // Action hook for all integrations to clear their cache
         do_action('wps_ic_purge_all_cache', $url_key);
-
-        // Direct hosting purge (reliable fallback — integration hooks may not register on AJAX)
-        self::purgeHostingCaches();
 
         // Varnish
         if ($varnish) {
@@ -283,76 +282,6 @@ class wps_ic_cache_integrations
         }
     }
 
-    /**
-     * Direct hosting cache purge — called from purgeAll() as a reliable fallback.
-     * Integration hooks may not register during AJAX, so we call hosting methods directly.
-     */
-    public static function purgeHostingCaches()
-    {
-        // WP Engine (memcached + varnish + CDN/Cloudflare)
-        // The CDN purge call returns immediately but CloudFlare propagation takes 30–60s —
-        // that's a platform characteristic, not fixable from PHP. We log the methods fired
-        // so support can correlate purge timing to observed behavior.
-        if (class_exists('WpeCommon')) {
-            $wpeMethods = [];
-            if (method_exists('WpeCommon', 'purge_memcached')) {
-                WpeCommon::purge_memcached();
-                $wpeMethods[] = 'memcached';
-            }
-            if (method_exists('WpeCommon', 'purge_varnish_cache')) {
-                WpeCommon::purge_varnish_cache();
-                $wpeMethods[] = 'varnish';
-            }
-            if (method_exists('WpeCommon', 'clear_cdn_cache')) {
-                WpeCommon::clear_cdn_cache();
-                $wpeMethods[] = 'cdn-async-30-60s';
-            }
-            if (!empty($wpeMethods)) {
-                if (function_exists('wpc_diagnostic_log')) {
-                    wpc_diagnostic_log('WPE_PURGE', 'methods=' . implode(',', $wpeMethods));
-                }
-                // Also write to the purge debug log so it's visible alongside other purge events
-                $plog = get_option('wpc_purge_debug_log', []);
-                if (!is_array($plog)) $plog = [];
-                $plog[] = date('Y-m-d H:i:s') . ' | WPE purged directly: ' . implode(', ', $wpeMethods);
-                update_option('wpc_purge_debug_log', array_slice($plog, -20), false);
-            }
-        }
-
-        // WPC's own drop-in cache files — belt-and-suspenders on top of purgeCacheFiles().
-        // Ensures every HTML cache layer we control is nuked on each purgeAll.
-        foreach ([WP_CONTENT_DIR . '/cache/wpc', WP_CONTENT_DIR . '/wpc-content/cache'] as $dir) {
-            if (is_dir($dir)) {
-                $files = glob($dir . '/*');
-                if ($files) {
-                    foreach ($files as $f) {
-                        if (is_file($f)) @unlink($f);
-                    }
-                }
-            }
-        }
-        // Kinsta
-        if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)) {
-            $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_complete_caches();
-        }
-        // SiteGround
-        if (function_exists('sg_cachepress_purge_everything')) {
-            sg_cachepress_purge_everything();
-        }
-        // LiteSpeed
-        if (defined('LSCWP_V')) {
-            do_action('litespeed_purge_all');
-        }
-        // WP Rocket
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
-        // Generic object cache
-        if (function_exists('wp_cache_flush')) {
-            wp_cache_flush();
-        }
-    }
-
     // TODO: Maybe it will cause errors with non SSL sites?
 
     public static function purgeBreeze()
@@ -374,12 +303,19 @@ class wps_ic_cache_integrations
         }
     }
 
-    public static function purgeCacheFiles($url_key = false)
+    public static function purgeCacheFiles($url_key = false, $preserve_assets = false)
     {
         $cache_dir = WPS_IC_CACHE;
 
         if (!$url_key) {
-            self::removeDirectory($cache_dir);
+            if ($preserve_assets) {
+                // Plugin-update purge: clear cached HTML pages but PRESERVE the content-addressed
+                // optimized CSS (wp-cio/css) + JS. Cached HTML (CF/Varnish/local) still references
+                // those exact filenames; deleting them on update = a 404 until that HTML is purged.
+                self::removeDirectoryExcept($cache_dir, ['css', 'js']);
+            } else {
+                self::removeDirectory($cache_dir);
+            }
         } else {
             self::removeFiles($cache_dir . $url_key);
         }

@@ -32,6 +32,18 @@ class wps_ic_upgrader extends wps_ic
 
     public function api_notify()
     {
+        // v7.02 — Transient gate. Without this, api_notify fires on EVERY
+        // page load + AJAX call where is_latest() returns false (which is
+        // common when wpc_version option drift exists). Each fire is a
+        // 200-500 ms blocking remote GET to keys.wpmediacompress.com — was
+        // adding ~300 ms to every admin page + every AJAX response (incl.
+        // the Details popup). 4 h TTL is plenty for an upgrade-notify ping
+        // that conceptually should fire once per version-upgrade event.
+        if (get_transient('wpc_api_notify_done')) {
+            return;
+        }
+        set_transient('wpc_api_notify_done', 1, 4 * HOUR_IN_SECONDS);
+
         $apikey = self::$options['api_key'];
         $siteurl = urlencode(site_url());
         $zone_name = get_option('ic_cdn_zone_name');
@@ -40,8 +52,10 @@ class wps_ic_upgrader extends wps_ic
         // Setup URI
         $uri = WPS_IC_KEYSURL . '?action=upgrade_notify&apikey=' . $apikey . '&site_type=' . $site_type . '&domain=' . $siteurl . '&zone_name=' . $zone_name . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        // Verify API Key is our database and user has is confirmed getresponse
-        $get = wp_remote_get($uri, ['timeout' => 60, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        // Also cap the timeout — 60s was insane for a non-critical ping.
+        // 3s is more than enough; if the endpoint is down, we don't want
+        // every admin request to potentially block for a minute.
+        $get = wp_remote_get($uri, ['timeout' => 3, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($get) == 200) {
             $body = wp_remote_retrieve_body($get);

@@ -895,6 +895,28 @@ HTACCESS;
 
         $webp_rules = '<IfModule mod_rewrite.c>'.PHP_EOL;
         $webp_rules .= 'RewriteEngine On'.PHP_EOL;
+        // v7.01.06 (MF-2) — AVIF negotiation, evaluated BEFORE WebP (AVIF preferred), but ONLY
+        // when the resolved Next-Gen ceiling is 'avif' — the SAME gate as the picture path (RC-3),
+        // so a WebP-only site (wpc_nextgen=webp) with leftover .avif files on disk never
+        // origin-serves AVIF (the format the user disabled). Gated on Accept ONLY: AVIF support is
+        // NOT reliably inferable from User-Agent (unlike WebP's Chrome proxy), so serve AVIF
+        // strictly when the client advertises image/avif. The -f check requires the .avif sibling
+        // on disk; [L] stops before the WebP block when AVIF fires. CACHE-SAFETY: the matching
+        // `Header append Vary Accept env=REDIRECT_avif` below is REQUIRED so a shared cache never
+        // serves AVIF to a non-AVIF client. Two blocks mirror the WebP pair: appended name
+        // (foo.jpg.avif) then replaced-extension (foo.avif — WPC's variant convention).
+        $wpc_avif_ok = !class_exists('WPC_Delivery_Resolver')
+            || WPC_Delivery_Resolver::effective_ceiling(get_option(WPS_IC_SETTINGS)) === 'avif';
+        if ($wpc_avif_ok) {
+            $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/avif'.PHP_EOL;
+            $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
+            $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}.avif -f'.PHP_EOL;
+            $webp_rules .= 'RewriteRule ^(.+)$ $1.avif [E=avif,L]'.PHP_EOL;
+            $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/avif'.PHP_EOL;
+            $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
+            $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}/%1.avif -f'.PHP_EOL;
+            $webp_rules .= 'RewriteRule ^(.+)\.(jpe?g|png|gif)$ $1.avif [E=avif,L]'.PHP_EOL;
+        }
         $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp [OR]'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} Chrome [OR]'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights"'.PHP_EOL;
@@ -913,9 +935,19 @@ HTACCESS;
 
         $webp_rules .= '<IfModule mod_mime.c>'.PHP_EOL;
         $webp_rules .= 'AddType image/webp .webp'.PHP_EOL;
+        // Make the origin honest about .avif Content-Type (Apache/LS only). Defense-in-depth:
+        // the CDN container trusts magic bytes regardless, but a correct origin CT reduces
+        // X-Origin-CT-Empty noise + helps curl/monitoring see the right type directly.
+        $webp_rules .= 'AddType image/avif .avif'.PHP_EOL;
         $webp_rules .= '</IfModule>'.PHP_EOL;
         $webp_rules .= '<IfModule mod_headers.c>'.PHP_EOL;
         $webp_rules .= 'Header append Vary Accept env=REDIRECT_webp'.PHP_EOL;
+        // v7.01.06 — cache-safety for the AVIF rewrite above, emitted ONLY when the AVIF blocks
+        // were (ceiling=avif). Without this a shared cache keyed on the .jpg URL could serve AVIF
+        // to a non-AVIF client.
+        if ($wpc_avif_ok) {
+            $webp_rules .= 'Header append Vary Accept env=REDIRECT_avif'.PHP_EOL;
+        }
         $webp_rules .= '</IfModule>'.PHP_EOL;
 
         return $webp_rules;

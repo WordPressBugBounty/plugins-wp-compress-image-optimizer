@@ -66,6 +66,22 @@ class wps_ic_fonts
                 $html = str_replace($styleEncoded, $replaceUrl, $html);
                 $html = str_replace($style, $replaceUrl, $html);
             }
+
+            // A rewritten link can inherit a leftover query fragment from the original googleapis href: the
+            // trailing "&display=swap" survives after "?family=…" is consumed, yielding "{cache}.css&display=swap".
+            // The cache file is static, so the query is ignored — but a bare "&display=swap" (no '?') 404s, AND
+            // leaving "?display=swap" on a file whose baked @font-face is now 'block'/'optional' is misleading
+            // (it implies swap when it isn't). So strip the leftover query ENTIRELY → a clean "{cache}.css" URL
+            // that resolves and matches the baked directive. The font-display lives in the CSS itself (baked in
+            // saveStylesheet), never the URL.
+            $fixed = preg_replace(
+                '~(' . preg_quote(WPS_IC_FONTS_URL, '~') . '[^"\'\s>()]+?\.css)(?:[?&](?:#038;)?[^"\'\s>()]*)?~i',
+                '$1',
+                $html
+            );
+            if (is_string($fixed)) {
+                $html = $fixed;
+            }
         }
 
         return $html;
@@ -270,10 +286,78 @@ class wps_ic_fonts
             unlink($stylesheetPath . $stylesheetFilename);
         }
 
+        // Bake font-display into each @font-face so the served local faces don't FOIT. The cache file is
+        // static, so a ?display= query on the <link> is ignored — the directive must live in the CSS itself.
+        $fdOpts = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+        $fd = (is_array($fdOpts) && !empty($fdOpts['font-display'])) ? strtolower((string) $fdOpts['font-display']) : 'swap';
+        // 'off' = honor the user's "don't touch font-display" opt-out (matches the runtime path); skip baking.
+        if ($fd !== 'off') {
+            if (!in_array($fd, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
+                $fd = 'swap';
+            }
+            $baked = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($fd) {
+                if (preg_match('/font-display\s*:/i', $m[0])) {
+                    return preg_replace('/font-display\s*:\s*[^;]+;?/i', 'font-display:' . $fd . ';', $m[0], 1);
+                }
+                return preg_replace('/@font-face\s*\{/i', '@font-face{font-display:' . $fd . ';', $m[0], 1);
+            }, $stylesheetCSS);
+            if (is_string($baked)) {
+                $stylesheetCSS = $baked;
+            }
+        }
+
         // Write CSS content to File
         file_put_contents($stylesheetPath . $stylesheetFilename, $stylesheetCSS);
 
         return ['stylesheetPath' => $stylesheetPath . $stylesheetFilename];
+    }
+
+    /**
+     * Re-bake the font-display directive into the already-localized cache .css files, in place, with no
+     * re-download. Called when the font-display setting changes so the localized cache stops disagreeing
+     * with the new value — otherwise the cache keeps its old baked directive, overrides the inline/crit
+     * faces when the deferred stylesheet lands, and FOUTs until a manual Purge & Rescan. Only the
+     * font-display in each @font-face is rewritten; the woff2 files (and everything else) are untouched.
+     * Mirrors the bake logic in saveStylesheet() so the two stay identical. Honors the 'off' opt-out.
+     */
+    public function rebakeFontDisplay()
+    {
+        $fdOpts = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+        $fd = (is_array($fdOpts) && !empty($fdOpts['font-display'])) ? strtolower((string) $fdOpts['font-display']) : 'swap';
+        if ($fd === 'off') {
+            return; // honor the "don't touch font-display" opt-out (matches saveStylesheet)
+        }
+        if (!in_array($fd, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
+            $fd = 'swap';
+        }
+
+        $map = get_option(WPS_IC_FONTS_MAP);
+        if (empty($map) || !is_array($map)) {
+            return;
+        }
+
+        foreach ($map as $rd) {
+            if (empty($rd['dir']) || empty($rd['filename'])) {
+                continue;
+            }
+            $path = WPS_IC_FONTS_DIR . $rd['dir'] . '/' . $rd['filename'];
+            if (!file_exists($path) || !is_writable($path)) {
+                continue;
+            }
+            $css = @file_get_contents($path);
+            if (!is_string($css) || $css === '') {
+                continue;
+            }
+            $baked = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($fd) {
+                if (preg_match('/font-display\s*:/i', $m[0])) {
+                    return preg_replace('/font-display\s*:\s*[^;]+;?/i', 'font-display:' . $fd . ';', $m[0], 1);
+                }
+                return preg_replace('/@font-face\s*\{/i', '@font-face{font-display:' . $fd . ';', $m[0], 1);
+            }, $css);
+            if (is_string($baked) && $baked !== $css) {
+                @file_put_contents($path, $baked);
+            }
+        }
     }
 
     public function mapStylesheets($url, $dir, $filename)

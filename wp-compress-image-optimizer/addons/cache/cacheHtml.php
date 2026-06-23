@@ -403,9 +403,13 @@ class wps_cacheHtml
             }
         }
 
-        if ($this->is_mobile()) {
-            $prefix = 'mobile';
-        }
+        // Build the cache-file prefix IDENTICALLY to the drop-in reader (advancedCacheSample.php:179-181):
+        // mobile-webp / mobile / webp / ''. The old code collapsed the prefix to 'mobile' for ANY mobile
+        // request, so a mobile+webp page (every modern mobile browser sends Accept: image/webp) was WRITTEN as
+        // 'mobile' while the pre-WP drop-in LOOKS UP 'mobile-webp' → guaranteed cache MISS → full WordPress boot
+        // + the slow plugins_loaded fallback serve (~1.5s) instead of the <300ms drop-in serve.
+        $wpc_req_webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
+        $prefix = $this->is_mobile() ? ($wpc_req_webp ? 'mobile-webp' : 'mobile') : ($wpc_req_webp ? 'webp' : '');
 
         if (!empty($prefix)) {
             $prefix = $prefix . '_';
@@ -432,6 +436,13 @@ class wps_cacheHtml
         if (function_exists('gzencode')) {
             $this->saveGzCache($buffer, $prefix);
         }
+
+        // v7.02 — Universal lazy trigger: hand the just-cached HTML to any
+        // listeners. The v2 trigger scanner (addons/v2/v2-trigger-scanner.php)
+        // listens here and queues lazy compression for any uncompressed images
+        // on the page. This is the bulletproof trigger for lazy mode — works
+        // even when this same cached page is later served without PHP running.
+        do_action('wpc_cache_buffer_ready', $buffer, $url ?? '', $prefix);
 
         $purge_rules['type-lists'] = $type_lists;
         update_option('wps_ic_purge_rules', $purge_rules);

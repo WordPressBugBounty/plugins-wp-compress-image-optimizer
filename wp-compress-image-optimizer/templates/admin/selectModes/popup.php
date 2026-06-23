@@ -3,6 +3,7 @@
     <div id="select-mode-popup-inner" class="ajax-settings-popup bottom-border">
 
         <?php
+        if (!function_exists('isFeatureEnabledPopup')) {
         function isFeatureEnabledPopup($featureName)
         {
             $feature = get_transient($featureName . 'Enabled');
@@ -11,6 +12,7 @@
             }
 
             return true;
+        }
         }
 
         wp_nonce_field('wpc_save_mode', 'wpc_save_mode_nonce');
@@ -53,7 +55,7 @@
                 <div class="wpc-popup-saving-preparing-logo">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg"
                          class="wpc-ic-popup-logo-saving"/>
-                    <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="wpc-ic-popup-logo-saving-loader"/>
+                    <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
                 </div>
             </div>
             <h4 style="margin-top: 0px;margin-bottom: 46px;display:none;"><?php esc_html_e('We are setting up your DNS, this can take up to 30 seconds...', WPS_IC_TEXTDOMAIN); ?></h4>

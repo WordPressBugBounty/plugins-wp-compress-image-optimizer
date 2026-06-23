@@ -227,10 +227,10 @@
   display: inline-block;
   margin: 0 auto;
   width: 100%;
-  background: #fff;
-  -webkit-box-shadow: 0 0 20px -6px rgba(123, 123, 123, 0.75);
-  -moz-box-shadow: 0 0 20px -6px rgba(123, 123, 123, 0.75);
-  box-shadow: 0 0 20px -6px rgba(123, 123, 123, 0.75);
+  background: transparent;
+  -webkit-box-shadow: none;
+  -moz-box-shadow: none;
+  box-shadow: none;
   border-radius: 5px !important;
 }
 .bulk-area-inner > div {

@@ -49,8 +49,15 @@ class wps_ic_combine_js
             $this->all_excludes = array_merge($this->all_excludes, self::$excludes->delayJSExcludes());
         }
 
-	    $cfCname = get_option(WPS_IC_CF);
-	    $custom_cname = !empty($cfCname) ? $cfCname : get_option('ic_custom_cname');
+	    // v7.01.84 — the CF cname lives in WPS_IC_CF_CNAME, NOT the WPS_IC_CF array (the prior read
+	    // used the whole array as the cname — a pre-existing bug). Mirror the canonical emit path
+	    // EXACTLY: require CF CDN delivery active (cf.settings.cdn) AND the fail-open verified-gate, so
+	    // combined JS never emits a mid-change ('0') cname and never emits an ORPHANED cname after a CF
+	    // disconnect / CDN-off (WPS_IC_CF_CNAME persists but cf.settings.cdn is gone). Falls back to the
+	    // working host otherwise. Matches cdn-rewrite/enqueues; without settings.cdn it diverged.
+	    $cf = get_option(WPS_IC_CF);
+	    $cfCname = get_option(WPS_IC_CF_CNAME);
+	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {

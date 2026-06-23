@@ -291,22 +291,24 @@ class wps_criticalCss
                         delete_transient('wpc_critical_key_' . $url_key);
                     }
                 }
-            } else {
             }
         }
 
-        $transient_name = 'wpc_critical_key_' . $url_key;
+        $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
         $critTransient = get_transient($transient_name);
 
         if (!empty($critTransient) && empty($_GET['forceCritical'])) {
+            // Die, already running!
             return true;
         }
 
+        // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 5);
 
         $uuid     = wp_generate_uuid4();
         $uuid_key = 'wpc_critical_uuid_' . $url_key;
         set_transient($uuid_key, $uuid, 60 * 5);
+
         $options = get_option(WPS_IC_OPTIONS);
         $apikey  = $options['api_key'] ?? '';
         $forcePull = isset($_GET['pushMode']) && sanitize_key($_GET['pushMode']) === 'false';
@@ -700,7 +702,6 @@ class wps_criticalCss
         $jobStatus = [];
         $critical_path = WPS_IC_CRITICAL . $urlKey . '/';
         $cache = new wps_ic_cache_integrations();
-
 
         if (is_array($CSS)) {
             $json = $CSS;

@@ -1,7 +1,7 @@
 function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
     if (imgWidth > 0 && !imageElement.classList.contains('wpc-excluded-adaptive')) {
-        if (imgWidth > 1100) {
-            imgWidth = 1100;
+        if (imgWidth > 2560) {
+            imgWidth = 2560;
         }
         newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:' + imgWidth);
     }

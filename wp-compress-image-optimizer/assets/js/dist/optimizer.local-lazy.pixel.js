@@ -16,6 +16,11 @@ function checkMobile() {
 }
 
 checkMobile();
+// All in One
+(function (w) {
+    // var dpr = ((w.devicePixelRatio === undefined) ? 1 : w.devicePixelRatio);
+    // document.cookie = 'ic_pixel_ratio=' + dpr + '; path=/';
+})(window);
 var preloadRunned = false;
 var wpcWindowWidth = window.innerWidth;
 
@@ -154,6 +159,15 @@ function lazyLoad() {
 
                 if (typeof lazyImage.dataset.src !== 'undefined' && typeof lazyImage.dataset.src !== undefined) {
                     lazyImage.src = lazyImage.dataset.src;
+                }
+
+                // Handle <picture> <source> lazy loading
+                var parentPicture = lazyImage.closest('picture');
+                if (parentPicture) {
+                    parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
+                        s.srcset = s.dataset.srcset;
+                        s.removeAttribute('data-srcset');
+                    });
                 }
 
                 var imageSrc = lazyImage.src;

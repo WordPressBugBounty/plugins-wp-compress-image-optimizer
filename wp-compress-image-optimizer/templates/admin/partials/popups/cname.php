@@ -13,45 +13,6 @@
 <div id="custom-cdn" style="display: none;">
     <div id="cdn-popup-inner" class="ajax-settings-popup bottom-border custom-cname-popup cdn-popup-inner">
 
-        <div class="wpc-debug-bar" style="background:#1e293b;color:#e2e8f0;padding:8px 12px;font-family:monospace;font-size:11px;display:flex;gap:6px;flex-wrap:wrap;border-radius:6px 6px 0 0;">
-            <span style="color:#94a3b8;margin-right:4px;">Debug:</span>
-            <button type="button" class="wpc-debug-btn" data-show="step-1" style="background:#334155;color:#93c5fd;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Step 1</button>
-            <button type="button" class="wpc-debug-btn" data-show="loading" style="background:#334155;color:#93c5fd;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Loading</button>
-            <button type="button" class="wpc-debug-btn" data-show="step-2" style="background:#334155;color:#93c5fd;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Step 2 (Success)</button>
-            <button type="button" class="wpc-debug-btn" data-show="retry" style="background:#334155;color:#93c5fd;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Retry</button>
-            <button type="button" class="wpc-debug-btn" data-show="err-dns" style="background:#334155;color:#fca5a5;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Err: DNS</button>
-            <button type="button" class="wpc-debug-btn" data-show="err-api" style="background:#334155;color:#fca5a5;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Err: API</button>
-            <button type="button" class="wpc-debug-btn" data-show="err-invalid" style="background:#334155;color:#fca5a5;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Err: Invalid</button>
-            <button type="button" class="wpc-debug-btn" data-show="err-empty" style="background:#334155;color:#fca5a5;border:1px solid #475569;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace;">Err: Empty</button>
-        </div>
-        <script>
-        jQuery(document).on('click', '.wpc-debug-btn', function(e) {
-            e.preventDefault(); e.stopPropagation();
-            var popup = jQuery(this).closest('.custom-cname-popup');
-            var s = jQuery(this).data('show');
-            // Reset all
-            popup.find('.cdn-popup-loading').hide();
-            popup.find('.cdn-popup-content').show();
-            popup.find('.cdn-popup-top').show();
-            popup.find('.custom-cdn-step-1').hide();
-            popup.find('.custom-cdn-step-2').hide();
-            popup.find('.custom-cdn-step-1-retry').hide();
-            popup.find('.custom-cdn-error-message').hide();
-            popup.find('.wpc-dns-error-text').hide();
-            popup.find('.error').remove();
-            popup.find('[name="custom-cdn"]').removeClass('empty');
-
-            if (s === 'step-1') { popup.find('.custom-cdn-step-1').show(); }
-            else if (s === 'loading') { popup.find('.cdn-popup-content').hide(); popup.find('.cdn-popup-loading').show(); }
-            else if (s === 'step-2') { popup.find('.custom-cdn-step-2').show(); popup.find('.btn-i-cant-see').html('I can\'t see the above image').removeClass('disabled'); }
-            else if (s === 'retry') { popup.find('.custom-cdn-step-1-retry').show(); }
-            else if (s === 'err-dns') { popup.find('.custom-cdn-step-1').show(); popup.find('.custom-cdn-error-message').html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> Seems like DNS is not set correctly...').show(); popup.find('.wpc-dns-error-text').show(); }
-            else if (s === 'err-api') { popup.find('.custom-cdn-step-1').show(); popup.find('.custom-cdn-error-message').html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> Seems like DNS API is not working, please contact support...').show(); }
-            else if (s === 'err-invalid') { popup.find('.custom-cdn-step-1').show(); popup.find('.custom-cdn-error-message').html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> This domain is invalid, please link a new domain...').show(); }
-            else if (s === 'err-empty') { popup.find('.custom-cdn-step-1').show(); popup.find('[name="custom-cdn"]').addClass('empty'); popup.find('.custom-cdn-step-1 .custom-cdn-error-message').html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> You must fill out the CNAME.').show(); }
-        });
-        </script>
-
         <div class="cdn-popup-loading" style="display: none;">
             <div class="wpc-cname-spinner"></div>
             <p class="wpc-cname-loading-text"><?php echo __('Setting up your DNS&hellip; this can take up to 30 seconds.', WPS_IC_TEXTDOMAIN); ?></p>

@@ -58,11 +58,22 @@ if (!empty($_POST)) {
         $newSettings['retina'] = '1';
         $newSettings['generate_adaptive'] = '1';
         $newSettings['generate_webp'] = '1';
+        // v7.01.87 — ITEM 2 (stop the de-sync at the source): couple the next-gen ceiling to the single
+        // Next-Gen control. Writing generate_webp=1 alone made ceiling_from_settings() derive 'webp'
+        // (defaults ship picture_avif=1 → fresh install = avif; this lite path silently dropped to webp).
+        $newSettings['picture_webp'] = '1';
+        $newSettings['picture_avif'] = '1';
+        $newSettings['wpc_nextgen'] = 'auto';
         $newSettings['imagesPreset'] = '1';
     } else {
         $newSettings['retina'] = '0';
         $newSettings['generate_adaptive'] = '0';
         $newSettings['generate_webp'] = '0';
+        // v7.01.87 — off-branch hygiene: ceiling_from_settings() already returns 'off' on generate_webp!=1
+        // regardless of picture_avif, but keep the state internally coherent.
+        $newSettings['picture_webp'] = '0';
+        $newSettings['picture_avif'] = '0';
+        $newSettings['wpc_nextgen'] = 'off';
         $newSettings['imagesPreset'] = '0';
     }
 
@@ -125,6 +136,15 @@ if (!empty($_POST)) {
         $cacheLogic->purgeCDN(false);
 	    $cache::purgeCriticalFiles();
 	    $cache::purgePreloads();
+    }
+
+    // v7.08.2 — Image-delivery settings altered HTML output. Purge HTML
+    // cache (Breeze/Varnish/WPC advanced-cache/W3TC/etc) via the canonical
+    // purger so the next render rebuilds with the new rules.
+    if (in_array('html', $purgeList)) {
+        if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+            wps_ic_cache::removeHtmlCacheFiles('all');
+        }
     }
 
     if (!class_exists('wps_ic_htaccess')) {
@@ -204,7 +224,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                 $.ajax({
                     url: ajaxurl,
                     type: 'POST',
-                    data: { action: 'wps_fetchInitialTest' },
+                    data: { action: 'wps_fetchInitialTest', nonce: wpc_ajaxVar.nonce },
                     success: function (response) {
                         if (response.success) {
                             clearInterval(checkFetch);

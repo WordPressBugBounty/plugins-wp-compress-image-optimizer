@@ -13,7 +13,19 @@ class wps_ic_notices extends wps_ic {
   public function __construct() {
     $this::$slug = parent::$slug;
     $this->templates = new wps_ic_templates();
-    add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
+
+    // v7.02 — Static guard against duplicate hook registration. Every
+    // plugin-check class (wps_ic_rocket, wps_ic_breeze, ~45 of them) extends
+    // wps_ic_integrations, whose parent ctor creates a NEW wps_ic_notices()
+    // instance. Without this guard, admin_enqueue_scripts was registered 80+
+    // times — each firing wp_enqueue_script/wp_enqueue_style for the same
+    // assets. QM made it visible. Static + class-level callable: one hook,
+    // one fire, identical asset enqueue.
+    static $hook_registered = false;
+    if (!$hook_registered) {
+      $hook_registered = true;
+      add_action('admin_enqueue_scripts', array(__CLASS__, 'enqueue_scripts'));
+    }
   }
 
   public function show_notice(
@@ -38,8 +50,9 @@ class wps_ic_notices extends wps_ic {
     new wps_ic_admin_notice($title, $message, $type, $global, $dismiss_tag, $info, $support);
   }
 
-  public function enqueue_scripts() {
+  public static function enqueue_scripts() {
     wp_enqueue_script('wps_admin_notices_script', WPS_IC_URI . 'assets/js/admin/admin-notices.min.js');
+    wp_localize_script('wps_admin_notices_script', 'wps_ic_notices_vars', ['nonce' => wp_create_nonce('wps_ic_nonce_action')]);
     wp_enqueue_style('wps_admin_notices_style', WPS_IC_URI . 'assets/css/admin_notices.min.css');
   }
 

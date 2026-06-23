@@ -1,11 +1,13 @@
 <?php
 
+include_once WPS_IC_DIR . 'traits/agency.php';
 
 /**
  * Class - Stats
  */
 class wps_ic_stats
 {
+    use wps_ic_agency_trait;
 
     public static $api_key;
     public static $options;
@@ -13,7 +15,7 @@ class wps_ic_stats
     public function __construct()
     {
 
-        if (is_admin()) {
+        if (is_admin() || $this->isAgencyPortal()) {
             $options = new wps_ic_options();
             $options = $options->get_option();
 
@@ -21,6 +23,8 @@ class wps_ic_stats
             if (!empty($options['api_key'])) {
                 self::$api_key = $options['api_key'];
             }
+
+            $this->isAgencyPortal();
         }
     }
 

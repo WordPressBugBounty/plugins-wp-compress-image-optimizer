@@ -1,5 +1,8 @@
 jQuery(document).ready(function ($) {
 
+    // Agency portal pages don't get WordPress's global ajaxurl — fall back to wpc_ajaxVar
+    if (typeof ajaxurl === 'undefined') { var ajaxurl = wpc_ajaxVar.ajaxurl; }
+
     // ─── Floating save pill — detach when header scrolls out of view ───
     var $wpcHeader = $('.wpc-header');
     var $wpcPill = $('.wpc-save-pill');
@@ -185,6 +188,44 @@ jQuery(document).ready(function ($) {
     });
 
 
+    // v7.01.106 — CF connect/reconnect DIAGNOSTIC renderer. The server (.104) returns a per-component
+    // `report` ({bypass_rule,static_rule,whitelist,cname,v2_sync} → {ok,mode,detail}) so the UI can show
+    // WHICH piece failed and WHY (permission vs misconfig vs unreachable) instead of a blind reload or a
+    // generic "token invalid". ok→✓, pending/scheduled→⋯ (finishes on its own), everything else→✕.
+    function wpcEsc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+        });
+    }
+    function wpcRenderCfReport(report) {
+        if (!report || typeof report !== 'object') return '';
+        var labels = {
+            bypass_rule: 'CDN bypass rule',
+            static_rule: 'Static-asset cache rule',
+            whitelist:   'IP whitelist',
+            cname:       'CDN hostname (CNAME)',
+            v2_sync:     'Server sync'
+        };
+        var order = ['bypass_rule', 'static_rule', 'whitelist', 'cname', 'v2_sync'];
+        var rows = '';
+        order.forEach(function (k) {
+            var c = report[k];
+            if (!c) return;
+            var ok = !!c.ok;
+            var mode = c.mode || (ok ? 'ok' : 'failed');
+            var icon, cls;
+            if (mode === 'pending' || mode === 'scheduled') { icon = '⋯'; cls = 'wpc-cf-diag-pending'; }
+            else if (ok && mode === 'ok')                   { icon = '✓'; cls = 'wpc-cf-diag-ok'; }
+            else                                            { icon = '✕'; cls = 'wpc-cf-diag-fail'; }
+            rows += '<li class="' + cls + '">' +
+                '<span class="wpc-cf-diag-icon">' + icon + '</span>' +
+                '<span class="wpc-cf-diag-name">' + wpcEsc(labels[k] || k) + '</span>' +
+                (c.detail ? '<span class="wpc-cf-diag-detail">' + wpcEsc(c.detail) + '</span>' : '') +
+                '</li>';
+        });
+        return rows ? '<ul class="wpc-cf-diag-list">' + rows + '</ul>' : '';
+    }
+
     $('.wpc-cf-token-connect').on('click', function (e){
         e.preventDefault();
 
@@ -230,15 +271,28 @@ jQuery(document).ready(function ($) {
                     } else {
                         $('.wpc-cf-loader-zone').hide();
                         $('.wpc-cf-insert-token-step').show();
-                        $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+                        // v7.01.106 — show the per-component diagnostic when the server returns one,
+                        // so the user sees exactly which rule didn't apply (and why) rather than a
+                        // blanket "token invalid" guess.
+                        var rep = (response.data && response.data.report) ? wpcRenderCfReport(response.data.report) : '';
+                        if (rep) {
+                            $('.wpc-cf-loader-error').html(
+                                '<strong>Connected to Cloudflare, but some rules didn\'t apply:</strong>' + rep +
+                                '<p class="wpc-cf-diag-hint">Fix the ✕ items (usually an API-token permission or a zone setting), then click Connect again. ⋯ items finish on their own.</p>'
+                            ).show();
+                        } else {
+                            $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
+                        }
                     }
                 });
             } else {
                 $('.wpc-cf-loader-zone').hide();
                 $('.wpc-cf-insert-token-step').show();
 
-                if (response.data.msg){
-                    $('.wpc-cf-loader-error').html(response.data.msg).show();
+                if (response.data && response.data.msg){
+                    // v7.01.107 — null-guard response.data (a {success:false} with no data threw a
+                    // TypeError here) + escape the server string before injecting it via .html().
+                    $('.wpc-cf-loader-error').html(wpcEsc(response.data.msg)).show();
 
                 } else {
                     $('.wpc-cf-loader-error').html('Looks like your API Token does not have correct privileges or it\'s invalid').show();
@@ -285,7 +339,24 @@ jQuery(document).ready(function ($) {
             timeout:120,
             _nonce: Math.random().toString(36).substr(2, 9), // Add a random hash
         }, function (response) {
-            window.location.reload();
+            // v7.01.106 — was a blind reload regardless of outcome. Reload on success; on an
+            // incomplete/failed reconnect surface the per-component diagnostic so the user knows
+            // which Cloudflare rule isn't active and why (permission / misconfig / unreachable).
+            if (response && response.success) {
+                window.location.reload();
+                return;
+            }
+            $('.wpc-cf-loader-refreshing').hide();
+            $('.wpc-cf-token-connected').show();
+            var rep = (response && response.data && response.data.report) ? wpcRenderCfReport(response.data.report) : '';
+            if (rep) {
+                $('.wpc-cf-loader-error').html(
+                    '<strong>Reconnect ran, but some Cloudflare rules aren\'t active:</strong>' + rep +
+                    '<p class="wpc-cf-diag-hint">Fix the ✕ items (an API-token permission or a zone setting) and click Verify again. ⋯ items finish automatically.</p>'
+                ).show();
+            } else {
+                $('.wpc-cf-loader-error').html('Couldn\'t confirm the Cloudflare connection. Please try again — if it persists, re-check your API token\'s permissions.').show();
+            }
         });
 
         return false;
@@ -304,15 +375,15 @@ jQuery(document).ready(function ($) {
         var name = $(this).data('option-name') || $(this).attr('name');
         if (name) wpcAdvInitialStates[name] = $(this).prop('checked');
     });
-    $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+    $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
         var name = $(this).attr('name');
         if (name) wpcAdvInitialStates[name] = $(this).val();
     });
     // Capture optimization level slider initial value
     var $optSlider = $('#optimizationLevel');
     if ($optSlider.length) wpcAdvInitialStates['optimizationLevel'] = $optSlider.val();
-    // Capture text/number inputs
-    $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+    // Capture text/number inputs (exclude CF connect form — those have their own save flow)
+    $('input[type="text"], input[type="number"]', '.wpc-settings-body').not('.wpc-cf-connect-wrapper *').each(function() {
         var name = $(this).attr('name') || $(this).attr('id');
         if (name) wpcAdvInitialStates[name] = $(this).val();
     });
@@ -322,8 +393,9 @@ jQuery(document).ready(function ($) {
     var $lb = $('#localBackup');
     if ($lb.length) wpcAdvInitialStates['localBackup'] = $lb.val();
 
-    // Check for unsaved changes when text/number inputs change
+    // Check for unsaved changes when text/number inputs change (skip CF connect form inputs)
     $(document).on('input change', '.wpc-settings-body input[type="text"], .wpc-settings-body input[type="number"]', function() {
+        if ($(this).closest('.wpc-cf-connect-wrapper').length) return;
         window.checkUnsavedChanges();
     });
 
@@ -371,7 +443,7 @@ jQuery(document).ready(function ($) {
         });
 
         // Collect dropdown hidden inputs — only if value changed
-        $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+        $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
             var name = $(this).attr('name');
             var value = $(this).val();
             if (name) {
@@ -394,8 +466,8 @@ jQuery(document).ready(function ($) {
             changes.push({ name: 'qualityLevel', value: optLevel, checked: 'false' });
         }
 
-        // Collect text/number inputs (lazySkipCount, maxWidth, etc.)
-        $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+        // Collect text/number inputs (lazySkipCount, maxWidth, etc.) — exclude CF connect form
+        $('input[type="text"], input[type="number"]', '.wpc-settings-body').not('.wpc-cf-connect-wrapper *').each(function() {
             var name = $(this).attr('name');
             var value = $(this).val();
             if (name && value !== '') {
@@ -447,7 +519,8 @@ jQuery(document).ready(function ($) {
             data: {
                 action: 'wps_ic_ajax_v2_checkbox_batch',
                 changes: JSON.stringify(changes),
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || ''
             },
             success: function() { onAllSaved(); },
             error: function() { hadError = true; onAllSaved(); }
@@ -467,12 +540,12 @@ jQuery(document).ready(function ($) {
                 var name = $(this).data('option-name') || $(this).attr('name');
                 if (name) wpcAdvInitialStates[name] = $(this).prop('checked');
             });
-            $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+            $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
                 var name = $(this).attr('name');
                 if (name) wpcAdvInitialStates[name] = $(this).val();
             });
-            // Refresh text/number input initial states
-            $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+            // Refresh text/number input initial states (exclude CF connect form)
+            $('input[type="text"], input[type="number"]', '.wpc-settings-body').not('.wpc-cf-connect-wrapper *').each(function() {
                 var name = $(this).attr('name') || $(this).attr('id');
                 if (name) wpcAdvInitialStates[name] = $(this).val();
             });
@@ -512,8 +585,13 @@ jQuery(document).ready(function ($) {
                 $btn.removeClass('wpc-saving').addClass('wpc-saved');
                 $btn.html('<span class="wpc-save-pill-check-ico"></span> ' + (wpc_ajaxVar.saved || 'Saved') + '!');
 
-                // Reload page if CF CDN or Static Assets changed
-                var cfReloadSettings = ['cf,cdn', 'cf,assets', 'status,show_admin_bar_title'];
+                // Reload page if CF CDN or Static Assets changed.
+                // v7.01.22 — wpc_nextgen included: the Next-Gen card saves through this native
+                // batch flow and must re-render its freshly-verified delivery state after save.
+                // v7.01.91 — wpc_delivery_override added: the Advanced override now saves through this
+                // native batch flow (parity with the Next-Gen switch) and must re-render its freshly-
+                // verified delivery state (forced re-verify happens server-side in the batch handler).
+                var cfReloadSettings = ['cf,cdn', 'cf,assets', 'status,show_admin_bar_title', 'wpc_nextgen', 'wpc_delivery_override'];
                 var needsReload = changeKeys.some(function(k) { return cfReloadSettings.indexOf(k) !== -1; });
 
                 if (needsReload) {
@@ -558,7 +636,7 @@ jQuery(document).ready(function ($) {
         });
         if (changed) return true;
         // Hidden dropdown inputs
-        $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+        $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
             var name = $(this).attr('name');
             if (name && wpcAdvInitialStates[name] !== undefined && $(this).val() !== wpcAdvInitialStates[name]) {
                 changed = true;
@@ -566,8 +644,8 @@ jQuery(document).ready(function ($) {
             }
         });
         if (changed) return true;
-        // Text/number inputs
-        $('input[type="text"], input[type="number"]', '.wpc-settings-body').each(function() {
+        // Text/number inputs (exclude CF connect form — those have their own save flow)
+        $('input[type="text"], input[type="number"]', '.wpc-settings-body').not('.wpc-cf-connect-wrapper *').each(function() {
             var name = $(this).attr('name') || $(this).attr('id');
             if (name && wpcAdvInitialStates[name] !== undefined && $(this).val() !== wpcAdvInitialStates[name]) {
                 changed = true;
@@ -1121,7 +1199,7 @@ jQuery(document).ready(function ($) {
         });
 
         // Handle ALL dropdown hidden inputs (CF, font-display, icon-font-display, replace-fonts, etc.)
-        $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+        $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
             settingsState.push($(this).val());
         });
     }
@@ -1153,7 +1231,7 @@ jQuery(document).ready(function ($) {
         });
 
         // Handle ALL dropdown hidden inputs (CF, font-display, icon-font-display, replace-fonts, etc.)
-        $('input[type="hidden"]', '.wpc-settings-body .wpc-box-check').each(function() {
+        $('input[type="hidden"][name^="options["]', '.wpc-settings-body').each(function() {
             getSettingsState.push($(this).val());
         });
 

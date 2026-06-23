@@ -97,6 +97,16 @@ function runAdaptive() {
             if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
             }
+
+            // Handle <picture> <source> lazy loading — promote lazy AVIF/WebP <source data-srcset>
+            // so the browser self-selects once (no eager pre-fetch + runLazy re-fetch). Mirrors local/lazy.js.
+            var parentPicture = adaptiveImage.closest('picture');
+            if (parentPicture) {
+                parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
+                    s.srcset = s.dataset.srcset;
+                    s.removeAttribute('data-srcset');
+                });
+            }
         } else if (typeof adaptiveImage.src !== 'undefined' && adaptiveImage.src != '') {
             newApiURL = adaptiveImage.src;
 

@@ -12,7 +12,7 @@ if ($option = 'exclude-url-from-all'){
             <div class="wpc-popup-saving-logo-container">
                 <div class="wpc-popup-saving-preparing-logo">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
-                    <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="wpc-ic-popup-logo-saving-loader"/>
+                    <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
                 </div>
             </div>
         </div>

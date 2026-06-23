@@ -7,6 +7,7 @@ const WPC_BYPASS_RULE_REF = 'wpc-bypass-cache';
 const WPC_STATIC_RULE_REF = 'wpc-static-assets';
 const WPC_HOMEPAGE_RULE_REF = 'wpc-homepage-html';
 const WPC_FULLHTML_RULE_REF = 'wpc-full-html';
+const WPC_CONFIG_INJECT_RULE_REF = 'wpc-config-inject'; // CF Piece 2 (signed x-wpc-config), scaffold
 
 
 class WPC_CloudflareAPI
@@ -49,7 +50,7 @@ class WPC_CloudflareAPI
         $siteUrl = site_url();
         $zoneName = str_replace(array('http://', 'https://', '/'), '', $siteUrl);
 
-        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'updateCFConfig', 'token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true), 'staticAssets' => $staticAssetsEnabled, 'htmlCache' => $htmlCacheMode], ['timeout' => 120]);
+        $body = $requests->GET(WPS_IC_KEYSURL, ['action' => 'updateCFConfig', 'token' => $token, 'zone' => $zoneInput, 'zoneName' => $zoneName, 'siteUrl' => $siteUrl, 'apikey' => $apikey, 'time' => microtime(true), 'staticAssets' => $staticAssetsEnabled, 'htmlCache' => $htmlCacheMode], ['timeout' => (int) apply_filters('wpc_cf_keys_timeout', 15)]); // dropped from 120 to 15: a 2-minute keys round-trip on an admin path is a guaranteed worker-pin, so cap it
 
         if (!empty($body)) {
             $data = (array)$body->data;
@@ -101,7 +102,7 @@ class WPC_CloudflareAPI
     {
         $url = add_query_arg($query, $this->apiBase . $endpoint);
 
-        $response = wp_remote_get($url, ['headers' => $this->getHeaders(),]);
+        $response = wp_remote_get($url, ['headers' => $this->getHeaders(), 'timeout' => (int) apply_filters('wpc_cf_api_timeout', 8)]); // hard cap (previously the WP default): a slow/unreachable CF API must never pin an admin worker
 
 
         return $this->processResponse($response);
@@ -146,6 +147,71 @@ class WPC_CloudflareAPI
     }
 
     /**
+     * Classify a CF SDK call result into a DIAGNOSABLE status, so Connect/Reconnect can tell the
+     * operator WHICH failure mode happened (missing token permission vs misconfigured zone vs
+     * never-heard-back) instead of a silent hang or a bare "failed". Reads the CF error CODES that
+     * processResponse() preserves in the WP_Error data.
+     *
+     * @param mixed $result array (CF success) | true (rule already present) | false (lost) | WP_Error
+     * @return array ['ok'=>bool,'mode'=>'ok|permission|misconfig|unreachable|unknown','detail'=>string]
+     */
+    public static function classifyResult($result)
+    {
+        if ($result === true) {
+            return ['ok' => true, 'mode' => 'ok', 'detail' => 'OK'];
+        }
+        if (is_array($result)) {
+            if (array_key_exists('success', $result) && !$result['success']) {
+                $m = !empty($result['errors'][0]['message']) ? (string) $result['errors'][0]['message'] : 'Cloudflare reported failure';
+                return ['ok' => false, 'mode' => 'unknown', 'detail' => $m];
+            }
+            return ['ok' => true, 'mode' => 'ok', 'detail' => 'OK'];
+        }
+        if (is_wp_error($result)) {
+            $code = (string) $result->get_error_code();
+            $msg  = (string) $result->get_error_message();
+            // (1) transport-level: we NEVER heard back (timeout / DNS / connection refused).
+            if ($code === 'http_request_failed'
+                || stripos($msg, 'timed out') !== false || stripos($msg, 'timeout') !== false
+                || stripos($msg, 'could not resolve') !== false || stripos($msg, 'failed to connect') !== false
+                || stripos($msg, 'connection') !== false || stripos($msg, 'resolve host') !== false) {
+                return ['ok' => false, 'mode' => 'unreachable',
+                    'detail' => 'Could not reach Cloudflare (' . ($msg !== '' ? $msg : 'no response') . '). This is usually transient — try Reconnect again.'];
+            }
+            // (2) CF answered with an error body: inspect the preserved CF error codes.
+            $data  = $result->get_error_data();
+            $codes = [];
+            if (is_array($data)) {
+                foreach ($data as $e) {
+                    if (is_array($e) && isset($e['code'])) $codes[] = (int) $e['code'];
+                }
+            }
+            $permCodes = [10000, 9109, 9106, 9103, 1000]; // auth / unauthorized-to-resource
+            $zoneCodes = [7003, 7000, 1001, 1049, 1061];  // could-not-route / invalid / not-found zone
+            foreach ($codes as $c) {
+                if (in_array($c, $permCodes, true)) {
+                    return ['ok' => false, 'mode' => 'permission',
+                        'detail' => 'Cloudflare rejected it — your API token is missing a required permission (needs Firewall Services: Edit, Cache Rules: Edit, and Cache Purge). CF said: ' . $msg];
+                }
+            }
+            foreach ($codes as $c) {
+                if (in_array($c, $zoneCodes, true)) {
+                    return ['ok' => false, 'mode' => 'misconfig',
+                        'detail' => 'Cloudflare zone looks misconfigured (' . $msg . '). Check the zone is active and the token is scoped to it.'];
+                }
+            }
+            if (stripos($msg, 'authentication') !== false || stripos($msg, 'unauthor') !== false || stripos($msg, 'permission') !== false) {
+                return ['ok' => false, 'mode' => 'permission',
+                    'detail' => 'Cloudflare rejected it — token permissions. CF said: ' . $msg];
+            }
+            return ['ok' => false, 'mode' => 'unknown', 'detail' => $msg !== '' ? $msg : 'Cloudflare error'];
+        }
+        // false / null — the lossy legacy path (e.g. bypass-token fetch failed; no CF response captured).
+        return ['ok' => false, 'mode' => 'unknown',
+            'detail' => 'Could not complete — no Cloudflare response captured (likely a token or connection issue). Try Reconnect again.'];
+    }
+
+    /**
      * Retrieve the list of zones
      *
      * @return array|WP_Error List of zones or WP_Error
@@ -183,6 +249,27 @@ class WPC_CloudflareAPI
     }
 
     /**
+     * Purge SPECIFIC files asynchronously (fire-and-forget). The HTML-only update purge uses this so a
+     * plugin update NEVER purge_everything — that would wipe all edge-cached IMAGES, forcing a fleet-wide
+     * cold-miss storm (the CDN re-probes the slow origin for every image → PHP-worker saturation → 40-60s
+     * HTML). Scoped to the given URLs; images stay cached. CF allows up to 30 files per call (free/pro).
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @param array  $files  Absolute URLs to purge
+     */
+    public function purgeFilesAsync($zoneId, $files)
+    {
+        if (empty($files) || !is_array($files)) return;
+        $url = $this->apiBase . "zones/$zoneId/purge_cache";
+        wp_remote_post($url, [
+            'headers'  => $this->getHeaders(),
+            'body'     => json_encode(['files' => array_values(array_slice($files, 0, 30))]),
+            'blocking' => false,
+            'timeout'  => 0.01,
+        ]);
+    }
+
+    /**
      * Send a POST request to the Cloudflare API
      *
      * @param string $endpoint API endpoint
@@ -193,7 +280,7 @@ class WPC_CloudflareAPI
     {
         $url = $this->apiBase . $endpoint;
 
-        $response = wp_remote_post($url, ['headers' => $this->getHeaders(), 'body' => json_encode($body)]);
+        $response = wp_remote_post($url, ['headers' => $this->getHeaders(), 'body' => json_encode($body), 'timeout' => (int) apply_filters('wpc_cf_api_timeout', 8)]); // hard cap (previously none, so it fell back to the WP default; this is the purge_cache + firewall/cache-rule writer)
 
         return $this->processResponse($response);
     }
@@ -208,6 +295,84 @@ class WPC_CloudflareAPI
     public function purgeFiles($zoneId, $files)
     {
         return $this->postRequest("zones/$zoneId/purge_cache", ['files' => $files,]);
+    }
+
+    /**
+     * Purge cache scoped to specific hostnames so an HTML purge doesn't flush the image CDN host
+     * (and vice-versa). CF purge-by-host (hosts[]) is an ENTERPRISE-only feature: on Free/Pro/Business
+     * CF rejects it (returns a WP_Error here), so we fall back to a full purge_everything and report
+     * scoped=false. Either way the purge happens; only Enterprise zones get true scoping. This blocks
+     * and returns a verifiable result, since the call sites are manual purge buttons, not a hot path.
+     *
+     * @param string $zoneId
+     * @param array  $hosts  hostnames to scope to, e.g. ['www.example.com']
+     * @return array ['scoped'=>bool, 'hosts'=>array, 'result'=>array|WP_Error]
+     */
+    public function purgeScoped($zoneId, $hosts)
+    {
+        $hosts = array_values(array_filter(array_unique(array_map('strval', (array) $hosts)), 'strlen'));
+        if (!empty($hosts)) {
+            $res = $this->postRequest("zones/$zoneId/purge_cache", ['hosts' => $hosts]);
+            if (!is_wp_error($res) && !empty($res['success'])) {
+                return ['scoped' => true, 'hosts' => $hosts, 'result' => $res];
+            }
+        }
+        // hosts[] unsupported on this plan (Enterprise-only) or no hosts resolved → full purge so the
+        // cache still clears (no regression vs the pre-.82 purge_everything behaviour).
+        return ['scoped' => false, 'hosts' => $hosts, 'result' => $this->purgeCache($zoneId)];
+    }
+
+    /**
+     * VERIFY a CF-CNAME is edge-live and orch-resolved before the resolver is allowed to EMIT it
+     * (the provision-then-promote gate). A request to https://{cfCname}/wp-content/... is resolved
+     * by the pod via Host→agencySites.cname; until the orch has the row it returns the
+     * {"error":"Site not found","hasApikey":false} body (proven on classicpoolandspa/perkzilla).
+     * So "live" = the response did NOT come back as Site-not-found AND it actually traversed CF
+     * (cf-ray present means edge, not NXDOMAIN/grey-cloud). An origin_404 or 200 both count as resolved.
+     * Bounded retries cover the brief DNS/cert/orch propagation window after a save. Returns bool.
+     *
+     * @param string $cfCname  the host to probe (e.g. cdn.example.com)
+     * @param int    $tries
+     * @return bool
+     */
+    public function verifyCfCnameLive($cfCname, $tries = 3, $timeout = 8)
+    {
+        $cfCname = trim((string) $cfCname);
+        if ($cfCname === '' || !function_exists('wp_remote_get')) {
+            return false;
+        }
+        // Probe a stable uploads path + a cache-buster so a stale edge bucket can't mask resolution.
+        $probe = 'https://' . $cfCname . '/wp-content/uploads/wpc-cname-verify.png?cb=' . (function_exists('wp_rand') ? wp_rand() : 1);
+        for ($i = 0; $i < max(1, (int) $tries); $i++) {
+            $r = wp_remote_get($probe, ['timeout' => max(2, (int) $timeout), 'sslverify' => false, 'redirection' => 0]);
+            if (!is_wp_error($r)) {
+                $code    = (int) wp_remote_retrieve_response_code($r);
+                $body    = (string) wp_remote_retrieve_body($r);
+                $cfRay   = wp_remote_retrieve_header($r, 'cf-ray');
+                $ctype   = (string) wp_remote_retrieve_header($r, 'content-type');
+                $through_cf = !empty($cfRay);
+                $site_not_found = (stripos($body, 'Site not found') !== false) || (stripos($body, '"hasApikey":false') !== false);
+                // RESOLVED only on a status that means "zone found": a 404 (the made-up probe file
+                // legitimately doesn't exist on origin, so the zone DID resolve — origin_404) or a 200
+                // that is an actual image. EXPLICITLY reject 5xx and CF challenge/block codes
+                // (403/429/503): those still traverse CF (cf-ray present) and aren't "Site not found",
+                // but they mean the host is NOT serving assets (WAF 1020, JS challenge, edge 5xx), so
+                // promoting on them would latch a BROKEN host. Must be CF-traversed, not-site-not-found,
+                // and a found-zone status.
+                // Also accept a redirect (301/302/307/308): the pod 302s a missing .png probe
+                // path to the natural sibling or origin, which still proves the zone RESOLVED (cf-traversed,
+                // not "Site not found"). Rejecting redirects stranded CF-direct zones whose probe path
+                // naturally redirects (acrystalglass: the .png verify-probe redirects with a 302).
+                $resolved_status = ($code === 404) || ($code === 200 && stripos($ctype, 'image/') !== false) || in_array($code, [301, 302, 307, 308], true);
+                if ($through_cf && !$site_not_found && $resolved_status) {
+                    return true;
+                }
+            }
+            if ($i + 1 < $tries) {
+                sleep(2); // brief propagation backoff (the save handler can afford it)
+            }
+        }
+        return false;
     }
 
     /**
@@ -286,7 +451,7 @@ class WPC_CloudflareAPI
 
         if (is_wp_error($result)) {
             error_log('[WPC] addCdnBypassRule CF API error: ' . $result->get_error_message());
-            return false;
+            return $result; // return the WP_Error rather than `false`, so classifyResult() can read the CF code (permission vs misconfig vs unreachable) instead of a bare fail
         }
 
         return $result;
@@ -414,7 +579,7 @@ class WPC_CloudflareAPI
     {
         $url = $this->apiBase . $endpoint;
 
-        $response = wp_remote_request($url, ['method' => 'DELETE', 'headers' => $this->getHeaders(),]);
+        $response = wp_remote_request($url, ['method' => 'DELETE', 'headers' => $this->getHeaders(), 'timeout' => (int) apply_filters('wpc_cf_api_timeout', 8),]); // hard cap (previously none)
 
         return $this->processResponse($response);
     }
@@ -559,7 +724,7 @@ class WPC_CloudflareAPI
     {
         $url = $this->apiBase . $endpoint;
 
-        $response = wp_remote_request($url, ['method' => 'PATCH', 'headers' => $this->getHeaders(), 'body' => json_encode($body),]);
+        $response = wp_remote_request($url, ['method' => 'PATCH', 'headers' => $this->getHeaders(), 'body' => json_encode($body), 'timeout' => (int) apply_filters('wpc_cf_api_timeout', 8),]); // hard cap (previously none)
 
         return $this->processResponse($response);
     }
@@ -966,9 +1131,65 @@ class WPC_CloudflareAPI
 
     private function getStaticAssetsRule()
     {
-        return ['ref' => WPC_STATIC_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Static assets cache', 'enabled' => true, 'expression' => '(http.request.method in {"GET" "HEAD"}) and lower(http.request.uri.path.extension) in {"css" "js" "mjs" "json" "map" "jpg" "jpeg" "png" "gif" "webp" "avif" "svg" "ico" "ttf" "otf" "woff" "woff2" "eot" "mp4" "webm" "ogg"} and not starts_with(http.request.uri.path, "/cdn-cgi/")', 'action_parameters' => ['cache' => true, 'edge_ttl' => ['mode' => 'override_origin', 'default' => 2592000  // 30 days
-        ], 'browser_ttl' => ['mode' => 'override_origin', 'default' => 2592000  // 30 days
-        ], 'cache_key' => ['ignore_query_strings_order' => true]]];
+        // Use respect_origin (this used to be override_origin / 2592000 = 30d). The pod is now a
+        // well-behaved origin (1yr on finals, 60s on interims, no-store on cross-format), so
+        // CF must honor its per-response TTL. The old 30d override pinned not-yet-landed
+        // natural .avif interims (and wrong-MIME css/js) for 30 days on a vary-blind CF edge.
+        return ['ref' => WPC_STATIC_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Static assets cache', 'enabled' => true, 'expression' => '(http.request.method in {"GET" "HEAD"}) and lower(http.request.uri.path.extension) in {"css" "js" "mjs" "json" "map" "jpg" "jpeg" "png" "gif" "webp" "avif" "svg" "ico" "ttf" "otf" "woff" "woff2" "eot" "mp4" "webm" "ogg"} and not starts_with(http.request.uri.path, "/cdn-cgi/")', 'action_parameters' => ['cache' => true, 'edge_ttl' => ['mode' => 'respect_origin'], 'browser_ttl' => ['mode' => 'respect_origin'], 'cache_key' => ['ignore_query_strings_order' => true]]];
+    }
+
+    /**
+     * Re-assert respect-origin TTLs on an already-provisioned static-assets cache rule (it may
+     * have been created with the old override_origin / 30d, which pins not-yet-landed natural
+     * .avif interims and wrong-MIME css/js for 30 days on a vary-blind CF edge). PATCH-only:
+     * flips the edge/browser TTL modes, preserves the expression and accumulated domains.
+     * Creates the rule (respect_origin) if it doesn't exist yet. Called on
+     * connect / refresh / settings-save / plugin-update so existing CF zones self-correct
+     * without a manual re-edit.
+     *
+     * @param string $zoneId Cloudflare Zone ID
+     * @return array|WP_Error API response or WP_Error
+     */
+    public function patchStaticAssetsRespectOrigin($zoneId)
+    {
+        if (empty($zoneId)) {
+            return new WP_Error('no_zone', 'No zone id');
+        }
+        $rule = $this->findCacheRuleByRef($zoneId, WPC_STATIC_RULE_REF);
+        if (!$rule) {
+            // Not provisioned yet → create with the respect_origin definition.
+            $created = $this->addCacheRule($zoneId, $this->getStaticAssetsRule());
+            $this->logCacheRuleResult('create', $zoneId, $created);
+            return $created;
+        }
+        if (!isset($rule['action_parameters']) || !is_array($rule['action_parameters'])) {
+            $rule['action_parameters'] = [];
+        }
+        // Flip ONLY the TTL modes; leave cache/expression/accumulated-domains untouched.
+        $rule['action_parameters']['cache']       = true;
+        $rule['action_parameters']['edge_ttl']    = ['mode' => 'respect_origin'];
+        $rule['action_parameters']['browser_ttl'] = ['mode' => 'respect_origin'];
+        $rulesetId = $this->getCacheRulesRulesetId($zoneId);
+        if (is_wp_error($rulesetId)) {
+            return $rulesetId;
+        }
+        $resp = $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$rule['id']}", $rule);
+        // Surface failures, for parity with configureCF's error reporting: a CF rejection here
+        // (e.g. an unexpected respect_origin payload contract) must not be silent — it's how the
+        // fix self-confirms on the first CF trigger. Fail-safe: a rejected PATCH leaves the
+        // existing rule untouched (no breakage).
+        $this->logCacheRuleResult('patch', $zoneId, $resp);
+        return $resp;
+    }
+
+    /** Log a static-rule API result (WP_Error or CF non-success) for diagnosis. */
+    private function logCacheRuleResult($op, $zoneId, $resp)
+    {
+        if (is_wp_error($resp)) {
+            error_log('[WPC CF] static-rule ' . $op . ' failed (zone ' . $zoneId . '): ' . $resp->get_error_message());
+        } elseif (is_array($resp) && array_key_exists('success', $resp) && !$resp['success']) {
+            error_log('[WPC CF] static-rule ' . $op . ' CF non-success (zone ' . $zoneId . '): ' . wp_json_encode($resp['errors'] ?? $resp));
+        }
     }
 
     private function getHomepageHTMLRule()
@@ -1817,6 +2038,143 @@ GQL;
         }
 
         return $context ? "{$context}: {$error_message}" : $error_message;
+    }
+
+    /**
+     * CF Piece 2 (a SCAFFOLD, inert until orch ships POST /v2/signed-header and the
+     * `wpc_v2_cf_header_injection` flag is on; see addons/v2/v2-signed-header.php).
+     *
+     * Ensure the signed x-wpc-config injection Transform Rule exists. Writes ONE `rewrite` rule in the
+     * http_request_late_transform phase, scoped to CDN-bound requests (the cdn.<domain> CNAME that
+     * fronts cdn-mc.zapwp.net), that:
+     *   - strips any inbound `apikey` header (a visitor must never be able to supply one), and
+     *   - SETS `x-wpc-config` to the orch-signed $signedValue. CF's `set` operation REPLACES any
+     *     inbound value, so it also strips a spoofed x-wpc-config — the brief's "strip + add" collapses
+     *     to one atomic header op (no race between a separate strip rule and an add rule).
+     * The cdn-mc container then reads Accept + the trusted x-wpc-config with ZERO database lookups.
+     *
+     * Idempotent: updates the existing rule (matched by ref) in place rather than appending duplicates.
+     * Find-or-create the ruleset exactly like the cache-rule helpers (getCacheRulesRulesetId/addCacheRule).
+     *
+     * @param string $zoneId
+     * @param string $signedValue Opaque orch-signed header value (do NOT construct plugin-side)
+     * @return array|WP_Error
+     */
+    public function ensureWpcConfigInjection($zoneId, $signedValue)
+    {
+        if (empty($signedValue) || !is_string($signedValue)) {
+            return new WP_Error('wpc_no_signed_value', 'Refusing to write an empty x-wpc-config injection rule');
+        }
+
+        $cdnHost = $this->getCfCname(); // the host CDN assets are served from (cdn.<domain>)
+        if (empty($cdnHost)) {
+            return new WP_Error('wpc_no_cdn_host', 'No CDN CNAME resolved for this zone');
+        }
+
+        $rule = [
+            'ref'         => WPC_CONFIG_INJECT_RULE_REF,
+            'description' => '[DO NOT EDIT] WP Compress signed config injection',
+            'expression'  => '(http.host eq "' . $cdnHost . '")',
+            'action'      => 'rewrite',
+            'enabled'     => true,
+            'action_parameters' => [
+                'headers' => [
+                    'apikey'       => ['operation' => 'remove'],
+                    'x-wpc-config' => ['operation' => 'set', 'value' => $signedValue],
+                ],
+            ],
+        ];
+
+        // Find-or-create the late_transform entrypoint ruleset, then update-or-add the rule by ref.
+        $rulesetId = $this->getTransformRulesRulesetId($zoneId);
+        if (is_wp_error($rulesetId)) {
+            // No transform ruleset yet → create one carrying this single rule (SAFE — new ruleset).
+            return $this->postRequest("zones/$zoneId/rulesets", [
+                'name'  => 'WP Compress Transform Rules',
+                'kind'  => 'zone',
+                'phase' => 'http_request_late_transform',
+                'rules' => [$rule],
+            ]);
+        }
+
+        // Ruleset exists — update our rule in place if present (no duplicates), else append it.
+        $existing = $this->findTransformRuleByRef($zoneId, $rulesetId, WPC_CONFIG_INJECT_RULE_REF);
+        if ($existing && !empty($existing['id'])) {
+            return $this->patchRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$existing['id']}", $rule);
+        }
+        return $this->postRequest("zones/$zoneId/rulesets/$rulesetId/rules", $rule);
+    }
+
+    /**
+     * Remove the signed-config injection rule (on CF disconnect or when the flag is turned off).
+     * Leaves all other Transform Rules untouched. Returns the delete response or false if absent.
+     *
+     * @param string $zoneId
+     * @return array|WP_Error|false
+     */
+    public function removeWpcConfigInjection($zoneId)
+    {
+        $rulesetId = $this->getTransformRulesRulesetId($zoneId);
+        if (is_wp_error($rulesetId)) {
+            return false;
+        }
+
+        $existing = $this->findTransformRuleByRef($zoneId, $rulesetId, WPC_CONFIG_INJECT_RULE_REF);
+        if ($existing && !empty($existing['id'])) {
+            return $this->deleteRequest("zones/$zoneId/rulesets/$rulesetId/rules/{$existing['id']}");
+        }
+        return false;
+    }
+
+    /**
+     * Get the http_request_late_transform entrypoint ruleset id, or a WP_Error('no_ruleset') if none
+     * exists yet. Mirrors getCacheRulesRulesetId() for the transform phase.
+     *
+     * @param string $zoneId
+     * @return string|WP_Error
+     */
+    private function getTransformRulesRulesetId($zoneId)
+    {
+        $response = $this->getRequest("zones/$zoneId/rulesets");
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        if (!empty($response['result'])) {
+            foreach ($response['result'] as $ruleset) {
+                if (isset($ruleset['phase']) && $ruleset['phase'] === 'http_request_late_transform') {
+                    return $ruleset['id'];
+                }
+            }
+        }
+
+        return new WP_Error('no_ruleset', 'No http_request_late_transform ruleset found');
+    }
+
+    /**
+     * Find a Transform Rule by its ref inside a known ruleset. Returns the rule array (incl. its id)
+     * or null. Mirrors findCacheRuleByRef() but reads the specific ruleset directly.
+     *
+     * @param string $zoneId
+     * @param string $rulesetId
+     * @param string $ref
+     * @return array|null
+     */
+    private function findTransformRuleByRef($zoneId, $rulesetId, $ref)
+    {
+        $response = $this->getRequest("zones/$zoneId/rulesets/$rulesetId");
+        if (is_wp_error($response)) {
+            return null;
+        }
+
+        $rules = $response['result']['rules'] ?? [];
+        foreach ($rules as $rule) {
+            if (isset($rule['ref']) && $rule['ref'] === $ref) {
+                return $rule;
+            }
+        }
+
+        return null;
     }
 
 }

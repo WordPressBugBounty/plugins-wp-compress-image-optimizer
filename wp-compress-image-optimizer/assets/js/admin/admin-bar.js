@@ -12,6 +12,7 @@ jQuery(document).ready(function ($) {
 
     });
 
+
     // Purge HTML Cache
     $('body').on('click', '.wp-compress-bar-generate-critical-css>a', function (e) {
         e.preventDefault();
@@ -39,7 +40,7 @@ jQuery(document).ready(function ($) {
 
         var li = $('#wp-admin-bar-wp-compress');
         var old_html = $(li).html();
-        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">' + (wpc_ajaxVar.purging_html || 'Purging HTML Cache...') + '</span>');
+        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
         $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_html', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
@@ -62,7 +63,7 @@ jQuery(document).ready(function ($) {
 
         var li = $('#wp-admin-bar-wp-compress');
         var old_html = $(li).html();
-        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">' + (wpc_ajaxVar.purging_critical || 'Purging Critical CSS...') + '</span>');
+        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
         $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_critical_css', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {
@@ -82,7 +83,7 @@ jQuery(document).ready(function ($) {
 
         var li = $('#wp-admin-bar-wp-compress');
         var old_html = $(li).html();
-        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">' + (wpc_ajaxVar.purging_cdn || 'Purging CDN Cache...') + '</span>');
+        $(li).html('<span class="wp-compress-admin-bar-icon"></span><span style="padding-left: 30px;">Purging cache...</span>');
 
         $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_purge_cdn', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             if (response.success) {

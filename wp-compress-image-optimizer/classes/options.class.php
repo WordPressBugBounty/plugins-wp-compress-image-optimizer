@@ -22,7 +22,7 @@ class wps_ic_options
 
         //Format of this list is the same as settings list, just instead of setting value, put ['critical' , 'combine'] to set what files will be purged. Cache is always purged
         $this->purgeList = [
-            'live-cdn' => ['critical'],
+            'live-cdn' => ['critical', 'html'],
             'serve' => [
                 'jpg' => ['critical'],
                 'png' => ['critical'],
@@ -38,8 +38,27 @@ class wps_ic_options
             'js_minify' => ['combine'],
             'delay-js' => ['combine'],
             'font-subsetting' => ['cdn','critical'],
-            'imagesPreset' => ['cdn','critical'],
-            'cdnAll' => ['cdn','critical'],
+            'imagesPreset' => ['cdn','critical', 'html'],
+            'cdnAll' => ['cdn','critical', 'html'],
+            // Image-delivery settings that change HTML output.
+            // When any of these toggle, cached pages contain stale picture
+            // wraps / srcset / fetchpriority / lazy attributes, so we must purge
+            // HTML cache so the next render rebuilds with the new rules.
+            'fetchpriority-high' => ['html'],
+            'lazySkipCount'      => ['html'],
+            'lazy-load'          => ['html'],
+            'native-lazy'        => ['html'],
+            'picture_webp'       => ['html'],
+            'picture_avif'       => ['html'],
+            'retina-in-srcset'   => ['html'],
+            'avif-natural-source' => ['html'],
+            'single-url-image-format' => ['html'], // Regime B: flipping it rewrites every single-URL image href
+            'optimize-lcp'       => ['html'],
+            'lazy-auto-sizes'    => ['html'],
+            'adaptive'           => ['html'],
+            'add-image-sizes'    => ['html'],
+            'generate_webp'      => ['html'],
+            'generate_adaptive'  => ['html'],
         ];
 
         $this::$recommendedSettings = [
@@ -61,10 +80,21 @@ class wps_ic_options
             'picture_avif' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
+            // Natural-AVIF picture sources (default ON). When on, the avif
+            // <source> emits natural -WxH.avif URLs (edge serves avif / self-heals)
+            // instead of wp:2 transforms that serve webp. Safe everywhere: Bunny
+            // auto-upgrades; Cloudflare is gated on wpc_v2_cf_avif_live (set when the
+            // edge's .avif live-transform is live) so it can't pin a webp interim.
+            'avif-natural-source' => 1,
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 0,
+            // Pixel-optimal delivery is the default experience in
+            // Recommended/Aggressive (user direction, final testing): the LCP
+            // sizes ladder feeds demand-width targeting end to end.
+            'optimize-lcp' => '1',
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
             'on-upload' => 1,
@@ -77,6 +107,7 @@ class wps_ic_options
             'disable-cart-fragments' => 0,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
+            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -144,10 +175,20 @@ class wps_ic_options
             'picture_avif' => '1',
             'retina' => '0',
             'retina-in-srcset' => '0',
+            // Safe mode is the CONSERVATIVE preset: both HTML-output-altering image
+            // toggles ship OFF. 'avif-natural-source' => 0 keeps AVIF <source>s on the never-404
+            // wp:2 transform form (not natural -WxH URLs) in Safe mode; 'fetchpriority-high' => 0
+            // was ABSENT from this preset, so the toggle kept its prior ON value on a Safe switch.
+            // Both were reported staying ON after switching to Safe.
+            'avif-natural-source' => '0',
+            'single-url-image-format' => 'same-ext', // Safe forces the single-URL floor (consistent with avif-natural-source off)
+            'fetchpriority-high' => '0',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', // BETA — device-independent LCP srcset (7.00.08+)
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
+            'modern_delivery_prefer_local' => '0', // when 1, srcset uses origin URL for variants confirmed local on disk; otherwise CDN. Off by default.
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => '1',
@@ -225,11 +266,15 @@ class wps_ic_options
             'picture_avif' => '1',
             'retina' => '1',
             'retina-in-srcset' => '0',
+            'avif-natural-source' => 1,
+            'single-url-image-format' => 'auto', // Regime B default
             'nativeLazy' => '1',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', // BETA — device-independent LCP srcset (7.00.08+)
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
+            'modern_delivery_prefer_local' => '0', // when 1, srcset uses origin URL for variants confirmed local on disk; otherwise CDN. Off by default.
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => 1,
@@ -242,6 +287,7 @@ class wps_ic_options
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
+            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -312,10 +358,13 @@ class wps_ic_options
             'picture_avif' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
+            'avif-natural-source' => 1,
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 1,
+            'optimize-lcp' => '1', // see recommended preset note
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
             'on-upload' => 1,
@@ -328,6 +377,7 @@ class wps_ic_options
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
+            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -463,7 +513,6 @@ class wps_ic_options
     public function getPreloadSettings()
     {
         $settings = get_option('wps_ic_settings');
-        $connectivityStatus = get_option('wpc-connectivity-status');
 
         $preloadSettings = $settings;
         $preloadSettings['critical']['css'] = 1;
@@ -473,9 +522,9 @@ class wps_ic_options
         $preloadSettings['delay-js-v2'] = 0;
         $preloadSettings['inline-js'] = 0;
 
-        if (!empty($connectivityStatus) && $connectivityStatus == 'failed') {
-            $preloadSettings['critical']['css'] = 0;
-        }
+        // (v7.03.31) Removed the wpc-connectivity-status == 'failed' -> critical['css'] = 0 gate. It disabled
+        // critical CSS based on the WARMUP box's reachability, but crit now runs on crit-push.zapwp.net (a
+        // different host that self-checks). Wrong-vantage + unreliable (the probe had no timeout) -> keep crit on.
 
         return $preloadSettings;
     }

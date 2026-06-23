@@ -2,6 +2,28 @@
 
 include __DIR__ . '/debug.php';
 include_once __DIR__ . '/defines.php';
+// v7.01.22 — the delivery resolver registers the 'wpc_delivery_verify' cron handler at file
+// scope, but core (its normal loader) doesn't load under DOING_CRON — so every scheduled
+// re-verify was a silent no-op and a tile/Next-Gen save could leave the site on the legacy
+// fallback until the next admin action. The resolver is standalone-safe (guards all
+// cross-file calls, self-includes negotiated-delivery when it needs it).
+include_once __DIR__ . '/addons/cdn/delivery-resolver.php';
+
+// v7.03.34 — Define the WPC v2 5-minute cron interval under DOING_CRON. wp-compress-core (which normally
+// registers it via v2-direct-entry.php / v2-pull-manifest.php) is gated OFF under DOING_CRON, so when
+// wp-cron fired the recurring wpc_v2_pull_cron / wpc_v2_journal_drain_cron events it couldn't find the
+// 'wpc_v2_5min' schedule → wp_reschedule_event() logged "invalid_schedule" and dropped the event on every
+// run (the log spam). This file IS loaded under DOING_CRON, so defining the interval here lets the reschedule
+// succeed and the events stay armed. Same idempotent shape + identical interval as the in-core registrations
+// (both guard isset()), so it's a pure no-op when core already defined it. We deliberately do NOT load the
+// pull/drain handlers here: that work is driven by the per-batch loopback + admin-init re-arm (cheaper than
+// running it every 5 min under cron on every site), so this only defines the interval, adding zero work.
+add_filter('cron_schedules', function ($schedules) {
+    if (!isset($schedules['wpc_v2_5min'])) {
+        $schedules['wpc_v2_5min'] = ['interval' => 5 * MINUTE_IN_SECONDS, 'display' => 'Every 5 minutes (WPC v2)'];
+    }
+    return $schedules;
+});
 
 class wps_ic_cron
 {
@@ -126,7 +148,7 @@ class wps_ic_cron
         $options = get_option(WPS_IC_OPTIONS);
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
-        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => class_exists('wps_ic') ? wps_ic::$version : '7.00.06']]);
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
         if (wp_remote_retrieve_response_code($call) == 401) {
             $cache = new wps_ic_cache_integrations();

@@ -100,7 +100,7 @@ jQuery(document).ready(function ($) {
         var save = $('.cdn-popup-save-btn', modes_popup);
         var loading = $('.cdn-popup-loading', modes_popup);
         var content = $('.cdn-popup-content', modes_popup);
-        var nonce = $('input[name="wpc_save_mode_nonce"]').val();
+        var nonce = $('input[name="wpc_save_mode_nonce"]').val() || (typeof wpc_ajaxVar !== 'undefined' ? wpc_ajaxVar.mode_nonce : '');
 
         $(save).on('click', function (e) {
             e.preventDefault();
@@ -111,7 +111,7 @@ jQuery(document).ready(function ($) {
             var cdn = $('.form-check-input', modes_popup).prop('checked');
 
             $.post(wpc_ajaxVar.ajaxurl, {
-                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce}, function (response) {
+                action: 'wps_ic_save_mode', mode: selected_mode, cdn: cdn, nonce: nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
                 if (response.success){
                     location.reload();
                 } else {

@@ -311,6 +311,123 @@ class wps_ic_cache
         if ($post_id === 'all') {
             self::mark_cache_cleared();
         }
+
+        // v7.02.47 — Warm the homepage after a homepage-affecting purge so the FIRST visitor gets a cache
+        // HIT instead of the full cold render. Non-blocking, debounced, jittered, fail-safe (see method).
+        // Scope: whole-cache / home / front-page purges only — a single non-front post purge doesn't warm.
+        if ($post_id === 'all' || $post_id === 'home' || $post_id === 0
+            || (is_int($post_id) && $post_id > 0 && $post_id === (int) get_option('page_on_front'))) {
+            self::maybeWarmHomepageAfterPurge();
+        }
+    }
+
+    /**
+     * v7.02.47 — Warm the homepage cache after a homepage-affecting purge, so the FIRST visitor after a
+     * purge gets a static cache HIT instead of eating the full cold render (the "purge → 4-7s" gap).
+     *
+     * Safe by construction:
+     *   - Non-blocking: schedules a fire-and-forget local-vhost loopback GET at shutdown, AFTER
+     *     fastcgi_finish_request() — the triggering request's response is already sent. Reuses the proven
+     *     wpc_loopback_open_socket transport (hits the LOCAL vhost, not the public/CF host).
+     *   - Single render: the homepage only — a page guaranteed to get traffic, so the warm render is one
+     *     that would have happened on the next visit anyway (it MOVES load earlier, doesn't add it).
+     *   - Debounced: a transient lock coalesces a burst of purges into ONE warm per window.
+     *   - Jittered: a small random pre-fire delay so a fleet-wide purge (thousands of sites at once)
+     *     spreads the re-renders across a window instead of a synchronized spike on shared infra.
+     *   - Loop-proof: the warm request carries X-WPC-Cache-Warm; this no-ops on such a request.
+     *   - Fail-safe: every failure is swallowed — the page just stays cold until a visitor warms it
+     *     (today's behaviour), never worse.
+     *   - Gated: HTML caching must be ON; opt out via the wpc_warm_homepage_on_purge option/filter or the
+     *     WPC_WARM_HOMEPAGE_DISABLE constant; skipped on Basic-Auth (the loopback can't land there).
+     */
+    public static function maybeWarmHomepageAfterPurge()
+    {
+        static $registered = false;
+        if ($registered) {
+            return;
+        }
+        // Loop-guard: a warm render must never schedule another warm.
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            return;
+        }
+        if (defined('WPC_WARM_HOMEPAGE_DISABLE') && WPC_WARM_HOMEPAGE_DISABLE) {
+            return;
+        }
+        if (!apply_filters('wpc_warm_homepage_on_purge', (bool) get_option('wpc_warm_homepage_on_purge', true))) {
+            return;
+        }
+        // Only meaningful when WPC HTML caching is actually ON (else the warm render won't be cached).
+        if (!class_exists('wps_cacheHtml')) {
+            return;
+        }
+        $ch = new wps_cacheHtml();
+        if (method_exists($ch, 'cacheEnabled') && !$ch->cacheEnabled()) {
+            return;
+        }
+        // The loopback can't land on a Basic-Auth site; the cron/visitor backstop still warms it.
+        if (function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth()) {
+            return;
+        }
+        // Debounce: coalesce a purge burst into one warm per window. Set BEFORE registering (race-safe).
+        $debounce = (int) apply_filters('wpc_warm_homepage_debounce_seconds', 30);
+        if ($debounce < 1) {
+            $debounce = 1;
+        }
+        if (get_transient('wpc_warm_homepage_lock')) {
+            return;
+        }
+        set_transient('wpc_warm_homepage_lock', 1, $debounce);
+
+        $registered = true;
+        register_shutdown_function(['wps_ic_cache', 'fireHomepageWarm']);
+    }
+
+    /**
+     * Shutdown handler for maybeWarmHomepageAfterPurge(): flush the triggering request's response, jitter
+     * (fleet-spread), then fire the non-blocking local-vhost loopback GET that renders + caches the
+     * homepage. The receiver survives this client-close via the X-WPC-Cache-Warm guard in wp-compress.php
+     * (ignore_user_abort). Never throws.
+     */
+    public static function fireHomepageWarm()
+    {
+        try {
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            }
+            // Fleet jitter: spread re-renders when many sites purge at once. Post-flush, so the already-
+            // finished triggering request's user is unaffected.
+            $jitter_ms = (int) apply_filters('wpc_warm_homepage_jitter_ms', 2000);
+            if ($jitter_ms > 0) {
+                @usleep(mt_rand(0, $jitter_ms) * 1000);
+            }
+            $parts = wp_parse_url(home_url('/'));
+            if (empty($parts['host'])) {
+                return;
+            }
+            $https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
+            $port  = !empty($parts['port']) ? (int) $parts['port'] : ($https ? 443 : 80);
+            $host  = (string) $parts['host'];
+            $path  = !empty($parts['path']) ? $parts['path'] : '/';
+            if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) {
+                return;
+            }
+            // Browser-like UA (no bot token) so the request caches exactly like a visitor; the
+            // X-WPC-Cache-Warm header is what identifies it (loop-guard + disconnect-survival).
+            $req = "GET {$path} HTTP/1.1\r\n"
+                 . "Host: {$host}\r\n"
+                 . "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0\r\n"
+                 . "Accept: text/html\r\n"
+                 . "X-WPC-Cache-Warm: 1\r\n"
+                 . "Connection: close\r\n\r\n";
+            $fp = wps_ic_ajax::wpc_loopback_open_socket($host, $port, $https, 0.2);
+            if ($fp) {
+                @stream_set_timeout($fp, 0, 100000);
+                @fwrite($fp, $req);
+                @fclose($fp);
+            }
+        } catch (\Throwable $e) {
+            // Fail-safe: warming is best-effort. A failure just leaves the page to warm on first visit.
+        }
     }
 
     private static function is_cache_cleared()
@@ -397,7 +514,7 @@ class wps_ic_cache
 
         $cacheLogic->purgeObjectCache();
 
-        $cache::purgeAll(false, true, false, false);
+        $cache::purgeAll(false, true, false, false, false, true); // preserve wp-cio/css on update (cached HTML still references it)
         $cache::purgeCombinedFiles();
 
         // Purge HTML Cache
@@ -635,6 +752,7 @@ class wps_ic_cache
             $log->logCachePurging($oldOptions, $options, 'resetHashes');
 
             update_option(WPS_IC_OPTIONS, $options);
+            restore_current_blog();
         } else {
             $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 

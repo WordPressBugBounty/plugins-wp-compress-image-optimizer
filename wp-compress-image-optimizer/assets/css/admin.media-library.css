@@ -32,8 +32,12 @@
   position: relative;
 }
 .wpc-dropdown-group a:focus {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
+}
+.wpc-dropdown-group a:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }
 .wpc-dropdown-group .wpc-show-btn-group {
   position: absolute;
@@ -272,6 +276,26 @@ p.important {
 .wpc-ml-card a.wpc-ml-action--primary:hover {
   color: #4f46e5 !important;
 }
+.wpc-ml-card span.wpc-ml-action--primary.wpc-ml-action--disabled,
+.wpc-ml-card .wpc-ml-action--disabled {
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
+  pointer-events: none;
+  font-weight: 600 !important;
+}
+.wpc-ml-card.is-regen-pending .wpc-ml-action--disabled svg {
+  animation: wpcRegenSpinPulse 1.6s ease-in-out infinite;
+}
+@keyframes wpcRegenSpinPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 .wpc-ml-card a.wpc-badge-btn.wps-ic-compress-live {
   all: unset !important;
   display: inline-flex !important;
@@ -313,6 +337,8 @@ p.important {
   align-items: center;
   gap: 10px;
   padding: 6px 0;
+  contain: layout;
+  position: relative;
 }
 .wpc-ml-card:not(.is-compressing):not(.is-restoring):hover .wpc-ml-card-icon {
   transform: scale(1.04);
@@ -362,15 +388,20 @@ p.important {
   animation: wpcExcludeBump 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 .wpc-ml-card.is-excluded .icon-idle .exclude-badge {
-  transform: scale(1);
+  transform: scale(1.28);
   opacity: 1;
 }
 .wpc-ml-card.is-excluded .icon-success {
   opacity: 0;
 }
+.wpc-ml-card--excluded .wpc-ml-card-icon {
+  background: #aeb9c7;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(148, 163, 184, 0.24);
+}
 .wpc-ml-card--excluded .wpc-ml-title {
   color: #64748b;
-  font-weight: 400;
+  font-weight: 600;
 }
 .wpc-ml-card a.wpc-badge-btn--include.wps-ic-exclude-live {
   all: unset !important;
@@ -410,6 +441,7 @@ p.important {
 .wpc-ml-body {
   flex: 1;
   min-width: 0;
+  min-height: 54px;
 }
 .wpc-ml-title {
   font-family: 'proxima_semibold', sans-serif;
@@ -417,6 +449,342 @@ p.important {
   color: #1e293b;
   line-height: 1.4;
   white-space: nowrap;
+  transition: color 0.3s ease;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+}
+@keyframes wpcCardFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wpcCardSettle {
+  0% {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wpcSavingsCountUp {
+  0% {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes wpcActionFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wpcSpinnerFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes wpcSavingsPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    color: #1e293b;
+  }
+  50% {
+    transform: scale(1.03);
+    color: var(--wpc-brand-primary, #5cb1ff);
+  }
+}
+.wpc-ml-card.wpc-state-entering {
+  animation: wpcCardFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--compressed .wpc-ml-title {
+  animation: wpcSavingsCountUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+  transform-origin: left center;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--compressed .wpc-ml-subtitle .wpc-ml-action {
+  animation: wpcActionFadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--compressed .wpc-ml-subtitle .wpc-ml-action:nth-child(1) {
+  animation-delay: 0.2s;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--compressed .wpc-ml-subtitle .wpc-ml-action:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--compressed .wpc-ml-subtitle .wpc-ml-action:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.wpc-ml-card.wpc-state-entering.is-compressing .wpc-ml-body,
+.wpc-ml-card.wpc-state-entering.is-restoring .wpc-ml-body {
+  animation: wpcSpinnerFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--uncompressed .wpc-ml-title {
+  animation: wpcCardFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--uncompressed .wpc-ml-subtitle .wpc-ml-action {
+  animation: wpcActionFadeUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--uncompressed .wpc-ml-subtitle .wpc-ml-action:nth-child(1) {
+  animation-delay: 0.18s;
+}
+.wpc-ml-card.wpc-state-entering.wpc-ml-card--uncompressed .wpc-ml-subtitle .wpc-ml-action:nth-child(2) {
+  animation-delay: 0.23s;
+}
+.wpc-ml-card.wpc-cascade-in {
+  animation: wpcCardSettle 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-ml-card.wpc-cascade-0 {
+  animation-delay: 0ms;
+}
+.wpc-ml-card.wpc-cascade-1 {
+  animation-delay: 60ms;
+}
+.wpc-ml-card.wpc-cascade-2 {
+  animation-delay: 120ms;
+}
+.wpc-ml-card.wpc-cascade-3 {
+  animation-delay: 180ms;
+}
+.wpc-ml-card.wpc-cascade-4 {
+  animation-delay: 240ms;
+}
+.wpc-ml-card.wpc-cascade-5 {
+  animation-delay: 300ms;
+}
+.wpc-ml-card.wpc-cascade-6 {
+  animation-delay: 360ms;
+}
+.wpc-ml-card.wpc-cascade-7 {
+  animation-delay: 420ms;
+}
+.wpc-ml-card.wpc-cascade-8 {
+  animation-delay: 480ms;
+}
+.wpc-ml-card.wpc-cascade-9 {
+  animation-delay: 540ms;
+}
+.wpc-ml-card.wpc-cascade-10 {
+  animation-delay: 600ms;
+}
+.wpc-ml-card.wpc-cascade-11 {
+  animation-delay: 660ms;
+}
+.wpc-ml-card.wpc-bg-updated .wpc-ml-title {
+  transform-origin: center;
+  animation: wpcSavingsPulse 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-ml-title.wpc-savings-counting {
+  transform-origin: left center;
+  animation: wpcSavingsCountGlow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcSavingsCountGlow {
+  0% {
+    transform: scale(1);
+    color: #1e293b;
+    text-shadow: 0 0 0 rgba(34, 183, 58, 0);
+  }
+  18% {
+    transform: scale(1.04);
+    color: #1a9c30;
+    text-shadow: 0 0 10px rgba(34, 183, 58, 0.45);
+  }
+  55% {
+    transform: scale(1.03);
+    color: #1a9c30;
+    text-shadow: 0 0 7px rgba(34, 183, 58, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    color: #1e293b;
+    text-shadow: 0 0 0 rgba(34, 183, 58, 0);
+  }
+}
+.wpc-delta-chip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 20%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 8px 3px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(34, 183, 58, 0.28);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: wpcChipSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center;
+  pointer-events: none;
+}
+.wpc-delta-chip-plus {
+  display: inline-block;
+  font-family: 'proxima_bold', sans-serif;
+  font-size: 13px;
+  line-height: 1;
+  color: #1a9c30;
+  margin-right: -2px;
+  transform: translateY(-0.5px);
+}
+.wpc-delta-chip-fmt {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(34, 183, 58, 0.13);
+  color: #1a9c30;
+  font-family: 'proxima_bold', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.45;
+}
+.wpc-delta-chip-size {
+  font-family: 'proxima_semibold', sans-serif;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1;
+}
+.wpc-delta-chip--avif {
+  border-color: rgba(92, 177, 255, 0.32);
+}
+.wpc-delta-chip--avif .wpc-delta-chip-fmt {
+  background: rgba(92, 177, 255, 0.14);
+  color: #1376d1;
+}
+.wpc-delta-chip--avif .wpc-delta-chip-plus {
+  color: #1376d1;
+}
+.wpc-delta-chip--webp {
+  border-color: rgba(34, 183, 58, 0.32);
+}
+.wpc-delta-chip--webp .wpc-delta-chip-fmt {
+  background: rgba(34, 183, 58, 0.14);
+  color: #1a9c30;
+}
+.wpc-delta-chip--webp .wpc-delta-chip-plus {
+  color: #1a9c30;
+}
+.wpc-delta-chip--jpeg,
+.wpc-delta-chip--jpg {
+  border-color: rgba(148, 163, 184, 0.4);
+}
+.wpc-delta-chip--jpeg .wpc-delta-chip-fmt,
+.wpc-delta-chip--jpg .wpc-delta-chip-fmt {
+  background: rgba(148, 163, 184, 0.16);
+  color: #475569;
+}
+.wpc-delta-chip--jpeg .wpc-delta-chip-plus,
+.wpc-delta-chip--jpg .wpc-delta-chip-plus {
+  color: #475569;
+}
+.wpc-delta-chip--png {
+  border-color: rgba(168, 85, 247, 0.32);
+}
+.wpc-delta-chip--png .wpc-delta-chip-fmt {
+  background: rgba(168, 85, 247, 0.14);
+  color: #7e22ce;
+}
+.wpc-delta-chip--png .wpc-delta-chip-plus {
+  color: #7e22ce;
+}
+.wpc-delta-chip--milestone {
+  border-color: rgba(99, 102, 241, 0.32);
+}
+.wpc-delta-chip--milestone .wpc-delta-chip-fmt {
+  background: rgba(99, 102, 241, 0.14);
+  color: #4338ca;
+}
+.wpc-delta-chip--milestone .wpc-delta-chip-plus {
+  color: #4338ca;
+}
+.wpc-delta-chip-fade {
+  animation: wpcChipSlideOut 0.6s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+.wpc-variant-count-chip {
+  font-variant-numeric: tabular-nums;
+}
+.wpc-variant-count-chip-row {
+  display: block;
+  margin-top: 6px;
+  line-height: 1;
+}
+.wpc-ml-card .wpc-ml-body {
+  min-height: 54px;
+}
+@keyframes wpcChipSlideIn {
+  0% {
+    opacity: 0;
+    transform: translate(0, calc(-50% + 10px));
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+@keyframes wpcChipSlideOut {
+  0% {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, calc(-50% - 14px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wpc-delta-chip,
+  .wpc-delta-chip-fade {
+    animation-duration: 0.18s !important;
+    animation-timing-function: ease !important;
+  }
+}
+.wpc-loading-text {
+  display: inline-block;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wpc-ml-card.wpc-state-entering,
+  .wpc-ml-card.wpc-state-entering *,
+  .wpc-ml-card.wpc-cascade-in,
+  .wpc-ml-card.wpc-bg-updated .wpc-ml-title,
+  .wpc-loading-text {
+    animation-duration: 0.12s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.12s !important;
+  }
 }
 .wpc-ml-subtitle {
   font-family: 'proxima_regular', sans-serif;
@@ -462,6 +830,52 @@ p.important {
 }
 .wpc-ml-action.wps-ic-exclude-live[data-action="exclude"]:hover svg {
   transform: scale(1.15) rotate(90deg);
+}
+.wpc-ml-action--lazy {
+  cursor: help;
+}
+.wpc-ml-action--lazy[data-wpc-tip]::after,
+.wpc-ml-action--lazy[data-wpc-tip]::before {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 99999;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform: translateY(4px);
+}
+.wpc-ml-action--lazy[data-wpc-tip]::after {
+  content: attr(data-wpc-tip);
+  width: 248px;
+  max-width: 60vw;
+  margin-bottom: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #1e293b;
+  color: #ffffff;
+  font-family: 'proxima_regular', sans-serif;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.1px;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+}
+.wpc-ml-action--lazy[data-wpc-tip]::before {
+  content: '';
+  left: 16px;
+  margin-bottom: 5px;
+  border: 6px solid transparent;
+  border-top-color: #1e293b;
+}
+.wpc-ml-action--lazy[data-wpc-tip]:hover::after,
+.wpc-ml-action--lazy[data-wpc-tip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 .wpc-ml-action.wpc-stats-trigger:hover {
   color: #4f46e5;
@@ -654,7 +1068,7 @@ p.important {
   transform: scale(1);
 }
 .wpc-ml-card.is-compressing .wpc-comet-tail {
-  animation: wpcCometCW 1.2s linear infinite;
+  animation: wpcCometCW 1s linear infinite;
 }
 .wpc-ml-card.is-restoring .icon-idle,
 .wpc-ml-card.is-restoring .icon-success {
@@ -671,7 +1085,7 @@ p.important {
   transform: scale(1);
 }
 .wpc-ml-card.is-restoring .wpc-comet-tail {
-  animation: wpcCometCCW 1.2s linear infinite;
+  animation: wpcCometCCW 1s linear infinite;
 }
 .wpc-ml-card.is-compressed .wpc-ml-card-icon {
   background: #6366f1;
@@ -891,6 +1305,9 @@ p.important {
 .wpc-ml-card--timeout .wpc-ml-title {
   color: #94a3b8;
   font-weight: 400;
+}
+.swal2-popup.wpc-stats-swal {
+  margin-top: 40px;
 }
 .wpc-stats-modal {
   text-align: left;

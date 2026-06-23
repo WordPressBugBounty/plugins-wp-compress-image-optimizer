@@ -236,7 +236,63 @@ class wps_ic_menu extends wps_ic
 
     public function menu_init()
     {
-        add_submenu_page('options-general.php', 'WP Compress', 'WP Compress', 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
+        $hook = add_submenu_page('options-general.php', 'WP Compress', 'WP Compress', 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
+        // v7.01.24 — our admin pages are app-like surfaces (dashboard, bulk); WP core
+        // relocates every plugin's .notice div after the first heading, which dumps
+        // Elementor/updater/license notices INSIDE our UI (user-caught on the bulk page).
+        // load-{hook} scopes the suppression to exactly this registered page.
+        if ($hook) {
+            add_action('load-' . $hook, function () {
+                add_action('in_admin_header', [$this, 'suppress_foreign_notices'], 1);
+            });
+        }
+    }
+
+    /**
+     * v7.01.24 — drop every admin-notice callback NOT defined inside this plugin.
+     * Path-whitelist (not a hardcoded list) so all current and future WPC notices
+     * (URL-changed, htaccess writability, coexistence, activate_list_mode) survive,
+     * while third-party + core update nags are removed from OUR screens only.
+     */
+    public function suppress_foreign_notices()
+    {
+        global $wp_filter;
+        foreach (['admin_notices', 'all_admin_notices', 'user_admin_notices', 'network_admin_notices'] as $tag) {
+            if (empty($wp_filter[$tag]) || empty($wp_filter[$tag]->callbacks)) {
+                continue;
+            }
+            foreach ($wp_filter[$tag]->callbacks as $prio => $cbs) {
+                foreach ($cbs as $key => $cb) {
+                    $fn = isset($cb['function']) ? $cb['function'] : null;
+                    $file = '';
+                    try {
+                        if (is_array($fn) && count($fn) === 2) {
+                            $ref = new \ReflectionMethod(is_object($fn[0]) ? get_class($fn[0]) : (string) $fn[0], (string) $fn[1]);
+                            $file = (string) $ref->getFileName();
+                        } elseif ($fn instanceof \Closure) {
+                            $ref = new \ReflectionFunction($fn);
+                            $file = (string) $ref->getFileName();
+                        } elseif (is_string($fn)) {
+                            if (strpos($fn, '::') !== false) {
+                                $ref = new \ReflectionMethod($fn);
+                            } elseif (function_exists($fn)) {
+                                $ref = new \ReflectionFunction($fn);
+                            } else {
+                                continue;
+                            }
+                            $file = (string) $ref->getFileName();
+                        } else {
+                            continue;
+                        }
+                    } catch (\Throwable $e) {
+                        continue; // unreflectable = leave it alone
+                    }
+                    if ($file === '' || strpos($file, WPS_IC_DIR) !== 0) {
+                        unset($wp_filter[$tag]->callbacks[$prio][$key]);
+                    }
+                }
+            }
+        }
     }
 
 

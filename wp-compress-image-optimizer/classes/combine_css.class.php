@@ -57,7 +57,11 @@ class wps_ic_combine_css
         $this->combine_external = false;
         $this->allExcludes = self::$excludes->combineCSSExcludes();
 
-        if (!empty($this->settings['serve']['jpg']) && !empty($this->settings['serve']['png']) && !empty($this->settings['serve']['gif']) && !empty($this->settings['serve']['svg'])) {
+        // This used to be an AND of all four image serve-keys, but under the consolidated single
+        // "Images" tile that only holds post-mirror. Use ANY image-key (OR) instead so combined-CSS
+        // @font-face→CDN tracks "images are on the CDN" the way every other per-format reader and the
+        // single tile imply.
+        if (!empty($this->settings['serve']['jpg']) || !empty($this->settings['serve']['png']) || !empty($this->settings['serve']['gif']) || !empty($this->settings['serve']['svg'])) {
             $this->enabledCDN = true;
             $cf = get_option(WPS_IC_CF);
             if (!empty($cf['settings']['cdn']) && $cf['settings']['cdn'] == '0') {
@@ -76,8 +80,16 @@ class wps_ic_combine_css
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';
 
+        // The CF cname lives in the WPS_IC_CF_CNAME option, not $cf['cname'], which was never
+        // populated — the legacy read here was dead. Mirror the canonical emit path exactly: require
+        // CF CDN delivery active (cf.settings.cdn) AND the fail-open verified-gate, so combined CSS
+        // (a) never emits a mid-change ('0') cname and (b) never emits an orphaned cname after a CF
+        // disconnect / CDN-off (when WPS_IC_CF_CNAME persists but cf.settings.cdn is gone). Without the
+        // settings.cdn guard, combine diverged from cdn-rewrite/enqueues and could route combined-CSS
+        // asset + @font-face url() to a disconnected/disabled CF host. Falls back to the working host.
         $cf = get_option(WPS_IC_CF);
-        $custom_cname = !empty($cf['cname']) ? $cf['cname'] : get_option('ic_custom_cname');
+        $cfCname = get_option(WPS_IC_CF_CNAME);
+        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {
@@ -144,18 +156,103 @@ class wps_ic_combine_css
     }
 
 
+    /**
+     * Build <link rel="preload"> tags for the LCP image so the browser preload
+     * scanner fetches it before finishing HTML parse. This measurably cuts LCP
+     * on throttled mobile (verified: 2.98s down to ~1.3s).
+     *
+     * Strategy:
+     *   1. Find the LCP candidate IMG — prefer fetchpriority="high", fall back to
+     *      first IMG inside <picture class="wpc-picture"> (our LCP-optimized wrap),
+     *      fall back to first IMG with class wpc-lcp-optimized, fall back to first IMG.
+     *   2. If the IMG is inside a <picture>, harvest the FIRST <source>'s srcset +
+     *      sizes (typically the AVIF source — best-quality modern format) and emit
+     *      `<link rel="preload" as="image" imagesrcset="…" imagesizes="…" fetchpriority="high">`
+     *      so the preload scanner picks the SAME variant the picture would.
+     *   3. If no picture wrap, use the IMG's own srcset+sizes (or just src as
+     *      single-URL preload).
+     *   4. Type hint: imageset/avif if the source was AVIF (modern Chrome
+     *      respects this for selecting AVIF early when supported).
+     *
+     * Returns an array of preload <link …> tag strings (typically 1 entry — just
+     * the LCP candidate). Caller string-joins and substitutes into the
+     * <!--WPC_INSERT_PRELOAD_MAIN--> placeholder injected in <head> via
+     * injectPreloadImages().
+     *
+     * Filterable via 'wpc_preload_lcp_links' (array of tag strings) so themes/
+     * mu-plugins can override or augment.
+     */
     public function preloadLCP($html)
     {
         $preloadLCP = [];
-        preg_match_all('/<img\s[^>]*\bsrc\s*=\s*["\']([^"\']*)["\'][^>]*>/si', $html, $matches);
-        if (!empty($matches[1])) {
-            $images = array_slice($matches[1], 0, 3);
-            foreach ($images as $k => $src) {
-                $preloadLCP[] = $src;
+
+        // (1) Try picture-wrapped LCP first — gives us AVIF/WebP srcset to preload
+        if (preg_match('/<picture[^>]*class="[^"]*wpc-picture[^"]*"[^>]*>(.*?)<\/picture>/is', $html, $picMatch)) {
+            $pictureInner = $picMatch[1];
+
+            // Harvest the first <source> (highest-priority format, typically AVIF)
+            $sourceData = null;
+            if (preg_match('/<source\s+[^>]*type=["\']image\/(avif|webp)["\'][^>]*>/i', $pictureInner, $sourceMatch)) {
+                $sourceTag = $sourceMatch[0];
+                $sourceType = 'image/' . strtolower($sourceMatch[1]);
+                $srcsetM = null; $sizesM = null;
+                if (preg_match('/srcset=["\']([^"\']+)["\']/i', $sourceTag, $ss)) $srcsetM = $ss[1];
+                if (preg_match('/sizes=["\']([^"\']+)["\']/i', $sourceTag, $sz)) $sizesM = $sz[1];
+                if ($srcsetM !== null) {
+                    $sourceData = [
+                        'type'     => $sourceType,
+                        'srcset'   => $srcsetM,
+                        'sizes'    => $sizesM !== null ? $sizesM : '100vw',
+                    ];
+                }
+            }
+
+            // Find the inner IMG for src fallback + fetchpriority detection
+            $innerImgSrc = '';
+            $innerImgIsLcp = false;
+            if (preg_match('/<img\s+[^>]*>/i', $pictureInner, $imgMatch)) {
+                $innerTag = $imgMatch[0];
+                $innerImgIsLcp = (bool) preg_match('/fetchpriority\s*=\s*["\']high["\']/i', $innerTag);
+                if (preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $innerTag, $sm)) {
+                    $innerImgSrc = $sm[1];
+                }
+            }
+
+            // Emit preload from source data
+            if ($sourceData !== null) {
+                $tag = '<link rel="preload" as="image"'
+                     . ' imagesrcset="' . esc_attr($sourceData['srcset']) . '"'
+                     . ' imagesizes="' . esc_attr($sourceData['sizes']) . '"'
+                     . ' type="' . esc_attr($sourceData['type']) . '"'
+                     . ' fetchpriority="high">';
+                $preloadLCP[] = $tag;
+            } elseif ($innerImgSrc !== '') {
+                // No AVIF/WebP source found — preload the IMG src directly
+                $preloadLCP[] = '<link rel="preload" as="image" href="' . esc_url($innerImgSrc) . '" fetchpriority="high">';
             }
         }
 
-        return $preloadLCP;
+        // (2) Fallback — first IMG with fetchpriority="high" outside any picture wrap
+        if (empty($preloadLCP)) {
+            if (preg_match('/<img\s+[^>]*fetchpriority\s*=\s*["\']high["\'][^>]*>/is', $html, $imgMatch)) {
+                $imgTag = $imgMatch[0];
+                $imgSrcsetM = null; $imgSizesM = null; $imgSrcM = null;
+                if (preg_match('/srcset=["\']([^"\']+)["\']/i', $imgTag, $ss)) $imgSrcsetM = $ss[1];
+                if (preg_match('/sizes=["\']([^"\']+)["\']/i', $imgTag, $sz)) $imgSizesM = $sz[1];
+                if (preg_match('/\bsrc=["\']([^"\']+)["\']/i', $imgTag, $sm)) $imgSrcM = $sm[1];
+                if ($imgSrcsetM !== null) {
+                    $preloadLCP[] = '<link rel="preload" as="image"'
+                        . ' imagesrcset="' . esc_attr($imgSrcsetM) . '"'
+                        . ' imagesizes="' . esc_attr($imgSizesM !== null ? $imgSizesM : '100vw') . '"'
+                        . ' fetchpriority="high">';
+                } elseif ($imgSrcM !== null) {
+                    $preloadLCP[] = '<link rel="preload" as="image" href="' . esc_url($imgSrcM) . '" fetchpriority="high">';
+                }
+            }
+        }
+
+        // Allow themes/mu-plugins to override or augment
+        return (array) apply_filters('wpc_preload_lcp_links', $preloadLCP, $html);
     }
 
 
@@ -201,7 +298,7 @@ class wps_ic_combine_css
                         $cssUrlPath = str_replace($cssFilename, '', $href);
 
                         // Remove the site URL from the Path to retrieve just the path
-                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
+                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath); // strip both schemes — a scheme-mismatched href otherwise survived behind a proxy
                         $cssPath = rtrim($cssPath, '/');
                         $this->cssPath = self::$site_url . '/' . $cssPath;
 
@@ -296,7 +393,7 @@ class wps_ic_combine_css
     public function is_home_url()
     {
         $home_url = rtrim(home_url(), '/');
-        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]"; // proxy-aware; the bare $_SERVER['HTTPS'] check made the homepage preload miss behind Cloudflare
         $current_url = rtrim($current_url, '/');
         $current_url = explode('?', $current_url);
         $current_url = $current_url[0];
@@ -422,7 +519,7 @@ class wps_ic_combine_css
                         $cssUrlPath = str_replace($cssFilename, '', $href);
 
                         // Remove the site URL from the Path to retrieve just the path
-                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
+                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath); // strip both schemes — a scheme-mismatched href otherwise survived behind a proxy
                         $cssPath = rtrim($cssPath, '/');
                         $this->cssPath = self::$site_url . '/' . $cssPath;
 
@@ -521,6 +618,122 @@ class wps_ic_combine_css
         $modifiedCss = preg_replace('/\banimation:\s*[^;]+;/i', $replacement, $css);
         $modifiedCss = preg_replace('/\btransition:\s*[^;]+;/i', $replacement, $modifiedCss);
         return $modifiedCss;
+    }
+
+    /**
+     * Apply the existing font-display setting to inline @font-face rules
+     * embedded in <style> tags in the rendered HTML.
+     *
+     * Why this exists: rewriteCSSContent() in addons/cdn/cdn-rewrite.php
+     * already rewrites @font-face inside CSS FILES served via cdn-zone. But
+     * modern WP block themes (TwentyTwentyFour, twentytwentyfive, blockified
+     * themes generally) emit @font-face DIRECTLY inside <style> tags in the
+     * page HTML — bypassing CSS-file rewriting entirely. Net effect on those
+     * themes: font-display setting is silently ignored.
+     *
+     * This helper pipes every <style>…</style> block's @font-face rules
+     * through the existing findFontFace() rewriter, which:
+     *   - replaces font-display:fallback/block/etc with the user's setting
+     *     (default 'swap')
+     *   - auto-detects icon fonts (fa-, awesome, material, etc.) and uses
+     *     icon-font-display setting instead (default 'block', prevents
+     *     garbled icon glyphs during swap period)
+     *
+     * Always runs when the page has <style> tags with @font-face. No new
+     * setting — uses the existing 'font-display' + 'icon-font-display' values.
+     *
+     * @return string updated HTML
+     */
+    public function rewriteInlineFontFaces($html)
+    {
+        if (strpos($html, '@font-face') === false) return $html;
+        // Inline @font-face gap: block themes emit @font-face directly in inline <style> (never an
+        // external CSS file), so process_css_for_fonts() never sees them. When the Fonts-CDN flag is
+        // on (plus the fonts toggle, a zone, CSS-combine off so we don't collide with the combine
+        // path's changeFontToCDN, and not cdn_disabled, which is the master kill), also route those
+        // inline @font-face url() through the CDN zone via the shared rewriter. The flag gates this
+        // off by default, so it's inert.
+        $wpc_inline_cdn = (class_exists('wps_cdn_rewrite')
+            && apply_filters('wpc_fonts_cdn_serve', (bool) get_site_option('wpc_fonts_cdn_serve', true))
+            && !empty($this->settings['fonts']) && $this->settings['fonts'] == '1'
+            && !empty($this->zone_name)
+            && (empty($this->settings['css_combine']) || $this->settings['css_combine'] != '1')
+            && !(function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()));
+        $wpc_zone = $wpc_inline_cdn ? (string) $this->zone_name : '';
+        $wpc_subsetting = ($wpc_inline_cdn && !empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1');
+        $wpc_site_host = $wpc_inline_cdn ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        return preg_replace_callback('/(<style\b[^>]*>)(.*?)(<\/style>)/is', function ($m) use ($wpc_inline_cdn, $wpc_zone, $wpc_subsetting, $wpc_site_host) {
+            if (strpos($m[2], '@font-face') === false) return $m[0];
+            $rewritten = $this->findFontFace($m[2]);
+            if ($wpc_inline_cdn) {
+                $rewritten = wps_cdn_rewrite::rewrite_fontface_css($rewritten, $wpc_zone, $wpc_subsetting, $wpc_site_host);
+            }
+            return $m[1] . $rewritten . $m[3];
+        }, $html);
+    }
+
+    /**
+     * Extract font preload <link> tags for any @font-face URLs found in the
+     * rendered HTML's inline <style> blocks. This wires the existing
+     * `preload-crit-fonts` setting into the production rendering path.
+     * Previously the setting only fired inside ?testCritical debug returns at
+     * cdn-rewrite.php:1387 + 3444, which never reach a real page render.
+     *
+     * Strategy:
+     *   - Walk every <style>…</style> in the HTML
+     *   - Find woff2 URLs inside @font-face declarations
+     *   - Skip icon fonts (fa-, la-, icon name patterns)
+     *   - Limit to first N (cap protects against bloated <head>; Google
+     *     recommends ≤4 critical font preloads)
+     *   - Emit `<link rel="preload" href="..." as="font" type="font/woff2"
+     *     crossorigin="anonymous">` per URL
+     *
+     * Gated by the existing 'preload-crit-fonts' setting — opt-in (default 0)
+     * because preloading too many fonts wastes bandwidth on sites with
+     * many @font-face declarations.
+     *
+     * @param string $html  rendered page HTML
+     * @param int    $cap   max fonts to preload (default 4 per Google guidance)
+     * @return array        list of <link> tag strings to inject
+     */
+    public function extractFontPreloadLinks($html, $cap = 4)
+    {
+        $settings = get_option(WPS_IC_SETTINGS);
+        if (empty($settings['preload-crit-fonts']) || (string) $settings['preload-crit-fonts'] !== '1') {
+            return [];
+        }
+        if (strpos($html, '@font-face') === false) return [];
+
+        $found = [];
+        if (preg_match_all('/<style\b[^>]*>(.*?)<\/style>/is', $html, $styleMatches)) {
+            foreach ($styleMatches[1] as $css) {
+                if (strpos($css, '@font-face') === false) continue;
+                if (preg_match_all('/@font-face\s*\{([^}]+)\}/is', $css, $faceMatches)) {
+                    foreach ($faceMatches[1] as $faceBody) {
+                        // Skip icon fonts
+                        if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $faceBody, $famM)) {
+                            $fam = strtolower(trim($famM[1]));
+                            if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $fam)) {
+                                continue;
+                            }
+                        }
+                        if (preg_match('/url\(["\']?([^)"\']+\.woff2)["\']?\)/i', $faceBody, $urlM)) {
+                            $url = $urlM[1];
+                            if (!in_array($url, $found, true)) {
+                                $found[] = $url;
+                                if (count($found) >= $cap) break 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        $links = [];
+        foreach ($found as $url) {
+            $links[] = '<link rel="preload" href="' . esc_url($url)
+                     . '" as="font" type="font/woff2" crossorigin="anonymous">';
+        }
+        return (array) apply_filters('wpc_font_preload_links', $links, $html);
     }
 
     public function findFontFace($css)
@@ -1020,6 +1233,25 @@ class wps_ic_combine_css
             $prefix = 'mobile_';
         }
 
+        // This is the last unswept CSS writer. Live wpcompress receipt: the 4
+        // q:u/w:1 transforms plus the nested old-zone monster all initiate from
+        // combine output, and combine's own rewriters re-create the wraps on
+        // every rebuild, including wrapping old-zone URLs baked into source CSS.
+        // Run the same sweep the cio writer does: collapse no-work/nested
+        // transforms to naturals and zone-swap origin SVGs. Both gates are
+        // re-checked inside.
+        if ($this->current_file != '' && class_exists('wps_cdn_rewrite')) {
+            if (method_exists('wps_cdn_rewrite', 'wpc_raster_naturalize')) {
+                $this->current_file = wps_cdn_rewrite::wpc_raster_naturalize($this->current_file);
+            }
+            if (method_exists('wps_cdn_rewrite', 'wpc_svg_naturalize')) {
+                $this->current_file = wps_cdn_rewrite::wpc_svg_naturalize($this->current_file);
+            }
+            if (method_exists('wps_cdn_rewrite', 'wpc_svg_zoneify')) {
+                $this->current_file = wps_cdn_rewrite::wpc_svg_zoneify($this->current_file);
+            }
+        }
+
         if ($this->criticalCombine) {
             file_put_contents($this->combined_dir . 'wps_combined.css', $this->current_file);
             return;
@@ -1463,6 +1695,11 @@ class wps_ic_combine_css
         if ($matched_url === '') return '';
         if (stripos($matched_url, 'data:') === 0) return $matched_url;
 
+        // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep natural origin (matches replaceFonts:604,
+        // cdn_rewrite_url font branch, changeFontToCDN). Same-host but under /wp-content/, so the /storage
+        // origin-skip below won't catch it — needs its own skip.
+        if (stripos($matched_url, '/cache/wp-cio-fonts/') !== false) return $matched_url;
+
         if (strpos($matched_url, $this->zone_name) !== false || strpos($matched_url, 'zapwp.net') !== false) {
             return $matched_url;
         }
@@ -1508,6 +1745,19 @@ class wps_ic_combine_css
         $is_img = (strpos($lower, '.jpg') !== false || strpos($lower, '.jpeg') !== false || strpos($lower, '.png') !== false || strpos($lower, '.gif') !== false || strpos($lower, '.svg') !== false || strpos($lower, '.webp') !== false);
 
         if ($is_font && !empty($this->settings['serve']['fonts'])) {
+            // Path scope, same as changeFontToCDN / replaceFonts / process_css_for_fonts:
+            // rewrite_relative_url() is the first font->zone lane in the combine pass (called at
+            // ~line 1402, before the changeFontToCDN pass at ~1474). A same-site custom store path
+            // like /storage/ (e.g. Elementor's local Google Fonts) gets 302'd by the CDN cross-origin,
+            // so the font fetch is CORS-blocked and fails (live: anacletababy). Leave such same-site,
+            // non-/wp-content/ fonts on the origin, which is always CORS-safe. Third-party fonts (a
+            // different host) keep their existing CDN behaviour.
+            $rru_fhost = function_exists('wp_parse_url') ? wp_parse_url($absolute, PHP_URL_HOST) : '';
+            $rru_shost = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
+            if (!empty($rru_fhost) && !empty($rru_shost) && strcasecmp((string) $rru_fhost, (string) $rru_shost) === 0
+                && stripos((string) wp_parse_url($absolute, PHP_URL_PATH), '/wp-content/') === false) {
+                return $absolute;
+            }
             return 'https://' . $this->zone_name . '/m:0/a:' . $absolute;
         }
 
@@ -1553,6 +1803,30 @@ class wps_ic_combine_css
 
     public function changeFontToCDN($html)
     {
+        // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep natural origin so it matches the inline
+        // @font-face + preload + deferred .css (one URL, fetched once). $html[1] is the captured woff2 URL.
+        if (stripos($html[1], '/cache/wp-cio-fonts/') !== false) {
+            return 'src:url("' . $html[1] . '");';
+        }
+        // Zone-skip guard. This was the root cause of the live double-wrap on
+        // wpcompress.com (m:0/a:https://zone/m:0/a:origin.woff2): this rewriter
+        // re-wrapped an already-zoned URL. replaceFonts has this guard, but this
+        // one never did. The outermost collapse pass repairs such output, but
+        // better not to produce it in the first place.
+        if (!empty($this->zone_name) && strpos($html[1], $this->zone_name) !== false) {
+            return 'src:url("' . $html[1] . '");';
+        }
+        // Path scope, same as replaceFonts / process_css_for_fonts: this is the CSS-combine-on
+        // font→zone lane. A same-site custom store path like /storage/ (e.g. Elementor's local Google
+        // Fonts) gets 302'd by the CDN cross-origin, so the font fetch is CORS-blocked and fails
+        // (live: anacletababy). Leave such same-site, non-/wp-content/ fonts on the origin, which is
+        // always CORS-safe. Third-party fonts (a different host) keep their existing subsetting behaviour.
+        $cf2_host = function_exists('wp_parse_url') ? wp_parse_url($html[1], PHP_URL_HOST) : '';
+        $cf2_site = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        if (!empty($cf2_host) && !empty($cf2_site) && strcasecmp((string) $cf2_host, (string) $cf2_site) === 0
+            && stripos((string) wp_parse_url($html[1], PHP_URL_PATH), '/wp-content/') === false) {
+            return 'src:url("' . $html[1] . '");';
+        }
         if (!empty($this->settings['font-subsetting']) && $this->settings['font-subsetting'] == '1') {
             if (strpos($html[1], 'icon') === false && strpos($html[1], 'awesome') === false && strpos($html[1], 'lightgallery') === false && strpos($html[1], 'gallery') === false && strpos($html[1], 'side-cart-woocommerce') === false) {
                 return 'src:url("https://' . $this->zone_name . '/font:true/a:' . $html[1] . '");';
@@ -1582,6 +1856,17 @@ class wps_ic_combine_css
     {
         $tag = $tag[0];
         $src = '';
+
+        // Never combine/defer WPC's own CRITICAL inline styles — they must stay inline + ACTIVE at first
+        // paint: the critical CSS, the ATF @font-face block (font-display:block only holds a weight
+        // invisible if its face is active at first paint — combining/deferring it = fallback then swap =
+        // FOUT), and the Elementor entrance-animation start-state. Mirrors rewriteLogic::cssStyleLazy's skip
+        // so BOTH deferral paths protect them. (wpc-gfont-atf matches both -atf and -atf-local.)
+        if (strpos($tag, 'wpc-critical-css') !== false
+            || strpos($tag, 'wpc-gfont-atf') !== false
+            || strpos($tag, 'wpc-elementor-anim-start') !== false) {
+            return $tag;
+        }
 
         if (strpos('rs6', $tag) !== false) {
             return $tag;

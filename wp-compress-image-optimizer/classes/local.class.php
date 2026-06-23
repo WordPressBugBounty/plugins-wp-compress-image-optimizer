@@ -330,7 +330,14 @@ class wps_ic_local
         $mime1 = 'image/jpeg';
         $mime2 = 'image/png';
         $mime3 = 'image/gif';
-        $meta_key = 'ic_stats';
+
+        // Match BOTH legacy v1 (`ic_stats` post_meta) AND v2
+        // (`ic_status` = 'compressed'). v2's run_v2_optimize writes
+        // ic_local_variants + ic_status but NOT ic_stats, so the legacy
+        // single-meta-key query missed every v2-compressed image entirely:
+        // bulk restore showed "0 images" even when the DB had compressed
+        // attachments. Both v1 and v2 set ic_status='compressed' on success,
+        // so the new condition catches everything.
 
         // UNCOMPRESSED (exclude excluded images)
         $queryUncompressed = $wpdb->get_results(
@@ -341,10 +348,13 @@ class wps_ic_local
         WHERE posts.post_type = %s
         AND posts.post_mime_type IN (%s, %s, %s)
         AND NOT EXISTS (
-            SELECT meta_value
+            SELECT 1
             FROM {$wpdb->postmeta} meta
             WHERE meta.post_id = posts.ID
-            AND meta.meta_key = %s
+            AND (
+                meta.meta_key = 'ic_stats'
+                OR (meta.meta_key = 'ic_status' AND meta.meta_value = 'compressed')
+            )
         )
         AND NOT EXISTS (
             SELECT 1 FROM {$wpdb->postmeta} ex
@@ -352,8 +362,7 @@ class wps_ic_local
         )
         ",
                 $post_type,
-                $mime1, $mime2, $mime3,
-                $meta_key
+                $mime1, $mime2, $mime3
             )
         );
 
@@ -366,10 +375,13 @@ class wps_ic_local
         WHERE posts.post_type = %s
         AND posts.post_mime_type IN (%s, %s, %s)
         AND EXISTS (
-            SELECT meta_value
+            SELECT 1
             FROM {$wpdb->postmeta} meta
             WHERE meta.post_id = posts.ID
-            AND meta.meta_key = %s
+            AND (
+                meta.meta_key = 'ic_stats'
+                OR (meta.meta_key = 'ic_status' AND meta.meta_value = 'compressed')
+            )
         )
         AND NOT EXISTS (
             SELECT 1 FROM {$wpdb->postmeta} ex
@@ -377,8 +389,7 @@ class wps_ic_local
         )
         ",
                 $post_type,
-                $mime1, $mime2, $mime3,
-                $meta_key
+                $mime1, $mime2, $mime3
             )
         );
 
@@ -412,8 +423,91 @@ class wps_ic_local
      * Preparing images to send to API
      * @return Array Array of images
      */
+    /**
+     * Cheap COUNT-only path for the bulk dashboard's "ready / restore"
+     * tiles. Mirrors the duplicate-dedup + exclude-live filter used by the heavy
+     * prepareImages() path, but returns just totals (wrapped in array_fill so the
+     * caller's count() calls keep working without changing the contract). Cached
+     * for 60 s, since a single page reload while bulk is queued otherwise pays
+     * for two full table aggregations every time.
+     */
+    public static function countLibraryImages()
+    {
+        $cached = get_transient('wpc_bulk_library_counts');
+        if (is_array($cached) && isset($cached['uncompressed'], $cached['compressed'])) {
+            $u = (int) $cached['uncompressed'];
+            $c = (int) $cached['compressed'];
+            return [
+                'compressed'   => $c > 0 ? array_fill(0, $c, 1) : [],
+                'uncompressed' => $u > 0 ? array_fill(0, $u, 1) : [],
+            ];
+        }
+
+        global $wpdb;
+
+        $uncompressed = (int) $wpdb->get_var("
+            SELECT COUNT(*) FROM (
+                SELECT MIN(p.ID) AS id
+                FROM {$wpdb->posts} p
+                INNER JOIN {$wpdb->postmeta} f
+                    ON f.post_id = p.ID AND f.meta_key = '_wp_attached_file'
+                LEFT JOIN {$wpdb->postmeta} s
+                    ON s.post_id = p.ID AND s.meta_key = 'ic_stats'
+                LEFT JOIN {$wpdb->postmeta} v
+                    ON v.post_id = p.ID AND v.meta_key = 'ic_status' AND v.meta_value = 'compressed'
+                WHERE p.post_type = 'attachment'
+                  AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM {$wpdb->postmeta} ex
+                      WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
+                  )
+                GROUP BY f.meta_value
+                HAVING SUM(CASE WHEN s.meta_id IS NULL AND v.meta_id IS NULL THEN 0 ELSE 1 END) = 0
+            ) AS u
+        ");
+
+        $compressed = (int) $wpdb->get_var("
+            SELECT COUNT(*) FROM {$wpdb->posts} p
+            WHERE p.post_type = 'attachment'
+              AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+              AND EXISTS (
+                  SELECT 1 FROM {$wpdb->postmeta} meta
+                  WHERE meta.post_id = p.ID
+                  AND (
+                      meta.meta_key = 'ic_stats'
+                      OR (meta.meta_key = 'ic_status' AND meta.meta_value = 'compressed')
+                  )
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM {$wpdb->postmeta} ex
+                  WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
+              )
+        ");
+
+        set_transient('wpc_bulk_library_counts', [
+            'uncompressed' => $uncompressed,
+            'compressed'   => $compressed,
+        ], 60);
+
+        return [
+            'compressed'   => $compressed > 0 ? array_fill(0, $compressed, 1) : [],
+            'uncompressed' => $uncompressed > 0 ? array_fill(0, $uncompressed, 1) : [],
+        ];
+    }
+
+
     public function prepareImages($action = 'compressing', $process = 'count', $limit = '-1')
     {
+        // Count-only fast path. The bulk view (templates/admin/bulk.php:59)
+        // only uses count($result['uncompressed']) and count($result['compressed']).
+        // The full path materializes per-image per-size 'unknown' placeholders, doing
+        // tens of thousands of array writes on real libraries — that was the ~4.5 s
+        // of pure PHP burning on the bulk dashboard page. Two cheap COUNT() queries
+        // plus a 60 s transient give the same numbers for ~0 ms on cache hit.
+        if ($process === 'count' && $action !== 'compressing') {
+            return self::countLibraryImages();
+        }
+
         // Raise resource limits
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '300');
@@ -428,6 +522,11 @@ class wps_ic_local
         $bulkStatus = ['foundImageCount' => 0, 'foundThumbCount' => 0,];
 
         while (true) {
+            // Group by file path (handles duplicate uploads), count as
+            // uncompressed only if NEITHER legacy ic_stats NOR v2 ic_status=compressed
+            // exists. Without the v2 branch, every v2-compressed image was reported
+            // as uncompressed (since v2 doesn't write ic_stats), so the bulk page
+            // showed inflated "ready to optimize" counts.
             $uncompressed_ids = $wpdb->get_col($wpdb->prepare("
         SELECT MIN(p.ID) AS id
         FROM {$wpdb->posts} p
@@ -437,6 +536,10 @@ class wps_ic_local
         LEFT JOIN {$wpdb->postmeta} s
             ON s.post_id = p.ID
            AND s.meta_key = 'ic_stats'
+        LEFT JOIN {$wpdb->postmeta} v
+            ON v.post_id = p.ID
+           AND v.meta_key = 'ic_status'
+           AND v.meta_value = 'compressed'
         WHERE p.post_type = 'attachment'
           AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
           AND NOT EXISTS (
@@ -444,7 +547,7 @@ class wps_ic_local
               WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
           )
         GROUP BY f.meta_value
-        HAVING SUM(CASE WHEN s.meta_id IS NULL THEN 0 ELSE 1 END) = 0
+        HAVING SUM(CASE WHEN s.meta_id IS NULL AND v.meta_id IS NULL THEN 0 ELSE 1 END) = 0
         ORDER BY id ASC
         LIMIT %d OFFSET %d
     ", $batch_size, $offset));
@@ -467,6 +570,9 @@ class wps_ic_local
         }
 
         // --- Process COMPRESSED images in a single pass (still batched if needed)
+        // Match legacy ic_stats OR v2 ic_status='compressed'. The v2 path
+        // doesn't write ic_stats, so the legacy single-key check missed all v2
+        // images — bulk page showed "0 to restore" even with v2-compressed images.
         $offset = 0;
         while (true) {
             $compressed_ids = $wpdb->get_col($wpdb->prepare("
@@ -476,7 +582,11 @@ class wps_ic_local
               AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
               AND EXISTS (
                   SELECT 1 FROM {$wpdb->postmeta} meta
-                  WHERE meta.post_id = posts.ID AND meta.meta_key = 'ic_stats'
+                  WHERE meta.post_id = posts.ID
+                  AND (
+                      meta.meta_key = 'ic_stats'
+                      OR (meta.meta_key = 'ic_status' AND meta.meta_value = 'compressed')
+                  )
               )
               AND NOT EXISTS (
                   SELECT 1 FROM {$wpdb->postmeta} ex

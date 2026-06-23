@@ -5,7 +5,7 @@
       <div class="wpc-popup-saving-logo-container">
         <div class="wpc-popup-saving-preparing-logo">
           <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
-          <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="wpc-ic-popup-logo-saving-loader"/>
+          <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
         </div>
       </div>
     </div>
@@ -18,8 +18,8 @@
           echo WPS_IC_URI; ?>assets/images/icon-exclude-from-cdn.svg"/>
         </div>
         <div class="inline-heading-text">
-          <h3><?php echo esc_html__('Exclude from Cache', WPS_IC_TEXTDOMAIN); ?></h3>
-          <p><?php echo esc_html__('Pages listed here always serve fresh content (cache is skipped), but plugin optimizations still apply.', WPS_IC_TEXTDOMAIN); ?></p>
+          <h3><?php echo esc_html__('Cache Exclusions', WPS_IC_TEXTDOMAIN); ?></h3>
+          <p><?php echo esc_html__('Pages listed here will always be loaded fresh, bypassing the cache. One URL or pattern per line.', WPS_IC_TEXTDOMAIN); ?></p>
         </div>
       </div>
     </div>
@@ -39,9 +39,8 @@
                 <div class="wps-example-list" style="display: none;">
         <div>
             <div>
-                <p><span class="wpc-example-chip">/my-account</span> <?php echo esc_html__('would exclude the account page and all sub-pages from cache', WPS_IC_TEXTDOMAIN); ?></p>
-                <p><span class="wpc-example-chip">/checkout</span> <?php echo esc_html__('would exclude checkout and all sub-pages from cache', WPS_IC_TEXTDOMAIN); ?></p>
-                <p><span class="wpc-example-chip">/cart</span> <?php echo esc_html__('would exclude the cart page from cache', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/my-account/</span> <?php echo esc_html__('would exclude the account page and all sub-pages', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><span class="wpc-example-chip">/checkout/</span> <?php echo esc_html__('would exclude just the checkout page', WPS_IC_TEXTDOMAIN); ?></p>
                 <p><span class="wpc-example-chip">cart</span> <?php echo __('would exclude any page with &quot;cart&quot; in the URL', WPS_IC_TEXTDOMAIN); ?></p>
             </div>
         </div>

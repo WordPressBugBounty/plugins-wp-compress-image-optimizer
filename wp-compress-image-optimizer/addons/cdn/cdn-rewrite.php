@@ -4,6 +4,49 @@
  * Description: Legitimate script handling for WP Compress Optimizer
  */
 
+if (!function_exists('wpc_force_natural')) {
+    /**
+     * Operator override (default OFF) to emit clean natural URLs everywhere instead of /q:i/wp:N/w:N/
+     * transforms. NOT a safe default: it bypasses the orch's native_accept_vary witness, the gate that
+     * blocks vary-blind CF cache-poisoning — only enable on a zone you've confirmed is vary-correct AND
+     * OTF-live. The safe road to all-natural is to provision the zone (orch then echoes the witness).
+     *
+     * Enable via WPC_FORCE_NATURAL in wp-config.php or the wpc_force_natural filter. Cached per-request.
+     */
+    function wpc_force_natural()
+    {
+        // KILL is absolute and wins over force. This is the first OR-term of $otf_live in the
+        // bare-<img>/CSS-bg naturalize lane, which isn't gated by natural_assets_on(); without the
+        // guard a site with both KILL and force defined would still naturalize under KILL. Check it
+        // before the static cache too, so a force value cached earlier this request can't survive a kill.
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) {
+            return false;
+        }
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        $on = defined('WPC_FORCE_NATURAL') && WPC_FORCE_NATURAL;
+        $cached = (bool) apply_filters('wpc_force_natural', $on);
+        return $cached;
+    }
+}
+
+if (!function_exists('wpc_cf_cname_verified_ok')) {
+    /**
+     * Shared FAIL-OPEN verified-gate for emitting the CF custom CNAME. Returns true unless the cname was
+     * EXPLICITLY cleared by a cname change (flag === '0') — the brief window between a save and
+     * verifyCfCnameLive promoting it. A never-set flag (default 'legacy') counts as verified: an
+     * already-serving zone and a fresh connect both legitimately have no flag yet, and blocking them
+     * would degrade the live fleet. Used by every CF-cname emit surface so they stay consistent.
+     */
+    function wpc_cf_cname_verified_ok()
+    {
+        $v = function_exists('get_option') ? get_option('wpc_cf_cname_verified', 'legacy') : 'legacy';
+        return !($v === '0' || $v === 0);
+    }
+}
+
 include WPS_IC_DIR . 'addons/cdn/rewriteLogic.php';
 include WPS_IC_DIR . 'addons/minify/html.php';
 include_once WPS_IC_DIR . 'addons/cache/cacheHtml.php';
@@ -145,6 +188,12 @@ class wps_cdn_rewrite
         self::$excludes['cdn'][] = '/wp-content/plugins/ameliabooking/v3/public/assets/'; //amelia fix
         self::$excludes['cdn'][] = '/vue3'; //issues with vue libraries on cdn
         self::$excludes['cdn'][] = 'sharethis.js';
+        if (defined('ELEMENTOR_VERSION')) {
+            // Elementor's webpack runtime resolves its own lazy-loaded chunk URLs; CDN-rewriting the
+            // base path breaks chunk loading, so both runtimes stay on origin.
+            self::$excludes['cdn'][] = 'webpack.runtime.min.js';
+            self::$excludes['cdn'][] = 'webpack-pro.runtime.min.js';
+        }
 
         self::$removeSrcset = self::$settings['remove-srcset'];
 
@@ -178,7 +227,7 @@ class wps_cdn_rewrite
     public function is_home_url()
     {
         $home_url = rtrim(home_url(), '/');
-        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]"; // proxy-aware scheme
         $current_url = rtrim($current_url, '/');
         $current_url = explode('?', $current_url);
         $current_url = $current_url[0];
@@ -526,7 +575,7 @@ class wps_cdn_rewrite
             $formatted_url .= '?icv=' . WPS_IC_HASH;
         }
 
-        if (self::$randomHash == 0 && strpos($formatted_url, '.js') !== false) {
+        if (self::$randomHash == 0 && preg_match('/\.js(?:[?#]|$)/i', $formatted_url)) {
             $formatted_url .= '?js_icv=' . WPS_IC_JS_HASH;
         }
 
@@ -551,10 +600,11 @@ class wps_cdn_rewrite
                 }
             }
 
-            // Serve GIF Enabled?
+            // Serve GIF? Never via the Bunny CDN: GIFs get no next-gen conversion, so on Bunny it's
+            // pure WPC egress. CF-direct zones only.
             if (strpos($image, '.gif') !== false) {
-                // is JPEG enabled
-                if (self::$settings['serve']['gif'] == '0') {
+                if (self::$settings['serve']['gif'] == '0'
+                    || !class_exists('wps_rewriteLogic') || !wps_rewriteLogic::cf_is_delivery()) {
                     return false;
                 }
             }
@@ -575,6 +625,14 @@ class wps_cdn_rewrite
                 }
             }
 
+            // Images-master gate for .webp/.ico — the only formats with no per-serve-key check above.
+            // When the "Images" tile is OFF, image CDN delivery stands down (jpg/gif/png/svg are
+            // already gated by their serve keys).
+            if ((strpos($image, '.webp') !== false || strpos($image, '.ico') !== false)
+                && (!class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings))) {
+                return false;
+            }
+
             return true;
         }
     }
@@ -589,7 +647,7 @@ class wps_cdn_rewrite
             $wps_ic_cdn = new wps_cdn_rewrite();
         }
 
-        ob_start([$this, 'buffer_local_callback']);
+        ob_start([$this, 'buffer_local_callback_wrapped']);
     }
 
     public function isActive()
@@ -678,10 +736,15 @@ class wps_cdn_rewrite
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_URL, $url);
+        // Bound the fetch — this runs during front-end output buffering, and with no timeout a
+        // slow/dead remote URL stalls real visitors (curl falls back to max_execution_time). Degrade
+        // to '' on failure so the caller keeps the original markup.
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         $data = curl_exec($ch);
         curl_close($ch);
 
-        return $data;
+        return ($data === false) ? '' : $data;
     }
 
     public function get_script_content($url)
@@ -744,6 +807,11 @@ class wps_cdn_rewrite
                 echo '<link rel="preconnect" href="https://optimize-v2.b-cdn.net/">';
                 echo '<link rel="dns-prefetch" href="//' . self::$zone_name . '" />';
                 echo '<link rel="preconnect" href="https://' . self::$zone_name . '">';
+                // Crossorigin preconnect for the cdn zone. The non-crossorigin tag above only warms
+                // the connection for non-CORS resources (images); fonts are fetched with crossorigin
+                // per spec and need their own preconnect, or the browser pays a full TLS handshake on
+                // the first font. Both tags let it pick the right connection per resource type.
+                echo '<link rel="preconnect" href="https://' . self::$zone_name . '" crossorigin>';
             }
         }
     }
@@ -811,6 +879,12 @@ class wps_cdn_rewrite
             }
         }
 
+        // ORIGIN FLOOR for JS: until the per-zone JS-MIME proof is satisfied (natural_assets_on() —
+        // Bunny by construction, CF once proven), leave the origin <script> untouched (real
+        // application/javascript from the filesystem, can never wrong-MIME). Proven → falls through.
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && !wps_rewriteLogic::natural_assets_on()) {
+            return $tag;
+        }
         if (self::$cdnEnabled == '1' && self::$js == '1') {
             if (strpos($src, self::$zone_name) === false) {
                 $fileMinify = self::$js_minify;
@@ -819,12 +893,26 @@ class wps_cdn_rewrite
                 }
 
                 /**
-                 * Is script inside Wp-content or Wp-includes
+                 * Same-site JS. When NOT minified (m:0) emit a clean NATURAL zone URL instead of the
+                 * m:0/a: transform: m:0 is pure pass-through, so the natural URL is byte-identical (the
+                 * edge serves the same origin asset — verified m:0 and natural both 302 to the file).
+                 * This also makes a webpack bundle's auto-publicPath natural, so its runtime-loaded
+                 * chunks become natural too (they derive their base from this script's src). When the
+                 * edge IS minifying (m:1+) keep the transform — a natural URL wouldn't be minified.
+                 * Only reached when natural_assets_on() (the JS-MIME proof) is satisfied (gated above).
                  */
-                if (strpos($src, 'wp-content') !== false || strpos($src, 'wp-includes') !== false) {
-                    $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
+                $abs = self::reformat_url($src, false);
+                if (empty($fileMinify)) {
+                    $pp = function_exists('wp_parse_url') ? wp_parse_url($abs) : parse_url($abs);
+                    if (is_array($pp) && !empty($pp['path'])) {
+                        $src = 'https://' . self::$zone_name . $pp['path']
+                             . (isset($pp['query']) ? '?' . $pp['query'] : '')
+                             . (isset($pp['fragment']) ? '#' . $pp['fragment'] : '');
+                    } else {
+                        $src = 'https://' . self::$zone_name . '/m:0/a:' . $abs; // unparsable → keep transform (never break)
+                    }
                 } else {
-                    $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($src, false);
+                    $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . $abs;
                 }
             }
 
@@ -942,8 +1030,9 @@ class wps_cdn_rewrite
      */
     public static function image_url_matching_site_url($image)
     {
-        // If the image starts with a slash or wp-content, it's a local image
-        if (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0) {
+        // Single leading slash = root-relative local path.
+        // Double leading slash = protocol-relative external URL (e.g. //cdnjs.cloudflare.com/...) — treat as external.
+        if (strpos($image, '//') !== 0 && (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0)) {
             return true;
         }
         $site_url = self::$site_url;
@@ -1073,7 +1162,26 @@ class wps_cdn_rewrite
         return false;
     }
 
+    /**
+     * Natural-URL source emission. When natural assets are on, emit the clean cname URL from the
+     * enqueue filter rather than the /m:N/a: transform form. The buffer pass naturalizes these for
+     * normal page output anyway, but content printed AFTER the buffer flushes (late import-maps,
+     * flush()'d footers, etc.) never reaches it and would otherwise ship the transform form.
+     * Naturalizing at the source makes the URL form independent of buffer/flush timing. Idempotent.
+     */
     public function adjust_src_url($src)
+    {
+        $out = $this->adjust_src_url_raw($src);
+        if (is_string($out) && $out !== '' && class_exists('wps_rewriteLogic') && wps_rewriteLogic::natural_assets_on()) {
+            $natural = wps_rewriteLogic::naturalize_asset_urls($out);
+            if (is_string($natural) && $natural !== '') {
+                $out = $natural;
+            }
+        }
+        return $out;
+    }
+
+    public function adjust_src_url_raw($src)
     {
 
         $src = trim($src);
@@ -1117,6 +1225,14 @@ class wps_cdn_rewrite
         }
 
         if (self::$externalUrlEnabled == '1' && !self::image_url_matching_site_url($src)) {
+            // ORIGIN FLOOR for external css/js: until the per-zone MIME proof is satisfied
+            // (natural_assets_on()), leave the origin href untouched (can never wrong-MIME).
+            // Scoped to .css/.js only — external images/.ico keep the m:0 form.
+            if ((strpos($src, '.css') !== false || strpos($src, '.js') !== false)
+                && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
+                && !wps_rewriteLogic::natural_assets_on()) {
+                return $src;
+            }
             // External not enabled
             if (strpos($src, self::$zone_name) === false) {
                 if (strpos($src, 'http') === false) {
@@ -1129,6 +1245,14 @@ class wps_cdn_rewrite
                 }
             }
 
+            return $src;
+        }
+
+        // ORIGIN FLOOR for same-origin css/js: unproven zone → leave the origin href (proven → the
+        // m:N/a: build below runs and adjust_src_url naturalizes it).
+        if ((strpos($src, '.css') !== false || strpos($src, '.js') !== false)
+            && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
+            && !wps_rewriteLogic::natural_assets_on()) {
             return $src;
         }
 
@@ -1171,8 +1295,743 @@ class wps_cdn_rewrite
         return $src;
     }
 
+    /**
+     * SVGs are vector — no raster transform applies — yet the legacy emitters route them through
+     * /q:/r:/wp:/w:/u: transform URLs. The edge serves uploads-path natural URLs verbatim by
+     * extension, so collapse zone-transform SVG URLs back to the clean host-swapped form. Uploads
+     * only: theme/plugin SVG paths 404 on some zone configs, so those keep their transform URLs.
+     * Runs as the outermost buffer pass (catches every emitter, srcset + CSS url() included).
+     */
+    public static function wpc_svg_naturalize($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
+            return $html;
+        }
+        $zone = preg_quote((string) self::$zone_name, '#');
+        return preg_replace_callback(
+            '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/[^"\'()\s<>]*?/u:(https?://[^"\'()\s<>]+?/wp-content/uploads/[^"\'()\s<>]+?\.svg(?:\?[^"\'()\s<>]*)?)#i',
+            static function ($m) {
+                $pos = stripos($m[1], '/wp-content/uploads/');
+                if ($pos === false) {
+                    return $m[0];
+                }
+                // substr keeps the origin URL's exact path+query bytes — no re-encoding.
+                return 'https://' . self::$zone_name . substr($m[1], $pos);
+            },
+            $html
+        );
+    }
+
+    /**
+     * CSS-background image-set() master gate. Default ON. Piggybacks wpc_svg_zoneify_active() (cdn on
+     * + live-cdn + images tile on + not suppressed + zone != origin) so it can only be active where
+     * the same-ext host-swap already runs. KILL is the absolute off-ramp.
+     */
+    public static function wpc_css_bg_imageset_active()
+    {
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return false; // absolute off-ramp
+        if (!self::wpc_svg_zoneify_active()) return false;                        // inherit the lane's gate
+        $on = function_exists('get_option') ? get_option('wpc_css_bg_imageset', 1) : 1; // DEFAULT ON
+        return (bool) apply_filters('wpc_css_bg_imageset', !empty($on));
+    }
+
+    /**
+     * CSS-bg on-disk sibling resolver: origin uploads url -> local path -> file_exists on .avif/.webp.
+     * A concrete css url maps directly to {base}.avif/.webp — no width inference.
+     *
+     * Never-404: an image-set() entry is type()-selected and commits (no onerror fall-through), so a
+     * format is listed only when its file is on disk now. The arms also pass picture_variant_dims_ok()
+     * so a dimensionally-corrupt sibling is dropped rather than committed.
+     *
+     * @param string $origin_url same-site origin uploads url
+     * @return array ['avif'=>bool,'webp'=>bool]
+     */
+    public static function wpc_css_bg_disk_siblings($origin_url)
+    {
+        $out = ['avif' => false, 'webp' => false];
+        $url = preg_replace('/[?#].*$/', '', (string) $origin_url);
+        if ($url === '') return $out;
+
+        $site = trailingslashit(site_url());
+        $host = wp_parse_url($url, PHP_URL_HOST);
+        $shst = wp_parse_url($site, PHP_URL_HOST);
+        if (!$host || !$shst || strcasecmp((string) $host, (string) $shst) !== 0) return $out; // same-site
+        if (strpos($url, '/wp-content/uploads/') === false) return $out;                       // uploads only
+
+        $base = str_replace($site, trailingslashit(ABSPATH), $url);
+        $base = str_replace('/', DIRECTORY_SEPARATOR, $base);
+        if (strpos($base, trailingslashit(ABSPATH)) !== 0) return $out;                         // traversal guard
+
+        $avif = preg_replace('/\.(jpe?g|png)$/i', '.avif', $base);
+        $webp = preg_replace('/\.(jpe?g|png)$/i', '.webp', $base);
+        if (is_string($avif) && $avif !== $base && @file_exists($avif)
+            && wps_rewriteLogic::picture_variant_dims_ok($avif, 0, 0)) {
+            $out['avif'] = true;
+        }
+        if (is_string($webp) && $webp !== $base && @file_exists($webp)
+            && wps_rewriteLogic::picture_variant_dims_ok($webp, 0, 0)) {
+            $out['webp'] = true;
+        }
+        return $out;
+    }
+
+    /**
+     * Build the CSS-bg image-set() format-upgrade for ONE matched background url(). Returns the full
+     * two-declaration replacement, or '' to fall through to the caller's same-ext host-swap.
+     *
+     *   background-image:url(<zone same-ext>);                  <- pre-image-set floor (always 200)
+     *   background-image:-webkit-image-set(<entries>);          <- prefix-only WebKit
+     *   background-image:image-set(url(<avif>) type("image/avif"), url(<webp>) type("image/webp"),
+     *                              url(<same-ext>) type("<mime>"));   <- self-select by type()
+     *
+     * Verified CDN-edge (Bunny+Vary): returns a single clean .webp natural URL; the edge negotiates
+     * format by Accept, so no image-set and no .avif. Non-edge (CF / vary-blind / picture / off):
+     * on-disk image-set only — type() self-selection is browser-side (vary-blind-safe, like a typed
+     * <picture> <source>) and never-404 by on-disk existence; same-ext entry is always last.
+     *
+     * @param string $origin_url   ORIGIN clean url (for on-disk sibling resolution)
+     * @param string $sameext_zone the zone-hosted same-ext url the caller already built
+     * @param string $quote        original quote char inside url() ('' | "'" | '"')
+     */
+    public static function wpc_css_bg_imageset_build($origin_url, $sameext_zone, $quote = '')
+    {
+        if (!self::wpc_css_bg_imageset_active()) return '';                 // gate/KILL → caller keeps same-ext
+        $origin_url   = (string) $origin_url;
+        $sameext_zone = (string) $sameext_zone;
+        if ($origin_url === '' || $sameext_zone === '') return '';
+
+        $clean = preg_replace('/[?#].*$/', '', $origin_url);
+        $ext   = strtolower(pathinfo($clean, PATHINFO_EXTENSION));
+        // wpc_natural_nw lets the edge OTF avif/webp from a webp source too (E1), so webp origins join the
+        // upgrade; otherwise raster only. gif/svg/data: stay excluded.
+        $css_nw   = wps_rewriteLogic::wpc_natural_nw();
+        $css_exts = $css_nw ? ['jpg', 'jpeg', 'png', 'webp'] : ['jpg', 'jpeg', 'png'];
+        if (!in_array($ext, $css_exts, true)) return '';                   // gif/svg/data:/next-gen excluded
+        $base_mime = ($ext === 'png') ? 'image/png' : (($ext === 'webp') ? 'image/webp' : 'image/jpeg');
+
+        $q = ($quote === '"' || $quote === "'") ? $quote : '';
+
+        // Verified CDN-edge (Bunny + Vary): emit ONE clean .webp natural URL. The edge negotiates
+        // format by Accept (AVIF up / WebP across / JPEG down), so .webp is the single negotiable base
+        // for a CSS background. No image-set and no explicit .avif here: a .avif URL is a fixed format
+        // the edge can't downgrade for a non-avif UA — only .webp varies both up and down.
+        if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
+            $webp_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.webp$2', $sameext_zone);
+            if (is_string($webp_zone) && $webp_zone !== '' && $webp_zone !== $sameext_zone) {
+                return 'background-image:url(' . $q . $webp_zone . $q . ')';
+            }
+            return '';                                     // ext-swap failed → caller keeps same-ext
+        }
+
+        // CONVERGED (wpc_natural_nw): non-edge zones emit the OTF image-set — typed avif + webp entries the
+        // edge resizes/transcodes from ANY source (E1), floor never-404s, no on-disk dependency. This is what
+        // gives CSS backgrounds avif on CF-direct (+ webp origins). type() self-selection is browser-side.
+        if ($css_nw) {
+            $avif_zone_nw = preg_replace('/\.(jpe?g|png|webp)(\?.*)?$/i', '.avif$2', $sameext_zone);
+            $webp_zone_nw = preg_replace('/\.(jpe?g|png|webp)(\?.*)?$/i', '.webp$2', $sameext_zone);
+            $nw_entries = [];
+            if (is_string($avif_zone_nw) && $avif_zone_nw !== '' && $avif_zone_nw !== $sameext_zone) {
+                $nw_entries[] = 'url(' . $q . $avif_zone_nw . $q . ') type("image/avif")';
+            }
+            if (is_string($webp_zone_nw) && $webp_zone_nw !== '' && $webp_zone_nw !== $sameext_zone) {
+                $nw_entries[] = 'url(' . $q . $webp_zone_nw . $q . ') type("image/webp")';
+            }
+            $nw_entries[] = 'url(' . $q . $sameext_zone . $q . ') type("' . $base_mime . '")'; // same-ext floor (always 200)
+            if (count($nw_entries) < 2) return '';
+            $nw_set = implode(',', $nw_entries);
+            return 'background-image:url(' . $q . $sameext_zone . $q . ');'
+                 . 'background-image:-webkit-image-set(' . $nw_set . ');'
+                 . 'background-image:image-set(' . $nw_set . ')';
+        }
+
+        // Non-edge (CF / vary-blind / picture-mode / off): on-disk image-set only. type()
+        // self-selection is browser-side and never-404 by on-disk existence — the vary-blind-safe
+        // path. No fabricated natural URLs here.
+        $sib = self::wpc_css_bg_disk_siblings($origin_url);
+        if (empty($sib['avif']) && empty($sib['webp'])) return '';         // no disk siblings → caller keeps same-ext
+
+        // Ext-swap on the ZONE url (host-swap already done by the caller); swap only the extension.
+        $avif_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.avif$2', $sameext_zone);
+        $webp_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.webp$2', $sameext_zone);
+
+        $entries = [];
+        if (!empty($sib['avif']) && is_string($avif_zone) && $avif_zone !== '' && $avif_zone !== $sameext_zone) {
+            $entries[] = 'url(' . $q . $avif_zone . $q . ') type("image/avif")';
+        }
+        if (!empty($sib['webp']) && is_string($webp_zone) && $webp_zone !== '' && $webp_zone !== $sameext_zone) {
+            $entries[] = 'url(' . $q . $webp_zone . $q . ') type("image/webp")';
+        }
+        // Same-ext floor entry — guarantees a 200 inside image-set even for an exotic UA.
+        $entries[] = 'url(' . $q . $sameext_zone . $q . ') type("' . $base_mime . '")';
+        if (count($entries) < 2) return '';                                // only the floor survived → no upgrade
+
+        $set = implode(',', $entries);
+        return 'background-image:url(' . $q . $sameext_zone . $q . ');'
+             . 'background-image:-webkit-image-set(' . $set . ');'
+             . 'background-image:image-set(' . $set . ')';
+    }
+
+    /**
+     * CSS/inline-background image-set sweep. Runs AFTER wpc_raster_naturalize_passes (so background URLs
+     * are already the clean natural ZONE-host form, e.g. cdn/wp-content/uploads/X.png) and upgrades each
+     * raster background to the never-404 image-set() via wpc_css_bg_imageset_build (AVIF+WebP+same-ext
+     * floor, type()-self-selected → Vary-blind-safe, OTF so no on-disk dependency on a nw/edge zone).
+     *
+     * One call site (inside wpc_raster_naturalize) covers EVERY caller: the CSS combiner (combine_css),
+     * process_css_for_fonts, the page output buffer (inline style backgrounds), and css_content. Scoped
+     * to the media-base catalog (uploads + storage + filtered). IDEMPOTENT: the negative-lookahead skips
+     * the image-set's own same-ext floor (a floor url is immediately followed by ;background-image:
+     * [-webkit-]image-set), and the belt skips any declaration that already contains image-set(. NULL-safe.
+     */
+    public static function wpc_css_bg_imageset_sweep($css)
+    {
+        if (!is_string($css) || $css === '' || empty(self::$zone_name)) {
+            return $css;
+        }
+        if (stripos($css, 'background') === false || !self::wpc_css_bg_imageset_active()) {
+            return $css; // no backgrounds present, or gate/KILL off
+        }
+        $zone = preg_quote(self::$zone_name, '#');
+        $origin_host = function_exists('wp_parse_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        $bases = function_exists('wpc_v2_upload_base_paths') ? wpc_v2_upload_base_paths() : ['/wp-content/uploads'];
+        $alts = [];
+        foreach ($bases as $b) {
+            $b = trim((string) $b, '/');
+            if ($b !== '') { $alts[] = preg_quote($b, '#'); }
+        }
+        if (empty($alts)) { $alts[] = preg_quote('wp-content/uploads', '#'); }
+        $base_alt = '(?:' . implode('|', array_unique($alts)) . ')';
+        $rx = '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)(https?://' . $zone . '/' . $base_alt . '/[^"\'()\s<>]+?)\.(png|jpe?g|webp)((?:\?[^"\'()\s<>]*)?)\2(\s*\))(?!\s*;\s*background-image\s*:\s*(?:-webkit-)?image-set)#i';
+        $out = preg_replace_callback($rx, static function ($m) use ($origin_host) {
+            if (stripos($m[0], 'image-set(') !== false) {
+                return $m[0]; // already upgraded
+            }
+            $sameext_zone = $m[3] . '.' . $m[4] . $m[5];
+            $rel = function_exists('wp_parse_url') ? (string) wp_parse_url($sameext_zone, PHP_URL_PATH) : '';
+            $origin_url = ($origin_host !== '' && $rel !== '') ? ('https://' . $origin_host . $rel) : $sameext_zone;
+            $iset = self::wpc_css_bg_imageset_build($origin_url, $sameext_zone, $m[2]);
+            return ($iset !== '') ? $iset : $m[0]; // upgrade, or leave the natural same-ext (already correct)
+        }, $css);
+        return is_string($out) ? $out : $css; // NULL-safe: a backtrack returns the original, never blanks
+    }
+
+    /**
+     * Gate for the SVG positive sweep. The naturalize pass only cleans SVGs the legacy rewriter
+     * already lifted to the zone; SVGs referenced from CSS background-image, inline style url(),
+     * root-relative hrefs etc. were never zone-served at all. The sweep host-swaps any origin
+     * uploads-SVG to the clean zone URL. Hard-gated: live CDN, Images master on, zone not suppressed,
+     * zone != origin.
+     */
+    public static function wpc_svg_zoneify_active()
+    {
+        if (empty(self::$zone_name)) {
+            return false;
+        }
+        $s = self::$settings;
+        if (!is_array($s) || empty($s['live-cdn']) || (string) $s['live-cdn'] !== '1') {
+            return false;
+        }
+        // No serve['svg'] check: the UI is one Images tile now, but legacy presets wrote svg='0',
+        // which would permanently block this gate on pre-consolidation sites. The cdn_images_enabled()
+        // check below is the tile's real gate and covers svg.
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            return false;
+        }
+        if (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled($s)) {
+            return false;
+        }
+        $origin = wp_parse_url(home_url(), PHP_URL_HOST);
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
+            return false; // zone derives from origin host → swapping would self-loop
+        }
+        return true;
+    }
+
+    public static function wpc_svg_zoneify($html)
+    {
+        if (!is_string($html) || $html === '' || !self::wpc_svg_zoneify_active()) {
+            return $html;
+        }
+        $origin = wp_parse_url(home_url(), PHP_URL_HOST);
+        $o = preg_quote($origin, '#');
+        // Absolute origin URLs (src/href/srcset/CSS url()).
+        $html = self::wpc_preg_safe(
+            '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.svg(?:\?[^"\'()\s<>]*)?)#i',
+            'https://' . self::$zone_name . '$1',
+            $html
+        );
+        // Root-relative references (quoted attributes + CSS url(...)).
+        $html = self::wpc_preg_safe(
+            '#(["\'(])(/wp-content/uploads/[^"\'()\s<>]+?\.svg(?:\?[^"\'()\s<>]*)?)#i',
+            '$1https://' . self::$zone_name . '$2',
+            $html
+        );
+        return $html;
+    }
+
+    public static function wpc_raster_zoneify_active()
+    {
+        if (empty(self::$zone_name)) {
+            return false;
+        }
+        $s = self::$settings;
+        if (!is_array($s) || empty($s['live-cdn']) || (string) $s['live-cdn'] !== '1') {
+            return false;
+        }
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            return false;
+        }
+        if (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled($s)) {
+            return false;
+        }
+        $origin = wp_parse_url(home_url(), PHP_URL_HOST);
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
+            return false; // zone derives from origin host → swapping would self-loop
+        }
+        return true;
+    }
+
+    /**
+     * Raster-zoneify backstop. nd-skipped origin rasters (metadata-broken attachments the
+     * negotiated/img lane never touched, plus theme/CSS-background uploads outside the srcset
+     * rewriter) leak to the origin host — SVGs got a backstop in wpc_svg_zoneify(), rasters didn't.
+     * Host-swaps absolute + root-relative origin /wp-content/uploads/ png/jpg/gif refs onto the zone,
+     * SAME extension — same bytes 200 from the CDN, no format change. No blanket webp swap: <link
+     * rel=icon>/og:image would break favicon parsers + webp-blind scrapers, and a GIF would flatten to
+     * a static webp. <picture> blocks are masked first so the builder-owned typed <source>s and their
+     * u: targets are never touched.
+     */
+    public static function wpc_raster_zoneify($html)
+    {
+        if (!is_string($html) || $html === '' || !self::wpc_raster_zoneify_active()) {
+            return $html;
+        }
+        $wpc_pic_blocks = [];
+        if (stripos($html, '<picture') !== false) {
+            // String-based <picture> masking (NOT regex). The old '#<picture\b.*?</picture>#is' returned
+            // NULL on pcre.backtrack_limit on large Elementor pages, and the bail-to-original below then
+            // silently skipped ALL naturalization — so gallery / background / storage transforms stayed
+            // /q: on exactly the heavy pages that need it (acrystalglass). A linear strpos scan can't
+            // backtrack, so the naturalize ALWAYS runs. Mirrors the old \b (skips <pictureX) and masks
+            // each first <picture>..</picture> block.
+            $masked = '';
+            $offset = 0;
+            $hlen   = strlen($html);
+            while (($start = stripos($html, '<picture', $offset)) !== false) {
+                $after = ($start + 8 < $hlen) ? $html[$start + 8] : '';
+                if ($after !== '' && (ctype_alnum($after) || $after === '_')) {
+                    // not a <picture> tag (e.g. <picturex) — emit through it and continue
+                    $masked .= substr($html, $offset, ($start + 8) - $offset);
+                    $offset  = $start + 8;
+                    continue;
+                }
+                $end = stripos($html, '</picture>', $start);
+                if ($end === false) {
+                    break; // unclosed — leave the remainder unmasked (old regex wouldn't match it either)
+                }
+                $end += 10; // strlen('</picture>')
+                $k = "\x01WPCPIC" . count($wpc_pic_blocks) . "\x01";
+                $wpc_pic_blocks[$k] = substr($html, $start, $end - $start);
+                $masked .= substr($html, $offset, $start - $offset) . $k;
+                $offset  = $end;
+            }
+            $masked .= substr($html, $offset);
+            $html = $masked;
+        }
+        $origin = wp_parse_url(home_url(), PHP_URL_HOST);
+        $o = preg_quote($origin, '#');
+        // GIF host-swaps to the zone ONLY on a CF-direct zone: on Bunny a GIF gets no next-gen
+        // conversion, so naturalizing it is pure WPC egress for zero benefit — leave it on origin.
+        // (Runs AFTER the per-image gate, so it must exclude gif too or it re-host-swaps a gif the
+        // gate left on origin.)
+        $nat_gif = (class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery()) ? '|gif' : '';
+        // Emit .webp for transcodable rasters on a proven negotiating edge. This outermost pass
+        // host-swaps any leftover origin uploads URL (gallery <a href>, data-large_image, the nd
+        // data-wpc-fb fallback) and was same-ext, so on a CF-fronted Bunny zone those double-fetched
+        // alongside the nd .webp. Derive CF-direct from emit-host-vs-cname (NOT zone_is_cf()'s CF-RAY
+        // false-positive); only swap when nd is active. gif stays gif; un-witnessed CF / nd-inactive →
+        // same-ext. The edge down-negotiates .webp→jpeg for non-webp Accept, so scraper/legacy paths
+        // stay valid by Content-Type.
+        $zn = self::$zone_name;
+        $cf_cname_z  = (defined('WPS_IC_CF_CNAME') && function_exists('get_option')) ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        $z_cf_direct = ($cf_cname_z !== '' && stripos((string) $zn, $cf_cname_z) !== false);
+        $z_edge_webp = (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()
+            && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_single_url_format'));
+        $z_swap = static function ($path) use ($z_edge_webp, $z_cf_direct) {
+            if (!preg_match('#^(.*\.)(png|jpe?g|gif)(\?.*)?$#i', $path, $mm)) return $path; // no ext → verbatim
+            $ext = strtolower($mm[2]);
+            $fmt = $z_edge_webp ? wps_rewriteLogic::wpc_single_url_format($ext, $z_cf_direct, true) : $ext;
+            $out = (is_string($fmt) && $fmt !== '') ? $fmt : $ext; // gif→gif, un-witnessed/KILL → same-ext
+            return $mm[1] . $out . (isset($mm[3]) ? $mm[3] : '');
+        };
+        // Absolute origin uploads rasters.
+        $z_abs = preg_replace_callback(
+            '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . ')(?:\?[^"\'()\s<>]*)?)#i',
+            static function ($m) use ($zn, $z_swap) { return 'https://' . $zn . $z_swap($m[1]); },
+            $html
+        );
+        if (is_string($z_abs)) $html = $z_abs;
+        // Root-relative refs.
+        $z_rel = preg_replace_callback(
+            '#(["\'(])(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . ')(?:\?[^"\'()\s<>]*)?)#i',
+            static function ($m) use ($zn, $z_swap) { return $m[1] . 'https://' . $zn . $z_swap($m[2]); },
+            $html
+        );
+        if (is_string($z_rel)) $html = $z_rel;
+        if (!empty($wpc_pic_blocks)) {
+            $html = strtr($html, $wpc_pic_blocks);
+        }
+        return $html;
+    }
+
+    /**
+     * webp-immediate gate. Bunny chains: always safe (edge negotiates AND downgrades natively). CF
+     * chains: only when the zone's pod is >= 2.89.18.2 — below that a legacy browser's jpg-downgrade
+     * could cache-pin itself under a .webp URL at CF's full TTL (the vary-blind poisoning lane). Pod
+     * version comes from the asset probe's x-cdn-version capture.
+     */
+    public static function wpc_webp_immediate_ok()
+    {
+        // KILL is the single emergency off-ramp. This witness feeds the bare-<img>/CSS-bg naturalize
+        // lane, which isn't gated by natural_assets_on() (the lane that honors KILL), so without this a
+        // KILL'd CF site would still naturalize wp:1→.webp there. Symmetric with avif_natural_source_ok.
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) {
+            return false;
+        }
+        // Config-authoritative CF detection. Request-header detection is blind to a CF-direct CNAME
+        // zone over a non-orange origin (no CF header on any origin render); without zone_is_cf() the
+        // optimistic `return true` below would promote a vary-blind .webp on the CF edge (CSS-bg /
+        // slideshow have no fallback). zone_is_cf() routes such a zone to the witness path instead.
+        $cf = !empty($_SERVER['HTTP_CF_RAY']) || !empty($_SERVER['HTTP_CF_VISITOR']) || get_option('wpc_v2_cf_assets_seen', 0);
+        if (!$cf && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'zone_is_cf')) {
+            $cf = wps_rewriteLogic::zone_is_cf();
+        }
+        if (!$cf) {
+            return true;
+        }
+        // Force-natural operator override (default OFF): promote natural .webp on a CF zone the
+        // operator confirmed vary-correct + OTF-live, before the orch echoes the witness. Short-circuits
+        // the vary-blind-poisoning gate below, so only ever true on a confirmed zone.
+        if (function_exists('wpc_force_natural') && wpc_force_natural()) {
+            return true;
+        }
+        // Honor the orch's per-zone native_accept_vary witness, symmetric with avif:
+        //   true  → promote (provisioned, vary-correct — webp lands in lockstep with avif);
+        //   false → orch asserts this CF zone is NOT vary-correct → stay on the wp:1 transform. A
+        //           capable pod binary doesn't guarantee EnableWebPVary, and a natural .webp would let a
+        //           legacy jpg-downgrade pin under the .webp URL on the vary-blind edge — the orch's
+        //           zone-config-level witness is the stronger authority, so it wins;
+        //   null  → orch hasn't reported → fall through to the pod-version witness below.
+        if (class_exists('WPC_Delivery_Resolver')) {
+            $nav = WPC_Delivery_Resolver::orch_nav_signal();
+            if ($nav === true)  return true;
+            if ($nav === false) return false;
+        }
+        // Un-provisioned CF fallback is optimistic, symmetric with the AVIF witness. The pod-version
+        // probe below stays a capability signal but must not lag the AVIF leg, or a fresh CF zone ships
+        // natural-avif + transform-webp (half-natural <picture>). WebP is emitted only as a typed
+        // <source>, so a no-webp UA never fetches the .webp URL → no vary-blind pin. Still overridable:
+        // nav=false above hard-disables, KILL/force handled above.
+        $pv = (string) get_transient('wpc_v2_cf_pod_version');
+        // Promote-on-proof self-capture. The pod-version transient is otherwise only written by the
+        // healthcheck asset-probe, so on a normal CF frontend render it's frequently unset, wrongly
+        // dropping WebP to wp:1 even though the pod is capable. If unset, capture it off-render
+        // (admin/cron); frontend renders only read the cached verdict.
+        if ($pv === '' && (is_admin() || (defined('DOING_CRON') && DOING_CRON))) {
+            $zone = (string) get_option('ic_cdn_zone_name', '');
+            if ($zone !== '') {
+                $r  = wp_remote_get('https://' . $zone . '/wp-includes/css/dist/block-library/style.min.css', ['timeout' => 3, 'sslverify' => false, 'redirection' => 2, 'limit_response_size' => 2048]);
+                $pv = is_wp_error($r) ? '' : (string) wp_remote_retrieve_header($r, 'x-cdn-version');
+                // good → cache 12h; empty/unreachable → 2h '0' sentinel so we don't re-probe every admin load
+                set_transient('wpc_v2_cf_pod_version', $pv !== '' ? $pv : '0', $pv !== '' ? 12 * HOUR_IN_SECONDS : 2 * HOUR_IN_SECONDS);
+            }
+        }
+        // Optimistic return. The probe verdict is kept for diagnostics but no longer gates: a capable,
+        // OTF-live edge is the fleet baseline and WebP-in-<picture> is type-safe, so we keep WebP
+        // natural in lockstep with the optimistic AVIF leg. The ONE hard-no is a definite-old probed
+        // version ($pv present, not the '0' unreachable sentinel, < 2.89.18.2) — the '0' sentinel and an
+        // empty probe are optimistic. nav=false above is the hard-off; KILL at the top reverts all.
+        if ($pv !== '' && $pv !== '0' && version_compare(ltrim($pv, 'v'), '2.89.18.2', '<')) {
+            return false; // probe positively says this pod is too old for natural .webp
+        }
+        return true;
+    }
+
+    /**
+     * NULL-safe preg_replace. A preg_replace that hits the PCRE backtrack/JIT-stack limit returns
+     * NULL; assigning that straight to the output-buffer $html serves a BLANK PAGE. Every buffer-pass
+     * rewrite routes through this: on NULL (or non-string) it returns the original subject unchanged,
+     * so the rewrite is skipped, never the page lost.
+     */
+    private static function wpc_preg_safe($pattern, $replacement, $subject)
+    {
+        $out = preg_replace($pattern, $replacement, $subject);
+        return is_string($out) ? $out : $subject;
+    }
+
+    /**
+     * Asset (CSS/JS) transform -> natural. Collapses the m:0 no-minify pass-through transform
+     * (cdn/m:0/a:ORIGIN_URL) to a clean natural zone URL (cdn host + the origin path). m:0 = no
+     * minify, so the natural URL is byte-identical — the edge fetches the same origin asset either
+     * way (confirmed: CSS "passes through fully"). ONLY m:0 (m:1+ are minified; collapsing would lose
+     * the minification). NULL-safe (a backtrack returns the original, never blanks the page).
+     * Kill switch: add_filter('wpc_asset_naturalize_enabled', '__return_false').
+     */
+    public static function wpc_asset_naturalize($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name) || stripos($html, '/m:0') === false) {
+            return $html;
+        }
+        if (!apply_filters('wpc_asset_naturalize_enabled', true)) {
+            return $html;
+        }
+        $zone = preg_quote(self::$zone_name, '#');
+        $bs = '\\\\?/';
+        $zone_name = self::$zone_name;
+        // $bs-tolerant throughout (not just the a: target) so a FULLY JSON-escaped m:0 transform inside
+        // a JS/loader config (https:\/\/zone\/m:0\/a:...) also collapses; the closure re-escapes on output.
+        $rx = '#https?:' . $bs . $bs . '(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)' . $bs . 'm:0' . $bs . 'a:(https?:' . $bs . $bs . '[^"\'()\s<>]+?\.(?:css|js)(?:\?[^"\'()\s<>]*)?)#i';
+        $out = preg_replace_callback($rx, static function ($m) use ($zone_name) {
+            $u_esc = (strpos($m[1], '\\/') !== false);
+            $u_plain = $u_esc ? str_replace('\\/', '/', $m[1]) : $m[1];
+            $p = function_exists('wp_parse_url') ? wp_parse_url($u_plain) : parse_url($u_plain);
+            if (empty($p['path'])) {
+                return $m[0];
+            }
+            $natural = 'https://' . $zone_name . $p['path'] . (isset($p['query']) ? '?' . $p['query'] : '');
+            if ($u_esc) {
+                $natural = str_replace('/', '\\/', $natural);
+            }
+            return $natural;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    public static function wpc_raster_naturalize($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
+            return $html;
+        }
+        $wpc_pic_blocks = [];
+        if (stripos($html, '<picture') !== false) {
+            // String-based <picture> masking (NOT regex). The old '#<picture\b.*?</picture>#is' returned
+            // NULL on pcre.backtrack_limit on large Elementor pages, and the bail-to-original below then
+            // silently skipped ALL naturalization — so gallery / background / storage transforms stayed
+            // /q: on exactly the heavy pages that need it (acrystalglass). A linear strpos scan can't
+            // backtrack, so the naturalize ALWAYS runs. Mirrors the old \b (skips <pictureX) and masks
+            // each first <picture>..</picture> block.
+            $masked = '';
+            $offset = 0;
+            $hlen   = strlen($html);
+            while (($start = stripos($html, '<picture', $offset)) !== false) {
+                $after = ($start + 8 < $hlen) ? $html[$start + 8] : '';
+                if ($after !== '' && (ctype_alnum($after) || $after === '_')) {
+                    // not a <picture> tag (e.g. <picturex) — emit through it and continue
+                    $masked .= substr($html, $offset, ($start + 8) - $offset);
+                    $offset  = $start + 8;
+                    continue;
+                }
+                $end = stripos($html, '</picture>', $start);
+                if ($end === false) {
+                    break; // unclosed — leave the remainder unmasked (old regex wouldn't match it either)
+                }
+                $end += 10; // strlen('</picture>')
+                $k = "\x01WPCPIC" . count($wpc_pic_blocks) . "\x01";
+                $wpc_pic_blocks[$k] = substr($html, $start, $end - $start);
+                $masked .= substr($html, $offset, $start - $offset) . $k;
+                $offset  = $end;
+            }
+            $masked .= substr($html, $offset);
+            $html = $masked;
+        }
+        $html = self::wpc_raster_naturalize_passes($html);
+        // Upgrade the now-natural raster backgrounds (CSS files + inline styles) to never-404 image-set
+        // (AVIF+WebP, type()-selected, Vary-free). Runs on the picture-masked html, so <picture> source
+        // URLs are untouched. Self-gated + idempotent + NULL-safe.
+        $html = self::wpc_css_bg_imageset_sweep($html);
+        if (!empty($wpc_pic_blocks)) {
+            $html = strtr($html, $wpc_pic_blocks);
+        }
+        return $html;
+    }
+
+    private static function wpc_raster_naturalize_passes($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
+            return $html;
+        }
+        $s = self::$settings;
+        if (!is_array($s) || empty($s['live-cdn']) || (string) $s['live-cdn'] !== '1') {
+            return $html;
+        }
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            return $html;
+        }
+        if (!class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled($s)) {
+            return $html;
+        }
+        $zone = preg_quote((string) self::$zone_name, '#');
+        // Pass 0 — double-zone collapse, any mode. A transform wrapping an already-zoned URL
+        // (/q:i/…/u:https://{zone}/…) 302s as text/plain and wastes a request before the natural 200:
+        // the edge can't treat itself as the origin at any width/format. The fonts lane double-wraps
+        // too (a rewriter without a zone-skip guard re-wrapping an already-zoned URL — works via a
+        // double hop but fragments the cache). Collapse any zone-prefixed wrap (q:/r:/wp:/w:/m:/
+        // font:true chains ending in a:/u:) whose target is already the zone, down to the inner URL.
+        $html = self::wpc_preg_safe(
+            '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:(?:q|r|wp|w|m):[a-z0-9]+/|font:true/){1,40}(?:a|u):(https?://' . $zone . '/[^"\'()\s<>]+)#i',
+            '$1',
+            $html
+        );
+        $origin = wp_parse_url(home_url(), PHP_URL_HOST);
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
+            return $html; // zone derives from origin host → swapping would self-loop
+        }
+        // Any width (not just w:1): the srcset ladder owns responsive widths, so uploads rasters go
+        // to natural zone URLs across the board — per-request edge resizing isn't part of the contract.
+        // Uploads-scoped (theme/plugin-path transforms keep their working form). The "/" or "\/" lets
+        // JSON-escaped u: targets naturalize too.
+        $bs = '\\\\?/';
+        // Media-base scope for the transform->natural collapse. Was hardcoded to /wp-content/uploads;
+        // now derived from wpc_v2_upload_base_paths() so offloaded / page-builder media (e.g. /storage)
+        // collapse to natural too — riding the SAME $otf_live witness gate /uploads already passes, so
+        // no new risk (uploads already proves natural delivery works on the zone). Each base's path
+        // segments are joined by $bs so JSON-escaped u: targets still match.
+        $wpc_bases = function_exists('wpc_v2_upload_base_paths') ? wpc_v2_upload_base_paths() : ['/wp-content/uploads'];
+        $base_parts = [];
+        foreach ($wpc_bases as $wpc_b) {
+            $wpc_b = trim((string) $wpc_b, '/');
+            if ($wpc_b === '') { continue; }
+            $base_parts[] = implode($bs, array_map(function ($s) { return preg_quote($s, '#'); }, explode('/', $wpc_b)));
+        }
+        $base_alt = !empty($base_parts) ? '(?:' . implode('|', array_unique($base_parts)) . ')' : 'wp-content' . $bs . 'uploads';
+        $rx = '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:q:[a-z0-9]+/)?r:\d+/wp:(\d)/w:\d+/u:(https?:' . $bs . $bs . '[^"\'()\s<>]+?' . $bs . $base_alt . $bs . '[^"\'()\s<>]+?\.(?:png|jpe?g|webp|gif)(?:\?[^"\'()\s<>]*)?)#i';
+        $naturalize = static function ($m, $allow_webp) use ($wpc_bases) {
+            // Never collapse a wp:2 (avif-intent) transform: its u: target is a jpg/png, so collapsing
+            // changes the served format class — the jpg-under-an-avif-slot corruption. No natural
+            // equivalent to synthesize (the builder emits the natural .avif when the file exists);
+            // leave the transform to do its interim+trigger work.
+            if ($m[1] === '2') {
+                return $m[0];
+            }
+            // Escape-tolerant: a u: target inside JSON arrives slash-escaped — unescape to find the
+            // path, re-escape on output.
+            $u_esc = (strpos($m[2], '\\/') !== false);
+            $u_plain = $u_esc ? str_replace('\\/', '/', $m[2]) : $m[2];
+            $pos = false;
+            foreach ($wpc_bases as $wpc_b) {
+                $needle = '/' . trim((string) $wpc_b, '/') . '/';
+                if ($needle === '//') { continue; }
+                $p = stripos($u_plain, $needle);
+                if ($p !== false) { $pos = $p; break; }
+            }
+            if ($pos === false) {
+                return $m[0];
+            }
+            $rel = substr($u_plain, $pos); // exact origin path+query bytes — no re-encoding
+            if ($allow_webp && $m[1] === '1') {
+                $rel = preg_replace('/\.(?:png|jpe?g)(\?|$)/i', '.webp$1', $rel);
+            }
+            $natural = 'https://' . self::$zone_name . $rel;
+            if ($u_esc) {
+                $natural = str_replace('/', '\\/', $natural); // keep JSON valid
+            }
+            return $natural;
+        };
+        // Pass 1 — <link>/<meta> tags: same-ext natural, any mode. These tags are never
+        // JS-width-managed, so the nd/jpeg gate below doesn't apply, and w:1 does no resize work anyway.
+        $html = preg_replace_callback('#<(?:link|meta)\b[^>]*>#i', static function ($tag) use ($rx, $naturalize) {
+            return preg_replace_callback($rx, static function ($m) use ($naturalize) {
+                return $naturalize($m, false);
+            }, $tag[0]);
+        }, $html);
+        // Pass 1.5 — no-work transforms (w:1), any mode, same-ext (picture-mode sites, where the
+        // nd-gated pass below never ran): q:u/wp:0/w:1 transforms of origin uploads, plus the
+        // nested-monster class — a transform wrapping the site's OLD zone host which wraps origin
+        // (old-era content re-wrapped by a rewriter with no foreign-zone guard). The capture runs
+        // through the nested junk to the innermost uploads target, so one pass digests the whole chain.
+        $rx_w1 = '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:q:[a-z0-9]+/)?r:\d+/wp:(\d)/w:1/u:(https?:' . $bs . $bs . '[^"\'()\s<>]+?' . $bs . $base_alt . $bs . '[^"\'()\s<>]+?\.(?:png|jpe?g|webp|gif)(?:\?[^"\'()\s<>]*)?)#i';
+        // Route the webp-vs-same-ext decision through the resolver per-match: an un-witnessed CF zone
+        // collapses to same-ext (no vary-blind .webp on a no-fallback URL), Bunny/witnessed-CF get
+        // negotiated .webp.
+        $html = preg_replace_callback($rx_w1, static function ($m) use ($naturalize) {
+            $u   = ($m[1] === '1') ? (strpos($m[2], '\\/') !== false ? str_replace('\\/', '/', $m[2]) : $m[2]) : '';
+            $ext = $u !== '' ? strtolower(pathinfo(preg_replace('/\?.*$/', '', $u), PATHINFO_EXTENSION)) : '';
+            $allow = ($ext !== '' && class_exists('wps_rewriteLogic')
+                && wps_rewriteLogic::wpc_single_url_format($ext, null, null) === 'webp');
+            return $naturalize($m, $allow);
+        }, $html);
+        $nd_webp = WPC_Negotiated_Delivery::is_active();
+        $nd_jpeg = !$nd_webp && WPC_Negotiated_Delivery::is_active_jpeg();
+        // OTF-live Pass-2 ungate. When the zone is OTF-live (the CDN resizes a natural -WxH URL by its
+        // filename suffix and negotiates format off Accept), the q:i/wp:N/w:N transform does no work a
+        // natural URL can't reproduce — collapsing to natural is byte-equivalent at the slot width and
+        // better-cached. Then Pass 2 must run regardless of nd/jpeg mode — picture/adaptive-mode sites
+        // (both $nd_webp/$nd_jpeg false) were still shipping w:N transforms in CSS/srcset/data-attrs.
+        // Witness is the same trichotomy the picture builder gates on — never a blind promotion:
+        //   • wpc_force_natural()        — operator-confirmed vary-correct + OTF-live zone;
+        //   • avif_natural_source_ok()   — provisioned (orch_nav_signal()===true) OR Bunny/CF-flag;
+        //   • wpc_webp_immediate_ok()    — symmetric webp witness (optimistic on un-witnessed CF; the
+        //                                  pod-version is only a negative hard-no, nav=false is the
+        //                                  authoritative hard-off, KILL reverts everything).
+        $otf_live = (function_exists('wpc_force_natural') && wpc_force_natural())
+            || (class_exists('wps_rewriteLogic') && wps_rewriteLogic::avif_natural_source_ok())
+            || self::wpc_webp_immediate_ok();
+        if (!$nd_webp && !$nd_jpeg && !$otf_live) {
+            return $html; // not OTF-live and not nd/jpeg → keep transforms (current conservative form)
+        }
+        // Pass 2 — everything else (CSS url(), style attrs, srcset, data attrs): webp ext-swap in nd
+        // mode or when OTF-live, origin ext in jpeg mode. The wp:2-avif-skip, uploads-scope, self-loop
+        // equality and <picture> masking all still hold — this only widens WHEN Pass 2 runs. nd-webp
+        // mode forces its own typed-webp URL; otherwise the per-match resolver collapses an un-witnessed
+        // CF zone to same-ext (no vary-blind .webp on a no-fallback URL) and gives Bunny/witnessed-CF
+        // negotiated .webp.
+        $html = preg_replace_callback($rx, static function ($m) use ($naturalize, $nd_webp) {
+            if ($nd_webp) {
+                return $naturalize($m, true); // nd-mode owns its typed-webp delivery URL
+            }
+            $u   = (strpos($m[2], '\\/') !== false) ? str_replace('\\/', '/', $m[2]) : $m[2];
+            $ext = strtolower(pathinfo(preg_replace('/\?.*$/', '', $u), PATHINFO_EXTENSION));
+            $allow = ($ext !== '' && class_exists('wps_rewriteLogic')
+                && wps_rewriteLogic::wpc_single_url_format($ext, null, null) === 'webp');
+            return $naturalize($m, $allow);
+        }, $html);
+        // Pass 3 — splash un-stick. Legacy-lane images ship the base64 SVG placeholder in src with the
+        // real URL in data-src, but the un-splash JS is intentionally dequeued on nd/jpeg paths →
+        // placeholder forever, invisible images. Native loading="lazy" already lazy-loads these, so
+        // restore the real URL into src and drop data-src. Only fires on the exact splash signature.
+        $html = preg_replace_callback('#<img\b[^>]*\bdata-src="[^"]+"[^>]*>#i', static function ($m) {
+            $tag = $m[0];
+            if (strpos($tag, 'src="data:image/svg+xml;base64,') === false) {
+                return $tag;
+            }
+            if (!preg_match('/\bdata-src="([^"]+)"/', $tag, $ds)) {
+                return $tag;
+            }
+            $tag = preg_replace('/\bsrc="data:image\/svg\+xml;base64,[^"]*"/', 'src="' . $ds[1] . '"', $tag, 1);
+            return preg_replace('/\s+data-src="[^"]+"/', '', $tag, 1);
+        }, $html);
+        return $html;
+    }
+
+    public function buffer_local_callback_wrapped($html)
+    {
+        return self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html))))));
+    }
+
+    public function cdnRewriter_wrapped($html)
+    {
+        return self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html))))));
+    }
+
     public function buffer_local_callback($html)
     {
+        // Negotiated delivery is a CDN-ON feature — its native .webp URLs are served by the
+        // CDN container, so it dispatches ONLY from cdnRewriter() (the CDN-on buffer), never
+        // here in the local/CDN-off path. See cdnRewriter() for the F.0 compose.
+
+        // Heal mixed content (same-host http→https on https requests), mirroring cdnRewriter() — covers
+        // the CDN-off local-delivery buffer too.
+        $html = wpc_heal_mixed_content($html);
 
         $isUserLoggedIn = is_user_logged_in();
 
@@ -1200,6 +2059,27 @@ class wps_cdn_rewrite
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replace_iframe_tags') {
             return $html;
         }
+
+        // Edge-negotiate Mode-B: when the resolver has proven CDN_EDGE with redirect_target='origin'
+        // (the "Edge negotiate" radio: zone 302-negotiates, origin serves bytes), negotiated owns <img>
+        // in the CDN-off buffer too. is_active() is the full gate. Mirrors the cdnRewriter dispatch;
+        // cdnEnabled stays 0 so the CSS/JS/font passes run on origin — only images ride the zone.
+        $wpcnd_local_stash = [];
+        if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
+            $html = WPC_Negotiated_Delivery::rewrite_buffer($html);
+            if (class_exists('wps_rewriteLogic')) {
+                wps_rewriteLogic::$pictureWebpEnabled = false; // path-A/local picture builder stands down
+            }
+            // Stash the final negotiated tags so the LOCAL passes (local_image_tags, lazy,
+            // set_image_sizes, css-bg) can't re-touch them — mirrors the cdnRewriter stash.
+            // Keys deliberately NOT HTML comments (the comment-clear pass would strip them).
+            $html = preg_replace_callback('/<img\b[^>]*\bdata-wpc-nd\b[^>]*>/i', function ($m) use (&$wpcnd_local_stash) {
+                $k = '___WPCND_IMG_' . count($wpcnd_local_stash) . '___';
+                $wpcnd_local_stash[$k] = $m[0];
+                return $k;
+            }, $html);
+        }
+
 
         // Layzload Iframe - sets load="lazy" to iframe tag
         // TODO: Fix so that it checks does iframe already have load="lazy|auto"
@@ -1323,7 +2203,7 @@ class wps_cdn_rewrite
                         if (empty($criticalCSSExists)) {
                             $criticalRunning = $criticalCSS->criticalRunning();
                             if (!$criticalRunning) {
-                                set_transient('wpc_critical_ajax_' . md5($_SERVER['REQUEST_URI']), date('d.m.Y H:i:s'), 60 * 5);
+                                set_transient('wpc_critical_ajax_' . md5(wp_parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH)), date('d.m.Y H:i:s'), 60 * 5);
                                 $html = self::$rewriteLogic->runCriticalAjax($html);
                             }
                         }
@@ -1501,6 +2381,35 @@ class wps_cdn_rewrite
 
         //clean up all our placeholder comments if not used
         $html = preg_replace('/<!--WPC[\s\S]*?-->/', '', $html);
+
+        // Local Fonts / Bunny localization — mirror of the CDN-on path (cdnRewriter ~5045) for CDN-OFF mode,
+        // where this previously never ran, so Local Fonts didn't localize at all (faces stayed on gstatic).
+        // Runs after lazyCSS (the deferred <link> exists) and outside the crit gate (applies crit-on AND -off).
+        if (!empty(self::$settings['replace-fonts'])) {
+            if (self::$settings['replace-fonts'] == 'local') {
+                $fonts = new wps_ic_fonts();
+                $html  = $fonts->replaceFrontend($html);
+            } else if (self::$settings['replace-fonts'] == 'bunny') {
+                // Bunny Fonts — GDPR-compliant Google Fonts drop-in (mirror of cdnRewriter)
+                $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
+                $html = preg_replace('/<link\b[^>]*\bhref=["\']https?:\/\/fonts\.gstatic\.com\/[^"\']+["\'][^>]*>\s*/i', '', $html);
+                $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
+            }
+        }
+
+        // 7.01.0 — Modern Image Delivery post-process (BETA, default OFF, self-gated)
+        // Mirrors the same call in cdnRewriter (line ~3834) for when CDN is disabled.
+        // Stands down when negotiated delivery is active (mutually exclusive); harmless no-op
+        // in CDN-off mode where negotiated is never active.
+        if (class_exists('WPC_Modern_Delivery') && WPC_Modern_Delivery::is_active()
+            && !(class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active())) {
+            $html = WPC_Modern_Delivery::rewrite_buffer($html);
+        }
+
+        // Restore the Edge-negotiate (Mode-B) stashed <img data-wpc-nd> tags.
+        if (!empty($wpcnd_local_stash)) {
+            $html = strtr($html, $wpcnd_local_stash);
+        }
 
         return $html;
     }
@@ -1887,7 +2796,7 @@ class wps_cdn_rewrite
 
 
             if (empty($_GET['wpc_no_buffer'])) {
-                ob_start([$this, 'cdnRewriter']);
+                ob_start([$this, 'cdnRewriter_wrapped']);
             }
         }
     }
@@ -2122,7 +3031,10 @@ class wps_cdn_rewrite
         }
 
 
-        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+        // "Nothing to deliver → disable the CDN rewrite" guard. Must include `fonts`, else
+        // Fonts-ON-alone (css/js/images all off) flips cdnEnabled=0 and the CDN rewrite path
+        // (incl. rewriteInlineFontFaces) never runs → @font-face stays on origin.
+        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
         }
 
@@ -2178,12 +3090,26 @@ class wps_cdn_rewrite
 
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $cf = get_option(WPS_IC_CF);
-        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname)) ? $cfCname : get_option('ic_custom_cname');
+        // VERIFIED-GATE: emit the CF cname ONLY once provision-verified, so the front-end never
+        // switches to a host that errors on every asset. Not-verified → fall back to
+        // ic_custom_cname → ic_cdn_zone_name (always a working host). FAIL-OPEN: a never-set flag
+        // (legacy zone / fresh connect) is treated as verified so the live fleet never degrades;
+        // only an EXPLICITLY-cleared flag ('0', in-flight cname change) blanks it.
+        $cfVerified = wpc_cf_cname_verified_ok();
+        $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && $cfVerified) ? $cfCname : get_option('ic_custom_cname');
 
         if (empty($custom_cname) || !$custom_cname) {
             self::$zone_name = get_option('ic_cdn_zone_name');
         } else {
             self::$zone_name = $custom_cname;
+        }
+
+        // orch cdn_disabled master kill: blank the runtime zone + force CDN off so this request
+        // emits ZERO CDN URLs. Empty zone_name trips the early-return below AND makes every
+        // zone-keyed emitter bail on its empty-zone guard. Inert by default.
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            self::$zone_name = '';
+            self::$cdnEnabled = 0;
         }
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
@@ -2209,9 +3135,29 @@ class wps_cdn_rewrite
         self::$webp_enabled = self::$settings['generate_webp'];
         self::$retina_enabled = self::$settings['retina'];
 
-        // Picture tag WebP/AVIF delivery
-        self::$rewriteLogic::$pictureWebpEnabled = !empty(self::$settings['picture_webp']) && self::$settings['picture_webp'] == '1' && !empty(self::$webp_enabled) && self::$webp_enabled == '1';
-        self::$rewriteLogic::$pictureAvifEnabled = !empty(self::$settings['picture_avif']) && self::$settings['picture_avif'] == '1';
+        // Picture tag WebP/AVIF delivery — BOTH gated on the RESOLVED Next-Gen ceiling.
+        // effective_ceiling() is the single source of truth: 'off' → no next-gen; 'webp' → webp
+        // only; 'avif' → both. Gate both because the legacy settings form / segmented "Off" can
+        // leave picture_webp/picture_avif=1 while the resolver tier is jpeg, and <picture> <source>
+        // selection is terminal (browsers don't fall through). Fall back to the raw legacy keys
+        // only if the resolver class is unavailable.
+        $wpc_nextgen_ceiling = class_exists('WPC_Delivery_Resolver')
+            ? WPC_Delivery_Resolver::effective_ceiling(self::$settings)
+            : 'avif';
+        // Images-master: the <picture> webp/avif builder is image-CDN delivery, so it stands down
+        // when the "Images" tile is OFF (no image serve-type on). Path A then serves the origin
+        // <picture> instead. Mirrors the negotiated/path-A stand-downs.
+        $wpc_cdn_images_on = !class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings);
+        // Gate the <picture> AVIF/WebP blocks on the resolved DELIVERY ceiling, NOT the raw
+        // picture_avif/picture_webp GENERATION flags: a CDN-on OTF zone synthesizes avif at the
+        // edge regardless of local generation, so coupling delivery to the local-generate flag
+        // would strand a Next-Gen-ON site at zero avif. The per-rung URL flavor (natural -WxH.avif
+        // vs never-404 wp:2 vs dropped) is still decided downstream by the per-zone proof/witness
+        // gate, so ceiling==='avif' here can never strand a 404ing source on an un-converged zone.
+        self::$rewriteLogic::$pictureWebpEnabled = $wpc_nextgen_ceiling !== 'off'
+            && !empty(self::$webp_enabled) && self::$webp_enabled == '1'
+            && $wpc_cdn_images_on;
+        self::$rewriteLogic::$pictureAvifEnabled = $wpc_nextgen_ceiling === 'avif' && $wpc_cdn_images_on;
 
         // Skip picture wrapping for JSON responses
         if (function_exists('wp_is_json_request') && wp_is_json_request()) {
@@ -2414,7 +3360,10 @@ class wps_cdn_rewrite
             self::$settings['serve']['svg'] = 1;
         }
 
-        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
+        // "Nothing to deliver → disable the CDN rewrite" guard. Must include `fonts`, else
+        // Fonts-ON-alone (css/js/images all off) flips cdnEnabled=0 and the CDN rewrite path
+        // (incl. rewriteInlineFontFaces) never runs → @font-face stays on origin.
+        if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
         }
 
@@ -2466,6 +3415,11 @@ class wps_cdn_rewrite
 
                 if (self::$js == "1") {
                     add_filter('script_loader_src', [$this, 'adjust_src_url'], 10, 3);
+                    // WP 6.5+ script MODULES (interactivity API, block-library views) load via the
+                    // import-map, which uses script_module_loader_src, NOT script_loader_src. The
+                    // buffer pass alone is timing-dependent (import-map can print after the buffer
+                    // flushes), so route modules through adjust_src_url to rewrite at the source.
+                    add_filter('script_module_loader_src', [$this, 'adjust_src_url'], 10, 2);
                 }
             }
 
@@ -2500,15 +3454,82 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        // Generate filename
-        $hash = substr(md5($src), 0, 10);
+        // Serve external-CSS @font-face fonts from the CDN zone when CSS-combine is OFF. The
+        // combine path already CDN-rewrites @font-face when combine is ON, so gate to combine-OFF
+        // to avoid a double-rewrite (changeFontToCDN has no zone-skip guard). Requires the Fonts
+        // toggle + live CDN + zone; flag-gated behind site option `wpc_fonts_cdn_serve` (default
+        // ON — without it the Fonts tile drives nothing reachable on combine-OFF sites).
+        $wpc_fonts_cdn = apply_filters('wpc_fonts_cdn_serve', (bool) get_site_option('wpc_fonts_cdn_serve', true))
+            && !empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1' // no zone font URLs when CDN off
+            && !empty(self::$settings['fonts']) && self::$settings['fonts'] == '1'
+            && !empty(self::$zone_name)
+            && (empty(self::$settings['css_combine']) || self::$settings['css_combine'] != '1');
+
+        // v7.02.46 — Fonts naturalize in lockstep with every other asset surface. CSS/JS collapse
+        // m:0/a:→natural via the ungated wpc_asset_naturalize buffer pass, but natural_assets_on() reads
+        // false at this enqueue-time hook, so the icon-font url() was the single last m:0/a: request left
+        // on the page. m:0 is a pass-through and the natural zone font is byte-identical — verified live:
+        // 200 + font/woff2 + access-control-allow-origin:* + 1yr cache, identical to the m:0 form. Gate on
+        // natural_assets_on() OR the same wpc_asset_naturalize_enabled off-ramp so fonts move with the rest
+        // (one filter disables all asset naturalization). Only the m:0 passthrough is naturalized below —
+        // font:true subsetting is a REAL transform and must keep its transform URL.
+        $wpc_font_nat = $wpc_fonts_cdn
+            && ((class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && wps_rewriteLogic::natural_assets_on())
+                || apply_filters('wpc_asset_naturalize_enabled', true));
+
+        // Generate filename. When CDN font rewriting is active, fold the zone + subsetting into
+        // the cache key so the optimized file self-invalidates if those change (the WPS_IC_CSS
+        // cache has no settings-keyed purge); inactive → key unchanged → zero-risk. Basis is the
+        // PARAM-STRIPPED src so a rotating ?ver= can't mint a new file per change (which would
+        // grow wp-cio unbounded and leave dead filenames in still-cached HTML).
+        $wpc_cache_basis = strtok($src, '?');
+        if ($wpc_fonts_cdn) {
+            $wpc_subset_key = (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') ? '1' : '0';
+            $wpc_cache_basis .= '|wpccf|' . self::$zone_name . '|' . $wpc_subset_key;
+            // Fold the natural-font-URL state so an already-written cio file rebuilds ONCE when
+            // naturalization is active — without a key change the old m:0/a: proxy-font file is
+            // returned from the file_exists cache below and the naturalize-on-write never lands.
+            if ($wpc_font_nat) {
+                $wpc_cache_basis .= '|wpcfontnat';
+            }
+        }
+        // CSS-file SVG zoneify. This writer ABSOLUTIZES every url() against home_url() (below),
+        // converting relative SVG refs into ORIGIN-absolute URLs — un-resolvable to the zone even
+        // when the CSS file itself is zone-served. So rewrite uploads-SVG url() to the natural zone
+        // host before save, and fold the zone into the cache key so the file self-rebuilds on zone
+        // change / CDN-off (key unchanged when inactive → zero-risk).
+        $wpc_svg_cdn = self::wpc_svg_zoneify_active();
+        if ($wpc_svg_cdn) {
+            // Marker folded into the key; bumping it forces every already-written cio file to
+            // rebuild under a new name on the next render.
+            $wpc_cache_basis .= '|wpccss3|' . self::$zone_name;
+            // Fold the CSS-bg image-set state so an already-written cio file rebuilds ONCE when the
+            // feature flips. The wp-cio hash is keyed on $wpc_cache_basis (NOT produced bytes) and
+            // the fast-path returns by filename without re-reading content, so without this marker a
+            // flip would keep returning the OLD same-ext-only file. Absent when off → byte-identical.
+            if (self::wpc_css_bg_imageset_active()) {
+                $wpc_cache_basis .= '|wpcbgis1';
+            }
+        }
+        $hash = substr(md5($wpc_cache_basis), 0, 10);
         $new_filename = sanitize_file_name($handle . '-' . $hash . '.css');
         $new_filepath = WPS_IC_CSS . '/' . $new_filename;
 
-        // If optimized file exists, return its URL
-        if (file_exists($new_filepath)) {
+        // If optimized file exists AND is non-empty, return its URL (the DOMINANT warm-serve path).
+        // A bare file_exists() would treat a 0-byte/partial file (failed/short write, or a purge
+        // unlink racing a writer) as a valid hit and bake its hashed href into cached HTML → durable
+        // 404. Require filesize>0 so a stub falls through to the atomic re-mint below, which lands the
+        // SAME hashed filename (hash is content/settings-derived) → self-heals next render, no
+        // rotation. clearstatcache() so we read the CURRENT inode, not a sibling's stale stat.
+        clearstatcache(true, $new_filepath);
+        if (file_exists($new_filepath) && @filesize($new_filepath) > 0) {
             $new_url = WPS_IC_CSS_URL . '/' . $new_filename;
             return $new_url;
+        }
+        if (file_exists($new_filepath)) {
+            // 0-byte residue (pre-fix incident file or foreign stub) — drop it so the
+            // atomic re-write below replaces it under the same name this render.
+            @unlink($new_filepath);
         }
 
         // Create optimized file
@@ -2525,8 +3546,12 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        if (stripos($css_content, '@font-face') === false) {
-            return $src; // No @font-face, skip
+        // Don't hard-skip when there's no @font-face: some CSS (e.g. elementor post-*.css) carries
+        // absolute origin uploads URLs but no @font-face, and would otherwise stay on origin. Also
+        // process uploads-referencing CSS when the zone sweep is active; pure-no-asset CSS skips.
+        $wpc_has_fontface = (stripos($css_content, '@font-face') !== false);
+        if (!$wpc_has_fontface && !($wpc_svg_cdn && stripos($css_content, '/wp-content/uploads/') !== false)) {
+            return $src;
         }
 
         // Get the base URL for the original CSS file (directory containing the CSS)
@@ -2544,7 +3569,7 @@ class wps_cdn_rewrite
 
             // Handle protocol-relative URLs
             if (strpos($url, '//') === 0) {
-                $protocol = is_ssl() ? 'https:' : 'http:';
+                $protocol = wpc_request_is_https() ? 'https:' : 'http:'; // proxy-aware (bare is_ssl() downgrades fonts behind Cloudflare)
                 return 'url(' . $quote . $protocol . $url . $quote . ')';
             }
 
@@ -2570,6 +3595,75 @@ class wps_cdn_rewrite
             return 'url(' . $quote . $absolute_url . $quote . ')';
         }, $css_content);
 
+        // Now that every font url() is absolute, route @font-face fonts through the CDN zone using
+        // the SAME form as changeFontToCDN (m:0 passthrough; font:true when subsetting + non-icon)
+        // so it inherits the zone's working font CORS. Scope to @font-face blocks (so the FAMILY is
+        // in context) and detect icon fonts by BOTH family AND URL — icon fonts must never be
+        // subsetted or their PUA glyphs mangle. Idempotent + same-site only.
+        if ($wpc_fonts_cdn) {
+            $wpc_subsetting = (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1');
+            $wpc_site_host = wp_parse_url(home_url(), PHP_URL_HOST);
+            $wpc_zone = (string) self::$zone_name;
+            // Strip CSS comments first (same regex as combine_css::removeCommentsFromCSS) so a
+            // stray '}' inside a comment can't truncate the @font-face block matcher below. Only
+            // runs under this flag, so the optimized CSS is byte-identical when the feature is OFF.
+            $css_content = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\//', '', $css_content);
+            $css_content = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($block) use ($wpc_subsetting, $wpc_site_host, $wpc_zone, $wpc_font_nat) {
+                $rule = $block[0];
+                // Family-based icon detection (same list as findFontFace / the font-display
+                // pass below) — catches fa-, material, dashicon, icomoon, etc. that the
+                // URL alone would miss.
+                $family_is_icon = false;
+                if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $rule, $fam)) {
+                    if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', strtolower(trim($fam[1])))) {
+                        $family_is_icon = true;
+                    }
+                }
+                return preg_replace_callback('/url\s*\(\s*(["\']?)(https?:[^"\')]+\.(?:woff2|woff|eot|ttf)(?:[?#][^"\')]*)?)\1\s*\)/i', function ($m) use ($wpc_subsetting, $wpc_site_host, $wpc_zone, $family_is_icon, $wpc_font_nat) {
+                    $url = $m[2];
+                    // Already on the zone? leave untouched (idempotent / no double-rewrite).
+                    if ($wpc_zone !== '' && strpos($url, $wpc_zone) !== false) {
+                        return $m[0];
+                    }
+                    // Same-site only — leave third-party fonts (gstatic, typekit, fontawesome
+                    // CDN, etc.) untouched.
+                    $host = wp_parse_url($url, PHP_URL_HOST);
+                    if (empty($host) || empty($wpc_site_host) || strcasecmp($host, $wpc_site_host) !== 0) {
+                        return $m[0];
+                    }
+                    // PATH SCOPE: only zoneify fonts under /wp-content/ — the paths the CDN serves
+                    // with correct CORS. A custom store path (e.g. /storage/) is 302'd cross-origin
+                    // back to the ORIGIN, and a redirected cross-origin font fetch is CORS-blocked →
+                    // the font fails to load. Leaving such fonts on the same-origin URL is always safe.
+                    $u_path = (string) wp_parse_url($url, PHP_URL_PATH);
+                    if (stripos($u_path, '/wp-content/') === false) {
+                        return $m[0];
+                    }
+                    // URL-based icon detection (the combine-path list: changeFontToCDN:1740 /
+                    // replaceFonts:594) as a second signal alongside the family check.
+                    $lower = strtolower($url);
+                    $url_is_icon = (strpos($lower, 'icon') !== false || strpos($lower, 'awesome') !== false || strpos($lower, 'lightgallery') !== false || strpos($lower, 'gallery') !== false || strpos($lower, 'side-cart-woocommerce') !== false);
+                    if ($wpc_subsetting && !$family_is_icon && !$url_is_icon) {
+                        // font:true = a REAL subsetting transform (NOT a pass-through) → never naturalized.
+                        $cdn_url = 'https://' . $wpc_zone . '/font:true/a:' . wps_cdn_rewrite::reformat_url($url);
+                    } elseif ($wpc_font_nat) {
+                        // m:0 is a pass-through → emit the clean natural zone URL (byte-identical delivery,
+                        // CORS + font/woff2 verified live). Keeps the icon font in lockstep with CSS/JS/images.
+                        $wpc_fnt_abs = wps_cdn_rewrite::reformat_url($url);
+                        $wpc_fnt_pp = wp_parse_url($wpc_fnt_abs);
+                        if (is_array($wpc_fnt_pp) && !empty($wpc_fnt_pp['path'])) {
+                            $cdn_url = 'https://' . $wpc_zone . $wpc_fnt_pp['path'] . (isset($wpc_fnt_pp['query']) ? '?' . $wpc_fnt_pp['query'] : '');
+                        } else {
+                            $cdn_url = 'https://' . $wpc_zone . '/m:0/a:' . $wpc_fnt_abs; // unparsable → safe transform
+                        }
+                    } else {
+                        $cdn_url = 'https://' . $wpc_zone . '/m:0/a:' . wps_cdn_rewrite::reformat_url($url);
+                    }
+                    return 'url(' . $m[1] . $cdn_url . $m[1] . ')';
+                }, $rule);
+            }, $css_content);
+        }
+
         // Add or replace font-display (icon fonts get separate setting)
         $iconFontDisplay = !empty(self::$settings['icon-font-display']) ? self::$settings['icon-font-display'] : 'block';
         $css_content = preg_replace_callback('/(@font-face\s*\{)([^}]*)(})/is', function ($matches) use ($iconFontDisplay) {
@@ -2587,7 +3681,10 @@ class wps_cdn_rewrite
                 }
             }
 
-            return $matches[1] . $content . 'font-display:' . $fontDisplayValue . ';' . $matches[3];
+            // Leading ';' — minified CSS drops the last semicolon before '}', and fusing
+            // onto the prior declaration (src:url(x)font-display:swap) invalidates it,
+            // silently killing the font. A doubled ';;' is valid CSS (empty declaration).
+            return $matches[1] . $content . ';font-display:' . $fontDisplayValue . ';' . $matches[3];
         }, $css_content);
 
         // Save optimized file
@@ -2595,10 +3692,175 @@ class wps_cdn_rewrite
             wp_mkdir_p(WPS_IC_CSS);
         }
 
-        file_put_contents($new_filepath, $css_content);
+        // Host-swap origin uploads-SVG url() to the natural zone URL (gates re-checked inside).
+        if ($wpc_svg_cdn) {
+            $css_content = self::wpc_svg_zoneify($css_content);
+            // Rasters too: (1) zone TRANSFORM urls inside CSS (adaptive/combine-era w:N forms)
+            // collapse via the same sweep the HTML passes use; (2) plain ORIGIN uploads rasters
+            // host-swap SAME-EXT (alpha-safe — CSS has no onerror fallback).
+            $css_content = self::wpc_raster_naturalize($css_content);
+            $wpc_css_origin = wp_parse_url(home_url(), PHP_URL_HOST);
+            if ($wpc_css_origin && strcasecmp((string) self::$zone_name, $wpc_css_origin) !== 0) { // zone must differ from origin
+                // CSS-background raster: host-swap to the zone, SAME-EXT (NEVER-404 floor).
+                // CSS url() has no <picture>/onerror fallback, so fabricating a .webp that 404s
+                // (when only the avif is on disk) = a broken background. Same-ext host-swap always
+                // points at a real file → always 200. Format upgrade returns via the image-set()
+                // pass below. Scope: png/jpg/jpeg/gif uploads, same-site; svg via zoneify; webp/avif left.
+                $o = preg_quote($wpc_css_origin, '#');
+                // FORMAT-UPGRADE PASS (scoped to background[-image] raster url() only): offer the
+                // two-declaration image-set() upgrade (on-disk avif/webp siblings, never-404,
+                // type()-self-selected → CF vary-blind-safe). On any miss (no/corrupt sibling, flag
+                // off, idempotent hit) it returns the SAME-EXT host-swap. gif/non-bg url() untouched.
+                $css_content = preg_replace_callback(
+                    '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?)\.(png|jpe?g)((?:\?[^"\'()\s<>]*)?)\2(\s*\))#i',
+                    function ($m) use ($wpc_css_origin) {
+                        // IDEMPOTENCY (layer 1): never re-wrap a declaration we already image-set'd.
+                        if (stripos($m[0], 'image-set(') !== false) return $m[0];
+                        $origin_url   = 'https://' . $wpc_css_origin . $m[3] . '.' . $m[4] . $m[5];
+                        $sameext_zone = 'https://' . self::$zone_name . $m[3] . '.' . $m[4] . $m[5];
+                        $iset = self::wpc_css_bg_imageset_build($origin_url, $sameext_zone, $m[2]);
+                        if ($iset !== '') {
+                            return $iset; // the matched 'background[-image]:...url(...)' is fully replaced
+                        }
+                        // Fall through: same-ext host-swap, preserving the matched prefix/quote/suffix.
+                        return $m[1] . $m[2] . $sameext_zone . $m[2] . $m[6];
+                    },
+                    $css_content
+                );
+                // EXISTING same-ext sweep (UNCHANGED) — host-swaps any remaining raster the upgrade pass
+                // did not touch: gif backgrounds, non-background url() (content:, mask, etc.), and any
+                // png/jpg the scoped regex missed. Idempotent on already-zoned urls (origin-anchored).
+                $css_bg_edge_webp = (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active());
+                $css_content = preg_replace_callback(
+                    '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?)\.(png|jpe?g|gif)((?:\?[^"\'()\s<>]*)?)#i',
+                    function ($m) use ($css_bg_edge_webp) {
+                        // VERIFIED CDN-edge (Bunny+Vary): emit the negotiable .webp base for any raster
+                        // CSS url() the image-set pass above missed (2nd+ url() of a multi-background,
+                        // mask-image, content:, cursor, etc.). The edge Vary-negotiates AVIF/WebP/JPEG, so
+                        // .webp is the one base; gif stays gif. Non-edge keeps the origin ext (never-404).
+                        $ext = strtolower($m[2]);
+                        // GIF to the zone ONLY on a CF-direct zone (no Bunny egress for an
+                        // un-optimizable CSS-background GIF); on a Bunny zone leave it on origin.
+                        if ($ext === 'gif' && !(class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery())) {
+                            return $m[0];
+                        }
+                        if ($css_bg_edge_webp && $ext !== 'gif') {
+                            return 'https://' . self::$zone_name . $m[1] . '.webp' . $m[3];
+                        }
+                        // host-swap to zone, KEEP the original extension (real file → 200).
+                        return 'https://' . self::$zone_name . $m[1] . '.' . $m[2] . $m[3];
+                    },
+                    $css_content
+                );
+                // Already-next-gen (webp/avif) uploads refs → same-ext natural (optimal).
+                $css_content = preg_replace(
+                    '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.(?:webp|avif)(?:\?[^"\'()\s<>]*)?)#i',
+                    'https://' . self::$zone_name . '$1',
+                    $css_content
+                );
+            }
+        }
+
+        // Naturalize the zone URLs in this written CSS file so a standalone stylesheet emits the
+        // SAME clean font URL as the inline/preload @font-face in the page HTML. The buffer-level
+        // naturalize only runs over HTML, never a separately-fetched CSS file's bytes — so without
+        // this the file ships the m:0/a: proxy form while the buffer ships natural, and the SAME
+        // woff2 downloads twice. Same natural_assets_on() gate as the buffer (and the |wpcfontnat
+        // cache-key marker above) so both surfaces stay in one mode and content/key changes coincide.
+        if ($wpc_fonts_cdn
+            && class_exists('wps_rewriteLogic')
+            && method_exists('wps_rewriteLogic', 'natural_assets_on')
+            && wps_rewriteLogic::natural_assets_on()) {
+            $css_content = wps_rewriteLogic::naturalize_asset_urls($css_content);
+        }
+
+        // ATOMIC, CHECKED, VERIFIED write. The hashed <link href> returned below is baked into the
+        // page-HTML cache and re-validated NOTHING at serve time, so a failed/partial/raced write
+        // would freeze a permanent 404 into cached HTML. Fix: write to a unique temp sibling (same
+        // dir → atomic rename, no torn file ever visible to a reader), CHECK real bytes landed,
+        // rename into the stable name (last-writer-wins), then EMIT-GUARD re-stat and only return
+        // the hashed URL when present & non-empty — else fall back to $src (always-200 original).
+        // The PUBLIC filename stays stable (<handle>-<hash>.css); only the .tmp rotates and is
+        // never referenced by HTML → no double-fetch, nothing re-minted per render.
+        $wpc_pid = function_exists('getmypid') ? getmypid() : 0;
+        $wpc_tmp_path = $new_filepath . '.' . $wpc_pid . '.' . substr(md5(uniqid('', true)), 0, 8) . '.tmp';
+        $wpc_bytes = @file_put_contents($wpc_tmp_path, $css_content);
+        if ($wpc_bytes === false || $wpc_bytes <= 0) {
+            if (file_exists($wpc_tmp_path)) {
+                @unlink($wpc_tmp_path);
+            }
+            // A racing writer may have already landed the real file — honor it.
+            if (file_exists($new_filepath) && @filesize($new_filepath) > 0) {
+                return WPS_IC_CSS_URL . '/' . $new_filename;
+            }
+            return $src;
+        }
+        if (!@rename($wpc_tmp_path, $new_filepath)) {
+            @unlink($wpc_tmp_path);
+            if (file_exists($new_filepath) && @filesize($new_filepath) > 0) {
+                return WPS_IC_CSS_URL . '/' . $new_filename;
+            }
+            return $src;
+        }
+
+        // Final emit-time guard: the backing file MUST be present & non-empty right now
+        // or we refuse to bake its hash into the (about-to-be-cached) HTML.
+        clearstatcache(true, $new_filepath);
+        if (!file_exists($new_filepath) || @filesize($new_filepath) <= 0) {
+            return $src;
+        }
 
         $new_url = WPS_IC_CSS_URL . '/' . $new_filename;
         return $new_url;
+    }
+
+    /**
+     * Shared @font-face → CDN-zone rewriter. Rewrites SAME-SITE @font-face
+     * font url() (woff2/woff/eot/ttf) to the zone using the same form as the combine path
+     * (m:0/a: passthrough; font:true/a: when $subsetting + non-icon). Scoped to @font-face blocks;
+     * icon-safe (family + URL); idempotent (skips URLs already on the zone); comments stripped so a
+     * stray '}' can't truncate the block matcher. Operates on ABSOLUTE url() only (callers resolve
+     * relatives first; relative inline url() is left untouched = safe). Returns $css unchanged when
+     * $zone is empty. Used by rewriteInlineFontFaces() (inline <style> @font-face — block themes);
+     * process_css_for_fonts() (external <link> CSS) keeps its own proven inline copy.
+     */
+    public static function rewrite_fontface_css($css, $zone, $subsetting, $site_host)
+    {
+        $zone = (string) $zone;
+        if ($zone === '' || strpos($css, '@font-face') === false) return $css;
+        $css = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\//', '', $css);
+        return preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($block) use ($subsetting, $site_host, $zone) {
+            $rule = $block[0];
+            $family_is_icon = false;
+            if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $rule, $fam)) {
+                if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', strtolower(trim($fam[1])))) {
+                    $family_is_icon = true;
+                }
+            }
+            return preg_replace_callback('/url\s*\(\s*(["\']?)(https?:[^"\')]+\.(?:woff2|woff|eot|ttf)(?:[?#][^"\')]*)?)\1\s*\)/i', function ($m) use ($subsetting, $site_host, $zone, $family_is_icon) {
+                $url = $m[2];
+                if (strpos($url, $zone) !== false) return $m[0];
+                $host = wp_parse_url($url, PHP_URL_HOST);
+                if (empty($host) || empty($site_host) || strcasecmp($host, $site_host) !== 0) return $m[0];
+                // PATH SCOPE: only zoneify fonts under /wp-content/. A same-site custom store path
+                // (e.g. /storage/) the CDN 302s cross-origin → CORS-blocked → font fails; same-origin
+                // under /wp-content/ is always safe (no redirect, no CORS net for fonts).
+                if (stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) return $m[0];
+                // Local-Fonts cache (self-host): leave on origin. The localized stylesheet is served as a
+                // static file with origin woff2 URLs, so zoneifying the inline copy would diverge — inline +
+                // preload land on the zone while the deferred .css stays origin → the browser binds the
+                // (origin) deferred face, double-fetches, and the zone preload is wasted (FOUT).
+                if (stripos($url, '/cache/wp-cio-fonts/') !== false) return $m[0];
+                $lower = strtolower($url);
+                $url_is_icon = (strpos($lower, 'icon') !== false || strpos($lower, 'awesome') !== false || strpos($lower, 'lightgallery') !== false || strpos($lower, 'gallery') !== false || strpos($lower, 'side-cart-woocommerce') !== false);
+                if ($subsetting && !$family_is_icon && !$url_is_icon) {
+                    $cdn = 'https://' . $zone . '/font:true/a:' . self::reformat_url($url);
+                } else {
+                    $cdn = 'https://' . $zone . '/m:0/a:' . self::reformat_url($url);
+                }
+                return 'url(' . $m[1] . $cdn . $m[1] . ')';
+            }, $rule);
+        }, $css);
     }
 
     public function preload_custom_assetsMobile($output = 'array', $html = '')
@@ -2988,7 +4250,7 @@ class wps_cdn_rewrite
         self::$lazy_enabled = 0;
         self::$adaptive_enabled = 0;
 
-        $regEx = '#(?<=[(\"\'])(?:' . $regExURL . ')?/(?:((?:' . $directories . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
+        $regEx = '#(?<=url\(|[\"\'])(?:' . $regExURL . ')?/(?:((?:' . $directories . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')])#';
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html, true);
 
         self::$lazy_enabled = $old_values['lazy'];
@@ -3081,6 +4343,30 @@ class wps_cdn_rewrite
             return print_r(['key' => $url_key, 'url' => $url, 'call' => $call], true);
         }
 
+        // Heal mixed content: upgrade same-host http://→https:// on an https request before any
+        // rewriter runs, so a proxy-misdetected core enqueue (is_ssl() false at the origin behind
+        // Cloudflare/WP Engine) can't leave blocked CSS/JS on the page. No-op when nothing to heal.
+        $html = wpc_heal_mixed_content($html);
+
+        // Negotiated delivery (COMPOSE, not bypass). When active, emit native .webp <img> tags here
+        // (each marked data-wpc-nd) and CONTINUE the pipeline so the CSS-bg / font / JS / critical /
+        // preload rewriters all still run. The legacy <img> rewriters skip data-wpc-nd tags, so each
+        // image is delivered exactly once. is_active_jpeg() is the Next-Gen-OFF clean-URL sibling:
+        // same gate, but emits natural .jpg URLs (no transforms/optimizer) instead of .webp. Either
+        // mode owns image delivery for the request; rewrite_buffer() picks the URL flavour internally.
+        if (class_exists('WPC_Negotiated_Delivery')
+            && (WPC_Negotiated_Delivery::is_active() || WPC_Negotiated_Delivery::is_active_jpeg())) {
+            $html = WPC_Negotiated_Delivery::rewrite_buffer($html);
+            // Negotiated owns image delivery this request → stand down the legacy <picture>
+            // builder (picture_webp). Negotiated <img> are marked data-wpc-nd and the
+            // replaceImageTagsDo path already skips them, but forcing pictureWebpEnabled off
+            // guarantees no <picture> wrap slips through. (WPC_Modern_Delivery is gated at its
+            // own dispatch near the return — both <picture> builders must defer to negotiated.)
+            if (class_exists('wps_rewriteLogic')) {
+                wps_rewriteLogic::$pictureWebpEnabled = false;
+            }
+        }
+
         self::$wpcPreloadLinks = [];
 
         $isUserLoggedIn = is_user_logged_in();
@@ -3154,7 +4440,12 @@ class wps_cdn_rewrite
         // TODO: Integration for other ajax loaders
         if (!empty($_POST['action'])) {
             // Find all URLs on page that have not been replaced
-            $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [self::$rewriteLogic, 'replaceImageTagsDoSlash'], $html);
+            // Images-master gate: replaceImageTagsDoSlash has no per-format gate and this branch
+            // early-returns BEFORE the master image gate below, so without this an Images-OFF site
+            // still transforms <img> on front-end POST/AJAX renders. CSS/JS/fonts unaffected.
+            if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+                $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [self::$rewriteLogic, 'replaceImageTagsDoSlash'], $html);
+            }
 
             return $html;
         }
@@ -3236,6 +4527,12 @@ class wps_cdn_rewrite
         // Replace Background
         if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == '1') {
             $html = self::$rewriteLogic->backgroundSizing($html);
+        } else {
+            // Elementor slideshow background images must reach the CDN even when Background-Sizing is
+            // OFF. The data-settings slideshow rewrite lives inside backgroundSizing() (gated above),
+            // so run ONLY the slideshow data-settings pass here (clean same-ext CDN URL = always 200)
+            // without the broader inline-CSS background:url() rewrite the operator left off.
+            $html = self::$rewriteLogic->backgroundSlideshowOnly($html);
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replaceImageTags') {
@@ -3302,7 +4599,12 @@ class wps_cdn_rewrite
         }
 
         // Replace <img> tags
-        $html = self::$rewriteLogic->replaceImageTags($html);
+        // Images-master gate. Images tile OFF ⇒ content-image CDN rewriting (<img> transforms +
+        // srcset + the <picture> webp/avif builder) stands down so images serve from origin (path
+        // A emits the origin <picture>). CSS/JS/font rewriting is a separate, unaffected pass.
+        if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+            $html = self::$rewriteLogic->replaceImageTags($html);
+        }
 
         // Restore protected <picture> blocks
         foreach ($wpcPictureBlocks as $i => $block) {
@@ -3313,19 +4615,51 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Find Logo and LCP
-        $foundLCP = $combine_css->preloadLCP($html);
-        if (!empty($foundLCP)) {
-            $preloadLCP = '';
-            foreach ($foundLCP as $i => $imageUrl) {
-                #$preloadLCP .= '<link rel="preload" href="'.$imageUrl.'" as="image">';
-            }
+        // Inline @font-face rewrite: applies font-display:swap (or the user setting) to inline
+        // <style> @font-face rules, which block themes emit and the external-CSS 'font-display'
+        // path silently missed. Uses the same findFontFace() icon-font detection. (The LCP-image
+        // and font preload passes that also fed the <head> placeholder are disabled just below.)
+        $html = $combine_css->rewriteInlineFontFaces($html);
 
-            $html = str_replace('<!--WPC_INSERT_PRELOAD_MAIN-->', $preloadLCP, $html);
-        }
+        // LCP <link rel=preload as=image> DISABLED: the hero is already eager via
+        // fetchpriority="high", so the preload is redundant; and its imagesrcset doesn't byte-match
+        // the <picture> source, so the browser can DOUBLE-FETCH the hero. Re-enable only after
+        // guaranteeing the preload imagesrcset is byte-identical to the source.
+        $preloadLCP = '';  // was: implode('', $combine_css->preloadLCP($html))
+
+        // Font preloading REVERTED: on throttled connections it saturates the pipe ahead of the LCP
+        // element (an LCP anti-pattern), and font-display:swap above already lets text paint with a
+        // fallback so fonts never need to block. Re-enable only behind an explicit fast-connection opt-in.
+        // $fontPreloadLinks = $combine_css->extractFontPreloadLinks($html);  // disabled
+        $preloadFonts = '';
+
+        $html = str_replace('<!--WPC_INSERT_PRELOAD_MAIN-->', $preloadLCP . $preloadFonts, $html);
 
         // Replace <picture> tags (both original restored ones and new wpc-picture ones)
-        $html = self::$rewriteLogic->replacePictureTags($html);
+        // Images-master gate: replaceSourceTags (inside) strips theme <source>/<img> srcset before
+        // the per-URL isImage gate, degrading a theme's own responsive <picture> when Images is OFF.
+        // Stand down entirely then (path A owns the origin <picture>).
+        if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+            $html = self::$rewriteLogic->replacePictureTags($html);
+        }
+
+        // Lazy cache-buster, applied ONCE here AFTER replacePictureTags (which rebuilds <source>
+        // srcsets, stripping any buster the picture builders added). ONLY when CDN lazy (smart) is
+        // on. Appends a per-request rotating "?v=" to NOT-YET-LANDED transform urls (those with
+        // "/q:i/") so the CDN re-checks origin until the native variant lands; landed/native urls
+        // (no "/q:i/") cache normally and the buster self-removes once @file_exists flips to the
+        // clean native url. Bunny keys its cache on the query string for these urls, so "?v=" busts.
+        if (function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled()) {
+            $lazy_v = substr(md5(microtime(true) . wp_rand(1, 9999999)), 0, 10);
+            $html = preg_replace_callback(
+                '#https?://[^\s"\',]*?/q:i/[^\s"\',]*#i',
+                function ($m) use ($lazy_v) {
+                    $u = $m[0];
+                    return $u . ((strpos($u, '?') !== false) ? '&' : '?') . 'v=' . $lazy_v;
+                },
+                $html
+            );
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'replaceImageTags3') {
             return $html;
@@ -3394,7 +4728,7 @@ class wps_cdn_rewrite
                         if (empty($criticalCSSExists)) {
                             $criticalRunning = $criticalCSS->criticalRunning();
                             if (!$criticalRunning) {
-                                set_transient('wpc_critical_ajax_' . md5($_SERVER['REQUEST_URI']), date('d.m.Y H:i:s'), 60 * 5);
+                                set_transient('wpc_critical_ajax_' . md5(wp_parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH)), date('d.m.Y H:i:s'), 60 * 5);
                                 $html = self::$rewriteLogic->runCriticalAjax($html);
                             }
                         }
@@ -3490,9 +4824,24 @@ class wps_cdn_rewrite
             $html = $metaData['html'];
         }
 
+        // Protect negotiated <img data-wpc-nd> from the page-wide cdn_rewrite_url passes below.
+        // Their src/srcset are already final zone-natural URLs, but the onerror fallback
+        // (data-wpc-fb) is an ORIGIN url that cdn_rewrite_url would rewrite into a transform —
+        // defeating the fallback's whole point (a non-edge origin file for when the edge fails).
+        // Stash now, restore after the URL passes.
+        $wpcnd_stash = [];
+        if (class_exists('WPC_Negotiated_Delivery')
+            && (WPC_Negotiated_Delivery::is_active() || WPC_Negotiated_Delivery::is_active_jpeg())) {
+            $html = preg_replace_callback('/<img\b[^>]*\bdata-wpc-nd\b[^>]*>/i', function ($m) use (&$wpcnd_stash) {
+                $k = '___WPCND_IMG_' . count($wpcnd_stash) . '___';
+                $wpcnd_stash[$k] = $m[0];
+                return $k;
+            }, $html);
+        }
+
 
         // Find all URLs on page that have not been replaced
-        $regEx = '#(?<=[(\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
+        $regEx = '#(?<=url\(|[\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
         //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
@@ -3522,6 +4871,11 @@ class wps_cdn_rewrite
             }, $decoded);
             return 'data-code="' . base64_encode($decoded) . '"';
         }, $html);
+
+        // Restore the stashed negotiated imgs (their data-wpc-fb origin fallback intact).
+        if (!empty($wpcnd_stash)) {
+            $html = strtr($html, $wpcnd_stash);
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'externalUrls') {
             return $html;
@@ -3710,11 +5064,72 @@ class wps_cdn_rewrite
             } else if (self::$settings['replace-fonts'] == 'bunny') {
                 // Bunny Fonts is a GDPR-compliant drop-in replacement for Google Fonts
                 $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
+                // Bunny serves font files at different paths than gstatic — a bare domain swap of
+                // font-file URLs (fonts.gstatic.com/s/...) produces 404s. Remove those <link> tags
+                // first, then swap the bare hostname on any remaining preconnect-only references.
+                $html = preg_replace('/<link\b[^>]*\bhref=["\']https?:\/\/fonts\.gstatic\.com\/[^"\']+["\'][^>]*>\s*/i', '', $html);
                 $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
             }
         }
         #}
 
+        // 7.01.0 — Modern Image Delivery post-process (BETA <picture> builder). Stands down when
+        // negotiated delivery is active for this request — they are mutually exclusive delivery
+        // strategies; negotiated (clean <img> + edge Accept-negotiation) wins and the <picture>
+        // builder must not re-wrap the negotiated tags back into <picture>.
+        if (class_exists('WPC_Modern_Delivery') && WPC_Modern_Delivery::is_active()
+            && !(class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active())) {
+            $html = WPC_Modern_Delivery::rewrite_buffer($html);
+        }
+
+        // Natural-URL assets: convert css/js/font m:/font: passthrough transform URLs
+        // to clean natural URLs on the cname (CDN-served + cached, no redirect hop). Image
+        // transforms untouched. Gated + inert by default (negotiated GA + filter).
+        if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::natural_assets_on()) {
+            $html = wps_rewriteLogic::naturalize_asset_urls($html);
+            // onerror->origin self-heal on the now-natural css/js (transport-failure floor:
+            // DNS/connection/TLS/5xx/abort, which <link>/<script> onerror DOES fire on; wrong-MIME-200
+            // is covered by the origin floor, not here). Inert on the origin floor.
+            $fb = self::add_asset_failover($html);
+            if (is_string($fb) && $fb !== '') $html = $fb;
+        }
+
+        return $html;
+    }
+
+    /**
+     * Regime-C onerror->origin self-heal. Decorates ONLY proven-natural css/js zone tags
+     * (no /a: transform marker) with a one-shot onerror that reverts the failed asset to the customer
+     * ORIGIN URL (different host → bypasses the CDN edge + any CF rule; the page already works from
+     * origin so it is always-valid). Catches the TRANSPORT-FAILURE class only (DNS/connection/TLS/5xx/
+     * abort) — the one class <link>/<script> onerror fires on; a wrong-MIME-200 does NOT fire onerror
+     * and is structurally covered by the origin floor (we never emit an unproven CDN css/js URL).
+     * One-shot + idempotent via data-wpc-fb (mirrors the image onerror pattern). Self-gated on
+     * natural_assets_on() so it is inert under KILL/CDN-off/unproven and on the origin floor.
+     */
+    public static function add_asset_failover($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name)) return $html;
+        if (!class_exists('wps_rewriteLogic') || !wps_rewriteLogic::natural_assets_on()) return $html;
+        $zoneHost = preg_replace('#/.*$#', '', (string) self::$zone_name);
+        $origin   = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        if ($origin === '' || strcasecmp((string) $zoneHost, (string) $origin) === 0) return $html; // never-loop
+        $zq = preg_quote((string) $zoneHost, '#');
+        // \s (whitespace) before href=/src=, NOT \b: a \b word boundary also matches
+        // data-href=/data-src= (hyphen is a boundary), which would wrongly decorate third-party
+        // lazy-deferral tags. \s requires a real attribute.
+        $css = preg_replace_callback('#<link\b(?=[^>]*\srel=["\']?stylesheet)(?![^>]*\sdata-wpc-fb)[^>]*\shref=["\']https://' . $zq . '(/[^"\']+?\.css[^"\']*)["\'][^>]*>#i', function ($m) use ($origin) {
+            if (strpos($m[0], '/a:') !== false) return $m[0]; // transform form (not natural) — skip
+            $o = 'https://' . $origin . $m[1];
+            return str_replace('<link', '<link data-wpc-fb="0" onerror="if(!this.dataset.wpcFb||this.dataset.wpcFb===\'0\'){this.dataset.wpcFb=1;this.href=\'' . esc_attr($o) . '\';}"', $m[0]);
+        }, $html);
+        if (is_string($css) && $css !== '') $html = $css; // preg failure → keep prior $html (never blank)
+        $js = preg_replace_callback('#<script\b(?![^>]*\sdata-wpc-fb)[^>]*\ssrc=["\']https://' . $zq . '(/[^"\']+?\.js[^"\']*)["\'][^>]*></script>#i', function ($m) use ($origin) {
+            if (strpos($m[0], '/a:') !== false) return $m[0];
+            $o = 'https://' . $origin . $m[1];
+            return str_replace('<script', '<script data-wpc-fb="0" onerror="if(!this.dataset.wpcFb||this.dataset.wpcFb===\'0\'){this.dataset.wpcFb=1;var s=document.createElement(\'script\');s.src=\'' . esc_attr($o) . '\';this.parentNode.insertBefore(s,this.nextSibling);}"', $m[0]);
+        }, $html);
+        if (is_string($js) && $js !== '') $html = $js;
         return $html;
     }
 
@@ -3833,6 +5248,31 @@ class wps_cdn_rewrite
         return ['html' => $html, 'store' => $metaTagsStore];
     }
 
+    // CF-DIRECT zone = the emit host IS the customer's configured Cloudflare CNAME (not a Bunny
+    // zone). A CF-direct edge is a plain cache: no OTF resize, no Accept negotiation. So a .webp
+    // source is delivered as its clean natural URL (the source file itself, never 404) instead of a
+    // /q:i/wp:N/ transform. Distinct from zone_is_cf(), which trips on the CF-RAY header and
+    // false-positives a CF-fronted Bunny origin.
+    public static function wpc_zone_is_cf_direct()
+    {
+        if (!function_exists('get_option') || !defined('WPS_IC_CF_CNAME')) {
+            return false;
+        }
+        $cname = trim((string) get_option(WPS_IC_CF_CNAME, ''));
+        return ($cname !== '' && stripos((string) self::$zone_name, $cname) !== false);
+    }
+
+    // WEBP-ORIGIN NATURAL PASS-THROUGH for the dimensionless paths (plain <img>/srcset + CSS
+    // backgrounds) that carry no per-image W×H. A .webp SOURCE's natural zone URL is the source file
+    // itself → never-404, no /q: transform, CF-cacheable static (a Bunny edge negotiates it up to
+    // avif). It's full-size (the edge OTF-resizes only by -WxH suffix, and these tags have no dims),
+    // a clean-URL-over-resize choice → opt-in, default OFF. Raster keeps /q: (full original too large).
+    public static function wpc_webp_origin_natural()
+    {
+        $opt = function_exists('get_option') ? get_option('wpc_webp_origin_natural', 0) : 0;
+        return (bool) apply_filters('wpc_webp_origin_natural', !empty($opt));
+    }
+
     public function cdn_rewrite_url($url, $addslashes = false)
     {
         $width = 1;
@@ -3858,6 +5298,15 @@ class wps_cdn_rewrite
         }
 
         if (strpos($url, 'spinner.svg') !== false || strpos($url, 'gform_ajax_spinner') !== false) {
+            return $this->maybe_slash($url, $addslashes);
+        }
+
+        // GIF never rides the Bunny zone — it gains nothing from a /q:i/wp:N/ transform, so serving it
+        // off the zone is pure WPC egress. This is the central img-src + srcset transform chokepoint.
+        // Allowed only on a true CF-direct zone (customer's own bandwidth) via cf_is_delivery() — NOT
+        // zone_is_cf(), which trips on the CF-RAY header even when delivery is actually Bunny.
+        if (preg_match('/\.gif(\?|#|\s|$)/i', $url)
+            && !(class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery())) {
             return $this->maybe_slash($url, $addslashes);
         }
 
@@ -3901,6 +5350,10 @@ class wps_cdn_rewrite
 
                 if (self::is_excluded_link($srcset_url) || self::is_excluded($srcset_url, $srcset_url)) {
                     $newSrcSet .= $srcset_url . ' ' . $srcset_width . ',';
+                } elseif (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+                    // Images-master gate: Images tile OFF ⇒ leave srcset entries at origin (no
+                    // /q:i/wp:N/ transform). Mirrors the single-URL serve gates.
+                    $newSrcSet .= $srcset_url . ' ' . $srcset_width . ',';
                 } else {
                     if (strpos($srcset_width, 'x') !== false) {
                         $width_url = 1;
@@ -3922,7 +5375,15 @@ class wps_cdn_rewrite
                         $srcsetWidthExtension = $srcset_width . $extension;
                     }
 
-                    $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:1/u:' . self::reformat_url($srcset_url) . ' ' . $srcsetWidthExtension . ',';
+                    // webp-origin natural pass-through: a webp srcset entry becomes its clean natural
+                    // URL (-WxH stripped to the full source). See the single-src .webp branch below.
+                    if (strpos($srcset_url, '.webp') !== false && self::wpc_webp_origin_natural()) {
+                        $webp_nat_ss = preg_replace('/-\d+x\d+(\.webp)$/i', '$1', $srcset_url);
+                        $webp_nat_ss = preg_replace('#^https?://[^/]+#', 'https://' . self::$zone_name, $webp_nat_ss);
+                        $newSrcSet .= $webp_nat_ss . ' ' . $srcsetWidthExtension . ',';
+                    } else {
+                        $newSrcSet .= self::$apiUrl . '/r:' . self::$is_retina . '/wp:' . self::$webp . '/w:1/u:' . self::reformat_url($srcset_url) . ' ' . $srcsetWidthExtension . ',';
+                    }
                 }
             }
 
@@ -3969,6 +5430,12 @@ class wps_cdn_rewrite
                 }
 
                 if (strpos($url, '.css') !== false && self::$css == '1') {
+                    // Local-Fonts cache stylesheet (wp-cio-fonts/{hash}.css): keep on natural origin so its
+                    // @font-face URLs match the inline/preload set. Latent today (replaceFrontend injects it
+                    // after this sweep) but guarded so a future reorder can't split font URLs across hosts.
+                    if (stripos($url, '/cache/wp-cio-fonts/') !== false) {
+                        return $this->maybe_slash($url, $addslashes);
+                    }
                     $fileMinify = self::$css_minify;
 
                     if (self::isExcluded('css_minify', $url)) {
@@ -3985,7 +5452,7 @@ class wps_cdn_rewrite
                     $newUrl = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($url);
 
                     return $newUrl;
-                } elseif (strpos($url, '.js') !== false && self::$js == '1') {
+                } elseif (preg_match('/\.js(?:[?#]|$)/i', $url) && self::$js == '1') {
                     $fileMinify = self::$js_minify;
                     if (self::isExcluded('js_minify', $url)) {
                         $fileMinify = '0';
@@ -4024,8 +5491,22 @@ class wps_cdn_rewrite
                     return $newUrl;
                 } elseif (self::$fonts == 1 && (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false)) {
                     /**
-                     * JS File
+                     * Font file
                      */
+                    // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep the natural origin URL. The crit
+                    // inline @font-face + preload are injected by addCritical AFTER rewrite_fontface_css runs,
+                    // so THIS generic sweep is the only pass that can keep them natural. They must match the
+                    // deferred localized .css (origin) so each font is declared at one URL → fetched once,
+                    // preloaded once, no double-load, no FOUT (crit-on === crit-off).
+                    if (stripos($url, '/cache/wp-cio-fonts/') !== false) {
+                        return $this->maybe_slash($url, $addslashes);
+                    }
+                    // PATH SCOPE: leave same-site custom-path (e.g. /storage/) fonts on origin — the
+                    // CDN 302s them cross-origin → CORS-blocked. This branch is already same-site-gated,
+                    // so only the /wp-content/ check is needed (latent path, guarded anyway).
+                    if (stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) {
+                        return $this->maybe_slash($url, $addslashes);
+                    }
                     if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
                         if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
                             $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
@@ -4080,7 +5561,21 @@ class wps_cdn_rewrite
                 }
 
                 if (strpos($url, '.webp') !== false) {
+                    // Images-master gate: Images tile OFF ⇒ serve the origin .webp, never a
+                    // /q:i/wp:N/ transform.
+                    if (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+                        return self::reformat_url($url, false);
+                    }
                     if (!self::is_excluded($url, $url)) {
+                        // webp-ORIGIN natural pass-through (dimensionless path): the source file itself
+                        // → never-404, clean, CF-cacheable (Bunny negotiates avif). Strip any -WxH to the
+                        // always-present full original (a sub-size may not exist on offloaded /storage).
+                        // Opt-in (default OFF). Raster (jpg/png branch above) keeps /q: — too big natural.
+                        if (self::wpc_webp_origin_natural()) {
+                            $webp_nat = preg_replace('/-\d+x\d+(\.webp)$/i', '$1', $url);
+                            $webp_nat = preg_replace('#^https?://[^/]+#', 'https://' . self::$zone_name, $webp_nat);
+                            return $this->maybe_slash($webp_nat, $addslashes);
+                        }
                         $webp = '/wp:' . self::$webp;
                         if (self::isExcludedFrom('webp', $url)) {
                             $webp = '/wp:0';
@@ -4948,7 +6443,12 @@ JS;
         if (!file_exists($image_path)) {
             return $image[0];
         } else {
-            if (self::$webp == 'true' || self::$webp == '1') {
+            // The bare webp src-swap must respect the Next-Gen ceiling: when Next-Gen=Off the
+            // visitor gets plain jpg/png even if a .webp is on disk, else "Next-Gen Off" would
+            // silently keep serving webp via <img src>. (The <picture> path is gated separately.)
+            $wpc_ng_ceiling = class_exists('WPC_Delivery_Resolver')
+                ? WPC_Delivery_Resolver::effective_ceiling(self::$settings) : 'avif';
+            if ($wpc_ng_ceiling !== 'off' && (self::$webp == 'true' || self::$webp == '1')) {
                 // Check if WebP Exists in PATH?
                 $webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $image_path);
 
@@ -5107,7 +6607,14 @@ JS;
         $finalTag = '<img ' . $image_tag . ' />';
 
         // Wrap in <picture> for bulletproof WebP delivery (local mode)
-        if (self::$rewriteLogic::$pictureWebpEnabled && $webP !== false) {
+        // Gate the WHOLE local (CDN-OFF) <picture> (webp + avif sources) on the Next-Gen ceiling.
+        // The bare <img src> swap above was already gated, but this <picture> builder was NOT, so a
+        // Next-Gen=OFF site still emitted <source type="image/webp"> and the browser picked WebP
+        // over the jpg <img>. pictureWebpEnabled is only ceiling-gated in the CDN-buffer setup,
+        // which doesn't run on the CDN-OFF render path, so it is stale-true here — hence this gate.
+        $wpc_pic_ceiling = class_exists('WPC_Delivery_Resolver')
+            ? WPC_Delivery_Resolver::effective_ceiling(self::$settings) : 'avif';
+        if (self::$rewriteLogic::$pictureWebpEnabled && $webP !== false && $wpc_pic_ceiling !== 'off') {
             $lowerSrc = strtolower($original_img_tag['original_src']);
             $skipFormats = (strpos($lowerSrc, '.svg') !== false || strpos($lowerSrc, '.gif') !== false || strpos($lowerSrc, '.ico') !== false || strpos($lowerSrc, '.webp') !== false);
 
@@ -5130,13 +6637,43 @@ JS;
                     $sourceSizes = ' sizes="' . $szMatch[1] . '"';
                 }
 
-                // AVIF source — only if local .avif file exists
+                // AVIF source — LOCAL (CDN-off) path: emit ONLY when the .avif exists on disk. No
+                // optimistic emission here: with CDN delivery OFF there is NO edge to intercept the
+                // 404, and <picture> <source> selection is terminal — an AVIF-capable browser does
+                // NOT fall back to the webp <source>, it renders a BROKEN image (and lazy_cdn can
+                // never land the variant). Only offer AVIF the browser can actually load; the webp
+                // <source> and the <img> jpeg are the safe fallbacks.
                 $avifSource = '';
                 if (self::$rewriteLogic::$pictureAvifEnabled) {
-                    $avifPath = str_replace(['.webp', '.jpeg', '.jpg', '.png'], '.avif', $image_path);
-                    if (file_exists($avifPath)) {
-                        $avifSrcset = str_replace('.webp', '.avif', $sourceSrcset);
-                        $avifSource = '<source' . $avifSrcset . $sourceSizes . ' type="image/avif">';
+                    // Derive the .avif disk path from a STABLE absolute base (the original src), NOT
+                    // the loop-mutated $image_path: the srcset loop above reassigns $image_path to a
+                    // RELATIVE last-entry path, so a fixed `ABSPATH .` prepend DOUBLED ABSPATH for the
+                    // no-srcset branch → file_exists() always false → AVIF <source> silently dropped.
+                    $avifBaseUrl  = preg_replace('/\?.*$/', '', (string) $original_img_tag['original_src']);
+                    $avifBaseRel  = preg_replace('#^(?:https?:)?//[^/]+#', '', $avifBaseUrl); // strip scheme+host if present
+                    $avifMainPath = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', ABSPATH . ltrim($avifBaseRel, '/'));
+                    if (@file_exists($avifMainPath)) {
+                        // Build the AVIF srcset PER-ENTRY from the ORIGINAL (jpg) srcset, swapping each
+                        // to .avif ONLY where the .avif sibling exists on disk — NOT str_replace(
+                        // '.webp','.avif',$sourceSrcset), which leaves .jpg gap-fill entries (widths
+                        // where .webp was missing) unswapped → malformed avif <source>.
+                        $avifEntries = [];
+                        if (!empty($original_img_tag['srcset'])) {
+                            foreach (explode(',', (string) $original_img_tag['srcset']) as $ent) {
+                                $ent = trim($ent);
+                                if ($ent === '' || !preg_match('/^(\S+)(\s+\S+)?$/', $ent, $em)) continue;
+                                $eAvifUrl = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', preg_replace('/\?.*$/', '', $em[1]));
+                                $eRel     = preg_replace('#^(?:https?:)?//[^/]+#', '', $eAvifUrl);
+                                if (@file_exists(ABSPATH . ltrim($eRel, '/'))) {
+                                    $avifEntries[] = $eAvifUrl . (isset($em[2]) ? $em[2] : '');
+                                }
+                            }
+                        }
+                        if (empty($avifEntries)) {
+                            // No srcset (single image) — emit just the main .avif URL.
+                            $avifEntries[] = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $avifBaseUrl);
+                        }
+                        $avifSource = '<source ' . $srcsetKey . '="' . implode(', ', $avifEntries) . '"' . $sourceSizes . ' type="image/avif">';
                     }
                 }
 

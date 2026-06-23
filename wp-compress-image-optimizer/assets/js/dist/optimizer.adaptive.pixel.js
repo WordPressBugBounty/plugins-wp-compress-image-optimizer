@@ -78,8 +78,8 @@ if (n489D_vars.linkPreload === 'true') {
 }
 function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
     if (imgWidth > 0 && !imageElement.classList.contains('wpc-excluded-adaptive')) {
-        if (imgWidth > 1100) {
-            imgWidth = 1100;
+        if (imgWidth > 2560) {
+            imgWidth = 2560;
         }
         newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:' + imgWidth);
     }
@@ -298,6 +298,16 @@ function runAdaptive() {
             adaptiveImage.src = newApiURL;
             if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
+            }
+
+            // Handle <picture> <source> lazy loading — promote lazy AVIF/WebP <source data-srcset>
+            // so the browser self-selects once (no eager pre-fetch + runLazy re-fetch). Mirrors local/lazy.js.
+            var parentPicture = adaptiveImage.closest('picture');
+            if (parentPicture) {
+                parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
+                    s.srcset = s.dataset.srcset;
+                    s.removeAttribute('data-srcset');
+                });
             }
         } else if (typeof adaptiveImage.src !== 'undefined' && adaptiveImage.src != '') {
             newApiURL = adaptiveImage.src;

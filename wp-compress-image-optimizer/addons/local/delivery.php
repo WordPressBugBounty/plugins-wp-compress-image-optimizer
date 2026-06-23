@@ -492,6 +492,8 @@ class wpc_ic_delivery
 
             //update_post_meta($imageID, 'ic_compress_stats', $stats);
             update_post_meta($imageID, 'ic_status', 'compressed');
+            // v7.01.22 (F1) — refresh the path-A optimized-ids cache (see wp-compress-core.php).
+            if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
             update_post_meta($imageID, 'ic_stats', $stats);
 
             // Delete queue

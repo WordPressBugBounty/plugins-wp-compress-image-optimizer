@@ -72,9 +72,24 @@ class wps_ic_media_library_live extends wps_ic
         self::$allowed_types = ['jpg' => 'jpg', 'jpeg' => 'jpeg', 'gif' => 'gif', 'png' => 'png'];
 
 
-        add_filter('media_row_actions', [$this, 'add_exclude_link'], 10, 2);
-        if (!empty(self::$settings['local']['media-library']) && self::$settings['local']['media-library'] == '1') {
+        // Decouple the Optimization column + per-image actions from the
+        // "Show in Media Library" (settings['local']['media-library']) display toggle. Optimizing is
+        // a core capability: you should always be able to optimize/restore an image from the media
+        // library regardless of a display preference, and enable it right there. So the column +
+        // actions register whenever WPC isn't hard-hidden (the hide_compress kill-switch below),
+        // not only when the display toggle is on. Filterable escape hatch (wpc_media_library_optimize)
+        // for any managed site that genuinely needs to suppress it. The media-library display toggle
+        // continues to govern only the other WPC admin UI registered elsewhere.
+        if (apply_filters('wpc_media_library_optimize', true)) {
             if (empty(self::$options['hide_compress']) || self::$options['hide_compress'] == '') {
+
+                // Per-image Exclude/Include row action — registered INSIDE the same gate as the column (the
+                // wpc_media_library_optimize filter + hide_compress kill-switch) instead of unconditionally in
+                // the constructor, so the kill-switches govern it consistently. It stays decoupled from the
+                // "Show in Media Library" display toggle by design: excluding an image from optimization is a
+                // core capability, not a display preference, so gating it by that toggle would remove
+                // deliberate functionality (it's suppressible via the filter/kill-switch above when needed).
+                add_filter('media_row_actions', [$this, 'add_exclude_link'], 10, 2);
 
                 // WP Custom Fields
                 #add_action('attachment_submitbox_misc_actions', array($this, 'wps_custom_media_fields'), PHP_INT_MAX);
@@ -96,8 +111,7 @@ class wps_ic_media_library_live extends wps_ic
                 }
                 add_action('restrict_manage_posts', [$this, 'add_wps_ic_filters']);
                 wp_enqueue_script('wps-ic-filters', WPS_IC_URI . '/assets/js/admin/media-filters.min.js', ['media-editor', 'media-views']);
-                $plugin_name = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
-                wp_localize_script('wps-ic-filters', 'WpsIcFilters', ['filters' => $this->get_filters(), 'filter_all' => $plugin_name . ' ' . __('Filters', WPS_IC_TEXTDOMAIN)]);
+                wp_localize_script('wps-ic-filters', 'WpsIcFilters', ['filters' => $this->get_filters(), 'filter_all' => __('Optimization Filters', WPS_IC_TEXTDOMAIN)]);
                 add_filter('ajax_query_attachments_args', [$this, 'do_wps_ic_ajax_filters']);
 
                 // Bulk actions disabled — queue processor not yet implemented
@@ -428,7 +442,7 @@ class wps_ic_media_library_live extends wps_ic
         }
         ?>
         <select id="wps-ic-filters" name="wps-ic-filters" class="attachment-filters">
-            <option value="all"><?php echo esc_html((function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : 'WP Compress') . ' ' . __('Filters', WPS_IC_TEXTDOMAIN)); ?></option>
+            <option value="all"><?php echo esc_html__('Optimization Filters', WPS_IC_TEXTDOMAIN); ?></option>
             <?php foreach ($this->get_filters() as $key => $value) { ?>
                 <option value="<?php echo esc_attr($key); ?>" <?php selected($filter, $key); ?>>
                     <?php echo esc_html($value); ?>
@@ -453,11 +467,11 @@ class wps_ic_media_library_live extends wps_ic
             return $query;
         }
 
+        $supported_mimes = ['image/jpeg', 'image/png', 'image/gif'];
+
         switch ($filter) {
             case 'uncompressed':
-                $query->set('meta_key', 'ic_stats');
-                $query->set('meta_compare', 'NOT EXISTS');
-
+                $query->set('post_mime_type', $supported_mimes);
                 $query->set('meta_query', ['relation' => 'OR', ['key' => 'ic_status', 'value' => 'restored', 'compare' => '='], ['key' => 'ic_status', 'compare' => 'Not Exists'],]);
                 break;
 
@@ -493,6 +507,7 @@ class wps_ic_media_library_live extends wps_ic
         $filter = sanitize_title(wp_unslash($_POST['query']['wps_ic_filters_ajax']));
         switch ($filter) {
             case 'uncompressed':
+                $query['post_mime_type'] = ['image/jpeg', 'image/png', 'image/gif'];
                 if (!isset($query['meta_query'])) {
                     $query['meta_query'] = [];
                 }
@@ -780,6 +795,16 @@ class wps_ic_media_library_live extends wps_ic
         $output = '';
         $stats = get_post_meta($imageID, 'ic_stats', true);
 
+        // Removed the earlier visual "Restoring..." gate that locked the card
+        // until _wpc_pending_thumb_regen cleared. Side effect: when the card was rendered
+        // mid-regen, it shipped to the JS as "Restoring..." HTML and could stay stuck if
+        // the next heartbeat tick happened to miss the regen-completion transient.
+        //
+        // The gate's underlying concern (user clicks Compress before regen done, sends
+        // incomplete filenames JSON to the service) is now handled action-side:
+        // wps_ic_compress_live calls wait_for_regen_or_clear_stale() before kicking the
+        // service request. Visual state is decoupled from action gating.
+
         $isBulkCompressRunning = false;
         $isBulkRestoreRunning = false;
         $bulkIsrunning = get_option('wps_ic_bulk_process');
@@ -820,10 +845,113 @@ class wps_ic_media_library_live extends wps_ic
             }
         }
 
-        if ($imageStatus || ($isBulkCompressRunning && empty($stats)) || ($isBulkRestoreRunning && !empty($stats) && empty(self::$parsedImages[$imageID]))) {
-            $output .= '<div class="wpc-ml-card is-compressing">';
+        // Post-restore regen-pending detection. After wps_ic_restore_live
+        // completes, the disk has the original bytes back but WP's sub-size
+        // thumbnails (300x300, medium_large, etc.) still need to be regenerated
+        // by wpc_regen_thumbs_hook running async in a separate worker. Until
+        // that finishes, clicking Compress would re-encode against stale
+        // sub-sizes. The Uncompressed render below uses this flag to render
+        // a disabled Compress button + tooltip: eager visual flip without
+        // exposing a footgun.
+        $ic_status_for_regen = get_post_meta($imageID, 'ic_status', true);
+        $regen_still_pending = !empty(get_post_meta($imageID, '_wpc_pending_thumb_regen', true));
+        $post_restore_regen_pending = ($ic_status_for_regen === 'restored' && $regen_still_pending);
+
+        // Skip the bulk-running Optimizing flip if this image is
+        // already compressed. The original condition flipped every card with
+        // empty $stats (legacy v1 meta key) into Optimizing whenever any bulk
+        // was running, but v2-compressed images store their data in
+        // ic_local_variants, not ic_stats. So already-compressed v2 images
+        // had empty $stats and got mass-flipped to "Optimizing 0J 0W 0A"
+        // during bulk runs even when their meta clearly said compressed.
+        // Trust ic_status here: if it says compressed, this image isn't part
+        // of the bulk pipeline (the queue filter excludes ic_status=compressed).
+        //
+        // Also accept ic_compressing.status='compressed' as proof
+        // of compression. eager_flip (in pull-manifest direct-entry) flips
+        // ic_compressing.status the instant the first Phase B variant lands,
+        // but ic_status only flips when Phase A's promote_to_compressed runs
+        // (potentially 10-30s later, or not at all if Phase A fails). For
+        // images whose variants land via pull before Phase A returns,
+        // ic_status stays empty so the old check said "not compressed" and ML
+        // refresh during bulk rendered "Optimizing 0J 0W 0A" forever even
+        // with 24 variants on disk. Trust either signal.
+        $ic_status_actual = get_post_meta($imageID, 'ic_status', true);
+        $ic_compressing_status = is_array($compressing) ? ($compressing['status'] ?? '') : '';
+        $is_already_compressed = ($ic_status_actual === 'compressed' || $ic_compressing_status === 'compressed');
+
+        // Exclusion is explicit user intent and must win over a stale
+        // "Optimizing" flip. An excluded image caught in a bulk run (isBulkCompressRunning
+        // + empty $stats), or one left with a lingering wps_ic_compress_ transient or
+        // ic_compressing.status='optimizing' from a dispatch that fired before the user
+        // excluded it, used to render "Optimizing 0J 0W 0A" forever: the loading branch
+        // just below returns at line ~902, so the Excluded render down in the not-compressed
+        // else-block (~985) was never reached. Check exclusion here, ahead of the loading
+        // state, and clear the stale loading signals so it can't re-trip. Only when not
+        // actually compressed: a compressed image keeps its Compressed card + Restore action.
+        if (!$is_already_compressed && get_post_meta($imageID, 'wps_ic_exclude_live', true) == 'true') {
+            // Unstick: drop any loading transient / optimizing meta that would otherwise
+            // keep flipping this excluded image back to Optimizing on the next refresh.
+            if ($imageStatus) {
+                delete_transient('wps_ic_compress_' . $imageID);
+                delete_transient('wps_ic_queue_' . $imageID);
+            }
+            if ($ic_compressing_status === 'optimizing' || $ic_compressing_status === 'queueing') {
+                delete_post_meta($imageID, 'ic_compressing');
+            }
+
+            // (No global clearstatcache here — an excluded image isn't being
+            // written during render, so the cached filesize is accurate, and a
+            // full realpath-cache flush per card is wasteful on excluded-heavy grids.)
+            $ex_filedata = get_attached_file($imageID);
+            $ex_origpath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
+            $ex_scaled   = ($ex_filedata && file_exists($ex_filedata)) ? filesize($ex_filedata) : 0;
+            $ex_orig     = ($ex_origpath && file_exists($ex_origpath)) ? filesize($ex_origpath) : 0;
+            $ex_filesize = wps_ic_format_bytes(max($ex_scaled, $ex_orig), null, null, false);
+
+            $output .= '<div class="wpc-ml-card wpc-ml-card--excluded is-excluded">';
             $output .= self::icon_stack();
-            $output .= '<div class="wpc-ml-body"><div class="fade-in-up"><div class="wpc-ml-title">' . esc_html__('Optimizing', 'wp-compress-image-optimizer') . '</div><div class="wpc-skeleton"><div class="wpc-skeleton-bar w-long"></div><div class="wpc-skeleton-bar w-short"></div></div></div></div>';
+            $output .= '<div class="wpc-ml-body">';
+            $output .= '<div class="wpc-ml-title">' . esc_html__('Excluded', 'wp-compress-image-optimizer') . '</div>';
+            $output .= '<div class="wpc-ml-subtitle">' . $ex_filesize . '<a class="wpc-ml-action wps-ic-exclude-live" data-action="include" data-attachment_id="' . $imageID . '">' . self::svg_plus() . ' ' . esc_html__('Include', 'wp-compress-image-optimizer') . '</a></div>';
+            $output .= '</div>';
+            $output .= '</div>';
+            return $output;
+        }
+
+        if (!$is_already_compressed && ($imageStatus || ($isBulkCompressRunning && empty($stats)) || ($isBulkRestoreRunning && !empty($stats) && empty(self::$parsedImages[$imageID])))) {
+            // Distinguish restoring vs compressing so refresh during either action
+            // renders the correct animation state (wps_ic_restore_live sets status=restoring).
+            $is_restoring = (is_array($imageStatus) && isset($imageStatus['status']) && $imageStatus['status'] === 'restoring')
+                || $isBulkRestoreRunning;
+            $css_class = $is_restoring ? 'is-restoring' : 'is-compressing';
+            $label     = $is_restoring ? esc_html__('Restoring', 'wp-compress-image-optimizer') : esc_html__('Optimizing', 'wp-compress-image-optimizer');
+
+            // Pre-render the variant-count chip inside the Optimizing
+            // card too (initial state 0/0/0/0). SSE updates this chip element
+            // directly via DOM as Phase B callbacks land, so the user sees the
+            // count climb from 1, 2, 3… during the Optimizing phase, not
+            // waiting for the heartbeat-driven card swap to expose the chip.
+            // Once status flips to compressed, the heartbeat swaps the whole
+            // card to the Compressed template (which has its own identical
+            // chip), and the SSE event continues seamlessly.
+            $output .= '<div class="wpc-ml-card ' . $css_class . '">';
+            $output .= self::icon_stack();
+            $output .= '<div class="wpc-ml-body"><div class="fade-in-up"><div class="wpc-ml-title">' . $label . '</div><div class="wpc-skeleton"><div class="wpc-skeleton-bar w-long"></div><div class="wpc-skeleton-bar w-short"></div></div>';
+            if (!$is_restoring) {
+                $output .=
+                    '<div class="wpc-variant-count-chip-row" style="margin-top:6px;line-height:1;">' .
+                    '<span class="wpc-variant-count-chip" style="display:inline-flex;align-items:center;gap:4px;' .
+                    'padding:2px 7px;border-radius:9px;background:rgba(120,120,140,0.12);' .
+                    'font-size:10px;font-weight:600;letter-spacing:.2px;color:#445;">' .
+                    '<span style="opacity:.95;">0</span>' .
+                    '<span style="opacity:.35;margin:0 1px;">·</span>' .
+                    '<span style="color:#888;">0J</span>' .
+                    '<span style="color:#0aa56b;">0W</span>' .
+                    '<span style="color:#7c4ddc;">0A</span>' .
+                    '</span></div>';
+            }
+            $output .= '</div></div>';
             $output .= '</div>';
             return $output;
         }
@@ -849,15 +977,52 @@ class wps_ic_media_library_live extends wps_ic
                 }
             }
 
+            // Live variant-count chip for production testing. Shows total
+            // variants in ic_local_variants plus per-format breakdown (J/W/A). Always
+            // visible. Renders as its own row BELOW the Details/Restore subtitle so it
+            // doesn't crowd the headline savings %. Inline-styled so it ships without a
+            // LESS recompile. Easy to hide later via:
+            //   .wpc-variant-count-chip-row { display: none !important; }
+            $variant_chip_row = '';
+            $vc_variants = get_post_meta($imageID, 'ic_local_variants', true);
+            if (is_array($vc_variants) && !empty($vc_variants)) {
+                $vc_total = 0; $vc_jpeg = 0; $vc_webp = 0; $vc_avif = 0;
+                foreach ($vc_variants as $vc_key => $vc_entry) {
+                    $vc_total++;
+                    if (strpos($vc_key, '-avif') !== false)      $vc_avif++;
+                    elseif (strpos($vc_key, '-webp') !== false)  $vc_webp++;
+                    elseif (strpos($vc_key, '-png') !== false)   { /* skip from chip */ }
+                    else                                          $vc_jpeg++;
+                }
+                $vc_title = sprintf('%d JPEG · %d WebP · %d AVIF · %d total',
+                    $vc_jpeg, $vc_webp, $vc_avif, $vc_total);
+                $variant_chip_row =
+                    '<div class="wpc-variant-count-chip-row"' .
+                    ' style="margin-top:6px;line-height:1;">' .
+                    '<span class="wpc-variant-count-chip" title="' . esc_attr($vc_title) . '"' .
+                    ' style="display:inline-flex;align-items:center;gap:4px;' .
+                    'padding:2px 7px;border-radius:9px;background:rgba(120,120,140,0.12);' .
+                    'font-size:10px;font-weight:600;letter-spacing:.2px;color:#445;">' .
+                    '<span style="opacity:.95;">' . (int) $vc_total . '</span>' .
+                    '<span style="opacity:.35;margin:0 1px;">·</span>' .
+                    '<span style="color:#888;">' . (int) $vc_jpeg . 'J</span>' .
+                    '<span style="color:#0aa56b;">' . (int) $vc_webp . 'W</span>' .
+                    '<span style="color:#7c4ddc;">' . (int) $vc_avif . 'A</span>' .
+                    '</span>' .
+                    '</div>';
+            }
+
             $output .= '<div class="wpc-ml-card wpc-ml-card--compressed">';
             $output .= self::icon_stack();
             $output .= '<div class="wpc-ml-body">';
             if ($saved_bytes > 0) {
                 $output .= '<div class="wpc-ml-title">' . $savings_percent . '% ' . esc_html__('Saved', 'wp-compress-image-optimizer') . '</div>';
                 $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wpc-stats-trigger" data-attachment_id="' . $imageID . '">' . self::svg_chart() . ' ' . esc_html__('Details', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-restore-live" data-attachment_id="' . $imageID . '">' . self::svg_undo() . ' ' . esc_html__('Restore', 'wp-compress-image-optimizer') . '</a></div>';
+                $output .= $variant_chip_row;
             } else {
                 $output .= '<div class="wpc-ml-title">' . esc_html__('Compressed', 'wp-compress-image-optimizer') . '</div>';
                 $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wpc-stats-trigger" data-attachment_id="' . $imageID . '">' . self::svg_chart() . ' ' . esc_html__('Details', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-restore-live" data-attachment_id="' . $imageID . '">' . self::svg_undo() . ' ' . esc_html__('Restore', 'wp-compress-image-optimizer') . '</a></div>';
+                $output .= $variant_chip_row;
             }
             $output .= '</div>';
             $output .= '</div>';
@@ -880,11 +1045,56 @@ class wps_ic_media_library_live extends wps_ic
                 $output .= '</div>';
                 $output .= '</div>';
             } else {
-                $output .= '<div class="wpc-ml-card wpc-ml-card--uncompressed">';
+                // In lazy_* modes the per-image Compress button is repurposed
+                // to "Pre-warm now" so customers can opt to encode a specific image
+                // synchronously rather than wait for its first front-end view. Manual
+                // mode keeps "Compress" since that's the only way to encode at all.
+                // Legacy mode is unchanged.
+                $compress_label = esc_html__('Compress', 'wp-compress-image-optimizer');
+                $compress_title = '';
+                if (function_exists('wpc_lazy_mode_active') && wpc_lazy_mode_active()) {
+                    $compress_label = esc_html__('Pre-warm now', 'wp-compress-image-optimizer');
+                    $compress_title = ' title="' . esc_attr__('Lazy mode is on — variants encode on first view. Click to force encoding now.', 'wp-compress-image-optimizer') . '"';
+                }
+                // Post-restore regen lock. Card flips to Uncompressed
+                // immediately (eager) but Compress stays unavailable until WP's
+                // sub-size thumbnails finish regenerating. Without this, the
+                // user could click Compress on an image whose sub-sizes are
+                // missing/stale and get a half-encoded result.
+                //   - Card carries `.is-regen-pending` class (wpcWatchCard's
+                //     class-diff detection picks this up vs the eventual
+                //     un-locked Uncompressed render and re-renders the card).
+                //   - Compress button rendered as a span (not anchor), so no
+                //     click handler binds. Tooltip explains the wait.
+                //   - Replaces the regen marker file/post-meta path which is
+                //     already polled by wpcWatchCard via the `pending` flag
+                //     returned by wps_ic_get_card.
+                $card_classes = 'wpc-ml-card wpc-ml-card--uncompressed';
+                if ($post_restore_regen_pending) $card_classes .= ' is-regen-pending';
+                $output .= '<div class="' . esc_attr($card_classes) . '">';
                 $output .= self::icon_stack();
                 $output .= '<div class="wpc-ml-body">';
                 $output .= '<div class="wpc-ml-title">' . $filesize . '</div>';
-                $output .= '<div class="wpc-ml-subtitle"><a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '">' . self::svg_bolt() . ' ' . esc_html__('Compress', 'wp-compress-image-optimizer') . '</a><a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a></div>';
+                $output .= '<div class="wpc-ml-subtitle">';
+                // Hide Compress button when in any lazy_* mode.
+                // Per UX intent: lazy mode means lazy, encoding happens on
+                // first front-end view, not by admin click. Showing the button
+                // suggests the customer can/should click it, which contradicts
+                // the lazy strategy. Customers who want manual control should
+                // switch the mode to legacy or manual. The Exclude action is
+                // still useful so it stays.
+                $is_lazy_mode = function_exists('wpc_lazy_mode_active') && wpc_lazy_mode_active();
+                if ($post_restore_regen_pending) {
+                    $regen_tip = esc_attr__('Finishing restore — regenerating sub-size thumbnails. Compress will be available in a few seconds.', 'wp-compress-image-optimizer');
+                    $output .= '<span class="wpc-ml-action wpc-ml-action--primary wpc-ml-action--disabled" title="' . $regen_tip . '" aria-disabled="true">' . self::svg_bolt() . ' ' . esc_html__('Regenerating Thumbnails…', 'wp-compress-image-optimizer') . '</span>';
+                } elseif ($is_lazy_mode) {
+                    $lazy_tip = esc_attr__('Optimized automatically on first view, we\'ll generate and serve modern, right-sized variants the moment a visitor loads this image. No manual compression needed.', 'wp-compress-image-optimizer');
+                    $output .= '<span class="wpc-ml-action wpc-ml-action--lazy" data-wpc-tip="' . $lazy_tip . '" aria-label="' . $lazy_tip . '">' . self::svg_bolt() . ' ' . esc_html__('Smart Delivery', 'wp-compress-image-optimizer') . '</span>';
+                } else {
+                    $output .= '<a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '"' . $compress_title . '>' . self::svg_bolt() . ' ' . $compress_label . '</a>';
+                }
+                $output .= '<a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a>';
+                $output .= '</div>';
                 $output .= '</div>';
                 $output .= '</div>';
             }

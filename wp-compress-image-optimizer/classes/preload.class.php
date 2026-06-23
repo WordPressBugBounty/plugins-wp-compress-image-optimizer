@@ -89,6 +89,7 @@ class wps_ic_preload
      */
     public function get_registered()
     {
+
         add_action('wp_footer', function () {
             global $wp_scripts;
             $scripts = [];

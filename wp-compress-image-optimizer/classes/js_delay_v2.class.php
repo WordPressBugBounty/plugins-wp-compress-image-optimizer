@@ -50,6 +50,10 @@ class wps_ic_js_delay_v2
           'onetrust', // OneTrust
           'quantcast', // Quantcast Choice
           'usercentrics', // Usercentrics
+          'consently', // Consently — manages script (un)blocking + redefines document.readyState, so it
+                       // MUST run immediately. Delaying it collides with WPC's own delay loader (both
+                       // redefine readyState) → Consently falls back to "unblock all" → scripts re-run →
+                       // SmartMenus re-inits (5x duplicate sub-arrow chevrons) + "Cannot redefine readyState".
         ];
 
         // If a cookie consent plugin is active, also exclude jQuery (their dependency).
@@ -149,6 +153,10 @@ class wps_ic_js_delay_v2
 
     public function process_html($html)
     {
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return $html;
+        }
+
         $this->script_registry = array();
         $this->script_id = 0;
 
@@ -383,10 +391,55 @@ class wps_ic_js_delay_v2
             return $full_script;
         }
 
-        $script_data = array('id' => 'delayed-script-' . $this->script_id++, 'src' => isset($attributes['src']) ? base64_encode(html_entity_decode($attributes['src'])) : '', 'content' => !empty($attributes['src']) ? '' : base64_encode($script_content), 'type' => isset($attributes['type']) ? $attributes['type'] : 'text/javascript', 'encoded' => true, 'attributes' => array());
+        // v7.08.45/46 — Naturalize the delayed-script src AND inline content BEFORE base64-encoding
+        // into the registry. loader.min.js decodes these and preloads/loads/injects them; storing the
+        // /m:N/a: transform form makes the browser 302→native per delayed asset. The HTML naturalize
+        // passes can't reach these — they're base64-encoded. The src field covers external scripts;
+        // the content body covers inline scripts that REFERENCE module/asset URLs in /m:N/a: form
+        // (e.g. WP's script-module preload/import inline script → interactivity/index, wp-emoji).
+        // v7.02.45 — The delayed-script registry was the ONLY asset surface still on the m:0/a: transform
+        // form while the page's CSS/JS/fonts all went natural. Those collapse via the UNGATED
+        // wpc_asset_naturalize() buffer pass (filter wpc_asset_naturalize_enabled, default on);
+        // natural_assets_on() reads false here because it's evaluated at script_loader_tag, BEFORE the
+        // negotiated-delivery verdict settles — so the delayed JS fell out of lockstep with every other
+        // asset. Gate on natural_assets_on() OR that same single off-ramp so the delayed-JS registry and
+        // the page assets always naturalize together (one filter disables both). naturalize_asset_urls()
+        // still no-ops safely if the zone is empty, and m:0 is a pass-through, so delivery is byte-identical.
+        $do_nat = class_exists('wps_rewriteLogic')
+            && method_exists('wps_rewriteLogic', 'naturalize_asset_urls')
+            && (
+                (method_exists('wps_rewriteLogic', 'natural_assets_on') && wps_rewriteLogic::natural_assets_on())
+                || apply_filters('wpc_asset_naturalize_enabled', true)
+            );
+        $reg_src = '';
+        if (isset($attributes['src'])) {
+            $reg_src = html_entity_decode($attributes['src']);
+            if ($do_nat) {
+                $nat = wps_rewriteLogic::naturalize_asset_urls($reg_src);
+                if (is_string($nat) && $nat !== '') $reg_src = $nat;
+            }
+            $reg_src = base64_encode($reg_src);
+        }
+        $reg_content = '';
+        if (empty($attributes['src'])) {
+            $reg_content = (string) $script_content;
+            if ($do_nat && $reg_content !== '') {
+                $nat = wps_rewriteLogic::naturalize_asset_urls($reg_content);
+                if (is_string($nat) && $nat !== '') $reg_content = $nat;
+            }
+            $reg_content = base64_encode($reg_content);
+        }
+        $script_data = array('id' => 'delayed-script-' . $this->script_id++, 'src' => $reg_src, 'content' => $reg_content, 'type' => isset($attributes['type']) ? $attributes['type'] : 'text/javascript', 'encoded' => true, 'attributes' => array());
 
         foreach ($attributes as $attr => $value) {
             if (!in_array($attr, array('src', 'type'))) {
+                // v7.08.49 — belt-and-suspenders: a data-* attribute could carry a /m:N/a: asset
+                // URL (loader.min.js replays these onto the injected tag). Naturalize it too, same
+                // gate as src/content. No-op unless natural assets are on AND the value contains /a:.
+                if ($do_nat && is_string($value) && $value !== '' && strpos($value, '/a:') !== false) {
+                    $nv = wps_rewriteLogic::naturalize_asset_urls($value);
+                    if (is_string($nv) && $nv !== '') $value = $nv;
+                }
                 $script_data['attributes'][$attr] = $value;
             }
         }
@@ -417,7 +470,7 @@ class wps_ic_js_delay_v2
             if (preg_match_all('/([\w-]+)(?:=(["\'])(.*?)\2|=([^\s>]+))?/i', $attr_string, $attr_matches, PREG_SET_ORDER)) {
                 foreach ($attr_matches as $attr_match) {
                     $name = strtolower($attr_match[1]);
-                    $value = isset($attr_match[3]) ? $attr_match[3] : (isset($attr_match[4]) ? $attr_match[4] : true);
+                    $value = !empty($attr_match[3]) ? $attr_match[3] : (!empty($attr_match[4]) ? $attr_match[4] : true);
                     $attributes[$name] = $value;
                 }
             }

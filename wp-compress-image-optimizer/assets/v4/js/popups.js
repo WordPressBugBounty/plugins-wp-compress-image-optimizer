@@ -1,5 +1,8 @@
 jQuery(document).ready(function ($) {
 
+    // Agency portal pages don't get WordPress's global ajaxurl — fall back to wpc_ajaxVar
+    if (typeof ajaxurl === 'undefined') { var ajaxurl = wpc_ajaxVar.ajaxurl; }
+
     // Copy defaults button handler
     $(document).on('click', '.wpc-copy-defaults-btn', function(e) {
         e.preventDefault();
@@ -88,7 +91,7 @@ jQuery(document).ready(function ($) {
 
             $('h4', loading).show();
 
-            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field, wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_add', cname: cname_field, wps_ic_nonce: wpc_ajaxVar.nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
                 $(top).fadeIn(150);
                 $(step_1_retry).hide();
                 $('h4', loading).hide();
@@ -132,8 +135,6 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             return false;
                         });
-
-                        setTimeout(function() { window.location.reload(); }, 1500);
                     }, 1000);
                 }
                 else {
@@ -181,7 +182,7 @@ jQuery(document).ready(function ($) {
             $(content).fadeOut(150, function() { $(loading).fadeIn(150); });
 
 
-            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_retry', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
+            $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_cname_retry', wps_ic_nonce: wpc_ajaxVar.nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
                 $(top).fadeOut(150);
                 $(content).fadeOut(150, function() { $(loading).fadeIn(150); });
                 $('h4', loading).show();
@@ -210,7 +211,7 @@ jQuery(document).ready(function ($) {
 
                 }
                 else {
-                    $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
+                    $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
                         if (response.success) {
                             $(loading).fadeOut(150, function() { $(content).fadeIn(150); });
                             $(cname_enabled).hide();
@@ -303,7 +304,7 @@ jQuery(document).ready(function ($) {
                         var settingName = $(item).data('setting-name');
                         var settingSubset = $(item).data('setting-subset');
 
-                        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset, wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
+                        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_get_setting', name: settingName, subset: settingSubset, wps_ic_nonce: wpc_ajaxVar.nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
                             $(loading).fadeOut(150, function() {
                                 $(content).fadeIn(150);
                             });
@@ -444,7 +445,8 @@ jQuery(document).ready(function ($) {
                 exclude_plugins: exclude_plugins,
                 exclude_wp: exclude_wp,
                 exclude_third: exclude_third,
-                min_mobile_width: min_mobile_width
+                min_mobile_width: min_mobile_width,
+                apikey: wpc_ajaxVar.apikey || ''
             }, function(response) {
                 if (response.success) {
                     // Toggle override tint on the configure link
@@ -469,7 +471,8 @@ jQuery(document).ready(function ($) {
 
         $.post(wpc_ajaxVar.ajaxurl, {
             action: 'wps_ic_get_purge_rules',
-            wps_ic_nonce: wpc_ajaxVar.nonce
+            wps_ic_nonce: wpc_ajaxVar.nonce,
+            apikey: wpc_ajaxVar.apikey || '',
         }, function (response) {
             if (response.success) {
 
@@ -561,7 +564,8 @@ jQuery(document).ready(function ($) {
                 recent_posts_widget: recent_posts_widget,
                 archive_pages: archive_pages,
                 scheduled: scheduled,
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
                 if (response.success){
                     WPCSwal.close();
@@ -600,7 +604,8 @@ jQuery(document).ready(function ($) {
 
         $.post(wpc_ajaxVar.ajaxurl, {
             action: 'wps_ic_get_cf_cdn',
-            wps_ic_nonce: wpc_ajaxVar.nonce
+            wps_ic_nonce: wpc_ajaxVar.nonce,
+            apikey: wpc_ajaxVar.apikey || '',
         }, function (response) {
             if (response.success) {
 
@@ -630,7 +635,8 @@ jQuery(document).ready(function ($) {
             $.post(wpc_ajaxVar.ajaxurl, {
                 action: 'wps_ic_save_cf_cdn',
                 wps_ic_nonce: wpc_ajaxVar.nonce,
-                cname: cname
+                cname: cname,
+                apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
                 if (response.success){
                     WPCSwal.close();
@@ -649,7 +655,8 @@ jQuery(document).ready(function ($) {
 
         $.post(wpc_ajaxVar.ajaxurl, {
             action: 'wps_ic_get_cache_cookies',
-            wps_ic_nonce: wpc_ajaxVar.nonce
+            wps_ic_nonce: wpc_ajaxVar.nonce,
+            apikey: wpc_ajaxVar.apikey || '',
         }, function (response) {
             if (response.success) {
 
@@ -685,7 +692,8 @@ jQuery(document).ready(function ($) {
                 exclude_cookies: exclude_cookies,
                 cache_cookies: cache_cookies,
                 setting_name: setting_name,
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || '',
             }, function (response) {
                 if (response.success){
                     WPCSwal.close();
@@ -713,7 +721,8 @@ jQuery(document).ready(function ($) {
                 excludes: exportExcludes,
                 cache: exportCache,
                 cookies: exportCookies,
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || ''
             },
             success: function(response) {
                 if (response.success) {
@@ -816,7 +825,8 @@ jQuery(document).ready(function ($) {
             data: {
                 action: 'wps_ic_import_settings',
                 importData: importData,
-                wps_ic_nonce: wpc_ajaxVar.nonce
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || ''
             },
             success: function (response) {
                 if (response.success) {

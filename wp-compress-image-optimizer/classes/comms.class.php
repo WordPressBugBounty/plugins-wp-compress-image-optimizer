@@ -411,12 +411,14 @@ class wps_ic_comms extends wps_ic
         $option = get_option($form['groupName']);
 
         $excludedList = rtrim($form['value'], "\n");
-        $excludedList = explode(' ', $excludedList);
+        $excludedList = explode("\n", $excludedList);
+        $excludedList = array_values(array_filter(array_map('trim', $excludedList)));
 
         $form['default_enabled'] = !empty($form['default_enabled']) ? sanitize_text_field($form['default_enabled']) : '0';
         $form['exclude_themes'] = !empty($form['exclude_themes']) ? sanitize_text_field($form['exclude_themes']) : '0';
         $form['exclude_plugins'] = !empty($form['exclude_plugins']) ? sanitize_text_field($form['exclude_plugins']) : '0';
         $form['exclude_wp'] = !empty($form['exclude_wp']) ? sanitize_text_field($form['exclude_wp']) : '0';
+        $form['exclude_third'] = !empty($form['exclude_third']) ? sanitize_text_field($form['exclude_third']) : '0';
 
 
         $option[$form['settingName']] = $excludedList;
@@ -424,9 +426,302 @@ class wps_ic_comms extends wps_ic
         $option[$form['settingName'] . '_exclude_themes'] = $form['exclude_themes'];
         $option[$form['settingName'] . '_exclude_plugins'] = $form['exclude_plugins'];
         $option[$form['settingName'] . '_exclude_wp'] = $form['exclude_wp'];
+        $option[$form['settingName'] . '_exclude_third'] = $form['exclude_third'];
         update_option($form['groupName'], $option);
 
+        if (!empty($form['min_mobile_width']) && $form['min_mobile_width'] !== 'false') {
+            update_option('wpc-min-mobile-width', sanitize_text_field($form['min_mobile_width']));
+        }
+
         wp_send_json_success();
+    }
+
+
+    public function getExcludes()
+    {
+        $options = get_option(WPS_IC_OPTIONS);
+        $form = json_decode(stripslashes($_GET['form']), true);
+
+        if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
+            wp_send_json_error('bad-apikey');
+        }
+
+        $group_name = sanitize_text_field($form['groupName']);
+        $setting_name = sanitize_text_field($form['settingName']);
+
+        if (!in_array($group_name, ['wpc-excludes', 'wpc-inline', 'wpc-url-excludes'])) {
+            wp_send_json_error('Forbidden.');
+        }
+
+        $option = get_option($group_name);
+        $value = !empty($option[$setting_name]) ? $option[$setting_name] : [];
+        $default_excludes = isset($option[$setting_name . '_default_excludes_disabled']) ? $option[$setting_name . '_default_excludes_disabled'] : '';
+        $exclude_themes   = isset($option[$setting_name . '_exclude_themes'])   ? $option[$setting_name . '_exclude_themes']   : '';
+        $exclude_plugins  = isset($option[$setting_name . '_exclude_plugins'])  ? $option[$setting_name . '_exclude_plugins']  : '';
+        $exclude_wp       = isset($option[$setting_name . '_exclude_wp'])       ? $option[$setting_name . '_exclude_wp']       : '';
+        $exclude_third    = isset($option[$setting_name . '_exclude_third'])    ? $option[$setting_name . '_exclude_third']    : '';
+        $min_mobile_width = get_option('wpc-min-mobile-width');
+
+        if (empty($value)) {
+            $value = '';
+        } else {
+            $value = implode("\n", $value);
+        }
+
+        wp_send_json_success([
+            'value'           => $value,
+            'default_excludes' => $default_excludes,
+            'exclude_themes'  => $exclude_themes,
+            'exclude_plugins' => $exclude_plugins,
+            'exclude_wp'      => $exclude_wp,
+            'exclude_third'   => $exclude_third,
+            'min_mobile_width' => $min_mobile_width,
+        ]);
+    }
+
+
+    public function getGpsResult()
+    {
+        $gps = get_option(WPS_IC_LITE_GPS);
+        if (!empty($gps) && !empty($gps['result'])) {
+            wp_send_json_success($gps);
+        }
+        wp_send_json_error('not-done');
+    }
+
+
+    public function resetTest()
+    {
+        $options = get_option(WPS_IC_OPTIONS);
+
+        // If a test is already in progress, don't start another one
+        if (get_transient('wpc_initial_test')) {
+            wp_send_json_success('already-running');
+        }
+
+        // Purge homepage HTML cache (same as reset button on user site)
+        $url = home_url();
+        $url_key_class = new wps_ic_url_key();
+        $url_key = $url_key_class->setup($url);
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeCacheFiles($url_key);
+
+        // Clear home test entry from WPS_IC_TESTS
+        $tests = get_option(WPS_IC_TESTS);
+        unset($tests['home']);
+        update_option(WPS_IC_TESTS, $tests);
+
+        // Save previous GPS result to history
+        $history = get_option(WPS_IC_LITE_GPS_HISTORY);
+        if (empty($history)) {
+            $history = [];
+        }
+        $history[time()] = get_option(WPS_IC_LITE_GPS);
+        update_option(WPS_IC_LITE_GPS_HISTORY, $history);
+
+        // Clear current results and flags
+        delete_transient('wpc_test_running');
+        delete_option(WPS_IC_LITE_GPS);
+        delete_option(WPC_WARMUP_LOG_SETTING);
+
+        // Mark test as running
+        set_transient('wpc_initial_test', 'running', 5 * 60);
+
+        // Kick off pagespeed test
+        $requests = new wps_ic_requests();
+        $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $options['api_key']];
+        $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => ['Content-Type' => 'application/json']]);
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (isset($data['jobId'])) {
+            set_transient(WPS_IC_JOB_TRANSIENT, $data['jobId'], 60 * 10);
+            wp_send_json_success('started');
+        } else {
+            set_transient(WPS_IC_JOB_TRANSIENT, 'failed', 60 * 10);
+        }
+
+        wp_send_json_error();
+    }
+
+
+    public function getCFOption()
+    {
+        $cf = get_option(WPS_IC_CF);
+        wp_send_json_success($cf ?: []);
+    }
+
+    public function getCFCname()
+    {
+        $cname = get_option(WPS_IC_CF_CNAME);
+        wp_send_json_success($cname ?: '');
+    }
+
+    public function saveCFOption()
+    {
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        if (!empty($form['cf'])) {
+            update_option(WPS_IC_CF, $form['cf']);
+        }
+        if (!empty($form['cname'])) {
+            update_option(WPS_IC_CF_CNAME, $form['cname']);
+        }
+        if (isset($form['settings_cf'])) {
+            $settings = get_option(WPS_IC_SETTINGS);
+            $settings['cf'] = $form['settings_cf'];
+            update_option(WPS_IC_SETTINGS, $settings);
+        }
+        wp_send_json_success();
+    }
+
+    public function deleteCFOption()
+    {
+        delete_option(WPS_IC_CF);
+        delete_transient('wpc_cdn_backup');
+        wp_send_json_success();
+    }
+
+    public function getPurgeRules()
+    {
+        $purge_rules = get_option('wps_ic_purge_rules');
+        if (empty($purge_rules)) {
+            $options = new wps_ic_options();
+            $purge_rules = $options->get_preset('purge_rules');
+        }
+        wp_send_json_success($purge_rules ?: []);
+    }
+
+    public function savePurgeRules()
+    {
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        $purge_rules = get_option('wps_ic_purge_rules', []);
+        if (!empty($form['post-publish'])) {
+            $purge_rules['post-publish'] = $form['post-publish'];
+        }
+        if (isset($form['hooks'])) {
+            $purge_rules['hooks'] = $form['hooks'];
+        }
+        if (isset($form['scheduled'])) {
+            $purge_rules['scheduled'] = $form['scheduled'];
+        }
+        update_option('wps_ic_purge_rules', $purge_rules);
+        wp_send_json_success();
+    }
+
+    public function purgeAfterSave()
+    {
+        $form        = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        $changedKeys = isset($form['changed_keys']) ? (array) $form['changed_keys'] : [];
+
+        $htmlPurgeKeys = [
+            'replace-fonts', 'font-display', 'icon-font-display',
+            'preload-crit-fonts', 'fontawesome-lazy',
+            'css', 'js', 'fonts', 'lazy',
+            'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
+            'generate_adaptive', 'generate_webp', 'retina', 'background-sizing',
+            'qualityLevel',
+            'avif-natural-source', 'fetchpriority-high', 'single-url-image-format', // v7.01.93/.94 — HTML-output keys (parity with ajax)
+            'critical,css', 'delay,js',
+            'minify,html', 'minify,css', 'minify,js',
+            'cf,cdn', 'cf,assets',
+        ];
+        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css'];
+
+        $needsHtmlPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $htmlPurgeKeys));
+        $needsCritPurge = !empty($changedKeys) && !empty(array_intersect($changedKeys, $critPurgeKeys));
+
+        if ($needsHtmlPurge) {
+            delete_transient('wps_ic_css_cache');
+            delete_option('wps_ic_modified_css_cache');
+            delete_option('wps_ic_css_combined_cache');
+            $cache = new wps_ic_cache_integrations();
+            $cache::purgeAll(false, true, false, false, true);
+            $cache::purgeCombinedFiles();
+            wps_ic_ajax::purgeBreeze();
+            wps_ic_ajax::purge_cache_files();
+            if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+            if (defined('LSCWP_V')) do_action('litespeed_purge_all');
+            if (defined('WPHB_VERSION')) do_action('wphb_clear_page_cache');
+        }
+
+        if ($needsCritPurge) {
+            global $wpdb;
+            $options_table = $wpdb->options;
+            $wpdb->query($wpdb->prepare("DELETE FROM $options_table WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_wpc_critical_key_') . '%', $wpdb->esc_like('_transient_timeout_wpc_critical_key_') . '%'));
+            if (!isset($cache)) $cache = new wps_ic_cache_integrations();
+            $cache::purgeCriticalFiles();
+        }
+
+        wp_send_json_success();
+    }
+
+    public function getCacheCookies()
+    {
+        $cookies_setting = get_option('wps_ic_cache_cookies');
+        if ($cookies_setting === false) {
+            $options = new wps_ic_options();
+            $cookies_setting = $options->get_preset('cache_cookies');
+        }
+        wp_send_json_success($cookies_setting ?: []);
+    }
+
+    public function importSettings()
+    {
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+
+        $options_class = new wps_ic_options();
+
+        if (isset($form['settings'])) {
+            $settings = $options_class->setMissingSettings($form['settings']);
+            update_option(WPS_IC_SETTINGS, $settings);
+        }
+
+        if (isset($form['excludes'])) {
+            update_option('wpc-excludes', $form['excludes']);
+        }
+
+        if (isset($form['cache'])) {
+            update_option('wps_ic_purge_rules', $form['cache']);
+        }
+
+        if (isset($form['cache_cookies'])) {
+            update_option('wps_ic_cache_cookies', $form['cache_cookies']);
+        }
+
+        $cache = new wps_ic_cache_integrations();
+        $cache::purgeCriticalFiles();
+        $cache::purgeAll();
+
+        wp_send_json_success(['msg' => 'Settings imported successfully']);
+    }
+
+    public function saveCacheCookies()
+    {
+        $form            = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        $cookies_setting = get_option('wps_ic_cache_cookies', []);
+        if (isset($form['cookies'])) {
+            $cookies_setting['cookies'] = $form['cookies'];
+        }
+        if (isset($form['exclude_cookies'])) {
+            $cookies_setting['exclude_cookies'] = $form['exclude_cookies'];
+        }
+        update_option('wps_ic_cache_cookies', $cookies_setting);
+        wp_send_json_success();
+    }
+
+    public function getOptimizationStatus()
+    {
+        $warmup_class = new wps_ic_preload_warmup();
+        $pages  = $warmup_class->getPagesToOptimize();
+        $status = $warmup_class->get_optimization_status();
+        $response = [
+            'optimizationStatus' => $status,
+            'optimized'          => ($pages['total'] ?? 0) - ($pages['unoptimized'] ?? 0),
+            'total'              => $pages['total'] ?? 0,
+            'connectivity'       => true,
+        ];
+        wp_send_json_success($response);
     }
 
 
@@ -443,15 +738,6 @@ class wps_ic_comms extends wps_ic
 
         if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
             wp_send_json_error(['msg' => 'bad-apikey', 'form' => print_r($form, true), 'post' => print_r($_POST, true), 'get' => print_r($_GET, true)]);
-        }
-
-        $cdnEnabled = 0;
-
-        foreach ($form['options']['serve'] as $key => $value) {
-            if ($value == '1' && ($key != 'css' && $key != 'js')) {
-                $cdnEnabled = '1';
-                break;
-            }
         }
 
         if (!empty($settings)) {
@@ -487,9 +773,40 @@ class wps_ic_comms extends wps_ic
             }
         }
 
+        // Recalculate live-cdn from the fully-merged settings so a partial agency
+        // save (only the changed key in the payload) doesn't incorrectly set it
+        // based on incomplete form data.
+        $cdnEnabled = '0';
+        foreach (['jpg', 'png', 'gif', 'svg'] as $_k) {
+            if (!empty($settings['serve'][$_k]) && $settings['serve'][$_k] == '1') {
+                $cdnEnabled = '1';
+                break;
+            }
+        }
+        if (!$cdnEnabled && !empty($settings['css'])   && $settings['css']   == '1') $cdnEnabled = '1';
+        if (!$cdnEnabled && !empty($settings['js'])    && $settings['js']    == '1') $cdnEnabled = '1';
+        if (!$cdnEnabled && !empty($settings['fonts']) && $settings['fonts'] == '1') $cdnEnabled = '1';
         $settings['live-cdn'] = $cdnEnabled;
 
+        // Capture old modern_image_delivery value BEFORE option write, for toggle-transition handling (L8/L13)
+        $oldModernDelivery = get_option(WPS_IC_SETTINGS)['modern_image_delivery'] ?? '0';
+        $newModernDelivery = $settings['modern_image_delivery'] ?? '0';
+
         update_option(WPS_IC_SETTINGS, $settings);
+
+        // Toggle-transition cleanup (fires AFTER option write — L8 + L13 + G13)
+        if ($oldModernDelivery !== $newModernDelivery) {
+            // Toggle ON: clear all retry-state so previously-failed attachments get a fresh try (L8)
+            if ($oldModernDelivery === '0' && $newModernDelivery === '1') {
+                global $wpdb;
+                // One-shot cleanup — can take 5-10s on sites with 100K+ options, acceptable for admin action
+                $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_failed_%' OR option_name LIKE '_transient_timeout_wpc_failed_%'");
+                $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_optimize_attempts'");
+            }
+            // Both directions: purge all caches so HTML regenerates with new path (G13)
+            do_action('wps_ic_purge_all_cache');
+        }
+
         wp_send_json_success($form);
     }
 
@@ -515,6 +832,12 @@ class wps_ic_comms extends wps_ic
             $settings['fonts'] = 0;
             $settings['generate_adaptive'] = 1;
             $settings['generate_webp'] = 1;
+            // v7.01.87 — ITEM 2 coherence hardening: the preset already ships picture_avif=1, but make the
+            // next-gen ceiling coherent independent of preset contents so this path can never de-sync
+            // (single Next-Gen control reads ON=avif). Twin of ajax.class.php save_mode_v2.
+            $settings['picture_webp'] = 1;
+            $settings['picture_avif'] = 1;
+            $settings['wpc_nextgen'] = 'auto';
             $settings['retina'] = 1;
         } else {
             $settings['live-cdn'] = '0';
@@ -592,7 +915,110 @@ class wps_ic_comms extends wps_ic
         $inlines = get_option('wpc-inline');
         $url_excludes = get_option('wpc-url-excludes');
         $mode = get_option(WPS_IC_PRESET);
-        wp_send_json_success(['settings' => $options, 'excludes' => $excludes, 'inline' => $inlines, 'wpc-url-excludes' => $url_excludes, 'mode' => $mode]);
+        $allow_live = get_option('wps_ic_allow_live', false);
+        $gps = get_option(WPS_IC_LITE_GPS);
+        $tests = get_option(WPS_IC_TESTS);
+        $plugin_options = get_option(WPS_IC_OPTIONS);
+        $plan_version = $plugin_options['version'] ?? '';
+        $fonts_map = get_option(WPS_IC_FONTS_MAP);
+
+        $cf = get_option(WPS_IC_CF) ?: [];
+        $cf_cname = get_option(WPS_IC_CF_CNAME) ?: '';
+        wp_send_json_success([
+            'settings'       => $options,
+            'excludes'       => $excludes,
+            'inline'         => $inlines,
+            'wpc-url-excludes' => $url_excludes,
+            'mode'           => $mode,
+            'allow_live'     => $allow_live,
+            'gps'            => $gps,
+            'tests'          => $tests,
+            'plan_version'   => $plan_version,
+            'fonts_map'      => $fonts_map,
+            'cf'             => $cf,
+            'cf_cname'       => $cf_cname,
+            'site_url'       => site_url(),
+            'home_url'       => home_url(),
+            'active_plugins' => (function () {
+                $all    = get_plugins();
+                $active = get_option('active_plugins', []);
+                $result = [];
+                foreach ($active as $path) {
+                    $slug     = explode('/', $path)[0];
+                    $result[] = ['slug' => $slug, 'name' => $all[$path]['Name'] ?? $slug, 'path' => $path];
+                }
+                return $result;
+            })(),
+            'active_theme'   => [
+                'slug' => wp_get_theme()->get_stylesheet(),
+                'name' => wp_get_theme()->get('Name'),
+                'type' => 'theme',
+            ],
+            'server_info'    => [
+                'php_version'  => phpversion(),
+                'wp_version'   => $GLOBALS['wp_version'],
+                'max_upload'   => size_format(wp_max_upload_size()),
+                'memory_limit' => ini_get('memory_limit'),
+            ],
+        ]);
+    }
+
+
+    public function scanFonts()
+    {
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+
+        $url = sanitize_url($form['scanUrl'] ?? '');
+        if (empty($url)) {
+            wp_send_json_error('no-url');
+        }
+
+        $fonts = new wps_ic_fonts();
+        $response = $fonts->callAPI($url);
+        $found = $fonts->scanForFonts($response);
+
+        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+        if ($hasGoogleFonts) {
+            $fonts->readGoogleStylesheet($found);
+        }
+
+        wp_send_json_success(['found' => $hasGoogleFonts]);
+    }
+
+
+    public function removeFont()
+    {
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+
+        $fontId = sanitize_text_field($form['fontId'] ?? '');
+        if (empty($fontId)) {
+            wp_send_json_error('no-font-id');
+        }
+
+        $font = new wps_ic_fonts();
+        $font->removeFont($fontId);
+
+        wp_send_json_success();
+    }
+
+
+    public function purgeFontCache()
+    {
+        delete_option(WPS_IC_FONTS_MAP);
+
+        $form = json_decode(stripslashes($_GET['form'] ?? '{}'), true);
+        $scanUrl = !empty($form['scanUrl']) ? sanitize_url($form['scanUrl']) : site_url();
+
+        $fonts = new wps_ic_fonts();
+        $response = $fonts->callAPI($scanUrl);
+        $found = $fonts->scanForFonts($response);
+
+        $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
+        if ($hasGoogleFonts) {
+            $fonts->readGoogleStylesheet($found);
+        }
+
+        wp_send_json_success(['found' => $hasGoogleFonts]);
     }
 
 

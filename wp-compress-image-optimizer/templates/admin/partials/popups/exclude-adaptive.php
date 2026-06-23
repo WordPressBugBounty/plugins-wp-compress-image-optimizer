@@ -5,7 +5,7 @@
             <div class="wpc-popup-saving-logo-container">
                 <div class="wpc-popup-saving-preparing-logo">
                     <img src="<?php echo WPS_IC_URI; ?>assets/images/logo/blue-icon.svg" class="wpc-ic-popup-logo-saving"/>
-                    <img src="<?php echo WPS_IC_URI; ?>assets/preparing.svg" class="wpc-ic-popup-logo-saving-loader"/>
+                    <div class="wpc-ic-popup-logo-saving-loader" aria-hidden="true"></div>
                 </div>
             </div>
         </div>
@@ -38,7 +38,7 @@
             <div class="wps-empty-row">&nbsp;</div>
 
             <div class="wps-default-excludes-container">
-                <?php echo esc_html__('Minimum mobile image width', WPS_IC_TEXTDOMAIN); ?> <input type="number" value="<?php
+                <?php echo esc_html__('Maximum mobile image width', WPS_IC_TEXTDOMAIN); ?> <input type="number" value="<?php
 	            $mobile_width = get_option('wpc-min-mobile-width');
 	            echo $mobile_width ? $mobile_width : 400;
 	            ?>" name="min-mobile-width" class="wps-min-mobile-width" style="max-height:30px;margin-left:5px;margin-right:5px;max-width:80px;"> <?php echo esc_html__('px', WPS_IC_TEXTDOMAIN); ?>

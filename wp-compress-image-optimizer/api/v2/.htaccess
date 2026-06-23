@@ -1,0 +1,53 @@
+# WP Compress v7.02 — Direct entry point hardening
+#
+# Allow only the 5 named handlers in this directory. Anything else 403's.
+# This is defense-in-depth — if a future accidental file drop lands here,
+# it can't be served. Also blocks attackers probing for unexpected entries.
+
+<IfModule mod_authz_core.c>
+    # Apache 2.4+
+    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$">
+        Require all granted
+    </FilesMatch>
+    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$).*">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    # Apache 2.2 fallback
+    <FilesMatch "^(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$">
+        Order Allow,Deny
+        Allow from all
+    </FilesMatch>
+    <FilesMatch "^(?!(bg_swap|bg_swap_batch|bg_swap_announce|health|_shared)\.php$).*">
+        Order Allow,Deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Block any .jsonl files that might end up here (journal lives in uploads/
+# but defense in depth against symlink mistakes).
+<FilesMatch "\.(jsonl|log|tmp|bak)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Disable directory listing
+Options -Indexes
+
+# Prevent _shared.php from being directly invoked (it's a library, not an entry)
+<Files "_shared.php">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</Files>

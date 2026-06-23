@@ -2,15 +2,14 @@
 global $ic_running;
 global $wps_ic_cdn_instance;
 
-// WPC Error Capture — logs plugin PHP warnings to DB for debug tool
-// SAFETY: wrapped in try/catch, returns false (never swallows errors),
-// only captures OUR files, deduplicates, caps at 50 entries, no autoload
+// Logs plugin PHP warnings to the DB for the debug tool. Only captures our own
+// files, dedupes, caps at 50 entries, always returns false so PHP still handles
+// the error normally.
 if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
     set_error_handler(function ($errno, $errstr, $errfile, $errline) {
         try {
-            // Honor @-operator suppression. When a caller writes @something(),
-            // PHP sets error_reporting() to 0 for the duration of that call.
-            // We should NOT log errors the developer explicitly suppressed.
+            // Honor the @-operator: error_reporting() is 0 during a suppressed
+            // call, and we shouldn't log what the developer chose to suppress.
             if (error_reporting() === 0) {
                 return false;
             }
@@ -83,14 +82,10 @@ if (!function_exists('wpc_url_is_excluded')) {
 }
 
 /**
- * WPC diagnostic logger — captures info-level tracking events for 7.00.08 features
- * (LCP BETA, cookie-plugin interactions, vars-block preservation).
- *
- * Writes to `wpc_diagnostic_log` option, capped at 100 entries, no autoload.
- * Surfaces in Debug Tool so customers can verify feature operation without SSH.
- *
- * Dedupe: same tag+detail within same request = skip (prevents flooding).
- * Sampled: only first N of any tag per request to avoid blowing up the log on high-image pages.
+ * Diagnostic logger — info-level feature-tracking events surfaced in the Debug
+ * Tool so customers can verify behavior without SSH. Writes to the
+ * `wpc_diagnostic_log` option (capped at 100), deduped and per-tag sampled so a
+ * high-image page can't flood it.
  */
 if (!function_exists('wpc_diagnostic_log')) {
     function wpc_diagnostic_log($tag, $detail = '') {
@@ -123,11 +118,24 @@ if (!function_exists('wpc_diagnostic_log')) {
 include_once __DIR__ . '/debug.php';
 include_once __DIR__ . '/defines.php';
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
+include_once WPS_IC_DIR . 'addons/cdn/modern-delivery.php';
+include_once WPS_IC_DIR . 'addons/cdn/delivery-resolver.php'; // load before negotiated — its is_active() consults the resolver
+include_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php'; // inert until EMISSION_READY; gated by the resolver
 include_once WPS_IC_DIR . 'addons/legacy/compress.php';
 include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
 
+// v2 protocol bootstrap. Guards on the `wpc_protocol_version` option (default
+// 'v1' = no-op); when non-'v1' it loads the WPS_LocalV2 client, the
+// /wpc/v2/bg_swap REST endpoint, and the capability probe.
+include_once WPS_IC_DIR . 'addons/v2/v2-bootstrap.php';
+
+// Outermost natural-URL buffer. Catches /m:N/a: asset transform URLs printed
+// past a mid-page flush() (import-maps, late footers, prefetch JSON) that
+// cdnRewriter's buffer can't reach. Inert unless negotiated delivery is GA.
+include_once WPS_IC_DIR . 'addons/v2/v2-natural-url-buffer.php';
+
 //TRAITS
-include WPS_IC_DIR . 'traits/excludes.php';
+include WPS_IC_DIR . 'traits/agency.php';
 
 // ─── Local Optimization Helpers ──────────────────────────────────────────
 
@@ -227,6 +235,45 @@ function wpc_purge_cdn_urls($attachment_id) {
         );
     }
 
+    // Also purge the CDN-transform variants. The cdn-mc purge above only clears the
+    // natural origin URL, but images are fetched via transform URLs
+    // (…/q:i/r:0/wp:2/w:1510/u:<origin>) — separate edge cache entries the origin purge
+    // doesn't touch. Purge each ladder width × format (jpg/webp/avif), non-blocking.
+    // `u:` needs the full URL including host (cdn-mc keys transforms by it).
+    $site_url = site_url();
+    $ladder_widths = [150, 221, 300, 400, 442, 480, 640, 720, 755, 768, 800,
+                      960, 1100, 1132, 1200, 1280, 1366, 1440, 1510, 1536,
+                      1600, 1800, 1887, 2048, 2560];
+    $cdn_zone = '';
+    $custom_cname = get_option('ic_custom_cname');
+    $cdn_zone = !empty($custom_cname) ? $custom_cname : (string) get_option('ic_cdn_zone_name');
+    if ($cdn_zone !== '') {
+        // Iterate both the origin-host and cdn-zone-host forms of `u:`: uForCdn() can
+        // rewrite the `u:` host from origin to cdn-zone, so the same image+width has two
+        // distinct cache keys — purging only one leaves the other served stale.
+        $u_hosts = ['https://' . $cdn_zone];
+        if (rtrim($site_url, '/') !== rtrim($u_hosts[0], '/')) {
+            $u_hosts[] = $site_url;  // origin host as separate variant
+        }
+        foreach ($urls_to_purge as $rel_url) {
+            // Skip the WebP/AVIF derivatives — only purge transforms of the JPG/PNG originals
+            // (cdn-mc keys transforms by the underlying source URL).
+            if (preg_match('/\.(webp|avif)$/i', $rel_url)) continue;
+            foreach ($u_hosts as $u_host_for_purge) {
+                $full_u = $u_host_for_purge . $rel_url;
+                foreach ([0, 1, 2] as $wp_fmt) {
+                    foreach ($ladder_widths as $w) {
+                        $transform_path = '/q:i/r:0/wp:' . $wp_fmt . '/w:' . $w . '/u:' . $full_u;
+                        wp_remote_get(
+                            "https://cdn-mc.zapwp.net/health/cache-purge?apikey=" . urlencode($options['api_key']) . "&url=" . urlencode($transform_path),
+                            ['timeout' => 5, 'blocking' => false, 'sslverify' => false]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // Purge Cloudflare (if connected)
     $cf = get_option(WPS_IC_CF);
     if (!empty($cf['token']) && !empty($cf['zone'])) {
@@ -239,6 +286,49 @@ function wpc_purge_cdn_urls($attachment_id) {
             $cfsdk->purgeFiles($cf['zone'], $full_urls);
         }
     }
+}
+
+/**
+ * Targeted single-URL CDN purge for bg-swap callbacks. Purges just the file we
+ * rewrote, not the 16+ URL fan-out of wpc_purge_cdn_urls — callbacks fire 5-15×
+ * per compress, so the full-attachment helper would burn 16×N requests.
+ *
+ * @param int    $attachment_id Image post ID (used to attribute the purge in logs).
+ * @param string $abs_path      Absolute filesystem path of the just-written file.
+ *                              Helper converts to uploads-relative URL internally.
+ */
+function wpc_purge_cdn_urls_single($attachment_id, $abs_path) {
+    $options = get_option(WPS_IC_OPTIONS);
+    if (empty($options['api_key'])) return;
+    if (!is_string($abs_path) || $abs_path === '') return;
+
+    // Convert absolute path → /wp-content/uploads/<rel> URL path.
+    $uploads = wp_upload_dir();
+    $basedir = isset($uploads['basedir']) ? $uploads['basedir'] : (WP_CONTENT_DIR . '/uploads');
+    $basedir = rtrim($basedir, '/');
+    if (strpos($abs_path, $basedir) !== 0) return;
+    $rel  = ltrim(substr($abs_path, strlen($basedir)), '/');
+    if ($rel === '') return;
+    $url  = '/wp-content/uploads/' . $rel;
+
+    // MC pod purge — non-blocking single GET.
+    wp_remote_get(
+        "https://cdn-mc.zapwp.net/health/cache-purge?apikey=" . urlencode($options['api_key']) . "&url=" . urlencode($url),
+        ['timeout' => 5, 'blocking' => false, 'sslverify' => false]
+    );
+
+    // Cloudflare zone purge — single URL only.
+    $cf = get_option(WPS_IC_CF);
+    if (!empty($cf['token']) && !empty($cf['zone']) && class_exists('WPC_CloudflareAPI')) {
+        $cfsdk = new WPC_CloudflareAPI($cf['token']);
+        $cfsdk->purgeFiles($cf['zone'], [site_url() . $url]);
+    }
+
+    error_log(sprintf(
+        '[WPC PurgeSingle] imageID=%d url=%s',
+        (int) $attachment_id,
+        $url
+    ));
 }
 
 /**
@@ -295,31 +385,346 @@ function wpc_get_plugin_name() {
 }
 
 /**
+ * Rewrite the CDN-transform URLs in an <img>'s src/srcset/data-* to natural
+ * (CDN-passthrough) URLs when the underlying file exists on disk. The natural
+ * file is preferred (higher quality, lower CDN load); the transform URL is only
+ * useful as a fallback, so it's kept when the file is missing.
+ *
+ * Already-natural / external / data: URLs pass through. srcset width descriptors
+ * are preserved exactly. Query strings are stripped for the disk lookup but kept
+ * in the output URL.
+ */
+function wpc_v2_rewrite_img_to_natural_urls($img_tag, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
+    if (empty($cdn_zone) || empty($img_tag)) return $img_tag;
+    if (strpos($img_tag, $cdn_zone) === false) return $img_tag;
+
+    // Attributes that may contain URLs. Each is handled with srcset-awareness.
+    $attrs = [
+        ['name' => 'src',         'is_srcset' => false],
+        ['name' => 'srcset',      'is_srcset' => true],
+        ['name' => 'data-src',    'is_srcset' => false],
+        ['name' => 'data-srcset', 'is_srcset' => true],
+    ];
+
+    foreach ($attrs as $a) {
+        $name = $a['name'];
+        // Match attr="value" — accommodating values containing : (URLs do).
+        if (!preg_match('/\b' . preg_quote($name, '/') . '\s*=\s*"([^"]*)"/i', $img_tag, $m)) continue;
+        $original_value = $m[1];
+        if ($original_value === '') continue;
+
+        $new_value = $a['is_srcset']
+            ? wpc_v2_rewrite_srcset_value($original_value, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url)
+            : wpc_v2_rewrite_single_url_to_natural($original_value, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url);
+
+        if ($new_value !== $original_value) {
+            // Replace only the first match to avoid collisions across attrs.
+            $img_tag = preg_replace(
+                '/(\b' . preg_quote($name, '/') . '\s*=\s*")' . preg_quote($original_value, '/') . '(")/i',
+                '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $new_value) . '$2',
+                $img_tag,
+                1
+            );
+        }
+    }
+
+    return $img_tag;
+}
+
+function wpc_v2_rewrite_srcset_value($srcset, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
+    if (empty($srcset)) return $srcset;
+    $entries = explode(',', $srcset);
+    foreach ($entries as &$entry) {
+        $entry = trim($entry);
+        if ($entry === '') continue;
+        // Entry is "URL [descriptor]" — split on the first whitespace so URLs
+        // with embedded colons stay intact.
+        if (preg_match('/^(\S+)(\s+.+)?$/', $entry, $em)) {
+            $url = $em[1];
+            $descriptor = isset($em[2]) ? $em[2] : '';
+            $new_url = wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url);
+            $entry = $new_url . $descriptor;
+        }
+    }
+    unset($entry);
+    return implode(', ', $entries);
+}
+
+function wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
+    if (empty($url) || empty($cdn_zone)) return $url;
+
+    // Only rewrite our own CDN zone's transform URLs. External hosts pass through.
+    if (strpos($url, $cdn_zone) === false) return $url;
+
+    // Two CDN URL shapes carry the origin URL as a suffix (running to end of
+    // string, since the attr/srcset parsers already trimmed it):
+    //   /u:<origin_url>      — img-tag adaptive transforms (q:i/r:0/wp:N/w:N/u:URL)
+    //   /m:0/a:<origin_url>  — picture <source> AVIF wraps + asset passthroughs
+    if (!preg_match('#/(?:u:|m:0/a:)(https?://[^\s]+)$#', $url, $m)) return $url;
+
+    $origin_url = $m[1];
+    $origin_clean = preg_replace('/\?.*$/', '', $origin_url);
+    $query = '';
+    if (strpos($origin_url, '?') !== false) {
+        $query = substr($origin_url, strpos($origin_url, '?'));
+    }
+
+    // Map origin URL → disk path. Try uploads first (most common), then
+    // any path under site_url.
+    $disk = null;
+    if ($upload_baseurl && strpos($origin_clean, $upload_baseurl) === 0) {
+        $relative = substr($origin_clean, strlen($upload_baseurl));
+        $disk = rtrim($upload_basedir, '/\\') . '/' . ltrim($relative, '/');
+    } elseif ($site_url && strpos($origin_clean, $site_url) === 0) {
+        $relative = substr($origin_clean, strlen(rtrim($site_url, '/')));
+        $disk = rtrim(ABSPATH, '/\\') . '/' . ltrim($relative, '/');
+    }
+
+    if ($disk === null || !@file_exists($disk)) {
+        // No mapping or file missing — leave the transform URL as fallback.
+        return $url;
+    }
+
+    // Build natural URL via CDN passthrough.
+    $path_after_site = str_replace($site_url, '', $origin_clean);
+    return 'https://' . $cdn_zone . $path_after_site . $query;
+}
+
+// ─── Picture-wrap srcset-selection helpers ───────────────────────────────────
+//
+// Make sizes="auto" actually fire on the <source> tags from
+// wpc_inject_picture_tags(). Per HTML spec auto is ignored unless the sibling
+// <img> is loading="lazy", and WP only lazies the first 1-2 images — leaving
+// every other content image eager and our auto hint dead.
+//
+// Both helpers are filterable so power users can opt out without disabling the
+// master picture_webp toggle:
+//   - wpc_picture_inject_lazy   (bool)  — gate the loading="lazy" injection
+//   - wpc_picture_lcp_sizes     (string)— override the smart-sizes ladder
+
+if (!function_exists('wpc_picture_should_inject_lazy')) {
+/**
+ * Decide whether to add loading="lazy" to a content IMG inside the picture wrap.
+ * Skip when it's the LCP target, already has loading=, or the user turned the
+ * master lazy setting off (don't silently re-enable lazy they disabled).
+ *
+ * @param string $img_tag  raw <img …> tag captured by the picture-wrap regex
+ * @param array  $settings full plugin settings array (reads lazy-load gate)
+ * @return bool true ⇒ caller should inject loading="lazy"
+ */
+function wpc_picture_should_inject_lazy($img_tag, $settings)
+{
+    // The "Native Lazy" toggle key is `nativeLazy` — NOT `lazy-load` (phantom
+    // key) and NOT `lazy` (that's the separate JS viewport-lazy loader). Unset
+    // is treated as default-on, matching the options.class.php presets.
+    if (isset($settings['nativeLazy']) && (string) $settings['nativeLazy'] !== '1') {
+        return (bool) apply_filters('wpc_picture_inject_lazy', false, $img_tag, $settings);
+    }
+    // Don't double-inject if loading= is already present
+    if (preg_match('/\sloading\s*=\s*["\'][^"\']*["\']/i', $img_tag)) {
+        return (bool) apply_filters('wpc_picture_inject_lazy', false, $img_tag, $settings);
+    }
+    // Skip lazy injection for eager-LCP IMGs. Lazying the LCP image to get a
+    // sizes="auto" pick saves ~30KB but costs ~700ms LCP under throttling with
+    // render-blocking fonts (the intersection observer waits on layout, layout
+    // waits on font CSS). The smart-sizes ladder gets near-optimal picks anyway,
+    // and an eager img is preload-scanned immediately. Non-LCP content images
+    // still get lazy here (below the fold, so the observer delay is harmless).
+    // Filter wpc_picture_inject_lazy → __return_true to opt back into lazy LCP.
+    $is_eager_lcp = wpc_picture_is_eager_lcp_marker($img_tag);
+    return (bool) apply_filters('wpc_picture_inject_lazy', !$is_eager_lcp, $img_tag, $settings);
+}
+}
+
+if (!function_exists('wpc_picture_is_eager_lcp_marker')) {
+/**
+ * Decide whether an IMG looks like an eager LCP candidate needing the
+ * smart-sizes override (override applies; lazy injection skipped).
+ *
+ * Can't rely on class markers (wpc-lcp-optimized etc.) or fetchpriority="high":
+ * rewriteLogic's ob_start runs after the_content where we run, so the class
+ * isn't set yet, and fp=high may be stripped/never-added. The signal available
+ * here is structural: width ≥ 1200 + sizes containing "100vw" — WP's full-width
+ * hero pattern, which resolves to 100vw and over-fetches on mobile (wrong for
+ * every theme that constrains hero width, i.e. all default block themes).
+ *
+ * Trade-off: also fires for wide images that will become lazy (where auto would
+ * measure layout) — we over-override on bandwidth-correct but non-adaptive
+ * picks. Mitigated by bailing when loading="lazy" is already present.
+ *
+ * @return bool true ⇒ smart-sizes override should apply (and lazy injection
+ *              should NOT happen — these images are explicitly eager hero)
+ */
+function wpc_picture_is_eager_lcp_marker($img_tag)
+{
+    // If the IMG is already lazy, leave sizes alone — auto will work correctly
+    if (preg_match('/\sloading\s*=\s*["\']lazy["\']/i', $img_tag)) return false;
+
+    // Fast path: explicit eager-LCP signals when they happen to be present
+    if (preg_match('/fetchpriority\s*=\s*["\']high["\']/i', $img_tag)) return true;
+
+    // Structural signal: wide image (width ≥ 1200) with 100vw in sizes
+    if (!preg_match('/\swidth\s*=\s*["\'](\d+)["\']/i', $img_tag, $wm)) return false;
+    if ((int) $wm[1] < 1200) return false;
+    if (!preg_match('/\ssizes\s*=\s*["\']([^"\']*)["\']/i', $img_tag, $sm)) return false;
+    return (stripos($sm[1], '100vw') !== false);
+}
+}
+
+if (!function_exists('wpc_picture_compute_lcp_sizes')) {
+/**
+ * Compute a viewport-aware sizes ladder for eager LCP IMGs (per
+ * wpc_picture_is_eager_lcp_marker) whose WP fallback would resolve to 100vw on
+ * mobile. Returns '' to leave WP's sizes untouched. Desktop cap defaults to 1200
+ * (the typical block-theme container) — larger caps overshoot hero images that
+ * don't fill the window. Filterable via wpc_picture_lcp_sizes.
+ *
+ * @param string $img_tag  raw <img …> tag
+ * @param array  $settings full plugin settings (reads maxWidth)
+ * @return string sizes value to write, or '' to leave WP's sizes alone
+ */
+if (!function_exists('wpc_get_theme_content_width')) {
+/**
+ * Resolve the theme's real content-column width server-side — the width PSI
+ * measures as the LCP image's displayed size on desktop. Using it as the desktop
+ * sizes tier (vs a hardcoded 1200 guess) makes the browser request a
+ * correctly-sized image and clears the "Improve image delivery" diagnostic.
+ *
+ * Sources: block-theme theme.json contentSize, then the classic $content_width
+ * global. Returns 0 when unknown (caller falls back to the 1200 cap).
+ * Filter wpc_lcp_content_width overrides per-site.
+ */
+function wpc_get_theme_content_width()
+{
+    $w = 0;
+    if (function_exists('wp_get_global_settings')) {
+        $layout = wp_get_global_settings(['layout']);
+        if (!empty($layout['contentSize'])) {
+            $px = (int) preg_replace('/[^0-9]/', '', (string) $layout['contentSize']);
+            if ($px >= 320 && $px <= 2000) $w = $px;
+        }
+    }
+    if ($w === 0 && !empty($GLOBALS['content_width']) && (int) $GLOBALS['content_width'] >= 320) {
+        $w = (int) $GLOBALS['content_width'];
+    }
+    return (int) apply_filters('wpc_lcp_content_width', $w);
+}
+}
+
+function wpc_picture_compute_lcp_sizes($img_tag, $settings)
+{
+    if (!wpc_picture_is_eager_lcp_marker($img_tag)) {
+        return (string) apply_filters('wpc_picture_lcp_sizes', '', $img_tag, $settings);
+    }
+    $intrinsic_w = 0;
+    if (preg_match('/\swidth\s*=\s*["\'](\d+)["\']/i', $img_tag, $wm)) {
+        $intrinsic_w = (int) $wm[1];
+    }
+    // Below ~1200, WP's own width-hint fallback already self-limits on mobile.
+    if ($intrinsic_w < 1200) {
+        return (string) apply_filters('wpc_picture_lcp_sizes', '', $img_tag, $settings);
+    }
+    $max_w       = !empty($settings['maxWidth']) ? (int) $settings['maxWidth'] : 2560;
+    // Prefer the theme's real content width for the desktop tier; fall back to
+    // the 1200 cap when the theme doesn't declare one.
+    $content_w   = function_exists('wpc_get_theme_content_width') ? wpc_get_theme_content_width() : 0;
+    $desktop_cap = $content_w > 0 ? $content_w : min(1200, max(400, $max_w));
+    // Phone/tablet vw kept low (50/40) so DPR-4 profiles don't overshoot the
+    // ladder. Mild softness on full-bleed themes is the trade-off (override via
+    // the filter). Keep in lockstep with the equivalent value in rewriteLogic.
+    $smart       = '(max-width: 600px) 50vw, (max-width: 1024px) 40vw, ' . $desktop_cap . 'px';
+    return (string) apply_filters('wpc_picture_lcp_sizes', $smart, $img_tag, $settings);
+}
+}
+
+if (!function_exists('wpc_picture_apply_sizes_to_img')) {
+/**
+ * Replace (or add) the sizes= attribute on an IMG tag string.
+ *
+ * @return string updated IMG tag
+ */
+function wpc_picture_apply_sizes_to_img($img_tag, $sizes_value)
+{
+    if (preg_match('/\ssizes\s*=\s*["\'][^"\']*["\']/i', $img_tag)) {
+        return preg_replace(
+            '/\ssizes\s*=\s*["\'][^"\']*["\']/i',
+            ' sizes="' . $sizes_value . '"',
+            $img_tag, 1
+        );
+    }
+    return preg_replace('/<img\b/i', '<img sizes="' . $sizes_value . '"', $img_tag, 1);
+}
+}
+
+/**
  * Wrap locally-optimized <img> tags in <picture> elements with WebP/AVIF sources.
  * Runs on the_content filter at low priority (after other plugins).
  */
 function wpc_inject_picture_tags($content) {
     if (is_admin() || empty($content)) return $content;
 
+    // Feed/AMP/REST bypass: <picture> must not leak into RSS/JSON/AMP where it's
+    // invalid or chokes strict parsers. Allow the Gutenberg block-renderer
+    // through so editor previews still deliver.
+    if (function_exists('is_feed') && is_feed()) return $content;
+    if (function_exists('is_amp_endpoint') && is_amp_endpoint()) return $content;
+    if (function_exists('amp_is_request') && amp_is_request()) return $content;
+    if (defined('REST_REQUEST') && REST_REQUEST) {
+        $wpc_route = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+        if (strpos($wpc_route, '/wp/v2/block-renderer/') === false) return $content;
+    }
+
+    // Single-authority delivery: once the resolver verifies CDN-edge, negotiated
+    // owns images as clean <img> + edge Accept-negotiation. This injector runs
+    // upstream of cdnRewriter, so it must stand down too — otherwise it wraps the
+    // <img> in <picture> before negotiated sees them. Inert until negotiated is
+    // GA, so legacy behavior is unchanged on non-CDN-edge sites.
+    if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
+        return $content;
+    }
+
     // Respect "Use Picture Tags" toggle — same setting controls CDN and local mode
     $settings = get_option(WPS_IC_SETTINGS);
     if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return $content;
 
-    // Already processed — guard against double-wrapping (caching plugins, REST API, nested filters)
+    // AVIF ceiling gate: only emit an AVIF <source> when the next-gen ceiling is
+    // 'avif'. A 'webp'/'off' ceiling must not ship AVIF even if -avif variants
+    // exist on disk (intent violation). Falls open if the resolver is absent.
+    $wpc_avif_ok = !class_exists('WPC_Delivery_Resolver')
+                   || WPC_Delivery_Resolver::effective_ceiling($settings) === 'avif';
+
+    // WebP ceiling gate, parallel to the AVIF one. Without it, ceiling='off'
+    // still wrapped the <img> with a webp <source> (file on disk → browser picks
+    // webp) — the CDN-off + Next-Gen-off "served WebP not JPEG" leak. 'off' must
+    // emit neither avif nor webp. Falls open if resolver absent.
+    $wpc_webp_ok = !class_exists('WPC_Delivery_Resolver')
+                   || WPC_Delivery_Resolver::effective_ceiling($settings) !== 'off';
+
+    // Single authority on CDN sites: when live CDN is on, the output-buffer
+    // rewriteLogic (path B) owns <picture> for all images — it resolves the zone,
+    // builds the full ladder, and gates AVIF. This injector (path A) runs upstream
+    // and never resolves $cdn_zone, so it would emit degraded markup that path B
+    // then locks in via its stash. Stand down so content images route through B;
+    // local/non-CDN sites keep path A below as the only picture emitter.
+    //
+    // BUT only stand down when CDN images are actually on. With the "Images" tile
+    // OFF, path B doesn't touch content images and negotiated is gated off — so
+    // path A must still emit the origin <picture>, otherwise Images-off +
+    // Next-Gen-on would mean plain <img> with no next-gen at all.
+    $wpc_cdn_imgs_on = !class_exists('WPC_Negotiated_Delivery')
+                       || WPC_Negotiated_Delivery::cdn_images_enabled($settings);
+    if (!empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1' && $wpc_cdn_imgs_on) {
+        return $content;
+    }
+
+    // Guard against double-wrapping (caching plugins, REST, nested filters)
     if (strpos($content, 'wpc-picture') !== false) return $content;
 
     $optimized = wpc_get_local_optimized_ids();
     if (empty($optimized)) return $content;
 
-    // Determine CDN zone for edge delivery of variant URLs
-    $cdn_zone = '';
-    if (!empty($settings['live-cdn']) && $settings['live-cdn'] == '1') {
-        $custom_cname = get_option('ic_custom_cname');
-        $cdn_zone = !empty($custom_cname) ? $custom_cname : get_option('ic_cdn_zone_name');
-    }
-
-    // Protect existing <picture> blocks — strip them before processing, restore after
-    // Prevents nesting our <picture> inside third-party <picture> (Performance Lab, ShortPixel, etc.)
+    // Stash existing <picture> blocks (restored after) so we don't nest ours
+    // inside a third-party one (Performance Lab, ShortPixel, etc.)
     $picture_placeholders = [];
     $content = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$picture_placeholders) {
         $key = '<!--WPC_PICTURE_' . count($picture_placeholders) . '-->';
@@ -327,25 +732,44 @@ function wpc_inject_picture_tags($content) {
         return $key;
     }, $content);
 
+    // Pre-resolve disk roots once; reused in the callback.
+    $upload_dir_for_rewrite = wp_get_upload_dir();
+    $upload_basedir_for_rewrite = isset($upload_dir_for_rewrite['basedir']) ? $upload_dir_for_rewrite['basedir'] : '';
+    $upload_baseurl_for_rewrite = isset($upload_dir_for_rewrite['baseurl']) ? $upload_dir_for_rewrite['baseurl'] : '';
+    $site_url_for_rewrite = site_url();
+
     // Match <img> tags with wp-image-{ID} class (WordPress standard)
     $content = preg_replace_callback(
         '/<img\b[^>]*class="[^"]*wp-image-(\d+)[^"]*"[^>]*>/i',
-        function ($matches) use ($optimized, $cdn_zone) {
+        function ($matches) use ($optimized, $cdn_zone, $upload_basedir_for_rewrite, $upload_baseurl_for_rewrite, $site_url_for_rewrite, $settings, $wpc_avif_ok, $wpc_webp_ok) {
             $img_tag = $matches[0];
             $attachment_id = (int) $matches[1];
 
             if (!isset($optimized[$attachment_id])) return $img_tag;
 
-            // Skip SVG, GIF, ICO — matches CDN behavior (rewriteLogic.php:2759)
+            // Skip SVG, GIF, ICO — matches CDN behavior
             if (preg_match('/\.(svg|gif|ico)[\s"\'?]/i', $img_tag)) return $img_tag;
+
+            // Rewrite the <img>'s transform URLs to natural ones first (before
+            // the variants-empty bail), so even an optimized image with no
+            // variants at least gets natural URLs.
+            if ($cdn_zone) {
+                $img_tag = wpc_v2_rewrite_img_to_natural_urls(
+                    $img_tag,
+                    $cdn_zone,
+                    $upload_basedir_for_rewrite,
+                    $upload_baseurl_for_rewrite,
+                    $site_url_for_rewrite
+                );
+            }
 
             $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
             if (empty($variants) || !is_array($variants)) return $img_tag;
 
-            // Detect lazy-load: use data-srcset if img uses data-srcset (matches CDN behavior, rewriteLogic.php:2769)
+            // Use data-srcset for lazy-loaded imgs (matches CDN behavior)
             $srcsetAttr = (strpos($img_tag, 'data-srcset=') !== false) ? 'data-srcset' : 'srcset';
 
-            // Build srcset per format: group all -webp variants, all -avif variants
+            // Build srcset per format
             $webp_srcset = [];
             $avif_srcset = [];
 
@@ -353,6 +777,7 @@ function wpc_inject_picture_tags($content) {
             $upload_dir = wp_get_upload_dir();
             $attached_file = get_post_meta($attachment_id, '_wp_attached_file', true);
             $upload_subdir = $attached_file ? dirname($attached_file) : '';
+            $upload_basedir = isset($upload_dir['basedir']) ? $upload_dir['basedir'] : '';
 
             foreach ($variants as $label => $data) {
                 if (empty($data['url'])) continue;
@@ -368,13 +793,57 @@ function wpc_inject_picture_tags($content) {
                     $meta = wp_get_attachment_metadata($attachment_id);
                     $width = !empty($meta['width']) ? (int) $meta['width'] : 4000;
                 }
-
                 if ($width <= 0) continue;
 
-                // Build local URL from filename (variant URLs in postmeta are service download URLs, not local paths)
+                // Only emit a natural-URL entry when the file exists on disk:
+                // ic_local_variants can list files that were restored/deleted but
+                // not cleared from postmeta, and emitting those 404s (Chrome
+                // ERR_BLOCKED_BY_ORB). Missing widths get the never-404 transform
+                // URL from the hybrid block below instead.
+                $disk_path = $upload_basedir . '/' . $upload_subdir . '/' . $filename;
+                if (!@file_exists($disk_path)) {
+                    continue;
+                }
+
+                // Dimensional validity gate (disable via WPC_SKIP_PICTURE_VARIANT_VALIDATION).
+                // A next-gen <source> is type-pinned with NO onerror, so one
+                // degenerate variant poisons the render with no fallback to <img>:
+                // e.g. a -1x1 minted from a width=1 label, or a full-size encode
+                // emitted under a tiny width descriptor. file_exists() can't catch
+                // these; rejecting empties the srcset and the $sources==='' escape
+                // returns the bare (good) <img>.
+                //
+                // Fail-safe: the plugin downloads AVIF, never encodes it locally,
+                // so a host without an AVIF decoder makes getimagesize() return
+                // false for a VALID .avif. So: (1) a filename-only degenerate
+                // check runs on every host; (2) byte-validation runs only when
+                // getimagesize() actually decodes — false ⇒ keep, never drop.
+                if (!defined('WPC_SKIP_PICTURE_VARIANT_VALIDATION') || !WPC_SKIP_PICTURE_VARIANT_VALIDATION) {
+                    // (1) Filename-only — no decode → catches -1x1 / -Nx<=2 / -<=2xN.
+                    if (preg_match('/-(\d+)x(\d+)\.\w+$/', $filename, $dm)
+                        && ((int) $dm[1] <= 2 || (int) $dm[2] <= 2)) {
+                        continue;
+                    }
+                    // (2) Byte-validation — only when getimagesize() decodes the file.
+                    $vdims = @getimagesize($disk_path);
+                    if (is_array($vdims) && !empty($vdims[0]) && !empty($vdims[1])) {
+                        $real_w = (int) $vdims[0];
+                        $real_h = (int) $vdims[1];
+                        if ($real_w <= 2 || $real_h <= 2) {
+                            continue; // decoded as degenerate
+                        }
+                        // name vs real-bytes mismatch; tolerance absorbs normal
+                        // sub-size rounding without false-rejecting good variants.
+                        if ($width > 0 && abs($real_w - $width) > max(8, (int) ($width * 0.10))) {
+                            continue;
+                        }
+                    }
+                }
+
+                // Build local URL (postmeta URLs are service download URLs, not local paths)
                 $local_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $filename;
 
-                // If CDN active, serve via CDN natural URL (passthrough edge delivery)
+                // If CDN active, serve via the CDN natural URL (edge passthrough)
                 if ($cdn_zone) {
                     $local_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $local_url);
                 }
@@ -387,24 +856,291 @@ function wpc_inject_picture_tags($content) {
                 }
             }
 
+            // Ideal-width generator, path-A leg. In Images-off / CDN-off modes
+            // path A is the emitter and nothing regenerates adaptive rungs after
+            // a restore wipes them, so the ladder is registered-only and the
+            // browser rounds up (a 1240-class need grabs 1510). Queue the same
+            // ideal widths the nd builder would; every per-width guard lives in
+            // the queue helper. Full-bleed/builder classes are excluded.
+            if (function_exists('wpc_v2_sized_trigger_queue')
+                && function_exists('wpc_get_theme_content_width')
+                && !preg_match('/\b(alignfull|alignwide|wp-block-cover|elementor|brz-|brxe-|et_pb)\b/i', $img_tag)) {
+                $pa_cap = (int) wpc_get_theme_content_width();
+                if ($pa_cap > 0) {
+                    $pa_existing = array_keys($webp_srcset + $avif_srcset);
+                    // Per-image targets from this tag's own sizes attribute;
+                    // content-width model as fallback for sizes-less tags.
+                    $pa_sizes  = preg_match('/sizes="([^"]*)"/i', $img_tag, $pa_sm) ? $pa_sm[1] : '';
+                    $pa_targets = function_exists('wpc_v2_ideal_targets_from_sizes')
+                        ? wpc_v2_ideal_targets_from_sizes($pa_sizes, $pa_cap)
+                        : array_unique([(int) round(206 * 1.75), 412, (int) round(206 * 3), $pa_cap, (int) round($pa_cap * 1.75), $pa_cap * 2]);
+                    foreach ($pa_targets as $pa_t) {
+                        if ($pa_t < 200) continue;
+                        // asymmetric: only a rung AT/ABOVE the target within 8% satisfies it
+                        // (a smaller rung can't — the browser rounds up past it).
+                        $pa_near = false;
+                        foreach ($pa_existing as $pa_e) {
+                            if ($pa_e >= $pa_t && ($pa_e - $pa_t) / $pa_t < 0.08) { $pa_near = true; break; }
+                        }
+                        if (!$pa_near) {
+                            wpc_v2_sized_trigger_queue($attachment_id, $pa_t, $pa_t);
+                            $pa_existing[] = $pa_t;
+                        }
+                    }
+                }
+            }
+
+            // Per-srcset-entry hybrid emission. For each WP sub-size, per format,
+            // emit the natural URL if the variant is on disk, else the CDN
+            // transform URL which serves the format on-the-fly (and for wp:2
+            // encodes AVIF in the background). Transform shapes:
+            //   wp:0 → JPG, wp:1 → WebP, wp:2 → AVIF (WebP placeholder first load,
+            //   real AVIF once encoded).
+            // A natural .avif that doesn't exist yet would 404 and trip
+            // ERR_BLOCKED_BY_ORB; the transform URL never 404s, so the srcset
+            // migrates entry-by-entry to natural URLs as each variant lands.
+            $lazy_enabled_for_optimistic = function_exists('wpc_v2_get_lazy_enabled')
+                                            && wpc_v2_get_lazy_enabled();
+            // Lazy is the gate for sight-unseen AVIF rungs: without the zone's
+            // lazy flag the pod serves webp-interim but fires NO backfill trigger
+            // (opt_out), so the rung stays interim forever. A site enabling lazy
+            // flips that flag via its own /v2/config save, so the rung lands ≤60s.
+            // Also require a LIVE CDN: $cdn_zone is just the zone name (set even
+            // when live-cdn=0, possibly disconnected), and srcset rungs have no
+            // onerror, so a dead-zone transform rung renders broken. CDN-off
+            // interim = registered naturals only; backfill fills the rest in ~90s.
+            $cdn_live_for_optimistic = !empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1';
+            if ($lazy_enabled_for_optimistic && $cdn_live_for_optimistic && $cdn_zone) {
+                $meta_for_lazy = wp_get_attachment_metadata($attachment_id);
+                if (is_array($meta_for_lazy) && !empty($meta_for_lazy['sizes'])) {
+                    // $upload_basedir already declared at the top of this filter
+                    foreach ($meta_for_lazy['sizes'] as $size_name => $size_data) {
+                        if (empty($size_data['file']) || empty($size_data['width'])) continue;
+                        $w = (int) $size_data['width'];
+                        if ($w <= 0) continue;
+
+                        // Only emit if this width isn't already covered by
+                        // ic_local_variants. Real variants take precedence.
+                        $needs_webp = !isset($webp_srcset[$w]);
+                        $needs_avif = !isset($avif_srcset[$w]);
+                        if (!$needs_webp && !$needs_avif) continue;
+
+                        $base_filename = (string) $size_data['file'];
+                        $base_no_ext   = preg_replace('/\.[^.]+$/', '', $base_filename);
+                        if ($base_no_ext === '' || $base_no_ext === null) continue;
+
+                        // Origin sub-size JPG URL (always exists — WP generates these)
+                        $jpg_origin_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $base_filename;
+
+                        // Disk paths for file_exists() check
+                        $webp_disk = $upload_basedir . '/' . $upload_subdir . '/' . $base_no_ext . '.webp';
+                        $avif_disk = $upload_basedir . '/' . $upload_subdir . '/' . $base_no_ext . '.avif';
+
+                        if ($needs_webp) {
+                            if (file_exists($webp_disk)) {
+                                // Variant landed — use natural URL (CDN serves directly)
+                                $webp_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $base_no_ext . '.webp';
+                            } else {
+                                // Not yet on disk — CDN transforms JPG→WebP on-the-fly
+                                $webp_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:1/w:' . $w . '/u:' . $jpg_origin_url;
+                            }
+                            $webp_srcset[$w] = esc_url($webp_url) . ' ' . $w . 'w';
+                        }
+                        if ($needs_avif) {
+                            if (file_exists($avif_disk)) {
+                                // Variant landed — use natural URL (CDN serves directly)
+                                $avif_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $base_no_ext . '.avif';
+                            } else {
+                                // Not on disk — CDN serves WebP placeholder, encodes
+                                // AVIF async; lazy_cdn lands the natural file later.
+                                $avif_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:2/w:' . $w . '/u:' . $jpg_origin_url;
+                            }
+                            $avif_srcset[$w] = esc_url($avif_url) . ' ' . $w . 'w';
+                        }
+                    }
+                    // Also add the full-size (unscaled) AVIF/WebP if metadata has it.
+                    if (!empty($meta_for_lazy['file']) && !empty($meta_for_lazy['width'])) {
+                        $w = (int) $meta_for_lazy['width'];
+                        if ($w > 0 && (!isset($avif_srcset[$w]) || !isset($webp_srcset[$w]))) {
+                            $parent_file = basename((string) $meta_for_lazy['file']);
+                            $parent_no_ext = preg_replace('/\.[^.]+$/', '', $parent_file);
+                            if ($parent_no_ext !== '' && $parent_no_ext !== null) {
+                                $jpg_full_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $parent_file;
+                                $webp_full_disk = $upload_basedir . '/' . $upload_subdir . '/' . $parent_no_ext . '.webp';
+                                $avif_full_disk = $upload_basedir . '/' . $upload_subdir . '/' . $parent_no_ext . '.avif';
+
+                                if (!isset($webp_srcset[$w])) {
+                                    if (file_exists($webp_full_disk)) {
+                                        $webp_full = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $parent_no_ext . '.webp';
+                                    } else {
+                                        $webp_full = 'https://' . $cdn_zone . '/q:i/r:0/wp:1/w:' . $w . '/u:' . $jpg_full_url;
+                                    }
+                                    $webp_srcset[$w] = esc_url($webp_full) . ' ' . $w . 'w';
+                                }
+                                if (!isset($avif_srcset[$w])) {
+                                    if (file_exists($avif_full_disk)) {
+                                        $avif_full = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $parent_no_ext . '.avif';
+                                    } else {
+                                        $avif_full = 'https://' . $cdn_zone . '/q:i/r:0/wp:2/w:' . $w . '/u:' . $jpg_full_url;
+                                    }
+                                    $avif_srcset[$w] = esc_url($avif_full) . ' ' . $w . 'w';
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (empty($webp_srcset) && empty($avif_srcset)) return $img_tag;
+
+            // Universal fine-grained ladder: a sparse srcset over-fetches 4-10×
+            // on high-DPR devices, so add LCP-style widths + retina doubles to
+            // every image. Encoding stays on-demand via lazy_cdn (only requested
+            // widths get encoded). Portrait images cap width at maxWidth × aspect
+            // so the encoded height doesn't blow past the configured size cap
+            // (same maxdim rule as rewriteLogic's buildLcpSrcset).
+            $lazy_enabled_for_uni_ladder = function_exists('wpc_v2_get_lazy_enabled')
+                                            && wpc_v2_get_lazy_enabled();
+            if ($lazy_enabled_for_uni_ladder && $cdn_zone && is_array($meta_for_lazy)) {
+                $maxW_uni = !empty($settings['maxWidth']) ? (int) $settings['maxWidth'] : 2560;
+                if ($maxW_uni < 100) $maxW_uni = 2560;
+                $effective_max_uni = $maxW_uni;
+                if (!empty($meta_for_lazy['width']) && !empty($meta_for_lazy['height'])) {
+                    $sw_uni = (int) $meta_for_lazy['width'];
+                    $sh_uni = (int) $meta_for_lazy['height'];
+                    if ($sh_uni > $sw_uni && $sh_uni > 0) {
+                        $effective_max_uni = (int) floor($maxW_uni * ($sw_uni / $sh_uni));
+                    }
+                }
+                // Base ladder + retina doubles of any width already in srcset
+                $ladder_uni = [400, 480, 640, 720, 800, 960, 1100, 1200, 1280, 1366, 1440, 1600, 1800, 2048, 2560];
+                foreach (array_merge(array_keys($webp_srcset), array_keys($avif_srcset)) as $existing_w) {
+                    $ladder_uni[] = (int) $existing_w * 2;
+                }
+                // Mobile srcset cap applied at final assembly below, so it covers
+                // widths added by every loop, not just this one.
+                $ladder_uni = array_values(array_unique(array_map(function ($w) use ($effective_max_uni) {
+                    return min($w, $effective_max_uni);
+                }, $ladder_uni)));
+                sort($ladder_uni);
+
+                // u: base = the unscaled original (highest-quality encoder source).
+                $orig_u_url_uni = '';
+                if (function_exists('wp_get_original_image_url') && function_exists('wp_get_original_image_path')) {
+                    $orig_url_try = wp_get_original_image_url($attachment_id);
+                    $orig_path_try = wp_get_original_image_path($attachment_id);
+                    if ($orig_url_try && $orig_path_try && @file_exists($orig_path_try)) {
+                        $orig_u_url_uni = $orig_url_try;
+                    }
+                }
+                $u_base_uni = $orig_u_url_uni !== ''
+                    ? $orig_u_url_uni
+                    : ($upload_dir['baseurl'] . '/' . $upload_subdir . '/' . basename((string) $meta_for_lazy['file']));
+                $base_no_ext_uni = preg_replace('/\.(jpe?g|png|webp)$/i', '', $u_base_uni);
+
+                foreach ($ladder_uni as $w_uni) {
+                    if ($w_uni <= 0) continue;
+                    // Skip widths already covered by both formats.
+                    if (isset($webp_srcset[$w_uni]) && isset($avif_srcset[$w_uni])) continue;
+
+                    // AVIF entry
+                    if (!isset($avif_srcset[$w_uni])) {
+                        $natural_avif = $base_no_ext_uni . '-' . $w_uni . 'w.avif';
+                        $natural_avif_disk = str_replace(trailingslashit($upload_dir['baseurl']), trailingslashit($upload_basedir) . '', $natural_avif);
+                        if (@file_exists($natural_avif_disk)) {
+                            $avif_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $natural_avif);
+                        } else {
+                            $u_via_cdn = preg_replace('#^https?://[^/]+#', 'https://' . $cdn_zone, $u_base_uni);
+                            $avif_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:2/w:' . $w_uni . '/u:' . $u_via_cdn;
+                        }
+                        $avif_srcset[$w_uni] = esc_url($avif_url) . ' ' . $w_uni . 'w';
+                    }
+                    // WebP entry
+                    if (!isset($webp_srcset[$w_uni])) {
+                        $natural_webp = $base_no_ext_uni . '-' . $w_uni . 'w.webp';
+                        $natural_webp_disk = str_replace(trailingslashit($upload_dir['baseurl']), trailingslashit($upload_basedir) . '', $natural_webp);
+                        if (@file_exists($natural_webp_disk)) {
+                            $webp_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $natural_webp);
+                        } else {
+                            $u_via_cdn = preg_replace('#^https?://[^/]+#', 'https://' . $cdn_zone, $u_base_uni);
+                            $webp_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:1/w:' . $w_uni . '/u:' . $u_via_cdn;
+                        }
+                        $webp_srcset[$w_uni] = esc_url($webp_url) . ' ' . $w_uni . 'w';
+                    }
+                }
+            }
+
+            // Activate sizes="auto" via lazy injection + smart LCP sizes override
+            // (see the helper docblocks above for the why).
+            if (wpc_picture_should_inject_lazy($img_tag, $settings)) {
+                $img_tag = preg_replace('/<img\b/i', '<img loading="lazy"', $img_tag, 1);
+                if (function_exists('wpc_diagnostic_log')) {
+                    wpc_diagnostic_log('PICTURE_LAZY',
+                        'injected loading=lazy on non-LCP IMG id=' . (int) $matches[1]);
+                }
+            }
+            $smart_lcp_sizes = wpc_picture_compute_lcp_sizes($img_tag, $settings);
+            if ($smart_lcp_sizes !== '') {
+                $img_tag = wpc_picture_apply_sizes_to_img($img_tag, $smart_lcp_sizes);
+                if (function_exists('wpc_diagnostic_log')) {
+                    wpc_diagnostic_log('PICTURE_LCP_SIZES',
+                        'override id=' . (int) $matches[1] . ' sizes="' . $smart_lcp_sizes . '"');
+                }
+            }
 
             // Extract sizes from <img> tag, pass through to <source>
             $sizes = '100vw';
             if (preg_match('/sizes="([^"]*)"/', $img_tag, $sz)) {
                 $sizes = $sz[1];
             }
+            // Prepend `auto,` so browsers measure rendered size and pick exact —
+            // but only when the IMG is lazy. auto is invalid on eager images and
+            // on the LCP hero it poisons sizes → Chrome falls back to 100vw and
+            // over-fetches the top of the ladder. Eager imgs keep their auto-free
+            // sizes so the picker resolves the same content-width slot.
+            $img_is_lazy_for_auto = (stripos($img_tag, 'loading="lazy"') !== false);
+            if ($img_is_lazy_for_auto && stripos($sizes, 'auto') === false) {
+                $sizes = 'auto, ' . $sizes;
+            }
+
+            // Mobile srcset cap. Gates on `generate_adaptive` (the "Resize by
+            // Incoming Device" toggle) — the same key rewriteLogic uses, NOT the
+            // separate `adaptive` section header. Applied at final assembly so it
+            // filters widths from every loop above, not just one.
+            $is_mobile_for_cap = class_exists('wps_ic_rewriteLogic')
+                ? (bool) wps_ic_rewriteLogic::$isMobile
+                : (function_exists('wp_is_mobile') && wp_is_mobile());
+            $is_adaptive_for_cap = !empty($settings['generate_adaptive'])
+                && (string) $settings['generate_adaptive'] === '1';
+            if ($is_mobile_for_cap && $is_adaptive_for_cap) {
+                $mob_cap_final = (int) apply_filters('wpc_mobile_srcset_cap',
+                    (int) get_option('wpc-min-mobile-width', 400),
+                    isset($img_tag) ? (string) $img_tag : '');
+                if ($mob_cap_final > 0) {
+                    $avif_srcset = array_filter($avif_srcset, function ($_, $w) use ($mob_cap_final) {
+                        return (int) $w <= $mob_cap_final;
+                    }, ARRAY_FILTER_USE_BOTH);
+                    $webp_srcset = array_filter($webp_srcset, function ($_, $w) use ($mob_cap_final) {
+                        return (int) $w <= $mob_cap_final;
+                    }, ARRAY_FILTER_USE_BOTH);
+                }
+            }
 
             $sources = '';
-            if (!empty($avif_srcset)) {
+            if ($wpc_avif_ok && !empty($avif_srcset)) { // ceiling-gated: webp/off → no AVIF source
                 ksort($avif_srcset);
                 $sources .= '<source type="image/avif" ' . $srcsetAttr . '="' . implode(', ', $avif_srcset) . '" sizes="' . esc_attr($sizes) . '">';
             }
-            if (!empty($webp_srcset)) {
+            if ($wpc_webp_ok && !empty($webp_srcset)) { // ceiling-gated: off → no WebP source
                 ksort($webp_srcset);
                 $sources .= '<source type="image/webp" ' . $srcsetAttr . '="' . implode(', ', $webp_srcset) . '" sizes="' . esc_attr($sizes) . '">';
             }
 
+            // No next-gen source → don't wrap in an empty <picture>; return the
+            // plain <img> so the visitor still gets the optimized original.
+            if ($sources === '') {
+                return $img_tag;
+            }
             return '<picture class="wpc-picture">' . $sources . $img_tag . '</picture>';
         },
         $content
@@ -423,11 +1159,85 @@ add_filter('the_content', 'wpc_inject_picture_tags', 999);
 function wpc_picture_tag_css() {
     $settings = get_option(WPS_IC_SETTINGS);
     if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return;
-    // display:contents makes <picture> invisible to layout — child <img> inherits all parent CSS as if <picture> isn't there
-    // Fallback for older browsers: display:inline-block matches <img> default behavior
+    // display:contents makes <picture> invisible to layout, so the child <img>
+    // inherits parent CSS as if the wrapper weren't there.
     echo '<style>.wpc-picture{display:contents;}</style>' . "\n";
 }
 add_action('wp_head', 'wpc_picture_tag_css', 1);
+
+// Missing uploads-image variants must 404 clean, never 302. WP core's 404
+// permalink-guess matches a missing "…-1024x501.avif" to the attachment and 302s
+// to the original ".png" — the CDN edge then receives PNG bytes under the .avif
+// URL and has to sniff-reject them. A true 404 is a clean miss signal and keeps
+// the edge's self-heal honest. Scoped to uploads images; page/post guessing
+// untouched.
+function wpc_no_404_guess_for_upload_images($do_guess)
+{
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    if ($uri !== '' && preg_match('#/wp-content/uploads/[^?]+\.(avif|webp|jpe?g|png|gif|svg|ico)(\?|$)#i', $uri)) {
+        return false;
+    }
+    return $do_guess;
+}
+add_filter('do_redirect_guess_404_permalink', 'wpc_no_404_guess_for_upload_images');
+
+// Hard-stop the 404 for uploads images before redirect plugins run. The guard
+// above stops WP core's redirect, but SEO/redirect plugins (template_redirect@10)
+// still 302 missing variants to the homepage, feeding the edge HTML bytes on its
+// .avif fetch. Priority 0 wins: send the honest 404 and exit. Fires only when WP
+// already ruled the request a 404 on an uploads image (real files never reach PHP).
+function wpc_hard_404_for_upload_images()
+{
+    if (!function_exists('is_404') || !is_404()) {
+        return;
+    }
+    // is_404() means WP's full request handling (incl. any offload integration) ALREADY ruled this a
+    // 404 — so a bare reply here is offload-safe (never a false-404 on a live image). Extend it to ANY
+    // image-ext path (uploads, /storage, page-builder, offloaded) — not just /wp-content/uploads — so a
+    // missing image stops rendering the theme's 404 template (often a multi-hundred-KB page: acrystalglass
+    // /storage misses were 447 KB / ~4 s). Returning ~9 bytes and exiting frees the FPM worker far sooner
+    // and slashes the per-miss bytes. This is the "make the 404 worker efficient" win for the paths the
+    // pre-core fast-404 (mu-plugin / advanced-cache) can't verify on local disk (offloaded /storage).
+    $uri  = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    $path = $uri !== '' ? (string) parse_url($uri, PHP_URL_PATH) : '';
+    if ($path === '' || !preg_match('#\.(avif|webp|jpe?g|png|gif|svg|ico|bmp|tiff?)$#i', $path)) {
+        return;
+    }
+    status_header(404);
+    nocache_headers();
+    header('Content-Type: text/plain; charset=utf-8');
+    header('X-WPC-Fast-404: tr'); // template_redirect skip-theme path (distinct from the mu-plugin's :1)
+    echo 'Not Found';
+    exit;
+}
+add_action('template_redirect', 'wpc_hard_404_for_upload_images', 0);
+
+// Some redirect plugins run before template_redirect, so also catch this at
+// init@0 with a file-existence check. An uploads-image URI reaching PHP means
+// the web server found no file (statics never hit PHP); verify on disk and 404.
+// Anchored to the literal /wp-content/uploads/ prefix, so relocated-uploads
+// sites simply don't match (defense stays at template_redirect there).
+function wpc_early_404_for_missing_upload_images()
+{
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    if ($uri === '' || !preg_match('#^/wp-content/uploads/([^?\#]+\.(?:avif|webp|jpe?g|png|gif|svg|ico))(?:[?\#]|$)#i', $uri, $m)) {
+        return;
+    }
+    $rel = rawurldecode($m[1]);
+    if (strpos($rel, '..') !== false || strpos($rel, "\0") !== false) {
+        return;
+    }
+    $file = (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : ABSPATH . 'wp-content') . '/uploads/' . $rel;
+    if (@file_exists($file)) {
+        return; // real file — let whatever routed it here proceed
+    }
+    status_header(404);
+    nocache_headers();
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Not Found';
+    exit;
+}
+add_action('init', 'wpc_early_404_for_missing_upload_images', 0);
 
 //CUSTOM_INCLUDE_HERE
 spl_autoload_register(function ($class_name) {
@@ -447,6 +1257,7 @@ spl_autoload_register(function ($class_name) {
 
 class wps_ic
 {
+    use wps_ic_agency_trait;
 
     public static $slug;
     public static $version;
@@ -498,7 +1309,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.00.08';
+        self::$version = '7.03.39';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -507,12 +1318,12 @@ class wps_ic
 
         $wps_ic = $this;
         self::$accStatusChecked = false;
-        if (class_exists('whtlbl_whitelabel_plugin')) {
-            $wlpl = new whtlbl_whitelabel_plugin();
-            if (method_exists($wlpl, 'get_slug')) {
-                self::$slug = $wlpl->get_slug();
-            }
-        }
+        // Do NOT swap self::$slug to the whitelabel slug. The whitelabel companion
+        // (cache-commander) hardcodes a list of `wpcompress-*` enqueue handles to
+        // find/copy/re-enqueue from its own /files/ dir; swapping the slug changed
+        // our handles so they never matched, leaving wp-compress-* asset URLs (and
+        // 404s in some multisite topologies). Keeping 'wpcompress' lets that
+        // pipeline match. The ?page redirect chain still works — one extra hop.
 
         // Load translations
         load_plugin_textdomain('wp-compress-image-optimizer', false, dirname(plugin_basename(WPC_CC_PLUGIN_FILE)) . '/langs');
@@ -554,8 +1365,15 @@ class wps_ic
         $cache->purgeHooks();
 
         $this->integrations = new wps_ic_integrations();
-        $this->integrations->add_admin_hooks();
-        $this->integrations->apply_admin_filters();
+        // Light-ajax skip: the high-frequency compress handlers (variant_count,
+        // heartbeat) fire 4-6×/sec, and add_admin_hooks/apply_admin_filters cost
+        // 200-1500ms instantiating every plugin-check class to register admin_init/
+        // admin_menu callbacks that don't fire on admin-ajax anyway. Skip the
+        // registration; keep the instance for later $this->integrations access.
+        if (!defined('WPC_IS_LIGHT_AJAX') || !WPC_IS_LIGHT_AJAX) {
+            $this->integrations->add_admin_hooks();
+            $this->integrations->apply_admin_filters();
+        }
 
         if (class_exists('WpeCommon')) {
             add_action('wpe_cache_flush', function() {
@@ -565,8 +1383,12 @@ class wps_ic
             });
         }
 
-        $preload = new wps_ic_preload_warmup();
-        $preload->setupCronPreload();
+        // Light-ajax skip: preload_warmup only registers cron handlers, which
+        // don't fire on admin-ajax — the light handlers don't need it.
+        if (!defined('WPC_IS_LIGHT_AJAX') || !WPC_IS_LIGHT_AJAX) {
+            $preload = new wps_ic_preload_warmup();
+            $preload->setupCronPreload();
+        }
 
         //Temporary in 6.10.13. we changed where cname is saved, this is for users upgrading
         $cfCname = get_option(WPS_IC_CF_CNAME);
@@ -622,19 +1444,25 @@ class wps_ic
 
                 // Purge Cache
                 $cache = new wps_ic_cache_integrations();
-                $cache::purgeAll();
+                $cache::purgeAll(false, false, false, true, false, true); // preserve wp-cio/css on update
                 $cache::purgeCriticalFiles();
-                $cache::purgeCacheFiles();
+                $cache::purgeCacheFiles(false, true); // preserve wp-cio/css on update
 
                 // Purge Object Cache
                 $cacheObject = new wps_ic_cache();
                 $cacheObject->purgeObjectCache();
 
-                // Force regen of wp-content/advanced-cache.php from the (possibly updated) template
-                // so new features (e.g. URL exclusions) take effect immediately on upgrade
-                // without requiring the user to save settings first.
-                // Also (re-)assert WP_CACHE = true in wp-config.php; some upgrade paths (uploader,
-                // managed-host snapshots) bypass activation() so the constant can drift to false.
+                // Invalidate the durable CSS/JS asset-MIME proof on upgrade: the
+                // edge rules or our emit host may have changed across versions, so
+                // re-verify the live edge from scratch rather than trust a stale verdict.
+                if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'invalidate_asset_mime_proof')) {
+                    wps_rewriteLogic::invalidate_asset_mime_proof();
+                }
+
+                // Regen advanced-cache.php from the updated template so new
+                // features take effect on upgrade without a settings save. Also
+                // re-assert WP_CACHE=true — some upgrade paths (uploader, managed-
+                // host snapshots) skip activation() so the constant can drift false.
                 if (!class_exists('wps_ic_htaccess')) {
                     @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
                 }
@@ -647,11 +1475,101 @@ class wps_ic
                 // Update the stored version
                 update_option('wpc_core_version', self::$version);
 
+                // Verified-gate backfill: the cdn-rewrite emit-gate now requires
+                // wpc_cf_cname_verified before emitting the CF cname. A currently-
+                // serving zone (cname set + cf.cdn on) is live by definition, so
+                // mark it verified on upgrade — else the gate blanks its host on
+                // the first post-update pageview. Only backfill a NEVER-SET flag,
+                // not an explicit '0' (a mid-change suppress from a cname save);
+                // the sentinel default distinguishes the two, so an update during
+                // an in-flight cname change can't promote a broken host to verified.
+                if (get_option('wpc_cf_cname_verified', '__unset__') === '__unset__') {
+                    $wpc_cf_bf  = (defined('WPS_IC_CF')) ? get_option(WPS_IC_CF) : false;
+                    $wpc_cfc_bf = (defined('WPS_IC_CF_CNAME')) ? trim((string) get_option(WPS_IC_CF_CNAME)) : '';
+                    if ($wpc_cfc_bf !== '' && is_array($wpc_cf_bf) && !empty($wpc_cf_bf['settings']['cdn'])) {
+                        update_option('wpc_cf_cname_verified', 1, false);
+                    }
+                }
+
+                // Fire the orch /v2/config provisioning sync on every update, for
+                // every zone — lays the Bunny Edge Rules + AVIF/WebP Vary + re-signs
+                // the config blob, unconditionally, so a zone the install/heartbeat
+                // never reached gets provisioned. Background cron, never blocks admin.
+                // The force-provision flag re-provisions past the heartbeat throttle
+                // and persists until a 2xx lands — the can't-be-stranded backstop.
+                update_option('wpc_v2_force_provision', 1, false);
+                if (function_exists('wpc_v2_schedule_config_sync')) {
+                    wpc_v2_schedule_config_sync();
+                } elseif (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_v2_deferred_config_sync')) {
+                    wp_schedule_single_event(time(), 'wpc_v2_deferred_config_sync');
+                }
+
                 // Auto-enable picture_webp for existing users who have WebP enabled
                 $migrateSettings = get_option(WPS_IC_SETTINGS);
+                $migrateDirty = false;
                 if (!empty($migrateSettings['generate_webp']) && $migrateSettings['generate_webp'] == '1' && !isset($migrateSettings['picture_webp'])) {
                     $migrateSettings['picture_webp'] = '1';
+                    $migrateDirty = true;
+                }
+
+                // Self-heal: re-couple picture_avif to the single Next-Gen switch.
+                // Lite writers set generate_webp=1 without picture_avif/wpc_nextgen,
+                // so the ceiling derives 'webp' even though the switch shows ON and
+                // defaults ship avif — leaving these installs stuck at the webp
+                // ceiling with the front-end AVIF block never running. Add the avif
+                // intent, but only when next-gen is on AND the user never explicitly
+                // chose a ceiling AND picture_avif is off; a deliberate webp/off
+                // choice is left untouched.
+                //
+                // Safe: this only enables the AVIF *block*. Whether a <source> emits
+                // a natural .avif vs the never-404 wp:2 transform is the independent,
+                // proof-based per-zone flavor gate — an un-converged zone falls back
+                // to the transform, so this heal can't produce a 404ing source.
+                $ng = isset($migrateSettings['wpc_nextgen']) ? strtolower((string) $migrateSettings['wpc_nextgen']) : '';
+                $ngUnchosen = ($ng === '' || $ng === 'auto');
+                $gwOn = !empty($migrateSettings['generate_webp']) && (string) $migrateSettings['generate_webp'] === '1';
+                $paOn = !empty($migrateSettings['picture_avif']) && (string) $migrateSettings['picture_avif'] === '1';
+                if ($gwOn && $ngUnchosen && !$paOn) {
+                    $migrateSettings['picture_avif'] = '1';
+                    if (empty($migrateSettings['picture_webp'])) {
+                        $migrateSettings['picture_webp'] = '1';
+                    }
+                    $migrateSettings['wpc_nextgen'] = 'auto'; // pin the intent so re-renders + future saves are coherent
+                    $migrateDirty = true;
+                }
+
+                if ($migrateDirty) {
                     update_option(WPS_IC_SETTINGS, $migrateSettings);
+                }
+
+                // Re-assert respect-origin on the CF static-assets rule on update.
+                // An old 30d override_origin pins not-yet-landed .avif interims (and
+                // wrong-MIME css/js) for 30 days on a vary-blind CF edge. PATCH-only
+                // (flips TTL modes, keeps expression + domains); no-op without CF.
+                $cfReassert = get_option(WPS_IC_CF);
+                if (!empty($cfReassert['token']) && !empty($cfReassert['zone'])) {
+                    if (!class_exists('WPC_CloudflareAPI')) {
+                        require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                    }
+                    if (class_exists('WPC_CloudflareAPI')) {
+                        $cfReassertSdk = new WPC_CloudflareAPI($cfReassert['token']);
+                        $cfReassertSdk->patchStaticAssetsRespectOrigin($cfReassert['zone']);
+
+                        // Flush the CF edge HTML cache so post-update delivery markup regenerates.
+                        // HTML-ONLY — we must NEVER purge_everything on a plugin update: that wipes every
+                        // edge-cached IMAGE too, and the CDN then re-probes the (often slow) origin for
+                        // every image on the next visit → PHP-worker saturation → 40-60s HTML (the v7.02.x
+                        // incident root cause). A plugin update only changes delivery MARKUP, so purge just
+                        // the HTML entry points; images stay edge-cached. Non-blocking. Filter
+                        // wpc_cf_html_purge_urls to add pages (e.g. shop/landing); wpc_purge_cf_on_update
+                        // to opt out entirely.
+                        if (apply_filters('wpc_purge_cf_on_update', true)
+                            && method_exists($cfReassertSdk, 'purgeFilesAsync')) {
+                            $wpc_html_purge_urls = apply_filters('wpc_cf_html_purge_urls', [home_url('/')]);
+                            $cfReassertSdk->purgeFilesAsync($cfReassert['zone'], (array) $wpc_html_purge_urls);
+                        }
+                    }
                 }
             }
 
@@ -664,8 +1582,23 @@ class wps_ic
                     $cfsdk->addCdnBypassRule($cf['zone']);
                     $cfsdk->whitelistIPs($cf['zone']);
                 }
-                // Always mark done — don't retry on failure (CF API errors would block every admin page load)
+                // Mark done even on failure — retrying would block every admin load on CF API errors
                 update_option('wpc_cf_bypass_v5', '1');
+            }
+
+            // One-time: default-on the natural-AVIF picture source for existing
+            // installs. setMissingSettings() forces absent keys to '0', so a preset
+            // default alone won't enable it on upgrade — set it explicitly, once
+            // (a new feature, so no prior user choice to clobber). Safe: this is
+            // only the master toggle; avif_natural_source_ok() still gates each
+            // rung on the edge witness and falls back to the never-404 transform.
+            if (get_option('wpc_avif_natural_default_v70') !== '1') {
+                $avifNatSettings = get_option(WPS_IC_SETTINGS);
+                if (is_array($avifNatSettings)) {
+                    $avifNatSettings['avif-natural-source'] = '1';
+                    update_option(WPS_IC_SETTINGS, $avifNatSettings);
+                }
+                update_option('wpc_avif_natural_default_v70', '1');
             }
         }
     }
@@ -719,7 +1652,7 @@ class wps_ic
 
         if ($data->account->quotaType == 'requests' || $data->account->quotaType == 'requests-combined') {
             // Requests
-            $liveCredits = ($data->account->leftover ?? 0) . ' Requests Left';
+            $liveCredits = $data->account->leftover . ' Requests Left';
 
             if (empty($data->liveCredits)) {
                 $data->liveCredits = (object)['formatted' => '', 'value' => 0];
@@ -1412,6 +2345,26 @@ class wps_ic
         // Reset loopback status so it re-tests on next upload
         delete_option('wpc_loopback_status');
 
+        // Ensure the telemetry table exists. Also runs on plugins_loaded each
+        // request (idempotent, version-gated) for upgrades that skip the hook.
+        if (class_exists('WPC_Modern_Delivery') && method_exists('WPC_Modern_Delivery', 'maybe_create_emissions_table')) {
+            WPC_Modern_Delivery::maybe_create_emissions_table();
+        }
+
+        // Fire the orch /v2/config provisioning sync on activation. Registration
+        // creates the agencySites row but never provisions — only /v2/config lays
+        // the Edge Rules + AVIF/WebP Vary + signed blob, so without this a fresh
+        // zone could live un-provisioned forever. Background cron, never blocks.
+        // The force-provision flag persists/retries until a 2xx so the zone can't
+        // be stranded if the self-loopback is blocked and wp-cron never ticks.
+        update_option('wpc_v2_force_provision', 1, false);
+        if (function_exists('wpc_v2_schedule_config_sync')) {
+            wpc_v2_schedule_config_sync();
+        } elseif (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_v2_deferred_config_sync')) {
+            wp_schedule_single_event(time(), 'wpc_v2_deferred_config_sync');
+        }
+
         // Purge Object Cache
         $cache = new wps_ic_cache();
         $cache->purgeObjectCache();
@@ -1517,6 +2470,39 @@ class wps_ic
             $htaccess->setWPCache(false);
             $htaccess->removeAdvancedCache();
 
+            // Purge the CF edge before wiping the local cache. After deactivate
+            // the plugin stops rewriting, but CF keeps serving its cached optimized
+            // HTML against an origin that no longer produces it → broken pages until
+            // TTL. Fire the zone purge directly (not via purgeAll, whose integration
+            // hooks may already be torn down). Differs from wpc_purgeCF(): no
+            // sleep(6) (a clicked Deactivate must not hang the response), and a
+            // one-shot guard since deactivation() is wired to two hooks and can run
+            // twice per request. No-op without CF.
+            static $wpc_deact_cf_purged = false;
+            if (!$wpc_deact_cf_purged && !empty(get_option(WPS_IC_CF))) {
+                $wpc_deact_cf_purged = true;
+                if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR') && file_exists(WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php')) {
+                    @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                }
+                $wpc_cf = get_option(WPS_IC_CF);
+                if (class_exists('WPC_CloudflareAPI') && !empty($wpc_cf['token']) && !empty($wpc_cf['zone'])) {
+                    try {
+                        $wpc_cfapi = new WPC_CloudflareAPI($wpc_cf['token']);
+                        if ($wpc_cfapi) {
+                            // Fire-and-forget (blocking=false, timeout=0.01) — dispatches the zone
+                            // purge_everything without delaying the deactivation HTTP response.
+                            if (method_exists($wpc_cfapi, 'purgeCacheAsync')) {
+                                $wpc_cfapi->purgeCacheAsync($wpc_cf['zone']);
+                            } else {
+                                $wpc_cfapi->purgeCache($wpc_cf['zone']);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        // A CF API error (bad token / network) must never block or fatal deactivation.
+                    }
+                }
+            }
+
             // Purge Cached Files
             $cacheLogic = new wps_ic_cache();
             if (file_exists(WPS_IC_CACHE)) {
@@ -1542,15 +2528,13 @@ class wps_ic
 
             // Multisite Settings
             $settings = get_option(WPS_IC_MU_SETTINGS);
-            if (!is_array($settings)) $settings = [];
             $settings['hide_compress'] = 0;
             update_option(WPS_IC_MU_SETTINGS, $settings);
 
             // Remove from active on API
             $options = get_option(WPS_IC_OPTIONS);
-            if (!is_array($options)) $options = [];
             $site = site_url();
-            $apikey = $options['api_key'] ?? '';
+            $apikey = $options['api_key'];
 
             $newOptions = $options;
             $newOptions['regExUrl'] = '';
@@ -1693,9 +2677,15 @@ class wps_ic
                     jQuery('.wp-pointer').hide();
 
                     pointer = jQuery(this).pointer({
-                        content: '<h3>Are You Sure...</h3><p>If you continue, you will need your API Key in order to ' +
-                            'Reconnect the plugin.</><p class="wps-ic-helpdesk-link">If you have any questions or issues, please visit our <a href="https://help' + '.wpcompress.com/en-us/" target="_blank">helpdesk</a>.</p><div' + ' ' + 'style="padding:15px;"><a id="wps-ic-leave-active" class="button ' + 'button-primary" href="#">Leave Connected</a> <a id="wps-ic-reconnect-confirm" class="button ' + 'button-secondary wps-ic-reconnect-confirm" ' + 'href="' + jQuery(
-                                link).attr('href') + '">Reconnect Anyway</a></div></p>',
+                        content: '<h3>Are You Sure...</h3>' +
+                            '<div class="wpc-boxed-outter">' +
+                            '<p>If you continue, you will need your API Key in order to Reconnect the plugin.</p>' +
+                            '<p class="wps-ic-helpdesk-link">If you have any questions or issues, please visit our <a href="https://help.wpcompress.com/en-us/" target="_blank">helpdesk</a>.</p>' +
+                            '</div>' +
+                            '<div class="wpc-boxed-footer">' +
+                            '<a id="wps-ic-leave-active" class="button button-primary" href="#">Leave Connected</a>' +
+                            '<a id="wps-ic-reconnect-confirm" class="button button-secondary wps-ic-reconnect-confirm" href="' + jQuery(link).attr('href') + '">Reconnect Anyway</a>' +
+                            '</div>',
                         position: {
                             my: 'left top',
                             at: 'left top',
@@ -1713,6 +2703,13 @@ class wps_ic
                     $p[0].style.setProperty('visibility', 'visible', 'important');
                     $p[0].style.setProperty('opacity', '1', 'important');
                     $p[0].style.setProperty('z-index', '999999', 'important');
+
+                    // Apply width + custom styling after opening (match deactivate pointer)
+                    jQuery('.wp-pointer').css({
+                        width: '440px',
+                        maxWidth: '440px'
+                    });
+                    jQuery('.wp-pointer').addClass('wpc-custom-pointer');
 
                     jQuery('#wps-ic-reconnect-confirm', '.wp-pointer-content').on('click', function (e) {
                         e.preventDefault();
@@ -1858,11 +2855,9 @@ class wps_ic
 
         //CUSTOM_CONSTRUCT_HERE
 
-
         if (!empty($_GET['ignore_ic'])) {
             return;
         }
-
 
         /***
          * Local Remote Hooks
@@ -1902,6 +2897,30 @@ class wps_ic
 
                     update_option(WPS_IC_TESTS, $tests);
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
+
+                    // PSI-MC v1.47+: structured audit insights extracted server-side.
+                    // Stored locally for admin UI + customer-visible stats. Service backend
+                    // already has the underlying data from running the test, so no plugin→backend
+                    // forwarding needed.
+                    //
+                    // Compat gates (per service team contract 2026-04-17):
+                    //   1. Plugin consumes schema_version === 1 only. Future v2+ shapes ignored
+                    //      until plugin gets explicit support (prevents silent corruption if
+                    //      service bumps to v2 before plugin updated).
+                    //   2. error === false required. If service couldn't extract (missing audits,
+                    //      PSI timeout, etc.), skip save to keep any previous good data intact.
+                    //   3. Graceful fallback: pre-v1.47 responses have no insights field, same
+                    //      condition evaluates false and plugin continues unchanged.
+                    if (!empty($body['insights'])
+                        && (int) ($body['insights']['schema_version'] ?? 0) === 1
+                        && empty($body['insights']['error'])) {
+                        update_option('wpc_psi_insights', [
+                            'data'           => $body['insights'],
+                            'schema_version' => 1,
+                            'lastRun'        => time(),
+                        ], false);
+                    }
+
                     if (!empty($body['testID'])) {
                         $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
                         $warmupLog[$body['testID']] = ['ended' => date('Y-m-d H:i:s')];
@@ -2018,6 +3037,9 @@ class wps_ic
             self::$api_key = $this::$options['api_key'];
         }
 
+        // Required to Extract Key - DO NOT REMOVE!
+        $this->isAgencyPortal();
+
         if (empty($this::$options['response_key'])) {
             self::$response_key = '';
         } else {
@@ -2028,18 +3050,42 @@ class wps_ic
         $this->upgrader = new wps_ic_upgrader();
         $this->mainwp = new wps_ic_mainwp();
 
-        if (is_admin()) {
-            $this->inAdmin();
+        if ($this->isAgencyPortal()) {
+
+            #$this->inAdmin();
+            $this->enqueues = new wps_ic_enqueues();
+            $this->ajax = new wps_ic_ajax();
+
+            // Output the #select-mode popup template in wp_footer (agency runs in frontend context)
+            $modes = new wps_ic_modes();
+            add_action('wp_footer', [$modes, 'showPopup']);
+
         } else {
-            // Add Elementor Bg Lazy
-            $bgLazy = new wps_ic_bgLazy();
-            $this->inFrontEnd();
+
+            if (is_admin()) {
+                $this->inAdmin();
+            } else {
+                // Add Elementor Bg Lazy
+                $bgLazy = new wps_ic_bgLazy();
+                $this->inFrontEnd();
+            }
+
+        }
+
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return;
         }
 
         // Change PHP Limits
         $wps_ic = $this;
         do_action('wps_ic_init');
     }
+
+
+    public function inAgency() {
+        $this->enqueues = new wps_ic_enqueues();
+    }
+
 
     public function fetchCritical()
     {
@@ -2181,6 +3227,7 @@ class wps_ic
      */
     public static function dontRunif()
     {
+
         if (self::hiddenAdminArea()) {
             return true;
         }
@@ -2431,7 +3478,6 @@ class wps_ic
         }
 
         $this->enqueues = new wps_ic_enqueues();
-
         $this->runInitialTest();
 
         // Force Disable Elementor Cache
@@ -2442,11 +3488,10 @@ class wps_ic
             }
         }
 
-        // Check is plugin able to Connect to API
-        if (get_option('wpc-connectivity-status') === false) {
-            $preload_warmup = new wps_ic_preload_warmup();
-            $preload_warmup->simpleConnectivityTest();
-        }
+        // Connectivity probe removed (v7.03.31): simpleConnectivityTest() blocked the admin render up to
+        // 30s on first link to set wpc-connectivity-status. That verdict is now orphaned — critical CSS
+        // moved to crit-push.zapwp.net (which self-checks reachability from its own vantage) and nothing
+        // in warmup/bulk reads it. Do NOT re-add a blocking reachability probe on the render path here.
 
 
         if (current_user_can('manage_wpc_settings') && !empty($this::$options['api_key'])) {
@@ -2511,7 +3556,12 @@ class wps_ic
                 $htacces->removeHtaccessRules();
             }
 
-            if (!empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
+            // On CDN sites the edge owns format negotiation, so an origin
+            // .htaccess webp rewrite would double-negotiate (and silently re-add
+            // the block each admin load). Emit the origin rule only on non-CDN
+            // sites; strip it when live CDN is on (mirrors the settings-save writer).
+            $wpc_livecdn = !empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1';
+            if (!$wpc_livecdn && !empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
                 $htacces->addWebpReplace(); // SHould be addWebP
             } else {
                 $htacces->removeWebpReplace();
@@ -2653,6 +3703,7 @@ class wps_ic
             delete_option(WPS_IC_TESTS);
             delete_option(WPS_IC_LITE_GPS);
             delete_option(WPC_WARMUP_LOG_SETTING);
+            delete_option('wpc_psi_insights');
 
             $requests = new wps_ic_requests();
 
@@ -2801,8 +3852,16 @@ class wps_ic
                 self::$settings['serve']['svg'] = $page_excludes['cdn'];
             }
 
+            // Per-page Force On / Off / Global for the JavaScript row in Smart
+            // Optimization writes to $page_excludes['delay_js']. The active V2 placeholder
+            // gate at enqueues.class.php:181 reads self::$settings['delay-js-v2'], so the
+            // override has to drive THAT key (not the dead V1 'delay-js' setting). Backward
+            // compat fallback handles any pre-7.01.13 installs that saved under the legacy
+            // 'delay_js_v2' storage key.
             if (isset($page_excludes['delay_js'])) {
-                self::$settings['delay-js'] = $page_excludes['delay_js'];
+                self::$settings['delay-js-v2'] = $page_excludes['delay_js'];
+            } elseif (isset($page_excludes['delay_js_v2'])) {
+                self::$settings['delay-js-v2'] = $page_excludes['delay_js_v2'];
             }
 
             if (isset($page_excludes['adaptive'])) {
@@ -2919,6 +3978,8 @@ class wps_ic
 
 }
 
+include WPS_IC_DIR . 'traits/excludes.php';
+
 function wpc_convert_to_bytes($value) {
     $value = trim($value);
     $last = strtolower($value[strlen($value) - 1]);
@@ -2979,6 +4040,16 @@ function wps_ic_size_format($bytes, $decimals)
 }
 
 
+// Bootstrap-skip gate for /wpc/v2/bg_swap REST callbacks. Everything the handler
+// needs is already loaded above (helpers, the REST route, the autoloader, the
+// wps_ic class def). Below this point we'd instantiate wps_ic + the CDN rewriter
+// + 40+ hooks, none of which the bg_swap callback uses — it runs purely from the
+// REST route and WP core. Returning here saves the ~5-7s of that bootstrap.
+// Universal-host safe; no behavioral change for any other request type.
+if (defined('WPC_IS_BG_SWAP') && WPC_IS_BG_SWAP) {
+    return;
+}
+
 // TODO: Maybe it's required on some themes?
 // Backend
 $wpsIc = new wps_ic();
@@ -2992,11 +4063,11 @@ if (!class_exists('wps_cdn_rewrite', false)) {
     }
 }
 
-if (class_exists('wps_cdn_rewrite', false)) {
+if (!$wpsIc->isAgencyPortal() && class_exists('wps_cdn_rewrite', false)) {
     $cdn = new wps_cdn_rewrite();
     $wps_ic_cdn_instance = $cdn;
 } else {
-    // Fail closed: prevent fatal if CDN module is unavailable
+    // Fail closed: prevent fatal if CDN module is unavailable or agency portal is active
     $wps_ic_cdn_instance = null;
 }
 
@@ -3046,6 +4117,7 @@ register_uninstall_hook(WPC_CC_PLUGIN_FILE, 'wpcUninstall');
 
 // Register API Hooks
 add_action('rest_api_init', function () {
+    // Rest API
     $local = new wps_local_compress();
     $local->registerEndpoints();
 });
@@ -3053,14 +4125,89 @@ add_action('rest_api_init', function () {
 // Re-test loopback whenever plugin settings change
 add_action('update_option_' . WPS_IC_SETTINGS, function () {
     delete_option('wpc_loopback_status');
+    // testLoopback() caches via a 1h transient to avoid a blocking re-POST on
+    // every admin pageview; clear it on a save so the re-test runs fresh (the
+    // hourly cap only suppresses unrelated pageviews).
+    delete_transient('wpc_loopback_test_at');
 });
 
 // Test loopback once on admin load (non-blocking, cached after first run)
 add_action('admin_init', function () {
+    // testLoopback() is a blocking ~5s POST. Never run it on admin-ajax — it
+    // would stall the post-save round-trip; it runs on the next regular page load.
+    if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     if (get_option('wpc_loopback_status', '') !== '') return;
     $local = new wps_local_compress();
     $local->testLoopback();
 }, 99);
+
+// One-time reconcile of the legacy per-format image serve-keys to the single
+// "Images" tile. Old installs could persist a split state (jpg=1, png=0); the
+// tile binds to serve[jpg] but the rewriters read each format key separately, so
+// a split would show the tile ON while other formats serve from origin. Collapse
+// all four to one value (ON if any was on). Idempotent; self-disables via the flag.
+add_action('admin_init', function () {
+    if (get_option('wpc_serve_keys_reconciled_v70121')) return;
+    $s = get_option(WPS_IC_SETTINGS);
+    if (is_array($s) && !empty($s['serve']) && is_array($s['serve'])) {
+        $any = false;
+        foreach (['jpg', 'png', 'gif', 'svg'] as $k) {
+            if (!empty($s['serve'][$k]) && (string) $s['serve'][$k] === '1') { $any = true; break; }
+        }
+        $v = $any ? '1' : '0';
+        if ((string) ($s['serve']['jpg'] ?? '') !== $v || (string) ($s['serve']['png'] ?? '') !== $v
+            || (string) ($s['serve']['gif'] ?? '') !== $v || (string) ($s['serve']['svg'] ?? '') !== $v) {
+            $s['serve']['jpg'] = $s['serve']['png'] = $s['serve']['gif'] = $s['serve']['svg'] = $v;
+            update_option(WPS_IC_SETTINGS, $s);
+        }
+    }
+    update_option('wpc_serve_keys_reconciled_v70121', 1);
+}, 98);
+
+// v7.02.48 — Auto-enable CloudFlare's FREE Tiered Cache on the connected zone (once per site).
+// Tiered Cache serves every CF edge POP from a warm regional upper-tier instead of hitting the origin
+// per-POP, so the homepage origin warm (.47) propagates to the whole edge off ONE origin fetch. The CF
+// PATCH is idempotent ('on' when already on = no-op); runs once (flag), backs off 6h on failure, and is
+// opt-out via the wpc_cf_tiered_cache filter. Only touches zones the customer already connected to WPC.
+add_action('admin_init', function () {
+    if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
+    if (get_option('wpc_cf_tiered_cache_done')) return;
+    if (!apply_filters('wpc_cf_tiered_cache', true)) return;
+    if (get_transient('wpc_cf_tiered_cache_retry')) return; // failure backoff — don't hammer the CF API
+    $cf = get_option(WPS_IC_CF);
+    if (empty($cf['zone']) || empty($cf['token'])) return; // CF not connected → nothing to enable
+    if (!defined('WPS_IC_DIR') || !file_exists(WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php')) return;
+    require_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
+    if (!class_exists('WPC_CloudflareAPI')) return;
+    try {
+        $api = new WPC_CloudflareAPI($cf['token']);
+        // The SDK already has setTieredCache($zoneId, $enabled) — but its only caller
+        // (updateWPCCacheConfig) is dead code, so Tiered Cache never actually got turned on. This
+        // admin_init pass is what makes it real for connected zones (idempotent CF PATCH).
+        $res = $api->setTieredCache($cf['zone'], true);
+        if (!is_wp_error($res) && !empty($res)) {
+            update_option('wpc_cf_tiered_cache_done', time(), false); // success → run once
+        } else {
+            set_transient('wpc_cf_tiered_cache_retry', 1, 6 * HOUR_IN_SECONDS);
+        }
+    } catch (\Throwable $e) {
+        set_transient('wpc_cf_tiered_cache_retry', 1, 6 * HOUR_IN_SECONDS);
+    }
+}, 97);
+
+// v7.02.51 — "Source Hints" toggle (Other Optimizations → Media & Assets), binary to match the grid.
+// settings['emit-src-hints'] = '1' (ON) | '0' (OFF) | unset (default → the baked-ON baseline). It rides
+// the wpc_src_hint_enabled filter, which src_hint_enabled() applies LAST — after the per-zone orch mirror
+// and the baked-ON global baseline — so an explicit ON/OFF beats the orch; unset = no override.
+add_filter('wpc_src_hint_enabled', function ($on) {
+    $s = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : null;
+    if (is_array($s) && isset($s['emit-src-hints'])) {
+        $v = (string) $s['emit-src-hints'];
+        if ($v === '1') return true;   // toggle ON  → emit hints
+        if ($v === '0') return false;  // toggle OFF → escape hatch (beats the orch)
+    }
+    return $on; // unset → baked-on baseline / orch decision
+}, 20);
 
 
 // ─── Backup cleanup: delete files older than 30 days ─────────────
@@ -3107,6 +4254,7 @@ function wpc_do_cleanup_backups() {
         error_log('[WPC Cleanup] Deleted ' . $deleted . ' backup files older than 30 days');
     }
 }
+
 
 // Fired when someone clicks "Deactivate (keep data)"
 add_action('admin_action_deactivate_and_disconnect', 'wpc_deactivate_delete_date');
@@ -3191,6 +4339,8 @@ function wpcCheckCredits()
     $call = wp_remote_get($url, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
     if (is_wp_error($call)) {
+        // Short cooldown so a sick API isn't re-hit on every request
+        set_transient($transient_key, true, MINUTE_IN_SECONDS);
         return;
     }
 
@@ -3198,6 +4348,8 @@ function wpcCheckCredits()
     $response_code = wp_remote_retrieve_response_code($call);
 
     if ($response_code !== 200) {
+        // Short cooldown so a sick API isn't re-hit on every request
+        set_transient($transient_key, true, MINUTE_IN_SECONDS);
         return;
     }
 
@@ -3289,6 +4441,7 @@ function wpc_delete_and_remove_data()
     delete_transient('wpc_initial_test');
     delete_option(WPS_IC_LITE_GPS);
     delete_option(WPC_WARMUP_LOG_SETTING);
+    delete_option('wpc_psi_insights');
 
     // Multisite Settings
     $settings = get_option(WPS_IC_MU_SETTINGS);
@@ -3337,3 +4490,82 @@ function wpc_delete_and_remove_data()
     }
     wp_safe_redirect(admin_url('plugins.php?deactivate=true'));
 }
+/**
+ * Favicon micro-optimization — core's /favicon.ico is an uncached 302 to the
+ * w-logo png (two requests per session). Only fires when WP handles the favicon
+ * (a physical favicon.ico is served by the webserver and never reaches here):
+ *   - Site Icon set: 301 (cacheable a day) instead of core's 302;
+ *   - no Site Icon:  stream the default w-logo png directly with a 1-year cache.
+ * Disable via the wpc_favicon_optimize filter.
+ */
+add_action('do_faviconico', function () {
+    if (!apply_filters('wpc_favicon_optimize', true) || headers_sent()) {
+        return; // fall through to core's default redirect
+    }
+    $icon = function_exists('get_site_icon_url') ? (string) get_site_icon_url(32) : '';
+    if ($icon !== '') {
+        header('Cache-Control: public, max-age=86400');
+        wp_redirect($icon, 301);
+        exit;
+    }
+    $f = ABSPATH . 'wp-includes/images/w-logo-blue-white-bg.png';
+    if (@is_file($f)) {
+        status_header(200);
+        header('Content-Type: image/png');
+        header('Content-Length: ' . (string) filesize($f));
+        header('Cache-Control: public, max-age=31536000, immutable');
+        readfile($f);
+        exit;
+    }
+    status_header(204);
+    header('Cache-Control: public, max-age=86400');
+    exit;
+}, 1);
+
+/**
+ * Universal LCP sizes floor. With CDN + Next-Gen off no plugin pass runs, so
+ * core's "100vw, {W}px" default makes the hero over-fetch. Hooking
+ * wp_calculate_image_sizes (WP's own content-image sizing) is the mode-
+ * independent floor: plain mode gets the ladder, path-A sources inherit it, and
+ * the nd/legacy emitters still override downstream. Scope: front-end,
+ * optimize-lcp on, the first wide (≥1200w) image per request only.
+ */
+add_filter('wp_calculate_image_sizes', function ($sizes, $size, $image_src, $image_meta, $attachment_id) {
+    static $done = false;
+    if ($done || is_admin()) return $sizes;
+    $s = get_option(WPS_IC_SETTINGS);
+    if (!is_array($s) || empty($s['optimize-lcp'])) return $sizes;
+    $w = 0;
+    if (is_array($size) && !empty($size[0])) $w = (int) $size[0];
+    if ($w <= 0 && is_array($image_meta) && !empty($image_meta['width'])) $w = (int) $image_meta['width'];
+    if ($w < 1200) return $sizes; // small slot: core's width-hint form is already right
+    $done = true;
+    $maxW = !empty($s['maxWidth']) ? (int) $s['maxWidth'] : 2560;
+    $cw   = function_exists('wpc_get_theme_content_width') ? (int) wpc_get_theme_content_width() : 0;
+    $cap  = $cw > 0 ? $cw : min(1200, max(400, $maxW));
+    $ladder = '(max-width: 600px) 50vw, (max-width: 1024px) 40vw, ' . $cap . 'px';
+    return (string) apply_filters('wpc_picture_lcp_sizes', $ladder, ['width' => $w], $s);
+}, 20, 5);
+
+/**
+ * Format/delivery settings changes purge the page cache. The format-fill scanner
+ * runs in the output buffer, so toggling Generate WebP on a cached page did
+ * nothing until an unrelated cache miss. Watches the format keys; purges once per
+ * real change.
+ */
+add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
+    if (!is_array($old)) $old = [];
+    if (!is_array($new)) $new = [];
+    foreach (['generate_webp', 'picture_avif', 'wpc_nextgen'] as $k) {
+        if ((string) ($old[$k] ?? '') !== (string) ($new[$k] ?? '')) {
+            if (class_exists('wps_ic_cache')) {
+                try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+            }
+            do_action('breeze_clear_all_cache');
+            if (function_exists('error_log')) {
+                error_log('[WPC FormatToggle] ' . $k . ' changed — page cache purged (format-fill can scan fresh renders)');
+            }
+            break;
+        }
+    }
+}, 10, 2);

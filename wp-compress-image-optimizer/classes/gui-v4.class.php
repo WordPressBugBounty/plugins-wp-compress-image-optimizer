@@ -632,13 +632,38 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
+        // Persistent "Purge CDN" ghost button next to Select All, ON THE CDN CARD ONLY,
+        // when the CDN is connected. The admin-bar "Purge CDN Cache" item (menu.class.php) is gated on
+        // serve[]/css/js being set in get_option(WPS_IC_SETTINGS) and is missing on first page load
+        // (option not yet warm), so it appears only on a SECOND refresh. And the tiny arrows-ccw icon in the
+        // tiles row (advanced_settings_v4.php:1063) is easy to miss. This static, server-rendered button
+        // is always present on first load (no async/option-warmth dependency) and discoverable. Scoped to
+        // the 'cdn-delivery-options' card so it does NOT appear on the other cards that reuse this title
+        // row (Adaptive Images, etc.), and gated on an active CDN (live-cdn==1) so it only shows when
+        // there is actually a CDN edge to purge. Reuses the existing .wpc-purge-cdn-cache delegated
+        // click handler (scripts.js:2041 → wps_ic_purge_cdn), so no JS change is needed.
+        // Emitted INSIDE the .form-check div (below) so it picks up the .form-check-scoped
+        // .wpc-purge-cdn-ghost rule (which carries the full ghost-pill base itself — it deliberately does
+        // NOT use the .wpc-select-all-btn class; see the note on the button markup just below).
+        $wpc_cdn_connected = (isset(self::$options['live-cdn']) && self::$options['live-cdn'] == '1');
+        // Class is wpc-purge-cdn-ghost (NOT wpc-select-all-btn): the Select All delegated
+        // handler (tabs.js) matches .wpc-select-all-btn, and the purge handler uses stopPropagation
+        // (not stopImmediatePropagation), so sharing that class made one Purge click ALSO toggle Select
+        // All. The ghost rule carries the full pill styling itself (see _section-cards.less).
+        $wpc_purge_cdn_btn = ($option === 'cdn-delivery-options' && $wpc_cdn_connected)
+            ? '<a href="#" class="wpc-purge-cdn-ghost wpc-purge-cdn-cache" title="' . esc_attr__('Purge the CDN cache', WPS_IC_TEXTDOMAIN) . '">'
+              . '<i class="icon-arrows-ccw" aria-hidden="true"></i>' . esc_html__('Purge CDN', WPS_IC_TEXTDOMAIN) . '</a>'
+            : '';
+
         if (!empty($option) && !$locked) {
             $html .= '<div class="form-check">';
+            $html .= $wpc_purge_cdn_btn;
             $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all" data-for-div-id="' . $option . '" type="checkbox" value="1" id="select-all-' . $option . '" name="select-all-' . $option . '">';
             $html .= '<button type="button" class="wpc-select-all-btn" data-for-div-id="' . $option . '" data-checkbox-id="select-all-' . $option . '">Select All</button>';
             $html .= '</div>';
         } else if ($locked) {
             $html .= '<div class="form-check">';
+            $html .= $wpc_purge_cdn_btn;
             $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all wpc-locked-checkbox" data-for-div-id="' . $option . '" type="checkbox" value="0" id="select-all-' . $option . '" name="select-all-' . $option . '">';
             $html .= '<button type="button" class="wpc-select-all-btn disabled" data-for-div-id="' . $option . '">Select All</button>';
             $html .= '</div>';
@@ -1794,6 +1819,10 @@ class wpc_gui_v4 extends wps_ic
 
     public static function isFeatureEnabled($featureName)
     {
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return true;
+        }
+
         $feature = get_transient($featureName . 'Enabled');
         if (!$feature || $feature == '0') {
             return false;
@@ -1834,7 +1863,7 @@ class wpc_gui_v4 extends wps_ic
     }
 
 
-    public static function dropdown($optionName, $title, $description = '', $values = [], $recommended = '')
+    public static function dropdown($optionName = '', $title, $description = '', $values = [], $recommended = '')
     {
 
         if (empty(self::$options[$optionName])) {

@@ -143,22 +143,16 @@ jQuery(document).ready(function ($) {
     });
 
 
-    $('.wps-ic-stop-bulk-restore,.wps-ic-stop-bulk-compress').on('click', function (e) {
-        e.preventDefault();
-
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {action: 'wps_ic_StopBulk', nonce: wpc_ajaxVar.nonce},
-            success: function (response) {
-                if (response.success == true) {
-                    window.location.reload();
-                }
-            }
-        });
-
-        return false;
-    });
+    // v7.08.23 — Rogue stop-bulk handler REMOVED.
+    // This used to bind .wps-ic-stop-bulk-* and fire wps_ic_StopBulk DIRECTLY on
+    // click with no confirmation. The canonical handler in
+    // assets/js/admin/media-library-bulk.js (_wpcConfirmStop popup → _doStopBulk
+    // → StopBulk, for BOTH compress and restore) is bound to the same buttons, so
+    // both fired on every click — this one ran first and stopped immediately,
+    // making the confirmation popup "totally ignored." media-library-bulk.js is
+    // enqueued on every page that shows the Stop buttons (bulk + dashboard), so it
+    // now solely owns Stop. Backend (v7.08.23) makes StopBulk actually halt the v2
+    // drain/tick/BGRetry, so confirming the popup fully stops processing.
 
     function initTooltipster() {
         $('.OptimizationPageTooltip:not(.tooltipstered)').tooltipster({
@@ -738,7 +732,7 @@ jQuery(document).ready(function ($) {
                     if (local === false) {
                         pagesHtml += `<li> ${createIndicator(item, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip', locked['css'])}</li>`;
                     }
-                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js_v2', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
+                    pagesHtml += `<li>  ${createIndicator(item, 'delay_js', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
                                                         </ul>
                                                         <div class="per-page-settings-cog"></div>
                                                     </div>
@@ -1087,7 +1081,7 @@ jQuery(document).ready(function ($) {
                         newStatusHtml += `<li> ${createIndicator(newItem, 'critical_css', globalSettings['critical']['css'], 'critical-css-tooltip', locked['css'])}</li>`;
                     }
                     newStatusHtml += `
-                    <li> ${createIndicator(newItem, 'delay_js_v2', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
+                    <li> ${createIndicator(newItem, 'delay_js', globalSettings['delay-js-v2'], 'delay-js-tooltip', locked['delay-js'])}</li>
                 `;
                     var $statusElement = $row.find('.wpc-dropdown-row-right-side ul');
                     if ($statusElement.html().trim() !== newStatusHtml.trim()) {
@@ -1748,62 +1742,6 @@ jQuery(document).ready(function ($) {
         return str;
     }
 
-    $('.test-api-button').on('click', function (e) {
-        e.preventDefault();
-        $.ajax({
-            url: ajaxurl, // WordPress AJAX URL
-            type: 'POST', data: {
-                action: 'wps_ic_test_api_connectivity', nonce: wpc_ajaxVar.nonce,
-            }, success: function (response) {
-                // Building the HTML table for the first section
-                let tableHtml = '<h3>Outbound tests</h3><table border="1" style="width:100%"><tr><th>Test Case</th><th>Result</th></tr>';
-                let keys = Object.keys(response.data);
-
-                for (let i = 0; i < keys.length - 1; i++) {
-                    let key = keys[i];
-                    let test = response.data[key];
-                    let result = test.success ? 'Passed' : 'Failed';
-
-                    tableHtml += `<tr><td>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</td><td>${result}</td></tr>`;
-                }
-                tableHtml += '</table>';
-
-                // Building the HTML table for the final test section
-                if (response.data.final_test) {
-                    let finalTest = response.data.final_test;
-                    tableHtml += '<h3>Inbound tests</h3><table border="1" style="width:100%"><tr><th>Test Case</th><th>Result</th></tr>';
-
-                    for (let innerKey in finalTest.response.data) {
-                        let innerResult = finalTest.response.data[innerKey];
-                        let result;
-
-                        if (innerResult.success) {
-                            result = 'Passed';
-                        } else {
-                            let blob = new Blob([innerResult.response], {type: 'text/html'});
-                            let url = URL.createObjectURL(blob);
-
-                            result = `<a href="${url}" target="_blank">View Response</a>`;
-                        }
-
-                        tableHtml += `<tr><td>${innerKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</td><td>${result}</td></tr>`;
-                    }
-                }
-                tableHtml += '</table>';
-
-                // Display the tables in a SweetAlert
-                WPCSwal.fire({
-                    title: 'API Test Results', html: tableHtml, width: '500px'
-                });
-            }, error: function (error) {
-                // Display error in SweetAlert
-                WPCSwal.fire({
-                    title: 'Error!', text: 'An error occurred while fetching the data.', icon: 'error'
-                });
-            }
-        });
-    });
-
     var progressBar = $('#optimizations-progress-bar');
     var marginLeft = 0; // Margin left for moving the bar
     var movingRight = true; // Direction of movement
@@ -2350,7 +2288,8 @@ jQuery(document).ready(function ($) {
             data: {
                 action: 'wps_ic_ajax_v2_checkbox_batch',
                 wps_ic_nonce: wpc_ajaxVar.nonce,
-                changes: JSON.stringify(changes)
+                changes: JSON.stringify(changes),
+                apikey: wpc_ajaxVar.apikey || ''
             },
             success: function () { if (callback) callback(); },
             error: function () { if (callback) callback(); }
@@ -2540,6 +2479,15 @@ jQuery(document).ready(function ($) {
             ? $labelEl.clone().children('.wpc-dropdown-badge').remove().end().text().trim()
             : $(this).clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim();
         var targetId = $dd.data('target');
+        var $hidden = targetId ? $('#' + targetId) : $();
+
+        // v7.03.3 — Capture pre-click value for bulletproof save-pill detection.
+        // User-reported repro on Optimization Strategy dropdown: save pill never
+        // appeared even after hard refresh. Root cause was wpcAdvInitialStates[name]
+        // === undefined → hasUnsavedChanges() diff check silent-fails. Capturing
+        // previousVal here lets us trigger the pill directly without relying on
+        // the init scan having seen this input.
+        var previousVal = $hidden.length ? $hidden.val() : null;
 
         // Update active state
         $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
@@ -2547,14 +2495,33 @@ jQuery(document).ready(function ($) {
 
         // Update label + hidden input
         $dd.find('.wpc-custom-dropdown-label').text(label);
-        if (targetId) {
-            $('#' + targetId).val(val).trigger('change');
+        if ($hidden.length) {
+            $hidden.val(val).trigger('change');
         }
 
-        // Check if anything actually changed from initial state
+        // v7.03.3 — Defensive save-pill trigger when value ACTUALLY changed.
+        // Also seeds wpcAdvInitialStates with the pre-click value so the save
+        // POST collector (which IS scoped to wpcAdvInitialStates) sees this
+        // input as "changed" and includes it in the changes[] array.
+        if ($hidden.length && previousVal !== null && previousVal !== val) {
+            var inputName = $hidden.attr('name');
+            if (inputName) {
+                window.wpcAdvInitialStates = window.wpcAdvInitialStates || {};
+                if (typeof window.wpcAdvInitialStates[inputName] === 'undefined') {
+                    window.wpcAdvInitialStates[inputName] = previousVal;
+                }
+            }
+            // Idempotent fade-in. Safe to call even if pill is already visible.
+            $('.save-button').stop(true, true).fadeIn(400);
+        }
+
+        // Still run checkUnsavedChanges() so OTHER input changes are detected.
+        // (If our defensive trigger above already fired the pill, this is a no-op
+        // visually; the function will just confirm pill state.)
         if (typeof checkUnsavedChanges === 'function') {
             checkUnsavedChanges();
-        } else {
+        } else if (previousVal === null || previousVal === val) {
+            // Last-resort fallback only when defensive trigger above didn't fire.
             $('.save-button').fadeIn(500);
         }
 

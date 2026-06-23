@@ -295,6 +295,31 @@ if (is_dir($critDir)) {
     echo '</div>';
 }
 
+// ─── 7.01.0 Modern Image Delivery Status Panel ────────────────────────────
+$wpc_settings = get_option(WPS_IC_SETTINGS);
+$modernOn = !empty($wpc_settings['modern_image_delivery']) && $wpc_settings['modern_image_delivery'] == '1';
+global $wpdb;
+$queuedCount = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_queued_%'");
+$failedCount = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_failed_%'");
+$attemptsCount = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_optimize_attempts'");
+$queueOption = get_option('wpc_compress_queue', []);
+$queueDepth = is_array($queueOption) ? count($queueOption) : 0;
+
+$panelBg = $modernOn ? '#ecfdf5' : '#f9fafb';
+$panelBorder = $modernOn ? '#bbf7d0' : '#e5e7eb';
+$statusColor = $modernOn ? '#15803d' : '#6b7280';
+$statusText = $modernOn ? 'ACTIVE — HTML emission via native <picture>' : 'OFF — legacy pipeline in use (default)';
+
+echo '<div style="background:' . $panelBg . ';border:1px solid ' . $panelBorder . ';padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
+echo '<strong style="font-size:14px;color:#065f46;">7.01.0 Modern Image Delivery (BETA) Status</strong><br>';
+echo '<div style="margin-top:8px;"><strong>Mode:</strong> <span style="color:' . $statusColor . ';font-weight:bold;">' . $statusText . '</span></div>';
+echo '<div style="margin-top:4px;"><strong>Lazy-gen queue depth:</strong> ' . $queueDepth . ' attachment(s) awaiting worker</div>';
+echo '<div><strong>Concurrent-visitor dedup transients:</strong> ' . $queuedCount . ' active (30-min window)</div>';
+echo '<div><strong>Failed cooldowns:</strong> ' . $failedCount . ' attachment(s) in 24h cooldown (3-strike ceiling)</div>';
+echo '<div><strong>Attachments with retry counter:</strong> ' . $attemptsCount . ' (cleared on successful compress)</div>';
+echo '<div style="margin-top:8px;font-size:11px;color:#065f46;">Zero-JS image delivery. Toggle in Settings &rsaquo; Image Optimization &rsaquo; Optimize Images. Default OFF on upgrade.</div>';
+echo '</div>';
+
 // ─── Purge Debug Log (stored in DB, works on all hosts) ─────────────────────
 $purgeLog = get_option('wpc_purge_debug_log', []);
 echo '<div style="background:#eff6ff;border:1px solid #bfdbfe;padding:16px 20px;margin:10px 0;border-radius:8px;font-family:monospace;font-size:12px;">';
@@ -349,6 +374,11 @@ $legend = [
     'COOKIE_PLUGIN_DETECTED' => ['Cookie-consent plugin detected — jQuery ecosystem excluded from delay', $tagCounts['COOKIE_PLUGIN_DETECTED'] ?? 0],
     'VARS_PRESERVED' => ['WPC inline vars (wp_localize_script output) preserved from delay — script runs at parse time', $tagCounts['VARS_PRESERVED'] ?? 0],
     'DELAY_EXCLUDE_JQ' => ['jQuery/WooCommerce/blockUI script excluded from delay — avoids jQuery-is-not-defined race', $tagCounts['DELAY_EXCLUDE_JQ'] ?? 0],
+    // 7.01.0 Modern Image Delivery events
+    'QUEUED_LAZY_GEN' => ['Modern Image Delivery queued lazy-gen for an attachment with missing variants', $tagCounts['QUEUED_LAZY_GEN'] ?? 0],
+    'DOWNLOAD_FAIL' => ['Variant download failed — retry counter incremented (3 strikes = 24h cooldown)', $tagCounts['DOWNLOAD_FAIL'] ?? 0],
+    'RETRY_CEILING_HIT' => ['Attachment hit 3-attempt ceiling — permanent-fail cooldown for 24h', $tagCounts['RETRY_CEILING_HIT'] ?? 0],
+    'FILENAME_MISMATCH' => ['Local MC returned variant with unexpected filename — write aborted (L1)', $tagCounts['FILENAME_MISMATCH'] ?? 0],
 ];
 foreach ($legend as $tag => [$desc, $count]) {
     $color = $count > 0 ? '#16a34a' : '#6b7280';
@@ -367,6 +397,10 @@ if (empty($diagLog)) {
         if (strpos($line, 'COOKIE_PLUGIN_DETECTED') !== false) $color = '#ca8a04';
         if (strpos($line, 'VARS_PRESERVED') !== false) $color = '#16a34a';
         if (strpos($line, 'DELAY_EXCLUDE_JQ') !== false) $color = '#2563eb';
+        if (strpos($line, 'QUEUED_LAZY_GEN') !== false) $color = '#7c3aed';
+        if (strpos($line, 'DOWNLOAD_FAIL') !== false) $color = '#dc2626';
+        if (strpos($line, 'RETRY_CEILING_HIT') !== false) $color = '#b91c1c';
+        if (strpos($line, 'FILENAME_MISMATCH') !== false) $color = '#a16207';
         echo '<div style="color:' . $color . ';border-bottom:1px solid #eff6ff;padding:2px 0;">' . esc_html($line) . '</div>';
     }
     echo '</div>';
@@ -1021,13 +1055,65 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td><?php esc_html_e('Settings', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <button class="wps_copy_button button-primary" data-field="settings" style="float:right"><?php esc_html_e('Copy text', WPS_IC_TEXTDOMAIN); ?></button>
-
+            <?php
+            echo json_encode(get_option(WPS_IC_SETTINGS));
+            ?>
         </td>
     </tr>
     <tr>
-        <td><?php esc_html_e('Test API Connectivity', WPS_IC_TEXTDOMAIN); ?></td>
+        <td><?php esc_html_e('Delivery Diagnostic', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
-            <button class="test-api-button"><?php esc_html_e('Start Test', WPS_IC_TEXTDOMAIN); ?></button>
+            <button class="wps_copy_button button-primary" data-field="delivery" style="float:right"><?php esc_html_e('Copy text', WPS_IC_TEXTDOMAIN); ?></button>
+            <?php
+            // WPC delivery-resolver diagnostic (v7.03.36). Read-only by default (cached verdict + the recorded
+            // verify detail + the forcing gates). Append &wpc_dprobe=1 to THIS page's URL to ALSO run the live
+            // origin->edge loopback probe + a forced re-verify (makes outbound HTTP; otherwise nothing here does).
+            if (!class_exists('WPC_Delivery_Resolver') && defined('WPS_IC_DIR') && @file_exists(WPS_IC_DIR . 'addons/cdn/delivery-resolver.php')) {
+                @require_once WPS_IC_DIR . 'addons/cdn/delivery-resolver.php';
+            }
+            if (!class_exists('WPC_Negotiated_Delivery') && defined('WPS_IC_DIR') && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
+                @require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
+            }
+            $wpc_dd   = ['resolver_loaded' => class_exists('WPC_Delivery_Resolver')];
+            $wpc_dd['wpc_delivery_state']    = get_option('wpc_delivery_state', null);     // cached verdict + verify.cdn.detail/error/fails
+            $wpc_dd['wpc_delivery_override'] = get_option('wpc_delivery_override', null);
+            $wpc_dd_s = get_option(WPS_IC_SETTINGS);
+            $wpc_dd_g = function ($k) use ($wpc_dd_s) { return (is_array($wpc_dd_s) && isset($wpc_dd_s[$k])) ? $wpc_dd_s[$k] : '(unset)'; };
+            $wpc_dd['gates'] = [
+                'live-cdn' => $wpc_dd_g('live-cdn'), 'cdnAll' => $wpc_dd_g('cdnAll'),
+                'picture_webp' => $wpc_dd_g('picture_webp'), 'picture_avif' => $wpc_dd_g('picture_avif'),
+                'generate_webp' => $wpc_dd_g('generate_webp'), 'generate_adaptive' => $wpc_dd_g('generate_adaptive'),
+                'wpc_optimization_mode' => $wpc_dd_g('wpc_optimization_mode'),
+                'single-url-image-format' => $wpc_dd_g('single-url-image-format'),
+                'zone_id' => get_option('wpc_v2_zone_id', '(unset)'),
+            ];
+            if (class_exists('WPC_Delivery_Resolver') && method_exists('WPC_Delivery_Resolver', 'pick_test_image')) {
+                $wpc_dd['pick_test_image'] = WPC_Delivery_Resolver::pick_test_image();
+            }
+            if (!empty($_GET['wpc_dprobe']) && class_exists('WPC_Delivery_Resolver')) {
+                if (method_exists('WPC_Delivery_Resolver', 'resolve_verbose')) {
+                    $wpc_dd['forced_reverify'] = WPC_Delivery_Resolver::resolve_verbose(true);
+                }
+                $wpc_dd_t   = isset($wpc_dd['pick_test_image']) ? $wpc_dd['pick_test_image'] : null;
+                $wpc_dd_url = (is_array($wpc_dd_t) && !empty($wpc_dd_t['cdn_webp_url'])) ? (string) $wpc_dd_t['cdn_webp_url'] : '';
+                if ($wpc_dd_url !== '' && method_exists('WPC_Delivery_Resolver', 'probe')) {
+                    $wpc_dd_pr = [];
+                    foreach (['avif' => 'image/avif,image/webp,*/*', 'webp' => 'image/webp,*/*', 'legacy' => 'image/*,*/*'] as $wpc_dd_c => $wpc_dd_a) {
+                        $wpc_dd_t0 = microtime(true);
+                        $wpc_dd_p  = WPC_Delivery_Resolver::probe($wpc_dd_url, $wpc_dd_a);
+                        if (is_array($wpc_dd_p)) { $wpc_dd_p['_ms'] = (int) round((microtime(true) - $wpc_dd_t0) * 1000); unset($wpc_dd_p['body']); }
+                        $wpc_dd_pr[$wpc_dd_c] = $wpc_dd_p;
+                    }
+                    $wpc_dd['live_loopback_probes'] = $wpc_dd_pr;
+                    if (method_exists('WPC_Delivery_Resolver', 'evaluate_cdn_probes')) {
+                        $wpc_dd['live_evaluate'] = WPC_Delivery_Resolver::evaluate_cdn_probes($wpc_dd_pr);
+                    }
+                }
+            } else {
+                $wpc_dd['_hint'] = 'Append &wpc_dprobe=1 to this page URL, reload, and re-open this tab to ALSO run the live origin->edge loopback probe + a forced re-verify.';
+            }
+            ?>
+            <textarea id="wps_delivery_field" style="width:100%;min-height:340px;font-family:monospace"><?php echo esc_textarea(wp_json_encode($wpc_dd, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></textarea>
         </td>
     </tr>
     <tr>
@@ -1158,6 +1244,408 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
     </tbody>
 </table>
 
+
+<?php
+// ─── Pipeline Overview ────────────────────────────────────────────────
+// 7.01.7 — at-a-glance side-by-side comparison of all three pipelines (compress,
+// restore, ladder backfill). Per-pipeline deep-dive panels remain below for
+// source attribution + recent samples + raw event log.
+$wpcOverviewStats = [
+    'compress' => get_option('wpc_compress_stats', []),
+    'restore'  => get_option('wpc_restore_stats',  []),
+    'ladder'   => get_option('wpc_ladder_stats',   []),
+];
+$wpcOverviewMeta = [
+    'compress' => ['label' => 'Compress',         'fired' => 'total_compresses_fired',  'success' => 'total_compresses_succeeded',  'last' => 'last_compress_at',  'p95' => 'wpc_compress_stats_p95'],
+    'restore'  => ['label' => 'Restore',          'fired' => 'total_restores_fired',    'success' => 'total_restores_succeeded',    'last' => 'last_restore_at',   'p95' => 'wpc_restore_stats_p95'],
+    'ladder'   => ['label' => 'Ladder backfill',  'fired' => 'total_backfills_fired',   'success' => 'total_backfills_succeeded',   'last' => 'last_backfill_at',  'p95' => 'wpc_ladder_stats_p95'],
+];
+?>
+<h2>Pipeline Overview</h2>
+<table class="wp-list-table widefat fixed striped" style="max-width:880px;">
+    <thead>
+        <tr>
+            <th style="width:25%;">Pipeline</th>
+            <th style="width:15%;">Fired</th>
+            <th style="width:18%;">Success rate</th>
+            <th style="width:18%;">p95 (ms)</th>
+            <th style="width:24%;">Last activity</th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($wpcOverviewMeta as $key => $meta): ?>
+            <?php
+                $stats   = $wpcOverviewStats[$key];
+                $fleet   = isset($stats['fleet']) && is_array($stats['fleet']) ? $stats['fleet'] : [];
+                $fired   = (int) ($fleet[$meta['fired']]   ?? 0);
+                $success = (int) ($fleet[$meta['success']] ?? 0);
+                $rate    = $fired > 0 ? round(($success / $fired) * 100, 1) : 0;
+                $p95     = function_exists($meta['p95']) ? (int) call_user_func($meta['p95'], $stats) : 0;
+                $last_ts = (int) ($fleet[$meta['last']] ?? 0);
+                $last_ago = $last_ts > 0 ? human_time_diff($last_ts) . ' ago' : '—';
+                $rate_color = $fired === 0 ? '#888' : ($rate >= 95 ? '#22b73a' : ($rate >= 80 ? '#fbae40' : '#ef5a5a'));
+            ?>
+            <tr>
+                <td><strong><?php echo esc_html($meta['label']); ?></strong></td>
+                <td><?php echo number_format_i18n($fired); ?></td>
+                <td>
+                    <?php if ($fired > 0): ?>
+                        <span style="color:<?php echo esc_attr($rate_color); ?>;font-weight:600;"><?php echo esc_html($rate); ?>%</span>
+                        <span style="color:#888;font-size:11px;">(<?php echo number_format_i18n($success); ?>/<?php echo number_format_i18n($fired); ?>)</span>
+                    <?php else: ?>
+                        <span style="color:#888;">—</span>
+                    <?php endif; ?>
+                </td>
+                <td><?php echo $p95 > 0 ? number_format_i18n($p95) . ' ms' : '<span style="color:#888;">—</span>'; ?></td>
+                <td><?php echo esc_html($last_ago); ?></td>
+            </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
+
+<?php
+// ─── Modern Delivery Ladder Status ────────────────────────────────────
+// Telemetry for the Phase 1 lazy-fill + multi-layer trigger worker.
+// Shows queue depth, cumulative stats, trigger attribution, p95 timing, and the recent event ring buffer.
+$wpcLadderStats = get_option('wpc_ladder_stats', []);
+$wpcLadderQueue = get_option('wpc_ladder_gen_queue', []);
+if (!is_array($wpcLadderQueue)) $wpcLadderQueue = [];
+$wpcLadderGenLog = get_option('wpc_variant_gen_log', []);
+if (!is_array($wpcLadderGenLog)) $wpcLadderGenLog = [];
+$wpcLadderPrewarm = get_option('wpc_prewarm_status', []);
+if (!is_array($wpcLadderPrewarm)) $wpcLadderPrewarm = [];
+
+$wpcLadderFleet    = isset($wpcLadderStats['fleet']) && is_array($wpcLadderStats['fleet']) ? $wpcLadderStats['fleet'] : [];
+$wpcLadderTiming   = isset($wpcLadderStats['timing']) && is_array($wpcLadderStats['timing']) ? $wpcLadderStats['timing'] : [];
+$wpcLadderQueueStat = isset($wpcLadderStats['queue']) && is_array($wpcLadderStats['queue']) ? $wpcLadderStats['queue'] : [];
+$wpcLadderTriggers = isset($wpcLadderStats['triggers']) && is_array($wpcLadderStats['triggers']) ? $wpcLadderStats['triggers'] : [];
+
+$wpcLadderSamples = (int) ($wpcLadderTiming['samples'] ?? 0);
+$wpcLadderAvgMs   = $wpcLadderSamples > 0 ? (int) round(($wpcLadderTiming['sum_ms'] ?? 0) / $wpcLadderSamples) : 0;
+$wpcLadderP95Ms   = function_exists('wpc_ladder_stats_p95') ? wpc_ladder_stats_p95($wpcLadderStats) : 0;
+$wpcLadderMaxMs   = (int) ($wpcLadderTiming['max_ms'] ?? 0);
+
+$wpcLadderTotalFired     = (int) ($wpcLadderFleet['total_backfills_fired'] ?? 0);
+$wpcLadderTotalSucceeded = (int) ($wpcLadderFleet['total_backfills_succeeded'] ?? 0);
+$wpcLadderTotalFailed    = (int) ($wpcLadderFleet['total_backfills_failed'] ?? 0);
+?>
+<h2 style="margin-top:40px;">Modern Delivery Ladder Status</h2>
+<table class="wp-list-table widefat fixed striped">
+    <thead>
+    <tr>
+        <th style="width:260px;">Metric</th>
+        <th>Value</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td><strong>Current queue depth</strong></td>
+        <td><?php echo count($wpcLadderQueue); ?> attachment(s) — <?php echo get_option('wpc_ladder_gen_queue_has_items') ? 'worker has work' : 'idle'; ?></td>
+    </tr>
+    <tr>
+        <td><strong>Max queue depth ever</strong></td>
+        <td>
+            <?php echo (int) ($wpcLadderQueueStat['max_depth_ever'] ?? 0); ?>
+            <?php if (!empty($wpcLadderQueueStat['max_depth_at'])): ?>
+                (last reached <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderQueueStat['max_depth_at'])); ?> UTC)
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Backfills fired</strong></td>
+        <td>
+            <?php echo $wpcLadderTotalFired; ?> total
+            — <span style="color:#2a7a2a;"><?php echo $wpcLadderTotalSucceeded; ?> succeeded</span>
+            / <span style="color:#a00;"><?php echo $wpcLadderTotalFailed; ?> failed</span>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Variants generated</strong></td>
+        <td>
+            <?php echo (int) ($wpcLadderFleet['total_variants_avif'] ?? 0); ?> AVIF
+            + <?php echo (int) ($wpcLadderFleet['total_variants_webp'] ?? 0); ?> WebP
+            <?php if (!empty($wpcLadderFleet['total_variants_jpg'])): ?>
+                + <?php echo (int) $wpcLadderFleet['total_variants_jpg']; ?> JPG
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Backfill duration</strong></td>
+        <td>
+            avg <?php echo $wpcLadderAvgMs; ?>ms
+            · p95 <?php echo $wpcLadderP95Ms; ?>ms
+            · max <?php echo $wpcLadderMaxMs; ?>ms
+            <?php if ($wpcLadderSamples > 0): ?>
+                (<?php echo $wpcLadderSamples; ?> samples)
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Trigger attribution</strong></td>
+        <td>
+            <?php
+            $triggerOrder = ['loopback', 'shutdown', 'admin', 'cron', 'manual', 'prewarm', 'cli-force', 'unknown'];
+            $parts = [];
+            foreach ($triggerOrder as $trig) {
+                $count = (int) ($wpcLadderTriggers[$trig] ?? 0);
+                if ($count > 0) $parts[] = $trig . ' <strong>' . $count . '</strong>';
+            }
+            echo $parts ? implode(' · ', $parts) : '<em>no fires yet</em>';
+            ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Last backfill</strong></td>
+        <td>
+            <?php if (!empty($wpcLadderFleet['last_backfill_at'])): ?>
+                <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderFleet['last_backfill_at'])); ?> UTC
+                (<?php echo human_time_diff((int) $wpcLadderFleet['last_backfill_at'], time()); ?> ago)
+            <?php else: ?>
+                <em>never fired</em>
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Activation pre-warm</strong></td>
+        <td>
+            <?php if (!empty($wpcLadderPrewarm['state'])): ?>
+                state=<?php echo esc_html($wpcLadderPrewarm['state']); ?>
+                · prewarmed=<?php echo (int) ($wpcLadderPrewarm['prewarmed'] ?? 0); ?>
+                <?php if (!empty($wpcLadderPrewarm['completed_at'])): ?>
+                    · done <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcLadderPrewarm['completed_at'])); ?> UTC
+                <?php endif; ?>
+                <?php if (!empty($wpcLadderPrewarm['failed_pages'])): ?>
+                    · failed_pages=<?php echo (int) $wpcLadderPrewarm['failed_pages']; ?>
+                <?php endif; ?>
+            <?php else: ?>
+                <em>not yet fired</em>
+            <?php endif; ?>
+        </td>
+    </tr>
+    </tbody>
+</table>
+
+<?php if (!empty($wpcLadderQueue)): ?>
+    <h3 style="margin-top:30px;">Current queue (<?php echo count($wpcLadderQueue); ?>)</h3>
+    <table class="wp-list-table widefat fixed striped">
+        <thead><tr><th style="width:120px;">Attachment ID</th><th>Widths pending</th></tr></thead>
+        <tbody>
+        <?php foreach (array_slice($wpcLadderQueue, 0, 25, true) as $aid => $widths): ?>
+            <tr>
+                <td><?php echo (int) $aid; ?></td>
+                <td><?php echo esc_html(implode(', ', array_map('intval', (array) $widths))); ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php if (count($wpcLadderQueue) > 25): ?>
+        <p><em>… and <?php echo count($wpcLadderQueue) - 25; ?> more. Showing first 25.</em></p>
+    <?php endif; ?>
+<?php endif; ?>
+
+<?php if (!empty($wpcLadderGenLog)): ?>
+    <h3 style="margin-top:30px;">Recent backfill events (last 10)</h3>
+    <table class="wp-list-table widefat fixed striped">
+        <thead>
+        <tr>
+            <th style="width:150px;">Time (UTC)</th>
+            <th style="width:90px;">Attachment</th>
+            <th>Widths</th>
+            <th style="width:110px;">Formats</th>
+            <th style="width:90px;">Duration</th>
+            <th style="width:90px;">Trigger</th>
+            <th style="width:70px;">OK?</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php foreach (array_slice($wpcLadderGenLog, -10) as $entry): ?>
+            <?php
+            $widthsDisplay = '';
+            if (!empty($entry['widths_delivered']) && is_array($entry['widths_delivered'])) {
+                $widthsDisplay = implode(', ', array_map('intval', $entry['widths_delivered']));
+            } elseif (is_array($entry['w'] ?? null)) {
+                $widthsDisplay = implode(', ', array_map('intval', $entry['w']));
+            } elseif (!empty($entry['w'])) {
+                $widthsDisplay = (string) (int) $entry['w'];
+            }
+
+            $formatsDisplay = '';
+            if (!empty($entry['formats_delivered']) && is_array($entry['formats_delivered'])) {
+                $fmtParts = [];
+                foreach ($entry['formats_delivered'] as $fmt => $cnt) {
+                    if ((int) $cnt > 0) $fmtParts[] = $fmt . '×' . (int) $cnt;
+                }
+                $formatsDisplay = implode(' ', $fmtParts);
+            } elseif (!empty($entry['f'])) {
+                $formatsDisplay = is_array($entry['f']) ? implode(',', $entry['f']) : (string) $entry['f'];
+            }
+
+            $dur = isset($entry['duration_ms']) ? ((int) $entry['duration_ms']) . 'ms' : '—';
+            $trg = isset($entry['trigger_source']) ? (string) $entry['trigger_source'] : (isset($entry['ctx']) ? (string) $entry['ctx'] : '—');
+            $ok  = !isset($entry['success']) ? '—' : ($entry['success'] ? '✓' : '✗');
+            ?>
+            <tr>
+                <td><?php echo esc_html(date('Y-m-d H:i:s', (int) ($entry['t'] ?? 0))); ?></td>
+                <td>#<?php echo (int) ($entry['aid'] ?? 0); ?></td>
+                <td><?php echo esc_html($widthsDisplay); ?></td>
+                <td><?php echo esc_html($formatsDisplay); ?></td>
+                <td><?php echo esc_html($dur); ?></td>
+                <td><?php echo esc_html($trg); ?></td>
+                <td><?php echo $ok; ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+<?php endif; ?>
+
+<?php
+// ─── Compress Status ───────────────────────────────────────────────────
+// End-to-end singleCompressV4 timings with source attribution.
+$wpcCompressStats = get_option('wpc_compress_stats', []);
+if (!is_array($wpcCompressStats)) $wpcCompressStats = [];
+$wpcCompressFleet   = isset($wpcCompressStats['fleet']) && is_array($wpcCompressStats['fleet']) ? $wpcCompressStats['fleet'] : [];
+$wpcCompressTiming  = isset($wpcCompressStats['timing']) && is_array($wpcCompressStats['timing']) ? $wpcCompressStats['timing'] : [];
+$wpcCompressSources = isset($wpcCompressStats['sources']) && is_array($wpcCompressStats['sources']) ? $wpcCompressStats['sources'] : [];
+
+$wpcCompressSamples = (int) ($wpcCompressTiming['samples'] ?? 0);
+$wpcCompressAvgMs   = $wpcCompressSamples > 0 ? (int) round(($wpcCompressTiming['sum_ms'] ?? 0) / $wpcCompressSamples) : 0;
+$wpcCompressP95Ms   = function_exists('wpc_compress_stats_p95') ? wpc_compress_stats_p95($wpcCompressStats) : 0;
+$wpcCompressMaxMs   = (int) ($wpcCompressTiming['max_ms'] ?? 0);
+
+$wpcCompressFired     = (int) ($wpcCompressFleet['total_compresses_fired'] ?? 0);
+$wpcCompressSucceeded = (int) ($wpcCompressFleet['total_compresses_succeeded'] ?? 0);
+$wpcCompressFailed    = (int) ($wpcCompressFleet['total_compresses_failed'] ?? 0);
+?>
+<h2 style="margin-top:40px;">Compress Status</h2>
+<table class="wp-list-table widefat fixed striped">
+    <thead>
+    <tr>
+        <th style="width:260px;">Metric</th>
+        <th>Value</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td><strong>Compresses fired</strong></td>
+        <td>
+            <?php echo $wpcCompressFired; ?> total
+            — <span style="color:#2a7a2a;"><?php echo $wpcCompressSucceeded; ?> succeeded</span>
+            / <span style="color:#a00;"><?php echo $wpcCompressFailed; ?> failed</span>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Source attribution</strong></td>
+        <td>
+            <?php
+            $compressSourceOrder = ['upload', 'single', 'bulk', 'retry', 'unknown'];
+            $cParts = [];
+            foreach ($compressSourceOrder as $src) {
+                $count = (int) ($wpcCompressSources[$src] ?? 0);
+                if ($count > 0) $cParts[] = esc_html($src) . ' <strong>' . $count . '</strong>';
+            }
+            echo $cParts ? implode(' · ', $cParts) : '<em>no compresses yet</em>';
+            ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Compress duration</strong></td>
+        <td>
+            avg <?php echo $wpcCompressAvgMs; ?>ms
+            · p95 <?php echo $wpcCompressP95Ms; ?>ms
+            · max <?php echo $wpcCompressMaxMs; ?>ms
+            <?php if ($wpcCompressSamples > 0): ?>
+                (<?php echo $wpcCompressSamples; ?> samples)
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Last compress</strong></td>
+        <td>
+            <?php if (!empty($wpcCompressFleet['last_compress_at'])): ?>
+                <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcCompressFleet['last_compress_at'])); ?> UTC
+                (<?php echo human_time_diff((int) $wpcCompressFleet['last_compress_at'], time()); ?> ago)
+            <?php else: ?>
+                <em>never fired</em>
+            <?php endif; ?>
+        </td>
+    </tr>
+    </tbody>
+</table>
+
+<?php
+// ─── Restore Status ────────────────────────────────────────────────────
+// Telemetry for the restore pipeline — mirrors the ladder stats panel structure.
+$wpcRestoreStats = get_option('wpc_restore_stats', []);
+if (!is_array($wpcRestoreStats)) $wpcRestoreStats = [];
+$wpcRestoreFleet   = isset($wpcRestoreStats['fleet']) && is_array($wpcRestoreStats['fleet']) ? $wpcRestoreStats['fleet'] : [];
+$wpcRestoreTiming  = isset($wpcRestoreStats['timing']) && is_array($wpcRestoreStats['timing']) ? $wpcRestoreStats['timing'] : [];
+$wpcRestoreSources = isset($wpcRestoreStats['sources']) && is_array($wpcRestoreStats['sources']) ? $wpcRestoreStats['sources'] : [];
+
+$wpcRestoreSamples = (int) ($wpcRestoreTiming['samples'] ?? 0);
+$wpcRestoreAvgMs   = $wpcRestoreSamples > 0 ? (int) round(($wpcRestoreTiming['sum_ms'] ?? 0) / $wpcRestoreSamples) : 0;
+$wpcRestoreP95Ms   = function_exists('wpc_restore_stats_p95') ? wpc_restore_stats_p95($wpcRestoreStats) : 0;
+$wpcRestoreMaxMs   = (int) ($wpcRestoreTiming['max_ms'] ?? 0);
+
+$wpcRestoreFired     = (int) ($wpcRestoreFleet['total_restores_fired'] ?? 0);
+$wpcRestoreSucceeded = (int) ($wpcRestoreFleet['total_restores_succeeded'] ?? 0);
+$wpcRestoreFailed    = (int) ($wpcRestoreFleet['total_restores_failed'] ?? 0);
+?>
+<h2 style="margin-top:40px;">Restore Status</h2>
+<table class="wp-list-table widefat fixed striped">
+    <thead>
+    <tr>
+        <th style="width:260px;">Metric</th>
+        <th>Value</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td><strong>Restores fired</strong></td>
+        <td>
+            <?php echo $wpcRestoreFired; ?> total
+            — <span style="color:#2a7a2a;"><?php echo $wpcRestoreSucceeded; ?> succeeded</span>
+            / <span style="color:#a00;"><?php echo $wpcRestoreFailed; ?> failed</span>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Source attribution</strong></td>
+        <td>
+            <?php
+            $sourceOrder = ['local_bkp', 'cloud_bkp', 'service', 'unknown'];
+            $sourceLabels = ['local_bkp' => 'local _bkp', 'cloud_bkp' => '/wpc-backups/', 'service' => 'service download', 'unknown' => 'unknown'];
+            $sParts = [];
+            foreach ($sourceOrder as $src) {
+                $count = (int) ($wpcRestoreSources[$src] ?? 0);
+                if ($count > 0) $sParts[] = esc_html($sourceLabels[$src] ?? $src) . ' <strong>' . $count . '</strong>';
+            }
+            echo $sParts ? implode(' · ', $sParts) : '<em>no restores yet</em>';
+            ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Restore duration</strong></td>
+        <td>
+            avg <?php echo $wpcRestoreAvgMs; ?>ms
+            · p95 <?php echo $wpcRestoreP95Ms; ?>ms
+            · max <?php echo $wpcRestoreMaxMs; ?>ms
+            <?php if ($wpcRestoreSamples > 0): ?>
+                (<?php echo $wpcRestoreSamples; ?> samples)
+            <?php endif; ?>
+        </td>
+    </tr>
+    <tr>
+        <td><strong>Last restore</strong></td>
+        <td>
+            <?php if (!empty($wpcRestoreFleet['last_restore_at'])): ?>
+                <?php echo esc_html(date('Y-m-d H:i:s', (int) $wpcRestoreFleet['last_restore_at'])); ?> UTC
+                (<?php echo human_time_diff((int) $wpcRestoreFleet['last_restore_at'], time()); ?> ago)
+            <?php else: ?>
+                <em>never fired</em>
+            <?php endif; ?>
+        </td>
+    </tr>
+    </tbody>
+</table>
 
 <script type="text/javascript">
     jQuery(document).ready(function ($) {
