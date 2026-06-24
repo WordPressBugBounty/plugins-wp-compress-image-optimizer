@@ -1,6 +1,82 @@
 <?php
 global $wps_ic, $wpdb;
 
+// ─── CDN Provisioning & Delivery — status + guaranteed sync (v7.03.42) ───────────────────
+// Operator window into the suppression/provisioning state with NO SSH/DB needed: answers
+// "is THIS zone provisioned, and if it's serving origin, exactly why?" + a one-click force
+// provision-and-re-verify. The un-suppress itself stays verify-gated (the orch-trigger path),
+// so this can never flip a zone live into broken images — it only nudges + reports.
+$wpcProvMsg = '';
+if (isset($_POST['wpc_prov_action']) && $_POST['wpc_prov_action'] === 'sync'
+    && current_user_can('manage_options') && check_admin_referer('wpc_prov_diag')) {
+    if (function_exists('delete_option'))    { delete_option('wpc_v2_selfheal_attempts'); }
+    if (function_exists('delete_transient')) { delete_transient('wpc_v2_selfheal_backoff'); delete_transient('wpc_v2_config_force_backoff'); delete_transient('wpc_v2_zone_reresolve_bk'); }
+    if (function_exists('update_option'))    { update_option('wpc_v2_force_provision', 1, false); }
+    // Heal a stale/ghost cached zone_id FIRST (a clone can inherit a deleted PZ), re-resolving from the
+    // apikey's live zone via /v2/zone — then provision + verify against the REAL zone.
+    if (function_exists('wpc_v2_resolve_zone_id'))         { wpc_v2_resolve_zone_id(true); }
+    if (function_exists('wpc_v2_run_deferred_config_sync')) { wpc_v2_run_deferred_config_sync(); }
+    if (function_exists('wpc_v2_cf_cname_reverify'))        { wpc_v2_cf_cname_reverify(false); }
+    $vr = function_exists('wpc_v2_verify_and_unsuppress') ? wpc_v2_verify_and_unsuppress('admin_button') : ['stamped' => false, 'reason' => 'handler_missing'];
+    $vz = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '?';
+    if (!empty($vr['stamped'])) {
+        $wpcProvMsg = 'Real-content verify PASSED (edge served 200 image/webp) on zone ' . $vz . ' → fingerprint stamped → CDN UN-SUPPRESSED. Reload the front-end: images + CSS/JS should now be on the CDN.';
+    } elseif (($vr['reason'] ?? '') === 'edge_not_serving_webp') {
+        $wpcProvMsg = 'Edge did NOT serve a real .webp on zone ' . $vz . ' (probe: HTTP ' . (string) ($vr['probe']['code'] ?? '?') . ', format "' . (string) ($vr['probe']['fmt'] ?? '?') . '"). Staying on ORIGIN (safe). If zone ' . $vz . ' is still a dead PZ, the orch must provision it. Probe URL: ' . (string) ($vr['probe_url'] ?? '');
+    } elseif (($vr['reason'] ?? '') === 'no_real_image_to_verify') {
+        $wpcProvMsg = 'No real image found to verify against — upload an image to the media library, then retry.';
+    } else {
+        $wpcProvMsg = 'Provision fired; un-suppress still pending (reason: ' . (string) ($vr['reason'] ?? 'unknown') . ').';
+    }
+}
+if (current_user_can('manage_options')) {
+    $pEnvUnconf  = function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed();
+    $pSuppressed = function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed();
+    $pApikey     = function_exists('wpc_v2_get_apikey') ? (string) wpc_v2_get_apikey() : '';
+    $pZone       = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '';
+    $pCname      = trim((string) get_option('ic_custom_cname', '')); if ($pCname === '') { $pCname = trim((string) get_option('ic_cdn_zone_name', '')); }
+    $pSynced     = (int) get_option('wpc_v2_config_synced_at', 0);
+    $pForce      = (bool) get_option('wpc_v2_force_provision', false);
+    $pAttempts   = (int) get_option('wpc_v2_selfheal_attempts', 0);
+    $pTier = '(resolver unavailable)';
+    if (class_exists('WPC_Delivery_Resolver') && method_exists('WPC_Delivery_Resolver', 'resolve_verbose')) {
+        $rv = WPC_Delivery_Resolver::resolve_verbose(false);
+        if (is_array($rv)) { $pTier = (string) ($rv['reason'] ?? ($rv['tier'] ?? '?')); }
+    }
+    $pWhy = [];
+    if ($pEnvUnconf) { $pWhy[] = 'env unconfirmed (fresh install / staging clone / migration — not yet verified for THIS host)'; }
+    if (function_exists('wpc_v2_zone_cdn_disabled')  && wpc_v2_zone_cdn_disabled())  { $pWhy[] = 'orch master-kill (cdn_disabled)'; }
+    if (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()) { $pWhy[] = 'liveness auto-disable'; }
+    $pNavKey = ($pZone !== '') ? ('wpc_v2_orch_nav_' . preg_replace('/[^A-Za-z0-9_\-]/', '', $pZone)) : '';
+    $pNav    = ($pNavKey !== '') ? get_option($pNavKey, '(not echoed)') : '(no zone)';
+
+    $yes = '<span style="color:#166534;font-weight:600;">YES</span>';
+    $no  = '<span style="color:#991b1b;font-weight:600;">NO</span>';
+    echo '<div style="margin:14px 0;padding:14px 16px;border:1px solid #c5d3e3;border-radius:8px;background:#f1f5f9;">';
+    echo '<h3 style="margin:0 0 8px;color:#19335b;font-size:15px;">CDN Provisioning &amp; Delivery</h3>';
+    if ($wpcProvMsg !== '') { echo '<div style="margin-bottom:10px;padding:8px 10px;background:#effbf1;border:1px solid #22b73a;border-radius:6px;color:#166534;font-size:12px;">' . esc_html($wpcProvMsg) . '</div>'; }
+    echo '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    $prow = function ($k, $v) { echo '<tr><td style="padding:4px 8px;color:#314b72;width:290px;vertical-align:top;">' . $k . '</td><td style="padding:4px 8px;font-family:monospace;">' . $v . '</td></tr>'; };
+    $prow('Connected (API key present)', $pApikey !== '' ? $yes : $no);
+    $prow('Zone identity', $pZone !== '' ? (esc_html($pZone) . (ctype_digit($pZone) ? ' (Bunny PZ)' : '')) : ($pCname !== '' ? (esc_html($pCname) . ' (CNAME)') : '<span style="color:#991b1b;">none</span>'));
+    $prow('Provisioning confirmed for THIS host', $pEnvUnconf ? ($no . ' — fingerprint not stamped') : $yes);
+    $prow('CDN suppressed right now', $pSuppressed ? ($yes . ' &rarr; serving ORIGIN (fail-safe, no 404)') : ($no . ' &rarr; CDN live'));
+    if ($pSuppressed && !empty($pWhy)) { $prow('&hellip;why suppressed', esc_html(implode('; ', $pWhy))); }
+    $prow('Resolved delivery tier', esc_html($pTier));
+    $prow('orch native_accept_vary witness', esc_html((string) $pNav));
+    $prow('Last /v2/config sync', $pSynced > 0 ? esc_html(human_time_diff($pSynced) . ' ago (' . date('Y-m-d H:i:s', $pSynced) . ')') : '<span style="color:#991b1b;">never</span>');
+    $prow('Provision pending (force flag)', $pForce ? $yes : $no);
+    $prow('Self-heal attempts', (string) $pAttempts);
+    echo '</table>';
+    echo '<form method="post" style="margin-top:12px;">';
+    wp_nonce_field('wpc_prov_diag');
+    echo '<input type="hidden" name="wpc_prov_action" value="sync">';
+    echo '<button type="submit" style="background:#4273f0;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;">Force provision + re-verify now</button>';
+    echo '<span style="margin-left:10px;color:#64748b;font-size:11px;">Fires /v2/config + a delivery re-verify (may take a few seconds). Un-suppress stays gated on a real-content verify.</span>';
+    echo '</form>';
+    echo '</div>';
+}
+
 // ─── URL Exclusions diagnostic + force-fix panel ─────────────────────
 // Lets admins verify the "Exclude from Plugin" feature end-to-end without SSH.
 // Handles 3 actions: regen advanced-cache.php, purge all caches, test a URL against the matcher.

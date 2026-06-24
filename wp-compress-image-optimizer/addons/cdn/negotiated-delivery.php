@@ -171,6 +171,17 @@ class WPC_Negotiated_Delivery
         // Emergency force-off filter (defaults true — resolver remains the real gate).
         if (!apply_filters('wpc_negotiated_delivery_enabled', true)) return false;
 
+        // Unified per-zone suppression gate — emit ZERO CDN URLs on a suppressed zone. CRITICAL: the
+        // resolver's cap-merge only carries cdn_disabled / auto_disabled, so resolve() can still return
+        // TIER_CDN_EDGE on an UNCONFIRMED env (fresh install, staging clone, CF-cname not yet live) whose
+        // self-test verify happened to pass — and is_active() would then emit natural .webp/.avif URLs the
+        // edge 404s (zone not yet OTF-provisioned). wpc_v2_zone_cdn_suppressed() ALSO covers
+        // wpc_v2_provision_env_changed() + the cf-cname-wait, which resolve() does not. This is the gate
+        // every other emission surface already checks (cdn-rewrite mainInit, is_active_jpeg, modern-delivery);
+        // the WebP/AVIF negotiated lane was the one exception — this closes it so an unprovisioned zone
+        // fails safe to origin (no 404) until it's genuinely verified + un-suppressed.
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) return false;
+
         // Activate only where the resolver has verified the CDN-edge tier for this site.
         if (!class_exists('WPC_Delivery_Resolver')) return false;
         return WPC_Delivery_Resolver::resolve() === WPC_Delivery_Resolver::TIER_CDN_EDGE;

@@ -929,6 +929,65 @@ class WPC_Delivery_Resolver
     }
 
     /**
+     * Real-content probe target for the orch-triggered un-suppress (v7.03.41). Picks a real attachment
+     * and builds its natural .webp URL (smallest registered subsize — always inside the edge's OTF
+     * budget). The caller then asserts the EDGE serves real webp BYTES (200 + body sniffs webp): a
+     * provisioned OTF zone derives it; an unprovisioned PROXY zone 404s or returns the origin PNG.
+     *
+     * This is the deliberate counterpart to pick_test_image()'s synthetic self-test: the self-test is a
+     * tiny gradient that can NEGOTIATE on a zone that nonetheless 404s real content (the staging
+     * false-positive that un-suppressed straight into broken images). A real rendition can't be fooled —
+     * so this is the gate the un-suppress STAMP keys on. Returns ['attachment_id'=>, 'cdn_webp_url'=>]
+     * or null (→ caller must NOT stamp → stays suppressed = origin = no 404).
+     */
+    public static function pick_real_image_probe()
+    {
+        static $cache = false;
+        if ($cache !== false) return $cache;
+        $cache = null;
+        if (!function_exists('get_posts')) return $cache;
+        if (!class_exists('WPC_Negotiated_Delivery') && defined('WPS_IC_DIR')
+            && @file_exists(WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php')) {
+            require_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
+        }
+        if (!class_exists('WPC_Negotiated_Delivery') || !method_exists('WPC_Negotiated_Delivery', 'build_natural_url')) {
+            return $cache;
+        }
+        $atts = get_posts([
+            'post_type'      => 'attachment',
+            'post_mime_type' => ['image/jpeg', 'image/png'],
+            'post_status'    => 'inherit',
+            'posts_per_page' => 8,
+            'orderby'        => 'ID',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+        ]);
+        if (empty($atts)) return $cache;
+        foreach ($atts as $id) {
+            $file = function_exists('get_attached_file') ? get_attached_file($id) : '';
+            if (!$file || !@file_exists($file)) continue;
+            $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($id) : [];
+            if (!is_array($meta) || empty($meta['file'])) continue;
+            // Prefer the SMALLEST registered subsize (-WxH) — always inside the edge OTF budget — over
+            // the full-size original. Fall back to the full natural URL if no subsizes are recorded.
+            $sub_file  = basename((string) $meta['file']);
+            $best_area = PHP_INT_MAX;
+            if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
+                foreach ($meta['sizes'] as $sz) {
+                    if (empty($sz['file']) || empty($sz['width']) || empty($sz['height'])) continue;
+                    $area = (int) $sz['width'] * (int) $sz['height'];
+                    if ($area > 0 && $area < $best_area) { $best_area = $area; $sub_file = (string) $sz['file']; }
+                }
+            }
+            $cdn_webp = (string) WPC_Negotiated_Delivery::build_natural_url($sub_file, $meta);
+            if ($cdn_webp === '') continue;
+            $cache = ['attachment_id' => (int) $id, 'cdn_webp_url' => $cdn_webp];
+            return $cache;
+        }
+        return $cache; // null — no real image to probe → caller stays suppressed (safe)
+    }
+
+    /**
      * Ensure a tiny, deterministic self-test image exists under /wp-content/uploads/ so the
      * CDN-edge verify always has a known-good, within-budget probe (see pick_test_image).
      * GD-generates a small gradient PNG once; idempotent + lazy (no activation hook). Returns

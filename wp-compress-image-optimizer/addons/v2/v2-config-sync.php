@@ -535,6 +535,42 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         // the next sync SKIPS, stranding the customer un-provisioned), and on a db_error arm a
         // pending flag so an admin load re-fires once orch recovers.
         $rbody = json_decode((string) wp_remote_retrieve_body($resp), true);
+
+        // CLONE-DRIFT auto-heal (v7.03.44) — honor the orch's zone_id_corrected echo (orch v3.22.72). When
+        // this plugin POSTed a dead/stale zone_id (a clone's inherited ghost PZ) and the apikey owns exactly
+        // ONE live zone, the orch remaps + provisions the REAL zone and echoes {from, to}. Adopt 'to' as the
+        // cached zone_id so THIS response's stamp + every future sync target the live zone — the no-admin
+        // counterpart to the admin /v2/zone healer (a front-end carrier's sync self-corrects too). Numeric
+        // only (a valid Bunny PZ id); fires regardless of failed[] so the correction is recorded even if a
+        // given provision deferred. The orch only remaps a SINGLE-live-zone apikey, so this can't hijack an
+        // agency apikey that owns several zones.
+        // v7.03.45 FIX — the echo is PER-ZONE (response.zones[i].zone_id_corrected, matched to each sent
+        // zone), NOT top-level; the .44 top-level read silently missed it. Scan zones[] for a corrected
+        // entry; keep a top-level fallback in case the orch ever mirrors it for the single-zone case. 'to'
+        // arrives as a JSON INT, so cast + digit-filter before comparing to the string-cached zone_id.
+        if (function_exists('update_option')) {
+            $zc = null;
+            if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
+                foreach ($rbody['zones'] as $rz) {
+                    if (is_array($rz) && !empty($rz['zone_id_corrected']) && is_array($rz['zone_id_corrected'])
+                        && isset($rz['zone_id_corrected']['to'])) { $zc = $rz['zone_id_corrected']; break; }
+                }
+            }
+            if ($zc === null && is_array($rbody) && !empty($rbody['zone_id_corrected'])
+                && is_array($rbody['zone_id_corrected']) && isset($rbody['zone_id_corrected']['to'])) {
+                $zc = $rbody['zone_id_corrected']; // top-level fallback (single-zone mirror, if orch adds it)
+            }
+            if (is_array($zc)) {
+                $zc_to  = preg_replace('/[^0-9]/', '', (string) $zc['to']);
+                $zc_now = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '';
+                if ($zc_to !== '' && $zc_to !== $zc_now) {
+                    $zc_from = isset($zc['from']) ? (string) $zc['from'] : $zc_now;
+                    update_option('wpc_v2_zone_id', $zc_to, false);
+                    if (function_exists('error_log')) error_log('[WPC ConfigSync] orch zone_id_corrected: adopted ' . $zc_to . ' (was ' . $zc_from . ') — clone-drift auto-heal');
+                }
+            }
+        }
+
         if (is_array($rbody) && !empty($rbody['failed']) && is_array($rbody['failed'])) {
             $reasons = [];
             $db_deferred = false;
@@ -2245,9 +2281,12 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
         $data = json_decode((string) wp_remote_retrieve_body($resp), true);
         $zone_id = '';
         if (is_array($data)) {
-            if (!empty($data['zone_id'])) {
-                $zone_id = (string) $data['zone_id'];
-            } elseif (!empty($data['zones'][0]['zone_id'])) {
+            // /v2/zone is FLAT (no zones[] array) and the id is an INT under zone_id (with zoneId/id
+            // aliases). Cast to string; fall back to a zones[] shape only if a future response uses one.
+            foreach (['zone_id', 'zoneId', 'id'] as $zk) {
+                if (!empty($data[$zk])) { $zone_id = (string) $data[$zk]; break; }
+            }
+            if ($zone_id === '' && !empty($data['zones'][0]['zone_id'])) {
                 $zone_id = (string) $data['zones'][0]['zone_id'];
             }
         }
@@ -2320,6 +2359,23 @@ add_action('admin_init', function () {
     // seed / legacy label) would be PATCH-targeted by orch and fail → heal it.
     if ($z === '' || !ctype_digit($z)) {
         wpc_v2_resolve_zone_id();
+        return;
+    }
+    // CLONE-DRIFT heal (v7.03.43). A cloned site inherits the source's wp_options — including a cached
+    // NUMERIC zone_id that can point at a DELETED (ghost) Bunny PZ. The orch then can't read EnableAvifVary
+    // off the dead PZ → no nav witness → the site stays suppressed forever (the staging 1739263 case: a
+    // ghost PZ while the apikey actually owns the live zone). The missing step the env-changed path needs
+    // is "re-RESOLVE the zone, don't just re-verify the stale one." So on a changed env, FORCE a re-resolve
+    // from the apikey's real zone via /v2/zone even for a numeric cache — throttled to once / 10 min so a
+    // not-yet-stamped clone doesn't hit /v2/zone every load. It heals the cache to the live zone;
+    // provisioning then targets it + stamps the fingerprint; env_changed flips false → this stops.
+    if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
+        && !(function_exists('get_transient') && get_transient('wpc_v2_zone_reresolve_bk'))) {
+        if (function_exists('set_transient')) set_transient('wpc_v2_zone_reresolve_bk', 1, 600);
+        $healed = wpc_v2_resolve_zone_id(true); // force: bypass the numeric short-circuit + the 6h backoff
+        if ($healed !== '' && $healed !== $z && function_exists('error_log')) {
+            error_log('[WPC ConfigSync] clone-drift heal: re-resolved stale zone_id ' . $z . ' → ' . $healed . ' (apikey owns the live zone)');
+        }
     }
 }, 20);
 

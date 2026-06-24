@@ -42,7 +42,9 @@ function wpc_v2_register_callback_route()
     // (no auth); keep the body minimal and stable — extending it is a contract
     // change LS needs notice of.
     register_rest_route('wpc/v2', '/healthcheck', [
-        'methods'             => 'GET',
+        // GET = the public no-auth fleet probe (unchanged). POST = the orch-triggered provisioned-ping
+        // (v7.03.41): HMAC-gated inside the handler, drives a verify-then-un-suppress. Same route, new method.
+        'methods'             => ['GET', 'POST'],
         'callback'            => 'wpc_v2_handle_healthcheck',
         'permission_callback' => '__return_true',
     ]);
@@ -72,8 +74,107 @@ add_action('rest_api_init', 'wpc_v2_register_callback_route');
  * Respond Cache-Control: no-store. LS owns the 24h client cache; we must never
  * serve a stale capability advertisement.
  */
+/**
+ * Real-content verify-then-un-suppress (v7.03.43) — extracted so BOTH the orch-trigger handler AND the
+ * debug panel's button share the EXACT same fail-safe. Probes a REAL image's .webp and stamps the
+ * provisioning fingerprint (un-suppress) ONLY when the edge returns 200 + webp BYTES (body-sniffed, so a
+ * 404 or proxied origin-PNG can't pass — the staging false-positive). Bypasses the outbound /v2/config
+ * entirely: the verify IS ground truth ("only the serve is truth"). Returns a result the callers map.
+ */
+function wpc_v2_verify_and_unsuppress($reason = '')
+{
+    if (!class_exists('WPC_Delivery_Resolver') || !method_exists('WPC_Delivery_Resolver', 'pick_real_image_probe')) {
+        return ['ok' => false, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'resolver_unavailable'];
+    }
+    $target = WPC_Delivery_Resolver::pick_real_image_probe();
+    if (!is_array($target) || empty($target['cdn_webp_url'])) {
+        return ['ok' => true, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'no_real_image_to_verify'];
+    }
+    $p     = WPC_Delivery_Resolver::probe($target['cdn_webp_url'], 'image/webp,*/*');
+    $code  = is_array($p) ? (int) ($p['code'] ?? 0) : 0;
+    $fmt   = is_array($p) ? (string) ($p['fmt'] ?? '') : '';
+    $ctype = is_array($p) ? (string) ($p['ctype'] ?? '') : '';
+    if (!($code === 200 && $fmt === 'webp')) {
+        return ['ok' => true, 'verify_cdn_ok' => false, 'stamped' => false, 'reason' => 'edge_not_serving_webp',
+                'probe' => ['code' => $code, 'fmt' => $fmt, 'ctype' => $ctype], 'probe_url' => (string) $target['cdn_webp_url']];
+    }
+    // Edge serves real webp for THIS host → stamp (un-suppress) + clear pending + re-resolve (promotes the
+    // cached tier picture→cdn-edge and fires the resolver's delivery-change purge of stale origin HTML).
+    if (function_exists('update_option') && function_exists('wpc_v2_env_fingerprint')) {
+        update_option('wpc_v2_provisioned_fingerprint', wpc_v2_env_fingerprint(), false);
+    }
+    if (function_exists('delete_option')) { delete_option('wpc_v2_force_provision'); }
+    if (method_exists('WPC_Delivery_Resolver', 'resolve')) { WPC_Delivery_Resolver::resolve(true); }
+    if (function_exists('error_log')) { error_log('[WPC v2] verify_and_unsuppress(' . (string) $reason . '): real-content 200 webp -> fingerprint stamped -> UN-SUPPRESSED'); }
+    return ['ok' => true, 'verify_cdn_ok' => true, 'stamped' => true, 'reason' => 'un_suppressed', 'attachment_id' => (int) ($target['attachment_id'] ?? 0)];
+}
+
+/**
+ * Orch-triggered provisioned-ping (v7.03.41) — the RELIABLE, INBOUND un-suppress path.
+ *
+ * After the orch backend-provisions a zone (signs the header config + creates the Bunny edge rules), it
+ * POSTs here so the plugin confirms-and-un-suppresses ITSELF — removing the plugin's flaky OUTBOUND
+ * /v2/config carriers (which time out on the synchronous edge-rule PATCH) as the single point of failure.
+ *
+ * The orch cannot write the suppression flag directly: it's sha1(home|DB_NAME|table_prefix), values the
+ * orch doesn't know. So this is a TRIGGER, not a remote DB write — and crucially it is NOT a blind flip:
+ * the plugin runs a REAL-CONTENT verify (a real image's .webp must return 200 + webp BYTES) before it
+ * stamps. That is the same fail-safe is_active() enforces — un-suppress ⇒ the edge provably works ⇒ no 404.
+ * A synthetic self-test could negotiate while real content 404s (the staging false-positive); a real
+ * rendition can't, so we never un-suppress into broken images.
+ *
+ * Contract: POST /wpc/v2/healthcheck, X-WPC-Sig HMAC (same as /v2/config), body {provisioned, zone_id, nav}.
+ */
+function wpc_v2_handle_provisioned_ping(WP_REST_Request $request)
+{
+    $body_raw = (string) $request->get_body();
+    $sig      = (string) $request->get_header('X-WPC-Sig');
+
+    // AUTH — same HMAC contract as /v2/config (apikey-keyed, 60s replay window). The GET probe is public;
+    // this mutating branch is not.
+    if ($sig === '' || !function_exists('wpc_v2_verify_hmac') || !wpc_v2_verify_hmac($sig, $body_raw, 60)) {
+        return new WP_REST_Response(['ok' => false, 'error' => 'bad_signature'], 403);
+    }
+
+    $data = json_decode($body_raw, true);
+    if (!is_array($data)) {
+        return new WP_REST_Response(['ok' => false, 'error' => 'bad_body'], 400);
+    }
+
+    // nav = the orch's native_accept_vary witness. Informational mirror only — verify_cdn below is the
+    // real gate (a witness can be stale/wrong; only the serve is truth).
+    $zone = isset($data['zone_id']) ? preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $data['zone_id']) : '';
+    if ($zone !== '' && array_key_exists('nav', $data) && function_exists('update_option')) {
+        update_option('wpc_v2_orch_nav_' . $zone, !empty($data['nav']) ? '1' : '0', false);
+    }
+
+    if (empty($data['provisioned'])) {
+        return new WP_REST_Response(['ok' => true, 'action' => 'noop', 'reason' => 'provisioned_false'], 200);
+    }
+
+    // Idempotent: already confirmed for THIS host → nothing to do.
+    if (function_exists('wpc_v2_provision_env_changed') && !wpc_v2_provision_env_changed()) {
+        return new WP_REST_Response(['ok' => true, 'action' => 'noop', 'reason' => 'already_provisioned'], 200);
+    }
+
+    // Delegate to the shared real-content verify-then-un-suppress (same fail-safe the debug button uses).
+    $r = wpc_v2_verify_and_unsuppress('orch_trigger');
+    if (($r['reason'] ?? '') === 'resolver_unavailable') {
+        return new WP_REST_Response(['ok' => false, 'error' => 'resolver_unavailable'], 200);
+    }
+    $action = !empty($r['stamped']) ? 'un_suppressed'
+            : ((($r['reason'] ?? '') === 'no_real_image_to_verify') ? 'deferred' : 'stay_suppressed');
+    return new WP_REST_Response(array_merge(['ok' => true, 'action' => $action], $r), 200);
+}
+
 function wpc_v2_handle_healthcheck(WP_REST_Request $request)
 {
+    // POST = the orch-triggered provisioned-ping (v7.03.41). Branch BEFORE the GET fleet-probe body —
+    // it's a distinct, HMAC-gated, verify-then-un-suppress path. (GET stays the public no-auth probe.)
+    if ($request->get_method() === 'POST') {
+        return wpc_v2_handle_provisioned_ping($request);
+    }
+
     // Prefer WPC_PLUGIN_VERSION (set before bootstrap). Fall back to
     // wps_ic::$version only defensively — versions without the constant don't
     // have this endpoint either.
