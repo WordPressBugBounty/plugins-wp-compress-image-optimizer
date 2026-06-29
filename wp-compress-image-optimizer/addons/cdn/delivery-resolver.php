@@ -109,6 +109,31 @@ class WPC_Delivery_Resolver
      * Pass = all three classes return 200 + the EXPECTED format for that Accept class, and the
      * URL is properly varied (Vary: Accept OR Bunny native vary) so caches can't poison.
      */
+    /**
+     * (v7.03.116) A "soft-degrade" CDN-edge verify failure = the probe failed ONLY because the cold
+     * self-test image served a valid raster (png/jpeg) for a next-gen Accept — graceful degradation,
+     * not a broken edge. True ONLY when: edge usable, the orch AUTHORITATIVELY confirms the zone
+     * negotiates (native_accept_vary===true), the verify RAN and FAILED, and the detail is a
+     * served-valid-raster (got-png/got-jpeg) — NOT a hard failure (no-200 / loop / error / pending).
+     * Used to honor an EXPLICIT user force (cdn/edge) when the only blocker is an un-warmable canary
+     * (e.g. SiteGround sgcaptcha 202-ing the cold self-test pull). Auto never calls this.
+     */
+    private static function verify_soft_degrade_ok($caps, $verify)
+    {
+        if (!self::edge_usable(is_array($caps) ? $caps : array())) return false;
+        if (!is_array($caps) || (isset($caps['orch_native_accept_vary']) ? $caps['orch_native_accept_vary'] : null) !== true) return false;
+        $v = (is_array($verify) && isset($verify['cdn'])) ? $verify['cdn'] : null;
+        if (!is_array($v) || !empty($v['ok'])) return false; // must have RUN and FAILED
+        $d = isset($v['detail']) ? (string) $v['detail'] : '';
+        if ($d === '') return false;
+        if (strpos($d, 'no-200') !== false || strpos($d, 'loop') !== false
+            || strpos($d, 'error') !== false || strpos($d, 'pending') !== false) return false; // hard fail → never
+        // CONTRACT: relies on the hard-fail tokens (no-200/loop/error/pending) and the soft-raster tokens
+        // (got-png/got-jpeg) being DISJOINT across every detail evaluate_cdn_probes() emits (verified
+        // exhaustively). If a future fail-detail embeds 'got-png'/'got-jpeg' for a HARD failure, gate it here.
+        return (strpos($d, 'got-png') !== false) || (strpos($d, 'got-jpeg') !== false) || (strpos($d, 'got-jpg') !== false);
+    }
+
     public static function evaluate_cdn_probes($probes)
     {
         $out = ['ok' => false, 'classes' => [], 'vary' => false, 'detail' => '', 'pending_orch' => false];
@@ -131,6 +156,23 @@ class WPC_Delivery_Resolver
         $mode_b = false;
         foreach (['avif', 'webp', 'legacy'] as $pc) {
             if (!empty($probes[$pc]['natural_mode'])) { $mode_b = true; break; }
+        }
+        // (v7.03.114) RELAXED trigger: some edges (e.g. Bunny's ?src=/?wpc_sib= canonicalization) negotiate
+        // format by 302-redirect to a format-specific URL WITHOUT emitting x-natural-mode/x-redirect-reason.
+        // Recognize that too — but ONLY when BOTH modern Accept classes (avif + webp) return a non-looping
+        // 3xx with a derivable Location. The STRICT per-Accept validation below is UNCHANGED, so a
+        // non-negotiating or poisoned edge still fails (wrong-format / same-url-loop / avif-worse-than-webp).
+        // Classic Vary-200 edges (avif/webp answer 200) never trigger this → no regression for them. This is
+        // what lets a header-less but genuinely-negotiating edge promote to CDN-edge instead of <picture>.
+        if (!$mode_b) {
+            $is_neg_redirect = function ($p) {
+                $c = is_array($p) ? (int) (isset($p['code']) ? $p['code'] : 0) : 0;
+                return ($c >= 300 && $c < 400) && !empty($p['location']);
+            };
+            if ($is_neg_redirect(isset($probes['avif']) ? $probes['avif'] : null)
+                && $is_neg_redirect(isset($probes['webp']) ? $probes['webp'] : null)) {
+                $mode_b = true;
+            }
         }
         if ($mode_b) {
             // STRICT map for the redirect-negotiate contract (tighter than the Vary-200 $want):
@@ -348,6 +390,17 @@ class WPC_Delivery_Resolver
                 && self::redirect_target_ready(self::edge_redirect_target($caps_merged), $verify_merged['cdn'])) {
                 return self::result(self::TIER_CDN_EDGE, 'forced: cdn (verified)', $warnings, self::edge_redirect_target($caps_merged));
             }
+            // (v7.03.116) Soft-degrade honor. When the user EXPLICITLY forces CDN and the orch
+            // authoritatively confirms the zone negotiates (native_accept_vary===true), a verify that
+            // failed ONLY because the cold self-test image served a valid raster (got-png/got-jpeg) — not
+            // a broken/looping/down edge — is graceful degradation, not a real failure. Real warm images
+            // negotiate (proven on this site); a cold one serves a valid png until warm; the <img>
+            // onerror→origin net covers any genuine miss. Honor the explicit force. (Auto — no override —
+            // stays strictly promote-on-proof; this never fires there.)
+            if (self::verify_soft_degrade_ok($caps_merged, $verify_merged)) {
+                $warnings[] = 'forced_cdn_orch_witness_soft_degrade';
+                return self::result(self::TIER_CDN_EDGE, 'forced: cdn (orch-witness, canary soft-degrade)', $warnings, self::edge_redirect_target($caps_merged));
+            }
             $warnings[] = 'override_cdn_unavailable';
         } elseif ($override === 'edge') {
             // "Edge negotiate": the edge picks the format regardless of the CDN-bytes stance.
@@ -357,6 +410,12 @@ class WPC_Delivery_Resolver
             if (self::edge_usable($caps_merged) && is_array($verify_merged['cdn']) && !empty($verify_merged['cdn']['ok'])
                 && self::redirect_target_ready(self::edge_redirect_target($caps_merged), $verify_merged['cdn'])) {
                 return self::result(self::TIER_CDN_EDGE, 'forced: edge (verified)', $warnings, self::edge_redirect_target($caps_merged));
+            }
+            // (v7.03.116) Soft-degrade honor — same rationale as the forced-cdn branch above: explicit
+            // force + orch witness + a got-png/got-jpeg (graceful) canary fail → honor it. onerror net covers misses.
+            if (self::verify_soft_degrade_ok($caps_merged, $verify_merged)) {
+                $warnings[] = 'forced_edge_orch_witness_soft_degrade';
+                return self::result(self::TIER_CDN_EDGE, 'forced: edge (orch-witness, canary soft-degrade)', $warnings, self::edge_redirect_target($caps_merged));
             }
             $warnings[] = 'override_edge_unavailable';
         }

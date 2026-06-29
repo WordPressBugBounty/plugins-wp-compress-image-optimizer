@@ -1425,6 +1425,15 @@ if (!function_exists('wpc_v2_auto_disable_enabled')) {
         // wp-config: define('WPC_DISABLE_AUTO_RESILIENCE', true); kills the probe + override entirely.
         if (defined('WPC_DISABLE_AUTO_RESILIENCE') && WPC_DISABLE_AUTO_RESILIENCE) return false;
         if (!function_exists('get_site_option')) return false;
+        // (v7.03.109) DEFAULT-ON fleet-wide. Fail-safe by construction: the probe only runs where the
+        // loopback works (hardened hosts → inert, CDN stays on); stands down ONLY after 3 consecutive
+        // failures (5xx/timeout OR content-poisoning); never flaps (2-ok + 5-min floors to re-promote).
+        // (v7.03.118) DEFAULT-OFF (opt-in) — the .109 default-ON flip was pulled in review: no runtime
+        // per-site off-switch exists (only the WPC_DISABLE_AUTO_RESILIENCE constant / wpc_cdn_auto_disable
+        // filter), so a fleet-wide default-on with no fast kill is premature. Detection (content-poison /
+        // 5xx-liveness / competing-CDN) is fully intact + works the moment it's enabled (option or filter),
+        // after a soak or once a real toggle + remote kill exist. Fail-safe guards (3-fail demote,
+        // never-flap, loopback-gated) unchanged.
         return (bool) apply_filters('wpc_cdn_auto_disable', (bool) get_site_option('wpc_cdn_auto_disable', false));
     }
 }
@@ -1438,6 +1447,80 @@ if (!function_exists('wpc_v2_zone_auto_disabled')) {
         if ($zone === '') return false;
         $key = 'wpc_v2_auto_disable_' . (function_exists('sanitize_key') ? sanitize_key($zone) : $zone);
         return get_option($key, 'up') === 'down';
+    }
+}
+
+if (!function_exists('wpc_cdn_norm_host')) {
+    /** Normalize a host for cross-site comparison: lowercase, trim, strip a leading "www." */
+    function wpc_cdn_norm_host($h)
+    {
+        $h = strtolower(trim((string) $h));
+        return preg_replace('/^www\./', '', $h);
+    }
+}
+
+if (!function_exists('wpc_cdn_zone_naming_affinity_ok')) {
+    /**
+     * (v7.03.55) Conservative name-affinity for a Bunny *.zapwp.com zone, whose label is
+     * {normalized-site-domain-prefix}{short-random} (CONFIRMED via Bunny dashboards: threegirlsmedia.co.uk →
+     * threegirlsmediacou77ea6, soulawakeningacademy.co.uk → soulawakeningacade5b2d2). This site's normalized
+     * domain must share all-but-a-short-random-tail with the zone label. Returns TRUE (passes) UNLESS the
+     * zone is unmistakably a DIFFERENT site's — a long non-matching tail (>10 after the common prefix) AND a
+     * negligible shared prefix (<4). Used ONLY to DETECT a suspect hostname (trigger a /v2/zone re-resolve +
+     * interim suppress); the authoritative heal is the hostname /v2/zone returns for the real PZ.
+     */
+    function wpc_cdn_zone_naming_affinity_ok($zone, $host)
+    {
+        $label = strtok(strtolower((string) $zone), '.');
+        if ($label === false || $label === '') return true;
+        $host = strtolower(trim((string) $host));
+        // The orch may derive the zone label from the host WITH or WITHOUT "www" (e.g. www.ahramag.com →
+        // wwwahramagcomb7786). Try BOTH forms; pass if EITHER shares enough of a leading prefix with the
+        // zone label. Foreign only when neither form does.
+        $bare = preg_replace('/^www\./', '', $host);
+        $candidates = array_unique([
+            preg_replace('/[^a-z0-9]/', '', $host),           // raw
+            preg_replace('/[^a-z0-9]/', '', $bare),           // www-stripped
+            preg_replace('/[^a-z0-9]/', '', 'www' . $bare),   // www-added (zone may carry www the host doesn't)
+        ]);
+        foreach ($candidates as $key) {
+            if ((string) $key === '') continue;
+            $n = min(strlen($label), strlen($key));
+            $lcp = 0;
+            while ($lcp < $n && $label[$lcp] === $key[$lcp]) $lcp++;
+            if (!((strlen($label) - $lcp) > 10 && $lcp < 4)) return true; // this form matches → not foreign
+        }
+        return false;
+    }
+}
+
+if (!function_exists('wpc_cdn_zone_is_foreign')) {
+    /**
+     * (v7.03.55) Is the stored Bunny zapwp zone (ic_cdn_zone_name — the host EVERY image/CSS/JS URL is built
+     * from) FOREIGN to this site? CONFIRMED failure mode: a clone-drift heals the numeric wpc_v2_zone_id
+     * (e.g. → 5374552, threegirls' real PZ) but NOT the hostname, which stays the SOURCE site's
+     * (soulawakeningacade5b2d2 = PZ 5395403) — so every asset is requested from the wrong PZ → wrong origin →
+     * 404. credits/connect can't heal it (the orch's zone_name record for the key is itself stale/wrong).
+     *   Reliable signal: ic_cdn_zone_name_host = the home host stamped when the zone was last confirmed; a
+     *   different current host ⇒ inherited from another environment. Legacy/unstamped → conservative zapwp
+     *   name-affinity. Scoped to the auto-provisioned zapwp Bunny zone: a verified custom/CF cname is the
+     *   delivery host then, so the zapwp zone is irrelevant and we never judge it.
+     */
+    function wpc_cdn_zone_is_foreign()
+    {
+        if (!function_exists('get_option') || !function_exists('home_url')) return false;
+        $zone = strtolower(trim((string) get_option('ic_cdn_zone_name', '')));
+        if ($zone === '' || !preg_match('/\.zapwp\.(?:com|net)$/', $zone)) return false;
+        if (trim((string) get_option('ic_custom_cname', '')) !== '') return false;
+        $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        $cf  = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
+        if ($cfc !== '' && is_array($cf) && !empty($cf['settings']['cdn'])) return false;
+        if (!apply_filters('wpc_zone_affinity_check', true, $zone)) return false;
+        $host_raw = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+        if ($host_raw === '') return false;
+        $stamp = wpc_cdn_norm_host((string) get_option('ic_cdn_zone_name_host', ''));
+        if ($stamp !== '') return ($stamp !== wpc_cdn_norm_host($host_raw)); // reliable: confirmed for another host
+        return !wpc_cdn_zone_naming_affinity_ok($zone, $host_raw);           // unstamped: name-affinity (tries www both ways)
     }
 }
 
@@ -1471,6 +1554,15 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
             $cfwait = ($cfc !== '' && is_array($cf) && !empty($cf['settings']['cdn']) && $ver !== '1' && $ver !== 1);
         }
         if ($cfwait) return true;
+        // (v7.03.55) FOREIGN-ZONE fail-safe: a clone-drift can leave the numeric zone_id correct but the
+        // HOSTNAME pointing at another site's PZ (confirmed: id 5374552 ✓ but host soulawakeningacade5b2d2 =
+        // PZ 5395403 ✗) → every asset 404s off the wrong origin. Suppress → origin (always works) until the
+        // /v2/zone resolver adopts THIS PZ's real hostname. Host-stamp (reliable) + name-affinity. Cached/req.
+        static $foreign = null;
+        if ($foreign === null) {
+            $foreign = (function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign());
+        }
+        if ($foreign) return true;
         return (function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled())
             || (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled());
     }
@@ -1647,9 +1739,48 @@ if (!function_exists('wpc_v2_cdn_liveness_probe_handler')) {
         // worker-occupancy of a synchronized-outage probe; min-spacing+3-fail guards a slow-but-up edge.
         $timeout = (float) apply_filters('wpc_liveness_probe_timeout', 1.0);
         if ($timeout < 0.3) $timeout = 0.3;
-        $r = wp_remote_head($canary, ['timeout' => $timeout, 'sslverify' => false, 'redirection' => 0]);
-        $code = (int) wp_remote_retrieve_response_code($r);
-        $down = is_wp_error($r) || $code >= 500 || $code === 0;
+        // (v7.03.109) GET (not HEAD) with a tiny response cap so we can inspect content-type +
+        // a few body bytes. A status-only HEAD is BLIND to an origin bot-challenge that returns
+        // 200/202 with an HTML/JSON challenge in PLACE of the image (e.g. SiteGround's sgcaptcha
+        // poisoning the CDN's origin-pull → Bunny caches+serves the challenge → jQuery/fonts/images
+        // break site-wide). The canary is always an IMAGE, so a non-image response = the edge is
+        // serving garbage → feed the SAME 3-fail / never-flap / promote-on-proof state machine.
+        $r = wp_remote_get($canary, [
+            'timeout'            => $timeout,
+            'sslverify'          => false,
+            'redirection'        => 0,
+            'limit_response_size' => 2048,
+        ]);
+        $code  = (int) wp_remote_retrieve_response_code($r);
+        $ctype = strtolower((string) wp_remote_retrieve_header($r, 'content-type'));
+        $loc   = strtolower((string) wp_remote_retrieve_header($r, 'location'));
+        $body  = (string) wp_remote_retrieve_body($r);
+        $down  = is_wp_error($r) || $code >= 500 || $code === 0;
+
+        // Content-poisoning detection (high-confidence, low false-positive). An image canary must
+        // come back as image/*. If it comes back HTML/JSON, OR redirects to a challenge path, OR its
+        // body carries a challenge/error marker, the origin/edge replaced the image with a bot-wall.
+        // Flag poison only when NOT image/* AND a challenge signal is present: a markup content-type
+        // (text/html / application/json — never valid for an image canary), OR a challenge-path redirect,
+        // OR a challenge marker in the body. An image/* response can never trip it (the !$is_img gate);
+        // a benign non-image binary (e.g. octet-stream) with no challenge signal reads as alive.
+        $poison = '';
+        if (!$down && $code !== 404) {
+            $is_img    = (strpos($ctype, 'image/') === 0);
+            $is_markup = ($ctype !== '' && (strpos($ctype, 'text/html') !== false || strpos($ctype, 'application/json') !== false)); // (v7.03.118) dropped text/plain — a real image mis-served as text/plain must not read as poison
+            $chal_loc  = ($loc !== '' && (strpos($loc, '/.well-known/') !== false || strpos($loc, 'captcha') !== false || strpos($loc, 'challenge') !== false));
+            $chal_body = ($body !== '' && (stripos($body, 'captcha') !== false || stripos($body, '.well-known') !== false || stripos($body, 'challenge') !== false || stripos($body, '"error"') !== false));
+            if (!$is_img && ($is_markup || $chal_loc || $chal_body)) {
+                $poison = $chal_loc ? 'challenge-redirect' : ($is_markup ? ('non-image-ctype:' . ($ctype !== '' ? $ctype : 'empty')) : 'challenge-body');
+                $down   = true;
+            }
+        }
+        if ($poison !== '') {
+            update_option('wpc_v2_cdn_poison_reason', $poison, false);
+        } elseif (!$down) {
+            delete_option('wpc_v2_cdn_poison_reason');
+        }
+
         // A 404 means the canary file was deleted (the edge IS up: it answered). Treat as alive, but
         // re-pick the canary after 3 consecutive 404s so the target self-heals.
         if (!$down && $code === 404) {
@@ -1660,6 +1791,26 @@ if (!function_exists('wpc_v2_cdn_liveness_probe_handler')) {
             delete_option('wpc_v2_cdn_canary_404');
         }
         wpc_v2_record_liveness($zone, !$down);
+
+        // (v7.03.109) Competing-CDN detection (once/day, transient-gated): HEAD the site's OWN origin
+        // and look for a 3rd-party CDN in front (SiteGround SG-CDN, Cloudflare, Fastly, CloudFront).
+        // A foreign edge + WPC's zone = double-CDN, a frequent source of conflicts + poisoned origin
+        // pulls (the lawyersindubai case). Surfaced in the debug panel so it's diagnosable, not mistaken
+        // for a WPC bug. Fail-safe: a blocked/failed loopback just skips detection (never a false positive).
+        if (!get_transient('wpc_v2_foreign_cdn_checked') && function_exists('home_url')) {
+            set_transient('wpc_v2_foreign_cdn_checked', 1, DAY_IN_SECONDS);
+            $oh = wp_remote_head(home_url('/'), ['timeout' => 4, 'sslverify' => false, 'redirection' => 0, 'user-agent' => 'Mozilla/5.0 (WPCompress conflict-check)']);
+            if (!is_wp_error($oh)) {
+                $fc = '';
+                if (wp_remote_retrieve_header($oh, 'x-sg-cdn') !== '')                $fc = 'SiteGround SG-CDN';
+                elseif (wp_remote_retrieve_header($oh, 'cf-ray') !== '')              $fc = 'Cloudflare';
+                elseif (wp_remote_retrieve_header($oh, 'x-amz-cf-id') !== '')         $fc = 'AWS CloudFront';
+                elseif (wp_remote_retrieve_header($oh, 'x-fastly-request-id') !== '') $fc = 'Fastly';
+                if ($fc !== '') { update_option('wpc_v2_foreign_cdn', $fc, false); }
+                else { delete_option('wpc_v2_foreign_cdn'); }
+            }
+        }
+
         wp_die('', '', ['response' => 200]);
     }
     add_action('wp_ajax_nopriv_wpc_cdn_liveness_probe', 'wpc_v2_cdn_liveness_probe_handler');
@@ -1852,6 +2003,45 @@ if (defined('WP_CLI') && WP_CLI && !class_exists('WPC_V2_LazyCDN_CLI')) {
             $enabled = wpc_v2_get_lazy_enabled();
             \WP_CLI::log('zone_id:      ' . ($zone !== '' ? $zone : '(not configured)'));
             \WP_CLI::log('lazy_enabled: ' . ($enabled ? 'YES' : 'no'));
+        }
+
+        /**
+         * Force a CONFIRMED-DELIVERY re-sync of this zone's CURRENT lazy state to the orch — inline,
+         * bypassing the cron/self-loopback carrier that's dead on WAF/cron-blocked hosts. Recovers a zone
+         * whose Smart Delivery is ON locally but never reached the orch (agencySites.lazy_cdn_active stuck
+         * at 0). Reports the orch's HTTP result so you can see it land. Use when an admin Heartbeat can't
+         * be relied on (headless, or you want it now).
+         *
+         * ## EXAMPLES
+         *     wp wpc lazy-cdn resync
+         */
+        public function resync()
+        {
+            $zone = wpc_v2_get_zone_id();
+            if ($zone === '') {
+                \WP_CLI::error('No zone_id configured. Reconnect your API key first.');
+                return;
+            }
+            $enabled = function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled();
+            // Direct blocking POST (CLI has no UI to hang). wpc_v2_config_sync_lazy_enabled sends the
+            // current lazy_enabled AND fires the config_changed apikey-cache purge on a 0→1 flip.
+            $res = wpc_v2_config_sync_lazy_enabled($zone, $enabled);
+            if (!empty($res['ok'])) {
+                \WP_CLI::success(sprintf(
+                    'Delivered lazy_enabled=%s for zone %s (orch HTTP %s). agencySites.lazy_cdn_active should now read %d.',
+                    $enabled ? '1' : '0',
+                    $zone,
+                    isset($res['http_code']) ? $res['http_code'] : '2xx',
+                    $enabled ? 1 : 0
+                ));
+            } else {
+                \WP_CLI::error(sprintf(
+                    'Re-sync did NOT land (orch %s / %s) — the orch never received lazy_enabled=%s. Retry, or check connectivity to the orchestrator.',
+                    isset($res['http_code']) ? $res['http_code'] : '0',
+                    isset($res['reason']) ? $res['reason'] : 'unknown',
+                    $enabled ? '1' : '0'
+                ));
+            }
         }
 
         private function _toggle($enable)
@@ -2129,6 +2319,19 @@ if (!function_exists('wpc_v2_maybe_sync_image_config')) {
             error_log('[WPC ConfigSync] enabled wpc_v2_pull_enabled (lazy_cdn turned on via settings)');
         }
 
+        // (v7.03.89) Route the lazy-state change through the WAF-IMMUNE browser-Heartbeat carrier, not only
+        // the backgrounded cron/self-loopback sync below — which is dead on Cloudways-class hosts (cron
+        // disabled + edge-WAF-blocked loopback), so a lazy toggle on an already-provisioned zone never reached
+        // the orch and agencySites.lazy_cdn_active stuck at its provisioned default (the 15-of-47,247 fleet
+        // failure the orch team measured). force_provision is the one gate wpc_v2_provision_ensure_bg() honors
+        // for a HEALTHY zone, and the wpc_v2_run_deferred_config_sync() it fires ALREADY carries the current
+        // lazy_enabled + fires the config_changed apikey-cache purge, and clears force on the confirming 2xx.
+        // So a lazy change now reliably delivers on the next admin Heartbeat even where the loopback is blocked.
+        // (A plugin update already sets force_provision, so installing this build re-delivers stuck zones too.)
+        if ($lazy_changed) {
+            update_option('wpc_v2_force_provision', 1, false);
+        }
+
         // DEFER the orch sync to background cron: this runs on the admin-ajax settings-SAVE, and the
         // /v2/config POST blocks up to 30s, so doing it inline hung the "Saving…" spinner on a slow orch.
         // The scheduled cron performs the same sync (reading the freshly-saved state) so the save returns
@@ -2188,6 +2391,19 @@ if (!function_exists('wpc_v2_purge_html_on_delivery_change')) {
             return;
         }
 
+        // (v7.03.110) Bust the persistent object cache for the AUTOLOADED settings option. The root of
+        // "I turned the CDN off but it's still serving": a host object cache (e.g. SiteGround Memcached /
+        // Redis) keeps serving the OLD WPS_IC_SETTINGS array to live PHP even after update_option wrote
+        // the new one — so the rewriter keeps reading live-cdn/js = on and keeps emitting zone URLs.
+        // WPS_IC_SETTINGS is autoloaded → it lives in the single 'alloptions' bucket; deleting that (plus
+        // the key itself) forces the next request's wp_load_alloptions() to re-read FRESH from the DB, so
+        // the new CDN state takes effect on the first reload. Targeted on purpose — NOT a full
+        // wp_cache_flush()/opcache_reset() (those are global + heavy; the stale value is only here).
+        if (function_exists('wp_cache_delete') && defined('WPS_IC_SETTINGS')) {
+            wp_cache_delete('alloptions', 'options');
+            wp_cache_delete(WPS_IC_SETTINGS, 'options');
+        }
+
         // MF-1 — Full purge: WPC's OWN page cache (wps_cacheHtml) + Varnish + every active
         // third-party cache integration. A bare do_action('wps_ic_purge_all_cache') reaches ONLY
         // the third-party integration listeners (none registered in WPC core), so on a site using
@@ -2242,7 +2458,16 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
         // the literal numeric id — so we fall through and re-resolve the real PZ from /v2/zone.
         if (!$force && function_exists('wpc_v2_get_zone_id')) {
             $existing = wpc_v2_get_zone_id();
-            if ($existing !== '' && ctype_digit((string) $existing)) return $existing;
+            if ($existing !== '' && ctype_digit((string) $existing)) {
+                // (v7.03.55) A numeric id normally means "done" — BUT if the stored HOSTNAME is foreign (a
+                // clone-drift healed the id, not the hostname), fall through to /v2/zone to adopt the PZ's
+                // real zone_name. Throttle (10 min) so a foreign site doesn't POST /v2/zone every admin load.
+                $host_foreign = function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign();
+                if (!$host_foreign) return $existing;
+                $hh_last = (int) get_option('ic_cdn_zone_hostheal_bk', 0);
+                if ((time() - $hh_last) < 600) return $existing;
+                update_option('ic_cdn_zone_hostheal_bk', time());
+            }
         }
 
         $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
@@ -2290,6 +2515,45 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
                 $zone_id = (string) $data['zones'][0]['zone_id'];
             }
         }
+        // (v7.03.55) Adopt the PZ's HOSTNAME if the orch returns it — the AUTHORITATIVE heal for a foreign
+        // ic_cdn_zone_name. credits/connect can carry a stale clone value (the orch's per-key zone_name
+        // record was itself wrong); THIS is the real hostname of the pull-zone the apikey actually resolves
+        // to, so it is correct by construction (id 5374552 → threegirlsmediacou77ea6.zapwp.com). Align
+        // ic_cdn_zone_name to it and stamp this host (clears the foreign gate; arms future clone-detection).
+        // No-op until the orch ships zone_name on /v2/zone — until then the gate keeps a foreign site on origin.
+        if (is_array($data)) {
+            $zn = '';
+            foreach (['zone_name', 'zone_hostname', 'hostname'] as $hk) {
+                if (!empty($data[$hk]) && is_string($data[$hk])) { $zn = strtolower(trim($data[$hk])); break; }
+            }
+            // (orch v3.22.81) zone_name is now the AUTHORITATIVE PZ hostname (read live from Bunny, cached 1h)
+            // — adopt it during clone-heal exactly like zone_id_corrected. EXCEPT when zone_name_source ===
+            // 'stored_fallback' (a Bunny transient → the orch echoed the STORED value, which is the very thing
+            // that can be poisoned): skip adoption then and let the foreign gate hold origin until the next
+            // resolve returns 'pz_authoritative'. Never adopt a fallback value.
+            $zn_src = isset($data['zone_name_source']) ? (string) $data['zone_name_source'] : '';
+            if ($zn !== '' && $zn_src !== 'stored_fallback' && preg_match('~^[a-z0-9.-]+\.zapwp\.(?:com|net)$~', $zn)) {
+                $cur_zone = strtolower(trim((string) get_option('ic_cdn_zone_name', '')));
+                if ($zn !== $cur_zone) {
+                    update_option('ic_cdn_zone_name', $zn);
+                    error_log('[WPC ConfigSync] healed ic_cdn_zone_name ' . $cur_zone . ' -> ' . $zn . ' via /v2/zone (' . ($zn_src ?: 'authoritative') . ')');
+                    // (v7.03.56) The hostname just changed → every cached page AND any baked critical/combined
+                    // CSS still reference the OLD zone. updateCSSHash() purges the HTML/page caches (Nginx
+                    // Helper/GridPane, Rocket, LiteSpeed, Breeze, … via wps_ic_purge_all_cache) AND bumps the
+                    // css/js hash so baked CSS regenerates with the new zone — fixing the "shows the old zone
+                    // until I add ?v=" symptom. One-time (only on an actual change). NOTE: on GridPane this
+                    // only reaches the FastCGI/Redis page cache if Nginx Helper is configured to purge it.
+                    if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'updateCSSHash')) {
+                        wps_ic_cache::updateCSSHash(0);
+                    } elseif (function_exists('do_action')) {
+                        do_action('wps_ic_purge_all_cache', false);
+                    }
+                }
+                if (function_exists('home_url') && function_exists('wpc_cdn_norm_host')) {
+                    update_option('ic_cdn_zone_name_host', wpc_cdn_norm_host((string) wp_parse_url(home_url(), PHP_URL_HOST)));
+                }
+            }
+        }
         // Sanitize to the same shape sanitize_key() would accept downstream.
         $zone_id = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $zone_id);
         if ($zone_id === '') { $backoff(); return ''; }
@@ -2326,6 +2590,17 @@ add_action('admin_init', function () {
     } elseif (function_exists('do_action')) {
         do_action('wps_ic_purge_all_cache');
     }
+    // (v7.03.46) Persistent OBJECT-cache flush on update. The HTML purge above is FILE-based; a persistent
+    // object cache (Redis/Memcached) survives it and can keep serving pre-update state — stale autoloaded
+    // plugin options (the delivery/serve flags) or object-cache-backed page output — which is the support
+    // ticket where webp/avif stopped serving after an update until the object cache was manually purged.
+    // GATED so it's safe + cheap: only when an EXTERNAL object cache is active (no-op on the default
+    // per-request cache → unaffected sites pay nothing) AND only once per version (the gate above) → a
+    // single flush on update, never per-request. wp_cache_flush() is the standard API each drop-in
+    // implements for its backend (the plugin already uses it in wps_ic_cache).
+    if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_flush')) {
+        wp_cache_flush();
+    }
     // (v7.03.31) Clear the orphaned connectivity verdict. The blocking simpleConnectivityTest probe that
     // wrote it is gone and nothing live reads it anymore (crit moved to crit-push, which self-checks).
     // Drop the stale option once so legacy 'failed' sites stop showing local-mode status display.
@@ -2344,7 +2619,7 @@ add_action('admin_init', function () {
             update_option(WPS_IC_SETTINGS, $wpc_sh_set);
         }
     }
-    error_log('[WPC ConfigSync] post-update one-shot (v' . $cur . '): healer backoff reset + deferred sync scheduled + html cache flushed + stale connectivity verdict cleared + src-hints baked-on backfill');
+    error_log('[WPC ConfigSync] post-update one-shot (v' . $cur . '): healer backoff reset + deferred sync scheduled + html cache flushed + object cache flushed (if persistent) + stale connectivity verdict cleared + src-hints baked-on backfill');
 }, 19);
 
 // Self-provision the zone on admin page loads (admin/admin-ajax context only — never a
@@ -2376,6 +2651,15 @@ add_action('admin_init', function () {
         if ($healed !== '' && $healed !== $z && function_exists('error_log')) {
             error_log('[WPC ConfigSync] clone-drift heal: re-resolved stale zone_id ' . $z . ' → ' . $healed . ' (apikey owns the live zone)');
         }
+    }
+    // (v7.03.55) HOSTNAME clone-drift: the numeric id can be correct while ic_cdn_zone_name still points at
+    // the SOURCE site's PZ (id 5374552 ✓ but host soulawakeningacade5b2d2 = PZ 5395403 ✗) → assets 404 off
+    // the wrong origin. env_changed is already false here (the id healed + the fingerprint stamped), so the
+    // block above never fires. Re-resolve to adopt THIS PZ's real hostname (resolve_zone_id self-throttles
+    // its /v2/zone call to once / 10 min; a no-op until the orch ships zone_name — the gate holds origin
+    // meanwhile, so a foreign site is safe, not broken).
+    if (function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign()) {
+        wpc_v2_resolve_zone_id();
     }
 }, 20);
 

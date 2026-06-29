@@ -819,6 +819,34 @@ if (!function_exists('wpc_v2_deferred_pull_drain_fire')) {
         if (function_exists('wpc_v2_pull_drain_fire')) {
             wpc_v2_pull_drain_fire();
         }
+        // (v7.03.81) Loopback-independent fallback — the page-load twin of the wake's (.80). On a host where the
+        // loopback self-POST can't land (Cloudways/datacenter-IP/WAF), the fire above does nothing and the
+        // page-load drain silently no-ops, leaving the WAKE as the ONLY working trigger — a single point of
+        // failure (a wake that never arrives → the manifest backs up forever). After a 3s grace, if no worker
+        // stamped wpc_v2_drain_worker_started, run the drain loop INLINE here. The handler stamps on entry, so a
+        // healthy-loopback host stands down (no double-drain); a blocked one drains on the page-load itself. The
+        // response is already flushed above (fastcgi_finish_request), so this is zero user-facing latency.
+        // (v7.03.82) FLEET RESOURCE SAFETY gate. Only hold a worker for the 3s grace + inline drain when there
+        // is genuinely a pending backlog — wpc_v2_drain_alive_until_ms (set by the optimize/wake, NOT the
+        // page-load tick anymore) still in the future. The tick already gates registration on this, but the
+        // window can expire between register and shutdown, so we re-check here: a no-backlog shutdown returns
+        // instantly instead of sleeping 3s and long-polling the manifest on the fleet's 10k shared hosts.
+        wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
+        $wpc_drain_window_open = ((int) get_option('wpc_v2_drain_alive_until_ms', 0) > (int) round(microtime(true) * 1000));
+        if ($wpc_drain_window_open && function_exists('wpc_v2_pull_drain_loop_handler')) {
+            @ignore_user_abort(true);
+            @set_time_limit(150);
+            sleep(3);
+            if (!get_transient('wpc_v2_drain_worker_started')) {
+                $apikey_inline = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
+                if ($apikey_inline !== '') {
+                    error_log('[WPC PageLoadDrain] loopback_worker_never_started — running drain inline');
+                    $_POST['t']   = (string) time();
+                    $_POST['sig'] = hash_hmac('sha256', 'wpc_v2_pull_drain.' . $_POST['t'], $apikey_inline);
+                    wpc_v2_pull_drain_loop_handler();
+                }
+            }
+        }
     }
 }
 if (!function_exists('wpc_v2_register_deferred_pull_drain')) {

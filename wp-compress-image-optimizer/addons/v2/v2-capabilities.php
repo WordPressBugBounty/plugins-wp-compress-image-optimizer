@@ -555,7 +555,10 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             $lz_body  = http_build_query(['attachment_id' => $attachment_id, 'nonce' => $nonce]);
             $lz_req   = "POST {$lz_path} HTTP/1.1\r\nHost: {$lz_host}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
                       . "Content-Length: " . strlen($lz_body) . "\r\nConnection: close\r\nUser-Agent: WPCLazyDrain/1.0\r\n\r\n" . $lz_body;
-            $lz_fp = wps_ic_ajax::wpc_loopback_open_socket($lz_host, $lz_port, $lz_https, 0.2);
+            // (v7.03.121) parity with the two structurally-identical sibling loopback callers
+            // (v2-pull-manifest.php + v2-direct-entry.php), which both guard this — defends against a
+            // partial-bootstrap context where wps_ic_ajax isn't loaded.
+            $lz_fp = (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) ? wps_ic_ajax::wpc_loopback_open_socket($lz_host, $lz_port, $lz_https, 0.2) : false;
             if ($lz_fp) { @stream_set_timeout($lz_fp, 0, 100000); @fwrite($lz_fp, $lz_req); @fclose($lz_fp); }
         }
 

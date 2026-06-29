@@ -108,6 +108,7 @@ class wps_ic_options
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
             'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
+            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -288,6 +289,7 @@ class wps_ic_options
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
             'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
+            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -378,6 +380,7 @@ class wps_ic_options
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
             'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
+            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',

@@ -858,25 +858,12 @@ class wps_cdn_rewrite
          * TODO:
          * check if external is enabled
          */
-        if ((self::$externalUrlEnabled == '0' || empty(self::$externalUrlEnabled))) {
-            if (!self::image_url_matching_site_url($src)) {
-                // External not enabled
-                return $tag;
-            }
-        }
-
-        if (self::$externalUrlEnabled == '1' && !self::image_url_matching_site_url($src)) {
-            // External not enabled
-            if (strpos($src, self::$zone_name) === false) {
-                if (strpos($src, 'http') === false) {
-                    $src = ltrim($src, '//');
-                    $src = 'https://' . $src;
-                }
-
-                if (!self::is_excluded_link($src)) {
-                    $src = 'https://' . self::$zone_name . '/m:0/a:' . $src;
-                }
-            }
+        // (v7.03.49) EXTERNAL assets are never routed through the CDN — leave them on their origin (direct).
+        // A third-party-host asset carries CORS + availability risk and gains little (it's already on its own
+        // CDN); routing it produced the broken {origin}/m:0/a:… 404s. Unconditional now (was only when the
+        // external-URL feature was off). Same-site assets (below) are unaffected — that's the core CDN.
+        if (!self::image_url_matching_site_url($src)) {
+            return $tag;
         }
 
         // ORIGIN FLOOR for JS: until the per-zone JS-MIME proof is satisfied (natural_assets_on() —
@@ -1210,11 +1197,12 @@ class wps_cdn_rewrite
          * TODO:
          * check if external is enabled
          */
-        if ((self::$externalUrlEnabled == '0' || empty(self::$externalUrlEnabled))) {
-            if (!self::image_url_matching_site_url($src)) {
-                // External not enabled
-                return $src;
-            }
+        // (v7.03.49) EXTERNAL css/js/assets are never routed through the CDN — leave them on their origin
+        // (direct). A third-party-host asset carries CORS + availability risk and gains little (already on
+        // its own CDN); routing it produced the broken {origin}/m:0/a:… 404s. Unconditional now (was only
+        // when the external-URL feature was off). Same-site assets (below) are unaffected — that's the core CDN.
+        if (!self::image_url_matching_site_url($src)) {
+            return $src;
         }
 
         //remove version, needed for cdn
@@ -1222,30 +1210,6 @@ class wps_cdn_rewrite
             if (strpos($src, '?ver=')) {
                 $src = remove_query_arg('ver', $src);
             }
-        }
-
-        if (self::$externalUrlEnabled == '1' && !self::image_url_matching_site_url($src)) {
-            // ORIGIN FLOOR for external css/js: until the per-zone MIME proof is satisfied
-            // (natural_assets_on()), leave the origin href untouched (can never wrong-MIME).
-            // Scoped to .css/.js only — external images/.ico keep the m:0 form.
-            if ((strpos($src, '.css') !== false || strpos($src, '.js') !== false)
-                && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
-                && !wps_rewriteLogic::natural_assets_on()) {
-                return $src;
-            }
-            // External not enabled
-            if (strpos($src, self::$zone_name) === false) {
-                if (strpos($src, 'http') === false) {
-                    $src = ltrim($src, '//');
-                    $src = 'https://' . $src;
-                }
-
-                if (!self::is_excluded_link($src)) {
-                    $src = 'https://' . self::$zone_name . '/m:0/a:' . $src;
-                }
-            }
-
-            return $src;
         }
 
         // ORIGIN FLOOR for same-origin css/js: unproven zone → leave the origin href (proven → the
@@ -2015,12 +1979,145 @@ class wps_cdn_rewrite
 
     public function buffer_local_callback_wrapped($html)
     {
-        return self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html))))));
+        $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html)))))));
+        $html = self::wpc_lazy_srcset_buffer_pass($html);
+        $html = self::wpc_lcp_hint_pass($html);
+        return self::wpc_freshness_marker($html);
     }
 
     public function cdnRewriter_wrapped($html)
     {
-        return self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html))))));
+        $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html)))))));
+        $html = self::wpc_lazy_srcset_buffer_pass($html);
+        $html = self::wpc_lcp_hint_pass($html);
+        return self::wpc_freshness_marker($html);
+    }
+
+    /**
+     * (v7.03.59) Buffer-level SAFETY NET for the lazy over-fetch fix. The per-image promotion at
+     * rewriteLogic.php:5024 only runs inside the $build_image_tag rebuild; a theme-lazy thumbnail that takes a
+     * different emit path (or any <img> the rebuild missed) keeps its INERT data-srcset and over-fetches the
+     * full `src`. This final pass catches EVERY native-lazy <img> in the rendered HTML — regardless of which
+     * builder produced it — and promotes data-srcset -> active srcset + sizes="auto" so the browser self-sizes.
+     * Reuses the EXACT per-image guards from wps_rewriteLogic (loading="lazy" only, no data-src / no active
+     * srcset, not a carousel, aspect-safe), so it's idempotent (an already-promoted img is skipped) and never
+     * touches eager/LCP/slider images. Gated by the SAME "Right-size Lazy Images" toggle, read here via
+     * get_option so it's correct independent of rewriteLogic's static cache. Default OFF => exact no-op.
+     */
+    public static function wpc_lazy_srcset_buffer_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, 'data-srcset') === false) return $html;
+        if (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'activate_lazy_srcset_auto')) return $html;
+        $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
+        if (!is_array($set) || empty($set['lazy-auto-sizes'])) return $html; // toggle OFF => exact no-op
+        return preg_replace_callback('/<img\b[^>]*?>/is', function ($m) {
+            $t = wps_rewriteLogic::activate_lazy_srcset_auto($m[0]);
+            if (method_exists('wps_rewriteLogic', 'auto_sizes_for_lazy_img')) {
+                $t = wps_rewriteLogic::auto_sizes_for_lazy_img($t);
+            }
+            return $t;
+        }, $html);
+    }
+
+    /**
+     * (v7.03.58) Stamp the rendered HTML with the plugin version + render UNIX time (tiny comment before
+     * </body>) so freshness is verifiable at a glance via View-Source/curl. A page-cache (LiteSpeed/GridPane)
+     * serves the BAKED-IN time, so an old r: value = you're looking at STALE cache → purge it. Ends the
+     * "is this fresh?" guessing that masked the over-fetch/zone fixes behind 7-day server caches. The
+     * ?wpc_fresh request also appends FRESH. Filter 'wpc_freshness_marker' => false to suppress (white-label).
+     */
+    public static function wpc_freshness_marker($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '</body>') === false) return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_freshness_marker', true)) return $html;
+        $ver   = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?';
+        $now   = time();
+        $fresh = !empty($_GET['wpc_fresh']) ? ' FRESH' : '';
+        // (v7.03.59) Stamp the "Right-size Lazy Images" toggle (la:1/0) so freshness AND the over-fetch gate
+        // are both verifiable from View-Source — la:0 on a page whose thumbnails over-fetch = the toggle just
+        // isn't saved on, full stop (no more guessing whether it's code or config).
+        $set   = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
+        $la    = (is_array($set) && !empty($set['lazy-auto-sizes'])) ? '1' : '0';
+        $marker = "\n<!-- wpc " . $ver . ' r:' . $now . ' (' . gmdate('Y-m-d H:i:s', $now) . ' UTC) la:' . $la . $fresh . " -->\n";
+        return preg_replace('#</body>#i', $marker . '</body>', $html, 1);
+    }
+
+    /**
+     * (v7.03.75) LCP fetchpriority consumer. WPC's per-tag rewriter can't identify the LCP image — its
+     * candidate logic only looks at the first-N images by DOM order, and it has no ancestor context to tell
+     * the hero <img> apart from the grid (same class). The crit side renders per-viewport (Penthouse) and
+     * DOES know the LCP element, so it provides a hint — per-viewport {stem,width} via option/filter
+     * 'wpc_lcp_hint' (the filename STEM, because that's the only thing this per-tag pass can match through the
+     * CDN rewrite). When an <img>'s src carries that stem we give it the Lighthouse-correct LCP shape:
+     * fetchpriority="high", eager (NOT lazy — Lighthouse penalises a lazy LCP), and a FIXED sizes=<width>px
+     * (auto is ignored by the spec on a non-lazy img, so eager+auto would over-fetch; the render-measured
+     * width right-sizes it). INERT until the hint is populated => zero change on every site that hasn't wired
+     * the crit side yet. Contract: wpc-lcp-fetchpriority-contract.md.
+     */
+    public static function wpc_lcp_hint_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<img') === false) return $html;
+        $hint = function_exists('apply_filters')
+            ? apply_filters('wpc_lcp_hint', (function_exists('get_option') ? get_option('wpc_lcp_hint') : null))
+            : (function_exists('get_option') ? get_option('wpc_lcp_hint') : null);
+        if (empty($hint) || !is_array($hint)) return $html;
+        // Accept a flat {stem,width} OR a per-viewport {desktop:{...},mobile:{...}}. Viewport via WP's UA
+        // check (the same basis WPC uses to pick the per-viewport crit); fall back to whichever entry exists.
+        if (isset($hint['stem'])) {
+            $entry = $hint;
+        } else {
+            $vp = (function_exists('wp_is_mobile') && wp_is_mobile()) ? 'mobile' : 'desktop';
+            $entry = (isset($hint[$vp]) && is_array($hint[$vp])) ? $hint[$vp]
+                   : ((isset($hint['desktop']) && is_array($hint['desktop'])) ? $hint['desktop']
+                   : ((isset($hint['mobile']) && is_array($hint['mobile'])) ? $hint['mobile'] : null));
+        }
+        if (!is_array($entry) || empty($entry['stem'])) return $html;
+        $stem  = (string) $entry['stem'];
+        $width = isset($entry['width']) ? (int) $entry['width'] : 0;
+        if (strlen($stem) < 4) return $html; // too-short stem would match unrelated images — refuse it
+        $applied = false;
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($stem, $width, &$applied) {
+            $tag = $m[0];
+            if ($applied || stripos($tag, $stem) === false) return $tag; // LCP is one element: first match only
+            $applied = true;
+            if (stripos($tag, 'fetchpriority') === false) {
+                $tag = preg_replace('/<img\b/i', '<img fetchpriority="high"', $tag, 1);
+            }
+            $tag = preg_replace('/\sloading=(["\'])lazy\1/i', ' loading="eager"', $tag, 1);
+            if (stripos($tag, 'loading=') === false) {
+                $tag = preg_replace('/<img\b/i', '<img loading="eager"', $tag, 1);
+            }
+            if ($width > 0) {
+                if (preg_match('/\ssizes=/i', $tag)) {
+                    $tag = preg_replace('/\ssizes=(["\'])[^"\']*\1/i', ' sizes="' . $width . 'px"', $tag, 1);
+                } else {
+                    $tag = preg_replace('/<img\b/i', '<img sizes="' . $width . 'px"', $tag, 1);
+                }
+            }
+            return $tag;
+        }, $html);
+        return ($out === null) ? $html : $out;
+    }
+
+    /**
+     * (v7.03.56) Collapse a doubled SAME-extension that a naturalize/zoneify pass can produce when the
+     * SOURCE is ALREADY next-gen — e.g. a .webp ORIGINAL used as a CSS background or an <img> fallback
+     * (…-1.webp.webp → 404), common on .webp-upload portfolios. SAME-ext only (backreference) so it NEVER
+     * touches a valid cross-ext like .webp.avif (natural AVIF from a webp source). Fast-path skips the regex
+     * unless a double is actually present; idempotent + safe on already-correct URLs.
+     */
+    public static function wpc_collapse_double_ext($html)
+    {
+        if (!is_string($html) || $html === '') return $html;
+        if (strpos($html, '.webp.webp') === false
+            && strpos($html, '.avif.avif') === false
+            && strpos($html, '.png.png')  === false
+            && strpos($html, '.gif.gif')  === false
+            && !preg_match('/\.jpe?g\.jpe?g/i', $html)) {
+            return $html;
+        }
+        $out = preg_replace('/(\.(?:webp|avif|jpe?g|png|gif))\1/i', '$1', $html);
+        return ($out === null) ? $html : $out;
     }
 
     public function buffer_local_callback($html)
@@ -2772,6 +2869,29 @@ class wps_cdn_rewrite
         $init = $this->mainInit();
 
         if (!self::$cdnEnabled && !in_array($_SERVER['PHP_SELF'], ['/wp-login.php', '/wp-register.php'])) {
+            // (v7.03.72) Determinism safety-net — never let a page-cache persist a TRANSIENT/internal CDN-off
+            // render. When the CDN is configured ON (live-cdn=1) but THIS render fell to the local/origin path
+            // only because of the crit-combine extraction pass (?criticalCombine / criticalCombine header) or
+            // the orch zone-suppression (provisioning / healthcheck hold), the HTML carries full-size ORIGIN
+            // images. If LiteSpeed/WP-cache/GridPane stores that render (the combine pass is keyed by a header a
+            // URL-keyed cache ignores, so it can overwrite the canonical page), every visitor gets the
+            // over-fetch markup until the next purge — the intermittent "flips back to the bad state" the field
+            // reported. Tell the page-caches not to store THIS one, so only a real CDN-on render is ever cached.
+            // Deliberate off-states (CDN genuinely off via live-cdn=0, per-page CDN exclude, CF-assets mode) are
+            // NOT flagged — they never set these signals. Idempotent + header-safe. Filterable kill-switch.
+            if (!empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == 1
+                && apply_filters('wpc_nocache_degraded_cdn_render', true)
+                && (
+                    !empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))
+                    || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())
+                )) {
+                if (!headers_sent()) {
+                    if (function_exists('nocache_headers')) { nocache_headers(); }
+                    header('X-LiteSpeed-Cache-Control: no-cache', true);
+                }
+                if (!defined('DONOTCACHEPAGE')) { define('DONOTCACHEPAGE', true); }
+                if (function_exists('do_action')) { do_action('litespeed_control_set_nocache', 'wpc: transient CDN-off render'); }
+            }
             $this->cdn = new wps_cdn_rewrite();
             add_action('template_redirect', [$this->cdn, 'buffer_local_go']);
 
@@ -3020,7 +3140,12 @@ class wps_cdn_rewrite
             self::$settings['serve']['png'] = 0;
             self::$settings['serve']['gif'] = 0;
             self::$settings['serve']['svg'] = 0;
-        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1') {
+        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
+            // (v7.03.112) GUARD: a per-page CDN "include" (cdn=='1') must NOT resurrect the CDN when the
+            // GLOBAL CDN is OFF (live-cdn=='0'). Off means off. Without this, a stale per-page include
+            // forced cdnEnabled=1 + js/css/serve=1 IN MEMORY while the saved settings were all 0 — so
+            // assets kept routing through the zone after the CDN was switched off, and ONLY deactivating
+            // the plugin stopped it (the "off but still serving / safe-mode doesn't help" bug).
             self::$cdnEnabled = 1;
             self::$settings['css'] = 1;
             self::$settings['js'] = 1;
@@ -3118,6 +3243,17 @@ class wps_cdn_rewrite
                 if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
                     self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
                 }
+            }
+        }
+
+        // (v7.03.49) A zone host accidentally equal to the ORIGIN host (a misconfigured custom cname, or a
+        // clone that stored its own domain as the zone) would make EVERY transform URL resolve back to the
+        // origin → 404. Treat it as no-zone so the whole rewrite stands down (origin served — never a
+        // transform→origin 404). Source-level guard covering all builders (fonts, external, same-site).
+        if (!empty(self::$zone_name) && function_exists('home_url')) {
+            $wpc_origin_h = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+            if ($wpc_origin_h !== '' && strcasecmp((string) self::$zone_name, $wpc_origin_h) === 0) {
+                self::$zone_name = '';
             }
         }
 
@@ -3350,7 +3486,12 @@ class wps_cdn_rewrite
             self::$settings['serve']['png'] = 0;
             self::$settings['serve']['gif'] = 0;
             self::$settings['serve']['svg'] = 0;
-        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1') {
+        } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
+            // (v7.03.112) GUARD: a per-page CDN "include" (cdn=='1') must NOT resurrect the CDN when the
+            // GLOBAL CDN is OFF (live-cdn=='0'). Off means off. Without this, a stale per-page include
+            // forced cdnEnabled=1 + js/css/serve=1 IN MEMORY while the saved settings were all 0 — so
+            // assets kept routing through the zone after the CDN was switched off, and ONLY deactivating
+            // the plugin stopped it (the "off but still serving / safe-mode doesn't help" bug).
             self::$cdnEnabled = 1;
             self::$settings['css'] = 1;
             self::$settings['js'] = 1;
@@ -3623,6 +3764,13 @@ class wps_cdn_rewrite
                     $url = $m[2];
                     // Already on the zone? leave untouched (idempotent / no double-rewrite).
                     if ($wpc_zone !== '' && strpos($url, $wpc_zone) !== false) {
+                        return $m[0];
+                    }
+                    // HOST GUARD (v7.03.48) — never build a transform on an empty/origin zone host: an empty
+                    // zone yields "https:///…" → resolves to the ORIGIN → 404 (and a zone equal to the origin
+                    // host 404s the same; also the suppressed-zone state). Mirrors the guard now in
+                    // replaceFonts / cdn_rewrite_url / cdnExternalUrls. Stay on the natural URL otherwise.
+                    if ($wpc_zone === '' || ($wpc_site_host !== '' && strcasecmp((string) $wpc_zone, (string) $wpc_site_host) === 0)) {
                         return $m[0];
                     }
                     // Same-site only — leave third-party fonts (gstatic, typekit, fontawesome
@@ -4338,7 +4486,10 @@ class wps_cdn_rewrite
             $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
             #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
 
-            $call = $requests->POST(self::$API_URL, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+            // (v7.03.121) FATAL FIX: was self::$API_URL — an UNDECLARED static (the property is lowercase
+            // self::$apiUrl, line 77; PHP static-prop names are case-sensitive) → "Access to undeclared
+            // static property wps_cdn_rewrite::$API_URL" white-screen, reachable via ?forceCritical=1 on a CDN-on render.
+            $call = $requests->POST(self::$apiUrl, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
 
             return print_r(['key' => $url_key, 'url' => $url, 'call' => $call], true);
         }
@@ -5507,14 +5658,22 @@ class wps_cdn_rewrite
                     if (stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) {
                         return $this->maybe_slash($url, $addslashes);
                     }
+                    // HOST GUARD (v7.03.47) — never build a transform on an empty/origin zone host: an empty
+                    // zone yields "https:///…" which resolves against the ORIGIN → 404 (also the suppressed-zone
+                    // state). Stay on the natural origin URL when the zone host isn't safely available.
+                    $wpc_zn = (string) self::$zone_name;
+                    $wpc_oh = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+                    if ($wpc_zn === '' || ($wpc_oh !== '' && strcasecmp($wpc_zn, $wpc_oh) === 0)) {
+                        return $this->maybe_slash($url, $addslashes);
+                    }
                     if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
                         if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
-                            $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                            $newUrl = 'https://' . $wpc_zn . '/m:0/a:' . self::reformat_url($url);
                         } else {
-                            $newUrl = 'https://' . self::$zone_name . '/font:true/a:' . self::reformat_url($url);
+                            $newUrl = 'https://' . $wpc_zn . '/font:true/a:' . self::reformat_url($url);
                         }
                     } else {
-                        $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
+                        $newUrl = 'https://' . $wpc_zn . '/m:0/a:' . self::reformat_url($url);
                     }
                     return $newUrl;
                 }
@@ -6241,6 +6400,25 @@ JS;
     public function replace_iframe_tags($iframe)
     {
         if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
+            return $iframe[0];
+        }
+
+        // (v7.03.47) Do NOT lazy a HIDDEN / off-screen / JS-MANAGED iframe. Many embeds ship the iframe
+        // hidden + parked off-screen and reveal it with their own JS once it loads + posts its height
+        // (GoHighLevel/LeadConnector, HubSpot, chat/booking widgets). Moving its src→data-wpc-src hands
+        // loading to our IntersectionObserver, which never fires for an off-screen element → the iframe
+        // never loads → the widget's reveal JS has nothing to show → invisible form. Leave these untouched.
+        // Detect via the embed's own hidden flag, hidden/off-screen inline styles, or a known widget host.
+        $wpc_if    = $iframe[0];
+        $wpc_if_ns = str_replace(' ', '', strtolower($wpc_if)); // normalize so CSS values match regardless of spacing
+        if (stripos($wpc_if, 'data-initial-iframe-hidden') !== false
+            || strpos($wpc_if_ns, 'visibility:hidden') !== false
+            || strpos($wpc_if_ns, 'opacity:0') !== false
+            || strpos($wpc_if_ns, 'display:none') !== false
+            || strpos($wpc_if_ns, 'left:-9999') !== false
+            || strpos($wpc_if_ns, 'left:-99999') !== false
+            || stripos($wpc_if, 'leadconnectorhq.com') !== false
+            || stripos($wpc_if, 'msgsndr') !== false) {
             return $iframe[0];
         }
 

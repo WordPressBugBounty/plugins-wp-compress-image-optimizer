@@ -287,10 +287,17 @@ class wps_ic_cache
         $cacheHtml->removeCacheFiles($post_id);
 
         $cache_integrations = new wps_ic_cache_integrations();
+        // (v7.03.92) Match the Varnish scope to the clear scope: per-post → that URL; 'home' → homepage;
+        // 'all' → FULL-SITE (regex). Before this, 'all' purged only the homepage path, so interior pages
+        // kept serving stale markup from host Varnish until TTL — the same homepage-only gap crit had. Most
+        // site-wide events (settings/delivery/CDN changes, bulk-end) route through here, so this upgrades
+        // them all to full-site at once.
         if (is_int($post_id)) {
-            $cache_integrations->purgeVarnish($post_id);
+            $cache_integrations->purgeVarnish($post_id);           // per-URL
+        } elseif ($post_id === 'home') {
+            $cache_integrations->purgeVarnish(0);                  // homepage only
         } else {
-            $cache_integrations->purgeVarnish(0);
+            $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
         }
 
         // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
@@ -541,9 +548,15 @@ class wps_ic_cache
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 
-        set_transient('wps_ic_purging_cdn', 'true', 30);
-
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key'] ?? '']);
+        // (v7.03.50) NO CDN purge on plugin update/activation. This runs on upgrader_process_complete +
+        // activated_plugin; the old full `action=cdn_purge` here wiped EVERY edge-cached image on every
+        // update — a fleet-wide cold-miss storm (the edge re-probes the slow origin for each image →
+        // PHP-worker saturation → 40-60s pages), the exact failure cf-sdk::purgeFilesAsync documents avoiding.
+        // It's also redundant: the css_hash/js_hash bump above re-stamps every CSS/JS CDN URL with a fresh
+        // ?icv=/?js_icv= (cdn-rewrite.php:575/579) → new cache key → the edge refetches CSS/JS on its own.
+        // Images don't change on a plugin update, so they MUST stay cached. The HTML/object/local caches are
+        // purged above (+ the page-cache fan-out below) — that's all an update needs. Genuine zone changes
+        // still purge the CDN (cname add/remove, the manual purge button) — those are separate paths.
 
         // Clear cache.
         if (function_exists('rocket_clean_domain')) {

@@ -2199,7 +2199,25 @@ class wps_ic_ajax extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
-        $cache::purgeAll(false, false, false, false);
+        // (v7.03.91) Purge the PAGE caches too, or this is a no-op that creates a permanent wall: the crit
+        // files get deleted but the cached HTML keeps serving (Varnish/WPC/3rd-party HIT) → WordPress never
+        // re-renders → crit never regenerates. $varnish=true (2nd arg) fires purgeVarnish (full-site, since
+        // url_key=false); $forcePurge=true (5th arg) bypasses the cache-off/purge-hooks/dev-mode early-return
+        // so an explicit admin purge ALWAYS clears the page cache + the integration fan-out.
+        $cache::purgeAll(false, true, false, false, true);
+        // (v7.03.91) Object cache: the crit-gen LOCK ('wpc_critical_key_*') is a 5-min transient; under an
+        // external object cache (Redis/Memcached) it lives there, NOT the options table — so the raw SQL
+        // DELETE above misses it and the surviving lock would throttle the regen for up to 5 min. Flush the
+        // object cache so the lock can't outlive the purge.
+        if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
+        // (v7.03.91) Arm the crit-regen-pending flag so v2-lcp-nocache.php emits no-store on crit-LESS renders
+        // until crit comes back — so a re-render during the crit-gen window can't re-cache a hint-less page and
+        // re-wall the regen. Bounded TTL: self-clears if crit never returns (e.g. producer down).
+        if (function_exists('set_transient')) {
+            set_transient('wpc_crit_regen_pending', 1, 10 * (defined('MINUTE_IN_SECONDS') ? MINUTE_IN_SECONDS : 60));
+        }
 
         // Dropped a cosmetic sleep(3): purge already completed synchronously above.
         delete_transient('wps_ic_purging_cdn');
@@ -7585,7 +7603,7 @@ class wps_ic_ajax extends wps_ic
      *   - 1536x1536            → metadata['sizes']['1536x1536']['width' & 'height']
      *   - medium / large / etc → metadata['sizes'][$base]['width' & 'height']
      *   - scaled               → metadata['width']/['height'] (scaled dims)
-     *   - original             → source file dimensions via getimagesize()
+     *   - original             → source dims CONSTRAINED to Max Image Size (the encoded master's real dims, not the pristine source)
      *   - thumb (variant alias) → metadata['sizes']['thumbnail'] if present, else thumb
      *   - unknown              → "" (empty; caller renders blank)
      *
@@ -7623,23 +7641,55 @@ class wps_ic_ajax extends wps_ic
             return (int) $cached_meta['sizes'][$base]['width'] . '×' . (int) $cached_meta['sizes'][$base]['height'];
         }
 
-        // "original" / "unscaled" → unscaled file dims
+        // (v7.03.58) Service-delivered AVIF responsive-ladder widths key on the literal "W x H"
+        // (e.g. "800x1085") — not a WP-named size, so the lookup above misses. Parse the dims straight
+        // from the key. AFTER the named-size check so 1536x1536 / 2048x2048 keep their metadata dims.
+        if (preg_match('/^(\d+)x(\d+)$/i', $base, $m)) {
+            return (int) $m[1] . '×' . (int) $m[2];
+        }
+
+        // "original" / "unscaled" → the encoded master's dims, NOT the pristine source.
+        // (v7.03.99) The source-build resizes any master that exceeds Max Image Size (or the
+        // byte/MP caps) down to maxWidth before sending, and the orchestrator returns nothing
+        // larger — so a 5979×3986 upload comes back as a 2560×1707 master, byte-identical to
+        // 'scaled'. The modal previously read the pristine unscaled file via getimagesize() and
+        // printed 5979×3986 against a 2560 encode. Fix: read source dims, then CONSTRAIN to Max
+        // Image Size using WP's own constrain math (exact parity with the scaled main).
         $base_lower = strtolower($base);
         if ($base_lower === 'original' || $base_lower === 'unscaled') {
+            $sw = 0; $sh = 0;
             if (function_exists('wp_get_original_image_path')) {
                 $orig_path = wp_get_original_image_path($imageID);
                 if ($orig_path && file_exists($orig_path)) {
                     $sz = @getimagesize($orig_path);
                     if (is_array($sz) && !empty($sz[0]) && !empty($sz[1])) {
-                        return (int) $sz[0] . '×' . (int) $sz[1];
+                        $sw = (int) $sz[0]; $sh = (int) $sz[1];
                     }
                 }
             }
-            // Fallback to scaled dims if original-path lookup failed
-            if (!empty($cached_meta['width']) && !empty($cached_meta['height'])) {
-                return (int) $cached_meta['width'] . '×' . (int) $cached_meta['height'];
+            if (($sw <= 0 || $sh <= 0) && !empty($cached_meta['width']) && !empty($cached_meta['height'])) {
+                $sw = (int) $cached_meta['width']; $sh = (int) $cached_meta['height'];
             }
-            return '';
+            if ($sw <= 0 || $sh <= 0) return '';
+
+            $wpsic_opts = get_option('wps_ic');
+            $maxw = (is_array($wpsic_opts) && !empty($wpsic_opts['maxWidth'])) ? (int) $wpsic_opts['maxWidth'] : 2560;
+            if ($maxw < 1) $maxw = 2560;
+
+            if (function_exists('wp_constrain_dimensions')) {
+                $cd = wp_constrain_dimensions($sw, $sh, $maxw, $maxw);
+                if (is_array($cd) && !empty($cd[0]) && !empty($cd[1])) {
+                    return (int) $cd[0] . '×' . (int) $cd[1];
+                }
+            }
+            // Manual constrain fallback (longest edge → maxWidth, aspect preserved).
+            $longest = max($sw, $sh);
+            if ($longest > $maxw) {
+                $scale = $maxw / $longest;
+                $sw = (int) round($sw * $scale);
+                $sh = (int) round($sh * $scale);
+            }
+            return $sw . '×' . $sh;
         }
 
         // "scaled" → top-level metadata dims (the scaled-down dims, post big_image_size_threshold)
@@ -7867,6 +7917,24 @@ class wps_ic_ajax extends wps_ic
             return 0;
         };
 
+        // (v7.03.58) Full original-image size — the "before" we show for AVIF responsive-ladder widths that
+        // carry NO per-variant original (service-delivered, originalSize=0, no same-width sibling). Resolve
+        // via the same canonical helper (pre-compression, consistent with the Original column), then fall
+        // back to the on-disk original file. Used only as the last-tier fallback in the loop below.
+        $full_orig = 0;
+        foreach (['scaled', 'full', 'original'] as $fb) { // (v7.03.59) prefer SCALED: the full original inflates the % savings
+            $full_orig = (int) $canonical_orig($fb);
+            if ($full_orig > 0) break;
+        }
+        if ($full_orig <= 0 && function_exists('get_attached_file')) { // the -scaled main file WP serves = fair "before"
+            $af = get_attached_file($imageID);
+            if (is_string($af) && $af !== '' && @file_exists($af)) $full_orig = (int) @filesize($af);
+        }
+        if ($full_orig <= 0 && function_exists('wp_get_original_image_path')) { // true pre-scale original = last resort
+            $op = wp_get_original_image_path($imageID);
+            if (is_string($op) && $op !== '' && @file_exists($op)) $full_orig = (int) @filesize($op);
+        }
+
         // Separate optimized from skipped, sort optimized by savings desc
         $optimized_rows = [];
         $skipped_rows = [];
@@ -7905,6 +7973,12 @@ class wps_ic_ajax extends wps_ic
                 }
             }
 
+            // Tier 5 (v7.03.58): still no per-variant original (AVIF ladder width) → show the FULL original
+            // image size as the "before" instead of "—" (user request). Flagged so the degenerate ≥99.9%
+            // guard below doesn't drop a legitimately-tiny ladder width measured against the big original.
+            $orig_is_full = false;
+            if ($orig <= 0 && $full_orig > 0) { $orig = $full_orig; $orig_is_full = true; }
+
             // Always recompute savings from current orig/opt at render time. The stored
             // `savings` field drifts when the variant entry is partially rewritten (e.g. service
             // returns updated `size` but service-side image_sizes row has stale originalSize from
@@ -7916,11 +7990,14 @@ class wps_ic_ajax extends wps_ic
                 ? round((1 - $opt / $orig) * 100, 2)
                 : 0;
 
-            // Defensive filter: skip nonsensical rows (size=0, no orig, or impossible 100%
-            // savings). These can briefly appear if the AJAX races a mid-write bg-swap callback.
-            // Skipping them keeps the modal clean even under race conditions; the next refresh
-            // shows the now-settled data.
-            if ($opt <= 0 || $orig <= 0 || $pct >= 99.9) continue;
+            // (v7.03.56) Show EVERY generated variant as a row so the table matches the chip count — incl.
+            // the AVIF-only responsive-ladder widths that carry no recorded original (service-delivered,
+            // originalSize=0, no same-width JPEG/WebP sibling). Drop only a truly-broken row (no optimized
+            // output); the ≥99.9% degenerate filter applies only when there IS an original. A row with
+            // orig<=0 renders "—" for Original/Savings (the optimized "after" still shows). The brief
+            // mid-write bg-swap race the old guard covered self-settles on the next modal refresh.
+            if ($opt <= 0) continue;
+            if ($orig > 0 && !$orig_is_full && $pct >= 99.9) continue;
 
             $fmt_class = 'wpc-fmt-jpeg';
             $fmt_label = 'JPEG';
@@ -7966,12 +8043,24 @@ class wps_ic_ajax extends wps_ic
         //   still visible.
         $html .= 'body .swal2-popup.wpc-stats-swal,body .wpc-stats-swal.swal2-popup{';
         $html .= 'padding:30px 28px 24px !important;border-radius:14px !important;';
-        $html .= 'max-height:calc(100vh - 80px) !important;margin:40px auto !important;';
+        $html .= 'max-height:calc(100vh - 80px) !important;margin:40px auto !important;max-width:calc(100% - 32px) !important;';
         $html .= 'overflow:hidden !important;animation:none !important;transform:none !important;}';
+        // (v7.03.58) RESPECT the WP admin sidebar: offset the whole swal CONTAINER to start at the menu's
+        // right edge (left=menu width) so the popup lives ENTIRELY in the content area — never under the
+        // fixed admin menu (z-index:9990, far above swal). The popup also caps to max-width:calc(100% - 32px)
+        // so it fits the content area on smaller screens. Menu widths: 160 normal, 36 folded/auto-fold,
+        // 0 off-canvas (<783px). :has() is progressive — older browsers center as before (no worse).
+        $html .= '.swal2-container:has(.wpc-stats-swal){left:160px !important;right:0 !important;width:auto !important;}';
+        $html .= 'body.folded .swal2-container:has(.wpc-stats-swal),body.auto-fold .swal2-container:has(.wpc-stats-swal){left:36px !important;}';
+        $html .= '@media screen and (max-width:782px){.swal2-container:has(.wpc-stats-swal){left:0 !important;}}';
         // Inner content: scroll. Both possible class names (post-v9 = html-container, pre-v9 = content).
         $html .= 'body .wpc-stats-swal .swal2-html-container,body .wpc-stats-swal .swal2-content{';
         $html .= 'max-height:calc(85vh - 120px) !important;overflow-y:auto !important;';
-        $html .= 'margin:0 !important;padding:0 4px 0 0 !important;text-align:left !important;}';
+        // (v7.03.57) Push the scrollbar OUT to the popup's right-padding gap (≈10px from the edge) so it
+        // clears the close ✕ at right:16px instead of running through it. margin-right:-18px extends the
+        // scroll box into the popup's 28px right padding; padding-right:18px keeps the content inset where
+        // it was (net content position unchanged) — only the scrollbar moves right, clear of the ✕.
+        $html .= 'margin:0 -18px 0 0 !important;padding:0 18px 0 0 !important;text-align:left !important;}';
         // Minimal scrollbar
         $html .= '.wpc-stats-swal .swal2-html-container::-webkit-scrollbar,';
         $html .= '.wpc-stats-swal .swal2-content::-webkit-scrollbar{width:6px;}';
@@ -8001,6 +8090,8 @@ class wps_ic_ajax extends wps_ic
         $html .= 'body .wpc-stats-swal .wpc-stats-grid thead th,body .wpc-stats-swal .wpc-stats-grid thead tr th{';
         $html .= 'position:sticky !important;top:0 !important;background:#fff !important;z-index:4 !important;';
         $html .= 'box-shadow:0 1px 0 #eef1f5 !important;}';
+        // (v7.03.58) Hide the T+ (arrival-time) column — testing aid, not for customers.
+        $html .= '.wpc-th-tplus,.wpc-td-tplus{display:none !important;}';
         $html .= '</style>';
         $html .= '<div class="wpc-stats-modal">';
         $html .= '<div class="wpc-stats-modal-header"><div>';
@@ -8015,7 +8106,10 @@ class wps_ic_ajax extends wps_ic
         $html .= '<th class="wpc-th-dimensions">' . esc_html__('Dimensions', 'wp-compress-image-optimizer') . '</th>';
         // Arrival time since click. Testing aid. Hide via CSS:
         //   .wpc-th-tplus, .wpc-td-tplus { display: none !important; }
-        $html .= '<th class="wpc-th-tplus">T+</th>';
+        // (v7.03.107) Inline display:none — the <style> hide (above) is stripped by
+        // SweetAlert2's HTML sanitizer, so the column showed despite the CSS rule.
+        // Inline styles survive sanitization, so this actually hides it. Testing aid only.
+        $html .= '<th class="wpc-th-tplus" style="display:none">T+</th>';
         $html .= '<th class="wpc-th-orig">' . esc_html__('Original', 'wp-compress-image-optimizer') . '</th>';
         $html .= '<th class="wpc-th-opt">' . esc_html__('Optimized', 'wp-compress-image-optimizer') . '</th>';
         $html .= '<th class="wpc-th-savings wpc-th-active-sort">' . esc_html__('Savings', 'wp-compress-image-optimizer') . ' <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></th>';
@@ -8032,10 +8126,15 @@ class wps_ic_ajax extends wps_ic
             $html .= '<tr class="wpc-row-enter">';
             $html .= '<td class="wpc-td-variant"><div class="wpc-cell-variant"><span class="wpc-format-badge ' . esc_attr($r['fmt_class']) . '">' . esc_html($r['fmt_label']) . '</span><span class="wpc-variant-name">' . esc_html($r['display_label']) . '</span></div></td>';
             $html .= '<td class="wpc-td-dimensions wpc-size-muted">' . esc_html($r['dimensions']) . '</td>';
-            $html .= '<td class="wpc-td-tplus wpc-size-muted">' . esc_html($fmt_tplus($r['t_ms'])) . '</td>';
-            $html .= '<td class="wpc-size-muted">' . esc_html(wps_ic_format_bytes($r['orig'])) . '</td>';
+            $html .= '<td class="wpc-td-tplus wpc-size-muted" style="display:none">' . esc_html($fmt_tplus($r['t_ms'])) . '</td>';
+            $html .= '<td class="wpc-size-muted">' . ($r['orig'] > 0 ? esc_html(wps_ic_format_bytes($r['orig'])) : '&mdash;') . '</td>';
             $html .= '<td class="wpc-size-opt">' . esc_html(wps_ic_format_bytes($r['opt'])) . '</td>';
-            $html .= '<td class="wpc-td-savings"><div class="wpc-cell-savings"><span class="wpc-savings-pct">' . esc_html(number_format($r['pct'], 1)) . '%</span><div class="wpc-bar-track"><div class="wpc-bar-fill" data-target="' . $r['pct'] . '"></div></div></div></td>';
+            // orig<=0 (responsive-ladder width with no recorded baseline) → "—" savings, no bar.
+            if ($r['orig'] > 0) {
+                $html .= '<td class="wpc-td-savings"><div class="wpc-cell-savings"><span class="wpc-savings-pct">' . esc_html(number_format($r['pct'], 1)) . '%</span><div class="wpc-bar-track"><div class="wpc-bar-fill" data-target="' . $r['pct'] . '"></div></div></div></td>';
+            } else {
+                $html .= '<td class="wpc-td-savings"><div class="wpc-cell-savings"><span class="wpc-savings-pct wpc-size-muted">&mdash;</span></div></td>';
+            }
             $html .= '</tr>';
         }
 
@@ -8052,7 +8151,7 @@ class wps_ic_ajax extends wps_ic
                 $html .= '<tr class="wpc-skipped-row">';
                 $html .= '<td class="wpc-td-variant"><div class="wpc-cell-variant"><span class="wpc-format-badge ' . esc_attr($r['fmt_class']) . '">' . esc_html($r['fmt_label']) . '</span><span class="wpc-variant-name">' . esc_html($r['display_label']) . '</span></div></td>';
                 $html .= '<td class="wpc-td-dimensions wpc-size-muted">' . esc_html($r['dimensions']) . '</td>';
-                $html .= '<td class="wpc-td-tplus wpc-size-muted">' . esc_html($fmt_tplus($r['t_ms'])) . '</td>';
+                $html .= '<td class="wpc-td-tplus wpc-size-muted" style="display:none">' . esc_html($fmt_tplus($r['t_ms'])) . '</td>';
                 $html .= '<td class="wpc-size-muted">' . esc_html(wps_ic_format_bytes($r['orig'])) . '</td>';
                 $html .= '<td class="wpc-size-muted">' . esc_html(wps_ic_format_bytes($r['orig'])) . '</td>';
                 $html .= '<td class="wpc-td-savings"><div class="wpc-cell-savings"><span class="wpc-skipped-badge">' . esc_html__('Skipped — optimal', 'wp-compress-image-optimizer') . '</span></div></td>';
@@ -8764,7 +8863,9 @@ class wps_ic_ajax extends wps_ic
 
         if ($updated) {
             $cache = new wps_ic_cache_integrations();
-            $cache::purgeAll(false, false, false, false);
+            // (v7.03.92) $varnish=true + $forcePurge=true: cache-cookie rules change which responses are
+            // cacheable; stale host-Varnish entries must be evicted or they survive with no purge at all.
+            $cache::purgeAll(false, true, false, false, true);
 
             $settings = get_option(WPS_IC_SETTINGS);
             if (!empty($settings['cache']['advanced']) && $settings['cache']['advanced'] == '1') {

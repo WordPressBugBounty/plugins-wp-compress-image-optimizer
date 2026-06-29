@@ -38,6 +38,8 @@ if (current_user_can('manage_options')) {
     $pSynced     = (int) get_option('wpc_v2_config_synced_at', 0);
     $pForce      = (bool) get_option('wpc_v2_force_provision', false);
     $pAttempts   = (int) get_option('wpc_v2_selfheal_attempts', 0);
+    $pPoison     = trim((string) get_option('wpc_v2_cdn_poison_reason', ''));
+    $pCompeting  = trim((string) get_option('wpc_v2_foreign_cdn', ''));
     $pTier = '(resolver unavailable)';
     if (class_exists('WPC_Delivery_Resolver') && method_exists('WPC_Delivery_Resolver', 'resolve_verbose')) {
         $rv = WPC_Delivery_Resolver::resolve_verbose(false);
@@ -47,6 +49,7 @@ if (current_user_can('manage_options')) {
     if ($pEnvUnconf) { $pWhy[] = 'env unconfirmed (fresh install / staging clone / migration — not yet verified for THIS host)'; }
     if (function_exists('wpc_v2_zone_cdn_disabled')  && wpc_v2_zone_cdn_disabled())  { $pWhy[] = 'orch master-kill (cdn_disabled)'; }
     if (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()) { $pWhy[] = 'liveness auto-disable'; }
+    if (function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign()) { $pWhy[] = 'CDN zone hostname belongs to a DIFFERENT site (clone healed the id, not the hostname) — auto re-resolving this PZ\'s real hostname via /v2/zone'; }
     $pNavKey = ($pZone !== '') ? ('wpc_v2_orch_nav_' . preg_replace('/[^A-Za-z0-9_\-]/', '', $pZone)) : '';
     $pNav    = ($pNavKey !== '') ? get_option($pNavKey, '(not echoed)') : '(no zone)';
 
@@ -59,6 +62,14 @@ if (current_user_can('manage_options')) {
     $prow = function ($k, $v) { echo '<tr><td style="padding:4px 8px;color:#314b72;width:290px;vertical-align:top;">' . $k . '</td><td style="padding:4px 8px;font-family:monospace;">' . $v . '</td></tr>'; };
     $prow('Connected (API key present)', $pApikey !== '' ? $yes : $no);
     $prow('Zone identity', $pZone !== '' ? (esc_html($pZone) . (ctype_digit($pZone) ? ' (Bunny PZ)' : '')) : ($pCname !== '' ? (esc_html($pCname) . ' (CNAME)') : '<span style="color:#991b1b;">none</span>'));
+    $pZoneHost  = strtolower(trim((string) get_option('ic_cdn_zone_name', '')));
+    $pZoneStamp = strtolower(trim((string) get_option('ic_cdn_zone_name_host', '')));
+    $pForeign   = function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign();
+    $pHomeHost  = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+    if ($pZoneHost !== '') { $prow('CDN zone hostname (builds image URLs)', esc_html($pZoneHost)); }
+    $prow('Zone &harr; site affinity', $pForeign
+        ? ($no . ' &rarr; FOREIGN (this site is <code>' . esc_html($pHomeHost) . '</code>) &mdash; serving ORIGIN + healing via /v2/zone')
+        : ($yes . ($pZoneStamp !== '' ? ' (confirmed for ' . esc_html($pZoneStamp) . ')' : '')));
     $prow('Provisioning confirmed for THIS host', $pEnvUnconf ? ($no . ' — fingerprint not stamped') : $yes);
     $prow('CDN suppressed right now', $pSuppressed ? ($yes . ' &rarr; serving ORIGIN (fail-safe, no 404)') : ($no . ' &rarr; CDN live'));
     if ($pSuppressed && !empty($pWhy)) { $prow('&hellip;why suppressed', esc_html(implode('; ', $pWhy))); }
@@ -67,6 +78,12 @@ if (current_user_can('manage_options')) {
     $prow('Last /v2/config sync', $pSynced > 0 ? esc_html(human_time_diff($pSynced) . ' ago (' . date('Y-m-d H:i:s', $pSynced) . ')') : '<span style="color:#991b1b;">never</span>');
     $prow('Provision pending (force flag)', $pForce ? $yes : $no);
     $prow('Self-heal attempts', (string) $pAttempts);
+    $prow('CDN content-verify', $pPoison !== ''
+        ? '<span style="color:#991b1b;font-weight:600;">STOOD DOWN</span> &rarr; origin served <code>' . esc_html($pPoison) . '</code> to the CDN (page protected; serving origin)'
+        : '<span style="color:#166534;">edge serves real images</span>');
+    $prow('Competing CDN in front of origin', $pCompeting !== ''
+        ? '<span style="color:#991b1b;font-weight:600;">' . esc_html($pCompeting) . '</span> &rarr; double-CDN; can conflict with WPC&rsquo;s zone (poisoned pulls / cache fights)'
+        : 'none detected');
     echo '</table>';
     echo '<form method="post" style="margin-top:12px;">';
     wp_nonce_field('wpc_prov_diag');

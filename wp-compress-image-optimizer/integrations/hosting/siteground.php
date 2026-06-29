@@ -49,34 +49,64 @@ class wps_ic_siteground extends wps_ic_integrations {
     }
 
     public function purge_cache($url_key = false) {
-        // 1. SiteGround Optimizer (new version)
-        if (class_exists('\SiteGround_Optimizer\Supercacher\Supercacher') &&
-            method_exists('\SiteGround_Optimizer\Supercacher\Supercacher', 'purge_cache')) {
-            \SiteGround_Optimizer\Supercacher\Supercacher::purge_cache();
+        // (v7.03.111) Purge ALL SiteGround layers — Dynamic + File + MEMCACHED (object cache).
+        // BUG FIXED: the previous step 1 called Supercacher::purge_cache() and RETURNED — but that
+        // method clears the DYNAMIC/file cache ONLY, NOT Memcached. WordPress autoloaded options
+        // (including WPC's CDN settings) live in Memcached, so a dynamic-only purge left the rewriter
+        // reading CDN="on" after it was switched OFF — the "I turned the CDN off but it's still serving"
+        // trap. The DOCUMENTED public function sg_cachepress_purge_cache() purges all three layers incl
+        // Memcached (SiteGround developer API, v3.3.0+), so we call it FIRST; every other path now also
+        // busts the object cache so the stale settings can never survive a purge.
+
+        // 1. Official all-layers purge (Dynamic + File + Memcached) — the correct single call.
+        if (function_exists('sg_cachepress_purge_cache')) {
+            sg_cachepress_purge_cache();
+            self::bust_object_cache();
             return;
         }
 
-        // 2. SG CachePress (older version)
+        // 2. Modern Supercacher (dynamic/file) — older builds without the public function. This does NOT
+        //    flush Memcached, so we bust the object cache explicitly below (no early return before it).
+        if (class_exists('\SiteGround_Optimizer\Supercacher\Supercacher') &&
+            method_exists('\SiteGround_Optimizer\Supercacher\Supercacher', 'purge_cache')) {
+            \SiteGround_Optimizer\Supercacher\Supercacher::purge_cache();
+            self::bust_object_cache();
+            return;
+        }
+
+        // 3. SG CachePress (older version) — also dynamic-only, so bust the object cache too.
         if (isset($GLOBALS['sg_cachepress_supercacher']) &&
             $GLOBALS['sg_cachepress_supercacher'] instanceof \SG_CachePress_Supercacher &&
             method_exists($GLOBALS['sg_cachepress_supercacher'], 'purge_cache')) {
             $GLOBALS['sg_cachepress_supercacher']->purge_cache();
+            self::bust_object_cache();
             return;
         }
 
-        // 3. Legacy function
-        if (function_exists('sg_cachepress_purge_cache')) {
-            sg_cachepress_purge_cache();
-            return;
-        }
-
-        // 4. Native fallback: UNIX socket to SiteGround Site Tools service
+        // 4. Native fallback: UNIX socket to SiteGround Site Tools service (dynamic cache).
         if (self::purge_via_socket()) {
+            self::bust_object_cache();
             return;
         }
 
-        // 5. Last resort: delete file cache directly
+        // 5. Last resort: delete file cache directly + bust object cache.
         self::purge_file_cache();
+        self::bust_object_cache();
+    }
+
+    /**
+     * (v7.03.111) Force the WP object cache (Memcached/Redis) to drop the autoloaded options bucket so
+     * the next request re-reads settings (incl WPC's CDN flags) FRESH from the DB. SiteGround's
+     * dynamic/file purges do NOT touch Memcached, where autoloaded options live — this closes that gap
+     * on every purge path (and covers native SiteGround installs running with no SG-Optimizer plugin).
+     */
+    private static function bust_object_cache() {
+        if (function_exists('wp_cache_delete')) {
+            @wp_cache_delete('alloptions', 'options');
+            if (defined('WPS_IC_SETTINGS')) {
+                @wp_cache_delete(WPS_IC_SETTINGS, 'options');
+            }
+        }
     }
 
     /**

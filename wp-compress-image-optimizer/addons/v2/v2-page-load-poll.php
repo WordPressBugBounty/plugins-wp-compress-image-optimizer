@@ -69,8 +69,18 @@ if (!function_exists('wpc_v2_page_load_drain_tick')) {
         // (wpc_v2_drain_running, 15s TTL) — second caller is a no-op.
         // Defense-in-depth.
         $now_ms = (int) round(microtime(true) * 1000);
+        // (v7.03.82) FLEET RESOURCE SAFETY. Fire the drain ONLY when a recent optimize actually left async
+        // variants pending — i.e. wpc_v2_drain_alive_until_ms (set by the optimize-trigger, extended by the
+        // wake + the drain loop while it has work) is still in the future. On an idle site this returns
+        // immediately: no loopback fire, no manifest long-poll, no FPM-worker hold — so the page-load drain
+        // can't add load across the fleet's 10k shared hosts. During an active window, throttle to 20s (vs the
+        // 5-min default) so the backup drains promptly when a wake was missed; the wake stays the real-time
+        // primary. NOTE: the tick no longer SETS the deadline (below) — that made every idle tick keep the
+        // drain loop alive for nothing; only the real backlog sources (optimize/wake) set it now.
+        wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
+        if ((int) get_option('wpc_v2_drain_alive_until_ms', 0) <= $now_ms) return;
         $last   = (int) get_option('wpc_v2_last_pull_check_ms', 0);
-        $window = (int) apply_filters('wpc_v2_page_load_poll_throttle_ms', 300000);  // 5min default
+        $window = (int) apply_filters('wpc_v2_page_load_active_throttle_ms', 20000);
         if (($now_ms - $last) < $window) return;
 
         // Write the new timestamp BEFORE firing the drain. Order matters:
@@ -79,19 +89,10 @@ if (!function_exists('wpc_v2_page_load_drain_tick')) {
         // page load.
         update_option('wpc_v2_last_pull_check_ms', $now_ms, false);
 
-        // Extend the pull-drain alive deadline before firing the
-        // drain. Without this, the drain loop checks
-        // wpc_v2_drain_alive_until_ms, finds it 0 or past, and exits
-        // immediately with `deadline_reached iter=0` (no manifest poll).
-        // 60s window for this poll-tick; each successful poll extends by
-        // 30s, so a steady stream of landings keeps the loop alive until
-        // the manifest is drained.
-        $target_deadline = $now_ms + 60000;
-        wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
-        $current_deadline = (int) get_option('wpc_v2_drain_alive_until_ms', 0);
-        if ($target_deadline > $current_deadline) {
-            update_option('wpc_v2_drain_alive_until_ms', $target_deadline, false);
-        }
+        // (v7.03.82) The deadline is NO LONGER set/extended here. We only reach this point when it is already
+        // in the future (the gate above), set by the real backlog sources — the optimize-trigger and the wake.
+        // The drain loop self-extends (+30s/poll) while it has work, so it stays alive until the manifest is
+        // drained; once it expires, the next idle tick no-ops instead of reviving a loop with nothing to pull.
 
         // Fire the drain AFTER the response flushes, not inline on init: the
         // loopback connect (up to ~0.6s on a 3-rung local-vhost fallback) was

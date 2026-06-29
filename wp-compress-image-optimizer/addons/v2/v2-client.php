@@ -27,11 +27,15 @@ class WPS_LocalV2
     // Orch returns 413 above ~1 MB body; base64 inflates 4/3, so cap raw at
     // ~700 KB. Larger sources fall through to the source.url fetch path.
     const INLINE_BYTES_RAW_MAX   = 716800;   // 700 KB raw → ~933 KB base64
-    // Orch URL-fetch ceiling — bigger and its HEAD-check 413s `source_too_large`
-    // (~3.5 MB empirically; set conservatively). Over this, we fall back to a
-    // resized source (or WP's -scaled.jpg): less savings, but a working compress
-    // beats 0%. Override via `wpc_v2_source_url_max_bytes`.
-    const SOURCE_URL_FETCH_MAX   = 3145728; // 3 MB
+    // Plugin self-limit on the byte size of the master we hand the orch — NOT an orch limit.
+    // (v7.03.98) The orch actually accepts up to 25 MB (MAX_INLINE_BYTES + URL-fetch) and 20 MP
+    // (MAX_SOURCE_MP); the ONLY hard 413 is megapixels, gated separately in build_request_body
+    // via $over_mp. This 9.5 MB cap is purely a memory/double-compression balance: ABOVE it we
+    // resize the master to Max Image Size at the source-quality below (keeps the inline-transport
+    // base64 memory peak bounded — ~2.3× raw — and q100 ≈ lossless for the orch's AVIF re-encode);
+    // BELOW it we send the original untouched (single pass). Safe to deploy independently — the
+    // orch takes far more, so this never causes a byte 413. Override via `wpc_v2_source_url_max_bytes`.
+    const SOURCE_URL_FETCH_MAX   = 9961472; // 9.5 MB — plugin memory/quality self-limit (orch takes 25 MB / 20 MP)
 
     /** @var string */
     private $apikey;
@@ -217,16 +221,28 @@ class WPS_LocalV2
 
         $bytes_on_disk = @filesize($source_path);
 
-        // Source-too-large fallback ladder. If the unscaled original exceeds the
-        // orch URL-fetch cap we'd 413 → dead v1 path → image stuck 'optimizing'.
-        // Recover by (1) resizing to maxWidth @q88 via wp_get_image_editor (better
-        // than WP's q≈82 auto-scale), or (2) on no GD/Imagick, WP's -scaled.jpg.
-        // Either yields a usable source under the cap.
+        // (v7.03.98) Megapixel gate. The orch's only HARD 413 is MAX_SOURCE_MP (~20 MP,
+        // server.js:167) — it rejects an over-dimension source REGARDLESS of byte size, and
+        // there's no reactive retry on our side. A lightly-compressed high-dimension original
+        // (e.g. 6000×4000 ≈ 24 MP at ~4 MB) slips UNDER the byte guard below, then 413s with
+        // nothing to catch it. So gate the resize on megapixels too — this is what actually
+        // makes "every site can send it" true. Header-only read; cheap. Ceiling a hair under
+        // 20 MP to cover a >= gate; resizing to Max Image Size brings any source to ≤6.5 MP.
+        $mp_probe       = @getimagesize($source_path);
+        $src_megapixels = (isset($mp_probe[0], $mp_probe[1])) ? ((int) $mp_probe[0] * (int) $mp_probe[1]) : 0;
+        $mp_ceiling     = (int) apply_filters('wpc_v2_source_max_megapixels', 19900000); // ~19.9 MP (< orch 20 MP)
+        $over_mp        = ($src_megapixels > 0 && $src_megapixels > $mp_ceiling);
+
+        // Source-too-large fallback ladder. Resize the master to Max Image Size when the
+        // original exceeds EITHER our byte self-limit OR the orch's megapixel ceiling. Recover
+        // via (1) wp_get_image_editor resize at the source-quality below, or (2) on no GD/Imagick,
+        // WP's -scaled.jpg (the fallback further down now also honors $over_mp). Either yields a
+        // source the orch will accept.
         $url_fetch_max = (int) apply_filters('wpc_v2_source_url_max_bytes', self::SOURCE_URL_FETCH_MAX);
         $used_resized  = false;
 
         if ($bytes_on_disk > 0
-            && $bytes_on_disk > $url_fetch_max
+            && ($bytes_on_disk > $url_fetch_max || $over_mp)
             && function_exists('wp_get_image_editor')) {
 
             // Read user's "Max Image Size" setting (Settings → Image
@@ -262,7 +278,18 @@ class WPS_LocalV2
             $editor = wp_get_image_editor($source_path);
             if (!is_wp_error($editor)) {
                 $editor->resize($resize_max, $resize_max, false);
-                $editor->set_quality(88);
+                // This intermediate is only built for the rare original that STILL exceeds the (9.5 MB)
+                // URL-fetch cap — everything under it is sent pristine/untouched for the orch to resize from.
+                // For those giants the encoder derives every variant from THIS 2560 source, and since no
+                // delivery variant exceeds Max Image Size, a 2560 source is already complete. (v7.03.97)
+                // q95 → q100: this is the ONLY place the plugin re-encodes before the orch's own encode — i.e.
+                // the sole double-compression in the whole pipeline (everything under the cap is sent
+                // pristine/untouched) — so minimize OUR pass. q100 JPEG @2560 ≈ 3–5 MB, safely under the
+                // 9.5 MB cap; the too-big fall-through below still catches any extreme outlier. Filterable via
+                // wpc_v2_source_quality (drop to true-lossless WebP/PNG only if the orch confirms it accepts
+                // those as a source format).
+                $wpc_src_q = (int) apply_filters('wpc_v2_source_quality', 100, $imageID);
+                $editor->set_quality($wpc_src_q);
 
                 $tmp_path = $tmp_dir . '/wpc-v2-src-' . (int) $imageID . '-' . wp_generate_password(8, false) . '.jpg';
                 $saved    = $editor->save($tmp_path, 'image/jpeg');
@@ -271,8 +298,8 @@ class WPS_LocalV2
                     $resized_bytes = @filesize($saved['path']);
                     if ($resized_bytes > 0 && $resized_bytes <= $url_fetch_max) {
                         error_log(sprintf(
-                            '[WPC V2Client] plugin-resize imageID=%s — unscaled=%d → resized=%d bytes (q88, max=%dpx)',
-                            (string) $imageID, $bytes_on_disk, $resized_bytes, $resize_max
+                            '[WPC V2Client] plugin-resize imageID=%s — unscaled=%d → resized=%d bytes (q%d, max=%dpx)',
+                            (string) $imageID, $bytes_on_disk, $resized_bytes, $wpc_src_q, $resize_max
                         ));
                         $source_path   = $saved['path'];
                         $bytes_on_disk = $resized_bytes;
@@ -293,8 +320,7 @@ class WPS_LocalV2
         // but > inline cap).
         if (!$used_resized
             && $bytes_on_disk > 0
-            && $bytes_on_disk > self::INLINE_BYTES_RAW_MAX
-            && $bytes_on_disk > $url_fetch_max
+            && (($bytes_on_disk > self::INLINE_BYTES_RAW_MAX && $bytes_on_disk > $url_fetch_max) || $over_mp)
             && $abs_path
             && $abs_path !== $source_path
             && file_exists($abs_path)) {
@@ -464,6 +490,17 @@ class WPS_LocalV2
             'variants'       => array_values($variants),
             'formats'        => $global_formats,
             'level'          => isset($options['level']) ? (string) $options['level'] : 'intelligent',
+            // (v7.03.95) Honor the user's backup setting on the MODERN path too. Phase A backs the
+            // parent source up to Bunny (CLOUD) async unless told otherwise; the legacy path emits
+            // skipBackup='1' when a local backup already exists (compress.php:969) but this V2 body
+            // never sent the flag → a local-backup site was STILL getting a redundant cloud copy.
+            // Mirror the legacy gate: wpc_parent_has_backup() (local /wpc-backups/ file, sibling _bkp,
+            // or an existing Bunny pointer) → '1' so the service skips the cloud backup; else '0'
+            // (default service behavior — correct for mode=cloud). backup_all_sizes runs before this
+            // send on the worker path, so on a local-backup mode the disk copy already exists here →
+            // '1' → disk-only. (Cross-team: confirm the orch's /optimize-v2 honors skipBackup as
+            // /optimize does — established contract, but unverified on the V2 endpoint.)
+            'skipBackup'     => (function_exists('wpc_parent_has_backup') && wpc_parent_has_backup($imageID)) ? '1' : '0',
             'callback'       => [
                 // Direct-entry URL selection. wpc_v2_callback_url()
                 // returns the direct-PHP-entry URL if the probe at activation
@@ -489,7 +526,7 @@ class WPS_LocalV2
                 // the orch falls through to per-variant POSTs to `url`.
                 // Lives behind orch's BATCHED_CALLBACK_ENABLED env flag too — both
                 // sides must be ON for batching to happen.
-                'batchSupported' => true,
+                'batchSupported' => apply_filters('wpc_v2_batch_supported', false), // (v7.03.69) DEFAULT OFF → orch uses per-variant bg_swap. Batching bundled ~28 avif into ONE POST where we fetch each variant's bytes; a few still-propagating 502s stalled the whole request past the orch's 60s timeout → whole-batch retry ×30s ≈ the ~6-min avif tail. Per-variant isolates a racing fetch to itself (the path already confirmed working). Re-enable via the filter once the orch shrinks max batch size + tightens the retry backoff.
                 // Advertise direct-entry capability. Orch can use this
                 // to relax BATCH_FLUSH_AFTER_MS coalescing (lower idle = more
                 // granular streaming) since the FPM cost per callback drops
@@ -513,17 +550,24 @@ class WPS_LocalV2
                                     : null,
                 // Pull delivery, added in v7.02.2 (service team v3.18.27+). When
                 // wpc_v2_pull_delivery_enabled() AND the host has curl_multi
-                // (parallel pull dependency), advertise 'pull' so orch routes
+                // (parallel pull dependency), advertise the pull family so orch routes
                 // bytes through BunnyCDN storage + URL-only callbacks. Plugin
                 // batch handler parallel-pulls bytes via wpc_v2_parallel_pull
                 // (curl_multi + HTTP/2 keep-alive). Falls back to inline bytesB64
                 // when this field is absent or on per-variant orch upload
                 // failure (orch retries that variant with bytesB64 instead).
                 // See addons/v2/v2-pull.php.
+                // (v7.03.79) Default 'ping_pull', not plain 'pull'. Plain 'pull' relies on the plugin's RECURRING
+                // POLL to drain the manifest — when that scheduler isn't firing on a host, fresh AND ancient
+                // entries sit unpulled (orch traced 22 fresh + 27 stale stuck on a test site). 'ping_pull' makes
+                // the orch WAKE /wake per variant (gated orch-side by LAZY_CDN_PING_PULL_ENABLED) → the drain
+                // fires immediately, poll-independent. The drain handles both lazycdn and numeric-imageID LIBRARY
+                // entries (v2-pull-manifest.php:413). Filter to revert to 'pull'; orch's PULL_PER_VARIANT is the
+                // service-side kill-switch.
                 'deliveryMode'   => (function_exists('wpc_v2_pull_delivery_enabled')
                                     && wpc_v2_pull_delivery_enabled()
                                     && function_exists('curl_multi_init'))
-                                    ? 'pull'
+                                    ? (string) apply_filters('wpc_v2_pull_delivery_mode', 'ping_pull')
                                     : null,
             ],
             // Origin field for AIMD (HMAC-signed via body inclusion per spec

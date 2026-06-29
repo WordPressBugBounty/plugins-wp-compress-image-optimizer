@@ -148,7 +148,13 @@ class wps_ic_cron
         $options = get_option(WPS_IC_OPTIONS);
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
-        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
+        // (v7.03.120) FATAL FIX: use the WPC_PLUGIN_VERSION global (defined early in wp-compress.php,
+        // class-independent) instead of wps_ic::$version. This runs via WP-Cron, where the wps_ic class
+        // is not guaranteed loaded — which threw "Uncaught Error: Class \"wps_ic\" not found" here on
+        // several sites. Also guard $options so a missing key is '' rather than an undefined-index notice.
+        $apikey         = (is_array($options) && isset($options['api_key'])) ? $options['api_key'] : '';
+        $plugin_version = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '';
+        $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $apikey, 'plugin-version' => $plugin_version]]);
 
         if (wp_remote_retrieve_response_code($call) == 401) {
             $cache = new wps_ic_cache_integrations();

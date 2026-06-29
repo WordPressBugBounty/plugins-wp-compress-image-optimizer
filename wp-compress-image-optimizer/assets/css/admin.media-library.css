@@ -442,6 +442,9 @@ p.important {
   flex: 1;
   min-width: 0;
   min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .wpc-ml-title {
   font-family: 'proxima_semibold', sans-serif;
@@ -1701,4 +1704,64 @@ p.important {
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* (v7.03.102) Pin the Optimization column. With no width set, the card's content —
+   especially the long "Regenerating Thumbnails…" line — balloons the column and
+   starves WP's primary "File" column, which then wraps its row-actions into a tall
+   vertical stack (the "mangled layout"). A fixed width on WPC's OWN column (plus
+   letting the card text wrap) contains it without touching any other column.
+   (v7.10.03) Widened 200px → 260px: at 200px the cell's usable body (cell − 42px icon
+   − 10px gap − ~20px td padding ≈ 128px) was too narrow for the "Smart Delivery /
+   Exclude" action row (~185px), forcing it to wrap onto a second line. 260px gives the
+   body ~188px so the actions sit on ONE line, while staying a BOUNDED fixed width — the
+   anti-balloon protection above is preserved (it can't grow to starve the File column),
+   just at a slightly larger cap. The card wrap safety-nets below remain as the fallback. */
+.wp-list-table th.column-wps_ic_actions,
+.wp-list-table td.column-wps_ic_actions {
+  width: 260px;
+  max-width: 260px;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-card {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-title,
+.wp-list-table td.column-wps_ic_actions .wpc-ml-subtitle {
+  white-space: normal;
+}
+/* (v7.10.03) Keep each action LABEL intact — "Smart Delivery" must never break to
+   "Smart / Delivery" mid-word. The subtitle row above is still flex-wrap:wrap, so if a
+   future state is too long for the (now wider) column the actions wrap as WHOLE chips
+   rather than mid-label. This is why the title/subtitle keep white-space:normal (long
+   status text like "Regenerating Thumbnails…" must still wrap) but the action does not. */
+.wp-list-table td.column-wps_ic_actions .wpc-ml-action {
+  white-space: nowrap;
+}
+
+/* (v7.03.108) Compact-card + stop-hijacking. The 200px cell cap (above) hard-limits OUR
+   column under table-layout:fixed, but the card's flex internals (.wpc-ml-body flex:1,
+   .wpc-ml-title fit-content) could still push content past the cell edge. Make the whole
+   card + its text shrink/wrap to the cell so we occupy the LEAST width — freeing space for
+   WP's File column when many plugin columns (RankMath, FileBird, ID…) crowd the table.
+   All selectors stay scoped to td.column-wps_ic_actions — no other column is touched. */
+.wp-list-table td.column-wps_ic_actions .wpc-ml-card {
+  flex-wrap: wrap;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-title {
+  width: auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-subtitle {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-variant-count-chip-row {
+  max-width: 100%;
 }

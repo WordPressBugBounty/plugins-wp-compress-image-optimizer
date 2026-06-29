@@ -1309,7 +1309,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.10.02';
+        self::$version = '7.10.03';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1442,6 +1442,41 @@ class wps_ic
 
             if (version_compare($installed_version, self::$version, '<') || !empty($_GET['simulateVersionChange'])) {
 
+                // (v7.10.03) CRASH-PROOF UPGRADE PASS — world-class reliable, cron-free.
+                //
+                // Every upgrade-time step below is wrapped so that NO error can white-screen
+                // the admin/settings page (the symptom customers saw on a bad upgrade). Two layers:
+                //
+                //   1. try/catch (\Throwable) — catches any Error/Exception thrown by the upgrade
+                //      work and swallows it (logged, not rethrown) → the page still renders.
+                //   2. register_shutdown_function — traps a HARD fatal (OOM / max_execution_time /
+                //      a fatal the catch can't see) and logs it.
+                //
+                // Self-resuming WITHOUT cron: wpc_core_version is bumped ONLY after a full clean
+                // pass (moved to the very end of this block). If the pass dies partway — caught
+                // error OR hard fatal — the version stays behind, so the NEXT admin page load
+                // re-enters and runs the whole pass again. Every individual step here is
+                // idempotent (cache purges are repeatable; the one-time steps self-guard with
+                // their own done-flags: wpc_cf_bypass_v5, wpc_avif_natural_default_v70, the
+                // wpc_cf_cname_verified sentinel), so replay-on-retry is safe and converges.
+                // No behavior change on a healthy upgrade — same work, same order, just guarded.
+                $wpc_upgrade_done = false;
+                if (function_exists('register_shutdown_function')) {
+                    register_shutdown_function(function () use (&$wpc_upgrade_done) {
+                        if ($wpc_upgrade_done) {
+                            return;
+                        }
+                        $wpc_le = function_exists('error_get_last') ? error_get_last() : null;
+                        if (is_array($wpc_le) && isset($wpc_le['type'])
+                            && in_array($wpc_le['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+                            error_log('[WPC Upgrade] HARD-FATAL during upgrade pass — wpc_core_version left UNBUMPED, next admin load will retry: '
+                                . $wpc_le['message'] . ' @ ' . $wpc_le['file'] . ':' . $wpc_le['line']);
+                        }
+                    });
+                }
+
+                try {
+
                 // Purge Cache
                 $cache = new wps_ic_cache_integrations();
                 $cache::purgeAll(false, false, false, true, false, true); // preserve wp-cio/css on update
@@ -1459,6 +1494,20 @@ class wps_ic
                     wps_rewriteLogic::invalidate_asset_mime_proof();
                 }
 
+                // (v7.03.119) Force a DELIVERY (image-edge) re-verify on upgrade — the automatic
+                // equivalent of clicking "Re-check now", so every site self-promotes to the Bunny CDN-edge
+                // tier on update without anyone touching it. Above only re-verified the CSS/JS asset lane;
+                // this covers the IMAGE lane. Promote-on-proof: force_provision makes the next resolve run a
+                // fresh verify (re-promotes to edge IF it verifies, else stays on the safe tier — never
+                // forces a bad edge), and ensure_bg re-asserts Bunny provisioning (AVIF Vary + edge rules,
+                // non-blocking). Reset the self-heal counter/backoff so the upgrade attempt isn't throttled.
+                if (function_exists('update_option'))    update_option('wpc_v2_force_provision', 1, false);
+                if (function_exists('delete_option'))    delete_option('wpc_v2_selfheal_attempts');
+                if (function_exists('delete_transient')) delete_transient('wpc_v2_selfheal_backoff');
+                if (function_exists('wpc_v2_provision_ensure_bg')) {
+                    wpc_v2_provision_ensure_bg('upgrade');
+                }
+
                 // Regen advanced-cache.php from the updated template so new
                 // features take effect on upgrade without a settings save. Also
                 // re-assert WP_CACHE=true — some upgrade paths (uploader, managed-
@@ -1472,8 +1521,11 @@ class wps_ic
                     $htaccess->setAdvancedCache();
                 }
 
-                // Update the stored version
-                update_option('wpc_core_version', self::$version);
+                // (v7.10.03) The stored-version bump MOVED to the very end of this block
+                // (after the final step) so the upgrade pass is atomic + self-resuming: the
+                // version only advances once a full clean pass completes. Bumping it HERE
+                // (mid-block) is what let a fatal in a later step abandon the remaining work
+                // AND suppress retry (version already matched → block never re-ran).
 
                 // Verified-gate backfill: the cdn-rewrite emit-gate now requires
                 // wpc_cf_cname_verified before emitting the CF cname. A currently-
@@ -1506,9 +1558,18 @@ class wps_ic
                 }
 
                 // Auto-enable picture_webp for existing users who have WebP enabled
+                // (v7.10.03) GUARD: only operate if the stored option is the expected ARRAY
+                // shape. A legacy/corrupt install can hold WPS_IC_SETTINGS as a string (or other
+                // scalar); the writes below ($migrateSettings['picture_webp'] = '1' etc.) on a
+                // string are a PHP-8 string-offset assignment = FATAL. This is the kind of
+                // "happens once on upgrade against the real DB" fault that white-screens on the
+                // first post-update admin load then never recurs (and can't be reproduced without
+                // restoring that exact malformed option). is_array() makes the whole migrate block
+                // a no-op on a bad shape instead of fataling. No change for the normal array case.
                 $migrateSettings = get_option(WPS_IC_SETTINGS);
                 $migrateDirty = false;
-                if (!empty($migrateSettings['generate_webp']) && $migrateSettings['generate_webp'] == '1' && !isset($migrateSettings['picture_webp'])) {
+                if (is_array($migrateSettings)
+                    && !empty($migrateSettings['generate_webp']) && $migrateSettings['generate_webp'] == '1' && !isset($migrateSettings['picture_webp'])) {
                     $migrateSettings['picture_webp'] = '1';
                     $migrateDirty = true;
                 }
@@ -1526,11 +1587,15 @@ class wps_ic
                 // a natural .avif vs the never-404 wp:2 transform is the independent,
                 // proof-based per-zone flavor gate — an un-converged zone falls back
                 // to the transform, so this heal can't produce a 404ing source.
-                $ng = isset($migrateSettings['wpc_nextgen']) ? strtolower((string) $migrateSettings['wpc_nextgen']) : '';
+                // (v7.10.03) GUARD: same array-shape protection as the picture_webp migrate
+                // above — the writes below assign string keys on $migrateSettings, which fatal
+                // if a legacy/corrupt install holds WPS_IC_SETTINGS as a scalar. is_array() short-
+                // circuits to a no-op on a bad shape; identical behavior for the normal array case.
+                $ng = is_array($migrateSettings) && isset($migrateSettings['wpc_nextgen']) ? strtolower((string) $migrateSettings['wpc_nextgen']) : '';
                 $ngUnchosen = ($ng === '' || $ng === 'auto');
-                $gwOn = !empty($migrateSettings['generate_webp']) && (string) $migrateSettings['generate_webp'] === '1';
-                $paOn = !empty($migrateSettings['picture_avif']) && (string) $migrateSettings['picture_avif'] === '1';
-                if ($gwOn && $ngUnchosen && !$paOn) {
+                $gwOn = is_array($migrateSettings) && !empty($migrateSettings['generate_webp']) && (string) $migrateSettings['generate_webp'] === '1';
+                $paOn = is_array($migrateSettings) && !empty($migrateSettings['picture_avif']) && (string) $migrateSettings['picture_avif'] === '1';
+                if (is_array($migrateSettings) && $gwOn && $ngUnchosen && !$paOn) {
                     $migrateSettings['picture_avif'] = '1';
                     if (empty($migrateSettings['picture_webp'])) {
                         $migrateSettings['picture_webp'] = '1';
@@ -1570,6 +1635,25 @@ class wps_ic
                             $cfReassertSdk->purgeFilesAsync($cfReassert['zone'], (array) $wpc_html_purge_urls);
                         }
                     }
+                }
+
+                // (v7.10.03) FINAL STEP — bump the stored version ONLY after the whole pass
+                // above ran clean. Doing it last (was mid-block) makes the upgrade atomic +
+                // self-resuming: any earlier failure leaves the version behind so the next
+                // admin load retries the full (idempotent) pass. No cron involved.
+                update_option('wpc_core_version', self::$version);
+
+                // Mark the pass complete so the shutdown trap below stays silent on a clean run.
+                $wpc_upgrade_done = true;
+
+                } catch (\Throwable $wpc_upgrade_err) {
+                    // Any Error/Exception in the upgrade work lands here — logged, NOT rethrown,
+                    // so the admin/settings page renders normally. wpc_core_version stays UNBUMPED
+                    // (we never reached the bump above), so the next admin page load re-runs the
+                    // whole pass. This is the guard that stops a bad upgrade from white-screening
+                    // the settings page the way customers reported.
+                    error_log('[WPC Upgrade] CAUGHT upgrade-pass error — wpc_core_version left UNBUMPED, next admin load will retry: '
+                        . $wpc_upgrade_err->getMessage() . ' @ ' . $wpc_upgrade_err->getFile() . ':' . $wpc_upgrade_err->getLine());
                 }
             }
 
@@ -3127,7 +3211,12 @@ class wps_ic
                     }
 
                     $criticalCSS = new wps_criticalCss();
-                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS]]);
+                    // (v7.03.86) lcp_url rides the criticalDone callback too now (crit-push v3.25.10, gated to
+                    // LCP-enabled domains) — read it from $_GET and pass it so saveCriticalCss stashes it for the
+                    // render-side healer. This covers the PULL path (the callback fires here); the SMART/push
+                    // path is covered by the /status poll (.85). Empty on non-LCP domains → no stash → inert.
+                    $wpc_cb_lcp_url = !empty($_GET['lcp_url']) ? sanitize_url(urldecode($_GET['lcp_url'])) : '';
+                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS], 'lcp_url' => $wpc_cb_lcp_url, 'lcp_src' => 'callback']);
 
                     // Check if LCP Exists
                     $mobileLCP = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-mobile';

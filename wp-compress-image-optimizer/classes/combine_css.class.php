@@ -1864,7 +1864,8 @@ class wps_ic_combine_css
         // so BOTH deferral paths protect them. (wpc-gfont-atf matches both -atf and -atf-local.)
         if (strpos($tag, 'wpc-critical-css') !== false
             || strpos($tag, 'wpc-gfont-atf') !== false
-            || strpos($tag, 'wpc-elementor-anim-start') !== false) {
+            || strpos($tag, 'wpc-elementor-anim-start') !== false
+            || strpos($tag, 'wpc-lazy-thumb-bgfix') !== false) {
             return $tag;
         }
 

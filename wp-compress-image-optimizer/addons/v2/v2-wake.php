@@ -158,6 +158,21 @@ if (!function_exists('wpc_v2_wake_handler')) {
         // Auth success — clear any previous failure counter for this IP
         wpc_v2_wake_clear_auth_failures($ip);
 
+        // (v7.03.107) AUTO SELF-HEAL: a verified wake means the orch has work queued for us.
+        // If pull delivery is gated OFF *only* because the site option was wiped (a DB reset:
+        // the option row is absent AND the absent-default check fails because zone/cdn were
+        // cleared too — the welliathome `flag_off`/drain=null signature), re-enable it so the
+        // drain can run. Storm-safe: this only flips the flag; the drain stays batch-throttled,
+        // so it will NOT pull a huge backlog at once. We deliberately do NOT override an explicit
+        // operator opt-out (option stored as 0) — only the absent/wiped case (option === null).
+        if (function_exists('wpc_v2_pull_enabled')
+            && !wpc_v2_pull_enabled()
+            && get_site_option('wpc_v2_pull_enabled', null) === null) {
+            update_site_option('wpc_v2_pull_enabled', 1);
+            error_log('[WPC Wake] self_heal pull_enabled re-enabled (verified wake + option absent + gate-off = DB-wipe signature)');
+            wpc_v2_wake_note('self_heal_pull_enabled');
+        }
+
         // T2 capture for cross-system race verification.
         //
         // Orch's v3.18.96 dedup-republish fix awaits writeManifestEntry
@@ -254,7 +269,13 @@ if (!function_exists('wpc_v2_wake_handler')) {
         // self-signed with the same timestamp HMAC the loopback uses. The handler
         // stamps on entry, so a healthy-loopback host makes this a no-op while a
         // blocked-loopback host drains on the wake request itself.
-        if ($dispatched && function_exists('wpc_v2_pull_drain_loop_handler')) {
+        // (v7.03.80) Run the loopback-independent fallback regardless of $dispatched. It was gated on
+        // $dispatched (= the fsockopen self-POST was at least WRITTEN), but on a host where fsockopen can't
+        // open the loopback socket AT ALL, $dispatched is false — so the fallback meant to cover a dead
+        // loopback was itself skipped, and the drain NEVER ran (orch traced inflight=0 + a days-old manifest
+        // backlog on a Cloudways/datacenter-IP/WAF site). The fallback already self-dedups via the
+        // wpc_v2_drain_worker_started stamp + the 3s grace, so a healthy-loopback host still no-ops here.
+        if (function_exists('wpc_v2_pull_drain_loop_handler')) {
             $wpc_wake_items_for_inline = $wake_items;
             add_action('shutdown', function () use ($wpc_wake_items_for_inline) {
                 if (function_exists('fastcgi_finish_request')) {
@@ -262,6 +283,16 @@ if (!function_exists('wpc_v2_wake_handler')) {
                 } elseif (function_exists('litespeed_finish_request')) {
                     @litespeed_finish_request();
                 }
+                // (v7.03.82) FLEET RESOURCE SAFETY. The orchestrator wakes once PER VARIANT, so a 22-variant
+                // optimize would otherwise spawn 22 shutdown workers each holding an FPM slot through the 3s
+                // grace. Dedup them: the first wake arms an 8s flag and proceeds; concurrent/subsequent wakes in
+                // that window return instantly. The drain loop pulls ALL pending variants in one pass, so a
+                // single worker covers the whole burst; the worker-started stamp + drain_running lock below
+                // still catch any check-then-set race. Net: ~1 held worker per burst instead of N.
+                if (get_transient('wpc_v2_inline_drain_pending')) {
+                    return;
+                }
+                set_transient('wpc_v2_inline_drain_pending', 1, 8);
                 @ignore_user_abort(true);
                 @set_time_limit(150);
                 sleep(3); // grace period: let a healthy loopback worker start and stamp

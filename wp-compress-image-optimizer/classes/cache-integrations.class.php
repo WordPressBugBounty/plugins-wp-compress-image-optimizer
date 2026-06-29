@@ -248,9 +248,11 @@ class wps_ic_cache_integrations
         // Action hook for all integrations to clear their cache
         do_action('wps_ic_purge_all_cache', $url_key);
 
-        // Varnish
+        // Varnish — full-site eviction when this is a site-wide purge ($url_key === false), else the
+        // configured single path. A site-wide purge (e.g. crit purge) must evict EVERY cached page, or
+        // interior pages keep serving a stale crit-less HIT and their regen stays walled.
         if ($varnish) {
-            self::purgeVarnish();
+            self::purgeVarnish(0, ($url_key === false));
         }
 
         // Final action hook after all purges
@@ -343,7 +345,7 @@ class wps_ic_cache_integrations
         wp_send_json_success();
     }
 
-    public static function purgeVarnish($post_id = 0)
+    public static function purgeVarnish($post_id = 0, $full_site = false)
     {
         global $wpdb, $current_blog;
 
@@ -363,6 +365,15 @@ class wps_ic_cache_integrations
 
         $x_purge_method = 'default';
         $regex = '';
+
+        // (v7.03.91) Full-site eviction for a SITE-WIDE purge (e.g. a critical-CSS purge): a single-path
+        // PURGE only evicts the homepage, leaving interior pages walled (a cached crit-less HIT blocks the
+        // crit regen because WP never re-renders). A regex purge against every path clears them all. Filters
+        // below can still override per host (some Varnish VCLs use BAN instead of an X-Purge-Method: regex).
+        if ($full_site) {
+            $x_purge_method = 'regex';
+            $regex = '.*';
+        }
 
 
         // Filter the HTTP protocol (scheme) for Varnish purge

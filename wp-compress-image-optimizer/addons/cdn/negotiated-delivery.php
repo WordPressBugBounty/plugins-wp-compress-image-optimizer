@@ -396,6 +396,65 @@ class WPC_Negotiated_Delivery
     }
 
     /**
+     * (v7.03.90) ATF right-sizing hints, read DIRECTLY from this page's lcp.json — memoized once per
+     * request. The crit reader (rewriteLogic::addCriticalCSS) also publishes these via the
+     * wpc_afold_image_hints filter, but it runs LATER in the pipeline than the img rewrite
+     * (cdn-rewrite: replaceImageTags @ ~4744 BEFORE addCritical @ ~4931), so at consume-time that filter
+     * is empty. Reading the file here makes the consumer ordering-independent; a registered filter still
+     * overrides. Returns stem (lowercased, NO -scaled/-WxH) → ['m'=>cssW,'d'=>cssW]. Inert on non-LCP pages.
+     */
+    private static $afold_hints_cache = null;
+    private static function afoldHints()
+    {
+        if (self::$afold_hints_cache !== null) {
+            return self::$afold_hints_cache;
+        }
+        self::$afold_hints_cache = [];
+        if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
+            return self::$afold_hints_cache;
+        }
+        $url = (is_ssl() ? 'https://' : 'http://')
+            . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+            . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?');
+        $key = (new wps_ic_url_key())->setup($url);
+        if ($key === '') {
+            return self::$afold_hints_cache;
+        }
+        $f = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/lcp.json';
+        if (!@is_readable($f)) {
+            return self::$afold_hints_cache;
+        }
+        $j   = json_decode((string) @file_get_contents($f), true);
+        $atf = (is_array($j) && isset($j['atf_images']) && is_array($j['atf_images'])) ? $j['atf_images'] : null;
+        if ($atf === null) {
+            return self::$afold_hints_cache;
+        }
+        $mob = (isset($atf['mobile'])  && is_array($atf['mobile']))  ? $atf['mobile']  : [];
+        $des = (isset($atf['desktop']) && is_array($atf['desktop'])) ? $atf['desktop'] : [];
+        if (empty($mob) && empty($des)) { $mob = $atf; $des = $atf; }   // flat fallback → both viewports
+        $map = [];
+        foreach (['m' => $mob, 'd' => $des] as $slot => $list) {
+            foreach ((array) $list as $im) {
+                if (!is_array($im) || empty($im['stem']) || empty($im['css_w'])) {
+                    continue;
+                }
+                $st = strtolower((string) $im['stem']);
+                if ($st === '') {
+                    continue;
+                }
+                if (!isset($map[$st])) {
+                    $map[$st] = ['m' => 0, 'd' => 0];
+                }
+                if ($map[$st][$slot] === 0) {
+                    $map[$st][$slot] = (int) round((float) $im['css_w']);
+                }
+            }
+        }
+        self::$afold_hints_cache = $map;
+        return self::$afold_hints_cache;
+    }
+
+    /**
      * Build the plain <img>. NO <picture>. src + srcset are .webp native URLs at the
      * registered sub-sizes; the edge negotiates the real format per Accept.
      */
@@ -508,8 +567,34 @@ class WPC_Negotiated_Delivery
             }
         }
         $wpc_lcp_sizes = '';
+        $wpc_crit_sized = false;
+        // (v7.03.83) ATF right-sizing. If the crit render measured THIS image's exact display width (matched by
+        // src stem), use it as the authoritative sizes — it drives BOTH the DPR-ladder rung generator (below)
+        // and the output sizes (~line 730). Generalizes the LCP override to the first-few ATF images. No 'auto,'
+        // prefix: the crit width is EXACT, so we don't want the browser to self-measure (which over-fetches on
+        // crit-deferred sites — the very thing this fixes). Stem-keyed, so it only touches images crit measured;
+        // fully inert until crit emits images:[].
+        $wpc_afold_hints = apply_filters('wpc_afold_image_hints', self::afoldHints());
+        if (is_array($wpc_afold_hints) && !empty($wpc_afold_hints) && !empty($attrs['src'])) {
+            $wpc_afold_base = basename(strtok((string) $attrs['src'], '?#'));
+            $wpc_afold_stem = strtolower(preg_replace('/(-\d+x\d+|-scaled)?\.[^.]+$/', '', $wpc_afold_base));
+            if ($wpc_afold_stem !== '' && isset($wpc_afold_hints[$wpc_afold_stem])) {
+                $wpc_afold_mW = (int) $wpc_afold_hints[$wpc_afold_stem]['m'];
+                $wpc_afold_dW = (int) $wpc_afold_hints[$wpc_afold_stem]['d'];
+                if ($wpc_afold_mW > 0 && $wpc_afold_dW > 0) {
+                    $wpc_lcp_sizes  = '(max-width: 768px) ' . $wpc_afold_mW . 'px, ' . $wpc_afold_dW . 'px';
+                    $wpc_crit_sized = true;
+                } elseif ($wpc_afold_dW > 0) {
+                    $wpc_lcp_sizes  = (string) $wpc_afold_dW . 'px';
+                    $wpc_crit_sized = true;
+                } elseif ($wpc_afold_mW > 0) {
+                    $wpc_lcp_sizes  = (string) $wpc_afold_mW . 'px';
+                    $wpc_crit_sized = true;
+                }
+            }
+        }
         // $img_index increments LATER (just before attr emission), so here the FIRST image still reads 0.
-        if (self::$img_index === 0) {
+        if ($wpc_lcp_sizes === '' && self::$img_index === 0) {
             $set_l = get_option(WPS_IC_SETTINGS);
             if (is_array($set_l) && !empty($set_l['optimize-lcp'])) {
                 $w_lcp  = isset($attrs['width']) ? (int) preg_replace('/\D/', '', (string) $attrs['width']) : 0;
@@ -535,8 +620,18 @@ class WPC_Negotiated_Delivery
         }
 
         $ng_cls   = isset($attrs['class']) ? (string) $attrs['class'] : '';
+        // (v7.03.74) sizes=auto → the browser self-measures the real slot at runtime, so the generator's
+        // content-width model isn't required (the srcset just needs rungs spanning the range). Without this,
+        // nd images on a NON-singular view — sidebar/widget ads, where wpc_get_theme_content_width() returns 0
+        // — failed this gate, so the generator and the .73 auto down-ladder inside it never ran, and the
+        // 887-natural ads kept serving 361 in a 288 box. Let an auto-sized, non-full-bleed tag through on auto.
+        $ng_has_auto = isset($attrs['sizes']) && stripos((string) $attrs['sizes'], 'auto') !== false;
         $ng_confident = !preg_match('/\b(alignfull|alignwide|wp-block-cover|elementor|brz-|brxe-|et_pb)\b/i', $ng_cls)
-            && function_exists('wpc_get_theme_content_width') && (int) wpc_get_theme_content_width() > 0
+            && (
+                (function_exists('wpc_get_theme_content_width') && (int) wpc_get_theme_content_width() > 0)
+                || $ng_has_auto
+                || $wpc_crit_sized   // (v7.03.83) crit measured this image's exact width → confident on any view
+            )
             && apply_filters('wpc_ideal_width_generator', true);
         if ($ng_confident && !empty($meta['width']) && function_exists('wpc_v2_sized_trigger_queue')) {
             $ng_natural = (int) $meta['width'];
@@ -643,9 +738,36 @@ class WPC_Negotiated_Delivery
         // on the single natural URL at the edge.
         $nd_w_attr    = isset($attrs['width']) ? (int) preg_replace('/\D/', '', (string) $attrs['width']) : 0;
         $nd_has_basis = ($wpc_lcp_sizes !== '' || (isset($attrs['sizes']) && $attrs['sizes'] !== '') || $nd_w_attr > 0);
+        // (v7.03.60) No-basis RIGHT-SIZE: a no-basis negotiated <img> (no width/sizes/LCP-ladder — typically a
+        // width:100% sidebar/skyscraper ad) would otherwise emit a BARE full-size src and over-fetch badly
+        // (e.g. 887x1774 into a ~290px slot). When "Right-size Lazy Images" is on, give it the natural-width
+        // srcset + force lazy + sizes="auto, {natural-max}px" (below) so the browser self-sizes. sizes="auto"
+        // sidesteps the v7.02.49 GIANT-render bug (auto measures the REAL box, not 100vw — the reason the
+        // bare-src branch exists), and the {max}px fallback (NOT 100vw) keeps today's full-size pick on
+        // browsers without sizes=auto support = zero regression. Protect image #1 (LCP): img_index is still 0
+        // here (pre-++). Sliders excluded (non-active slides may never enter the viewport).
+        $nd_set_rs     = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
+        $nd_nobasis_rs = (!$nd_has_basis
+            && self::$img_index >= 1
+            && is_array($entries) && count($entries) > 1
+            && is_array($nd_set_rs) && !empty($nd_set_rs['lazy-auto-sizes'])
+            && !preg_match('/\b(rs|slide|lgx_app|dynamic-image|breakdance)\b/i', (isset($attrs['class']) ? (string) $attrs['class'] : ''))
+            && apply_filters('wpc_nd_auto_sizes', true, $attrs));
         $out = '<img ' . self::MARK . ' src="' . esc_attr($src_url) . '"';
-        if ($nd_has_basis) {
+        if ($nd_has_basis || $nd_nobasis_rs) {
             $out .= ' srcset="' . esc_attr(implode(', ', $entries)) . '"';
+        }
+        // (v7.03.66) No-basis right-size: emit the attachment's natural width/height so the browser has an
+        // aspect-ratio to reserve. The author's custom-HTML ads (wpc-nd, style="width:100%;height:auto") ship
+        // NO width/height attrs — and this path adds srcset + sizes="auto" + forces lazy while BYPASSING the
+        // aspect-safe gate (see $nd_nobasis_rs short-circuit below). With no intrinsic ratio, sizes="auto" +
+        // lazy + height:auto drops the aspect → the image lays out at the wrong height (the ahramag sidebar
+        // skyscraper rendered far too tall). Supplying real dims locks the ratio; CSS width:100% + height:auto
+        // still drives the displayed size. Guarded: nd_nobasis_rs implies no width attr; skip if a height
+        // attr somehow exists (the carry-loop would emit it) or meta lacks real dims.
+        if ($nd_nobasis_rs && $nd_w_attr === 0 && empty($attrs['height'])
+            && !empty($meta['width']) && !empty($meta['height'])) {
+            $out .= ' width="' . (int) $meta['width'] . '" height="' . (int) $meta['height'] . '"';
         }
 
         // Native-lazy injection by POSITION. The negotiated <img> replaces WP's tag before core's
@@ -671,6 +793,9 @@ class WPC_Negotiated_Delivery
                 $attrs['loading'] = 'eager';
             }
         }
+        if ($nd_nobasis_rs) {
+            $attrs['loading'] = 'lazy'; // right-size: force lazy so sizes="auto" is valid + the browser self-sizes
+        }
         if (self::$img_index === 1 && !isset($attrs['fetchpriority'])) {
             $attrs['fetchpriority'] = 'high'; // first negotiated image ≈ LCP candidate
         }
@@ -687,6 +812,10 @@ class WPC_Negotiated_Delivery
             // Width attr present: anchor sizes to it (avoids 100vw over-fetch on small slots;
             // see reference_auto_prefix_poisons_eager_lcp).
             $nd_sizes = '(max-width: ' . $nd_w_attr . 'px) 100vw, ' . $nd_w_attr . 'px';
+        } elseif ($nd_nobasis_rs && isset($max_w) && (int) $max_w > 0) {
+            // No basis but right-sizing (v7.03.60): the SAFE fallback is the natural MAX width (NOT 100vw → no
+            // giant render). "auto, {max}px" is assembled below — supporting browsers self-size, others keep full.
+            $nd_sizes = (int) $max_w . 'px';
         }
         if ($nd_sizes !== '') {
             // sizes="auto" makes the browser pick the srcset candidate from the image's ACTUAL rendered box,
@@ -723,7 +852,7 @@ class WPC_Negotiated_Delivery
             $nd_auto_on = is_array($nd_set) && !empty($nd_set['lazy-auto-sizes']);
             if ($nd_loading === 'lazy'
                 && apply_filters('wpc_nd_auto_sizes', $nd_auto_on, $attrs)
-                && wps_rewriteLogic::lazy_auto_aspect_safe($nd_dw, $nd_dh, $nd_rw, $nd_rh)
+                && ($nd_nobasis_rs || wps_rewriteLogic::lazy_auto_aspect_safe($nd_dw, $nd_dh, $nd_rw, $nd_rh))
                 && stripos($nd_sizes, 'auto') === false) {
                 $nd_sizes = 'auto, ' . $nd_sizes;
             }
@@ -846,7 +975,7 @@ class WPC_Negotiated_Delivery
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
             && wps_rewriteLogic::src_hint_enabled()) {
             $sh_oe  = isset($orig_ext) ? strtolower((string) $orig_ext) : '';
-            $sh_src = ($sh_oe === 'png' || $sh_oe === 'gif') ? $sh_oe : (($sh_oe === 'jpg' || $sh_oe === 'jpeg') ? 'jpg' : '');
+            $sh_src = ($sh_oe === 'png' || $sh_oe === 'gif' || $sh_oe === 'webp') ? $sh_oe : (($sh_oe === 'jpg' || $sh_oe === 'jpeg') ? 'jpg' : ''); // (v7.03.61) +webp source (avif excluded — never a transcode source)
             if ($sh_src !== '' && stripos($url, 'src=') === false) {
                 $url .= (strpos($url, '?') === false ? '?' : '&') . 'src=' . $sh_src;
             }

@@ -59,6 +59,9 @@ require_once WPC_V2_DIR . '/v2-sized-trigger.php';  // plugin-signed sized-trigg
 // context for the plugin-side wiring.
 // See SPEC-direct_entry.md
 require_once WPC_V2_DIR . '/v2-direct-entry.php';
+// Phase-B drain recovery + diagnostics (deleted-DB / stranded-drain "drain=null").
+// wp wpc-v2-recover <fresh|resync|status>; or ?wpc_v2_pull_recover=… (admin+nonce).
+require_once WPC_V2_DIR . '/v2-recovery.php';
 // Adaptive concurrency control. The plugin self-measures FPM capacity via
 // TCP-style AIMD on callback handler timings (measured from REQUEST_TIME_FLOAT
 // so FPM queue wait is captured), advertises a per-type cap in the /optimize-v2
@@ -109,6 +112,13 @@ require_once WPC_V2_DIR . '/v2-wake.php';
 // hosts running Imunify360-style edge WAFs that block wake-ping POSTs from
 // Bunny orch pods. Fires on init with a 5-min throttle.
 require_once WPC_V2_DIR . '/v2-page-load-poll.php';
+// (v7.03.87) LCP/ATF health-check endpoint (?wpc_lcp_health=<key>&url=…) for the crit-push joint debug —
+// returns the live stash/heal/lcp.json/hints state for one URL as JSON. Key-gated; inert without the param.
+require_once WPC_V2_DIR . '/v2-lcp-health.php';
+// (v7.03.88) No-cache while the LCP/ATF hint is pending: emit no-store + DONOTCACHEPAGE for the ~28s
+// window between crit-regen and the .lcp.json landing, so a shared cache can't pin the hint-less render
+// for the full s-maxage AND renders keep flowing so the inline healer (rewriteLogic.php) can capture it.
+require_once WPC_V2_DIR . '/v2-lcp-nocache.php';
 // Shutdown-function drain trigger (real-time, server-side) plus a WP-cron
 // 2-min belt. Replaces reliance on orch wake-ping (which gets WAF-blocked on
 // some hosts) with a trigger that runs on every request AFTER the response is

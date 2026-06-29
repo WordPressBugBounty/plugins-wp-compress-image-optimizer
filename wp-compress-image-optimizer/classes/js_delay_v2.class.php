@@ -54,6 +54,19 @@ class wps_ic_js_delay_v2
                        // MUST run immediately. Delaying it collides with WPC's own delay loader (both
                        // redefine readyState) → Consently falls back to "unblock all" → scripts re-run →
                        // SmartMenus re-inits (5x duplicate sub-arrow chevrons) + "Cannot redefine readyState".
+          // Form / booking / chat widget LOADERS (v7.03.47) — these inject or REVEAL a (often hidden,
+          // off-screen) iframe/DOM on load and size it via postMessage. Delaying them holds the reveal until
+          // first interaction, so the embedded form/widget looks broken (blank/invisible) on initial view —
+          // a real customer report (GoHighLevel form stopped rendering after update). Distinctive script-src
+          // substrings only (substring match), so they can't over-exclude unrelated scripts.
+          'form_embed',       // GoHighLevel / LeadConnector form_embed.js (sizes + reveals the form iframe)
+          'msgsndr',          // GoHighLevel / LeadConnector (link.msgsndr.com)
+          'leadconnectorhq',  // LeadConnector widget host
+          'hsforms',          // HubSpot Forms loader (js.hsforms.net)
+          'hbspt',            // HubSpot inline embed (hbspt.forms.create)
+          'calendly',         // Calendly embed (reveals/sizes the booking iframe)
+          'typeform',         // Typeform embed
+          'jotform',          // JotForm embed
         ];
 
         // If a cookie consent plugin is active, also exclude jQuery (their dependency).

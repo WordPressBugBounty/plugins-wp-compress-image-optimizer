@@ -233,6 +233,15 @@ class wps_rewriteLogic
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
             self::$zoneName = '';
         }
+        // (v7.03.49) Zone host == ORIGIN host (misconfigured cname / a clone storing its own domain) →
+        // every transform would resolve to the origin → 404. Treat as no-zone; the empty-zone guards
+        // throughout this class then keep assets on their natural URLs. Mirrors cdn-rewrite mainInit.
+        if (!empty(self::$zoneName) && function_exists('home_url')) {
+            $wpc_oh = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+            if ($wpc_oh !== '' && strcasecmp((string) self::$zoneName, $wpc_oh) === 0) {
+                self::$zoneName = '';
+            }
+        }
 
         self::$siteUrlScheme = parse_url(self::$siteUrl, PHP_URL_SCHEME);
     }
@@ -616,12 +625,26 @@ class wps_rewriteLogic
                     && stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) {
                     return $url;
                 }
+                // EXTERNAL-ORIGIN fonts stay DIRECT (v7.03.47) — never route a third-party font through the
+                // zone. Fonts require CORS (Access-Control-Allow-Origin); proxying them via m:0/a: risks a
+                // CORS failure + 404s (the cdnjs Font Awesome case) for ~zero gain (the source is already a
+                // CDN). Only same-site fonts are eligible (matches cdn_rewrite_url's /wp-content/ scope).
+                if (empty($f_host) || empty($f_site) || strcasecmp((string) $f_host, (string) $f_site) !== 0) {
+                    return $url;
+                }
                 if (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false) {
-
+                    // HOST GUARD (v7.03.47) — never build a transform on an empty/origin host. An empty zone
+                    // yields "https:///m:0/a:…", which the browser resolves against the ORIGIN → 404 (the
+                    // reported earthworkstreeservice.com/m:0/a:… case; also the suppressed-zone state). When
+                    // the zone host isn't safely available, stay natural.
+                    $wpc_z = (string) self::$zoneName;
+                    if ($wpc_z === '' || strcasecmp($wpc_z, (string) $f_site) === 0) {
+                        return $url;
+                    }
                     if (strpos($url, 'icon') !== false || strpos($url, 'awesome') !== false || strpos($url, 'lightgallery') !== false || strpos($url, 'gallery') !== false || strpos($url, 'side-cart-woocommerce') !== false) {
-                        $newUrl = 'https://' . self::$zoneName . '/m:0/a:' . self::reformatUrl($url);
+                        $newUrl = 'https://' . $wpc_z . '/m:0/a:' . self::reformatUrl($url);
                     } else {
-                        $newUrl = 'https://' . self::$zoneName . '/font:true/a:' . self::reformatUrl($url);
+                        $newUrl = 'https://' . $wpc_z . '/font:true/a:' . self::reformatUrl($url);
                     }
 
                     return $newUrl;
@@ -714,9 +737,35 @@ class wps_rewriteLogic
         // the dangerous state. We still honor an explicit orch TRUE (redundant under the baked-on baseline);
         // the UI "Source Hints" toggle (wpc_src_hint_enabled filter, applied last) remains the authoritative
         // opt-out, and the global wpc_src_hint_enabled option (default 1) is the fleet kill-switch.
-        $zsh = function_exists('wpc_v2_zone_src_hints') ? wpc_v2_zone_src_hints() : null;
-        $on  = ($zsh === true) ? true : (bool) (function_exists('get_option') ? get_option('wpc_src_hint_enabled', 1) : 1);
-        return (bool) apply_filters('wpc_src_hint_enabled', $on);
+        return self::src_hint_mode() !== 'off';
+    }
+
+    /**
+     * (v7.03.61) 3-STATE source-hint mode — the single source of truth for ?src across ALL delivery paths.
+     * The UI "Source Hints" checkbox (emit-src-hints) is the master on/off; "Always Emit Source Hints"
+     * (emit-src-hints-always) flips until-landed → always. Reading the UI option HERE also fixes a real
+     * disconnect: the old gate read wpc_src_hint_enabled, an option the UI never set, so the toggle did
+     * nothing. Returns:
+     *   'off'    — never emit ?src.
+     *   'until'  — emit ?src only while the variant is NOT on disk (self-healing; on-disk arm stays clean). DEFAULT.
+     *   'always' — emit ?src on every natural arm, even after the variant lands on disk.
+     * Overrides: the wpc_src_hint_mode filter is authoritative; the legacy wpc_src_hint_enabled=>false filter
+     * still forces OFF (fleet kill-switch). The per-zone orch echo is no longer consulted — v7.03.39 baked it
+     * ON in all modes, making the UI toggle the authoritative control.
+     */
+    public static function src_hint_mode()
+    {
+        $set  = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
+        $raw  = (is_array($set) && isset($set['emit-src-hints'])) ? (string) $set['emit-src-hints'] : '1';
+        $on   = ($raw !== '0' && $raw !== '' && strtolower($raw) !== 'off');
+        $mode = !$on ? 'off' : ((is_array($set) && !empty($set['emit-src-hints-always'])) ? 'always' : 'until');
+        if (function_exists('apply_filters')) {
+            $mode = (string) apply_filters('wpc_src_hint_mode', $mode);
+            if (apply_filters('wpc_src_hint_enabled', true) === false) {
+                $mode = 'off';
+            }
+        }
+        return in_array($mode, array('off', 'until', 'always'), true) ? $mode : 'until';
     }
 
     /**
@@ -727,9 +776,13 @@ class wps_rewriteLogic
      * non-keying, so hinted + clean URLs share one cached object. Emitted ONLY on the not-on-disk natural
      * arms (the wp:2/wp:1 transforms already carry the source in u:).
      */
-    private static function src_hint_qs($src_ext)
+    private static function src_hint_qs($src_ext, $on_disk = false)
     {
-        return ($src_ext !== '' && self::src_hint_enabled()) ? '?src=' . $src_ext : '';
+        if ($src_ext === '') return '';
+        $mode = self::src_hint_mode();
+        if ($mode === 'off') return '';
+        if ($mode === 'until' && $on_disk) return ''; // self-healing: variant landed on disk → emit the CLEAN URL
+        return '?src=' . $src_ext;                     // 'until' (not-on-disk) or 'always'
     }
 
     private static function recoverAdaptiveVariant($natural_url, $base_no_ext, $width, $ext)
@@ -1636,7 +1689,15 @@ class wps_rewriteLogic
         if (!is_string($build_image_tag) || $build_image_tag === '') return $build_image_tag;
         // Toggle: "Right-size Lazy Images" (Other Optimizations). Setting drives the default; filter overrides.
         // Default OFF ⇒ this is a pure no-op (byte-identical to <=7.03.26).
-        $la_on = (is_array(self::$settings) && !empty(self::$settings['lazy-auto-sizes']));
+        // (v7.03.67) Resolve the toggle the SAME way the buffer-net's outer gate does (get_option), not just
+        // self::$settings — the in-memory cache isn't hydrated on every render path that runs the buffer-net
+        // (e.g. the crit-gen fetch), so an inner self::$settings-only gate bailed there → the srcset shipped
+        // INERT non-deterministically (buffer-net fired per the marker, but promotion didn't). Falling back to
+        // get_option makes the inner gate always agree with the outer one → deterministic srcset.
+        $la_set = (is_array(self::$settings) && isset(self::$settings['lazy-auto-sizes']))
+            ? self::$settings
+            : ((function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array());
+        $la_on = (is_array($la_set) && !empty($la_set['lazy-auto-sizes']));
         if (!apply_filters('wpc_auto_sizes_lazy', $la_on, $build_image_tag)) return $build_image_tag;
         if (!preg_match('/\sloading\s*=\s*(["\'])lazy\1/i', $build_image_tag)) return $build_image_tag;
         if (!preg_match('/\ssrcset\s*=\s*["\'][^"\']*?\d+w(?=[\s,"\'])/i', $build_image_tag)) return $build_image_tag;
@@ -1648,6 +1709,167 @@ class wps_rewriteLogic
         list($rw, $rh) = self::srcset_real_dims($build_image_tag);
         if (!self::lazy_auto_aspect_safe($aw, $ah, $rw, $rh)) return $build_image_tag;
         return str_replace($m[0], ' sizes=' . $m[1] . 'auto, ' . $m[2] . $m[1], $build_image_tag);
+    }
+
+    /**
+     * (v7.03.55) ACTIVATE an inert lazy ladder so the BROWSER can right-size it — the missing half of
+     * auto_sizes_for_lazy_img(). With "Resize by Incoming Device" (adaptive) or WPC-lazy on, rewriteLogic
+     * emits the natural -WxH ladder into data-srcset (deferred for the JS resizer, ~line 4865). On a
+     * NATIVE-lazy <img> (loading="lazy") that JS frequently never runs before the browser native-lazy-loads
+     * the big `src` — especially below the fold — so the perfect ladder (incl. -300x169) sits UNUSED and the
+     * browser over-fetches the full src (e.g. -800x450 into a 291px box; ~430 KiB on a news grid). This
+     * promotes that inert data-srcset → an ACTIVE srcset so the very next pipeline step
+     * (auto_sizes_for_lazy_img) adds sizes="auto" and the browser self-selects the right rung — no JS, no
+     * race, below-the-fold included. Also drops data-wpc-loaded so the adaptive JS leaves it alone (it would
+     * otherwise overwrite sizes="auto" with a fixed px on its near-viewport pass).
+     *
+     * SAME safety contract as auto_sizes_for_lazy_img (its inert-ladder twin) — every guard must pass:
+     *   - TOGGLE 'wpc_auto_sizes_lazy' (Right-size Lazy Images), default OFF ⇒ pure no-op (byte-identical).
+     *   - loading="lazy" ONLY (spec) — eager LCP/hero + no-loading sliders auto-excluded.
+     *   - REAL w-descriptor data-srcset; SKIP if an active srcset already exists (never clobber).
+     *   - SKIP JS-lazy/placeholder imgs (data-src present) and known carousels — promote only PURE native-lazy.
+     *   - ASPECT-MATCH guarded (declared box vs the ladder's real aspect) → the 7.03.27 squish cannot recur.
+     */
+    public static function activate_lazy_srcset_auto($build_image_tag)
+    {
+        if (!is_string($build_image_tag) || $build_image_tag === '') return $build_image_tag;
+        // Toggle: "Right-size Lazy Images" (Other Optimizations). Default OFF ⇒ pure no-op.
+        // (v7.03.67) Resolve the toggle the SAME way the buffer-net's outer gate does (get_option), not just
+        // self::$settings — the in-memory cache isn't hydrated on every render path that runs the buffer-net
+        // (e.g. the crit-gen fetch), so an inner self::$settings-only gate bailed there → the srcset shipped
+        // INERT non-deterministically (buffer-net fired per the marker, but promotion didn't). Falling back to
+        // get_option makes the inner gate always agree with the outer one → deterministic srcset.
+        $la_set = (is_array(self::$settings) && isset(self::$settings['lazy-auto-sizes']))
+            ? self::$settings
+            : ((function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array());
+        $la_on = (is_array($la_set) && !empty($la_set['lazy-auto-sizes']));
+        if (!apply_filters('wpc_auto_sizes_lazy', $la_on, $build_image_tag)) return $build_image_tag;
+        if (!preg_match('/\sloading\s*=\s*(["\'])lazy\1/i', $build_image_tag)) return $build_image_tag;
+        // Inert ladder present, no active srcset, not a JS-lazy/placeholder img, not a carousel.
+        if (!preg_match('/\sdata-srcset\s*=\s*(["\'])(.*?)\1/is', $build_image_tag, $ds)) return $build_image_tag;
+        if (!preg_match('/\d+w(?=[\s,"\'])/', $ds[2])) return $build_image_tag;
+        if (preg_match('/(?<![-\w])srcset\s*=/i', $build_image_tag)) return $build_image_tag;  // already active
+        if (preg_match('/\sdata-src\s*=/i', $build_image_tag)) return $build_image_tag;         // JS-lazy placeholder
+        if (preg_match('/\sclass\s*=\s*["\'][^"\']*(swiper|slick|owl|carousel|flickity|splide|attachment-slider|size-slider)/i', $build_image_tag)) return $build_image_tag;
+        // ASPECT-MATCH guard — never distort a mismatched-attr image (declared box vs the ladder's real aspect).
+        $aw = preg_match('/\swidth\s*=\s*["\']?(\d+)/i', $build_image_tag, $mw) ? (int) $mw[1] : 0;
+        $ah = preg_match('/\sheight\s*=\s*["\']?(\d+)/i', $build_image_tag, $mh) ? (int) $mh[1] : 0;
+        list($rw, $rh) = self::srcset_real_dims(' srcset="' . $ds[2] . '"'); // reuse via a srcset-shaped string
+        if (!self::lazy_auto_aspect_safe($aw, $ah, $rw, $rh)) return $build_image_tag;
+        // Promote: inert data-srcset → ACTIVE srcset, and stop the adaptive JS from re-touching it.
+        $build_image_tag = preg_replace('/\sdata-srcset(\s*=)/i', ' srcset$1', $build_image_tag, 1);
+        $build_image_tag = preg_replace('/\sdata-wpc-loaded\s*=\s*(["\'])true\1/i', '', $build_image_tag);
+        return $build_image_tag;
+    }
+
+    /**
+     * (v7.03.52) Collapse a same-site SVG image-transform to its NATURAL zone URL. SVGs are vectors — the
+     * /q:/r:/wp:/w: transform is a no-op pass-through (nothing to resize/transcode), so the markup carries a
+     * needless transform URL, e.g. {zone}/q:u/r:0/wp:0/w:1/u:https://site/.../icon.svg. Host-swap it to the
+     * clean {zone}/.../icon.svg: identical bytes, shorter + more cacheable, and never-404 by construction
+     * (the /u: URL is the exact file already in the markup — only its host changes to the zone). Same-site
+     * ONLY: a foreign /u: host is left untouched (external assets never go on the CDN, v7.03.49). Always on,
+     * no witness/flag: unlike the webp/avif lane in maybe_naturalize_single_src (which trades on disk
+     * presence + skips wp:0, so SVGs never reach it), an SVG host-swap is unconditionally safe. src=/data-src=.
+     */
+    public static function naturalize_svg_src($build_image_tag)
+    {
+        if (!is_string($build_image_tag) || $build_image_tag === '' || self::$zoneName === '') {
+            return $build_image_tag;
+        }
+        if (stripos($build_image_tag, '.svg') === false || strpos($build_image_tag, '/u:') === false) {
+            return $build_image_tag;
+        }
+        $zone_host = (string) self::$zoneName;
+        $site_host = function_exists('site_url') ? (string) wp_parse_url(site_url(), PHP_URL_HOST) : '';
+        $zone      = preg_quote(self::$zoneName, '#');
+        return preg_replace_callback(
+            '#((?:src|data-src)=")https://' . $zone . '(?:/q:[a-z0-9]+)?(?:/e:\d+)?/r:\d+/wp:\d+/w:\d+/u:(https?://[^"?]+?\.svg(?:\?[^"]*)?)(")#i',
+            function ($m) use ($zone_host, $site_host) {
+                $origin = $m[2];
+                $ohost  = (string) wp_parse_url($origin, PHP_URL_HOST);
+                // Only naturalize a /u: URL on OUR zone host or the SAME-SITE origin host. A foreign host
+                // (external SVG) is left exactly as-is — external assets must never be served from the CDN.
+                if ($ohost === ''
+                    || (strcasecmp($ohost, $zone_host) !== 0 && ($site_host === '' || strcasecmp($ohost, $site_host) !== 0))) {
+                    return $m[0];
+                }
+                // Host-swap origin → zone, preserving the path + any ?query. The cacheable natural URL.
+                $nat = preg_replace('#^https?://[^/]+#', 'https://' . $zone_host, $origin);
+                return $m[1] . $nat . $m[3];
+            },
+            $build_image_tag
+        );
+    }
+
+    /**
+     * (v7.03.53) SRCSET WIDTH CORRECTOR — guarantees every srcset rung's FILE matches its width DESCRIPTOR,
+     * so the browser can pick a genuinely-smaller variant (no over-fetch). Builder-agnostic final pass that
+     * fixes the two degenerate shapes seen in the wild:
+     *   • one source at many descriptors  (e.g. -800x450.webp at 400w/480w/640w/660w — the LCP ladder whose
+     *     /w: transform got naturalized away → collapsed onto one file), and
+     *   • the bare FULL image injected at small descriptors (…name.webp at 480w/600w/960w — rewriteSrcset's
+     *     480/960 + retina doublers naturalized onto the full file).
+     * For each w-descriptor D on OUR zone it emits {zone}{base}-{D}x{round(D*aspect)}.{ext} (aspect from any
+     * -WxH rung in the same srcset), deduped, and NEVER above the largest descriptor present (no upscale →
+     * the edge OTF-downscales each from the base → never-404). Already-correct rungs round-trip unchanged;
+     * x-descriptors, non-zone URLs, and aspect-less srcsets are left untouched.
+     */
+    public static function naturalize_srcset_widths($build_image_tag)
+    {
+        if (!is_string($build_image_tag) || $build_image_tag === '' || self::$zoneName === '') return $build_image_tag;
+        if (stripos($build_image_tag, 'srcset=') === false) return $build_image_tag;
+        $zone = (string) self::$zoneName;
+        return preg_replace_callback('/((?:data-)?srcset=")([^"]+)(")/i', function ($mm) use ($zone) {
+            $raw = array_values(array_filter(array_map('trim', explode(',', $mm[2])), 'strlen'));
+            if (count($raw) < 2) return $mm[0];
+            // Aspect (h/w) from any -WxH rung (file or transform u:) + the largest w-descriptor = source ceiling.
+            $aspect = 0.0; $maxW = 0; $aspectW = 0;
+            foreach ($raw as $e) {
+                $p = preg_split('/\s+/', $e);
+                if (count($p) < 2 || !preg_match('/^(\d+)w$/', $p[1], $dm)) continue;
+                $maxW = max($maxW, (int) $dm[1]);
+                // aspect from the LARGEST -WxH rung (truest source aspect; a small cropped thumb's rounding
+                // shouldn't skew the synthesized heights).
+                if (preg_match('#-(\d+)x(\d+)\.[a-z0-9]+#i', $p[0], $a) && (int) $a[1] > $aspectW) {
+                    $aspectW = (int) $a[1]; $aspect = (int) $a[2] / (int) $a[1];
+                }
+            }
+            if ($aspect <= 0 || $maxW <= 0) return $mm[0]; // no basis → leave untouched
+            $out = []; $seen = [];
+            foreach ($raw as $e) {
+                $p = preg_split('/\s+/', $e);
+                if (count($p) < 2 || !preg_match('/^(\d+)w$/', $p[1], $dm) || strpos($p[0], '//' . $zone . '/') === false) {
+                    $out[] = $e; continue; // x-descriptors / off-zone → as-is
+                }
+                $D = (int) $dm[1];
+                if (isset($seen[$D])) continue; // dedupe descriptor (kills the dup 300w etc.)
+                $seen[$D] = true;
+                $url = $p[0];
+                $isTransform = (strpos($url, '/u:') !== false);
+                // Resolve to the underlying natural path (a /w: transform → its u: source; natural → itself).
+                $probe = ($isTransform && preg_match('#/u:(https?://\S+)$#i', $url, $um)) ? $um[1] : $url;
+                $ppath = (string) wp_parse_url(preg_replace('/\?.*$/', '', $probe), PHP_URL_PATH);
+                if ($ppath === '') { $out[] = $e; continue; }
+                $noext = preg_replace('/\.[a-z0-9]+$/i', '', $ppath);
+                $ext   = strtolower((string) pathinfo($ppath, PATHINFO_EXTENSION)); if ($ext === '') $ext = 'webp';
+                $fw    = preg_match('#-(\d+)x(\d+)$#', $noext, $wx) ? (int) $wx[1] : 0; // underlying file width (0 = full/base)
+                // PREFER the static landed file: when the underlying file's width already == the descriptor
+                // (a real WP sub-size), or it's the full at the ceiling rung, emit its CLEAN natural zone URL
+                // as-is — no needless edge OTF, no 1px rounding drift. Works whether the rung arrived natural
+                // or as a /w: transform (we resolved u: above).
+                if (($fw === $D) || ($fw === 0 && $D >= $maxW)) {
+                    $out[] = 'https://' . $zone . $ppath . ' ' . $D . 'w';
+                    continue;
+                }
+                if ($D > $maxW) { $out[] = $e; continue; } // never synthesize above the source ceiling (no upscale)
+                $base = preg_replace('#-\d+x\d+$#', '', $noext);
+                $h = (int) round($D * $aspect);
+                if ($h <= 0) { $out[] = $e; continue; }
+                $out[] = 'https://' . $zone . $base . '-' . $D . 'x' . $h . '.' . $ext . ' ' . $D . 'w';
+            }
+            return $mm[1] . implode(', ', $out) . $mm[3];
+        }, $build_image_tag);
     }
 
     public static function maybe_naturalize_single_src($build_image_tag)
@@ -2142,6 +2364,23 @@ class wps_rewriteLogic
             return $src_url;
         }
 
+        // HOST GUARD (v7.03.47) — never build an external-asset transform without a real CDN zone host, or
+        // on the origin host. An empty zone yields "https:///m:…/a:…" which the browser resolves against the
+        // ORIGIN → 404 (the reported origin-host transform), and a zone accidentally equal to the origin host
+        // 404s the same way (also the suppressed-zone state). Stay on the natural URL when the zone isn't safely usable.
+        $wpc_z  = (string) self::$zoneName;
+        $wpc_oh = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        if ($wpc_z === '' || ($wpc_oh !== '' && strcasecmp($wpc_z, $wpc_oh) === 0)) {
+            return $src_url;
+        }
+
+        // (v7.03.49) EXTERNAL-origin assets are never routed through the CDN — leave them direct (no
+        // {zone}/m:N/a:{external} URL anywhere). Only same-site assets the main rewrite missed fall through.
+        $wpc_ah = (string) wp_parse_url($src_url, PHP_URL_HOST);
+        if ($wpc_ah !== '' && $wpc_oh !== '' && strcasecmp($wpc_ah, $wpc_oh) !== 0) {
+            return $src_url;
+        }
+
         $webp = '/wp:' . self::$webp;
         if (self::isExcludedFrom('webp', $src_url)) {
             $webp = '';
@@ -2483,6 +2722,20 @@ SCRIPT;
             $criticalCss .= "\r\n" . '<style id="wpc-elementor-anim-start">.elementor-invisible{visibility:hidden}</style>';
         }
 
+        // (v7.03.71) Lazy-thumbnail black-flash guard. Some themes (Sahifa/TieLabs, etc.) paint a solid dark
+        // background on the post-thumbnail link — `.post-thumbnail a{background:#000}` — as a reveal-from-black
+        // lazy effect. Penthouse captures that into the crit, so at first paint, before each lazy thumbnail has
+        // loaded, the dark anchor shows through the not-yet-loaded image as black boxes until it loads. Only
+        // inject when the crit actually carries such a near-black anchor background (no-op on every other theme).
+        // The override uses `a[href]` — one notch more specific than the theme's `.post-thumbnail a` — so it also
+        // wins after the deferred full stylesheet re-applies the dark rule, with no !important; the loaded image
+        // covers the anchor in steady state, so this is invisible except for killing the load-time black flash.
+        // Filterable kill-switch, default on.
+        if (apply_filters('wpc_lazy_thumb_blackflash_guard', true)
+            && preg_match('/\.post-thumbnail\s+a\s*\{[^}]*background[^;}]*(?:#0{3,6}\b|\bblack\b)/i', $criticalCss)) {
+            $criticalCss .= "\r\n" . '<style type="text/css" id="wpc-lazy-thumb-bgfix">.post-thumbnail a[href]{background:transparent}</style>';
+        }
+
         $html = str_replace('<!--WPC_INSERT_CRITICAL-->', $criticalCss, $html);
         return $html;
     }
@@ -2496,6 +2749,107 @@ SCRIPT;
 
 
         if (!empty($criticalCSSExists) && empty($_GET['removeCritical'])) {
+            // (v7.03.76) Feed the LCP fetchpriority hint to wpc_lcp_hint_pass (.75). The crit pull stashed the
+            // per-URL {stem,width} as lcp.json next to the crit (saveCriticalCss). Read it here — this page's
+            // own crit dir, so it's per-URL — and expose it through the wpc_lcp_hint filter the .75 consumer
+            // reads. Local read, no fetch; inert when the file is absent. See wpc-lcp-fetchpriority-contract.md.
+            if (!empty($criticalCSSExists['desktop'])) {
+                $wpc_lcp_file = dirname($criticalCSSExists['desktop']) . '/lcp.json';
+                // (v7.03.88) INLINE late-hint capture — REPLACES the .85 deferred shutdown fetch, which on
+                // FPM hosts that recycle the worker at fastcgi_finish_request never completed (the joint crit
+                // debug proved it: give_up_count climbed but lcp.json never landed, last_fetch stayed null).
+                // The .lcp.json lands ~28s post-regen; once crit is older than that, a visit fetches it INLINE
+                // here (≤3s, ≤1/URL/min, give-up after 15) so the reader just below applies it in THIS render.
+                // Paired with no-cache-while-pending (addons/v2/v2-lcp-nocache.php) so the hint-less page can't
+                // get cached before the file lands — which is what keeps renders flowing so this capture fires.
+                if (!is_readable($wpc_lcp_file)) {
+                    $wpc_heal_dir  = dirname($criticalCSSExists['desktop']) . '/';
+                    $wpc_heal_uf   = $wpc_heal_dir . 'lcp_url.txt';
+                    $wpc_heal_lock = 'wpc_lcp_heal_' . md5($wpc_heal_dir);
+                    $wpc_crit_mt   = (int) @filemtime($criticalCSSExists['desktop']);
+                    $wpc_crit_age  = $wpc_crit_mt ? (time() - $wpc_crit_mt) : 0;
+                    if (is_readable($wpc_heal_uf)
+                        && apply_filters('wpc_lcp_hint_healer', true)
+                        && $wpc_crit_age >= 30                       // .lcp.json should have landed (~28s post-regen)
+                        && !get_transient($wpc_heal_lock)) {
+                        $wpc_heal_url  = trim((string) file_get_contents($wpc_heal_uf));
+                        $wpc_heal_nkey = ($wpc_heal_url !== '') ? 'wpc_lcp_healn_' . md5($wpc_heal_url) : '';
+                        if ($wpc_heal_nkey !== '' && (int) get_transient($wpc_heal_nkey) >= 15) {
+                            @unlink($wpc_heal_uf);   // producer never wrote it after ~15 tries — stop probing
+                        } elseif ($wpc_heal_url !== '' && filter_var($wpc_heal_url, FILTER_VALIDATE_URL)) {
+                            set_transient($wpc_heal_nkey, (int) get_transient($wpc_heal_nkey) + 1, HOUR_IN_SECONDS);
+                            set_transient($wpc_heal_lock, 1, MINUTE_IN_SECONDS);   // ≤1 heal-fetch / URL / min
+                            $wpc_heal_ua = defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : 'WPCompress';
+                            // INLINE direct GET to CDN storage — always reachable; ≤3s so the render stays bounded.
+                            $wpc_hr = wp_remote_get($wpc_heal_url, ['timeout' => 3, 'headers' => ['user-agent' => $wpc_heal_ua]]);
+                            $wpc_h_status = is_wp_error($wpc_hr) ? 0 : (int) wp_remote_retrieve_response_code($wpc_hr);
+                            $wpc_h_wrote  = false;
+                            if ($wpc_h_status === 200) {
+                                $wpc_hb = wp_remote_retrieve_body($wpc_hr);
+                                if (is_string($wpc_hb) && $wpc_hb !== '' && json_decode($wpc_hb) !== null) {
+                                    $wpc_h_wrote = (bool) @file_put_contents($wpc_lcp_file, $wpc_hb);
+                                    if ($wpc_h_wrote && class_exists('wps_ic_cache_integrations')) {
+                                        $wpc_heal_pageurl = (is_ssl() ? 'https://' : 'http://')
+                                            . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+                                            . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?');
+                                        $wpc_heal_key = class_exists('wps_ic_url_key')
+                                            ? (new wps_ic_url_key())->setup($wpc_heal_pageurl)
+                                            : basename(rtrim($wpc_heal_dir, '/'));
+                                        if ($wpc_heal_key !== '') {
+                                            wps_ic_cache_integrations::purgeCacheFiles($wpc_heal_key);   // clear any pre-.88 hint-less render
+                                            do_action('wps_ic_purge_all_cache', $wpc_heal_key);
+                                        }
+                                    }
+                                }
+                            }
+                            // record for the LCP health endpoint (crit joint debug)
+                            @file_put_contents($wpc_heal_dir . 'lcp_heal.json', wp_json_encode([
+                                'at' => gmdate('c'), 'http_status' => $wpc_h_status, 'wrote' => $wpc_h_wrote, 'mode' => 'inline',
+                            ]));
+                        }
+                    }
+                }
+                if (is_readable($wpc_lcp_file)) {
+                    $wpc_lcp_json = json_decode((string) file_get_contents($wpc_lcp_file), true);
+                    $wpc_lcp_hint = (is_array($wpc_lcp_json) && isset($wpc_lcp_json['lcp']) && is_array($wpc_lcp_json['lcp']))
+                        ? $wpc_lcp_json['lcp']
+                        : (is_array($wpc_lcp_json) ? $wpc_lcp_json : null);
+                    if (is_array($wpc_lcp_hint) && !empty($wpc_lcp_hint)) {
+                        add_filter('wpc_lcp_hint', function () use ($wpc_lcp_hint) { return $wpc_lcp_hint; }, 5);
+                    }
+                    // (v7.03.84) Above-the-fold RIGHT-SIZING hints — crit producer v3.25.8. The same render that
+                    // finds the LCP measures the first ≤12 ATF images PER DEVICE, emitted as a sibling atf_images
+                    // object; each entry {stem, css_w, css_h, nat_w, nat_h, top}. css_w = CSS LAYOUT px,
+                    // DPR-INDEPENDENT — the plugin's generator builds the ×1/1.75/2 device-pixel ladder from it
+                    // (rung = css_w × real DPR). Build a stem→[m,d] map of mobile/desktop css_w for the
+                    // negotiated-delivery sizes override, which feeds BOTH the rung generator AND the output
+                    // sizes. Primary shape mirrors the lcp field ({mobile:[…], desktop:[…]}); falls back to a flat
+                    // array (applied to both viewports). Inert when absent. Contract: crit-team-atf-image-sizing-contract.md.
+                    $wpc_atf = (isset($wpc_lcp_json['atf_images']) && is_array($wpc_lcp_json['atf_images']))
+                        ? $wpc_lcp_json['atf_images'] : null;
+                    if ($wpc_atf !== null) {
+                        $wpc_afold_map = [];
+                        $wpc_atf_m = (isset($wpc_atf['mobile'])  && is_array($wpc_atf['mobile']))  ? $wpc_atf['mobile']  : [];
+                        $wpc_atf_d = (isset($wpc_atf['desktop']) && is_array($wpc_atf['desktop'])) ? $wpc_atf['desktop'] : [];
+                        // Flat fallback: no mobile/desktop keys → one list, applied to both viewports.
+                        if (empty($wpc_atf_m) && empty($wpc_atf_d)) { $wpc_atf_m = $wpc_atf; $wpc_atf_d = $wpc_atf; }
+                        foreach (['m' => $wpc_atf_m, 'd' => $wpc_atf_d] as $wpc_atf_slot => $wpc_atf_list) {
+                            foreach ($wpc_atf_list as $wpc_atf_im) {
+                                if (!is_array($wpc_atf_im) || empty($wpc_atf_im['stem']) || empty($wpc_atf_im['css_w'])) continue;
+                                $wpc_atf_st = strtolower((string) $wpc_atf_im['stem']);
+                                if ($wpc_atf_st === '') continue;
+                                if (!isset($wpc_afold_map[$wpc_atf_st])) $wpc_afold_map[$wpc_atf_st] = ['m' => 0, 'd' => 0];
+                                if ($wpc_afold_map[$wpc_atf_st][$wpc_atf_slot] === 0) {        // first = topmost (DOM order)
+                                    $wpc_afold_map[$wpc_atf_st][$wpc_atf_slot] = (int) round((float) $wpc_atf_im['css_w']);
+                                }
+                            }
+                        }
+                        if (!empty($wpc_afold_map)) {
+                            add_filter('wpc_afold_image_hints', function () use ($wpc_afold_map) { return $wpc_afold_map; }, 5);
+                        }
+                    }
+                }
+            }
             if (file_exists($criticalCSSExists['desktop']) && file_exists($criticalCSSExists['mobile'])) {
                 $criticalCSSContent_Desktop = file_get_contents($criticalCSSExists['desktop']);
                 $criticalCSSContent_Mobile = file_get_contents($criticalCSSExists['mobile']);
@@ -2981,7 +3335,8 @@ SCRIPT;
         // or animated elements flash visible before the reveal. (wpc-gfont-atf covers -atf and -atf-local.)
         if (strpos($fullTag, 'wpc-critical-css') !== false
             || strpos($fullTag, 'wpc-gfont-atf') !== false
-            || strpos($fullTag, 'wpc-elementor-anim-start') !== false) {
+            || strpos($fullTag, 'wpc-elementor-anim-start') !== false
+            || strpos($fullTag, 'wpc-lazy-thumb-bgfix') !== false) {
             return $fullTag;
         }
 
@@ -3852,6 +4207,9 @@ SCRIPT;
         // the <picture> path does, so single-src transforms here were never naturalized. Runs on the
         // finished (unslashed) tag, before addslashes. No-op when wpc_single_url_natural_prefer is OFF.
         $newImageElement = self::maybe_naturalize_single_src($newImageElement);
+        $newImageElement = self::naturalize_svg_src($newImageElement); // same-site SVG → natural zone URL
+        $newImageElement = self::activate_lazy_srcset_auto($newImageElement); // native-lazy: inert data-srcset → active srcset (browser self-sizes via auto)
+        $newImageElement = self::naturalize_srcset_widths($newImageElement); // each srcset file ↔ its descriptor (no over-fetch)
         // Bare-<img> emit path counterpart of the negotiated/modern auto-sizes — native-lazy only, additive,
         // no-op unless a w-srcset + sizes are present and not already auto. Fixes the small-display over-fetch.
         $newImageElement = self::auto_sizes_for_lazy_img($newImageElement);
@@ -4824,6 +5182,9 @@ SCRIPT;
         // /wp:N/ transform src → its CF-cacheable NATURAL uploads URL when provably safe (witness + sub-size
         // + on-disk). Runs BEFORE the natural detection below so an already-natural src flows into the wrap.
         $build_image_tag = self::maybe_naturalize_single_src($build_image_tag);
+        $build_image_tag = self::naturalize_svg_src($build_image_tag); // same-site SVG → natural zone URL
+        $build_image_tag = self::activate_lazy_srcset_auto($build_image_tag); // native-lazy: inert data-srcset → active srcset (browser self-sizes via auto)
+        $build_image_tag = self::naturalize_srcset_widths($build_image_tag); // each srcset file ↔ its descriptor (no over-fetch)
 
         // Legacy/local (CDN-off + non-negotiated) sizes="auto" — same treatment as the negotiated <img> and
         // modern <picture> paths, so over-fetch is fixed on EVERY config. Native-lazy only (sliders/LCP are
@@ -5354,7 +5715,7 @@ SCRIPT;
                                     $extra_is_wxh = (bool) preg_match('/-\d+x\d+\.avif$/i', $natural_url_avif);
                                     if (@file_exists($natural_path_avif)) {
                                         $pathPart_extra = str_replace($avifSiteHost, '', $natural_url_avif);
-                                        $avifEntries[] = $avifZoneBase . $pathPart_extra . ' ' . $extra_width . 'w';
+                                        $avifEntries[] = $avifZoneBase . $pathPart_extra . self::src_hint_qs($src_hint_ext, true) . ' ' . $extra_width . 'w'; // (v7.03.61) on_disk=true: clean in 'until', ?src in 'always'
                                     } elseif ($optimistic_avif || $avif_otf_live || $avif_emit_natural) { // emit-natural reaches the -WxH decision on a ceiling-on un-witnessed zone; else wp:2 for optimistic-only
                                         $u_src_extra = $avif_original_u_url !== '' ? $avif_original_u_url : $cleanSource;
                                         $u_src_extra_via_cdn = preg_replace('#^https?://[^/]+#', 'https://' . self::$zoneName, $u_src_extra);
@@ -5429,7 +5790,7 @@ SCRIPT;
                                     $uni_is_wxh = (bool) preg_match('/-\d+x\d+\.avif$/i', $natural_url_uni);
                                     if (@file_exists($natural_path_uni)) {
                                         $pathPart_uni = str_replace($avifSiteHost, '', $natural_url_uni);
-                                        $avifEntries[] = $avifZoneBase . $pathPart_uni . ' ' . $w_uni . 'w';
+                                        $avifEntries[] = $avifZoneBase . $pathPart_uni . self::src_hint_qs($src_hint_ext, true) . ' ' . $w_uni . 'w'; // (v7.03.61) on_disk: clean in 'until', ?src in 'always'
                                     } else {
                                         $u_src_uni = $avif_original_u_url !== '' ? $avif_original_u_url : $cleanSource;
                                         $u_src_uni_via_cdn = preg_replace('#^https?://[^/]+#', 'https://' . self::$zoneName, $u_src_uni);
@@ -5713,7 +6074,7 @@ SCRIPT;
 
                             if (@file_exists($natural_path_webp)) {
                                 $pathPart_extra_wp = str_replace($webpSiteHost, '', $natural_url_webp);
-                                $webpEntries[] = $webpZoneBase . $pathPart_extra_wp . ' ' . $extra_width_wp . 'w';
+                                $webpEntries[] = $webpZoneBase . $pathPart_extra_wp . self::src_hint_qs($src_hint_ext, true) . ' ' . $extra_width_wp . 'w'; // (v7.03.61) on_disk: clean in 'until', ?src in 'always'
                             } else {
                                 // when the edge will safely serve a natural .webp, emit the clean natural URL
                                 // (edge png/jpg→webp transforms it, CF-cacheable, symmetric with the avif source).
@@ -5782,7 +6143,7 @@ SCRIPT;
                             $uni_wp_is_wxh = (bool) preg_match('/-\d+x\d+\.webp$/i', $natural_url_uni_wp);
                             if (@file_exists($natural_path_uni_wp)) {
                                 $pathPart_uni_wp = str_replace($webpSiteHost, '', $natural_url_uni_wp);
-                                $webpEntries[] = $webpZoneBase . $pathPart_uni_wp . ' ' . $w_uni_wp . 'w';
+                                $webpEntries[] = $webpZoneBase . $pathPart_uni_wp . self::src_hint_qs($src_hint_ext, true) . ' ' . $w_uni_wp . 'w'; // (v7.03.61) on_disk: clean in 'until', ?src in 'always'
                             } else {
                                 // when the edge will safely serve a natural .webp, emit the clean natural URL
                                 // (edge png/jpg→webp transforms it, CF-cacheable, symmetric with the avif source).
@@ -5868,9 +6229,31 @@ SCRIPT;
                     // transform). Convert every transform URL in the fallback to its natural zone URL, preserving
                     // descriptors + the onerror JS. Gated on the natural fleet master (revert via wpc_picture_natural_fleet=0).
                     if ((self::picture_natural_fleet_enabled() || self::wpc_natural_nw()) && self::$zoneName !== '') {
-                        $fallbackTag = preg_replace(
-                            '#(https?://[^/"\x27\s,>]+)/[^"\x27\s,>]*?/u:https?://[^/"\x27\s,>]+(/[^"\x27\s,>?]*)(?:\?[^"\x27\s,>]*)?#i',
-                            '$1$2',
+                        // (v7.03.53) Rebuild each rung as a DISTINCT natural -WxH instead of host-swapping the
+                        // transform's single u: source verbatim. buildLcpSrcset points every ladder rung at ONE
+                        // source + relies on the /w:W/ transform to resize; naively stripping /w: collapsed all
+                        // rungs onto that one file (e.g. -800x450 at 400w/480w/640w/660w → the browser has no
+                        // smaller candidate → over-fetch). Derive -WxH from the /w:W/ width + the source's own
+                        // aspect (downscale only → never-404; the edge OTF-resizes each). No /w: or no -WxH
+                        // aspect basis → host-swap the source as-is (unchanged behaviour for those).
+                        $fallbackTag = preg_replace_callback(
+                            '#https?://' . preg_quote(self::$zoneName, '#') . '/[^"\x27\s,>]*?(?:/w:(\d+))?/u:(https?://[^"\x27\s,>]+?\.(?:webp|avif|jpe?g|png|gif))(?:\?[^"\x27\s,>]*)?#i',
+                            function ($m) {
+                                $w    = (isset($m[1]) && $m[1] !== '') ? (int) $m[1] : 0;
+                                $path = (string) wp_parse_url($m[2], PHP_URL_PATH);
+                                if ($path === '') return $m[0];
+                                $ext = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+                                if ($ext === '') $ext = 'webp';
+                                $noext = preg_replace('/\.[a-z0-9]+$/i', '', $path);
+                                if ($w > 0 && preg_match('#^(.*)-(\d+)x(\d+)$#', $noext, $d) && (int) $d[2] > 0) {
+                                    $sw = (int) $d[2]; $sh = (int) $d[3];
+                                    $h  = (int) round($w * $sh / $sw);
+                                    if ($h > 0) {
+                                        return 'https://' . self::$zoneName . $d[1] . '-' . $w . 'x' . $h . '.' . $ext;
+                                    }
+                                }
+                                return 'https://' . self::$zoneName . $noext . '.' . $ext;
+                            },
                             $fallbackTag
                         );
                     }

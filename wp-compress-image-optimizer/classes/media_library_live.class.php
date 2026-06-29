@@ -655,16 +655,17 @@ class wps_ic_media_library_live extends wps_ic
 
 
             } else if ($column_name == 'wps_ic_actions') {
-                $output .= '<div class="wps-ic-media-actions-toolbox">';
-                $output .= '<ul class="wps-ic-include">';
-                $output .= '<li class="no-padding">';
-
-                $output .= '<div class="btn-group">';
-                $output .= 'Not supported';
+                // (v7.03.114) Render the unsupported-format state as a proper card, reusing the EXCLUDED
+                // card's exact styling so it's visually consistent with the rest of the column (was a bare
+                // legacy "Not supported" string that looked out of place). JPEG/PNG/GIF are the optimizable
+                // SOURCE formats; a webp/avif/svg source shows this. (Such images are still delivered
+                // next-gen via the CDN where applicable — this only refers to local source optimization.)
+                $output .= '<div class="wpc-ml-card wpc-ml-card--excluded is-excluded">';
+                $output .= self::icon_stack();
+                $output .= '<div class="wpc-ml-body">';
+                $output .= '<div class="wpc-ml-title">' . esc_html__('Unsupported Format', 'wp-compress-image-optimizer') . '</div>';
+                $output .= '<div class="wpc-ml-subtitle">' . esc_html__('JPEG, PNG & GIF only', 'wp-compress-image-optimizer') . '</div>'; // (v7.03.118) literal & — esc_html__ encodes it once (was double-encoding to &amp;)
                 $output .= '</div>';
-
-                $output .= '</li>';
-                $output .= '</ul>';
                 $output .= '</div>';
             }
 
@@ -940,7 +941,7 @@ class wps_ic_media_library_live extends wps_ic
             $output .= '<div class="wpc-ml-body"><div class="fade-in-up"><div class="wpc-ml-title">' . $label . '</div><div class="wpc-skeleton"><div class="wpc-skeleton-bar w-long"></div><div class="wpc-skeleton-bar w-short"></div></div>';
             if (!$is_restoring) {
                 $output .=
-                    '<div class="wpc-variant-count-chip-row" style="margin-top:6px;line-height:1;">' .
+                    '<div class="wpc-variant-count-chip-row" style="display:none;margin-top:6px;line-height:1;">' . // (v7.03.65) hidden on optimizing too — the "0 · 0J 0W 0A" read as empty; count still tracked under the hood for the heartbeat/?wpc_counter_debug diagnostic
                     '<span class="wpc-variant-count-chip" style="display:inline-flex;align-items:center;gap:4px;' .
                     'padding:2px 7px;border-radius:9px;background:rgba(120,120,140,0.12);' .
                     'font-size:10px;font-weight:600;letter-spacing:.2px;color:#445;">' .
@@ -998,7 +999,7 @@ class wps_ic_media_library_live extends wps_ic
                     $vc_jpeg, $vc_webp, $vc_avif, $vc_total);
                 $variant_chip_row =
                     '<div class="wpc-variant-count-chip-row"' .
-                    ' style="margin-top:6px;line-height:1;">' .
+                    ' style="display:none;margin-top:6px;line-height:1;">' .
                     '<span class="wpc-variant-count-chip" title="' . esc_attr($vc_title) . '"' .
                     ' style="display:inline-flex;align-items:center;gap:4px;' .
                     'padding:2px 7px;border-radius:9px;background:rgba(120,120,140,0.12);' .
@@ -1012,7 +1013,7 @@ class wps_ic_media_library_live extends wps_ic
                     '</div>';
             }
 
-            $output .= '<div class="wpc-ml-card wpc-ml-card--compressed">';
+            $output .= '<div class="wpc-ml-card wpc-ml-card--compressed" style="align-items:center;">'; // (v7.03.60) badge hidden → vertically center the remaining content with the icon (no leftover chip slot)
             $output .= self::icon_stack();
             $output .= '<div class="wpc-ml-body">';
             if ($saved_bytes > 0) {
@@ -1093,7 +1094,12 @@ class wps_ic_media_library_live extends wps_ic
                 } else {
                     $output .= '<a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '"' . $compress_title . '>' . self::svg_bolt() . ' ' . $compress_label . '</a>';
                 }
-                $output .= '<a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a>';
+                // (v7.03.117) Hide Exclude WHILE regenerating thumbnails — the long "Regenerating
+                // Thumbnails…" label + Exclude overflow the card. Exclude returns the moment regen ends
+                // (the card re-renders to the normal Compress/Smart-Delivery + Exclude row).
+                if (!$post_restore_regen_pending) {
+                    $output .= '<a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a>';
+                }
                 $output .= '</div>';
                 $output .= '</div>';
                 $output .= '</div>';

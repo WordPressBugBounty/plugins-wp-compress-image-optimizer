@@ -118,6 +118,20 @@ function runAdaptive() {
             }
         }
 
+        // (v7.03.54) Wire box-measurement to NATURAL srcsets. SetupNewApiURL only rewrites /w: TRANSFORM
+        // URLs — a no-op now that srcsets are natural (-WxH) — so the natural ladder kept the theme's stale
+        // sizes (e.g. "620px") and the browser over-fetched the biggest rung. Set sizes from the REAL
+        // measured box so the browser picks the right -WxH (DPR-aware → retina still gets 2x). Use a FRESH
+        // measurement (NOT imgWidth — it falls back to window.innerWidth for a 0-width/hidden image, which
+        // would over-fetch); skip unless it's a genuine laid-out width + a width-descriptor srcset is present.
+        var wpcBoxW = Math.round(parseInt(window.getComputedStyle(adaptiveImage).width)) || 0;
+        if (wpcBoxW > 1
+            && !adaptiveImage.classList.contains('wpc-excluded-adaptive')
+            && typeof adaptiveImage.srcset === 'string'
+            && /\d+w(\s|,|$)/.test(adaptiveImage.srcset)) {
+            adaptiveImage.sizes = wpcBoxW + 'px';
+        }
+
         adaptiveImage.classList.add("ic-fade-in");
         adaptiveImage.classList.remove("wps-ic-lazy-image");
         adaptiveImage.removeAttribute('data-wpc-loaded');

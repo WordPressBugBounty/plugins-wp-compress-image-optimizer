@@ -398,7 +398,7 @@ class WPC_Modern_Delivery
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
             && wps_rewriteLogic::src_hint_enabled()) {
             $sh_oe  = !empty($meta['file']) ? strtolower((string) pathinfo((string) $meta['file'], PATHINFO_EXTENSION)) : '';
-            $sh_src = ($sh_oe === 'png' || $sh_oe === 'gif') ? $sh_oe : (($sh_oe === 'jpg' || $sh_oe === 'jpeg') ? 'jpg' : '');
+            $sh_src = ($sh_oe === 'png' || $sh_oe === 'gif' || $sh_oe === 'webp') ? $sh_oe : (($sh_oe === 'jpg' || $sh_oe === 'jpeg') ? 'jpg' : ''); // (v7.03.61) +webp source (avif excluded)
             if ($sh_src !== '') {
                 foreach ($entries as $sh_w => $sh_entry) {
                     $sh_sp = strpos($sh_entry, ' ');

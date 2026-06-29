@@ -691,7 +691,8 @@ class wps_ic_comms extends wps_ic
 
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCriticalFiles();
-        $cache::purgeAll();
+        // (v7.03.92) full-site Varnish: a settings import is a maximal site-wide markup change.
+        $cache::purgeAll(false, true, false, false, true);
 
         wp_send_json_success(['msg' => 'Settings imported successfully']);
     }
@@ -803,8 +804,12 @@ class wps_ic_comms extends wps_ic
                 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_failed_%' OR option_name LIKE '_transient_timeout_wpc_failed_%'");
                 $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_optimize_attempts'");
             }
-            // Both directions: purge all caches so HTML regenerates with new path (G13)
-            do_action('wps_ic_purge_all_cache');
+            // Both directions: purge all caches so HTML regenerates with new path (G13). (v7.03.92) a bare
+            // do_action reaches only 3rd-party purgers, NOT host Varnish — go through purgeAll so Varnish
+            // (full-site) + the fan-out both fire.
+            if (class_exists('wps_ic_cache_integrations')) {
+                wps_ic_cache_integrations::purgeAll(false, true, false, false, true);
+            }
         }
 
         wp_send_json_success($form);
@@ -1172,7 +1177,8 @@ class wps_ic_comms extends wps_ic
         if ($updated_local || $updated_live) {
             if (class_exists('wps_ic_cache_integrations')) {
                 $cache = new wps_ic_cache_integrations();
-                $cache::purgeAll();
+                // (v7.03.92) full-site Varnish: suspend/unsuspend toggles optimization site-wide.
+                $cache::purgeAll(false, true, false, false, true);
             }
         }
         wp_send_json_success([$updated_local, $updated_live]);

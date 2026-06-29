@@ -6,6 +6,11 @@ jQuery(document).ready(function ($) {
     // unload.
     var allowRefresh = true;
     window.allowRefresh = allowRefresh;
+    // (v7.03.63) Counter-flow debug. Enable with ?wpc_counter_debug=1 on the media page (or
+    // window.WPC_COUNTER_DEBUG=true in console) to trace the optimize → chip-climb → swap flow. Silent off.
+    var WPC_CDBG = (typeof location !== 'undefined' && /[?&]wpc_counter_debug=1\b/.test(location.search))
+                   || (typeof window !== 'undefined' && window.WPC_COUNTER_DEBUG === true);
+    if (WPC_CDBG) console.log('[wpc-counter] debug ON');
     $('.ic-tooltip').tooltipster({
         maxWidth: '300',
         delay: 100,
@@ -602,8 +607,9 @@ jQuery(document).ready(function ($) {
         // Background-tab polling burns FPM workers for no user benefit.
         // When user returns, visibilitychange listener fires heartbeatBurst
         // and page-load-style state catches up.
-        if (typeof document !== 'undefined' && document.hidden) return;
+        if (typeof document !== 'undefined' && document.hidden) { if (WPC_CDBG) console.log('[wpc-counter] HB skip (tab hidden)'); return; }
         wpcHBRunning = true;
+        if (WPC_CDBG) console.log('[wpc-counter] HB tick active=[' + (wpcActiveImages || []).join(',') + ']');
         $.ajax({
             url: ajaxurl,
             type: 'POST',
@@ -619,11 +625,24 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 wpcHBRunning = false;
+                if (WPC_CDBG) { var _hk = (response && response.data && response.data.html) ? Object.keys(response.data.html) : []; console.log('[wpc-counter] HB resp imgs=[' + _hk.join(',') + ']' + (response && response.success === true ? '' : ' (success!=true)')); }
                 if (response && response.success === true && response.data && response.data.html) {
                     $.each(response.data.html, function (index, payload) {
                         if (!payload) return;
                         var imageID = parseInt(index, 10);
                         if (!imageID) return;
+
+                        // (v7.03.64) Passive Smart-Delivery tracking. If the heartbeat surfaces an image
+                        // that's actively OPTIMIZING (via the recently-changed transient path) and it isn't
+                        // already tracked, register it so subsequent ticks poll its climbing chip{}. Makes the
+                        // counter climb for background SD optimizes the page-load scan missed (started after
+                        // load). Tab-active is already enforced (heartbeat skips when document.hidden), and
+                        // wpcMarkActive's 90s safety-timeout + the settle-stop bound the polling.
+                        if ((payload.status === 'optimizing' || payload.status === 'queueing')
+                            && wpcActiveImages.indexOf(imageID) === -1) {
+                            wpcMarkActive(imageID);
+                            if (WPC_CDBG) console.log('[wpc-counter] passive-track img=' + imageID + ' (SD optimizing → auto-registered)');
+                        }
 
                         // ── Card-swap path FIRST (SYNCHRONOUS). Must happen
                         //    before chip mutation so chip/badges land on the
@@ -660,6 +679,24 @@ jQuery(document).ready(function ($) {
         });
     };
 
+    // (v7.03.64) Smooth count-up tween for the variant-count chip — rAF-based, monotonic, cancels any
+    // in-flight tween on the same element. Makes the climb readable even when variants land in a burst
+    // (a single click-optimize) rather than trickling. Uses the rAF timestamp argument (no Date.now).
+    function wpcAnimateCount($el, to) {
+        to = parseInt(to, 10); if (isNaN(to)) return;
+        var from = parseInt($el.text(), 10); if (isNaN(from)) from = 0;
+        if (to <= from) { $el.text(String(to)); return; }
+        var prevRAF = $el.data('wpcRAF'); if (prevRAF) cancelAnimationFrame(prevRAF);
+        var dur = Math.min(900, 150 + (to - from) * 55), t0 = null;
+        function step(ts) {
+            if (t0 === null) t0 = ts;
+            var p = Math.min((ts - t0) / dur, 1), e = 1 - Math.pow(1 - p, 3);
+            $el.text(String(Math.round(from + (to - from) * e)));
+            if (p < 1) { $el.data('wpcRAF', requestAnimationFrame(step)); } else { $el.removeData('wpcRAF'); }
+        }
+        $el.data('wpcRAF', requestAnimationFrame(step));
+    }
+
     /**
      * v7.02 Stage 2 — Apply chip + savings + recent[] from a heartbeat payload
      * to one image's card. Idempotent: safe to call on every tick. Each block
@@ -669,16 +706,14 @@ jQuery(document).ready(function ($) {
         var $card = $('.wps-ic-media-actions-' + imageID).find('.wpc-ml-card').first();
         if (!$card.length) return;
 
-        // v7.02 Stage 2 — Gate ALL chip/badge/savings activity on the card
-        // being in the COMPRESSED visual state. Until the swap fires (driven
-        // by the html path above), badges + chip updates would land on the
-        // still-Optimizing card and look like "variants landing before the
-        // card flipped." The recent[] cursor stays at 0 until we successfully
-        // process a tick, so nothing is missed — the very next heartbeat
-        // after the swap will replay every variant.
-        if (!$card.hasClass('wpc-ml-card--compressed')) return;
-
         // 1) Chip count mutation (count · J · W · A)
+        //
+        // (v7.03.63) Runs for OPTIMIZING cards too — NOT gated on compressed. The is-compressing loading
+        // card carries the SAME 5-child .wpc-variant-count-chip (media_library_live.class.php ~943:
+        // count · 0J 0W 0A), so the old "compressed-only" early-return (now moved BELOW this block) froze
+        // the live counter at 0 through the entire optimize — the reported "never counted up." The chip
+        // count is monotonic and IS the live variant-landing tally, so climbing it on the loading card is
+        // exactly the intended demo behaviour; the swap then carries the final number to the compressed card.
         //
         // v7.02.10 — Monotonic guard. Variants are write-once during a
         // compress session; the chip count and per-format counts should
@@ -705,14 +740,27 @@ jQuery(document).ready(function ($) {
                         webp:  Math.max(prev.webp,  payload.chip.webp  || 0),
                         avif:  Math.max(prev.avif,  payload.chip.avif  || 0)
                     };
+                    var grew = (next.count > prev.count);
                     window[maxKey] = next;
-                    $(parts[0]).text(String(next.count));
+                    wpcAnimateCount($(parts[0]), next.count);
                     $(parts[2]).text(next.jpeg + 'J');
                     $(parts[3]).text(next.webp + 'W');
                     $(parts[4]).text(next.avif + 'A');
-                }
-            }
-        }
+
+                    // (v7.03.65) Transient chip-reveal REMOVED — the variant chip is now hidden on BOTH the
+                    // optimizing and compressed cards (per request; the "0 · 0J 0W 0A" read as empty). The
+                    // count still updates the hidden chip element so the heartbeat-driven ?wpc_counter_debug
+                    // log keeps working as the avif/variant-landing diagnostic (it caught img=17 climb
+                    // J8 W7 A0 → A8 as the async avif landed). No visible chip in any state.
+                    if (WPC_CDBG) console.log('[wpc-counter] chip img=' + imageID + ' -> ' + next.count + ' (J' + next.jpeg + ' W' + next.webp + ' A' + next.avif + ') ' + ($card.hasClass('wpc-ml-card--compressed') ? 'compressed' : 'optimizing') + (grew ? ' [grew]' : ''));
+                } else if (WPC_CDBG) { console.log('[wpc-counter] chip img=' + imageID + ' SKIP parts=' + parts.length + ' (<5)'); }
+            } else if (WPC_CDBG) { console.log('[wpc-counter] chip img=' + imageID + ' SKIP: no .wpc-variant-count-chip in ' + ($card.hasClass('wpc-ml-card--compressed') ? 'compressed' : 'optimizing') + ' card'); }
+        } else if (WPC_CDBG) { console.log('[wpc-counter] img=' + imageID + ' payload has NO chip{} (status=' + (payload.status || '?') + ')'); }
+
+        // v7.02 Stage 2 — Gate the REST (savings %, badges, recent[]) on the COMPRESSED visual state — those
+        // belong on the flipped card. The chip COUNT above is intentionally EXEMPT so it climbs live during
+        // optimize. recent[] cursor stays 0 until a compressed tick, so nothing is missed (replayed post-swap).
+        if (!$card.hasClass('wpc-ml-card--compressed')) return;
 
         // 2) Savings % climb on the headline title
         //
@@ -933,6 +981,19 @@ jQuery(document).ready(function ($) {
         });
         heartbeatBurst();
     }
+    // (v7.03.70) Proactive Smart-Delivery watch — register the first ~12 not-yet-compressed cards so the
+    // heartbeat polls them. When Smart Delivery optimizes one in the background while the library is open,
+    // the card transitions live + the +WebP/+AVIF pips float up + savings counts up — instead of only after a
+    // refresh. (.64's passive-track was REACTIVE — it only caught images the heartbeat already surfaced; this
+    // watches the candidates up front.) Bounded: first 12 only; the heartbeat already skips when the tab is
+    // hidden; and wpcMarkActive's 90s auto-deregister + the settle-stop keep idle cards from polling forever
+    // (the .64 indexOf guard prevents re-registration, so that timeout actually fires). Tune the slice if poll
+    // cost matters on very large libraries.
+    $('.wpc-ml-card.wpc-ml-card--uncompressed').slice(0, 12).each(function () {
+        var aEl = $(this).closest('[class*="wps-ic-media-actions-"]');
+        var um  = (aEl.attr('class') || '').match(/wps-ic-media-actions-(\d+)/);
+        if (um) wpcMarkActive(parseInt(um[1], 10));
+    });
     $('.wpc-ml-card.is-restoring, .wpc-ml-card.is-regen-pending').each(function () {
         var attEl = $(this).closest('[class*="wps-ic-media-actions-"]');
         var cls   = attEl.attr('class') || '';
@@ -1199,7 +1260,7 @@ jQuery(document).ready(function ($) {
             '<div class="fade-in-up">' +
             '<div class="wpc-ml-title"><span class="wpc-loading-text">Queueing&hellip;</span></div>' +
             '<div class="wpc-skeleton"><div class="wpc-skeleton-bar w-long"></div><div class="wpc-skeleton-bar w-short"></div></div>' +
-            '<div class="wpc-variant-count-chip-row" style="margin-top:6px;line-height:1;">' +
+            '<div class="wpc-variant-count-chip-row" style="display:none;margin-top:6px;line-height:1;">' + // (v7.03.68) hidden on the JS-built on-click "Optimizing…" card too — matches the PHP page-load card (.65); the count still updates the hidden chip for the heartbeat/?wpc_counter_debug
                 '<span class="wpc-variant-count-chip" style="display:inline-flex;align-items:center;gap:4px;' +
                 'padding:2px 7px;border-radius:9px;background:rgba(120,120,140,0.12);' +
                 'font-size:10px;font-weight:600;letter-spacing:.2px;color:#445;">' +

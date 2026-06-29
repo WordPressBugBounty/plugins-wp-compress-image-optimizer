@@ -249,7 +249,11 @@ class wps_criticalCss
                             'url' => [
                                 'desktop' => $data['desktop_url'],
                                 'mobile'  => $data['mobile_url'],
-                            ]
+                            ],
+                            // (v7.03.85) /status carries lcp_url (v3.25.1) — pass it so saveCriticalCss stashes
+                            // it for the render-side healer (the .lcp.json itself lands ~28s later).
+                            'lcp_url' => !empty($data['lcp_url']) ? $data['lcp_url'] : '',
+                            'lcp_src' => 'poll',  // (v7.03.87) for the LCP health endpoint
                         ]);
 
                         // Purge caches so next visit gets fresh HTML with critical CSS injected
@@ -317,7 +321,7 @@ class wps_criticalCss
         $args = [
             'url'     => $url . '?criticalCombine=true&testCompliant=true',
             'uuid'    => $uuid,
-            'version' => wps_ic::$version,
+            'version' => (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : (class_exists('wps_ic') ? wps_ic::$version : '')), // (v7.03.120) class-independent — crit can run class-less via cron/loopback ("Class wps_ic not found" guard)
             'async'   => 'false',
             'dbg'     => 'true',
             'hash'    => time() . mt_rand(100, 9999),
@@ -610,6 +614,32 @@ class wps_criticalCss
             $jobStatus['lcp-mobile-success'] = true;
         }
 
+        // (v7.03.76) LCP fetchpriority hint — rides the SAME crit pull. The crit service emits a per-URL
+        // sibling carrying the per-viewport {stem,width} the .75 consumer needs (wpc-lcp-fetchpriority-
+        // contract.md). Stash it next to the crit so wpc_lcp_hint_pass reads it locally at render — per-URL,
+        // no per-request fetch. Locator: lcp_url (crit-push v3.25.1 FLAT field, the agreed locator), else the
+        // nested url.lcp, else derive <crit-dir>/<uuid>.lcp.json from the crit uuid. Gated on the producer
+        // emitting one of these => fully inert on every site until the crit side ships.
+        $wpc_lcp_url = '';
+        if (!empty($json['lcp_url'])) {                                          // crit-push v3.25.1 flat locator (agreed)
+            $wpc_lcp_url = (string) $json['lcp_url'];
+        } elseif (!empty($json['url']['lcp'])) {                                 // nested-form fallback
+            $wpc_lcp_url = (string) $json['url']['lcp'];
+        } elseif (!empty($json['uuid']) && !empty($json['url']['desktop'])) {    // last resort: derive sibling from the crit uuid
+            $wpc_lcp_url = dirname((string) $json['url']['desktop']) . '/' . (string) $json['uuid'] . '.lcp.json';
+        }
+        if ($wpc_lcp_url !== '') {
+            $wpc_lcp_resp = wp_remote_get($wpc_lcp_url, ['headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'timeout' => 5]);
+            if (!is_wp_error($wpc_lcp_resp) && (int) wp_remote_retrieve_response_code($wpc_lcp_resp) === 200) {
+                $wpc_lcp_body = wp_remote_retrieve_body($wpc_lcp_resp);
+                if (is_string($wpc_lcp_body) && $wpc_lcp_body !== '' && json_decode($wpc_lcp_body) !== null) {
+                    if (!is_dir($critical_path)) { wp_mkdir_p($critical_path); }
+                    file_put_contents($critical_path . 'lcp.json', $wpc_lcp_body);
+                    $jobStatus['lcp-hint-saved'] = true;
+                }
+            }
+        }
+
         return $jobStatus;
     }
 
@@ -686,7 +716,7 @@ class wps_criticalCss
 
     public function generateCriticalAjax()
     {
-        $args = ['url' => urldecode($this->serverRequest), 'version' => wps_ic::$version];
+        $args = ['url' => urldecode($this->serverRequest), 'version' => (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : (class_exists('wps_ic') ? wps_ic::$version : ''))]; // (v7.03.120) class-independent
 
         $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
@@ -781,6 +811,14 @@ class wps_criticalCss
             unlink($critical_path . 'critical_mobile.css');
         }
 
+        // (v7.03.85) Clear the stale per-uuid LCP hint + its stashed URL on regen. Each regen mints a NEW
+        // uuid, so a leftover lcp.json / lcp_url.txt would point the render-side healer at the OLD uuid. The
+        // poll/callback re-stashes the new lcp_url below (on success); the healer then re-fetches the new hint.
+        if (file_exists($critical_path . 'lcp.json'))      { @unlink($critical_path . 'lcp.json'); }
+        if (file_exists($critical_path . 'lcp_url.txt'))   { @unlink($critical_path . 'lcp_url.txt'); }
+        if (file_exists($critical_path . 'lcp_src.txt'))   { @unlink($critical_path . 'lcp_src.txt'); }   // (v7.03.87) debug
+        if (file_exists($critical_path . 'lcp_heal.json')) { @unlink($critical_path . 'lcp_heal.json'); } // (v7.03.87) debug
+
         // Create path if not exists
         if (!file_exists($critical_path)) {
             mkdir($critical_path, 0777, true);
@@ -824,6 +862,18 @@ class wps_criticalCss
 
                 $jobStatus['critical-css'] = 'success';
                 $cache::purgeAll($urlKey, false, true, false);
+                // (v7.03.85) Stash the per-URL lcp_url so the render-side healer can re-fetch the .lcp.json —
+                // the producer writes it to CDN storage ~28s LATER (per-uuid, fire-and-forget, no second
+                // callback), so it isn't here yet. lcp_url rides the crit /status (v3.25.1) and can ride the
+                // callback too (gated). See the healer in rewriteLogic::addCriticalCSS.
+                $wpc_lcp_url_stash = '';
+                if (!empty($json['lcp_url']))        { $wpc_lcp_url_stash = (string) $json['lcp_url']; }
+                elseif (!empty($json['url']['lcp']))  { $wpc_lcp_url_stash = (string) $json['url']['lcp']; }
+                if ($wpc_lcp_url_stash !== '') {
+                    @file_put_contents($critical_path . 'lcp_url.txt', $wpc_lcp_url_stash);
+                    // (v7.03.87) record which path stashed it, for the LCP health endpoint (crit joint debug).
+                    @file_put_contents($critical_path . 'lcp_src.txt', !empty($json['lcp_src']) ? (string) $json['lcp_src'] : 'unknown');
+                }
             }
         }
 

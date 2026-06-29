@@ -1367,6 +1367,39 @@ if (!function_exists('wpc_admin_drain_pending_downloads')) {
             if ($last_at > 0 && (time() - $last_at) < 30) continue; // honor backoff
             if (function_exists('wpc_retry_compress_hook')) wpc_retry_compress_hook((int) $row->post_id);
         }
+
+        // (v7.03.93) Pending ON-UPLOAD compress queue (FIX-1 — the reliability audit's H1). on_upload
+        // enqueues into wpc_compress_queue and fires the worker via SELF-LOOPBACK only — dead on WAF/cron-
+        // blocked hosts → the image sits stuck 'queued' forever (it never writes an ic_compressing row, so
+        // the stale-cleanup watchdog can't see it; and the card's $inQueue keeps its age-failsafe from ever
+        // clearing the spinner). Run the worker's per-image step INLINE here, on the WAF-immune admin-init
+        // carrier the manual single-image fallback already trusts. Capped at 1/pageview (singleCompressV4 is
+        // heavy) + worker-lock-guarded so it never double-runs. The dequeue alone also unblocks the existing
+        // card failsafe + retry-drain ($inQueue → false), and singleCompressV4 clears the wps_ic_compress_
+        // spinner transient on every exit (compress.php:5967/5978/6007). Loopback stays the fast primary;
+        // this is the reliable fallback.
+        if (!get_transient('wpc_compress_lock')) {
+            wp_cache_delete('wpc_compress_queue', 'options');
+            $cq = get_option('wpc_compress_queue', []);
+            if (is_array($cq) && !empty($cq) && class_exists('wps_local_compress')) {
+                $cq_id = (int) array_shift($cq);
+                update_option('wpc_compress_queue', $cq, false);     // dequeue (mirrors worker:4222-4223)
+                if ($cq_id > 0 && get_post_type($cq_id) === 'attachment') {
+                    set_transient('wpc_compress_lock', time(), 300); // hold the worker-lock for the inline run
+                    try {
+                        $cq_obj = new wps_local_compress();
+                        if (method_exists($cq_obj, 'backup_all_sizes')) {
+                            $cq_obj->backup_all_sizes($cq_id);
+                        }
+                        $cq_obj->singleCompressV4($cq_id, 'silent', true, 'page-load-drain');
+                    } finally {
+                        delete_transient('wpc_compress_lock');       // always release, even on throw
+                    }
+                } else {
+                    delete_transient('wps_ic_compress_' . $cq_id);   // invalid id → clear the stuck spinner
+                }
+            }
+        }
     }
     add_action('admin_init', 'wpc_admin_drain_pending_downloads', 99);
 }

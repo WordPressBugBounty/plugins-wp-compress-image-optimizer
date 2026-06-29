@@ -990,6 +990,30 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                             </ul>
                         </div>
                         <!-- Tab List End -->
+                        <?php // (v7.03.60) Dev easter egg: 5 clicks on the Export/Import ICON BOX toggles the hidden
+                        // debug menus (?show_hidden_menus). Non-agency only, mirroring the server-side gate at the top. ?>
+                        <?php if (!(defined('WPS_IC_AGENCY') && WPS_IC_AGENCY)) { ?>
+                        <script type="text/javascript">
+                        (function () {
+                            var box = document.querySelector('a[data-tab="export_settings"] .wpc-icon-container');
+                            if (!box) { return; }
+                            var shown = <?php echo (get_option('wpc_show_hidden_menus') == 'true') ? 'true' : 'false'; ?>;
+                            var clicks = 0, timer = null;
+                            box.style.cursor = 'pointer';
+                            box.addEventListener('click', function () {
+                                clicks++;
+                                if (timer) { clearTimeout(timer); }
+                                timer = setTimeout(function () { clicks = 0; }, 1500);
+                                if (clicks >= 5) {
+                                    clicks = 0;
+                                    var u = new URL(window.location.href);
+                                    u.searchParams.set('show_hidden_menus', shown ? 'false' : 'true');
+                                    window.location.href = u.toString();
+                                }
+                            });
+                        })();
+                        </script>
+                        <?php } ?>
                         <!-- Tab Content Start -->
                         <div class="wpc-settings-tab-content">
                             <div class="wpc-settings-tab-content-inner">
@@ -1868,6 +1892,10 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 // (default — the baked-on baseline) emits the CDN source-format hint; OFF is the
                                                 // self-service escape hatch (the wpc_src_hint_enabled filter applies it last → OFF beats the orch).
                                                 echo $gui::checkboxDescription_v4(__('Source Hints', WPS_IC_TEXTDOMAIN), '', false, '0', 'emit-src-hints', false, 'right', '');
+                                                // (v7.03.61) "Always" sub-toggle → makes Source Hints effectively 3-state: OFF (master off) /
+                                                // UNTIL-LANDED (master on, this off — self-healing default) / ALWAYS (both on — keep ?src even
+                                                // after the variant is cached on disk). Two binary checkboxes = the proven, reliable save path.
+                                                echo $gui::checkboxDescription_v4(__('Always Emit Source Hints', WPS_IC_TEXTDOMAIN), __('Keep the ?src hint even after the variant lands on disk (default: only until it lands).', WPS_IC_TEXTDOMAIN), false, '0', 'emit-src-hints-always', false, 'right', '');
                                                 ?>
                                             </div>
                                         </div>

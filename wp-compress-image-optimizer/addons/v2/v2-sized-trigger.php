@@ -46,6 +46,10 @@ if (!function_exists('wpc_v2_ideal_targets_from_sizes')) {
     {
         $targets = [];
         $sizes = is_string($sizes) ? trim($sizes) : '';
+        // (v7.03.73) sizes=auto means the browser self-measures the REAL rendered slot at runtime — so any
+        // explicit px tier is only an UPPER bound, not the slot. Enables the down-ladder in the px branch.
+        $auto_sub = ($sizes !== '' && stripos($sizes, 'auto') !== false
+            && (!function_exists('apply_filters') || apply_filters('wpc_nd_auto_subtier_rungs', true)));
         if ($sizes !== '') {
             foreach (array_map('trim', explode(',', $sizes)) as $tier) {
                 if ($tier === '' || strtolower($tier) === 'auto') continue;
@@ -56,6 +60,14 @@ if (!function_exists('wpc_v2_ideal_targets_from_sizes')) {
                 } elseif (preg_match('/(\d+)px\s*$/', $tier, $pm)) {
                     $slot = (int) $pm[1];
                     foreach ([1, 1.75, 2] as $d) $targets[] = (int) round($slot * $d);
+                    // (v7.03.73) A trailing px tier under sizes=auto is only an UPPER bound (a portrait ad at
+                    // width:100% in a ~300px sidebar still reports its 887px natural here). Without a sub-tier
+                    // rung the browser rounds UP to the smallest big rung and over-fetches. Ladder DOWN so auto
+                    // has rungs near the true width (DPR1 right-size + DPR2 sharpness). The generator's natural
+                    // cap + 8% dedupe + 200px floor bound what actually emits.
+                    if ($auto_sub) {
+                        foreach ([0.66, 0.5, 0.33] as $f) $targets[] = (int) round($slot * $f);
+                    }
                 }
             }
         }
