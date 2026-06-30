@@ -1049,7 +1049,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td colspan="3">
             <?php
             $options = get_option(WPS_IC_OPTIONS);
-            echo $options['api_key'];
+            echo esc_html($options['api_key']);
             ?>
         </td>
     </tr>
@@ -1057,7 +1057,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td><?php esc_html_e('CDN Zone Name', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
-            echo get_option('ic_cdn_zone_name');
+            echo esc_html(get_option('ic_cdn_zone_name'));
             ?>
         </td>
         <td>
@@ -1070,7 +1070,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         <td><?php esc_html_e('Custom CDN Zone Name', WPS_IC_TEXTDOMAIN); ?></td>
         <td>
             <?php
-            echo get_option('ic_custom_cname');
+            echo esc_html(get_option('ic_custom_cname'));
             ?>
         </td>
         <td>

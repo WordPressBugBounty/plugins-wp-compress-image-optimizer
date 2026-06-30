@@ -80,14 +80,16 @@ if (!$live_cdn) {
                 // post-bulk reality — otherwise users see stale counts for up to 60 s
                 // after a Stop or natural completion (late Phase B callbacks can also
                 // land in this window).
-                if (empty(get_option('wps_ic_bulk_process'))) {
+                // Self-healing read: an orphaned bulk flag (dead JS loop / drain
+                // chain, queue transient drained or expired) is cleared here so the
+                // splash reflects reality instead of a phantom "running".
+                $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
+                if (empty($bulkProcess)) {
                     delete_transient('wpc_bulk_library_counts');
                 }
                 $libraryStatus = wps_ic_local::countLibraryImages();
                 $uncompressedImages = count($libraryStatus['uncompressed']);
                 $compressedImages = count($libraryStatus['compressed']);
-
-                $bulkProcess = get_option('wps_ic_bulk_process');
 
                 $prepare_compress = 'display:none;';
                 $prepare_restore = 'display:none;';

@@ -40,10 +40,17 @@
     border-top: none;
     border-radius: 0 0 @radius-md @radius-md;
     padding: 0;
-    overflow: hidden;
+    // overflow moved onto .iframe-wrap below: this card must NOT clip, or the connect-form zone-picker
+    // dropdown (position:absolute, extends past the card) gets cut off. The iframe still clips itself.
+    overflow: visible;
   }
 
-  .iframe-wrap { height: 0; transition: height 0.3s ease; }
+  .iframe-wrap {
+    height: 0;
+    overflow: hidden; // (moved from .accordion-body) clip the collapsing CF dashboard iframe
+    border-radius: 0 0 @radius-md @radius-md; // keep the card's rounded bottom on the iframe
+    transition: height 0.3s ease;
+  }
   &[open] .iframe-wrap {
     height: calc(100vh - 220px);
     min-height: 480px;
@@ -219,6 +226,35 @@
   .wpc-cf-loader-error {
     padding: 10px;
     color: @color-red;
+
+    // v7.01.106 — per-component CF connect/reconnect diagnostic (rendered by tabs.js wpcRenderCfReport).
+    // Overrides the red error colour with per-status colours so a partial result reads clearly.
+    strong { display: block; margin-bottom: 8px; color: @color-text-dark; }
+
+    .wpc-cf-diag-list {
+      list-style: none;
+      margin: 0 0 8px;
+      padding: 0;
+      text-align: left;
+
+      li {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 4px 0;
+        color: @color-text-body;
+        font-size: 13px;
+      }
+      .wpc-cf-diag-icon { flex-shrink: 0; width: 16px; text-align: center; font-family: @font-bold; }
+      .wpc-cf-diag-name { flex-shrink: 0; font-family: @font-semibold; min-width: 150px; }
+      .wpc-cf-diag-detail { color: @color-text-secondary; }
+
+      .wpc-cf-diag-ok      .wpc-cf-diag-icon { color: @color-success; }
+      .wpc-cf-diag-fail    .wpc-cf-diag-icon { color: @color-error; }
+      .wpc-cf-diag-pending .wpc-cf-diag-icon { color: @color-warning; }
+    }
+
+    .wpc-cf-diag-hint { margin: 4px 0 0; font-size: 12px; color: @color-text-secondary; }
   }
 
   // Circle check dots — matches standard from _section-cards.less
@@ -821,6 +857,11 @@
 // Enterprise override: backup 9755-9761
 #cf-connect-options {
   overflow: visible !important; // FORCED: dropdowns must not clip
+  // The zone-picker dropdown opens downward into the next card. Its JS doesn't tag this card with
+  // .wpc-dropdown-open, so the universal lift never fires and the following "Other Integrations" card
+  // paints over the dropdown. Lift this card itself (parity with .wpc-dropdown-lifted z-index:50).
+  position: relative;
+  z-index: 50;
 
   .wpc-perf-grid { overflow: visible; }
   .wpc-box-for-checkbox,

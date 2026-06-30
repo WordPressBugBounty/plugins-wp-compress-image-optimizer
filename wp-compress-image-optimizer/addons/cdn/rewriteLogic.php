@@ -2573,9 +2573,11 @@ class wps_rewriteLogic
         // NEW API  does not need this code:
         //return '</body>';
 
-        if (!empty($_GET['test_adding_critical_ajax'])) {
-            $script = print_r($post, true);
-            $script .= print_r($realUrl = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], true);
+        // (v7.10.04) SECURITY: admin-gate this debug branch + esc_html() its output. It reflected
+        // $_SERVER['REQUEST_URI'] (attacker-influenced) straight into the page HTML = reflected XSS.
+        if (!empty($_GET['test_adding_critical_ajax']) && function_exists('current_user_can') && current_user_can('manage_options')) {
+            $script  = esc_html(print_r($post, true));
+            $script .= esc_html((string) ($_SERVER['HTTP_HOST'] ?? '') . (string) ($_SERVER['REQUEST_URI'] ?? ''));
             return $script;
         }
 
@@ -2586,7 +2588,12 @@ class wps_rewriteLogic
         $script = '';
         if (isset($post) && !empty($post->ID)) {
 
-            $realUrl = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+            // (v7.10.04) SECURITY: $_SERVER['REQUEST_URI'] is attacker-influenced and is interpolated
+            // into a JS string + a form body below. rawurlencode() makes it inert in the JS-string
+            // context (no quotes/backslashes/newlines survive) AND correct as the realUrl form value
+            // (a raw ?/& in the URI would otherwise corrupt the POST body). The handler urldecodes it
+            // back, so behaviour is unchanged. Closes the reflected-XSS sink.
+            $realUrl = rawurlencode((string) ($_SERVER['HTTP_HOST'] ?? '') . (string) ($_SERVER['REQUEST_URI'] ?? ''));
 
             // TODO: Issues if DelayJS is disabled
             $script = <<<SCRIPT
@@ -3356,14 +3363,18 @@ SCRIPT;
             return $fullTag;
         }
 
-        if (strpos($fullTag, 'type=') !== false) {
+        // Decide the branch from the OPENING tag only — not the whole block. CSS bodies routinely
+        // contain "type=" (e.g. input[type=checkbox]), which would false-positive a strpos($fullTag,...)
+        // and route a type-less <style> into the text/css regex below, which then matches nothing and
+        // leaves the block undeferred.
+        if (preg_match('/<style\b[^>]*\btype\s*=/i', $fullTag)) {
             // Define the regular expression pattern
             $pattern = '/<style(\s*[^>]*)\s+type=("|\')text\/css("|\')([^>]*)>/i';
 
             // Replace the type attribute in style tags
             $fullTag = preg_replace($pattern, '<style$1 type=\'' . $lazyCss . '\'$4>', $fullTag);
         } else {
-            $fullTag = str_replace('<style', '<style type="' . $lazyCss . '"', $fullTag);
+            $fullTag = preg_replace('/<style\b/i', '<style type="' . $lazyCss . '"', $fullTag, 1);
         }
 
         return $fullTag;
@@ -6257,6 +6268,36 @@ SCRIPT;
                             $fallbackTag
                         );
                     }
+
+                    // (v7.10.04) HARD GUARANTEE — the fallback <img>'s OWN src/data-src is NEVER a
+                    // transform URL. The naturalize pass above is GATED on the picture-natural fleet
+                    // flag; if that's off (or a rung slips through) the <img> could keep a
+                    // /q:i.../u: transform that needs the proxy + Accept-negotiation to resolve a
+                    // decodable format. The <img> is the TERMINAL fallback for browsers that support
+                    // neither AVIF nor WebP (and the no-JS path the onerror can't cover), so it must be
+                    // a clean raster the browser decodes by EXTENSION — no proxy, no Accept dependency,
+                    // no JS. Rewrite the <img>'s src AND data-src to the clean original ($image_source,
+                    // the same verified URL already used for data-wpc-fb) whenever they're still a
+                    // transform. This also neutralises the lazy loader: optimizer.js SetupNewApiURL only
+                    // mutates wp:/w:/r:/e: tokens, so a clean raster URL passes through it untouched.
+                    // Scoped to the <img>'s own src/data-src ONLY — the typed <source>s (AVIF/WebP for
+                    // capable browsers) are separate vars and untouched; a webp-origin keeps its own
+                    // extension (no raster exists → accepted). A WPC transform URL always embeds the
+                    // origin as ".../u:<origin>", so that substring is the reliable detector.
+                    if (!empty($image_source) && stripos((string) $image_source, '/u:') === false) {
+                        $wpc_fb_clean = preg_replace('/\?.*$/', '', (string) $image_source);
+                        $fallbackTag  = preg_replace_callback(
+                            '/\s(src|data-src)="([^"]*)"/i',
+                            function ($m) use ($wpc_fb_clean) {
+                                if (stripos($m[2], '/u:') !== false) { // transform/proxy URL → clean raster
+                                    return ' ' . $m[1] . '="' . esc_url($wpc_fb_clean) . '"';
+                                }
+                                return $m[0]; // already clean → leave as-is
+                            },
+                            $fallbackTag
+                        );
+                    }
+
                     $build_image_tag = '<picture class="wpc-picture">'
                         . $avifSource
                         . '<source' . $sourceSrcset . $sourceSizes . ' type="image/webp">'
@@ -6266,12 +6307,17 @@ SCRIPT;
             }
         }
 
-        if (!empty($_GET['dbgAjaxEnd'])) {
-            return print_r([$_POST, $_GET, wp_doing_ajax(), self::$isAjax, $image[0]], true);
+        // (v7.10.04) SECURITY — same class as CVE-2026-9066: these debug branches dumped raw
+        // $_GET/$_POST (and internal markup) straight into the HTML buffer, so ?dbgAjaxEnd=1&x=<script>
+        // reflected unescaped = a reflected XSS. Gate behind an admin session (debug only, never a
+        // public query string) AND esc_html() the dump so it's inert even for an admin who clicks a
+        // crafted link. Output is meant to be READ as text, so escaping is the correct behaviour.
+        if (!empty($_GET['dbgAjaxEnd']) && function_exists('current_user_can') && current_user_can('manage_options')) {
+            return esc_html(print_r([$_POST, $_GET, wp_doing_ajax(), self::$isAjax, $image[0]], true));
         }
 
-        if (!empty($_GET['dbg_buildimg'])) {
-            return print_r([$original_img_tag['original_tags'], $original_img_tag['additional_tags'], str_replace('<img', 'mgi', $build_image_tag)], true);
+        if (!empty($_GET['dbg_buildimg']) && function_exists('current_user_can') && current_user_can('manage_options')) {
+            return esc_html(print_r([$original_img_tag['original_tags'], $original_img_tag['additional_tags'], str_replace('<img', 'mgi', $build_image_tag)], true));
         }
 
         if (self::$isAjax) {

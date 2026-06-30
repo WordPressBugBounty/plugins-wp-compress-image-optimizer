@@ -7835,7 +7835,7 @@ class wps_local_compress
                             $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
 
                             if ($output == 'json') {
-                                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID, 'url' => $downloadImage]);
+                                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'imageID' => $imageID, 'url' => $downloadImage]); // (v7.10.04) SECURITY: removed api_key from error output
                             }
 
                             return false;
@@ -8245,7 +8245,7 @@ class wps_local_compress
                             $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
 
                             if ($output == 'json') {
-                                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID, 'url' => $downloadImage]);
+                                wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'imageID' => $imageID, 'url' => $downloadImage]); // (v7.10.04) SECURITY: removed api_key from error output
                             }
 
                             return false;
@@ -8398,7 +8398,7 @@ class wps_local_compress
             } else {
                 $this->writeLog('Ended Image ID - failed to get backup ' . $imageID);
                 if ($output == 'json') {
-                    wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID]);
+                    wp_send_json_error(['msg' => 'failed-to-get-backup', 'apiUrl' => self::$apiURL, 'imageID' => $imageID]); // (v7.10.04) SECURITY: removed api_key from error output
                 }
             }
 

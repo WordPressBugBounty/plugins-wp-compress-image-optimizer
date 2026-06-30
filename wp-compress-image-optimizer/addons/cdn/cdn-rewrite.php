@@ -979,6 +979,40 @@ class wps_cdn_rewrite
         return false;
     }
 
+    /**
+     * A stylesheet/script whose asset lives ENTIRELY in the query string — the URL path carries
+     * no .css/.js (e.g. the Sonaar/Iron theme's "https://site/?load=custom-style.css&ver=123", or
+     * any "/?load=…", "/styles?file=….css" dynamic endpoint). These are PHP-generated, NOT static
+     * files: CDN-rewriting them strips the query + points at the zone root, so the browser fetches
+     * HTML instead of CSS/JS and the styling/scripts silently vanish. They must stay on origin.
+     *
+     * Distinguishes a real versioned asset ("/style.css?ver=1" → path HAS .css → fine to rewrite)
+     * from a query-driven one ("/?load=style.css" → path has no .css → keep on origin).
+     *
+     * @param string $link
+     * @return bool  true = dynamic query-driven asset, do NOT CDN-rewrite
+     */
+    public static function is_dynamic_query_asset($link)
+    {
+        if (empty($link) || !is_string($link)) {
+            return false;
+        }
+        $hasCss = stripos($link, '.css') !== false;
+        $hasJs  = stripos($link, '.js') !== false;
+        if (!$hasCss && !$hasJs) {
+            return false; // not a css/js url — unaffected
+        }
+        $path = (string) (function_exists('wp_parse_url')
+            ? wp_parse_url($link, PHP_URL_PATH)
+            : parse_url($link, PHP_URL_PATH));
+        // Real static asset: the .css/.js is in the PATH (a trailing ?ver= query is fine).
+        if (($hasCss && stripos($path, '.css') !== false) || ($hasJs && stripos($path, '.js') !== false)) {
+            return false;
+        }
+        // .css/.js appears ONLY in the query string → dynamic endpoint → leave on origin.
+        return true;
+    }
+
     public static function is_excluded_link($link)
     {
         /**
@@ -986,6 +1020,14 @@ class wps_cdn_rewrite
          */
         if (empty($link)) {
             return false;
+        }
+
+        // (v7.10.04) Theme/plugin dynamic CSS/JS served from a query string (path has no .css/.js,
+        // e.g. Sonaar/Iron "/?load=custom-style.css&ver=…") is excluded from the CDN — rewriting it
+        // strips the query / points at the zone root → it returns HTML, not the asset, so styles or
+        // scripts silently disappear. Keep on origin. (Fixes gentiana.cz "bg shows then removes".)
+        if (self::is_dynamic_query_asset($link)) {
+            return true;
         }
 
         if (strpos($link, '.css') !== false || strpos($link, '.js') !== false) {
@@ -3430,12 +3472,28 @@ class wps_cdn_rewrite
             }
         }
 
-        if (!empty($_GET['test_zone'])) {
-            if ($_GET['test_zone'] == 'cdn-rage4') {
-                self::$zone_test = 1;
-                self::$zone_name = $_GET['server'] . '.zapwp.net/key:' . self::$options['api_key'];
+        // (v7.10.04) SECURITY — CVE-2026-9066 (Reflected XSS; reported by Lubin Regnault via
+        // WPScan/Automattic). test_zone + server flow into self::$zone_name, which is emitted
+        // into asset URLs (<script src>, <link href>, dns-prefetch, the wpcScriptRegistry JSON).
+        // Unvalidated, an input like test_zone=attacker.example.com%23 turned the appended
+        // ".wpmediacompress.com/key:..." into a URL fragment, pointing asset loads at the
+        // attacker origin → the loader fetched + executed attacker JS in the visitor's session.
+        // Both params are zone SUBDOMAIN LABELS, so the fix is two layers:
+        //   (1) require an admin session — this is a debug/test knob, never a public query string;
+        //   (2) accept ONLY a strict single-label allowlist [a-z0-9-] (no . # / ? : % " < > space),
+        //       which makes the fragment/path/attribute-breakout injection impossible.
+        // Anything else is ignored and self::$zone_name keeps its provisioned value. Fails closed.
+        if (!empty($_GET['test_zone'])
+            && function_exists('current_user_can') && current_user_can('manage_options')
+            && preg_match('/^[a-z0-9\-]+$/iD', (string) $_GET['test_zone'])) { // D: $ = absolute end (no trailing-newline bypass)
+            if ($_GET['test_zone'] === 'cdn-rage4') {
+                $wpc_test_server = isset($_GET['server']) ? (string) $_GET['server'] : '';
+                if (preg_match('/^[a-z0-9\-]+$/iD', $wpc_test_server)) {
+                    self::$zone_test = 1;
+                    self::$zone_name = $wpc_test_server . '.zapwp.net/key:' . self::$options['api_key'];
+                }
             } else {
-                self::$zone_name = $_GET['test_zone'] . '.wpmediacompress.com/key:' . self::$options['api_key'];
+                self::$zone_name = (string) $_GET['test_zone'] . '.wpmediacompress.com/key:' . self::$options['api_key'];
             }
         }
 
@@ -4477,7 +4535,10 @@ class wps_cdn_rewrite
     public function cdnRewriter($html)
     {
 
-        if (!empty($_GET['forceCritical'])) {
+        // (v7.10.04) SECURITY: admin-gate this debug branch. Ungated, ?forceCritical=1 replaced the
+        // whole page with a print_r dump (url-key/permalink disclosure) and fired an API call for ANY
+        // visitor. Debug only — never a public query string.
+        if (!empty($_GET['forceCritical']) && function_exists('current_user_can') && current_user_can('manage_options')) {
             $urlKey = new wps_ic_url_key();
             $requests = new wps_ic_requests();
             $postID = get_queried_object_id();
@@ -5213,8 +5274,6 @@ class wps_cdn_rewrite
                 $fonts = new wps_ic_fonts();
                 $html = $fonts->replaceFrontend($html);
             } else if (self::$settings['replace-fonts'] == 'bunny') {
-                // Bunny Fonts is a GDPR-compliant drop-in replacement for Google Fonts
-                $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
                 // Bunny serves font files at different paths than gstatic — a bare domain swap of
                 // font-file URLs (fonts.gstatic.com/s/...) produces 404s. Remove those <link> tags
                 // first, then swap the bare hostname on any remaining preconnect-only references.

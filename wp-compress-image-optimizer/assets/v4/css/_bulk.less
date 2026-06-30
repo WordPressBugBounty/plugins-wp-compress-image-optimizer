@@ -1,0 +1,3946 @@
+// ─── Bulk Compress — v7.02 rolling-tally surface ─────────────────────────
+//
+// Server-side wpc_bulk_v2_drain chain dispatches Phase A POSTs. Heartbeat
+// poller (bulkCompressProgressPoll in media-library-bulk.js / bulkCompressV2Poll
+// in check-bulk-running.js) reads ic_local_variants + wpc_v2_pending_$id to
+// build active/completed arrays. WPCBulk (bulk-ui.js) renders the rows below.
+//
+// Markup lives at templates/admin/bulk.php under .wpc-bulk-v2-surface, hidden
+// by default (style="display: none;") and revealed by renderTally() on first
+// tick so the legacy v1 driver doesn't see empty rows.
+
+.wpc-bulk-v2-surface {
+  margin-top: 20px;
+  position: relative;
+}
+
+// v7.03 — Two-view machine inside .wpc-bulk-v2-surface (processing /
+// completed). compressCompleted() swaps `is-active` between them. Same
+// pattern as the restore 3-view machine.
+.wpc-bulk-view {
+  display: none;
+}
+.wpc-bulk-view.is-active {
+  display: block;
+  // v7.03.2 (2026-05-25) — Removed opacity 0→1 fade for the same reason as
+  // .wpc-bulk-surface-enter: this fired on every render of the active view
+  // (page load + when JS revealed the surface) and held content at opacity 0
+  // for ~300 ms, reading as a "blank middle" between skeleton and content.
+  // Slide-up only now — content is on-screen from frame 1.
+  animation: wpcBulkViewIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcBulkViewIn {
+  from { transform: translateY(8px); }
+  to   { transform: translateY(0); }
+}
+
+// v7.03 — Soft transition when the v2 surface first appears (gated on
+// first-variant arrival in bulk-ui.js renderTally). Avoids a hard snap
+// from the preparing skeleton.
+//
+// v7.03 fix (2026-05-25) — Removed the opacity: 0 → 1 fade because it
+// left the surface BLANK for ~300 ms while prep was already hidden,
+// which read as a "blank middle page" between skeleton and running view.
+// Slide-up only now: content is fully visible on the first frame so the
+// transition reads as motion, not a gap.
+.wpc-bulk-surface-enter {
+  animation: wpcBulkSurfaceIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcBulkSurfaceIn {
+  from { transform: translateY(10px); }
+  to   { transform: translateY(0); }
+}
+
+// Reciprocal fade-out for the preparing skeleton.
+.wpc-bulk-prep-exit {
+  animation: wpcBulkPrepOut 0.38s cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: none;
+}
+@keyframes wpcBulkPrepOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-12px) scale(0.98); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  v7.03 — HERO CARD (per-image ML treatment at the top of bulk)
+//
+//  Mirrors the ML compressed card pattern (.wpc-ml-card--compressed). One
+//  hero image at a time — rotates to whichever image just received a
+//  variant. Big "X% Saved" headline counts up; variant count chip uses
+//  the same coloured letters as the ML inline chip; format chips land
+//  in the headline as variants arrive (relocated from the summary card).
+//
+//  Layout: thumb (160×110 desktop) | body. Stacks at ≤768.
+// ═══════════════════════════════════════════════════════════════════════
+
+.wpc-bulk-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: @color-white;
+  border-radius: @radius-card;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  padding: 22px 26px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  // Soft mesh decoration in the corners
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 100% 0%, fade(@color-primary, 5%), transparent 55%),
+      radial-gradient(circle at 0% 100%, fade(@color-gradient-end, 3%), transparent 40%);
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 32px -8px rgba(15, 23, 42, 0.14), 0 4px 8px -2px rgba(15, 23, 42, 0.06);
+  }
+}
+
+// Entrance — spring slide-up on first reveal
+.wpc-bulk-hero-enter {
+  animation: wpcBulkHeroIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcBulkHeroIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+// Image-change pulse — subtle indigo wash when the hero rotates
+.wpc-bulk-hero-pulse {
+  animation: wpcBulkHeroPulse 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcBulkHeroPulse {
+  0%   { box-shadow: @shadow-card, 0 0 0 0 rgba(99, 102, 241, 0); }
+  35%  { box-shadow: @shadow-card, 0 0 0 6px rgba(99, 102, 241, 0.12); }
+  100% { box-shadow: @shadow-card, 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+// ─── Thumb ──────────────────────────────────────────────────────────────
+
+.wpc-bulk-hero-thumb-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 160px;
+  height: 110px;
+  border-radius: @radius-md;
+  overflow: hidden;
+  background: linear-gradient(135deg, @color-bg-frost, @color-ice);
+  box-shadow: inset 0 0 0 1px @color-border, 0 6px 16px -4px rgba(15, 23, 42, 0.16);
+  z-index: 1;
+}
+
+.wpc-bulk-hero-thumb {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scale(1);
+}
+
+.wpc-bulk-hero-thumb.is-loading {
+  opacity: 0;
+  transform: scale(1.06);
+}
+
+// Diagonal glint sweep — fires once on hero change (CSS-only) so the new
+// thumb feels like it just "arrived" rather than swapping in dead.
+.wpc-bulk-hero-thumb-glint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.6) 50%, transparent 65%);
+  background-size: 250% 250%;
+  background-position: 200% 0;
+  opacity: 0;
+}
+.wpc-bulk-hero-pulse .wpc-bulk-hero-thumb-glint {
+  animation: wpcBulkHeroGlint 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes wpcBulkHeroGlint {
+  0%   { background-position: 200% 0; opacity: 0; }
+  40%  { opacity: 1; }
+  100% { background-position: -150% 0; opacity: 0; }
+}
+
+// ─── Body ───────────────────────────────────────────────────────────────
+
+.wpc-bulk-hero-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1;
+}
+
+// v7.04.68 — FINAL hero order (mirrors restore card structure):
+//   1. status-row ("• OPTIMIZING") — TOP
+//   2. headline (% Saved + inline delta chip) — MIDDLE
+//   3. meta (filename) — BELOW
+// CSS order trick keeps markup readable while the visual stack matches
+// what restore shows (• RESTORING / filename pattern).
+.wpc-bulk-hero-body {
+  justify-content: center;
+}
+.wpc-bulk-hero-body .wpc-bulk-hero-status-row      { order: 1; }
+.wpc-bulk-hero-body .wpc-bulk-hero-headline        { order: 2; }
+.wpc-bulk-hero-body .wpc-bulk-hero-meta            { order: 3; }
+.wpc-bulk-hero-body .wpc-bulk-hero-optimizing-row  { order: 4; }  // (hidden)
+
+// v7.04.68 — "• OPTIMIZING" status row. Same visual treatment as the
+// restore card's "• RESTORING" label so the two flows feel unified.
+.wpc-bulk-hero-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+}
+.wpc-bulk-hero-status-text {
+  font-family: @font-semibold;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: @color-blue-vivid;
+}
+
+// Filename in the new "below savings" position — smaller, secondary weight
+// so it doesn't compete with the big % headline above it.
+.wpc-bulk-hero-meta .wpc-bulk-hero-filename {
+  font-size: 13px;
+  color: @color-text-secondary;
+}
+
+// v7.04.68 — Optimizing chip removed from the hero per user direction.
+// The hero already signals "active" via the pulsing live-dot in the
+// filename row and the hero's own pulse animations — the duplicate
+// chip was visual noise. Keep the markup in case we want it back, but
+// hide it via CSS.
+.wpc-bulk-hero-optimizing-row { display: none !important; }
+
+// Old slot — fully hidden now (template uses inline display:none too).
+.wpc-bulk-hero-variants-chip { display: none !important; }
+
+// v7.04.68 — Delta chip vertical alignment with the % headline. Iterated
+// per user feedback: -4 too high → -2 OK → 0 sits naturally at the
+// headline's optical center. Settled at margin-top: 0 (was -2, lowered 2px).
+.wpc-bulk-hero-headline .wpc-bulk-delta-chip {
+  margin-top: 0;
+  align-self: center;
+}
+
+.wpc-bulk-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wpc-bulk-hero-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: @color-blue-vivid;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 fade(@color-blue-vivid, 50%);
+  animation: wpcBulkHeroLiveDot 1.6s ease-in-out infinite;
+}
+@keyframes wpcBulkHeroLiveDot {
+  0%, 100% { box-shadow: 0 0 0 0 fade(@color-blue-vivid, 50%); }
+  70%      { box-shadow: 0 0 0 6px fade(@color-blue-vivid, 0%); }
+}
+
+.wpc-bulk-hero-filename {
+  font-family: @font-semibold;
+  font-size: 13px;
+  color: @color-text-secondary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 0;
+}
+.wpc-bulk-hero-filename.is-changing {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.wpc-bulk-hero-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  position: relative;  // so the delta chip can anchor inline next to the %
+}
+
+.wpc-bulk-hero-savings {
+  font-family: @font-bold;
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: @color-text-heading;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpc-bulk-hero-saved-label {
+  font-family: @font-regular;
+  font-size: 18px;
+  color: @color-text-secondary;
+  margin-left: 2px;
+}
+
+// Variant count chip — same vocabulary as ML inline chip
+// (media_library_live.class.php:909, colors match exactly).
+// v7.04.68 — Hero variants chip turned into an EMPTY SLOT for the rising
+// delta-chip ("+ AVIF Original") to land in. All static content hidden;
+// the slot is reserved space (min-height) so the layout doesn't jump when
+// delta chips appear and disappear. JS host changed to this element so
+// the "+ FMT Size" chip animates inside this slot instead of next to %.
+.wpc-bulk-hero-variants-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  // Reserve vertical space so the card height stays stable between chips.
+  min-height: 22px;
+  // Slot has no own background — it's purely a positioning anchor.
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+// Hide every static span inside the variants-chip — the slot is reserved
+// for the rising delta-chip only now.
+.wpc-vc-total,
+.wpc-vc-sep,
+.wpc-vc-jpeg,
+.wpc-vc-webp,
+.wpc-vc-avif { display: none !important; }
+
+// When the delta-chip lands inside this slot, drop the inherited left
+// margin (the chip's default was 12px to space it from the % Saved label
+// — not needed when it's the only thing in the slot).
+.wpc-bulk-hero-variants-chip .wpc-bulk-delta-chip {
+  margin-left: 0;
+}
+
+// Pulse — per-format letter bumps when its count increments.
+.wpc-vc-bump {
+  animation: wpcVcBump 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes wpcVcBump {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+// Responsive — stack at ≤768
+@media screen and (max-width: 768px) {
+  .wpc-bulk-hero {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px;
+    gap: 18px;
+  }
+  .wpc-bulk-hero-thumb-wrap {
+    width: 100%;
+    height: 180px;
+  }
+  .wpc-bulk-hero-savings { font-size: 30px; }
+  .wpc-bulk-hero-saved-label { font-size: 16px; }
+}
+@media screen and (max-width: 480px) {
+  .wpc-bulk-hero { padding: 16px; gap: 14px; }
+  .wpc-bulk-hero-thumb-wrap { height: 160px; }
+  .wpc-bulk-hero-savings { font-size: 26px; }
+}
+
+// v7.03 — "+ AVIF Scaled" chip landing in the summary card.
+// Mirrors the ML per-image card UX so the bulk top card uses the same
+// chip vocabulary. JS in bulk-ui.js queues + paces so a burst of 8+
+// variants doesn't strobe — each chip gets ≥0.75 s of standalone time.
+.wpc-bulk-summary-status { position: relative; }
+
+// Pixel-identical to the ML per-image card chip
+// (assets/css/admin.media-library.less:704). Same shape, same colors, same
+// backdrop-blur, same plus/fmt/size composition. Vocabulary stays consistent
+// plugin-wide so users feel one product, not two.
+.wpc-bulk-delta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(34, 183, 58, 0.28);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-family: @font-semibold;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: wpcBulkDeltaChipIn 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center;
+}
+
+.wpc-bulk-delta-chip .wpc-delta-plus {
+  display: inline-block;
+  font-family: @font-bold;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1a9c30; // default (WebP) — overridden per format below
+  margin-right: -2px;
+  transform: translateY(-0.5px);
+  background: transparent;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+}
+
+.wpc-bulk-delta-chip .wpc-delta-fmt {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(34, 183, 58, 0.13);
+  color: #1a9c30;
+  font-family: @font-bold;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.45;
+}
+
+.wpc-bulk-delta-chip .wpc-delta-size {
+  font-family: @font-semibold;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1;
+}
+
+// Format accents — mirror ML card chip exactly (AVIF blue, WebP green,
+// JPEG slate, PNG purple). NOTE: these differ from the modal-table
+// badge palette (where AVIF is amber). Chip uses card-style colors,
+// table uses modal-style. Both are intentional.
+.wpc-bulk-delta-chip.is-avif { border-color: rgba(92, 177, 255, 0.32); }
+.wpc-bulk-delta-chip.is-avif .wpc-delta-fmt { background: rgba(92, 177, 255, 0.14); color: #1376d1; }
+.wpc-bulk-delta-chip.is-avif .wpc-delta-plus { color: #1376d1; }
+
+.wpc-bulk-delta-chip.is-webp { border-color: rgba(34, 183, 58, 0.32); }
+.wpc-bulk-delta-chip.is-webp .wpc-delta-fmt { background: rgba(34, 183, 58, 0.14); color: #1a9c30; }
+.wpc-bulk-delta-chip.is-webp .wpc-delta-plus { color: #1a9c30; }
+
+.wpc-bulk-delta-chip.is-jpeg { border-color: rgba(148, 163, 184, 0.4); }
+.wpc-bulk-delta-chip.is-jpeg .wpc-delta-fmt { background: rgba(148, 163, 184, 0.16); color: #475569; }
+.wpc-bulk-delta-chip.is-jpeg .wpc-delta-plus { color: #475569; }
+
+.wpc-bulk-delta-chip.is-png { border-color: rgba(168, 85, 247, 0.32); }
+.wpc-bulk-delta-chip.is-png .wpc-delta-fmt { background: rgba(168, 85, 247, 0.14); color: #7e22ce; }
+.wpc-bulk-delta-chip.is-png .wpc-delta-plus { color: #7e22ce; }
+
+.wpc-bulk-delta-chip.is-fading {
+  animation: wpcBulkDeltaChipOut 0.6s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+// Mirrors ML wpcChipSlideIn/Out — straight up/down motion, no scale (the
+// scale variant looked diagonal because the chip is inside a left-aligned
+// flex container; pure translate Y reads cleanly).
+@keyframes wpcBulkDeltaChipIn {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes wpcBulkDeltaChipOut {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+
+// v7.03 — Stop button "Stopping…" state. JS adds .is-stopping on click so
+// the button stays visible (instead of being hidden) and reads as
+// disabled-but-active until the reload commits. Spinner replaces icon.
+.wpc-action-btn--stop.is-stopping,
+.wpc-action-btn--pause.is-stopping {
+  pointer-events: none;
+  opacity: 0.78;
+
+  .wpc-action-btn-icon svg { display: none; }
+  .wpc-action-btn-icon::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: wpcSpin 0.8s linear infinite;
+  }
+}
+
+// v7.03 — Transient "Stopping…" card shown for ~300–1500 ms between Stop
+// click and page reload. Replaces the previous flash-stale-splash UX.
+.wpc-bulk-stopping {
+  background: @color-white;
+  border-radius: @radius-card;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  padding: 80px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: wpcBulkSurfaceIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.wpc-bulk-stopping-spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid @color-border;
+  border-top-color: @color-primary;
+  border-right-color: @color-primary;
+  animation: wpcSpin 0.9s linear infinite;
+  margin-bottom: 8px;
+}
+
+.wpc-bulk-stopping-title {
+  font-family: @font-bold;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: @color-text-heading;
+}
+
+.wpc-bulk-stopping-sub {
+  font-family: @font-regular;
+  font-size: 14px;
+  color: @color-text-secondary;
+}
+
+// ─── Summary card (mirrors restore card layout) ──────────────────────────
+
+.wpc-bulk-summary-card {
+  background: @color-white;
+  border-radius: @radius-card;
+  box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
+  border: 1px solid @color-border;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.wpc-bulk-summary-body {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 24px 28px;
+}
+
+.wpc-bulk-summary-status {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  // v7.04.68 — Explicitly left-align so the "Now Processing" label + thumb
+  // stack + filename sit directly below the "Optimizing" chip rather than
+  // drifting to the center of the flex track.
+  align-items: flex-start;
+  text-align: left;
+  gap: 12px;
+}
+
+.wpc-bulk-now-processing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;                       // fill the status column so children left-anchor
+}
+
+// Defensive: ensure children of the now-processing row are also left-justified.
+.wpc-bulk-now-processing-row {
+  justify-content: flex-start !important;
+}
+.wpc-bulk-now-processing-label {
+  text-align: left;
+}
+.wpc-bulk-active-titles {
+  text-align: left;
+}
+
+.wpc-bulk-now-processing-label {
+  font-family: @font-semibold;
+  font-size: 10px;
+  color: @color-text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.wpc-bulk-active-titles {
+  font-family: @font-semibold;
+  font-size: 16px;
+  line-height: 1.4;
+  color: @color-text-dark;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.wpc-bulk-summary-stats {
+  flex-shrink: 0;
+  display: flex;
+  gap: 28px;
+  padding-left: 24px;
+  border-left: 1px solid @color-border;
+}
+
+.wpc-stat-tile {
+  text-align: right;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+
+  .wpc-stat-value {
+    font-family: @font-bold;
+    font-size: 24px;
+    line-height: 1;
+    color: @color-text-heading;
+    letter-spacing: -0.4px;
+  }
+
+  .wpc-stat-label {
+    font-family: @font-semibold;
+    font-size: 10px;
+    color: @color-text-secondary;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+}
+
+.wpc-bulk-summary-progress-track {
+  position: relative;
+  height: 8px;
+  background: @color-border;
+  overflow: hidden;
+}
+
+.wpc-bulk-summary-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, @color-gradient-start, @color-gradient-mid, @color-gradient-end);
+  transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 8px -1px fade(@color-gradient-mid, 50%);
+}
+
+// ─── Optimizing chip with pulsing dot (signals activity) ─────────────────
+
+.wpc-chip-active {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+
+  .wpc-chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: @color-blue-vivid;
+    animation: wpcChipPulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes wpcChipPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
+// ─── Completion list (polished to match restore card aesthetic) ──────────
+
+.wpc-bulk-completion-header {
+  font-family: @font-semibold;
+  font-size: 10px;
+  color: @color-text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 4px 4px 10px;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  v7.03 — Variant feed table — mirrors the ML "Optimization Results" modal
+//  (assets/css/admin.media-library.less .wpc-format-badge / .wpc-bar-fill).
+//
+//  Same visual vocabulary across the plugin: mint JPEG · lavender WEBP ·
+//  amber AVIF · pink PNG; purple→indigo savings bar that animates from 0 to
+//  target width on row insert. Columns: Image+Name | Format | Original |
+//  Optimized | Savings (% + bar). 5-column CSS grid so rows can use
+//  transform-based entrance animations without table layout breaking.
+// ═══════════════════════════════════════════════════════════════════════
+
+.wpc-bulk-feed-table {
+  background: @color-white;
+  border-radius: @radius-card;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  overflow: hidden;
+}
+
+.wpc-bulk-feed-thead,
+.wpc-bulk-completion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) 90px minmax(80px, 1fr) minmax(80px, 1fr) minmax(160px, 1.4fr);
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px;
+}
+
+.wpc-bulk-feed-thead {
+  background: #f8fafc;
+  border-bottom: 1px solid #eef1f5;
+  font-family: @font-semibold;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: @color-text-secondary;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+
+  > span:last-child {
+    color: #4f46e5;
+    text-align: right;
+  }
+  > span:nth-child(3),
+  > span:nth-child(4) {
+    text-align: right;
+  }
+}
+
+.wpc-bulk-completion-list {
+  // v7.03 — Mask wrapper for the scroll-up cascade. Inner div .wpc-bulk-feed-inner
+  // is the transform target the JS slides on each row insert. overflow:hidden
+  // (was overflow-y:auto) so the off-screen prepended row + the fading last
+  // row don't show outside the mask.
+  position: relative;
+  max-height: 440px;
+  overflow: hidden;
+  background: @color-white;
+}
+
+.wpc-bulk-feed-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+// Soft bottom fade — only shows when there are 2 OR MORE rows so the
+// single first row doesn't look half-erased. The :has() selector keeps
+// this gated by row count, no JS toggle needed. Modern browsers only
+// (Chrome 105+, Firefox 121+, Safari 15.4+; WP admin supports these).
+// v7.04.68 — Was always-on; user reported the fade looked wrong on the
+// first-restored row when there was nothing below it to fade toward.
+.wpc-bulk-completion-list:has(.wpc-bulk-feed-inner > :nth-child(2))::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  pointer-events: none;
+  background: linear-gradient(to top, @color-white 0%, fade(@color-white, 70%) 50%, transparent 100%);
+  z-index: 2;
+}
+
+// Empty-state placeholder centred over the mask
+.wpc-bulk-feed-inner:empty::before {
+  content: 'Encoding variants — first results in ~5 seconds…';
+  display: block;
+  padding: 32px 16px;
+  text-align: center;
+  color: @color-text-light;
+  font-family: @font-regular;
+  font-size: 13px;
+}
+
+// v7.03 — Empty-state placeholder moved onto .wpc-bulk-feed-inner so the
+// new mask wrapper doesn't double-render it. See .wpc-bulk-feed-inner:empty
+// definition above.
+
+.wpc-bulk-completion-row {
+  font-family: @font-regular;
+  font-size: 13px;
+  color: @color-text-body;
+  border-bottom: 1px solid #eef1f5;
+  transition: background-color 0.18s ease;
+  position: relative;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: #fafbfc; }
+}
+
+// ─── Restore feed variant ───────────────────────────────────────────────────
+// v7.04.68 — Restore feed reuses the compress feed table styling but with a
+// 4-column grid (Image | Source | Restored | Status) instead of 5. Override
+// the grid-template-columns on the restore variant so headers + rows align.
+
+.wpc-bulk-feed-thead--restore,
+.wpc-bulk-completion-row--restore {
+  grid-template-columns: minmax(0, 2.4fr) 110px minmax(80px, 1fr) 140px;
+}
+
+.wpc-bulk-feed-thead--restore > span:last-child {
+  color: @color-success;
+  text-align: right;
+}
+.wpc-bulk-feed-thead--restore > span:nth-child(3) {
+  text-align: right;
+}
+
+// Filename cell (uses the existing .wpc-bulk-cell-image grid slot). The
+// row template inlines a `.wpc-bulk-cell-image-name` instead of the compress
+// `.wpc-bulk-name` so we can scope ellipsis behavior independently.
+.wpc-bulk-completion-row--restore .wpc-bulk-cell-image-name {
+  font-family: @font-semibold;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.wpc-bulk-completion-row--restore:hover .wpc-bulk-cell-image-name { color: #0f172a; }
+
+// Restored bytes (right-aligned, same treatment as compress's "Optimized").
+.wpc-bulk-completion-row--restore .wpc-bulk-cell-orig {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+// Status column — right-aligned chip.
+.wpc-bulk-completion-row--restore .wpc-bulk-cell-status {
+  display: flex;
+  justify-content: flex-end;
+}
+
+// Source chip — neutral pill with subtle color hint per backup source.
+.wpc-restore-source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: @radius-full;
+  font-family: @font-semibold;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid;
+  line-height: 1.4;
+}
+.wpc-restore-source-chip--cloud {
+  background: @color-ice;
+  color: @color-blue-deep;
+  border-color: @color-border-blue;
+}
+.wpc-restore-source-chip--local {
+  background: @color-bg-frost;
+  color: @color-text-secondary;
+  border-color: @color-border;
+}
+.wpc-restore-source-chip--auto {
+  background: @color-bg-frost;
+  color: @color-text-light;
+  border-color: @color-border;
+}
+
+// Status chip — green check + "Restored" label.
+.wpc-restore-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: @radius-full;
+  background: @color-success-bg;
+  color: @color-success;
+  font-family: @font-semibold;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid fade(@color-success, 30%);
+  white-space: nowrap;
+
+  svg { flex-shrink: 0; }
+}
+
+// Row reveal flash — green wash that fades out 700ms after insert (mirrors
+// compress's is-persist-confirm). Same easing/timing.
+.wpc-bulk-completion-row--restore.is-persist-confirm {
+  background-color: @color-success-bg;
+  transition: background-color 0.7s ease;
+}
+
+// ─── Cells ──────────────────────────────────────────────────────────────
+
+.wpc-bulk-cell-image {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wpc-bulk-thumb {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: @color-bg-frost no-repeat center / cover;
+  box-shadow: inset 0 0 0 1px @color-border, 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  &.is-empty {
+    background-image: linear-gradient(135deg, @color-bg-frost, @color-ice);
+  }
+}
+
+.wpc-bulk-name {
+  font-family: @font-semibold;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  transition: color 0.15s ease;
+}
+
+.wpc-bulk-completion-row:hover .wpc-bulk-name { color: #0f172a; }
+
+.wpc-bulk-size-label {
+  font-size: 11px;
+  color: @color-text-light;
+  font-family: @font-regular;
+  margin-top: 2px;
+}
+
+.wpc-bulk-cell-orig,
+.wpc-bulk-cell-opt {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.wpc-bulk-cell-orig {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.wpc-bulk-cell-opt {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.wpc-bulk-cell-savings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+// ─── Format badges (shared with ML Optimization Results modal) ──────────
+//
+// Duplicated from admin.media-library.less:1497 so the same .wpc-fmt-*
+// classes work here unscoped. Sole source of truth for these palettes is
+// the ML modal — if those change, mirror the change here.
+
+.wpc-bulk-feed-table .wpc-format-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: @font-semibold;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  width: 3.2rem;
+  flex-shrink: 0;
+  transition: transform 0.25s @transition-smooth;
+
+  &.wpc-fmt-jpeg { background: #ecfdf5; color: #059669; box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.2); }
+  &.wpc-fmt-webp { background: #f5f3ff; color: #7c3aed; box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.2); }
+  &.wpc-fmt-avif { background: #fffbeb; color: #d97706; box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.2); }
+  &.wpc-fmt-png  { background: #fce7f3; color: #db2777; box-shadow: inset 0 0 0 1px rgba(219, 39, 119, 0.2); }
+}
+
+// ─── Savings cell (% + bar) ─────────────────────────────────────────────
+
+.wpc-bulk-feed-table .wpc-savings-pct {
+  font-family: @font-bold;
+  font-weight: 700;
+  font-size: 13px;
+  color: #334155;
+  min-width: 38px;
+  text-align: right;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+}
+
+.wpc-bulk-completion-row:hover .wpc-savings-pct { color: #4f46e5; }
+
+// v7.03 — "Optimal" pill for rows where the encoder couldn't improve on
+// source (Unsplash-style images that arrive pre-compressed). Replaces the
+// misleading "0%" + empty bar with an honest "we tried, source already
+// optimal" signal. Neutral slate so the savings column doesn't read as
+// a celebration when nothing was gained.
+.wpc-savings-optimal {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: @color-bg-frost;
+  color: @color-text-secondary;
+  font-family: @font-semibold;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px @color-border;
+}
+
+.wpc-bulk-feed-table .wpc-bar-track {
+  width: 64px;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.wpc-bulk-feed-table .wpc-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, #8b5cf6, #6366f1);
+  border-radius: 9999px;
+  width: 0;
+  transition: width 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+  // Delay matches the row entrance so the bar fills AFTER the row settles
+  transition-delay: calc(var(--row-stagger-index, 0) * 90ms + 0.35s);
+}
+
+// ─── Live-feed scroll-up cascade (v7.03 — replaces stagger) ─────────────
+//
+// New JS pattern: each variant arrives, prepends to .wpc-bulk-feed-inner
+// with opacity 0, then the inner is transform:translateY(-itemH) without
+// transition, then the inner transitions back to 0 — sliding ALL rows up
+// while the new row fades in at top. Last row (if at cap) fades to 0 then
+// is removed. Matches the reference live-feed cascade exactly.
+//
+// The CSS here just provides:
+//   1. is-fresh-{fmt}: per-format tint that fades after 1 s
+//   2. Row base transitions for opacity / background (JS sets target)
+
+.wpc-bulk-completion-row {
+  transition: background 0.8s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.8s ease;
+  position: relative;
+}
+
+// Fresh tint — different background per format, fades out after JS removes
+// the class. Uses the same palette as the chip + format badges so the visual
+// vocabulary stays coherent.
+.wpc-bulk-completion-row.is-fresh-avif { background: rgba(92, 177, 255, 0.08); }
+.wpc-bulk-completion-row.is-fresh-webp { background: rgba(34, 183, 58, 0.08); }
+.wpc-bulk-completion-row.is-fresh-jpeg { background: rgba(148, 163, 184, 0.10); }
+.wpc-bulk-completion-row.is-fresh-png  { background: rgba(168, 85, 247, 0.08); }
+
+// Legacy class kept (was set by older .wpc-bulk-row-flash JS path) — now a
+// no-op so cached older JS that emits it doesn't error. Will be removed
+// once the cascade refactor is settled.
+.wpc-bulk-row-flash { animation: none; }
+
+// ─── Now-processing row: thumb stack + active titles ─────────────────────
+.wpc-bulk-now-processing-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.wpc-bulk-active-thumbs {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+
+  .wpc-bulk-active-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: @radius-md;
+    background: @color-bg-frost no-repeat center / cover;
+    box-shadow: 0 0 0 2px @color-white, inset 0 0 0 1px @color-border;
+    margin-left: -8px;
+    animation: wpcBulkThumbIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:first-child {
+      margin-left: 0;
+    }
+
+    &.is-empty {
+      background-image: linear-gradient(135deg, @color-bg-frost, @color-ice);
+    }
+
+    // Skeleton placeholder shown between batches — gentle shimmer so the
+    // chip never looks abandoned during the loopback gap.
+    &.is-skeleton {
+      background: linear-gradient(90deg, @color-bg-frost 0%, @color-ice 50%, @color-bg-frost 100%);
+      background-size: 200% 100%;
+      animation: wpcBulkSkeletonShimmer 1.4s ease-in-out infinite;
+      box-shadow: 0 0 0 2px @color-white, inset 0 0 0 1px @color-border;
+    }
+
+    // v7.03 — Up-next queue preview. Rendered during the drain gap when
+    // active is empty. Cascading opacity (set inline by JS: 0.92/0.62/0.35)
+    // + indigo inner ring distinguishes "upcoming" from "currently active".
+    // No entrance keyframe — would override the inline cascading opacity.
+    &.is-upnext {
+      box-shadow: 0 0 0 2px @color-white, inset 0 0 0 1.5px rgba(99, 102, 241, 0.55);
+      animation: none;
+      transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+@keyframes wpcBulkThumbIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes wpcBulkSkeletonShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+// ─── v7.02 Lite — pending pill (announce arrived, bytes batch not yet) ────
+//
+// Pending pills are display-state-only rows in the variant feed. The announce
+// endpoint wrote them; the bytes batch hasn't landed yet. Visually they:
+//   • render at slightly reduced opacity so the eye picks "real vs pending"
+//   • show a gentle pulse on the format pill (subtle, not distracting at scale
+//     of 8+ simultaneous pending rows)
+//   • do not have a clickable URL — they're announcements, not files
+// When the bytes batch lands, the JS transitions this row to persisted state
+// by removing .is-pending-announce — the opacity + pulse stop, savings number
+// finalizes, and .is-persist-confirm fires a brief 700ms reassurance flash.
+.wpc-bulk-completion-row.is-pending-announce {
+  opacity: 0.72;
+  transition: opacity 0.4s @transition-smooth;
+
+  .wpc-bulk-row-pill {
+    animation: wpcAnnouncePulse 1.6s ease-in-out infinite;
+  }
+
+  .wpc-bulk-row-savings {
+    color: @color-text-light;
+    font-family: @font-regular;
+  }
+}
+
+// noImprovement variant — encoder confirmed source is already optimal, won't
+// be in any future bytes batch. UI shows this as "source kept" state — no
+// pulse (it's final), neutral pill color, friendly label.
+.wpc-bulk-completion-row.is-no-improvement {
+  .wpc-bulk-row-pill {
+    animation: none;
+    background: @color-bg-frost;
+    color: @color-text-secondary;
+    box-shadow: inset 0 0 0 1px @color-border;
+  }
+  .wpc-bulk-row-savings.is-source-kept {
+    color: @color-text-secondary;
+    font-family: @font-regular;
+    font-size: 12px;
+    font-style: italic;
+  }
+}
+
+// Persist-confirm — fires once when a pending row upgrades to persisted.
+// Brief green-tint background pulse to signal "bytes just landed, this row
+// is now real." 700 ms total, then fades back to base styling.
+.wpc-bulk-completion-row.is-persist-confirm {
+  animation: wpcPersistConfirm 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes wpcAnnouncePulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+@keyframes wpcPersistConfirm {
+  0%   { background: @color-success-bg; }
+  40%  { background: @color-success-bg; }
+  100% { background: transparent; }
+}
+
+// Final reveal — modal-level class applied by WPCBulk.renderFinalReveal.
+.bulk-area-inner.wpc-bulk-done .wpc-bulk-summary-card {
+  border-color: @color-success;
+  transition: border-color 0.4s ease-out;
+}
+
+// ─── Responsive: stack summary card at tablet ────────────────────────────
+
+@media screen and (max-width: 768px) {
+  .wpc-bulk-summary-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .wpc-bulk-summary-stats {
+    padding-left: 0;
+    border-left: none;
+    padding-top: 16px;
+    border-top: 1px solid @color-border;
+    justify-content: space-between;
+  }
+
+  .wpc-stat-tile {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+// ─── Restore Card (v7.02 world-class polish) ─────────────────────────────
+// Emitted by bulkRestoreHtml (classes/ajax.class.php). One card per
+// heartbeat tick. Layout: thumbnail | chips + filename | counter + % badge,
+// gradient progress bar at the bottom.
+
+// World-class restore card v2: no opacity animation (was causing washed-out
+// look due to 1s heartbeat re-rendering mid-fade), bolder visual hierarchy,
+// punchier chips/badges, full-width visible progress bar.
+
+.wpc-restore-card {
+  background: @color-white;
+  border-radius: @radius-card;
+  box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
+  border: 1px solid @color-border;
+  overflow: hidden;
+}
+
+.wpc-restore-card-body {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 28px 32px;
+}
+
+.wpc-restore-thumb {
+  flex-shrink: 0;
+  width: 240px;
+  height: 170px;
+  border-radius: @radius-md;
+  overflow: hidden;
+  background: @color-bg-frost;
+  box-shadow: 0 4px 12px -3px rgba(15, 23, 42, 0.12);
+}
+
+.wpc-restore-thumb-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.wpc-restore-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: @color-text-light;
+  background: @color-bg-frost;
+}
+
+.wpc-restore-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wpc-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wpc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: @radius-pill;
+  font-family: @font-semibold;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.wpc-chip-success {
+  background: #dcfce7;          // stronger mint than @color-success-bg
+  color: #15803d;               // darker green for legibility on stronger bg
+  border: 1px solid #86efac;
+}
+
+.wpc-chip-ghost {
+  background: @color-bg-frost;
+  color: @color-text-body;
+  border: 1px solid @color-border-medium;
+  font-family: @font-regular;
+}
+
+.wpc-restore-filename {
+  font-family: @font-semibold;
+  font-size: 18px;
+  line-height: 1.4;
+  color: @color-text-dark;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.wpc-restore-counter {
+  flex-shrink: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding-left: 16px;
+  border-left: 1px solid @color-border;
+  min-width: 140px;
+
+  .wpc-counter-main {
+    font-family: @font-bold;
+    font-size: 36px;
+    line-height: 1;
+    color: @color-text-heading;
+    margin: 0;
+    letter-spacing: -0.5px;
+
+    .wpc-counter-divider {
+      color: @color-border-medium;
+      margin: 0 4px;
+      font-family: @font-light;
+      font-weight: normal;
+    }
+  }
+
+  .wpc-counter-label {
+    font-family: @font-semibold;
+    font-size: 10px;
+    color: @color-text-secondary;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .wpc-percent-badge {
+    display: inline-block;
+    background: #dbeafe;          // stronger ice
+    color: #1e40af;               // darker navy-blue
+    font-family: @font-semibold;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: @radius-pill;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+  }
+}
+
+.wpc-restore-progress-track {
+  position: relative;
+  height: 8px;
+  background: @color-border;     // visible track (was bg-frost, too pale)
+  overflow: hidden;
+}
+
+.wpc-restore-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, @color-gradient-start, @color-gradient-mid, @color-gradient-end);
+  transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 0 8px -1px fade(@color-gradient-mid, 50%);
+}
+
+// Responsive: stack at tablet and below
+@media screen and (max-width: 768px) {
+  .wpc-restore-card-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .wpc-restore-thumb {
+    width: 100%;
+    height: 180px;
+  }
+
+  .wpc-restore-counter {
+    align-items: flex-start;
+    text-align: left;
+    padding-left: 0;
+    border-left: none;
+    padding-top: 16px;
+    border-top: 1px solid @color-border;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.02 — RESTORE WORLD-CLASS UX (3-view state machine + button polish)
+//  Used by WPCRestore (bulk-ui.js). Three views toggle: preparing /
+//  processing / completed. Field-level updates from heartbeat JSON drive
+//  crossfade thumb + slide filename + ETA + recent strip + progress fill.
+// ═══════════════════════════════════════════════════════════════════════════
+
+@wpc-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+@wpc-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+@wpc-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+.wpc-restore-surface {
+  width: 100%;
+  position: relative;
+}
+
+.wpc-restore-view {
+  display: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.45s @wpc-ease-out-expo, transform 0.45s @wpc-ease-out-expo;
+
+  &.is-active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// ─── Preparing view ─────────────────────────────────────────────────────
+
+.wpc-restore-prep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px 24px;
+}
+
+.wpc-restore-spinner {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: @color-ice;
+  color: @color-blue-vivid;
+  position: relative;
+  animation: wpcPulseRing 2s @wpc-ease-in-out infinite;
+
+  svg {
+    animation: wpcSpin 1.4s linear infinite;
+  }
+}
+
+@keyframes wpcPulseRing {
+  0%   { box-shadow: 0 0 0 0 fade(@color-blue-vivid, 28%); }
+  70%  { box-shadow: 0 0 0 22px fade(@color-blue-vivid, 0%); }
+  100% { box-shadow: 0 0 0 0 fade(@color-blue-vivid, 0%); }
+}
+
+@keyframes wpcSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.wpc-restore-prep-title {
+  font-family: @font-semibold;
+  font-size: 22px;
+  letter-spacing: -0.4px;
+  color: @color-text-dark;
+  margin: 0 0 8px;
+}
+
+.wpc-restore-prep-subtitle {
+  font-family: @font-regular;
+  font-size: 14px;
+  color: @color-text-secondary;
+  margin: 0;
+}
+
+// ─── Processing view (card) ─────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════
+// v7.02 — Restore "Processing" view, world-class redesign
+// ═══════════════════════════════════════════════════════════════════════
+// All selectors below scoped under `.wpc-restore-` so the compress UI is
+// untouched. Motion language: GPU transform+opacity only, ease-out-expo
+// for entry, ~280ms for most micro-interactions, bluePulse for the live
+// dot (already defined in style.less).
+// ───────────────────────────────────────────────────────────────────────
+
+.wpc-restore-view[data-view="processing"] {
+  .wpc-restore-card {
+    background: @color-white;
+    border-radius: @radius-card;
+    box-shadow: 0 8px 28px -10px rgba(15, 23, 42, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06);
+    border: 1px solid @color-border;
+    overflow: hidden;
+  }
+
+  .wpc-restore-card-body {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    column-gap: 28px;
+    padding: 22px 28px 24px;
+  }
+}
+
+// ─── Thumb with breathing halo ─────────────────────────────────────────
+.wpc-restore-thumb-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  overflow: visible;
+}
+
+.wpc-restore-thumb-halo {
+  position: absolute;
+  inset: -4px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, fade(@color-primary, 22%), fade(@color-blue-vivid, 14%));
+  filter: blur(8px);
+  opacity: 0.65;
+  animation: wpcRestoreHaloBreathe 3.2s ease-in-out infinite;
+  z-index: 0;
+}
+
+.wpc-restore-thumb-img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: @color-bg-frost;
+  box-shadow: 0 6px 16px -6px rgba(15, 23, 42, 0.24), inset 0 0 0 1px rgba(255,255,255,0.6);
+  transition: transform 0.6s @wpc-ease-out-expo, opacity 0.45s ease;
+  transform: scale(1.04);
+  opacity: 0;
+
+  &.is-loaded {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes wpcRestoreHaloBreathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.06); }
+}
+
+// ─── Meta column (live status + filename + sub-row) ────────────────────
+// v7.04.68 — Explicitly left-align everything in the meta column so the
+// filename sits directly below the "RESTORING" chip (not centered in the
+// 1fr grid track). The grid's align-items:center vertically centers the
+// column block, but justify-self of children was leaving the filename to
+// follow whatever block-default rules wp-admin imposed.
+.wpc-restore-view[data-view="processing"] .wpc-restore-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;             // left-align children inside the column
+  justify-self: start;                  // pin the column itself to the left edge of its grid track
+  gap: 4px;                             // tighter gap — chip + filename feel like one unit
+  text-align: left;
+}
+
+.wpc-restore-view[data-view="processing"] .wpc-restore-filename {
+  text-align: left;
+  margin-left: 0;
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.wpc-restore-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wpc-restore-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: @color-blue-vivid;
+  box-shadow: 0 0 0 0 fade(@color-blue-vivid, 60%);
+  animation: wpcRestoreLivePulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
+}
+
+@keyframes wpcRestoreLivePulse {
+  0%   { box-shadow: 0 0 0 0   fade(@color-blue-vivid, 55%); transform: scale(1);    }
+  70%  { box-shadow: 0 0 0 8px fade(@color-blue-vivid, 0%);  transform: scale(1.08); }
+  100% { box-shadow: 0 0 0 0   fade(@color-blue-vivid, 0%);  transform: scale(1);    }
+}
+
+.wpc-restore-status-text {
+  font-family: @font-semibold;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: @color-blue-vivid;
+}
+
+.wpc-restore-filename {
+  font-family: @font-semibold;
+  font-size: 18px;
+  line-height: 1.3;
+  color: @color-text-dark;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 0.28s ease, transform 0.28s @wpc-ease-out-expo;
+
+  &.is-animating {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+// v7.04.68 — Restore card simplified per user direction. Hide the file-size
+// + elapsed metarow and the entire ETA / avg-per-image block. The card now
+// reads: thumb · "RESTORING" chip · filename · progress bar. Cleaner, no
+// metrics noise during a restore (originals come back, that's it).
+.wpc-restore-metarow,
+.wpc-restore-eta-block,
+.wpc-restore-bytes {
+  display: none !important;
+}
+
+.wpc-restore-metarow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: @font-regular;
+  font-size: 12px;
+  color: @color-text-secondary;
+  min-height: 16px;
+
+  .wpc-restore-meta-sep {
+    color: @color-border-medium;
+  }
+  .wpc-restore-meta-size,
+  .wpc-restore-meta-elapsed {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ─── Counter column (horizontal "9 of 19" hero stat) ───────────────────
+.wpc-restore-stats {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: center;
+  justify-content: center;
+  text-align: right;
+  padding-right: 0;
+  border-right: none;
+  margin-top: 14px;
+  margin-bottom: 0;
+  // v7.04.68 — Nudge 2px left from the card's right edge per user direction.
+  margin-right: 2px;
+  gap: 0;
+  min-width: 140px;
+}
+
+// Tighten the type so "3 of 5" sits as one visually compact unit and the
+// label hugs the bottom of the counter row.
+.wpc-restore-counter-row {
+  margin-bottom: 0;
+  line-height: 1;            // no extra leading
+  white-space: nowrap;       // keep "3 of 5" on one line even at narrow widths
+}
+.wpc-counter-current,
+.wpc-counter-of,
+.wpc-counter-total {
+  line-height: 1;
+}
+.wpc-restore-counter-label {
+  margin-top: 2px;           // tight to the counter row above (was implicit)
+}
+
+.wpc-restore-counter-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+  margin-bottom: 4px;
+}
+
+.wpc-counter-current {
+  font-family: @font-bold;
+  font-size: 34px;
+  line-height: 1;
+  color: @color-text-heading;
+}
+
+.wpc-counter-of {
+  font-family: @font-regular;
+  font-size: 13px;
+  color: @color-text-light;
+  text-transform: lowercase;
+}
+
+.wpc-counter-total {
+  font-family: @font-semibold;
+  font-size: 18px;
+  line-height: 1;
+  color: @color-text-light;
+}
+
+.wpc-restore-counter-label {
+  font-family: @font-semibold;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: @color-text-light;
+  margin-bottom: 6px;
+}
+
+.wpc-restore-bytes {
+  font-family: @font-semibold;
+  font-size: 12px;
+  color: @color-success;
+  font-variant-numeric: tabular-nums;
+  min-height: 16px;
+}
+
+// ─── ETA column (right-most: "1:30 left + avg") ────────────────────────
+.wpc-restore-eta-block {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 88px;
+}
+
+.wpc-restore-eta-value {
+  font-family: @font-bold;
+  font-size: 22px;
+  line-height: 1;
+  color: @color-text-heading;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+}
+
+.wpc-restore-eta-label {
+  font-family: @font-semibold;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: @color-text-light;
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+
+.wpc-restore-eta-avg {
+  font-family: @font-regular;
+  font-size: 11px;
+  color: @color-text-light;
+  font-variant-numeric: tabular-nums;
+  min-height: 14px;
+}
+
+// ─── Progress bar (gradient + leading-edge shimmer + label rider) ──────
+.wpc-restore-progress-track {
+  position: relative;
+  height: 8px;
+  background: @color-bg-frost;
+  overflow: visible;        // allow label rider to sit ABOVE the track
+}
+
+.wpc-restore-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, @color-gradient-start, @color-gradient-mid, @color-gradient-end);
+  transition: width 0.6s @wpc-ease-in-out;
+  box-shadow: 0 0 12px -2px fade(@color-gradient-mid, 50%);
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;         // clip the shimmer to the filled portion
+}
+
+// Leading-edge sweep — sweeps left→right across the FILLED portion every
+// 2.4s, giving the bar a subtle "in motion" feel during the long restore.
+.wpc-restore-progress-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%);
+  transform: translateX(-100%);
+  animation: wpcRestoreShimmer 2.4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes wpcRestoreShimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(220%); }
+}
+
+// v7.04.68 — Hide the floating "80%" chip per user direction. The progress
+// bar fill itself is enough visual signal; the chip read as noise on top of
+// the cleaner card design. JS keeps writing to data-field="pct" (used by the
+// % count under ETA) so removing the visual presentation here is safe.
+.wpc-restore-progress-label {
+  display: none !important;
+  position: absolute;
+  top: -22px;
+  left: 0%;                         // JS updates `left` to track the fill's leading edge
+  font-family: @font-semibold;
+  font-size: 11px;
+  color: @color-text-light;
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+  background: @color-white;
+  padding: 2px 8px;
+  border-radius: @radius-pill;
+  box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.10);
+  border: 1px solid @color-border;
+  transform: translateX(-50%);      // anchor the label's centre at its `left` point
+  transition: left 0.6s @wpc-ease-in-out;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+// ─── Feed grid (Just restored | Up next) ───────────────────────────────
+.wpc-restore-feed-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 22px;
+  padding: 18px 24px 20px;
+  background: @color-white;
+  border: 1px solid @color-border;
+  border-radius: @radius-card;
+  box-shadow: 0 4px 14px -8px rgba(15, 23, 42, 0.08);
+
+  // On narrow viewports, stack vertically
+  @media screen and (max-width: 900px) {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+.wpc-restore-feed-label {
+  font-family: @font-semibold;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: @color-text-light;
+  margin-bottom: 10px;
+}
+
+.wpc-restore-feed-list,
+.wpc-restore-upnext-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+
+// "Just restored" chip — slide-in-up, then fade by recency
+.wpc-restore-recent-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: @color-success-bg;
+  border: 1px solid fade(@color-success, 30%);
+  border-radius: @radius-pill;
+  font-family: @font-regular;
+  font-size: 12px;
+  color: @color-success;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: wpcRestoreChipIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  transition: opacity 0.5s ease;
+
+  &::before {
+    content: '✓';
+    color: @color-success;
+    font-family: @font-bold;
+    flex-shrink: 0;
+  }
+
+  // Older items fade by position (newest=full opacity, oldest=40%)
+  &:nth-child(2) { opacity: 0.85; }
+  &:nth-child(3) { opacity: 0.65; }
+  &:nth-child(4) { opacity: 0.5;  }
+  &:nth-child(n+5) { opacity: 0.4; }
+}
+
+@keyframes wpcRestoreChipIn {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0);    }
+}
+
+// Up-next chip — quieter (no checkmark, neutral colour)
+.wpc-restore-upnext-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px dashed @color-border-medium;
+  border-radius: @radius-pill;
+  font-family: @font-regular;
+  font-size: 12px;
+  color: @color-text-light;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.wpc-restore-upnext-empty {
+  font-family: @font-regular;
+  font-size: 12px;
+  color: @color-text-light;
+  font-style: italic;
+}
+
+// ─── Pause button (ghost style — quieter than the old "Stop") ─────────
+.wpc-action-btn--pause {
+  background: @color-white !important;
+  color: @color-text-secondary !important;
+  border-color: @color-border-medium !important;
+  box-shadow: none !important;
+
+  &:hover {
+    background: @color-bg-frost !important;
+    color: @color-text-dark !important;
+    border-color: @color-border !important;
+  }
+}
+
+// ─── Mobile pass ──────────────────────────────────────────────────────
+@media screen and (max-width: 900px) {
+  .wpc-restore-view[data-view="processing"] .wpc-restore-card-body {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    row-gap: 18px;
+    padding: 18px 20px 20px;
+  }
+  .wpc-restore-stats {
+    grid-column: 1 / -1;
+    border-right: none;
+    border-top: 1px solid @color-border;
+    padding-right: 0;
+    padding-top: 14px;
+    align-items: flex-start;
+    text-align: left;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    width: 100%;
+  }
+  .wpc-restore-eta-block {
+    align-items: flex-end;
+    text-align: right;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .wpc-restore-thumb-wrap { width: 64px; height: 64px; }
+  .wpc-restore-filename { font-size: 15px; }
+  .wpc-counter-current  { font-size: 28px; }
+  .wpc-restore-eta-value { font-size: 18px; }
+}
+
+// ─── Completed view ─────────────────────────────────────────────────────
+
+.wpc-restore-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  // v7.04.68 — Card padding bumped (56px → 60px top, 52px bottom) for a more
+  // generous "moment of completion" feel. Children carry their own per-slot
+  // margins so the rhythm scales: icon → 28px → title → 12px → subtitle →
+  // 32px → stats → 32px → CTA. Each ratio doubles to set a clear hierarchy.
+  padding: 60px 24px 52px;
+  background: @color-white;
+  border-radius: @radius-card;
+  border: 1px solid @color-border;
+  box-shadow: 0 6px 20px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+}
+
+// v7.04.68 — Unicorn-level success reveal sequence.
+//
+// Beats:
+//   t=0       icon pops in scale 0.3→1.15 at viewport-card CENTER (translateY 120px)
+//   t=0.3s    check mark draws across
+//   t=0.45s   icon settles to 1.0 (overshoot resolved, still at center)
+//   t=0.45-1.0s   pause — the check sits center-stage, no other motion
+//   t=1.0s    icon slides up from translateY(120px) → 0 to its real position
+//   t=1.6s    title fades up (icon has arrived)
+//   t=1.85s   subtitle fades up
+//   t=2.15s   stats box fades up
+//
+// Total ~3s reveal. Each beat is distinct — no overlap, no aggressive bounce.
+// The center-pop + settle + slide-up trick gives the check real "moment-of-arrival" weight.
+
+// v7.04.68 — Restore success icon now matches the bulk success icon
+// EXACTLY: solid green background, white check, 90×90, same triple-ring
+// box-shadow glow + 20px margin-bottom. Single source of visual truth
+// across the two flows so the celebration feels consistent.
+.wpc-restore-complete-icon {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  background: @color-success;                 // solid (was light @color-success-bg)
+  color: @color-white;                         // white check (was green-on-light)
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;                         // matches bulk
+  box-shadow:
+    0 0 0 8px fade(@color-success, 12%),
+    0 0 0 16px fade(@color-success, 6%),
+    0 12px 28px -8px fade(@color-success, 40%);
+  // Starting state — invisible, scaled tiny, parked at card center.
+  opacity: 0;
+  transform: scale(0.3) translateY(120px);
+  will-change: transform, opacity;
+
+  .wpc-check-path {
+    stroke-dasharray: 28;
+    stroke-dashoffset: 28;
+  }
+}
+
+.wpc-restore-view.is-active .wpc-restore-complete-icon {
+  animation: wpcSuccessIconReveal 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+  .wpc-check-path {
+    animation: wpcSuccessCheckDraw 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+  }
+}
+
+@keyframes wpcSuccessIconReveal {
+  0%   { opacity: 0; transform: scale(0.3) translateY(120px); }   // tiny, center, invisible
+  20%  { opacity: 1; transform: scale(1.15) translateY(120px); }  // pop overshoot at center
+  30%  { transform: scale(1) translateY(120px); }                  // settle to 1x, still center
+  60%  { transform: scale(1) translateY(120px); }                  // hold — check is on-stage
+  100% { opacity: 1; transform: scale(1) translateY(0); }          // glide up to real position
+}
+
+@keyframes wpcSuccessCheckDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+.wpc-restore-complete-title {
+  font-family: @font-semibold;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+  color: @color-text-dark;
+  margin: 0 0 12px;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.wpc-restore-view.is-active .wpc-restore-complete-title {
+  // Title appears after icon has arrived at its real position (t=1.5s + tiny breath).
+  animation: wpcSuccessFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.6s forwards;
+}
+
+.wpc-restore-complete-subtitle {
+  font-family: @font-regular;
+  font-size: 15px;
+  color: @color-text-secondary;
+  margin: 0 0 32px;
+  line-height: 1.55;
+  opacity: 0;
+  transform: translateY(8px);
+
+  strong {
+    color: @color-text-dark;
+    font-family: @font-semibold;
+  }
+}
+
+.wpc-restore-view.is-active .wpc-restore-complete-subtitle {
+  animation: wpcSuccessFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.85s forwards;
+}
+
+.wpc-restore-complete .wpc-bulk-complete-stats {
+  margin-top: 0;
+  margin-bottom: 32px;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.wpc-restore-view.is-active .wpc-restore-complete .wpc-bulk-complete-stats {
+  animation: wpcSuccessFadeUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) 2.15s forwards;
+}
+
+// Shared fade-up keyframe for the text + box reveals.
+@keyframes wpcSuccessFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// v7.04.68 — Sequence the button strictly AFTER the stats box finishes.
+// Stats: 0.7s starting at t=700ms → ends ~1400ms. CTA now starts at t=1500ms
+// so the eye reads icon → text → box → button in clear discrete beats,
+// not three overlapping animations.
+.wpc-restore-complete-cta {
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.6s ease 1.5s, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1.5s;
+}
+
+.wpc-restore-view.is-active .wpc-restore-complete-cta {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+// ─── Confetti burst on Restore Complete reveal ──────────────────────────
+// 16 small particles spray outward from behind the success icon.
+// Each particle gets a unique angle + distance + color via :nth-child.
+
+.wpc-confetti {
+  position: absolute;
+  // v7.04.68 — Bumped 105 → 120 per user direction (confetti was still
+  // bursting above the icon's actual rendered center). Math-only calc
+  // didn't account for the flex layout's intrinsic content offsets;
+  // 120px lines the burst up with where the eye sees the green circle.
+  top: 120px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wpc-restore-complete {
+  position: relative;     // confetti positions relative to this
+}
+
+.wpc-restore-complete-icon {
+  position: relative;
+  z-index: 1;             // sits ABOVE confetti
+}
+
+.wpc-confetti-piece {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+}
+
+.wpc-restore-view.is-active .wpc-confetti-piece {
+  animation: wpcConfettiBurst 1.1s @wpc-ease-out-expo forwards;
+}
+
+// Distribute 16 particles around a circle, varying distance + color + delay
+// v7.04.68 — Confetti delays bumped by +1.5s so the burst fires AFTER the
+// icon completes its center-pop → glide-up arrival (icon animation finishes
+// at ~1.5s). Pre-fix: confetti exploded around the icon's FINAL position
+// while the icon itself was still at center → particles appeared above
+// empty space and the eye missed the connection.
+.wpc-confetti-piece:nth-child(1)  { --tx:  60px; --ty: -50px; background: @color-gradient-start;  animation-delay: 1.55s; }
+.wpc-confetti-piece:nth-child(2)  { --tx: -55px; --ty: -65px; background: @color-success;         animation-delay: 1.58s; }
+.wpc-confetti-piece:nth-child(3)  { --tx:  80px; --ty:  10px; background: @color-gradient-end;    animation-delay: 1.62s; }
+.wpc-confetti-piece:nth-child(4)  { --tx: -80px; --ty:   0px; background: @color-blue-vivid;      animation-delay: 1.65s; }
+.wpc-confetti-piece:nth-child(5)  { --tx:  40px; --ty:  60px; background: @color-warning;         animation-delay: 1.68s; }
+.wpc-confetti-piece:nth-child(6)  { --tx: -40px; --ty:  70px; background: @color-gradient-mid;    animation-delay: 1.72s; }
+.wpc-confetti-piece:nth-child(7)  { --tx:  90px; --ty: -20px; background: @color-success;         animation-delay: 1.60s; }
+.wpc-confetti-piece:nth-child(8)  { --tx: -70px; --ty: -30px; background: @color-blue-sky;        animation-delay: 1.64s; }
+.wpc-confetti-piece:nth-child(9)  { --tx:  20px; --ty: -80px; background: @color-gradient-start;  animation-delay: 1.70s; }
+.wpc-confetti-piece:nth-child(10) { --tx: -20px; --ty: -90px; background: @color-success;         animation-delay: 1.56s; }
+.wpc-confetti-piece:nth-child(11) { --tx:  65px; --ty:  35px; background: @color-blue-vivid;      animation-delay: 1.75s; }
+.wpc-confetti-piece:nth-child(12) { --tx: -65px; --ty:  35px; background: @color-warning;         animation-delay: 1.78s; }
+.wpc-confetti-piece:nth-child(13) { --tx: 100px; --ty:  -5px; background: @color-gradient-mid;    animation-delay: 1.66s; }
+.wpc-confetti-piece:nth-child(14) { --tx:-100px; --ty:  -5px; background: @color-success;         animation-delay: 1.69s; }
+.wpc-confetti-piece:nth-child(15) { --tx:   0px; --ty: -95px; background: @color-blue-vivid;      animation-delay: 1.57s; }
+.wpc-confetti-piece:nth-child(16) { --tx:   0px; --ty:  85px; background: @color-gradient-end;    animation-delay: 1.80s; }
+
+@keyframes wpcConfettiBurst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.8) rotate(180deg);
+  }
+}
+
+// ─── Success icon: subtle glow halo + scale pop on reveal ───────────────
+
+// v7.04.68 — .wpc-icon-glow retired. Compress doesn't use a separate glow
+// span; it just lets the box-shadow rings on .wpc-bulk-complete-icon do
+// the glow work. Restore now mirrors that approach (rings on the icon
+// itself) so the two views share one visual treatment. Hide the legacy
+// span so it doesn't render a stray dot.
+.wpc-icon-glow {
+  display: none !important;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.02 — World-class action buttons (Stop + Return to Dashboard)
+//  Used in the bulk page header AND in the restore completed view CTA.
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  // v7.04.44 — Pin radius across ALL pseudo-states. WP admin's
+  // `.button` / `.wp-core-ui .button-secondary` rules set 3-4 px corners
+  // and bleed into `<a>` tags via `:active` and `:focus` cascades in
+  // some themes. Without an !important + explicit override on each
+  // state, the pill snapped to square on click → "rounded to square"
+  // visual glitch the user reported. Pill is part of our visual
+  // identity so worth the !important.
+  border-radius: @radius-pill !important;
+  font-family: @font-semibold;
+  font-size: 13px;
+  letter-spacing: 0.1px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s @wpc-ease-out-expo,
+    transform 0.15s @wpc-ease-out-expo;
+  border: 1px solid transparent;
+
+  &:hover,
+  &:focus,
+  &:active,
+  &:visited { border-radius: @radius-pill !important; text-decoration: none; }
+  &:focus { outline: none; }
+  &:focus-visible {
+    outline: 2px solid @color-blue-vivid;
+    outline-offset: 2px;
+  }
+  &:active { transform: scale(0.97); }
+
+  .wpc-action-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s @wpc-ease-out-expo;
+  }
+  .wpc-action-btn-icon--right {
+    margin-left: 2px;
+  }
+}
+
+// Primary (Return to Dashboard) — WL-themable solid, arrow slides right on hover.
+// v7.03 — Switched from hardcoded @color-blue-vivid to the same --wpc-brand-*
+// custom-property pattern the splash cards use, so the glow + bg match the
+// site's white-label brand color instead of hardcoding the default WPC blue.
+.wpc-action-btn--primary {
+  background: var(--wpc-brand-primary, @color-blue-vivid);
+  color: @color-white;
+  border-color: var(--wpc-brand-primary, @color-blue-vivid);
+  box-shadow: 0 4px 10px -3px var(--wpc-brand-shadow, fade(@color-blue-vivid, 40%));
+
+  &:hover {
+    background: var(--wpc-brand-primary-strong, darken(@color-blue-vivid, 6%));
+    color: @color-white;
+    box-shadow: 0 6px 14px -3px var(--wpc-brand-shadow, fade(@color-blue-vivid, 50%));
+    transform: translateY(-1px);
+
+    .wpc-action-btn-icon--right { transform: translateX(2px); }
+  }
+}
+
+// Stop (destructive) — v7.04.68 ghost variant. Quieter than the previous
+// soft-red filled pill. Transparent bg + neutral border at rest, red text/
+// icon signals the destructive intent. Hover tints the bg lightly so the
+// affordance is clear without competing with the primary "Return to
+// Dashboard" button. Same geometry as the primary button — pill, 10/20.
+.wpc-action-btn--stop {
+  background: transparent;
+  color: @color-error;
+  border-color: @color-border;
+  font-weight: 600;
+  padding: 10px 20px;
+  box-shadow: none;
+  transition: all 0.18s ease;
+
+  &:hover {
+    background: @color-error-bg;
+    color: @color-error-dark;
+    border-color: fade(@color-error, 40%);
+    box-shadow: 0 2px 8px -3px fade(@color-error, 25%);
+    transform: translateY(-1px);
+
+    .wpc-action-btn-icon { animation: wpcStopIconPulse 1.2s ease-in-out infinite; }
+  }
+
+  .wpc-action-btn-icon {
+    color: currentColor;
+    opacity: 0.85;
+    margin-right: 2px;
+  }
+}
+
+@keyframes wpcStopIconPulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50%      { transform: scale(1.12); opacity: 1; }
+}
+
+// Responsive: stack restore card at tablet
+@media screen and (max-width: 768px) {
+  .wpc-restore-view[data-view="processing"] .wpc-restore-card-body {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+  .wpc-restore-stats {
+    border-left: none;
+    border-top: 1px solid @color-border;
+    padding-left: 0;
+    padding-top: 16px;
+    width: 100%;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — BULK SPLASH (twin entry cards — mockup-matched)
+//
+//  Compress = primary (blue accent, gradient icon, "RECOMMENDED" eyebrow).
+//  Restore = destructive (muted icon, amber "REVERSES OPTIMIZATION" eyebrow,
+//  warning triangle next to "Compressed variants will be discarded").
+//
+//  Layout: bigger card (40px padding, 24px radius), 64×64 icon, 32px title,
+//  56px count number, features inside a colored panel (light blue for
+//  compress, light gray for restore), pill button (14px 28px) with chevron.
+//  Empty state = single centered card when both counts are 0.
+//
+//  Polish: card entry stagger, icon gleam sweep on compress, eyebrow dot
+//  pulse, count-in fade, hover shine sweep + lift. Choreographed so the
+//  splash feels alive within ~1.2s of first paint without being noisy.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// v7.04.68 — Stabilize the bulk page height during initial JS settle so the
+// WP admin footer (#wpfooter) doesn't snap up/down as check-bulk-running.js
+// toggles between splash and bulk-area views. The min-height covers the
+// splash case (most common); processing/completion states grow past it
+// naturally. Without this the page reflows twice on every load:
+//   1. PHP renders splash       (~520px)
+//   2. JS hides splash briefly  (~0px)   ← footer snaps up
+//   3. JS shows correct view    (varies) ← footer snaps to final
+.wp-compress-bulk-area {
+  min-height: 540px;
+}
+
+.wpc-bulk-splash {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.wpc-bulk-splash-card {
+  position: relative;
+  background: @color-white;
+  border-radius: @radius-2xl;            // 24px — matches mockup --radius-2xl
+  border: 1px solid @color-border;
+  border-top: 1px solid @color-border;    // explicit override — earlier versions added a 3px accent here
+  box-shadow: @shadow-card;
+  padding: 40px;                          // mockup padding
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-align: left;                       // FORCED: parent flow centers text in some WP admin contexts
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: wpcSplashCardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  // Soft mesh decoration in the corners (subtle, doesn't compete with content)
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 100% 0%, fade(@color-blue, 4%), transparent 55%);
+  }
+
+  // Hover shine sweep
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 70%;
+    height: 100%;
+    background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    pointer-events: none;
+    transition: left 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
+  }
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.14), 0 8px 12px -2px rgba(15, 23, 42, 0.05);
+
+    &::after { left: 130%; }
+    .wpc-bulk-splash-icon { transform: scale(1.06) rotate(-3deg); }
+  }
+}
+
+.wpc-bulk-splash-card:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+@keyframes wpcSplashCardIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+// ─── Icon ───────────────────────────────────────────────────────────────
+
+.wpc-bulk-splash-icon {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 24px;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 2;
+
+  svg { position: relative; z-index: 2; }
+}
+
+.wpc-bulk-splash-card--compress .wpc-bulk-splash-icon {
+  // v7.03 — WL-themable: gradient end uses the brand var (falls back to
+  // @color-blue). Gradient start lifts it ~15% lighter via fade-shift.
+  background: linear-gradient(135deg, var(--wpc-brand-primary-light, #60a5fa), var(--wpc-brand-primary, @color-blue));
+  color: @color-white;
+  box-shadow: 0 10px 20px -5px var(--wpc-brand-shadow, fade(@color-blue, 40%)), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+  // Gleam sweep — once every 7s
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.4) 50%, transparent 62%);
+    background-size: 250% 250%;
+    background-position: 200% 0;
+    animation: wpcIconGleam 7s ease-in-out infinite;
+    animation-delay: 1.5s;
+    z-index: 1;
+  }
+}
+
+@keyframes wpcIconGleam {
+  0%, 70% { background-position: 200% 0; }
+  85%     { background-position: -120% 0; }
+  100%    { background-position: -120% 0; }
+}
+
+.wpc-bulk-splash-card--restore .wpc-bulk-splash-icon {
+  background: @color-bg-frost;
+  color: @color-text-secondary;
+  border: 1px solid @color-border;
+}
+
+// ─── Eyebrow with leading dot ───────────────────────────────────────────
+
+.wpc-bulk-splash-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: @font-bold;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.wpc-bulk-splash-card--compress .wpc-bulk-splash-eyebrow { color: var(--wpc-brand-primary, @color-blue); }
+.wpc-bulk-splash-card--restore  .wpc-bulk-splash-eyebrow { color: @color-warning; }
+
+.wpc-bulk-splash-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: wpcEyebrowPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes wpcEyebrowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 0 5px transparent; opacity: 0.7; }
+}
+
+// ─── Title + Count ──────────────────────────────────────────────────────
+
+.wpc-bulk-splash-title {
+  font-family: @font-bold;
+  font-size: 32px;                        // 2rem — mockup
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: @color-text-heading;
+  margin: 0 0 16px;
+}
+
+.wpc-bulk-splash-count {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.wpc-bulk-splash-count-num {
+  font-family: @font-bold;
+  font-size: 56px;                        // 3.5rem — mockup
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  animation: wpcCountIn 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+.wpc-bulk-splash-card--compress .wpc-bulk-splash-count-num { color: var(--wpc-brand-primary, @color-blue); }
+.wpc-bulk-splash-card--restore  .wpc-bulk-splash-count-num { color: @color-text-dark; }
+
+@keyframes wpcCountIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.wpc-bulk-splash-count-label {
+  font-family: @font-semibold;
+  font-size: 16px;                        // 1rem — mockup
+  font-weight: 600;
+  color: @color-text-secondary;
+}
+
+// ─── Features panel (inside the card, colored bg) ───────────────────────
+
+.wpc-bulk-splash-meta {
+  display: flex;
+  flex-direction: column;
+  // v7.04.68 — justify-content: center vertically aligns rows so when the
+  // grid stretches one card taller (because of differing text wrap), the
+  // bullets in BOTH cards still center-align with their siblings — visual
+  // height stays uniform even when intrinsic row counts differ slightly.
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  border-radius: @radius-input;            // 12px
+  margin-bottom: 32px;
+  flex: 1;                                 // push button to bottom if heights differ
+  // Floor so the features box has predictable footprint even on cards
+  // where text doesn't wrap. v7.04.68 — Dropped from 130 to 65 per user
+  // direction; lets the box hug the bullets more tightly while flex:1
+  // still expands it to match the taller card.
+  min-height: 65px;
+}
+
+.wpc-bulk-splash-card--compress .wpc-bulk-splash-meta { background: var(--wpc-brand-faint, @color-ice); }
+.wpc-bulk-splash-card--restore  .wpc-bulk-splash-meta { background: @color-bg-frost; }
+
+.wpc-bulk-splash-meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-family: @font-regular;        // v7.03 — one weight lighter (was @font-semibold which loaded the 600 face)
+  font-size: 14px;
+  font-weight: 400;
+  color: @color-text-secondary;
+  line-height: 1.45;
+
+  svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+  }
+}
+
+.wpc-bulk-splash-card--compress .wpc-bulk-splash-meta-row svg { color: var(--wpc-brand-primary, @color-blue); }
+.wpc-bulk-splash-card--restore  .wpc-bulk-splash-meta-row svg { color: @color-text-secondary; }
+.wpc-bulk-splash-card--restore  .wpc-bulk-splash-meta-row svg.is-warning { color: @color-warning; }
+
+// ─── CTAs — bigger pill (14px 28px, 16px text, chevron) ─────────────────
+// !important needed to override _header.less .button-start-bulk-* base.
+
+.wpc-bulk-splash-card .button-start-bulk-compress,
+.wpc-bulk-splash-card .button-start-bulk-restore {
+  align-self: flex-start;
+  width: max-content;
+  padding: 14px 28px !important;          // FORCED: bigger pill (mockup spec)
+  border-radius: @radius-full !important; // FORCED: fully rounded pill
+  font-family: @font-semibold !important;
+  font-size: 16px !important;             // FORCED: 1rem mockup spec
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.01em;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent !important;
+  transition: all 0.2s ease;
+
+  svg { flex-shrink: 0; }
+}
+
+.wpc-bulk-splash-card--compress .button-start-bulk-compress {
+  background: var(--wpc-brand-primary, @color-blue) !important;                                          // FORCED + WL-themable
+  color: @color-white !important;
+  box-shadow: 0 4px 12px -2px var(--wpc-brand-shadow, fade(@color-blue, 40%)) !important;
+
+  &:hover {
+    background: var(--wpc-brand-primary-dark, @color-blue-vivid) !important;                              // FORCED: deeper hover (WL fallback to vivid)
+    filter: brightness(1.05);                                                                              // works even if WL color doesn't have a -dark var
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px -2px var(--wpc-brand-shadow, fade(@color-blue, 50%)) !important;
+  }
+}
+
+.wpc-bulk-splash-card--restore .button-start-bulk-restore {
+  background: @color-white !important;
+  color: @color-text-dark !important;          // FORCED: dark text on white pill
+  // v7.04.68 — Border darkened (b8c2d0 → 94a3b8 = slate-400). Clearly visible
+  // on the white card now while staying visually subordinate to the primary
+  // blue pill — still reads as a secondary ghost button, not a primary CTA.
+  border-color: #94a3b8 !important;
+  // Slightly more present shadow for pill depth.
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+
+  &:hover {
+    background: @color-bg-frost !important;
+    color: @color-text-dark !important;
+    border-color: @color-text-secondary !important;     // #64748b darker on hover
+    transform: none;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.04.66 — Empty-state pattern (from mockup)
+//
+//  When a splash card has zero work to do (count = 0), we don't swap the
+//  button for a different markup block — we add .is-empty to the card and
+//  let CSS transform the action button into a dashed status badge in-place.
+//  This preserves the card's vertical rhythm so the populated/empty heights
+//  match, no jarring layout shift.
+//
+//  The two badge variants:
+//    .wpc-bulk-splash-badge--complete : compress card, success green + check
+//    .wpc-bulk-splash-badge--ghost    : restore card, neutral gray, no icon
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Disable hover lift + interactive shine when the card is empty — the card
+// is informational, not actionable. Keep the static decoration.
+.wpc-bulk-splash-card.is-empty {
+  cursor: default;
+
+  &:hover {
+    transform: none;
+    box-shadow: @shadow-card;
+
+    &::after { left: -100%; }                 // suppress shine sweep
+    .wpc-bulk-splash-icon { transform: none; } // suppress icon nudge
+  }
+}
+
+// Mute the count number when empty so the badge gets visual priority.
+.wpc-bulk-splash-card.is-empty .wpc-bulk-splash-count-num {
+  color: @color-gray-text;
+}
+// Exception: keep the compress count brand-blue per mockup, just a touch
+// dimmer than the populated state to signal "informational, not an alert."
+.wpc-bulk-splash-card--compress.is-empty .wpc-bulk-splash-count-num {
+  color: var(--wpc-brand-primary, @color-blue);
+  opacity: 0.85;
+}
+
+// Fade the features panel so the badge stands out — the bullets are still
+// readable (good for context) but secondary visually.
+.wpc-bulk-splash-card.is-empty .wpc-bulk-splash-meta {
+  opacity: 0.55;
+  background: @color-bg-frost;     // drop the compress brand-faint bg here
+  transition: opacity 0.4s ease, background 0.4s ease;
+}
+
+// Suppress the eyebrow dot pulse on empty cards — nothing's "active."
+.wpc-bulk-splash-card.is-empty .wpc-bulk-splash-eyebrow-dot {
+  animation: none;
+  opacity: 0.6;
+}
+
+// ─── The badge itself ───────────────────────────────────────────────────────
+// Matches the populated button's pill geometry EXACTLY (padding/font/height)
+// so the two states swap in place with no visual jump. Solid border instead
+// of dashed — the original mockup's dashed border read as "tag", we want
+// "verified status" which solid color delivers more cleanly. Subtle inner
+// highlight + soft shadow give it a "premium / earned" feel rather than
+// looking like a disabled button.
+
+.wpc-bulk-splash-badge {
+  // v7.04.68 — !important on dimensional rules so WordPress admin's
+  // .button base styles can't shrink the badge relative to the populated
+  // button pill (which DOES carry .button .button-primary classes and
+  // gets WP base padding). Match EVERY metric to the populated button:
+  //   padding 14px 28px → ≈ 50px tall pill
+  //   min-height 48px enforces minimum even if text shrinks
+  //   font-size 16px, line-height 1, font-semibold all mirror the button
+  align-self: flex-start;
+  width: max-content;
+  padding: 14px 28px !important;
+  min-height: 48px !important;
+  height: auto;
+  box-sizing: border-box;
+  border-radius: @radius-full !important;
+  font-family: @font-semibold !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;                        // match button's 8px exactly for visual alignment
+  border: 1px solid transparent;
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+  position: relative;
+  transition: none;                // no hover state — non-interactive
+}
+
+// Small icon — sized to match the button's chevron weight so optical balance
+// reads correctly when the two states swap visually.
+.wpc-bulk-splash-badge-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;                 // a touch bolder so the check feels confident at small size
+}
+
+// ─── Compress empty — "All Images Optimized" with check ─────────────────────
+// v7.04.68 — Flat, modern emerald palette (Tailwind emerald-50/200/600).
+// No gradient, no inner highlight, no shadow — just a clean, confident pill
+// that reads "verified status" without dimensional fuss. Better contrast +
+// more contemporary than the old #22b73a saturated kelly-green.
+
+.wpc-bulk-splash-badge--complete {
+  background: #ecfdf5;       // emerald-50  — subtle tint, not noisy
+  color: #059669;            // emerald-600 — readable on emerald-50, modern
+  border-color: #a7f3d0;     // emerald-200 — visible at 1px without competing
+  box-shadow: none;
+}
+
+// ─── Restore empty — "Nothing to Restore" neutral ghost ─────────────────────
+// Deliberately quieter than the compress success — restore is the destructive
+// flow so its empty state shouldn't compete visually with the celebrated
+// "Optimized" state. Subtle neutral pill, no shadow.
+
+.wpc-bulk-splash-badge--ghost {
+  background: @color-bg-frost;
+  color: @color-text-secondary;
+  border-color: @color-border;
+  box-shadow: 0 1px 0 fade(@color-white, 60%) inset;
+}
+
+// ─── Empty state — single centered card when both counts are 0 ───────────
+
+.wpc-bulk-splash-empty {
+  background: @color-white;
+  border-radius: @radius-card;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  padding: 80px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.wpc-bulk-splash-empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: @color-success-bg;
+  color: @color-success;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  box-shadow: 0 0 0 8px fade(@color-success, 8%);
+}
+
+.wpc-bulk-splash-empty-title {
+  font-family: @font-bold;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: @color-text-heading;
+  margin: 0;
+}
+
+.wpc-bulk-splash-empty-subtitle {
+  font-family: @font-regular;
+  font-size: 15px;
+  color: @color-text-secondary;
+  max-width: 460px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.wpc-bulk-splash-empty-cta {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, @color-gradient-start, @color-gradient-end);
+  color: @color-white;
+  border-radius: @radius-pill;
+  font-family: @font-semibold;
+  font-size: 13px;
+  text-decoration: none;
+  box-shadow: @shadow-blue-glow;
+  transition: @transition-fast;
+  min-height: 44px;
+
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+    color: @color-white;
+  }
+}
+
+// Splash subnote — used under the count when one side has zero items but
+// the other side still has work to do (so we render the twin layout, not
+// the full empty state).
+.wpc-bulk-splash-subnote {
+  font-family: @font-regular;
+  font-size: 13px;
+  color: @color-text-light;
+  line-height: 1.5;
+  margin: 0;
+}
+
+// ─── Splash — Responsive ────────────────────────────────────────────────
+
+@media screen and (max-width: 1024px) {
+  .wpc-bulk-splash-card {
+    padding: 30px 26px 26px;
+  }
+  .wpc-bulk-splash-count-num {
+    font-size: 40px;
+  }
+  .wpc-bulk-splash-title {
+    font-size: 23px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .wpc-bulk-splash {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .wpc-bulk-splash-card {
+    padding: 28px 24px 24px;
+  }
+  .wpc-bulk-splash-title {
+    font-size: 22px;
+  }
+  .wpc-bulk-splash-count-num {
+    font-size: 38px;
+  }
+  .wpc-bulk-splash-empty {
+    padding: 64px 24px;
+  }
+  .wpc-bulk-splash-empty-title {
+    font-size: 22px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .wpc-bulk-splash-card {
+    padding: 24px 20px 22px;
+    gap: 14px;
+  }
+  .wpc-bulk-splash-title {
+    font-size: 20px;
+  }
+  .wpc-bulk-splash-count-num {
+    font-size: 34px;
+  }
+  .wpc-bulk-splash-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+  }
+  .wpc-bulk-splash-meta {
+    padding: 12px 14px;
+  }
+  .wpc-bulk-splash-card .button-start-bulk-compress,
+  .wpc-bulk-splash-card .button-start-bulk-restore {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — PREPARING SCREEN (mockup-matched, replaces legacy skeleton)
+//
+//  Both compress + restore share the same layout — only the spinner ring
+//  gradient + center icon differ (blue for compress, slate for restore).
+//  Avatars inside the skeleton tiles spin individually so the page feels
+//  alive even before the first heartbeat data arrives.
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-prep-surface {
+  background: @color-white;
+  border-radius: @radius-2xl;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  margin: 0 0 20px;
+  padding: 0;
+  text-align: left;
+  animation: wpcSplashCardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.wpc-prep-layout {
+  display: flex;
+  flex-direction: column;
+  padding: 64px 48px 48px;
+  width: 100%;
+  // v7.03 — Constrain skeleton width on wide cards. Without this cap,
+  // skel-header-row's `space-between` pushed the two short pills to the
+  // far edges (700+px gap on a 1100px card) and the 4 tile-grid spanned
+  // the full card width, breaking past the visible card boundary on
+  // certain admin column widths. Capping at 640px keeps the skeleton
+  // tight + centered, matching the mockup's intended proportions.
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+.wpc-prep-logo-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wpc-prep-spinner-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: wpcPrepSpin 1.5s linear infinite;
+}
+
+@keyframes wpcPrepSpin { to { transform: rotate(360deg); } }
+
+.wpc-prep-logo-icon {
+  // v7.03 — Bumped 36 → 44 so the main-logo.svg reads clearly inside the
+  // 100px spinner ring (the previous shield SVG was solid/bold; an svg
+  // <img> typically looks lighter at the same dimension).
+  width: 44px;
+  height: 44px;
+  position: relative;
+  z-index: 2;
+  object-fit: contain;
+  display: block;
+}
+
+.wpc-prep-title {
+  font-family: @font-bold;
+  font-size: 20px;
+  font-weight: 700;
+  color: @color-text-heading;
+  text-align: center;
+  margin: 0 0 24px;
+  letter-spacing: -0.02em;
+}
+
+.wpc-prep-divider {
+  width: 180px;
+  height: 2px;
+  background: @color-bg-frost;
+  margin: 0 auto 48px;
+  border-radius: 2px;
+}
+
+// ─── Skeleton block (pulses as a whole) ──────────────────────────────────
+
+.wpc-prep-skeleton {
+  width: 100%;
+}
+
+.wpc-prep-skeleton-pulse {
+  animation: wpcPrepSkelPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes wpcPrepSkelPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+.wpc-prep-skel-line {
+  background: @color-bg-frost;
+  border-radius: 999px;
+  height: 8px;
+}
+
+.wpc-prep-skel-header-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.wpc-prep-skel-main-bar {
+  background: @color-bg-frost;
+  border-radius: 999px;
+  height: 12px;
+  width: 100%;
+  margin-bottom: 48px;
+}
+
+.wpc-prep-skel-grid {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+}
+
+.wpc-prep-skel-tile {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid @color-border;
+  border-radius: @radius-md;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: @color-white;
+}
+
+.wpc-prep-skel-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: @radius-md;
+  background: var(--wpc-brand-faint, @color-ice);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+// Restore variant: muted gray avatar bg
+.bulk-preparing-restore .wpc-prep-skel-avatar {
+  background: @color-bg-frost;
+}
+
+.wpc-prep-skel-avatar-inner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid @color-border;
+  border-top-color: var(--wpc-brand-primary, @color-blue);
+  animation: wpcPrepSpin 1s linear infinite;
+}
+
+.bulk-preparing-restore .wpc-prep-skel-avatar-inner {
+  border-top-color: @color-text-secondary;
+}
+
+.wpc-prep-skel-tile-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+// ─── Responsive ──────────────────────────────────────────────────────────
+
+@media screen and (max-width: 768px) {
+  .wpc-prep-layout { padding: 48px 24px 32px; }
+  .wpc-prep-divider { margin-bottom: 32px; }
+  .wpc-prep-skel-main-bar { margin-bottom: 32px; }
+  .wpc-prep-skel-grid {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .wpc-prep-layout { padding: 40px 20px 24px; }
+  .wpc-prep-logo-container { width: 84px; height: 84px; }
+  .wpc-prep-logo-icon { width: 30px; height: 30px; }
+  .wpc-prep-title { font-size: 18px; margin-bottom: 20px; }
+  .wpc-prep-divider { width: 140px; margin-bottom: 28px; }
+  .wpc-prep-skel-tile { padding: 18px; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Breakdown ribbon (live one-line summary above the summary card)
+//
+//  Saved 4.2 MB · 3.4 img/sec · 1:24 left — gives the user a continuous
+//  storytelling layer that doesn't compete with the hero or summary card.
+//  Hidden until first variant lands.
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-bulk-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  // v7.04.68 — Larger ribbon to give the rotating sentence proper presence.
+  padding: 14px 24px;
+  background: linear-gradient(135deg, fade(@color-blue, 6%), fade(@color-gradient-end, 4%));
+  border: 1px solid fade(@color-blue, 18%);
+  border-radius: @radius-pill;
+  margin: 0 0 14px;
+  font-family: @font-semibold;
+  // Bumped 12 → 14 so the sentence reads more like a headline than a footnote.
+  font-size: 14px;
+  color: @color-text-body;
+  animation: wpcBulkViewIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  // Stable height so the slide-swap doesn't reflow the page each rotation.
+  min-height: 48px;
+  overflow: hidden;
+}
+
+// v7.04.68 — Single sentence slot. Smooth slide-up + fade-out-up motion
+// for each rotation: old sentence exits upward, new sentence enters from
+// below. Two-phase: .is-fact-out → swap content → .is-fact-in → release.
+.wpc-bulk-ribbon-sentence {
+  display: inline-block;
+  font-family: @font-semibold;
+  font-size: 14px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: @color-text-body;
+  transition: opacity 0.32s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+// Exiting state (old sentence rolls up + fades out)
+.wpc-bulk-ribbon-sentence.is-fact-out {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+// Entering state (new sentence starts BELOW + invisible, then released
+// to its natural position via the transition above)
+.wpc-bulk-ribbon-sentence.is-fact-in {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: none;          // instant snap to from-below; no animation
+}
+
+// Bigger icon to match the larger ribbon
+.wpc-bulk-ribbon > .wpc-bulk-ribbon-icon {
+  flex-shrink: 0;
+}
+
+.wpc-bulk-ribbon-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wpc-brand-primary, @color-blue);
+}
+
+.wpc-bulk-ribbon-value {
+  font-family: @font-bold;
+  font-weight: 700;
+  color: @color-text-heading;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpc-bulk-ribbon-label {
+  color: @color-text-secondary;
+  font-family: @font-regular;
+  font-weight: 500;
+}
+
+.wpc-bulk-ribbon-sep {
+  color: @color-border-medium;
+  font-size: 14px;
+}
+
+@media screen and (max-width: 768px) {
+  .wpc-bulk-ribbon { gap: 8px; padding: 8px 14px; font-size: 11px; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Mobile feed table at 375 px (single-column stacked-card layout)
+//
+//  At narrow widths the 5-column grid squishes so badly the format pill
+//  + savings get clipped. Switch to a 2-row stacked layout per row:
+//    Row 1: thumb + filename + format badge
+//    Row 2: original | optimized | savings bar
+// ═══════════════════════════════════════════════════════════════════════════
+@media screen and (max-width: 480px) {
+  .wpc-bulk-feed-thead { display: none; } // labels redundant in stacked layout
+
+  .wpc-bulk-completion-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "image image format"
+      "orig  opt   savings";
+    column-gap: 10px;
+    row-gap: 8px;
+    padding: 14px 16px;
+  }
+  .wpc-bulk-cell-image    { grid-area: image; min-width: 0; }
+  .wpc-bulk-feed-table .wpc-format-badge { grid-area: format; align-self: start; }
+  .wpc-bulk-cell-orig     { grid-area: orig;    text-align: left;  font-size: 11.5px; }
+  .wpc-bulk-cell-opt      { grid-area: opt;     text-align: center; font-size: 11.5px; }
+  .wpc-bulk-cell-savings  { grid-area: savings; justify-content: flex-end; }
+
+  .wpc-bulk-cell-orig::before { content: 'Orig: '; color: @color-text-light; font-weight: 500; }
+  .wpc-bulk-cell-opt::before  { content: 'Opt: ';  color: @color-text-light; font-weight: 500; }
+  .wpc-bulk-feed-table .wpc-bar-track { width: 48px; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — COMPRESS COMPLETED VIEW (matches restore completion celebration)
+//
+//  Big drawn-check + confetti + final stats + primary CTA. Replaces the
+//  legacy `wps_ic_getBulkStats` HTML injection into .bulk-finished (which
+//  was rendering ALONGSIDE the still-visible v2 surface, producing two
+//  overlapping states). compressCompleted() switches the v2 surface to
+//  data-view="completed" so this card replaces the running surface cleanly.
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-bulk-complete {
+  position: relative;
+  background: @color-white;
+  border-radius: @radius-2xl;
+  border: 1px solid @color-border;
+  box-shadow: @shadow-card;
+  padding: 80px 32px 64px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.wpc-bulk-complete-icon {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: @color-success;
+  color: @color-white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  box-shadow:
+    0 0 0 8px fade(@color-success, 12%),
+    0 0 0 16px fade(@color-success, 6%),
+    0 12px 28px -8px fade(@color-success, 40%);
+  animation: wpcBulkCompleteIconIn 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes wpcBulkCompleteIconIn {
+  0%   { opacity: 0; transform: scale(0.3) rotate(-12deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.wpc-bulk-complete-check {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: wpcBulkCheckDraw 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+}
+
+@keyframes wpcBulkCheckDraw { to { stroke-dashoffset: 0; } }
+
+.wpc-bulk-complete-title {
+  font-family: @font-bold;
+  font-size: 30px;
+  letter-spacing: -0.025em;
+  color: @color-text-heading;
+  margin: 0;
+  animation: wpcBulkFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both;
+}
+
+.wpc-bulk-complete-subtitle {
+  font-family: @font-regular;
+  font-size: 15.5px;
+  color: @color-text-secondary;
+  max-width: 540px;
+  line-height: 1.55;
+  margin: 0 0 12px 0;
+  animation: wpcBulkFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.75s both;
+
+  strong {
+    color: @color-text-heading;
+    font-family: @font-semibold;
+    font-weight: 600;
+  }
+}
+
+// v7.04.44 — Tighter visual rhythm: a bit more breathing room between
+// the subtitle and the stats card, plus internal padding bump so the
+// numbers don't kiss the box edges.
+.wpc-bulk-complete-stats {
+  display: flex;
+  // v7.04.68 — align-items: center vertically balances the value+label pair
+  // inside the box so top/bottom padding read as visually equal. Pre-fix
+  // the label sat below its natural baseline making the box bottom-heavy.
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  margin-top: 20px;
+  // Even top/bottom padding now reads correctly thanks to align-items:center
+  // and the value's line-height: 1.1 below (gives even ascender/descender).
+  padding: 24px 32px;
+  background: @color-bg-frost;
+  border-radius: @radius-card;
+  animation: wpcBulkFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.9s both;
+  flex-wrap: wrap;
+}
+
+.wpc-bulk-complete-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  // Gap between value and label — controlled here rather than via the label's
+  // own margin-top so the visual block centers cleanly inside the stats box.
+  gap: 6px;
+}
+
+.wpc-bulk-complete-stat-value {
+  font-family: @font-bold;
+  font-weight: 700;
+  font-size: 28px;
+  // 1.1 (was 1) gives the value glyphs an even ascender/descender envelope so
+  // when align-items:center stacks them with the label, the centering math
+  // actually matches what the eye perceives.
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: @color-text-heading;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpc-bulk-complete-stat-label {
+  font-family: @font-semibold;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: @color-text-secondary;
+  // margin-top removed — replaced by .wpc-bulk-complete-stat gap above
+  // for cleaner flex-centering math.
+  margin-top: 0;
+  line-height: 1.2;
+}
+
+.wpc-bulk-complete-cta {
+  margin-top: 28px;
+  animation: wpcBulkFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 1.05s both;
+}
+
+@keyframes wpcBulkFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// Responsive
+@media screen and (max-width: 768px) {
+  .wpc-bulk-complete { padding: 64px 24px 48px; }
+  .wpc-bulk-complete-title { font-size: 24px; }
+  .wpc-bulk-complete-icon { width: 80px; height: 80px; }
+  .wpc-bulk-complete-stats { flex-wrap: wrap; gap: 20px; padding: 18px 20px; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03.3 — Full Stop/Restore confirmation popup polish
+//
+//  SweetAlert2's defaults wreck the hierarchy: title is huge + centered, body
+//  is left + small, close X drifts to a corner, buttons stretch full width.
+//  Lock the entire layout: tight padding, title aligned with body, close X
+//  visually anchored, buttons right-aligned at human size.
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-confirm-popup.swal2-container,
+.swal2-container.wpc-confirm-popup {
+  .swal2-popup {
+    // v7.04.68 — More generous padding so the card has real breath room.
+    // Was 28/32 → 36/40. Top extra for close-X clearance, bottom extra so
+    // buttons sit comfortably away from the card edge.
+    padding: 36px 40px 32px !important;
+    border-radius: @radius-card !important;
+    box-shadow: 0 24px 64px -16px rgba(15, 23, 42, 0.25), 0 8px 16px -4px rgba(15, 23, 42, 0.08) !important;
+    width: 520px !important;            // 480 → 520 so body copy doesn't crowd
+    max-width: calc(100vw - 32px) !important;
+  }
+  .swal2-header {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+  .swal2-title {
+    font-family: @font-bold !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: @color-text-heading !important;
+    letter-spacing: -0.015em !important;
+    line-height: 1.3 !important;
+    text-align: left !important;
+    padding: 0 40px 0 0 !important;     // room for close X
+    // Title→body gap bumped 14 → 18 for a clearer hierarchy.
+    margin: 0 0 18px !important;
+  }
+  .swal2-html-container {
+    font-size: 15px !important;          // matches inline style for safety
+    line-height: 1.6 !important;
+    color: @color-text-body !important;
+    // Body→buttons gap bumped 24 → 32 — this was the tight spot the user
+    // flagged. Gives the eye a clear pause before the action row.
+    margin: 0 0 32px !important;
+    padding: 0 !important;
+    text-align: left !important;
+    overflow: visible !important;
+  }
+  // v7.04.68 — Scoped to .wpc-confirm-popup only (not global) so we don't
+  // affect other SweetAlert dialogs across the plugin. Targets the older
+  // SA2 .swal2-content wrapper rendered by this build of sweetalert2.all.min.js
+  // (verified via inspector — see ticket screenshot).
+  .swal2-content {
+    padding: 5px 0 15px !important;
+  }
+  // The popup's `html` we inject already has the gray hint copy in its own
+  // <p> — drop the inner margins so spacing reads as one cohesive block.
+  .swal2-html-container > div { margin: 0 !important; }
+  .swal2-close {
+    position: absolute !important;
+    top: 22px !important;                // align with title baseline visually
+    right: 22px !important;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 1 !important;
+    font-size: 22px !important;
+    color: @color-text-secondary !important;
+    background: transparent !important;
+    border-radius: @radius-base !important;
+    transition: @transition-fast;
+    &:hover {
+      color: @color-text-dark !important;
+      background: @color-bg-frost !important;
+    }
+    &:focus { outline: none !important; box-shadow: @shadow-focus-ring !important; }
+  }
+  .swal2-actions {
+    justify-content: flex-end !important;
+    gap: 12px !important;                // 10 → 12 — buttons feel less crowded
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-wrap: nowrap !important;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Confirmation modal buttons (Stop / Pause / Restore-start)
+//
+//  SweetAlert2's default buttons are kinda ugly; force our pill style.
+//  --danger = red Stop, --warning = amber Restore, --ghost = white cancel.
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-confirm-popup .wpc-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px !important;
+  border-radius: @radius-pill !important;
+  font-family: @font-semibold !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  border: 1px solid transparent !important;
+  transition: all 0.18s ease;
+  min-height: 44px;
+  margin: 0 6px !important;
+}
+
+.wpc-confirm-btn--danger {
+  background: @color-error !important;
+  color: @color-white !important;
+  box-shadow: 0 4px 12px -2px fade(@color-error, 35%);
+
+  &:hover {
+    background: @color-error-dark !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -2px fade(@color-error, 45%);
+  }
+}
+
+.wpc-confirm-btn--warning {
+  background: @color-warning !important;
+  color: @color-white !important;
+  box-shadow: 0 4px 12px -2px fade(@color-warning, 35%);
+
+  &:hover {
+    background: darken(@color-warning, 8%) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -2px fade(@color-warning, 45%);
+  }
+}
+
+.wpc-confirm-btn--ghost {
+  background: @color-white !important;
+  color: @color-text-body !important;
+  border-color: @color-border-medium !important;
+  box-shadow: @shadow-sm;
+
+  &:hover {
+    background: @color-bg-frost !important;
+    border-color: @color-text-secondary !important;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — A11y: prefers-reduced-motion
+//
+//  Honors the OS-level motion preference. All keyframe animations on the
+//  bulk surfaces collapse to imperceptible duration; transitions stay
+//  functional (state changes still fire) but at 0.001 ms so the user
+//  doesn't see the choreography. Critical for vestibular / motion-sensitivity
+//  users — the splash + hero + feed have a LOT of loops + pulses by default.
+// ═══════════════════════════════════════════════════════════════════════════
+@media (prefers-reduced-motion: reduce) {
+  .wpc-bulk-splash,
+  .wpc-bulk-splash *,
+  .wpc-bulk-splash-empty,
+  .wpc-bulk-splash-empty *,
+  .wpc-bulk-hero,
+  .wpc-bulk-hero *,
+  .wpc-bulk-v2-surface,
+  .wpc-bulk-v2-surface *,
+  .wpc-bulk-feed-table *,
+  .wpc-prep-surface,
+  .wpc-prep-surface *,
+  .wpc-bulk-stopping,
+  .wpc-bulk-stopping *,
+  .wpc-bulk-delta-chip,
+  .wpc-bulk-completion-row,
+  .wpc-bulk-row-flash,
+  .wpc-prep-spinner-ring,
+  .wpc-prep-skel-avatar-inner,
+  .wpc-bulk-hero-live-dot,
+  .wpc-live-dot,
+  .wpc-chip-dot,
+  .wpc-bulk-splash-eyebrow-dot {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Live-dot freeze on Stop
+//
+//  JS adds .wpc-bulk-is-stopping to <body> on Stop click. All live-status
+//  pulses (hero dot, chip dot, eyebrow dots) freeze so the page reads as
+//  "stopping" rather than "actively optimizing."
+// ═══════════════════════════════════════════════════════════════════════════
+body.wpc-bulk-is-stopping .wpc-bulk-hero-live-dot,
+body.wpc-bulk-is-stopping .wpc-live-dot,
+body.wpc-bulk-is-stopping .wpc-chip-dot,
+body.wpc-bulk-is-stopping .wpc-bulk-splash-eyebrow-dot,
+body.wpc-bulk-is-stopping .wpc-bulk-hero-thumb-halo {
+  animation-play-state: paused !important;
+  opacity: 0.4;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Splash entrance stagger
+//
+//  Each splash card child cascades in 80 ms apart so the splash feels alive
+//  on first paint instead of snapping in as a single block. Second card uses
+//  a 120 ms base offset (matches the existing card-level stagger).
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-bulk-splash-card { --wpc-stagger-base: 0s; }
+.wpc-bulk-splash-card:nth-child(2) { --wpc-stagger-base: 0.12s; }
+
+.wpc-bulk-splash-card > * {
+  animation: wpcSplashChildIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.wpc-bulk-splash-card > :nth-child(1) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.00s); }
+.wpc-bulk-splash-card > :nth-child(2) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.08s); }
+.wpc-bulk-splash-card > :nth-child(3) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.16s); }
+.wpc-bulk-splash-card > :nth-child(4) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.24s); }
+.wpc-bulk-splash-card > :nth-child(5) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.32s); }
+.wpc-bulk-splash-card > :nth-child(6) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.40s); }
+.wpc-bulk-splash-card > :nth-child(7) { animation-delay: calc(var(--wpc-stagger-base, 0s) + 0.48s); }
+
+@keyframes wpcSplashChildIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// Don't double-animate — drop the card-level fade since children now own it.
+.wpc-bulk-splash-card {
+  animation: none !important;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.03 — Hero card height lock
+//
+//  Prevents perceived card-height "jumps" when the hero image rotates and
+//  the new thumb is mid-load (briefly empty). min-height keeps the card a
+//  stable size while crossfades happen.
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-bulk-hero {
+  min-height: 158px; // thumb 110 + padding 22*2 = 154; +4 safety = 158
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.04.68 — World-class preparing skeleton (compress + restore)
+//
+//  Replaces the old generic 4-tile prep skeleton with a STRUCTURE-MIRRORING
+//  skeleton that matches the actual processing layout. Zero layout shift when
+//  JS swaps preparing→processing on first heartbeat — same outer geometry,
+//  same internal grid, same row heights. Each text/data slot is a shimmer
+//  placeholder. The "Preparing" chip stays a real signal element so the user
+//  sees an active state immediately.
+//
+//  Single shimmer animation drives every placeholder (shared keyframe).
+// ═══════════════════════════════════════════════════════════════════════════
+
+.wpc-prep-skel-v2 {
+  position: relative;
+  // Container has no internal animation — children own their own shimmer.
+}
+
+// Shimmer animation: a soft gradient slides left→right across every placeholder
+// element. Subtle. Three placeholders ride the SAME animation cycle so the
+// page reads as one breathing surface, not many independent pulses.
+@keyframes wpcPrepShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+// Shared shimmer surface mixin: any placeholder element wears this look.
+.wpc-prep-skel-v2 .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-restore-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-badge,
+.wpc-prep-skel-v2 .wpc-prep-skel-progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    @color-bg-frost 25%,
+    fade(@color-ice, 80%) 50%,
+    @color-bg-frost 75%
+  );
+  background-size: 200% 100%;
+  animation: wpcPrepShimmer 1.8s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+// Specific shapes
+.wpc-prep-skel-v2 .wpc-prep-skel-line { height: 10px; border-radius: 999px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--title    { height: 14px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--filename { height: 16px; margin-bottom: 8px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--meta     { height: 11px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--counter  { height: 24px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--label    { height: 10px; margin-top: 4px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--bytes    { height: 12px; margin-top: 8px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--eta      { height: 22px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--value    { height: 22px; margin: 4px 0; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--num      { height: 11px; width: 56px; margin-left: auto; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--name     { height: 12px; flex: 1; max-width: 200px; }
+.wpc-prep-skel-v2 .wpc-prep-skel-line--bar      { height: 8px; width: 80%; margin-left: auto; }
+
+// Thumb placeholders (different sizes for different contexts)
+.wpc-prep-skel-v2 .wpc-prep-skel-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.wpc-prep-skel-v2 .wpc-prep-skel-thumb--row { width: 32px; height: 32px; }
+
+// Restore thumb is bigger (matches .wpc-restore-thumb-wrap dimensions)
+.wpc-prep-skel-v2 .wpc-prep-skel-restore-thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+// "Now Processing" thumb stack
+.wpc-prep-skel-v2 .wpc-prep-skel-thumb-stack {
+  display: inline-flex;
+  align-items: center;
+
+  .wpc-prep-skel-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    margin-left: -8px;
+    border: 2px solid @color-white;
+
+    &:first-child { margin-left: 0; }
+  }
+}
+
+// Format/Status badge placeholders
+.wpc-prep-skel-v2 .wpc-prep-skel-badge {
+  width: 56px;
+  height: 22px;
+  border-radius: 999px;
+}
+.wpc-prep-skel-v2 .wpc-prep-skel-badge--status {
+  width: 86px;
+  margin-left: auto;
+}
+
+// Progress bar shimmer (sits inside the real progress track shell so swap is seamless)
+.wpc-prep-skel-v2 .wpc-prep-skel-progress-shimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+// ─── Compress prep skeleton card (mirrors .wpc-bulk-summary-card) ───────────
+.wpc-prep-skel-v2 .wpc-prep-skel-card .wpc-bulk-summary-stats .wpc-stat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+// "Now processing" row in the compress prep card
+.wpc-prep-skel-v2 .wpc-bulk-now-processing-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+// ─── Restore prep skeleton hero (mirrors .wpc-restore-card-body grid) ──────
+.wpc-prep-skel-v2--restore .wpc-restore-card-body {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 28px;
+}
+
+.wpc-prep-skel-restore-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wpc-prep-skel-restore-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding-right: 24px;
+  border-right: 1px solid @color-border;
+}
+
+.wpc-prep-skel-restore-eta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 24px;
+}
+
+// ─── Feed table skeleton rows (compress 5-col + restore 4-col) ──────────────
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) 90px minmax(80px, 1fr) minmax(80px, 1fr) minmax(160px, 1.4fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 22px;
+  border-bottom: 1px solid #eef1f5;
+
+  &:last-child { border-bottom: none; }
+}
+
+// Restore variant override (4 cols, matches the live restore feed layout)
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row--restore {
+  grid-template-columns: minmax(0, 2.4fr) 110px minmax(80px, 1fr) 140px;
+}
+
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-cell--image {
+  gap: 12px;
+}
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-cell--savings {
+  justify-content: flex-end;
+}
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-cell--status {
+  justify-content: flex-end;
+}
+
+// Stagger each row's shimmer delay so the feed has a soft cascade rather
+// than every row flashing in lockstep — feels less mechanical, more alive.
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(1) .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(1) .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(1) .wpc-prep-skel-badge { animation-delay: 0s; }
+
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(2) .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(2) .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(2) .wpc-prep-skel-badge { animation-delay: 0.12s; }
+
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(3) .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(3) .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(3) .wpc-prep-skel-badge { animation-delay: 0.24s; }
+
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(4) .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(4) .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(4) .wpc-prep-skel-badge { animation-delay: 0.36s; }
+
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(5) .wpc-prep-skel-line,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(5) .wpc-prep-skel-thumb,
+.wpc-prep-skel-v2 .wpc-prep-skel-feed-row:nth-child(5) .wpc-prep-skel-badge { animation-delay: 0.48s; }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  v7.04.68 — Unicorn-level compress success reveal (matches restore exactly).
+//
+//  Beats:
+//    t=0      icon pops at card-CENTER (translateY 120px) — scale 0.3 → 1.15
+//    t=0.3s   check mark draws across (0.55s)
+//    t=0.45s  icon settles to 1.0 (overshoot resolved, still at center)
+//    t=0.9s   icon glides up to its real position (final 0.6s of icon anim)
+//    t=1.6s   title fades up
+//    t=1.85s  subtitle fades up
+//    t=2.15s  stats box fades up
+//
+//  Total ~3s reveal. Each beat distinct. The center-pop-then-glide-up trick
+//  gives the green check real "moment-of-arrival" weight before the rest of
+//  the content reveals beneath it.
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-bulk-complete-icon {
+  animation: wpcSuccessIconReveal 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.wpc-bulk-complete-check {
+  // Check draws while the icon is still at its center-stage position so the
+  // celebratory tick lands before the icon glides to its final spot.
+  animation: wpcBulkCheckDraw 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+}
+
+.wpc-bulk-complete-title {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: wpcSuccessFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.6s forwards;
+}
+
+.wpc-bulk-complete-subtitle {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: wpcSuccessFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 1.85s forwards;
+}
+
+.wpc-bulk-complete-stats {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: wpcSuccessFadeUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) 2.15s forwards;
+}
+
+.wpc-bulk-complete-cta {
+  // v7.04.68 — Hidden. The top-right header "Return to Dashboard" is enough
+  // — no need for a duplicate in-card CTA. Card now ends with the stats box.
+  display: none !important;
+}
+
+// v7.04.68 — Same for restore: hide the in-card CTA, the top-right Return
+// button handles the dashboard nav. One primary action, cleaner card.
+.wpc-restore-complete-cta {
+  display: none !important;
+}

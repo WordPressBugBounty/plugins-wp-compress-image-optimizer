@@ -33,7 +33,7 @@
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
                         <li><?php echo __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo $zone_name; ?></strong>
+                              echo esc_html($zone_name); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -48,7 +48,7 @@
                       $custom_cname = get_option('ic_custom_cname');
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php
-                        echo $custom_cname; ?>"/>
+                        echo esc_attr($custom_cname); ?>"/>
                         <input type="submit" value="<?php echo esc_attr__('Save', WPS_IC_TEXTDOMAIN); ?>" name="save"/>
                     </form>
 
@@ -78,7 +78,7 @@
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
                         <li><?php echo __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo $zone_name; ?></strong>
+                              echo esc_html($zone_name); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -90,7 +90,7 @@
                       $custom_cname = get_option('ic_custom_cname');
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php
-                        echo $custom_cname; ?>"/>
+                        echo esc_attr($custom_cname); ?>"/>
                         <input type="submit" value="<?php echo esc_attr__('Save', WPS_IC_TEXTDOMAIN); ?>" name="save"/>
                     </form>
                 </div>

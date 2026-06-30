@@ -554,6 +554,8 @@ class wps_ic_ajax extends wps_ic
             }
 
             if (!empty($zonesOutput)) {
+                $zonesDropdown = '';
+
                 foreach ($zonesOutput as $zoneID => $zoneName) {
                     $zonesDropdown .= '<div data-selected-zone="' . $zoneName . '" data-selected-zone-id="' . $zoneID . '">' . $zoneName . '</div>';
                 }
@@ -2877,6 +2879,12 @@ class wps_ic_ajax extends wps_ic
         if ($bulkProcess && $bulkProcess['status'] != 'restoring') {
             wp_send_json_error(['msg' => 'bulk-process-failed']);
         }
+        // This poll fires every ~3s from the browser while a restore is live (v2 OR
+        // legacy). Bump the liveness heartbeat here so an in-progress restore is never
+        // mistaken for an orphan; if the tab closes it lapses and the flag self-heals.
+        if ($bulkProcess && !$isDone && function_exists('wpc_bulk_heartbeat_touch')) {
+            wpc_bulk_heartbeat_touch();
+        }
 
         // Liveness watchdog: the drain worker stamps wpc_bulk_restore_last_tick before each image.
         // If the queue still has work but the stamp is >75s stale, the slice died/wedged — re-fire
@@ -4731,6 +4739,7 @@ class wps_ic_ajax extends wps_ic
                 'driver' => 'v2',
             ]);
             set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 2 * HOUR_IN_SECONDS);
+            if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
             // Clear leftover stop-signal from a previous run.
             delete_transient('wpc_bulk_stop_signal');
             // Stamp start time (ms) so the completion view can show
@@ -4751,6 +4760,7 @@ class wps_ic_ajax extends wps_ic
         if ($send['status'] == 'success') {
             update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
             set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
+            if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
 
             // Send restore call
             $local = new wps_ic_local();
@@ -4772,6 +4782,7 @@ class wps_ic_ajax extends wps_ic
 
                 update_option('wps_ic_bulk_process', ['date' => date('y-m-d H:i:s'), 'status' => 'restoring']);
                 set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 60 * 5);
+                if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
                 wp_send_json_success($send);
             } else {
                 wp_send_json_error($send);
@@ -4944,6 +4955,9 @@ class wps_ic_ajax extends wps_ic
             'driver' => $driver,
         ]);
         set_transient('wps_ic_bulk_running', date('y-m-d H:i:s'), 3600);
+        // Liveness heartbeat — bumped per image / per drain slice below. If the
+        // driver dies mid-run the orphaned flag self-heals (wpc_bulk_process_active).
+        if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
 
         if ($driver === 'sequential') {
             // Pre-populate session_ids with the full queue so the heartbeat
@@ -5000,6 +5014,11 @@ class wps_ic_ajax extends wps_ic
         if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
+
+        // Sequential bulk is driven by this JS-called loop — each call is a unit of
+        // progress, so bump the liveness heartbeat. If the tab closes mid-run the
+        // heartbeat lapses and the orphaned flag self-heals (wpc_bulk_process_active).
+        if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
 
         // When the server-side v2 drain chain is active, the JS-driven
         // per-image loop is redundant: wpc_bulk_v2_drain owns the queue.
@@ -5357,6 +5376,8 @@ class wps_ic_ajax extends wps_ic
                     error_log('[WPC Bulk] drain paused mid-iteration');
                     break;
                 }
+                // Liveness heartbeat — server chain is alive and advancing.
+                if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
                 // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
                 // self-chain re-fires a fresh worker; queue still non-empty so work advances).
                 $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
@@ -5717,6 +5738,8 @@ class wps_ic_ajax extends wps_ic
                     error_log('[WPC Bulk Restore] drain paused mid-iteration');
                     break;
                 }
+                // Liveness heartbeat — server chain is alive and advancing.
+                if (function_exists('wpc_bulk_heartbeat_touch')) { wpc_bulk_heartbeat_touch(); }
                 // RISK #3 — memory guard. Exit the loop (→ finally RELEASE_LOCK →
                 // self-chain re-fires a fresh worker; queue still non-empty so work advances).
                 $mem_limit = wp_convert_hr_to_bytes((string) @ini_get('memory_limit'));
@@ -5855,6 +5878,8 @@ class wps_ic_ajax extends wps_ic
         // Revert: remove the snapshot + foreach block; revert to the 3
         // delete_transient lines that existed before this hardening.
         $session_snapshot = get_transient('wpc_bulk_session_ids') ?: [];
+        delete_option('wps_ic_bulk_process');
+        delete_transient('wps_ic_bulk_running');
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_done');
         delete_transient('wpc_bulk_library_counts');
@@ -6082,7 +6107,7 @@ class wps_ic_ajax extends wps_ic
     {
         global $wps_ic;
 
-        $count = $_POST['count'] . ' of ' . $_POST['count'];
+        $count = absint($_POST['count'] ?? 0) . ' of ' . absint($_POST['count'] ?? 0); // (v7.10.04) SECURITY: was raw $_POST into HTML
 
         $output = '<div class="wps-ic-bulk-html-wrapper">';
         $output .= '<div class="bulk-restore-container">';
@@ -8480,7 +8505,7 @@ class wps_ic_ajax extends wps_ic
         $html .= '<div class="cdn-popup-content-full">';
         $html .= '<div class="cdn-popup-content-inner">';
         $html .= '<textarea name="exclude-pages" data-setting-name="' . $setting . '" data-page-id="' . $id . '" class="exclude-list-textarea-value" placeholder="' . esc_attr__('e.g. plugin-name/js/script.js, scripts.js, anyimage.jpg', WPS_IC_TEXTDOMAIN) . '">';
-        $html .= $current_excludes;
+        $html .= esc_textarea($current_excludes); // (v7.10.04) SECURITY: escape stored excludes into the textarea
         $html .= '</textarea>';
         $html .= '<div class="wps-empty-row">&nbsp;</div>';
         $html .= '</div>';

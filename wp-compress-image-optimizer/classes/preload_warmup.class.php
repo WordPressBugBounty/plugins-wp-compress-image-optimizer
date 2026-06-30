@@ -1244,7 +1244,7 @@ class wps_ic_preload_warmup
             if (is_wp_error($call)) {
                 $call = $call->get_error_messages();
             }
-            wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTest']], print_r($call, true));
+            wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'action' => 'doTest']], print_r($call, true)); // (v7.10.04) SECURITY: removed api_key from error output
         }
 
         return false;
@@ -1347,7 +1347,7 @@ class wps_ic_preload_warmup
             }
         }
 
-        wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'action' => 'doTestLCP']], $call);
+        wp_send_json_error([self::$apiUrl, ['id' => $id, 'url' => $url, 'action' => 'doTestLCP']], $call); // (v7.10.04) SECURITY: removed api_key from error output
     }
 
     public function localCacheWarmup($link)

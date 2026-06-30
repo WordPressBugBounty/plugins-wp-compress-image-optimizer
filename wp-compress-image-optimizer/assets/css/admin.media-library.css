@@ -1711,7 +1711,7 @@ p.important {
    starves WP's primary "File" column, which then wraps its row-actions into a tall
    vertical stack (the "mangled layout"). A fixed width on WPC's OWN column (plus
    letting the card text wrap) contains it without touching any other column.
-   (v7.10.03) Widened 200px → 260px: at 200px the cell's usable body (cell − 42px icon
+   (v7.10.04) Widened 200px → 260px: at 200px the cell's usable body (cell − 42px icon
    − 10px gap − ~20px td padding ≈ 128px) was too narrow for the "Smart Delivery /
    Exclude" action row (~185px), forcing it to wrap onto a second line. 260px gives the
    body ~188px so the actions sit on ONE line, while staying a BOUNDED fixed width — the
@@ -1730,7 +1730,7 @@ p.important {
 .wp-list-table td.column-wps_ic_actions .wpc-ml-subtitle {
   white-space: normal;
 }
-/* (v7.10.03) Keep each action LABEL intact — "Smart Delivery" must never break to
+/* (v7.10.04) Keep each action LABEL intact — "Smart Delivery" must never break to
    "Smart / Delivery" mid-word. The subtitle row above is still flex-wrap:wrap, so if a
    future state is too long for the (now wider) column the actions wrap as WHOLE chips
    rather than mid-label. This is why the title/subtitle keep white-space:normal (long

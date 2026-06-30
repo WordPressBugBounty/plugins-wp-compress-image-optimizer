@@ -656,6 +656,20 @@ class wps_cacheHtml
 
         $urlKey = $this->url_key_class->setup($url);
         self::removeDirectory(WPS_IC_CRITICAL . $urlKey);
+
+        // (v7.10.04) Per-page crit purge MUST also clear the per-URL transients, not just
+        // the file dir. wpc_critical_key_<urlKey> is a 5-min "crit already generated /
+        // request in flight" gate (see criticalRunning() + criticalCss-v2 "Die, already
+        // running!"): if we delete the file but leave this transient, the page is told crit
+        // still exists and WON'T regenerate for up to 5 min → it re-inlines nothing / serves
+        // STALE above-the-fold. The 'all' branch already deletes these; the per-page branch
+        // silently didn't — which is why a single-page purge (e.g. an Elementor save) left
+        // the layout stale. wpc_critical_uuid_<urlKey> is the paired generation token; drop
+        // it too so any in-flight stale gen is abandoned in favour of a fresh one. Both are
+        // local option deletes — fast, NON-BLOCKING; the regen itself happens lazily on the
+        // next front-end visit.
+        delete_transient('wpc_critical_key_' . $urlKey);
+        delete_transient('wpc_critical_uuid_' . $urlKey);
     }
 
     public function recursiveDelete($folder)

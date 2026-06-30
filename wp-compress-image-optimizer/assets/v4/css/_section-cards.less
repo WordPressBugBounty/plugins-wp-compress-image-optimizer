@@ -221,6 +221,45 @@
         }
       }
 
+      // v7.01.93 — Persistent "Purge CDN" ghost button beside Select All on the CDN card.
+      // Carries the FULL pill base itself (no longer shares the .wpc-select-all-btn class, to avoid
+      // colliding with the Select All click handler) + icon gap + a hover spin affordance.
+      .wpc-purge-cdn-ghost {
+        background: @color-white;
+        color: @color-text-secondary;
+        border: 1px solid @color-border;
+        border-radius: @radius-md;
+        padding: @space-sm @space-xl;
+        font-size: @font-size-sm;
+        font-family: @font-semibold;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: @transition-fast;
+        white-space: nowrap;
+        line-height: 1.4;
+        gap: @space-xs;
+        margin-right: @space-sm;
+        text-decoration: none;
+
+        &:hover {
+          transform: translateY(-1px);
+          border-color: var(--wpc-brand-accent-light, @color-border-blue);
+          color: @color-text-dark;
+        }
+
+        i {
+          font-size: 0.95em;
+          transition: transform 0.4s ease;
+        }
+
+        &:hover i {
+          transform: rotate(180deg);
+        }
+      }
+
       // Legacy label support (keep for non-button sections)
       label.with-label {
         display: none;
@@ -2036,7 +2075,7 @@
         position: absolute;
         top: calc(100% + 8px);
         right: 0;
-        min-width: 14em;
+        min-width: 20em;
         background: @color-white;
         border: 1px solid @color-bg-frost;
         border-radius: @radius-card;
@@ -2099,6 +2138,48 @@
           border-radius: @radius-default;
           line-height: 1.4;
           vertical-align: middle;
+
+          &.wpc-chip--success {
+            color: @color-success;
+            background: fade(@color-success, 10%);
+          }
+          &.wpc-chip--info {
+            color: @color-primary;
+            background: fade(@color-primary, 10%);
+          }
+          &.wpc-chip--danger {
+            color: @color-error;
+            background: fade(@color-error, 10%);
+          }
+          &.wpc-chip--purple {
+            color: @color-purple;
+            background: fade(@color-purple, 10%);
+          }
+        }
+
+        .wpc-dropdown-item-content {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .wpc-dropdown-item-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          white-space: nowrap;
+        }
+
+        .wpc-dropdown-tooltip {
+          font-size: 12px;
+          color: @color-gray-text;
+          font-family: @font-regular;
+          font-weight: 400;
+          line-height: 1.4;
+          white-space: normal;
+          max-width: 260px;
         }
       }
     }
@@ -3307,4 +3388,329 @@ body.wpc-icon-brand.wpc-icon-tint .wpc-checkbox-icon:has(> svg) {
   --wpc-icon-shadow: rgba(82, 82, 91, 0.4);
   --wpc-icon-tint-bg: #F4F4F5;
   --wpc-icon-tint-color: #52525B;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Next-Gen Images — one control + auto-verified delivery status card
+//   (WPC_Delivery_Resolver → templates/admin/partials/delivery-status.php)
+// ═══════════════════════════════════════════════════════════════════════════
+.wpc-advanced-settings-container-v4 {
+  // v7.01.21 — Next-Gen card rebuilt to the approved mockup, mapped onto our design system
+  // (Proxima + the @color-* palette). Inner card stays LIGHT (subtle border, NO shadow) so it
+  // doesn't double up with the already-defined .wpc-tab-content-box around it. Margin-based
+  // vertical rhythm (24px between blocks) like the mockup, not flex-gap.
+  .wpc-ngd-card {
+    background: @color-white;
+    border: 1px solid @color-border;
+    border-radius: @radius-card;
+    padding: 32px;
+
+    // ── Top: title + segmented Off / On ──
+    .wpc-ngd-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 24px;
+      .wpc-switch { margin-top: 0; } // sliding On/Off switch sits inline with the title
+    }
+    .wpc-ngd-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: @font-semibold;
+      font-size: 16px;
+      color: @color-text-heading;
+    }
+    // v7.01.21 — small static blue status dot beside the title (matches the Adaptive Images rows).
+    // v7.01.22 — the card's status dot IS the standard .circle-check (grey off / brand-blue on,
+    // styles inherited from the container scope) so it matches Native Lazy & co. exactly. Only
+    // alignment is local: the title is an inline-flex (align-items center), so the 6px title-offset
+    // the boxes use doesn't apply here.
+    .wpc-ngd-title .circle-check {
+      margin-top: 0 !important; // FORCED: container rule sets 6px for h4 alignment
+    }
+    // Pulse on card hover — identical contract to every other settings box.
+    &:hover .circle-check.active {
+      animation: bluePulse 1.5s infinite !important; // FORCED: match settings-box hover behavior
+      transform: scale(1.1) !important; // FORCED: match settings-box hover behavior
+    }
+    .wpc-ngd-segments {
+      display: inline-flex;
+      background: @color-bg-frost;
+      border-radius: @radius-pill;
+      padding: 4px;
+      gap: 2px;
+    }
+    .wpc-ngd-seg {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: @color-text-secondary;
+      padding: 8px 24px;
+      border-radius: @radius-pill;
+      transition: @transition-fast;
+      &:hover:not(.is-active) { color: @color-text-heading; }
+      &.is-active { // white pill + brand-blue text, smooth slide (matches the other WPC toggle pills)
+        background: @color-white;
+        color: var(--wpc-brand-primary, @color-blue);
+        box-shadow: @shadow-sm;
+      }
+    }
+
+    // ── HERO — value-prop cascade AVIF → WebP → JPEG leads the section ──
+    .wpc-ngd-hero {
+      // v7.02.19 — brand-accent the cascade box (was hardcoded blue @color-ice / @color-border-blue,
+      // which clashed on non-blue white-label brands). Subtle accent-tinted bg (color-mix), accent border.
+      background: @color-ice; // fallback for browsers without color-mix()
+      background: color-mix(in srgb, var(--wpc-brand-primary, @color-blue) 8%, #ffffff);
+      border: 1px solid var(--wpc-brand-primary, @color-border-blue);
+      border-radius: @radius-input;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .wpc-ngd-hero-label {
+      display: block;
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: @color-text-heading;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    .wpc-ngd-formats {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    // Uniform chips — AVIF reads the same as WebP/JPEG (the label already says "best first").
+    .wpc-ngd-fmt {
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: var(--wpc-brand-primary, @color-blue);
+      background: @color-white;
+      border: 1px solid var(--wpc-brand-primary, @color-border-blue); // v7.02.19 — accent, was hardcoded blue
+      border-radius: @radius-md;
+      padding: 8px 20px;
+      box-shadow: @shadow-sm;
+      &.is-primary { /* uniform — intentionally identical to the others */ }
+    }
+    .wpc-ngd-arrow {
+      color: var(--wpc-brand-primary, @color-blue-medium); // v7.02.19 — accent, was hardcoded blue
+      font-size: 18px;
+      line-height: 1;
+    }
+    // ── Cascade entrance — chips fill in sequentially when Next-Gen turns on ──
+    // JS adds .is-cascading on page-load (card On) and on the pending-On preview flip.
+    // Order: AVIF pops → arrow draws → WebP → arrow → JPEG, then a soft glow ring on AVIF.
+    .wpc-ngd-formats.is-cascading {
+      .wpc-ngd-fmt,
+      .wpc-ngd-arrow {
+        opacity: 0;
+        animation-fill-mode: forwards;
+      }
+      .wpc-ngd-fmt {
+        animation-name: wpcChipCascade;
+        animation-duration: 0.32s;
+        animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); // spring overshoot
+      }
+      .wpc-ngd-arrow {
+        animation-name: wpcArrowDraw;
+        animation-duration: 0.22s;
+        animation-timing-function: ease-out;
+      }
+      > :nth-child(1) { animation-delay: 0.04s; }
+      > :nth-child(2) { animation-delay: 0.22s; }
+      > :nth-child(3) { animation-delay: 0.33s; }
+      > :nth-child(4) { animation-delay: 0.5s; }
+      > :nth-child(5) { animation-delay: 0.61s; }
+    }
+    // a11y — later in the cascade so it wins at equal specificity, no !important needed
+    @media (prefers-reduced-motion: reduce) {
+      .wpc-ngd-formats.is-cascading .wpc-ngd-fmt,
+      .wpc-ngd-formats.is-cascading .wpc-ngd-arrow {
+        animation: none;
+        opacity: 1;
+      }
+    }
+
+    // ── Status row + sub ──
+    .wpc-ngd-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .wpc-ngd-method {
+      font-family: @font-semibold;
+      font-size: 15px;
+      color: @color-text-heading;
+    }
+    .wpc-ngd-badge {
+      display: inline-flex;
+      align-items: center;
+      font-family: @font-semibold;
+      font-size: 12px;
+      line-height: 1;
+      padding: 4px 10px;
+      border-radius: @radius-pill;
+      background: @color-success-bg;
+      color: @color-success;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .wpc-ngd-sub {
+      font-family: @font-regular;
+      font-size: 14px;
+      color: @color-text-secondary;
+      margin-bottom: 24px;
+    }
+    .wpc-ngd-fix {
+      margin: 0 0 24px;
+      font-size: 13px;
+      color: @color-text-secondary;
+      background: @color-bg-frost;
+      border-radius: @radius-md;
+      padding: 8px 12px;
+    }
+
+    // ── Meta (Re-check) ──
+    .wpc-ngd-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .wpc-ngd-recheck {
+      border: 0;
+      background: none;
+      box-shadow: none;
+      color: var(--wpc-brand-primary, @color-blue);
+      cursor: pointer;
+      font-family: @font-semibold;
+      font-size: 14px;
+      text-decoration: none;
+      padding: 0;
+      &:hover { color: @color-blue-deep; }
+      &:focus { outline: none; box-shadow: none; }
+    }
+    .wpc-ngd-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-left: 8px;
+      vertical-align: middle;
+      border: 2px solid @color-border;
+      border-top-color: @color-primary;
+      border-radius: @radius-circle;
+      animation: spin 0.6s linear infinite;
+      &[hidden] { display: none; }
+    }
+
+    // ── Advanced (override) — full-bleed divider above, content re-inset ──
+    .wpc-ngd-advanced {
+      margin: 0 -32px;
+      padding: 24px 32px 0;
+      border-top: 1px solid @color-border;
+      summary {
+        cursor: pointer;
+        font-family: @font-semibold;
+        font-size: 14px;
+        color: @color-text-secondary;
+        list-style: none;
+        &::-webkit-details-marker { display: none; }
+        &:hover { color: @color-text-heading; }
+      }
+    }
+    .wpc-ngd-adv-note {
+      font-family: @font-regular;
+      font-size: 13px;
+      color: @color-text-secondary;
+      margin: 16px 0;
+      line-height: 1.5;
+    }
+    .wpc-ngd-overrides {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    // v7.01.91 — the override is a SINGLE pill control with ONE source of truth.
+    // Previously the pill drew TWO selection cues: the native radio dot (driven by
+    // input:checked) AND the .is-active class (server-rendered / JS-toggled). When those
+    // two disagreed — e.g. the JS moved .is-active but a stale :checked lingered, or vice
+    // versa — the row showed "half on each option" (blue pill on one, filled dot on
+    // another). Fix: HIDE the native radio dot and drive the selected look from BOTH
+    // input:checked (the true state) and .is-active (the optimistic pre-save preview), so
+    // there is exactly one indicator and it can never split across two pills. The whole
+    // pill is the click target (the <input> fills it via position:absolute).
+    .wpc-ngd-ov {
+      position: relative;
+      font-family: @font-semibold;
+      font-size: 13px;
+      padding: 6px 14px;
+      border: 1px solid @color-border;
+      border-radius: @radius-pill;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: @transition-fast;
+      // Native radio: keep it accessible + clickable, but visually gone — the pill IS the
+      // indicator. Stretched over the pill so the whole chip is the hit target.
+      input {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      &:hover { border-color: @color-border-medium; }
+      // Selected look fires for EITHER the real checked state OR the optimistic class —
+      // one rule, one appearance, no split.
+      &:has(input:checked),
+      &.is-active {
+        border-color: var(--wpc-brand-primary, @color-blue);
+        color: var(--wpc-brand-primary, @color-blue);
+        background: fade(@color-blue, 6%);
+      }
+      // Keyboard focus ring on the pill. The radio lives INSIDE the label, so :focus-within
+      // on the pill catches it (no adjacent-sibling selector — that would mis-expand under the
+      // nested parent scope).
+      &:focus-within {
+        outline: 2px solid fade(@color-blue, 45%);
+        outline-offset: 2px;
+      }
+    }
+    .wpc-ngd-diag {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      code {
+        font-family: @font-code;
+        font-size: 12px;
+        color: @color-text-secondary;
+        background: @color-bg-neutral;
+        border: 1px solid @color-border;
+        padding: 8px 12px;
+        border-radius: @radius-md;
+        word-break: break-word;
+      }
+    }
+
+    // ── State variants (badge + fix tint) ──
+    &.wpc-ngd-state-warn {
+      .wpc-ngd-badge { background: fade(@color-warning, 16%); color: darken(@color-warning, 8%); }
+      .wpc-ngd-fix { color: darken(@color-warning, 12%); font-family: @font-semibold; }
+    }
+    &.wpc-ngd-state-pending .wpc-ngd-badge { background: fade(@color-primary, 14%); color: @color-primary; }
+    &.wpc-ngd-state-off .wpc-ngd-badge { background: @color-bg-frost; color: @color-gray-text; }
+  }
 }

@@ -107,11 +107,15 @@ function getSrcset(sourceArray, imageWidth, imageElement) {
 // OK
 function listHas(list, keyword) {
     var found = false;
-    list.forEach(function (className) {
-        if (className.includes(keyword)) {
+    // (v7.10.04) old-browser safe: classList is a DOMTokenList whose .forEach is unsupported on
+    // some engines (the "a.forEach is not a function" crash that halted lazy/adaptive + the
+    // WooCommerce gallery + Elementor). Iterate a real array with a for-loop + indexOf instead.
+    var _wpcArr = Array.prototype.slice.call(list || []);
+    for (var _i = 0; _i < _wpcArr.length; _i++) {
+        if (String(_wpcArr[_i]).indexOf(keyword) !== -1) {
             found = true;
         }
-    });
+    }
 
 
     if (found) {

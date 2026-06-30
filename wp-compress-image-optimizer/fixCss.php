@@ -118,9 +118,8 @@ function replaceCSS($matches)
           // Add the filename
           $walker .= '/' . $removedQueryVar;
 
-          if (!empty($_GET['debugWalker2'])) {
-            return print_r([$dirName, $walker, $cssPath, $foundUrls], true);
-          }
+          // (v7.10.04) SECURITY: removed an ungated ?debugWalker2 branch that dumped internal
+          // filesystem paths (print_r of $dirName/$walker/$cssPath) to any visitor — info disclosure.
 
           // Once again, check if the file exists in figured out path
           if (file_exists($dirName . '/' . $walker)) {

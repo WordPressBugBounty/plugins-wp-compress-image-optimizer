@@ -738,7 +738,7 @@ class wps_ic_comms extends wps_ic
         }
 
         if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
-            wp_send_json_error(['msg' => 'bad-apikey', 'form' => print_r($form, true), 'post' => print_r($_POST, true), 'get' => print_r($_GET, true)]);
+            wp_send_json_error(['msg' => 'bad-apikey']); // (v7.10.04) SECURITY: was dumping $_POST/$_GET back to the caller
         }
 
         if (!empty($settings)) {

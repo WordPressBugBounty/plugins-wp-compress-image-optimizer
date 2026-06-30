@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="currentColor">
+  <!-- Main 4-pointed blob star -->
+  <path d="M50 5 C53 25, 70 35, 95 50 C70 65, 53 75, 50 95 C47 75, 30 65, 5 50 C30 35, 47 25, 50 5Z"/>
+  <!-- Large circle bottom-left -->
+  <circle cx="18" cy="82" r="10"/>
+  <!-- Medium circle top-right -->
+  <circle cx="80" cy="18" r="6"/>
+  <!-- Small circle left -->
+  <circle cx="22" cy="35" r="4.5"/>
+</svg>

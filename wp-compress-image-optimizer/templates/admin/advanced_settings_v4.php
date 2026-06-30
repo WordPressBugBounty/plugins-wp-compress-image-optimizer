@@ -287,7 +287,7 @@ $gui = new wpc_gui_v4();
 $proSite = get_option('wps_ic_prosite');
 $options = get_option(WPS_IC_OPTIONS);
 $settings = get_option(WPS_IC_SETTINGS);
-$bulkProcess = get_option('wps_ic_bulk_process');
+$bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
 
 $allowLocal = get_option('wps_ic_allow_local');
 $allowLive = get_option('wps_ic_allow_live', false);
@@ -733,7 +733,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                 </div>
                                 <?php
                                 $localOptimizationStatus = '';
-                                $bulkRunning = get_option('wps_ic_bulk_process');
+                                $bulkRunning = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
                                 if ($bulkRunning) {
                                     if (!empty($bulkRunning['status'])) {
                                         if ($bulkRunning['status'] == 'compressing') {
@@ -750,7 +750,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 <a href="<?php
                                                 echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>"
                                                    class="wps-ic-stop-bulk-compress" style="display:block;"><i
-                                                            class="icon-pause"></i> <?php echo esc_html__('Pause Local Optimization', WPS_IC_TEXTDOMAIN); ?></a>
+                                                            class="icon-eye"></i> <?php echo esc_html__('View Local Optimization', WPS_IC_TEXTDOMAIN); ?></a>
                                                 <?php
                                             } ?>
                                         </li>
@@ -760,7 +760,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 <a href="<?php
                                                 echo admin_url('options-general.php?page=' . $wps_ic::$slug . '&view=bulk&hash=' . time()); ?>"
                                                    class="wps-ic-stop-bulk-restore" style="display:block;"><i
-                                                            class="icon-pause"></i> <?php echo esc_html__('Pause Local Restore', WPS_IC_TEXTDOMAIN); ?></a>
+                                                            class="icon-eye"></i> <?php echo esc_html__('View Local Restore', WPS_IC_TEXTDOMAIN); ?></a>
                                                 <?php
                                             } ?>
                                         </li>

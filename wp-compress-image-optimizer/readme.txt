@@ -5,7 +5,7 @@ Tags:  wpcompress, performance, image optimization, cache, speed
 Requires PHP: 7.4
 Requires at least: 6.5
 Tested up to: 7.0
-Stable tag: 7.10.03
+Stable tag: 7.10.04
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -221,6 +221,13 @@ Yes, in addition to our incredible live chat support you can visit our help desk
 6. Example Results from Aggressive Mode + Smart Optimization
 
 == Changelog ==
+
+= 7.10.04 =
+* Security Improvement
+* Fixed missing backgrounds/styles on some themes (e.g. Sonaar/Iron) that load CSS via the page URL.
+* More reliable images on older phones & browsers (old Safari/Android) — fixed a script error that could stop images loading.
+* Plays nicely with other cache plugins — no longer takes over the page-cache file when WP Compress caching is turned off.
+* Bug fixes & stability: Bunny Fonts, critical-CSS timing, bulk cleanup, and minor PHP warnings.
 
 = 7.10.03 =
 * Smart Delivery Improvements

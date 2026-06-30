@@ -505,8 +505,94 @@ class wps_ic_cache
 
     public static function purgeElementorCache($document)
     {
+        // (v7.10.04) Elementor's editor "Update" fires elementor/document/after_save, which
+        // lands here. Previously this purged the page's HTML cache ONLY — so the page
+        // re-rendered but re-inlined the OLD critical CSS, leaving stale above-the-fold /
+        // layout (the reported "the save didn't take"). Now we also purge that page's CRIT
+        // (file + per-URL transients, via removeCriticalFiles) so the next visit regenerates
+        // crit for the new layout. This handler is the RELIABLE path (it already fired — it's
+        // what was purging the HTML); all work here is local file/option deletes = NON-BLOCKING;
+        // crit regeneration happens lazily on the next front-end visit, never on this save.
+        $post_id = 0;
+        if (is_object($document) && method_exists($document, 'get_post')) {
+            $p = $document->get_post();
+            if (is_object($p) && !empty($p->ID)) {
+                $post_id = (int) $p->ID;
+            }
+        }
+
         $cacheHtml = new wps_cacheHtml();
-        $cacheHtml->removeCacheFiles($document->get_post()->ID);
+
+        // A Theme-Builder template / global widget / library item (post_type elementor_library
+        // — headers, footers, single/archive layouts, popups, global widgets) affects MANY
+        // front-end pages, not just itself: a header change must invalidate every page's HTML
+        // + crit. Full purge in that case (still LOCAL/non-blocking — the site-wide regen is
+        // lazy, per visit). A normal page/post is scoped to itself below.
+        if ($post_id !== 0 && function_exists('get_post_type') && get_post_type($post_id) === 'elementor_library') {
+            $cacheHtml->removeCacheFiles('all');
+            $cacheHtml->removeCriticalFiles('all');
+            // Edge: a global template change makes every page's edge HTML stale; home is the
+            // highest-value HTML-only eviction we can name cheaply (no zone-wide purge → assets
+            // stay cached). Non-blocking.
+            self::purgeEdgeHtmlUrls([home_url('/')]);
+            return;
+        }
+
+        // Normal page/post: scope to THIS page — its HTML cache AND its critical CSS.
+        $cacheHtml->removeCacheFiles($post_id);
+        $cacheHtml->removeCriticalFiles($post_id);
+
+        // Edge: the page's crit is inlined INTO its HTML, so a CF-fronted site keeps serving
+        // the stale above-the-fold from the edge until the edge copy is dropped. Evict just
+        // THIS page's HTML URL at the edge (HTML only — never the image/CSS/JS assets), async.
+        $page_url = ($post_id !== 0) ? get_permalink($post_id) : home_url('/');
+        if (!empty($page_url)) {
+            self::purgeEdgeHtmlUrls([$page_url]);
+        }
+    }
+
+    /**
+     * (v7.10.04) NON-BLOCKING, HTML-ONLY Cloudflare edge purge of specific page URL(s).
+     *
+     * Used by the Elementor save path: the page's critical CSS is inlined into its HTML, so
+     * clearing the LOCAL crit alone leaves a CF-fronted site serving the stale above-the-fold
+     * from the edge. We purge ONLY the given URL(s) via purgeFilesAsync — NEVER a zone-wide
+     * purge_everything — so edge-cached IMAGES / CSS / JS are left intact (a full purge would
+     * cold-miss every asset → origin image storm, the documented failure this avoids). The
+     * call is fire-and-forget (blocking=false, 0.01s timeout) so the editor save stays instant,
+     * and is a no-op when Cloudflare isn't connected. Best-effort: any error is swallowed.
+     */
+    public static function purgeEdgeHtmlUrls($urls)
+    {
+        if (empty($urls) || !is_array($urls)) {
+            return;
+        }
+        $urls = array_values(array_unique(array_filter(array_map('strval', $urls))));
+        $urls = apply_filters('wpc_cf_html_purge_urls', $urls); // mirror the upgrade-path filter
+        if (empty($urls)) {
+            return;
+        }
+
+        $cf = get_option(WPS_IC_CF);
+        if (empty($cf['token']) || empty($cf['zone'])) {
+            return; // Cloudflare not connected → nothing to evict at the edge
+        }
+
+        if (!class_exists('WPC_CloudflareAPI')) {
+            @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+        }
+        if (!class_exists('WPC_CloudflareAPI')) {
+            return;
+        }
+
+        try {
+            $sdk = new WPC_CloudflareAPI($cf['token']);
+            if (method_exists($sdk, 'purgeFilesAsync')) {
+                $sdk->purgeFilesAsync($cf['zone'], $urls);
+            }
+        } catch (\Throwable $e) {
+            // Edge purge is best-effort; a CF/SDK hiccup must never break the save.
+        }
     }
 
     public static function purgeCDNUpdate()

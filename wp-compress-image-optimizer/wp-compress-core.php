@@ -189,6 +189,51 @@ function wpc_invalidate_local_cache() {
 }
 
 /**
+ * Bulk liveness heartbeat — bump on every unit of bulk progress.
+ *
+ * The "Local is running" badge is driven by the autoloaded option
+ * wps_ic_bulk_process (no TTL), which doubles as the worker's "keep going" flag.
+ * If the driver dies mid-run — tab closed (JS-sequential), FPM/OOM kill — its
+ * terminal cleanup never runs and the flag is orphaned, pinning the badge forever.
+ *
+ * This short-TTL transient is the liveness signal: each bulk action (per image /
+ * per drain slice) refreshes it, so a genuinely-advancing bulk never lets it lapse.
+ * Bump it ONLY on bulk progress — not on unrelated local actions (a manual single
+ * compress later must not resurrect a dead bulk's heartbeat).
+ */
+function wpc_bulk_heartbeat_touch() {
+    // 5 min TTL. Bulk actions are seconds apart (per image ~12s, per slice <=30s),
+    // so this never lapses mid-run; once the driver dies it expires within 5 min.
+    set_transient('wpc_bulk_heartbeat', time(), 300);
+}
+
+/**
+ * Read wps_ic_bulk_process with an orphan self-heal.
+ *
+ * Returns the bulk-process array while genuinely live (heartbeat fresh), or false
+ * once the driver has died and the heartbeat lapsed — clearing the orphaned flag
+ * at read time (which always runs), since the worker's own cleanup didn't.
+ *
+ * Use this anywhere the UI decides whether Local optimization is "running" — a raw
+ * get_option can't tell a live bulk from a dead one.
+ *
+ * @return array|false The bulk-process array while genuinely live, else false.
+ */
+function wpc_bulk_process_active() {
+    $bp = get_option('wps_ic_bulk_process');
+    if (empty($bp)) {
+        return false;
+    }
+    if (get_transient('wpc_bulk_heartbeat')) {
+        return $bp; // a recent bulk action kept it alive → genuinely running
+    }
+    // No heartbeat for the full TTL → the driver is dead. Mirror its terminal cleanup.
+    delete_option('wps_ic_bulk_process');
+    delete_transient('wps_ic_bulk_running');
+    return false;
+}
+
+/**
  * Purge CDN cache for a specific image and all its thumbnails.
  * Calls the MC pod per-URL purge endpoint + Cloudflare purge if connected.
  * Non-blocking — does not slow down the restore flow.
@@ -1309,7 +1354,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.10.03';
+        self::$version = '7.10.04';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -1442,7 +1487,7 @@ class wps_ic
 
             if (version_compare($installed_version, self::$version, '<') || !empty($_GET['simulateVersionChange'])) {
 
-                // (v7.10.03) CRASH-PROOF UPGRADE PASS — world-class reliable, cron-free.
+                // (v7.10.04) CRASH-PROOF UPGRADE PASS — world-class reliable, cron-free.
                 //
                 // Every upgrade-time step below is wrapped so that NO error can white-screen
                 // the admin/settings page (the symptom customers saw on a bad upgrade). Two layers:
@@ -1512,16 +1557,27 @@ class wps_ic
                 // features take effect on upgrade without a settings save. Also
                 // re-assert WP_CACHE=true — some upgrade paths (uploader, managed-
                 // host snapshots) skip activation() so the constant can drift false.
-                if (!class_exists('wps_ic_htaccess')) {
-                    @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
-                }
-                if (class_exists('wps_ic_htaccess')) {
-                    $htaccess = new wps_ic_htaccess();
-                    $htaccess->setWPCache(true);
-                    $htaccess->setAdvancedCache();
+                //
+                // (v7.10.04) GATED on WPC page caching being enabled. Previously this ran
+                // unconditionally on every update, so it clobbered another caching plugin's
+                // advanced-cache.php (e.g. W3TC) and forced WP_CACHE=true on sites that
+                // deliberately run WPC for images/CDN only with caching OFF. When caching is
+                // OFF we now leave advanced-cache.php AND WP_CACHE untouched. The gated
+                // admin-load re-assert (checkHtaccess, ~3633) restores the drop-in the moment
+                // caching is turned back on, so nothing is lost by deferring here.
+                $wpc_cache_settings = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+                if (!empty($wpc_cache_settings['cache']['advanced']) && $wpc_cache_settings['cache']['advanced'] == '1') {
+                    if (!class_exists('wps_ic_htaccess')) {
+                        @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+                    }
+                    if (class_exists('wps_ic_htaccess')) {
+                        $htaccess = new wps_ic_htaccess();
+                        $htaccess->setWPCache(true);
+                        $htaccess->setAdvancedCache();
+                    }
                 }
 
-                // (v7.10.03) The stored-version bump MOVED to the very end of this block
+                // (v7.10.04) The stored-version bump MOVED to the very end of this block
                 // (after the final step) so the upgrade pass is atomic + self-resuming: the
                 // version only advances once a full clean pass completes. Bumping it HERE
                 // (mid-block) is what let a fatal in a later step abandon the remaining work
@@ -1558,7 +1614,7 @@ class wps_ic
                 }
 
                 // Auto-enable picture_webp for existing users who have WebP enabled
-                // (v7.10.03) GUARD: only operate if the stored option is the expected ARRAY
+                // (v7.10.04) GUARD: only operate if the stored option is the expected ARRAY
                 // shape. A legacy/corrupt install can hold WPS_IC_SETTINGS as a string (or other
                 // scalar); the writes below ($migrateSettings['picture_webp'] = '1' etc.) on a
                 // string are a PHP-8 string-offset assignment = FATAL. This is the kind of
@@ -1587,7 +1643,7 @@ class wps_ic
                 // a natural .avif vs the never-404 wp:2 transform is the independent,
                 // proof-based per-zone flavor gate — an un-converged zone falls back
                 // to the transform, so this heal can't produce a 404ing source.
-                // (v7.10.03) GUARD: same array-shape protection as the picture_webp migrate
+                // (v7.10.04) GUARD: same array-shape protection as the picture_webp migrate
                 // above — the writes below assign string keys on $migrateSettings, which fatal
                 // if a legacy/corrupt install holds WPS_IC_SETTINGS as a scalar. is_array() short-
                 // circuits to a no-op on a bad shape; identical behavior for the normal array case.
@@ -1637,7 +1693,7 @@ class wps_ic
                     }
                 }
 
-                // (v7.10.03) FINAL STEP — bump the stored version ONLY after the whole pass
+                // (v7.10.04) FINAL STEP — bump the stored version ONLY after the whole pass
                 // above ran clean. Doing it last (was mid-block) makes the upgrade atomic +
                 // self-resuming: any earlier failure leaves the version behind so the next
                 // admin load retries the full (idempotent) pass. No cron involved.
@@ -2467,8 +2523,17 @@ class wps_ic
         $config = new wps_ic_config();
         $config->generateCacheConfig();
 
-        $htaccess->setWPCache(true);
-        $htaccess->setAdvancedCache();
+        // (v7.10.04) Only take over advanced-cache.php + WP_CACHE when WPC page caching is
+        // enabled — otherwise (re)activation would clobber another caching plugin's drop-in
+        // (e.g. W3TC) on a site that runs WPC for images/CDN only. A fresh install has no
+        // settings yet here, so this skips; the admin-load re-assert (checkHtaccess, ~3633),
+        // which first writes the recommended defaults, then installs the drop-in on the next
+        // admin load if the default has caching on.
+        $wpc_cache_settings = get_option(WPS_IC_SETTINGS);
+        if (!empty($wpc_cache_settings['cache']['advanced']) && $wpc_cache_settings['cache']['advanced'] == '1') {
+            $htaccess->setWPCache(true);
+            $htaccess->setAdvancedCache();
+        }
 
         // Setup inline JS Defaults
         $wpc_excludes = get_option('wpc-inline');

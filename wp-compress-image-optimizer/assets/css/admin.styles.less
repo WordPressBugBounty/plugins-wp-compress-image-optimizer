@@ -3940,9 +3940,9 @@ td.wps_compress {
   /* background: #ffa800;*/
 }
 
-th.column-title {
-  width: 200px;
-}
+// removed (v7.03.17): unscoped `th.column-title{width:200px}` leaked onto WordPress's own media-library
+// Title column on upload.php (admin.styles.css loads there for the WPC optimization column). No WPC table
+// uses the `column-title` class, so the rule had no legitimate target — it only overrode WP core's layout.
 
 .wps-ic-form-loading-container {
   text-align: center;

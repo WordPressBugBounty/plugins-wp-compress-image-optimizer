@@ -132,7 +132,7 @@ class wpc_gui_v4 extends wps_ic
             $lockedClass = 'wpc-locked-setting';
         }
 
-        $bulkProcess = get_option('wps_ic_bulk_process');
+        $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
 
         if (!is_array($option)) {
             $tooltipID = 'option_tooltip_' . $option;

@@ -214,3 +214,14 @@
   to { transform: scaleY(1); }
 }
 
+// ─── Next-Gen cascade entrance (v7.01.22) — format chips fill in sequentially on enable ───
+@keyframes wpcChipCascade {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.9); }
+  60%  { opacity: 1; transform: translateY(-2px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wpcArrowDraw {
+  0%   { opacity: 0; transform: translateX(-6px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
