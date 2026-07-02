@@ -6945,8 +6945,10 @@ class wps_local_compress
                 }
             }
 
-            // WebP File Path
-            $webp_file_location = str_replace('.' . $extension, '.webp', $file_location);
+            // WebP File Path — (v7.10.04.2) anchor to the TRUE trailing extension. The old
+            // str_replace('.'.$extension, ...) replaced EVERY occurrence, so a file whose mid-name
+            // token equals its extension (e.g. "x.png-4.png") got double-swapped to a bad name.
+            $webp_file_location = preg_replace('/\.' . preg_quote($extension, '/') . '$/', '.webp', $file_location);
             $call = wp_remote_post(self::$apiURL, ['timeout' => 300, 'method' => 'POST', 'headers' => $headers, 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {

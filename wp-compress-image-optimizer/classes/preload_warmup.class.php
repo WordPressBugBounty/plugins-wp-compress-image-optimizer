@@ -1005,9 +1005,19 @@ class wps_ic_preload_warmup
 
     public function saveGzCacheLocal($cachePath, $body)
     {
-        $fp = fopen($cachePath . 'index.html' . '_gzip', 'w+');
+        // (v7.10.06) ATOMIC write — temp + rename() so a live visitor's readgzfile never reads a
+        // half-warmed gzip. See cacheHtml.php::saveGzCache.
+        $final = $cachePath . 'index.html' . '_gzip';
+        $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+        $fp = @fopen($tmp, 'w+');
+        if ($fp === false) {
+            return;
+        }
         fwrite($fp, gzencode($body, 8));
         fclose($fp);
+        if (!@rename($tmp, $final)) {
+            @unlink($tmp);
+        }
     }
 
     public function stopOptimizations()

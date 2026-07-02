@@ -722,7 +722,10 @@ class wpc_ic_delivery
             $settings = get_option(WPS_IC_SETTINGS);
 
             if (!empty($settings['generate_webp']) && $settings['generate_webp'] == '1' && !empty($imageData['url_webp'])) {
-                $webpPath = str_replace(['.png', '.jpg', '.jpeg'], '.webp', $imagePath);
+                // (v7.10.04.2) anchor the ext swap to the TRUE trailing extension — the old
+                // str_replace mangled mid-name ".png"/".jpg" (e.g. "Layout-1-B.png-4.webp"),
+                // writing the local webp variant under a bad name that later 404s on delivery.
+                $webpPath = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $imagePath);
 
                 // It's an URL
                 $imageWebpDownload = download_url($imageData['url_webp']);

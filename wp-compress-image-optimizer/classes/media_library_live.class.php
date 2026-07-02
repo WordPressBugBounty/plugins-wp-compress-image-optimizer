@@ -663,8 +663,22 @@ class wps_ic_media_library_live extends wps_ic
                 $output .= '<div class="wpc-ml-card wpc-ml-card--excluded is-excluded">';
                 $output .= self::icon_stack();
                 $output .= '<div class="wpc-ml-body">';
-                $output .= '<div class="wpc-ml-title">' . esc_html__('Unsupported Format', 'wp-compress-image-optimizer') . '</div>';
-                $output .= '<div class="wpc-ml-subtitle">' . esc_html__('JPEG, PNG & GIF only', 'wp-compress-image-optimizer') . '</div>'; // (v7.03.118) literal & — esc_html__ encodes it once (was double-encoding to &amp;)
+                // (v7.10.04.7) A next-gen SOURCE (webp/avif) can't be re-optimized locally — name it
+                // explicitly ("Already WebP/AVIF Image") instead of a generic "Unsupported Format".
+                $wpc_src_ext = strtolower((string) $type['ext']);
+                if ($wpc_src_ext === '') $wpc_src_ext = strtolower((string) pathinfo((string) $file_data, PATHINFO_EXTENSION));
+                if ($wpc_src_ext === 'webp') {
+                    $wpc_ml_title = __('Already WebP', 'wp-compress-image-optimizer');
+                    $wpc_ml_sub   = __('Unsupported format', 'wp-compress-image-optimizer');
+                } elseif ($wpc_src_ext === 'avif') {
+                    $wpc_ml_title = __('Already AVIF', 'wp-compress-image-optimizer');
+                    $wpc_ml_sub   = __('Unsupported format', 'wp-compress-image-optimizer');
+                } else {
+                    $wpc_ml_title = __('Unsupported Format', 'wp-compress-image-optimizer');
+                    $wpc_ml_sub   = __('JPEG, PNG & GIF only', 'wp-compress-image-optimizer'); // literal & — esc_html encodes once
+                }
+                $output .= '<div class="wpc-ml-title">' . esc_html($wpc_ml_title) . '</div>';
+                $output .= '<div class="wpc-ml-subtitle">' . esc_html($wpc_ml_sub) . '</div>';
                 $output .= '</div>';
                 $output .= '</div>';
             }

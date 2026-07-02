@@ -793,6 +793,35 @@ HTACCESS;
             $mandatoryCookieReplacement = "#WPC_MANDATORY_COOKIES_START\ndefine('WPC_MANDATORY_COOKIES', $mandatoryCookiesConstant);\n#WPC_MANDATORY_COOKIES_END";
             $newContents = preg_replace("/$mandatoryCookiePattern/s", $mandatoryCookieReplacement, $newContents);
 
+            // (v7.10.06) Bake the URL/cache exclude lists into the drop-in so the pre-WP hit path runs
+            // ZERO DB queries (was 2 SELECTs per request). Re-baked here on every settings/excludes save.
+            $urlExcludesConstant = 'false';
+            $cacheExcludesConstant = 'false';
+
+            $wpc_url_excludes_opt = get_option('wpc-url-excludes');
+            if (!empty($wpc_url_excludes_opt['exclude-url-from-all']) && is_array($wpc_url_excludes_opt['exclude-url-from-all'])) {
+                $urlExFmt = array_map(function ($p) {
+                    return "'" . addslashes($p) . "'";
+                }, $wpc_url_excludes_opt['exclude-url-from-all']);
+                $urlExcludesConstant = 'array(' . implode(', ', $urlExFmt) . ')';
+            }
+
+            $wpc_cache_excludes_opt = get_option('wpc-excludes');
+            if (!empty($wpc_cache_excludes_opt['cache']) && is_array($wpc_cache_excludes_opt['cache'])) {
+                $cacheExFmt = array_map(function ($p) {
+                    return "'" . addslashes($p) . "'";
+                }, $wpc_cache_excludes_opt['cache']);
+                $cacheExcludesConstant = 'array(' . implode(', ', $cacheExFmt) . ')';
+            }
+
+            $urlExPattern = "#WPC_URL_EXCLUDES_START\r?\n(.+?)\r?\n#WPC_URL_EXCLUDES_END";
+            $urlExReplacement = "#WPC_URL_EXCLUDES_START\ndefine('WPC_URL_EXCLUDES', $urlExcludesConstant);\n#WPC_URL_EXCLUDES_END";
+            $newContents = preg_replace("/$urlExPattern/s", $urlExReplacement, $newContents);
+
+            $cacheExPattern = "#WPC_CACHE_EXCLUDES_START\r?\n(.+?)\r?\n#WPC_CACHE_EXCLUDES_END";
+            $cacheExReplacement = "#WPC_CACHE_EXCLUDES_START\ndefine('WPC_CACHE_EXCLUDES', $cacheExcludesConstant);\n#WPC_CACHE_EXCLUDES_END";
+            $newContents = preg_replace("/$cacheExPattern/s", $cacheExReplacement, $newContents);
+
             if ($newContents !== $currentAdvancedCache) {
                 file_put_contents($this->advancedCachePath, $newContents);
             }

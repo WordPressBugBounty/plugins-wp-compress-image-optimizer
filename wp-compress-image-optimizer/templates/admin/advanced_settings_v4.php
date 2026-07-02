@@ -1884,6 +1884,11 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 echo $gui::checkboxDescription_v4(__('Right-size Lazy Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'lazy-auto-sizes', false, 'right', false, false, '', 'BETA');
                                                 echo $gui::checkboxDescription_v4(__('Retina in srcset', WPS_IC_TEXTDOMAIN), '', false, false, 'retina-in-srcset', false, 'right', false, false, '');
                                                 echo $gui::checkboxDescription_v4(__('Natural AVIF Sources', WPS_IC_TEXTDOMAIN), '', false, '0', 'avif-natural-source', false, 'right', '');
+                                                // (v7.10.04.4) Force Natural URLs — emit clean natural CDN URLs instead of the /q:i/
+                                                // transform form even where the auto-witness stays conservative (e.g. a vary-blind
+                                                // Cloudflare zone). Wired into wpc_force_natural() alongside the WPC_FORCE_NATURAL
+                                                // constant + filter. Only safe when the CDN serves the requested format deterministically.
+                                                echo $gui::checkboxDescription_v4(__('Force Natural URLs', WPS_IC_TEXTDOMAIN), __('Emit clean natural CDN URLs instead of the /q:i/ transform form, even where the auto-detection stays conservative. Only enable when your CDN serves the requested format deterministically (e.g. a Cloudflare zone that returns webp for a .webp URL).', WPS_IC_TEXTDOMAIN), false, '0', 'force-natural', false, 'right', false, false, '', 'BETA');
                                                 echo $gui::checkboxDescription_v4(__('Optimize Metadata Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'optimize_meta_images', false, 'right', '');
                                                 // '.htaccess WebP Rewrite' removed — it was a dead toggle (read nowhere; real .htaccess
                                                 // gate keys off generate_webp). Server-level delivery is now resolver-chosen + verified.

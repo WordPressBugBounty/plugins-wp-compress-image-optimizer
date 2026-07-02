@@ -1354,7 +1354,7 @@ class wps_ic
 
         // Basic plugin info
         self::$slug = 'wpcompress';
-        self::$version = '7.10.04';
+        self::$version = '7.10.09';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -3861,10 +3861,21 @@ class wps_ic
 
             $requests = new wps_ic_requests();
 
+            // (v7.10.08) Thread a PLUGIN-generated uuid end-to-end so the fire-and-forget result is
+            // POLLABLE. The old dispatch sent a throwaway `hash` the server ignored (it self-assigned an
+            // id + the worker overwrote it with its own uuidv4), so get-results was keyed on an id nothing
+            // outside the worker could ever learn — the plugin waited on a push callback that doesn't exist
+            // → the card hung forever (activeJobs:0). pagespeed-mc v1.49.0 accepts this client uuid|hash and
+            // threads it to the file name. We stash it so the first-run self-heal can pull
+            // get-results/{uuid} status-first (symmetric with crit's /status?uuid=). Backward-compatible:
+            // an older server keys on its own id, get-results 404s, and the self-heal re-dispatches.
+            $psiUuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
+            set_transient('wpc_psi_uuid', $psiUuid, 30 * 60);
+
             // Test
-            $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $apikey];
+            $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'uuid' => $psiUuid, 'hash' => $psiUuid, 'apikey' => $apikey];
             $args['features'] = self::getActiveFeatures();
-            // Fire-and-forget: the PageSpeed server calls back with results via ?fetchTest={jobId}
+            // Fire-and-forget dispatch; the plugin PULLS get-results/{uuid} (no push callback exists).
             $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
         }
     }
@@ -4723,3 +4734,206 @@ add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
         }
     }
 }, 10, 2);
+
+/**
+ * (v7.10.06) Keep the drop-in's baked exclude constants (WPC_URL_EXCLUDES / WPC_CACHE_EXCLUDES) in
+ * sync with the options. The zero-DB hit path in advanced-cache.php reads those constants, so a stale
+ * bake would silently honour an out-of-date exclude list. Re-template on ANY change to either option —
+ * this catches the save paths (per-page settings, import, recovery) that don't call setAdvancedCache
+ * directly. No-ops unless page caching is on and the drop-in exists (setAdvancedCache guards both), and
+ * only writes when the rendered content actually changed.
+ */
+$wpc_rebake_dropin_excludes = function () {
+    $s = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+    if (empty($s['cache']['advanced']) || $s['cache']['advanced'] != '1') {
+        return;
+    }
+    // COMPATIBILITY: only ever re-bake OUR OWN drop-in. If advanced-cache.php is absent (activation
+    // installs it) or belongs to another cache plugin (WP Rocket / W3TC / LiteSpeed / WP Super Cache —
+    // they don't carry our WP_COMPRESS_ADVANCED_CACHE marker), do NOT touch it. Prevents clobbering a
+    // co-installed cache plugin's drop-in when WPC caching was left on.
+    $wpc_dropin = ABSPATH . 'wp-content/advanced-cache.php';
+    if (!file_exists($wpc_dropin)) {
+        return;
+    }
+    $wpc_dropin_head = @file_get_contents($wpc_dropin, false, null, 0, 256);
+    if ($wpc_dropin_head === false || strpos($wpc_dropin_head, 'WP_COMPRESS_ADVANCED_CACHE') === false) {
+        return; // not our drop-in — leave it alone
+    }
+    if (!class_exists('wps_ic_htaccess')) {
+        @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+    }
+    if (class_exists('wps_ic_htaccess')) {
+        try {
+            $htaccess = new wps_ic_htaccess();
+            $htaccess->setAdvancedCache();
+        } catch (\Throwable $e) {}
+    }
+};
+add_action('update_option_wpc-excludes', $wpc_rebake_dropin_excludes);
+add_action('add_option_wpc-excludes', $wpc_rebake_dropin_excludes);
+add_action('update_option_wpc-url-excludes', $wpc_rebake_dropin_excludes);
+add_action('add_option_wpc-url-excludes', $wpc_rebake_dropin_excludes);
+
+/**
+ * (v7.10.07) FIRST-RUN SELF-HEAL — a fresh site's Critical CSS + PageSpeed can never stay stuck.
+ *
+ * A freshly-provisioned site's initial crit run rides ONE crit-push /generate round-trip (which also
+ * populates the PageSpeed card, criticalCss-v2.php:535). The render-time trigger is disabled, so that
+ * first run depends on the dashboard AJAX firing AND returning — if it's dropped (dispatched-but-lost,
+ * or completed-but-callback-lost), crit never generates and "Analyzing…" spins forever. This runs on
+ * admin load and, when the site is provisioned but the home has no crit, (re)dispatches the run —
+ * bounded, non-blocking, and self-healing:
+ *   - re-dispatches a STUCK run once it passes the round-trip timeout (default 180s), so a lost run heals;
+ *   - re-dispatch goes through the plugin's real initCritical, which polls /status for the in-flight uuid
+ *     — so it also recovers a completed-but-UNRETURNED run, not just a never-dispatched one;
+ *   - after N fast attempts (default 5) it sets wpc_first_run_failed so the UI can show a retry/error
+ *     instead of an infinite spinner, but KEEPS retrying hourly so a transient crit-push outage recovers
+ *     on its own (never a permanent stuck state);
+ *   - clears its state the instant crit lands.
+ * The dispatch runs on shutdown AFTER the response has flushed (fastcgi_finish_request), so it adds zero
+ * latency to the admin page. On a healthy site it's a single file_exists per admin load (early return).
+ * Tunables: filters wpc_first_run_timeout_seconds / wpc_first_run_max_attempts.
+ */
+if (!function_exists('wpc_first_run_home_crit_exists')) {
+    function wpc_first_run_home_crit_exists()
+    {
+        if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
+            return true; // can't tell → treat as present (fail-safe: never hammer)
+        }
+        $homePage = function_exists('get_option') ? get_option('page_on_front') : 0;
+        $url = (!empty($homePage) && function_exists('get_permalink')) ? get_permalink($homePage) : home_url('/');
+        $key = (new wps_ic_url_key())->setup($url);
+        if ($key === '') {
+            return true;
+        }
+        $f = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/critical_desktop.css';
+        return @file_exists($f) && @filesize($f) > 0;
+    }
+}
+if (!function_exists('wpc_first_run_dispatch_now')) {
+    function wpc_first_run_dispatch_now()
+    {
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request(); // flush the response first — the admin page is never blocked
+        }
+        if (!class_exists('wps_criticalCss')) {
+            @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+        }
+        if (class_exists('wps_criticalCss')) {
+            try {
+                $c = new wps_criticalCss();
+                $c->generateCriticalCSS('home', true); // real round-trip; /status poll recovers a lost callback
+            } catch (\Throwable $e) {}
+        }
+    }
+}
+add_action('admin_init', function () {
+    $opts = function_exists('get_option') ? get_option(WPS_IC_OPTIONS) : [];
+    if (empty($opts['api_key'])) {
+        return; // not provisioned yet — nothing to dispatch
+    }
+    if (wpc_first_run_home_crit_exists()) {
+        if (get_option('wpc_first_run_attempts') !== false) {
+            delete_option('wpc_first_run_dispatched_at');
+            delete_option('wpc_first_run_attempts');
+            delete_option('wpc_first_run_failed');
+        }
+        return; // crit is there — done
+    }
+    $dispatchedAt = (int) get_option('wpc_first_run_dispatched_at');
+    $attempts     = (int) get_option('wpc_first_run_attempts');
+    $timeout      = (int) apply_filters('wpc_first_run_timeout_seconds', 180);
+    $maxAttempts  = (int) apply_filters('wpc_first_run_max_attempts', 5);
+    // Fast retries while under the cap; then an hourly backstop — never permanently give up, never hammer.
+    $interval = ($attempts < $maxAttempts) ? $timeout : 3600;
+    if ($dispatchedAt > 0 && (time() - $dispatchedAt) < $interval) {
+        return; // a dispatch is in flight / backing off — let it be
+    }
+    if ($attempts >= $maxAttempts && !get_option('wpc_first_run_failed')) {
+        update_option('wpc_first_run_failed', 1, false); // UI: surface a retry/error, not a spinner
+    }
+    update_option('wpc_first_run_dispatched_at', time(), false);
+    update_option('wpc_first_run_attempts', $attempts + 1, false);
+    register_shutdown_function('wpc_first_run_dispatch_now');
+}, 20);
+
+/**
+ * (v7.10.08) PSI first-run self-heal — the PageSpeed card twin of the crit self-heal above.
+ * PSI is a SEPARATE run-pagespeed dispatch + get-results poll (NOT part of the crit round-trip — verified
+ * with the pagespeed team). There is no push callback, and pagespeed-mc v1.49.0 keys the benchmark on the
+ * plugin-supplied uuid (stashed as wpc_psi_uuid at dispatch). So recovery is PULL: poll get-results/{uuid}
+ * status-first; if no uuid is stashed (never dispatched / expired), dispatch a fresh run with a new uuid.
+ * Bounded (5 fast, then hourly), non-blocking (shutdown), no-op once the card is populated.
+ */
+if (!function_exists('wpc_first_run_psi_now')) {
+    function wpc_first_run_psi_now()
+    {
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request();
+        }
+        $opts = get_option(WPS_IC_OPTIONS);
+        if (empty($opts['api_key'])) {
+            return;
+        }
+        $uuid = function_exists('get_transient') ? get_transient('wpc_psi_uuid') : '';
+        if (!empty($uuid)) {
+            // PULL: poll get-results/{uuid}; saveBenchmark() fills WPS_IC_LITE_GPS when the run is complete.
+            if (!class_exists('wps_criticalCss')) {
+                @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
+            }
+            if (class_exists('wps_criticalCss') && class_exists('wps_ic_url_key')) {
+                try {
+                    $homePage = get_option('page_on_front');
+                    $url = (!empty($homePage) && function_exists('get_permalink')) ? get_permalink($homePage) : home_url('/');
+                    $key = (new wps_ic_url_key())->setup($url);
+                    (new wps_criticalCss())->saveBenchmark($key, $uuid);
+                } catch (\Throwable $e) {}
+            }
+            return;
+        }
+        // No uuid stashed → dispatch a fresh run keyed on a plugin uuid (pull-recoverable next cycle).
+        $uuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
+        set_transient('wpc_psi_uuid', $uuid, 30 * 60);
+        try {
+            $requests = new wps_ic_requests();
+            $args = [
+                'url'            => home_url(),
+                'uuid'           => $uuid,
+                'hash'           => $uuid,
+                'apikey'         => $opts['api_key'],
+                'version'        => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+                'plugin_version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+            ];
+            $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => ['Content-Type' => 'application/json']]);
+        } catch (\Throwable $e) {}
+    }
+}
+add_action('admin_init', function () {
+    $opts = function_exists('get_option') ? get_option(WPS_IC_OPTIONS) : [];
+    if (empty($opts['api_key'])) {
+        return;
+    }
+    $gps = get_option(WPS_IC_LITE_GPS);
+    if (!empty($gps['result'])) {
+        if (get_option('wpc_first_run_psi_attempts') !== false) {
+            delete_option('wpc_first_run_psi_at');
+            delete_option('wpc_first_run_psi_attempts');
+        }
+        return; // PageSpeed card is populated — done
+    }
+    $at          = (int) get_option('wpc_first_run_psi_at');
+    $attempts    = (int) get_option('wpc_first_run_psi_attempts');
+    $timeout     = (int) apply_filters('wpc_first_run_timeout_seconds', 180);
+    $maxAttempts = (int) apply_filters('wpc_first_run_max_attempts', 5);
+    $interval    = ($attempts < $maxAttempts) ? $timeout : 3600;
+    if ($at > 0 && (time() - $at) < $interval) {
+        return;
+    }
+    if ($attempts >= $maxAttempts && !get_option('wpc_first_run_failed')) {
+        update_option('wpc_first_run_failed', 1, false);
+    }
+    update_option('wpc_first_run_psi_at', time(), false);
+    update_option('wpc_first_run_psi_attempts', $attempts + 1, false);
+    register_shutdown_function('wpc_first_run_psi_now');
+}, 21);

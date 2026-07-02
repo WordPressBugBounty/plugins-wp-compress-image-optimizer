@@ -381,9 +381,19 @@ class wps_advancedCache
             return true;
         }
 
-        $fp = fopen($this->cachePath . $prefix . 'index.html' . '_gzip', 'w+');
+        // (v7.10.06) ATOMIC write — temp file + rename() so a concurrent readgzfile never sees a
+        // half-written gzip. See cacheHtml.php::saveGzCache for the full rationale.
+        $final = $this->cachePath . $prefix . 'index.html' . '_gzip';
+        $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+        $fp = @fopen($tmp, 'w+');
+        if ($fp === false) {
+            return $buffer;
+        }
         fwrite($fp, gzencode($buffer, 8));
         fclose($fp);
+        if (!@rename($tmp, $final)) {
+            @unlink($tmp);
+        }
 
         return $buffer;
     }

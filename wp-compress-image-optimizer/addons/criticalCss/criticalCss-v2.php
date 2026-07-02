@@ -458,6 +458,7 @@ class wps_criticalCss
 
         $stats = get_option(WPS_IC_TESTS);
         $attempt = 0;
+        $psiPending = false; // (v7.10.09) true when get-results is 'partial' (crit not ready) — don't finalize
 
         $this->debugPageSpeed(WPS_IC_PAGESPEED_RESULTS_HOME . $uuid);
 
@@ -481,6 +482,23 @@ class wps_criticalCss
 
             if (json_last_error() !== JSON_ERROR_NONE || empty($data)) {
                 $jobStatus['benchmark-failed'] = true;
+                break;
+            }
+
+            // (v7.10.09) STATUS-FIRST. get-results shapes verified live: complete | partial+cssGenerationFailed
+            // | 404. Only a COMPLETE benchmark has the optimized "after" pass; a 'partial' means crit isn't
+            // generated yet (afterScore null) — finalizing it would show a broken before→(blank) card. Treat
+            // non-complete as PENDING: retry once, else leave the result UNsaved so the first-run self-heal
+            // keeps polling and completes the instant crit lands. (Missing status = legacy complete.)
+            $psiStatus = isset($data['status']) ? (string) $data['status'] : 'complete';
+            if ($psiStatus !== 'complete') {
+                $jobStatus['benchmark-pending'] = $psiStatus;
+                if ($attempt === 0) {
+                    sleep(30);
+                    $attempt++;
+                    continue;
+                }
+                $psiPending = true;
                 break;
             }
 
@@ -532,7 +550,11 @@ class wps_criticalCss
 
         } while ($attempt <= 3);
 
-        update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => empty($parsedData), 'lastRun' => time()]);
+        // (v7.10.09) Don't finalize a PENDING (partial / crit-not-ready) benchmark — leave WPS_IC_LITE_GPS
+        // untouched so the card stays "analyzing" and the self-heal re-polls; only write a real complete/failed.
+        if (!$psiPending) {
+            update_option(WPS_IC_LITE_GPS, ['result' => $parsedData, 'failed' => empty($parsedData), 'lastRun' => time()]);
+        }
         return $jobStatus;
     }
 

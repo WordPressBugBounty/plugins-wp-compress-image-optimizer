@@ -1513,6 +1513,101 @@ class WPC_Modern_Delivery
     }
 
     /**
+     * (v7.10.04.4) URL-derived <picture> for OFFLOADED / attachment-unresolvable raster images.
+     *
+     * build_picture() is bound to a WP attachment + on-disk variants (file_exists-gated), so
+     * offloaded media (/storage/, S3, page-builder paths with no DB record) bails to the bare
+     * /q:i/ transform. This emitter derives the typed <source>s straight from the source URL —
+     * host-swap to the zone + ANCHORED ext-swap — and relies on the edge to OTF-transcode.
+     *
+     * SAFETY (this is why it is witness-gated, not a blind flag): a <picture> <source> that 404s
+     * is an UNRECOVERABLE broken image — browsers do NOT fall through <source>s on 404 (see the
+     * note at build_picture / :845). So a next-gen <source> is emitted ONLY for a format the zone
+     * is WITNESSED to serve naturally (avif_natural_source_ok / wpc_webp_immediate_ok — the very
+     * witnesses the uploads <picture> already rides). If neither is witnessed, we DON'T touch the
+     * tag (the transform stays). The <img> fallback is SAME-EXT (always exists at origin) + an
+     * origin onerror, so a no-<source> (old) browser is always safe.
+     *
+     * Flag: filter 'wpc_offloaded_picture' / constant WPC_OFFLOADED_PICTURE (default ON). KILL and
+     * the Next-Gen=Off ceiling both hard-disable. Returns null when it doesn't apply (caller keeps
+     * the original tag verbatim).
+     */
+    public static function build_picture_offloaded($original_tag, $src, $attrs)
+    {
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return null;
+        $flag_default = defined('WPC_OFFLOADED_PICTURE') ? (bool) WPC_OFFLOADED_PICTURE : true;
+        if (!apply_filters('wpc_offloaded_picture', $flag_default, $src)) return null;
+        if (!is_string($src) || $src === '' || stripos($src, 'data:') === 0) return null;
+
+        // The src may already be a /q:i/.../u:ORIGIN transform (cdn-rewrite ran first) — recover the origin.
+        $origin_src = $src;
+        if (strpos($src, '/u:') !== false && preg_match('~/u:(https?://[^?#\s"\']+)~', $src, $m)) {
+            $origin_src = $m[1];
+        }
+        $clean = preg_replace('/[?#].*$/', '', (string) $origin_src);
+        $ext   = strtolower((string) pathinfo($clean, PATHINFO_EXTENSION));
+        if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) return null; // raster only (never svg/gif/next-gen)
+
+        // SAME-ORIGIN only — never route a foreign host through the zone.
+        $origin_host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+        $src_host    = (string) wp_parse_url($clean, PHP_URL_HOST);
+        if ($origin_host === '' || $src_host === '' || strcasecmp($src_host, $origin_host) !== 0) return null;
+
+        // Zone host: ic_custom_cname → ic_cdn_zone_name (host only).
+        $cdn_host = trim((string) get_option('ic_custom_cname'));
+        if ($cdn_host === '') $cdn_host = trim((string) get_option('ic_cdn_zone_name'));
+        $cdn_host = rtrim(preg_replace('#^https?://#', '', $cdn_host), '/');
+        if ($cdn_host === '' || strcasecmp($cdn_host, $origin_host) === 0) return null; // no zone / self-loop
+
+        // Next-Gen ceiling + readiness. A <source> 404 is fatal → emit ONLY formats the zone will serve.
+        // "Force Natural URLs" is the operator confirming this zone is OTF-ready — it enables BOTH formats
+        // (typed <picture> sources don't need vary-correctness, so the vary-concerned witnesses that gate
+        // the single-URL lane wrongly blocked this offloaded lane on vary-blind CF zones). Without force,
+        // fall back to the per-format natural witnesses (the same signal the uploads <picture> rides).
+        $ceiling = class_exists('WPC_Delivery_Resolver')
+            ? WPC_Delivery_Resolver::effective_ceiling(get_option(WPS_IC_SETTINGS)) : 'avif';
+        if ($ceiling === 'off') return null; // Next-Gen off → nothing to gain, keep the transform
+        $forced  = function_exists('wpc_force_natural') && wpc_force_natural();
+        $avif_ok = ($ceiling === 'avif') && ($forced || (class_exists('wps_rewriteLogic')
+            && method_exists('wps_rewriteLogic', 'avif_natural_source_ok') && wps_rewriteLogic::avif_natural_source_ok()));
+        $webp_ok = $forced || (class_exists('wps_cdn_rewrite')
+            && method_exists('wps_cdn_rewrite', 'wpc_webp_immediate_ok') && wps_cdn_rewrite::wpc_webp_immediate_ok());
+        if (!$avif_ok && !$webp_ok) return null; // not ready for next-gen → keep the transform (no 404 risk)
+
+        // Natural base = host-swap origin → zone (exact origin path preserved). Anchored ext-swap (mangle-safe).
+        $zone_base = preg_replace('#^https?://[^/]+#', 'https://' . $cdn_host, $clean);
+        $swap = function ($fmt) use ($zone_base) {
+            return class_exists('wps_rewriteLogic')
+                ? wps_rewriteLogic::swap_ext_to($zone_base, $fmt)
+                : preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.' . $fmt, $zone_base);
+        };
+        // ?src= on-disk-format hint — uniform with the other lanes.
+        $hint = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
+            && wps_rewriteLogic::src_hint_enabled()) ? ('?src=' . ($ext === 'jpeg' ? 'jpg' : $ext)) : '';
+
+        // Preserve original attrs on the fallback <img> (minus the ones we own).
+        $skip = ['src', 'srcset', 'sizes', 'data-src', 'data-srcset', 'loading', 'decoding', 'onerror', 'data-wpc-fb'];
+        $extra = '';
+        foreach ($attrs as $k => $v) {
+            if (in_array($k, $skip, true)) continue;
+            $extra .= ' ' . $k . '="' . esc_attr($v) . '"';
+        }
+        $loading = (isset($attrs['loading']) && $attrs['loading'] === 'eager') ? 'eager' : 'lazy';
+
+        $html  = '<picture class="wpc-picture modern-delivery wpc-offloaded">';
+        if ($avif_ok) $html .= '<source type="image/avif" srcset="' . esc_attr($swap('avif') . $hint) . '">';
+        if ($webp_ok) $html .= '<source type="image/webp" srcset="' . esc_attr($swap('webp') . $hint) . '">';
+        $html .= '<img src="' . esc_url($zone_base) . '"';       // fallback = same-ext zone URL (exists at origin)
+        $html .= ' data-wpc-fb="' . esc_attr($clean) . '"';      // STATIC onerror (no URL in JS → no injection surface)
+        $html .= ' onerror="this.onerror=null;this.src=this.getAttribute(\'data-wpc-fb\');"';
+        $html .= ' loading="' . $loading . '" decoding="async"';
+        $html .= $extra;
+        $html .= ' />';
+        $html .= '</picture>';
+        return $html;
+    }
+
+    /**
      * preg_replace_callback handler for individual <img> tags.
      */
     public static function rewrite_img_callback($matches)
@@ -1533,7 +1628,12 @@ class WPC_Modern_Delivery
         // Resolve attachment (prefers wp-image-{id} class, falls back to URL resolution)
         $attachment_id = self::resolve_attachment_id($src, $attrs['class'] ?? '');
 
-        if ($attachment_id <= 0) return $original_tag; // external / unknown
+        if ($attachment_id <= 0) {
+            // (v7.10.04.4) OFFLOADED / attachment-unresolvable raster → URL-derived typed <picture>
+            // (witness-gated; null when it doesn't apply → keep the original transform tag verbatim).
+            $off = self::build_picture_offloaded($original_tag, $src, $attrs);
+            return $off !== null ? $off : $original_tag;
+        }
 
         // Is this LCP candidate?
         $is_lcp = self::is_lcp_candidate($attrs, self::resolve_metadata($attachment_id));

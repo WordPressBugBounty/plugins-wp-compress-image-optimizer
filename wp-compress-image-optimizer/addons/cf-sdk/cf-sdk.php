@@ -1768,26 +1768,26 @@ GQL;
         $missingPermissions = [];
         $permissionTests = [];
 
-        // Helper function to check if response indicates permission error
+        // (v7.10.04.9) Return TRUE only for a GENUINE Cloudflare permission/auth code. A transport
+        // WP_Error (timeout / DNS / connection refused) or any NON-permission CF error is INCONCLUSIVE
+        // and must NOT count as a missing scope — the old blanket `is_wp_error() => true` rejected
+        // otherwise-valid tokens whenever a single probe hiccuped. processResponse() returns CF errors
+        // as a WP_Error whose DATA is the CF errors array ([['code'=>9109,...]]); a decoded array
+        // return means the call SUCCEEDED. (The old success-false-array branch was dead — processResponse
+        // never returns that shape for an error.)
         $isPermissionError = function ($response) {
-            if (is_wp_error($response)) {
-                return true;
+            if (!is_wp_error($response)) {
+                return false; // decoded array => the request succeeded (had the permission)
             }
-
-            // Check if success is false and there are errors
-            if (isset($response['success']) && $response['success'] === false) {
-                if (!empty($response['errors'])) {
-                    foreach ($response['errors'] as $error) {
-                        $code = $error['code'] ?? 0;
-                        // Permission/auth error codes: 9109, 10000, 1095
-                        if (in_array($code, [9109, 10000, 1095])) {
-                            return true;
-                        }
+            $data = $response->get_error_data();
+            if (is_array($data)) {
+                foreach ($data as $error) {
+                    if (is_array($error) && in_array((int) ($error['code'] ?? 0), [9109, 10000, 1095], true)) {
+                        return true; // real CF auth/permission code
                     }
                 }
             }
-
-            return false;
+            return false; // transport / non-permission error => inconclusive, NOT "missing permission"
         };
 
         // Test 1: Zone Read
@@ -1812,24 +1812,11 @@ GQL;
         // Use POST with minimal valid data to test permission without actually purging
         $cacheResponse = $this->postRequest("zones/{$zoneId}/purge_cache", ['files' => []]);
 
-        // Check if it's a permission error vs validation error
-        $hasCachePurgePermission = true;
-        if (is_wp_error($cacheResponse)) {
-            $hasCachePurgePermission = false;
-        } elseif (isset($cacheResponse['success']) && $cacheResponse['success'] === false) {
-            if (!empty($cacheResponse['errors'])) {
-                foreach ($cacheResponse['errors'] as $error) {
-                    $code = $error['code'] ?? 0;
-                    // Permission/auth error codes
-                    if (in_array($code, [9109, 10000, 1095])) {
-                        $hasCachePurgePermission = false;
-                        break;
-                    }
-                    // Code 1012 or similar validation errors mean we have permission but bad data
-                    // This is actually good - it means permission is OK
-                }
-            }
-        }
+        // Cache Purge: an empty `files` payload triggers a VALIDATION error (e.g. code 1012) which
+        // actually PROVES the token has purge scope (we got past auth to validation). Reuse the fixed
+        // classifier — only a genuine permission code counts as "no purge"; a validation or transport
+        // error is NOT a missing scope (same false-positive fix as above).
+        $hasCachePurgePermission = !$isPermissionError($cacheResponse);
 
         if (!$hasCachePurgePermission) {
             $missingPermissions[] = 'Zone - Cache Purge - Purge';
@@ -1879,13 +1866,48 @@ GQL;
             $permissionTests['Cache Rules Edit'] = 'OK';
         }
 
-        // Return results
-        if (!empty($missingPermissions)) {
-            $missingList = implode(', ', $missingPermissions);
-            return new WP_Error('cloudflare_insufficient_privileges', 'API token is missing required permissions: ' . $missingList, ['missing' => $missingPermissions, 'test_results' => $permissionTests]);
+        // (v7.10.04.9) CRITICAL vs OPTIONAL split. Only Zone Read (to resolve/verify the zone) and
+        // Cache Purge (the integration's core job) are REQUIRED to connect. The other five gate
+        // optional features and must NOT block — they come back as warnings so the operator can add
+        // them in Cloudflare and reconnect without being locked out. Returns a STRUCTURED ARRAY
+        // (was WP_Error|true) — the sole caller (ajax.class.php) is updated to match.
+        $criticalRefs = ['Zone - Zone - Read', 'Zone - Cache Purge - Purge'];
+        // Render each internal probe as the EXACT Cloudflare token-editor wording ("Group → Access")
+        // so the operator can find and add it verbatim in the CF dashboard (Create/Edit Token →
+        // Permissions row = [Zone] [Group] [Access]).
+        $cfLabel = [
+            'Zone - Zone - Read'              => 'Zone → Read',
+            'Zone - Cache Purge - Purge'      => 'Cache Purge → Purge',
+            'Zone - Zone Settings - Edit'     => 'Zone Settings → Edit',
+            'Zone - Firewall Services - Edit' => 'Firewall Services → Edit',
+            'Zone - DNS - Edit'               => 'DNS → Edit',
+            'Zone - Analytics - Read'         => 'Analytics → Read',
+            'Zone - Cache Rules - Edit'       => 'Cache Rules → Edit',
+        ];
+        $featureFor = [
+            'Zone - Zone Settings - Edit'     => 'auto Rocket-Loader conflict handling',
+            'Zone - Firewall Services - Edit' => 'firewall / access rules',
+            'Zone - DNS - Edit'               => 'automatic CNAME setup',
+            'Zone - Analytics - Read'         => 'the Cloudflare analytics panel',
+            'Zone - Cache Rules - Edit'       => 'edge-cache optimization rules',
+        ];
+        $critical_missing = [];
+        $optional_missing = [];
+        foreach ($missingPermissions as $perm) {
+            $label = $cfLabel[$perm] ?? $perm;
+            if (in_array($perm, $criticalRefs, true)) {
+                $critical_missing[] = $label;
+            } else {
+                $optional_missing[] = $label . (isset($featureFor[$perm]) ? ' (enables ' . $featureFor[$perm] . ')' : '');
+            }
         }
 
-        return true;
+        return [
+            'ok'               => empty($critical_missing), // can CONNECT when no critical scope is missing
+            'critical_missing' => $critical_missing,
+            'optional_missing' => $optional_missing,
+            'tests'            => $permissionTests,
+        ];
     }
 
     /**

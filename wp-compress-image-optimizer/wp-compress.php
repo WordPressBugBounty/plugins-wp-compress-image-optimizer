@@ -4,15 +4,17 @@
  * Plugin URI: https://www.wpcompress.com
  * Author: WP Compress
  * Author URI: https://www.wpcompress.com
- * Version: 7.10.04
+ * Version: 7.10.09
  * Description: Automatically compress and optimize images to shrink image file size, improve  times and boost SEO ranks - all without lifting a finger after setup.
  * Text Domain: wp-compress-image-optimizer
  * Domain Path: /languages
  */
 
+
 if (!defined('WPC_PLUGIN_VERSION')) {
-    define('WPC_PLUGIN_VERSION', '7.10.04');
+    define('WPC_PLUGIN_VERSION', '7.10.09');
 }
+
 
 $wpc_disabled_fns = array_filter(array_map('trim', explode(',', (string) (function_exists('ini_get') ? ini_get('disable_functions') : ''))));
 $wpc_can_shim = function ($fn) use ($wpc_disabled_fns) {
@@ -64,11 +66,6 @@ if (!function_exists('wpc_request_scheme')) {
     }
 }
 if (!function_exists('wpc_heal_mixed_content')) {
-    // On an https request, upgrade SAME-HOST http:// references to https:// so a
-    // proxy-misdetected core enqueue can't leave blocked mixed-content CSS/JS on
-    // the page. Same-host only (home_url / site_url / HTTP_HOST): an https site
-    // always serves its own assets over https, so this never touches genuinely
-    // external http resources. Cheap str_replace, guarded by a strpos pre-check.
     function wpc_heal_mixed_content($html)
     {
         if (!is_string($html) || $html === '' || !wpc_request_is_https()) {
@@ -100,24 +97,10 @@ if (!function_exists('wpc_heal_mixed_content')) {
     }
 }
 
-// Early detection of /wpc/v2/bg_swap REST callbacks. Set BEFORE any
-// plugin code loads so wp-compress-core.php can early-return before the wps_ic
-// constructor (integrations, preload_warmup, CF rocket check), CDN rewrite,
-// elementor, and admin/frontend hook registration — all of which are wasted
-// work on the bg_swap endpoint.
-//
-// WordPress defines REST_REQUEST inside parse_request (after plugins load), so
-// we can't gate on it here. URL-substring detection runs before WP bootstraps
-// anything. Service-team data 2026-05-20: bootstrap was the dominant remaining
-// cost after the v2-callback.php lock fix — ~5-7 s of every callback wall.
+
 if (!empty($_SERVER['REQUEST_URI'])) {
     $wpc_req_uri = (string) $_SERVER['REQUEST_URI'];
-    // Extended to cover /wpc/v2/healthcheck (Q10 cold-start probe
-    // from LS team's lazy_cdn flow). LS hits this once per new customer + caches
-    // 24h, so volume is low — but each probe under full bootstrap would burn
-    // 5-7s for no reason. Healthcheck handler only needs wps_ic::$version + a
-    // function_exists check; the WPC_IS_BG_SWAP early-return in core gives it
-    // the same fast path the bg_swap callback gets.
+
     if (strpos($wpc_req_uri, '/wp-json/wpc/v2/bg_swap') !== false
         || strpos($wpc_req_uri, '/wp-json/wpc/v2/healthcheck') !== false
         || strpos($wpc_req_uri, 'rest_route=/wpc/v2/bg_swap') !== false
@@ -157,9 +140,7 @@ if ((!isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC']) && ((defi
     include __DIR__ . '/wp-compress-cron.php';
 }
 
-// Register wp-cli commands when running under WP_CLI. The CLI handler
-// itself bootstraps wp-compress-core.php on demand, so this include is a no-op
-// outside cli context.
+
 if (defined('WP_CLI') && WP_CLI && !isset($_SERVER['HTTP_DISABLEWPC']) && empty($_GET['disableWPC'])) {
     include __DIR__ . '/wp-compress-cli.php';
 }

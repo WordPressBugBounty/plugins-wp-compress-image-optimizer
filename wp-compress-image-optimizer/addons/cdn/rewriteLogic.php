@@ -1439,9 +1439,13 @@ class wps_rewriteLogic
     // self::src_hint_qs($ext) for the ?src hint.
     public static function wpc_nw_url($src_url, $width, $fmt, $aspect_meta = null)
     {
-        $base = preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', (string) $src_url); // strip -WxH
+        // (v7.10.04.1) Strip query AND #fragment FIRST. A #fragment (e.g. a theme's "logo.png#665")
+        // survives the query-only strip AND defeats the -WxH/-Nw/ext strips below (they anchor on the
+        // extension at end-of-string), yielding a broken "logo.png#665-933w.webp" that the browser reads
+        // as fragment and fetches the base png — so next-gen silently never delivers for that image.
+        $base = preg_replace('/[?#].*$/', '', (string) $src_url);                   // strip query + fragment
+        $base = preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', $base);             // strip -WxH
         $base = preg_replace('/-\d+w(\.[a-z0-9]+)$/i', '$1', $base);                // strip -Nw
-        $base = preg_replace('/\?.*$/', '', $base);                                 // strip query
         $base = preg_replace('/\.[a-z0-9]+$/i', '', $base);                         // strip ext
         $base = preg_replace('#^https?://[^/]+#', 'https://' . self::$zoneName, $base);
         if (function_exists('wpc_v2_adaptive_variant_suffix') && is_array($aspect_meta)
@@ -1457,12 +1461,32 @@ class wps_rewriteLogic
     // NEVER upscales (no 302→404). The safe fallback the bypass emits when the source's native width is unknown.
     public static function wpc_natural_full_url($src_url, $fmt)
     {
-        $base = preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', (string) $src_url);
+        $base = preg_replace('/[?#].*$/', '', (string) $src_url); // (v7.10.04.1) strip query + fragment FIRST (see wpc_nw_url)
+        $base = preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', $base);
         $base = preg_replace('/-\d+w(\.[a-z0-9]+)$/i', '$1', $base);
-        $base = preg_replace('/\?.*$/', '', $base);
         $base = preg_replace('/\.[a-z0-9]+$/i', '', $base);
         $base = preg_replace('#^https?://[^/]+#', 'https://' . self::$zoneName, $base);
         return $base . '.' . $fmt;
+    }
+
+    // (v7.10.04.2) Anchored extension swap. The old str_replace(['.jpeg','.jpg','.png'],'.webp',$x)
+    // replaced a raster extension ANYWHERE in the string, mangling valid filenames that carry
+    // ".png"/".jpg" MID-NAME — e.g. "Layout-1-B.png-4.webp" became "Layout-1-B.webp-4.webp", a file
+    // that never existed (the CDN edge 302s the full-size request to that origin URL → 404, breaking
+    // the image for logged-in users where no page cache masks the live rewrite). Swap ONLY the TRUE
+    // trailing extension, before an optional ?query / #fragment. Kept case-sensitive (no /i) to
+    // preserve the prior lowercase-only match set — this change fixes ANCHORING, nothing else.
+    public static function swap_ext_to($url, $fmt)
+    {
+        return preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.' . $fmt, (string) $url);
+    }
+
+    // Boundary-anchored variant for a whole <img> tag: swap a raster extension only when it is
+    // immediately followed by a URL boundary (quote, whitespace, ?, #, ), >). Same mid-name safety
+    // as swap_ext_to() but usable on markup that contains multiple attributes.
+    public static function swap_ext_in_tag($tag, $fmt)
+    {
+        return preg_replace('/\.(jpe?g|png)(?=["\'\s?#)>])/', '.' . $fmt, (string) $tag);
     }
 
     // Width ladder for the -Nw convergence: WP srcset descriptors, else the <img>'s intrinsic width (+retina),
@@ -4054,12 +4078,12 @@ SCRIPT;
             } else {
                 if (self::$webp == 'true' || self::$webp == '1') {
                     // Check if WebP Exists in PATH?
-                    $webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $image_path);
+                    $webP = self::swap_ext_to($image_path, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
 
                     if (!file_exists($webP)) {
                         return $tag;
                     } else {
-                        return str_replace(['.jpeg', '.jpg', '.png'], '.webp', $tag);
+                        return self::swap_ext_in_tag($tag, 'webp'); // (v7.10.04.2) boundary-anchored tag swap
                     }
                 } else {
                     return $tag;
@@ -5274,7 +5298,7 @@ SCRIPT;
                         if (self::picture_webp_natural_full_ok()
                             && !empty($image_source)
                             && strpos($singleWebpSrc, '/wp:') !== false) {
-                            $cleanWebpSingle = preg_replace('/\?.*$/', '', $image_source);
+                            $cleanWebpSingle = preg_replace('/[?#].*$/', '', $image_source); // (v7.10.04.1) strip fragment too
                             $natWebpSingle   = preg_replace('/\.(jpe?g|png|avif)$/i', '.webp', $cleanWebpSingle);
                             $webpSiteHostS   = rtrim(trailingslashit(site_url()), '/');
                             if (strpos($natWebpSingle, $webpSiteHostS) === 0) {
@@ -5310,7 +5334,7 @@ SCRIPT;
                 // back to WebP (no broken image), worst case a one-time WebP serve while it encodes.
                 $avifSource = '';
                 if (self::$pictureAvifEnabled && !empty($image_source)) {
-                    $cleanSource = preg_replace('/\?.*$/', '', $image_source);
+                    $cleanSource = preg_replace('/[?#].*$/', '', $image_source); // (v7.10.04.1) strip fragment too
                     $avifUrl = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $cleanSource);
                     $avifSiteUrl = trailingslashit(site_url());
                     $avifPath = str_replace($avifSiteUrl, trailingslashit(ABSPATH), $avifUrl);
@@ -5538,7 +5562,7 @@ SCRIPT;
                             foreach ($srcsetParts as $part) {
                                 $part = trim($part);
                                 if (preg_match('/^(\S+)\s+(.+)$/', $part, $m)) {
-                                    $srcUrl = preg_replace('/\?.*$/', '', $m[1]);
+                                    $srcUrl = preg_replace('/[?#].*$/', '', $m[1]); // (v7.10.04.1) strip fragment too
                                     $descriptor = $m[2];
                                     $avifSrcUrl = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $srcUrl);
                                     $avifSizePath = str_replace($avifSiteUrl, trailingslashit(ABSPATH), $avifSrcUrl);
@@ -5836,7 +5860,7 @@ SCRIPT;
                                     // to an already-CDN/transform URL, str_replace would corrupt a
                                     // mid-URL host — skip the collapse and leave entries untouched.
                                     if ($avif_full_src && strpos((string) $avif_full_src, $avifSiteHost) === 0) {
-                                        $avif_full_url  = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', preg_replace('/\?.*$/', '', $avif_full_src));
+                                        $avif_full_url  = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', preg_replace('/[?#].*$/', '', $avif_full_src)); // (v7.10.04.1) strip fragment (else ext-swap fails)
                                         $avif_full_disk = str_replace($avifSiteUrl, trailingslashit(ABSPATH), $avif_full_url);
                                         // Arm the collapse when the full-size .avif is REACHABLE, not only when
                                         // already on disk (the witness covers a not-yet-landed natural .avif; on a
@@ -5978,7 +6002,7 @@ SCRIPT;
                     foreach (explode(',', $original_img_tag['original_srcset']) as $part) {
                         $part = trim($part);
                         if (!preg_match('/^(\S+)\s+(.+)$/', $part, $wm)) continue;
-                        $jpgUrl = preg_replace('/\?.*$/', '', $wm[1]);
+                        $jpgUrl = preg_replace('/[?#].*$/', '', $wm[1]); // (v7.10.04.1) strip fragment too
                         $descriptor = $wm[2];
                         $webpUrl = preg_replace('/\.(jpe?g|png|avif)$/i', '.webp', $jpgUrl);
                         $webpDisk = str_replace($webpSiteUrl, trailingslashit(ABSPATH), $webpUrl);

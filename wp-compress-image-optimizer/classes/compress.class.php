@@ -948,8 +948,12 @@ class wps_ic_compress
                             // First delete the current file
                             clearstatcache();
 
-                            // Rename image into webp
-                            $permfile = str_replace(['.jpg', '.jpeg', '.png'], '.webp', $file_data);
+                            // Rename image into webp — (v7.10.04.3) anchor to the TRUE trailing
+                            // extension. The old str_replace replaced ".png"/".jpg" ANYWHERE, mangling
+                            // valid mid-name tokens (e.g. "Layout-1-B.png-4.webp" -> ".webp-4.webp",
+                            // "Layout-1-B.png.webp" -> ".webp.webp") and writing the variant under a
+                            // bad on-disk name that then 404s on delivery.
+                            $permfile = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $file_data);
 
                             // Copy image from temporary file into real file
                             if (file_exists($permfile)) {
@@ -1136,7 +1140,8 @@ class wps_ic_compress
             }
 
             if (!empty($image_data['webp'])) {
-                $current_thumbnail_path = str_replace(['.png', '.jpg', '.jpeg'], '.webp', $current_thumbnail_path);
+                // (v7.10.04.3) anchor to the TRUE trailing extension (see note above) — was str_replace mid-name
+                $current_thumbnail_path = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $current_thumbnail_path);
                 $temp_file = download_url($image_data['webp'], 60);
 
                 if ($temp_file) {

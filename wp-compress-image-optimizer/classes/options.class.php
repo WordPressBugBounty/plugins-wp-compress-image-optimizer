@@ -52,6 +52,7 @@ class wps_ic_options
             'picture_avif'       => ['html'],
             'retina-in-srcset'   => ['html'],
             'avif-natural-source' => ['html'],
+            'force-natural'      => ['html'], // (v7.10.04.4) flipping it swaps every image href transform<->natural
             'single-url-image-format' => ['html'], // Regime B: flipping it rewrites every single-URL image href
             'optimize-lcp'       => ['html'],
             'lazy-auto-sizes'    => ['html'],

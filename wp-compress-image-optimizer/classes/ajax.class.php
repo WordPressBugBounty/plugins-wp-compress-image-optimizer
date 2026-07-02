@@ -482,8 +482,27 @@ class wps_ic_ajax extends wps_ic
         $cfapi = new WPC_CloudflareAPI($token);
         $check = $cfapi->checkPrivileges($zoneInput);
         if (is_wp_error($check)) {
+            // e.g. no zone provided — can't run the per-zone permission probes
             wp_send_json_error(['msg' => $check->get_error_message()]);
         }
+        // (v7.10.04.9) Only CRITICAL scopes (Zone Read + Cache Purge) block the connection. Optional
+        // scopes gate features and come back as a NON-blocking warning, so the user can still connect
+        // now and add the rest later. Either way we tell them exactly what's missing (and why).
+        if (is_array($check) && !empty($check['critical_missing'])) {
+            wp_send_json_error([
+                'msg'              => 'Your Cloudflare API token is missing required permission(s): '
+                    . implode(', ', $check['critical_missing'])
+                    . '. In Cloudflare go to My Profile → API Tokens → edit this token, add the permission(s) above'
+                    . ' (each is a "Permissions" row: Zone → [Group] → [Access]), Save, then reconnect here.'
+                    . (!empty($check['optional_missing'])
+                        ? ' Optional (not required to connect — each unlocks a feature): ' . implode('; ', $check['optional_missing']) . '.'
+                        : ''),
+                'critical_missing' => $check['critical_missing'],
+                'optional_missing' => $check['optional_missing'],
+                'tests'            => $check['tests'],
+            ]);
+        }
+        $wpc_optional_missing = (is_array($check) && !empty($check['optional_missing'])) ? $check['optional_missing'] : [];
         $zones = $cfapi->listZones();
 
         if (is_wp_error($zones)) {
@@ -517,7 +536,7 @@ class wps_ic_ajax extends wps_ic
             } else {
                 update_option(WPS_IC_CF, $save);
             }
-            wp_send_json_success($save);
+            wp_send_json_success(array_merge($save, ['optional_missing' => $wpc_optional_missing]));
         }
 
         wp_send_json_error(print_r($zones, true));

@@ -11,7 +11,8 @@ if (!function_exists('wpc_force_natural')) {
      * blocks vary-blind CF cache-poisoning — only enable on a zone you've confirmed is vary-correct AND
      * OTF-live. The safe road to all-natural is to provision the zone (orch then echoes the witness).
      *
-     * Enable via WPC_FORCE_NATURAL in wp-config.php or the wpc_force_natural filter. Cached per-request.
+     * Enable via WPC_FORCE_NATURAL in wp-config.php, the wpc_force_natural filter, OR the
+     * "Force Natural URLs" toggle (Other Optimizations → force-natural). Cached per-request.
      */
     function wpc_force_natural()
     {
@@ -27,6 +28,14 @@ if (!function_exists('wpc_force_natural')) {
             return $cached;
         }
         $on = defined('WPC_FORCE_NATURAL') && WPC_FORCE_NATURAL;
+        // UI setting (Other Optimizations → "Force Natural URLs"). Same effect as the constant; the
+        // constant/filter still win so a wp-config force can't be undone by a stale saved '0'.
+        if (!$on && function_exists('get_option') && defined('WPS_IC_SETTINGS')) {
+            $s = get_option(WPS_IC_SETTINGS);
+            if (is_array($s) && !empty($s['force-natural']) && (string) $s['force-natural'] === '1') {
+                $on = true;
+            }
+        }
         $cached = (bool) apply_filters('wpc_force_natural', $on);
         return $cached;
     }
@@ -3128,6 +3137,18 @@ class wps_cdn_rewrite
         // default excluded keywords
         self::$default_excluded_list = ['wp-admin', 'redditstatic', 'ai-uncode', 'gtm', 'instagram.com', 'fbcdn.net', 'twitter', 'google', 'coinbase', 'cookie', 'schema', 'recaptcha', 'data:image', 'stats.jpg'];
 
+        // (v7.10.04.11) Keep Elementor's GENERATED per-page CSS same-origin — never on the CDN.
+        // Elementor regenerates wp-content/uploads/elementor/css/{post-N,global,custom-*}.css on every
+        // content edit and cache clear. Served cross-origin through the CDN, a transient 404 during that
+        // regeneration returns the CDN's HTML error page; Chrome's ORB (cross-origin + nosniff) then BLOCKS
+        // the stylesheet, AND the CDN caches that 404 → a persistent UNSTYLED page for real visitors.
+        // Same-origin makes ORB impossible (it is cross-origin-only), stops the CDN caching a 404, and lets
+        // the file self-heal on the next request. The substring 'elementor/css/' matches ONLY the generated
+        // dir — Elementor's static plugin CSS ('elementor/assets/css/') is unaffected and stays on the CDN.
+        if (apply_filters('wpc_elementor_css_same_origin', true)) {
+            self::$default_excluded_list[] = 'elementor/css/';
+        }
+
         // Preload anything inside themes,elementor,wp-includes
         self::$assets_to_preload = ['themes', 'elementor', 'wp-includes', 'google'];
         self::$assets_to_defer = ['themes', 'tracking', 'fontawesome'];
@@ -3585,6 +3606,7 @@ class wps_cdn_rewrite
                 if (self::$css == "1") {
                     add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
                     add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
+                    add_action('wp_head', [$this, 'cssOriginFallbackScript'], 0);
                 }
                 #}
 
@@ -3610,6 +3632,7 @@ class wps_cdn_rewrite
                 if (self::$css == "1") {
                     add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
                     add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
+                    add_action('wp_head', [$this, 'cssOriginFallbackScript'], 0);
                 }
 
                 if (self::$js == "1") {
@@ -3626,6 +3649,44 @@ class wps_cdn_rewrite
                 add_action("wp_head", [$this, 'dnsPrefetch'], 0);
             }
         }
+    }
+
+    /**
+     * (v7.10.04.12) ORB safety-belt for cross-origin CDN stylesheets.
+     *
+     * Chrome's ORB blocks a cross-origin <link rel="stylesheet"> when the CDN returns a non-CSS body
+     * (e.g. the CDN's HTML 404 page during a brief origin/regeneration window). The stylesheet is
+     * dropped (net::ERR_BLOCKED_BY_ORB) and — because the CDN can cache that 404 — the page can render
+     * unstyled for real visitors. This injects a tiny capture-phase 'error' listener that, when a CDN
+     * stylesheet fails, reloads the SAME resource from its same-origin URL so the page recovers.
+     *
+     * Failure-path only: on a normal 200 text/css load nothing runs (no extra request, no reflow).
+     * Verified in Chromium — onerror fires on ERR_BLOCKED_BY_ORB and the same-origin swap re-applies
+     * the styles. Reverse-map handles both CDN URL shapes: natural (https://ZONE/path.css -> host swap)
+     * and transform (https://ZONE/m:N/a:https://SITE/path.css -> the origin URL embedded after /a:).
+     * Complements the same-origin belt (.04.11) which keeps Elementor's volatile CSS off the CDN
+     * entirely; this covers any OTHER cross-origin CDN stylesheet that transiently 404s.
+     * Gated behind the wpc_css_origin_fallback filter (default on).
+     */
+    public function cssOriginFallbackScript()
+    {
+        if (!apply_filters('wpc_css_origin_fallback', true)) {
+            return;
+        }
+        $zone = self::$zone_name;
+        if (empty($zone)) {
+            return;
+        }
+        // scheme+host of the origin only; the reverse-map rebuilds the path from the CDN URL itself
+        $siteOrigin = preg_replace('#^(https?://[^/]+).*$#', '$1', rtrim((string) self::$site_url, '/'));
+        if (empty($siteOrigin) || strpos($siteOrigin, 'http') !== 0) {
+            return;
+        }
+        $Z = json_encode((string) $zone, JSON_UNESCAPED_SLASHES);
+        $O = json_encode($siteOrigin, JSON_UNESCAPED_SLASHES);
+        echo '<script id="wpc-css-orb-fallback">(function(){var Z=' . $Z . ',O=' . $O . ';'
+            . 'function toOrigin(h){var i=h.indexOf("/a:");if(i!==-1){var r=h.slice(i+3);return /^https?:\/\//i.test(r)?r:O+(r.charAt(0)==="/"?"":"/")+r;}try{var u=new URL(h);return O+u.pathname+u.search;}catch(e){return null;}}'
+            . 'window.addEventListener("error",function(e){var el=e.target;if(!el||el.tagName!=="LINK"||el.rel!=="stylesheet")return;var h=el.href||"";if(h.indexOf(Z)===-1||el.getAttribute("data-wpco"))return;var o=toOrigin(h);if(!o||o===h)return;el.setAttribute("data-wpco","1");var l=document.createElement("link");l.rel="stylesheet";if(el.media)l.media=el.media;l.href=o;el.parentNode.insertBefore(l,el.nextSibling);},true);})();</script>' . "\n";
     }
 
     public function add_font_display_swap_to_url($src, $handle)
@@ -6669,7 +6730,7 @@ JS;
         $image_path = ABSPATH . $image_path[0];
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'local_settings') {
-            $webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $image_path);
+            $webP = wps_rewriteLogic::swap_ext_to($image_path, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
 
             return print_r([self::$webp, $image_path, $webP, file_exists($webP)], true);
         }
@@ -6687,13 +6748,13 @@ JS;
                 ? WPC_Delivery_Resolver::effective_ceiling(self::$settings) : 'avif';
             if ($wpc_ng_ceiling !== 'off' && (self::$webp == 'true' || self::$webp == '1')) {
                 // Check if WebP Exists in PATH?
-                $webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $image_path);
+                $webP = wps_rewriteLogic::swap_ext_to($image_path, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
 
                 if (!file_exists($webP)) {
                     $webP = false;
                     $image_source = $original_img_src;
                 } else {
-                    $original_img_src = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $original_img_src);
+                    $original_img_src = wps_rewriteLogic::swap_ext_to($original_img_src, 'webp'); // (v7.10.04.2) anchored
                     $image_source = $original_img_src;
                 }
             } else {
@@ -6793,8 +6854,8 @@ JS;
                             $image_path = str_replace(self::$site_url . '/', '', $real_src);
                             $image_path_webP = ABSPATH . $image_path;
 
-                            $webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $real_src);
-                            $image_path_webP = str_replace(['.jpeg', '.jpg', '.png'], '.webp', $image_path_webP);
+                            $webP = wps_rewriteLogic::swap_ext_to($real_src, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
+                            $image_path_webP = wps_rewriteLogic::swap_ext_to($image_path_webP, 'webp'); // (v7.10.04.2) anchored
 
                             if (!file_exists($image_path_webP)) {
                                 $srcset_att .= $real_src . ' ' . $real_src_width . ',';

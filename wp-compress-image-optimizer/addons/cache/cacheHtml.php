@@ -234,10 +234,6 @@ class wps_cacheHtml
 
     public function cacheExists($prefix = '')
     {
-        if (!empty($_GET['dbgCache']) && $_GET['dbgCache'] == 'exists-1') {
-            die($_GET['dbgCache']);
-        }
-
         if (!empty($_GET['disable_cache'])) {
             return false;
         }
@@ -247,24 +243,12 @@ class wps_cacheHtml
         }
 
         if (function_exists('gzencode')) {
-
             if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && filesize($this->cachePath . $prefix . 'index.html' . '_gzip') > 0) {
-
-                if (!empty($_GET['dbgCache']) && $_GET['dbgCache'] == 'exists-3') {
-                    die($_GET['dbgCache']);
-                }
-
                 return true;
             }
         }
 
-
         if (file_exists($this->cachePath . $prefix . 'index.html') && filesize($this->cachePath . $prefix . 'index.html') > 0) {
-
-            if (!empty($_GET['cacheExistsDebug']) && $_GET['cacheExistsDebug'] == '4') {
-                die($_GET['cacheExistsDebug']);
-            }
-
             return true;
         } else {
             return false;
@@ -293,7 +277,7 @@ class wps_cacheHtml
         }
 
         if (empty($this->options['cache']['ignore-server-control']) || $this->options['cache']['ignore-server-control'] == '0') {
-            $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL']);
+            $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL'] ?? '');
             if (strpos($cacheControl, 'no-cache') !== false || strpos($cacheControl, 'no-store') !== false || strpos($cacheControl, 'private') !== false) {
                 return $buffer;
             }
@@ -506,9 +490,22 @@ class wps_cacheHtml
             return true;
         }
 
-        $fp = fopen($this->cachePath . $prefix . 'index.html' . '_gzip', 'w+');
+        // (v7.10.06) ATOMIC write. Build the gzip in a unique temp file, then rename() onto the live
+        // path. rename() is atomic on the same filesystem, so a concurrent reader (the drop-in's
+        // readgzfile) only ever sees a COMPLETE file — never the half-written gzip that a direct
+        // fopen('w+')+fwrite exposed (w+ truncates to 0 immediately, so a reader in that window got a
+        // truncated stream → decode error / broken page). Same fix in advancedCache.php + preload_warmup.
+        $final = $this->cachePath . $prefix . 'index.html' . '_gzip';
+        $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+        $fp = @fopen($tmp, 'w+');
+        if ($fp === false) {
+            return $buffer;
+        }
         fwrite($fp, gzencode($buffer, 8));
         fclose($fp);
+        if (!@rename($tmp, $final)) {
+            @unlink($tmp);
+        }
 
         return $buffer;
     }

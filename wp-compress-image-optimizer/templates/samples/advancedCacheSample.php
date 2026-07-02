@@ -23,6 +23,14 @@ define('WPC_EXCLUDE_COOKIES', false);
 define('WPC_MANDATORY_COOKIES', false);
 #WPC_MANDATORY_COOKIES_END
 
+#WPC_URL_EXCLUDES_START
+define('WPC_URL_EXCLUDES', false);
+#WPC_URL_EXCLUDES_END
+
+#WPC_CACHE_EXCLUDES_START
+define('WPC_CACHE_EXCLUDES', false);
+#WPC_CACHE_EXCLUDES_END
+
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';
 
@@ -116,51 +124,55 @@ if (isset($_SERVER['HTTP_CRITICALCOMBINE']) || isset($_SERVER['HTTP_DISABLEWPC']
     return;
 }
 
-// URL bypass — cache exclude (wpc-excludes['cache']) AND full plugin bypass (wpc-url-excludes)
-// Inline matcher because WordPress isn't fully loaded yet (no plugin functions available)
-if (isset($GLOBALS['wpdb'])) {
-    $check_url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-    $check_url = explode('?', $check_url)[0];
+// URL bypass — cache exclude (wpc-excludes['cache']) AND full plugin bypass (wpc-url-excludes).
+// (v7.10.06) ZERO-DB hit path: the exclude lists are BAKED into this drop-in as constants
+// (WPC_URL_EXCLUDES / WPC_CACHE_EXCLUDES) by htaccess.class.php::setAdvancedCache, re-baked on every
+// settings/excludes save. That removes the 2 SELECTs this file used to run on EVERY request before
+// serving. DB fallback only if the constants aren't baked yet (a drop-in written before this upgrade,
+// until its next settings save re-templates it) — so excludes are still honoured during migration.
+$check_url = ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
+$check_url = explode('?', $check_url)[0];
 
-    $wpc_match_pattern = function ($url, $pattern) {
-        $pattern = trim($pattern);
-        if ($pattern === '' || $pattern[0] === '#') return false;
-        $pattern = ltrim($pattern, '/');
-        if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
-            $regex = preg_quote($pattern, '#');
-            $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
-            return (bool) @preg_match('#' . $regex . '#i', $url);
-        }
-        return stripos($url, $pattern) !== false;
-    };
+$wpc_match_pattern = function ($url, $pattern) {
+    $pattern = trim($pattern);
+    if ($pattern === '' || $pattern[0] === '#') return false;
+    $pattern = ltrim($pattern, '/');
+    if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
+        $regex = preg_quote($pattern, '#');
+        $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
+        return (bool) @preg_match('#' . $regex . '#i', $url);
+    }
+    return stripos($url, $pattern) !== false;
+};
 
-    // Check 1: Full plugin bypass (wpc-url-excludes)
-    $wpc_url_excludes_raw = $GLOBALS['wpdb']->get_var(
-        "SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-url-excludes'"
-    );
-    if (!empty($wpc_url_excludes_raw)) {
-        $wpc_url_excludes = @maybe_unserialize($wpc_url_excludes_raw);
-        if (!empty($wpc_url_excludes['exclude-url-from-all']) && is_array($wpc_url_excludes['exclude-url-from-all'])) {
-            foreach ($wpc_url_excludes['exclude-url-from-all'] as $pattern) {
-                if ($wpc_match_pattern($check_url, $pattern)) {
-                    return; // Bypass cache (plugin will also be bypassed via dontRunif)
-                }
-            }
+// Resolve each exclude list: baked constant wins (zero DB); null means "not baked → read DB".
+$wpc_url_excludes_list   = defined('WPC_URL_EXCLUDES')   ? ((WPC_URL_EXCLUDES   === false) ? [] : WPC_URL_EXCLUDES)   : null;
+$wpc_cache_excludes_list = defined('WPC_CACHE_EXCLUDES') ? ((WPC_CACHE_EXCLUDES === false) ? [] : WPC_CACHE_EXCLUDES) : null;
+
+if (($wpc_url_excludes_list === null || $wpc_cache_excludes_list === null) && isset($GLOBALS['wpdb'])) {
+    if ($wpc_url_excludes_list === null) {
+        $raw = $GLOBALS['wpdb']->get_var("SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-url-excludes'");
+        $u = !empty($raw) ? @maybe_unserialize($raw) : [];
+        $wpc_url_excludes_list = (!empty($u['exclude-url-from-all']) && is_array($u['exclude-url-from-all'])) ? $u['exclude-url-from-all'] : [];
+    }
+    if ($wpc_cache_excludes_list === null) {
+        $raw = $GLOBALS['wpdb']->get_var("SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-excludes'");
+        $c = !empty($raw) ? @maybe_unserialize($raw) : [];
+        $wpc_cache_excludes_list = (!empty($c['cache']) && is_array($c['cache'])) ? $c['cache'] : [];
+    }
+}
+
+if (is_array($wpc_url_excludes_list)) {
+    foreach ($wpc_url_excludes_list as $pattern) {
+        if ($wpc_match_pattern($check_url, $pattern)) {
+            return; // Bypass cache (plugin will also be bypassed via dontRunif)
         }
     }
-
-    // Check 2: Cache-only exclude (wpc-excludes['cache']) — existing UI, now wildcard-aware
-    $wpc_cache_excludes_raw = $GLOBALS['wpdb']->get_var(
-        "SELECT option_value FROM {$GLOBALS['wpdb']->options} WHERE option_name = 'wpc-excludes'"
-    );
-    if (!empty($wpc_cache_excludes_raw)) {
-        $wpc_cache_excludes = @maybe_unserialize($wpc_cache_excludes_raw);
-        if (!empty($wpc_cache_excludes['cache']) && is_array($wpc_cache_excludes['cache'])) {
-            foreach ($wpc_cache_excludes['cache'] as $pattern) {
-                if ($wpc_match_pattern($check_url, $pattern)) {
-                    return; // Skip cache for this URL (plugin still optimizes)
-                }
-            }
+}
+if (is_array($wpc_cache_excludes_list)) {
+    foreach ($wpc_cache_excludes_list as $pattern) {
+        if ($wpc_match_pattern($check_url, $pattern)) {
+            return; // Skip cache for this URL (plugin still optimizes)
         }
     }
 }
