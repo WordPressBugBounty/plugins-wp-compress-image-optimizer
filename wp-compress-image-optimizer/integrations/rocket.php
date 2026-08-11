@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_rocket extends wps_ic_integrations
@@ -28,7 +28,7 @@ class wps_ic_rocket extends wps_ic_integrations
 
   public function do_checks()
   {
-    // Logic to check for conflicts
+    
     $rocket_settings = get_option('wp_rocket_settings');
     $updated = false;
 
@@ -37,23 +37,13 @@ class wps_ic_rocket extends wps_ic_integrations
       $rocket_settings['delay_js'] = 0;
       $updated = true;
 
-      /*
-			$this->notices_class->show_notice( 'WPCompress - Delay JS conflict detected',
-				'Click "Fix" to use WPCompress and disable WP Rocket\'s setting, or "Dismiss" to continue.',
-				'warning', true, 'wpc_rocket_delay_js_dismiss_tag', [ 'plugin' => 'rocket', 'setting' => 'delay_js' ] );
-      */
+
     }
 
     if (!empty($this->wps_settings['lazy']) && $this->wps_settings['lazy'] == 1 && !empty($rocket_settings['lazyload']) && $rocket_settings['lazyload']) {
       $rocket_settings['lazyload'] = 0;
       $updated = true;
 
-      /*
-			$this->notices_class->show_notice( 'WPCompress - Lazy Load conflict detected',
-				'Click "Fix" to use WPCompress and disable WP Rocket\'s setting, or "Dismiss" to continue.',
-				'warning', true, 'wpc_rocket_lazyload_dismiss_tag',[ 'plugin' => 'rocket', 'setting' => 'lazyload' ] );
-
-      */
 
     }
 

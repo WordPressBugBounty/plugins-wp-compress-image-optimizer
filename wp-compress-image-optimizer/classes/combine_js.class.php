@@ -24,9 +24,9 @@ class wps_ic_combine_js
     public $file_count;
     public $current_section;
 
-    /**
-     * @var void
-     */
+    
+
+
 
     public function __construct()
     {
@@ -38,23 +38,18 @@ class wps_ic_combine_js
         self::$excludes = new wps_ic_excludes();
         self::$rewrite = new wps_cdn_rewrite();
         $this->settings = get_option(WPS_IC_SETTINGS);
-        $this->filesize_cap = '500000'; //in bytes
+        $this->filesize_cap = '500000';
         $this->combine_inline_scripts = true;
         $this->combine_external = false;
 
         $this->all_excludes = self::$excludes->combineJSExcludes();
 
         if (!empty($this->settings['delay-js']) && $this->settings['delay-js'] == '1') {
-            //If it shouldn't be delayed, it shouldn't be combined
+            
             $this->all_excludes = array_merge($this->all_excludes, self::$excludes->delayJSExcludes());
         }
 
-	    // v7.01.84 — the CF cname lives in WPS_IC_CF_CNAME, NOT the WPS_IC_CF array (the prior read
-	    // used the whole array as the cname — a pre-existing bug). Mirror the canonical emit path
-	    // EXACTLY: require CF CDN delivery active (cf.settings.cdn) AND the fail-open verified-gate, so
-	    // combined JS never emits a mid-change ('0') cname and never emits an ORPHANED cname after a CF
-	    // disconnect / CDN-off (WPS_IC_CF_CNAME persists but cf.settings.cdn is gone). Falls back to the
-	    // working host otherwise. Matches cdn-rewrite/enqueues; without settings.cdn it diverged.
+
 	    $cf = get_option(WPS_IC_CF);
 	    $cfCname = get_option(WPS_IC_CF_CNAME);
 	    $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
@@ -64,7 +59,7 @@ class wps_ic_combine_js
             $this->zone_name = $custom_cname;
         }
 
-        //Check if Hide my WP is active and get replaces
+        
         $this->hmwpReplace = false;
         if (class_exists('HMWP_Classes_ObjController')) {
             $this->hmwpReplace = true;
@@ -88,22 +83,62 @@ class wps_ic_combine_js
     public function write_file_and_next()
     {
         if ($this->current_file != '') {
-            file_put_contents($this->combined_dir . 'wps_' . $this->current_section . '_' .
-                $this->file_count . '.js', $this->current_file);
+            $wpc_name644 = 'wps_' . $this->current_section . '_' . $this->file_count . '.js';
+            file_put_contents($this->combined_dir . $wpc_name644, $this->current_file);
+            $this->wpc_written644[] = $wpc_name644;
         }
         $this->file_count++;
         $this->current_file = '';
     }
 
+    
+    public $wpc_written644 = [];
+    public function wpc_sweep_unwritten644()
+    {
+        try {
+            foreach ((array) @glob($this->combined_dir . 'wps_*.js') as $wpc_f644) {
+                if (!in_array(basename($wpc_f644), $this->wpc_written644, true)) {
+                    @unlink($wpc_f644);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    
+    
+    
+    
+    private function wpc_combine_stale644()
+    {
+        try {
+            $wpc_key644 = rtrim(WPS_IC_COMBINE . $this->urlKey, '/');
+            if (@is_file($wpc_key644 . '/.wpc-stale')) {
+                return true;
+            }
+            $wpc_ep644 = (int) get_option('wpc_combine_stale_epoch', 0);
+            if ($wpc_ep644 > 0) {
+                $wpc_new644 = 0;
+                foreach ((array) @glob($this->combined_dir . '*.js') as $wpc_f644) {
+                    $wpc_new644 = max($wpc_new644, (int) @filemtime($wpc_f644));
+                }
+                return $wpc_new644 > 0 && $wpc_new644 < $wpc_ep644;
+            }
+        } catch (\Throwable $e) {
+        }
+        return false;
+    }
+
     public function maybe_do_combine($html)
     {
-        if ($this->combine_exists() && empty($_GET['forceRecombine'])) {
+        if ($this->combine_exists() && empty($_GET['forceRecombine']) && !$this->wpc_combine_stale644()) {
 
             $this->no_content_excludes = get_option('wps_no_content_excludes_js');
 
             $html = $this->replace($html);
             return $html;
         }
+        @unlink(rtrim(WPS_IC_COMBINE . $this->urlKey, '/') . '/.wpc-stale');
 
         $this->no_content_excludes = [];
 
@@ -121,6 +156,7 @@ class wps_ic_combine_js
         $html = preg_replace_callback('/<\/head>(.*?)<\/body>/si', [$this, 'combine'], $html);
 
         $this->write_file_and_next();
+        $this->wpc_sweep_unwritten644();
 
         update_option('wps_no_content_excludes_js', $this->no_content_excludes);
         $html = $this->insert_combined_scripts($html);
@@ -142,15 +178,15 @@ class wps_ic_combine_js
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
             return $tag;
-            #return print_r(array($tag),true);
+            
         }
 
-        //get only the <script ...> and check for src
+
         preg_match('/<script(.*?)>/si', $tag, $tag_start);
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        #return print_r(array($src),true);
+        
 
         if ($is_src_set == 1) {
 
@@ -158,7 +194,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
+            
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -177,8 +213,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            // TODO: Testing
-            //return $tag;
+            
+            
 
             $src = 'Inline Script';
             $content = $tag;
@@ -193,7 +229,7 @@ class wps_ic_combine_js
             return $tag;
         }
 
-        //sometimes php injects a zero width space char at the start of a new script, this clears it
+
         $content = preg_replace('/^[\pZ\pC]+|[\pZ\pC]+$/u', '', $content);
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
@@ -221,21 +257,21 @@ class wps_ic_combine_js
         $src = '';
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
-            #return $tag;
-            #return print_r(array($tag),true);
+            
+            
         }
 
         if (self::$excludes->strInArray($tag, $this->no_content_excludes) || current_user_can('manage_wpc_settings')) {
-            //These are tags that we couldn't get content for
+
             return $tag;
         }
 
-        //get only the <script ...> and check for src
+
         preg_match('/<script(.*?)>/si', $tag, $tag_start);
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        #return print_r(array($src),true);
+        
 
         if ($is_src_set == 1) {
 
@@ -243,7 +279,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
+            
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -252,8 +288,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            // TODO: Testing
-            //return $tag;
+            
+            
 
             $src = 'Inline Script';
             $content = $tag;
@@ -286,7 +322,7 @@ class wps_ic_combine_js
         }
 
         if ($this->hmwpReplace) {
-            //apply their replacements to our combined files because they are doing them before our insert
+
             foreach ($this->hmwp_rewrite->_replace['from'] as $key => $value) {
                 $replace = $this->hmwp_rewrite->_replace['to'][$key];
                 $header_links = str_replace($value, $replace, $header_links);
@@ -294,14 +330,33 @@ class wps_ic_combine_js
             }
         }
 
-        //header
-        //$html = preg_replace( '/<head>/', '<head>'.$footer_links, $html );
+
         $html = preg_replace('/<\/head>/', $header_links . '</head>', $html);
-        //$html = preg_replace( '/<head>/', '<head>' . $header_links, $html );
-        //footer
+        
+        
         $html = preg_replace('/<\/body>/', $footer_links . '</body>', $html);
 
         return $html;
+    }
+
+    
+    
+    
+    public function wpc_looks_like_html_doc659($s)
+    {
+        if (!is_string($s) || $s === '') {
+            return false;
+        }
+        
+        
+        
+        
+        $head = strtolower(ltrim($s));
+        return strncmp($head, '<!doctype html', 14) === 0
+            || strncmp($head, '<html', 5) === 0
+            || strncmp($head, '<head>', 6) === 0
+            || strncmp($head, '<head ', 6) === 0
+            || strncmp($head, '<body', 5) === 0;
     }
 
     public function getRemoteContent($url)
@@ -310,22 +365,36 @@ class wps_ic_combine_js
             $url = 'https:' . $url;
         }
 
-        $data = wp_remote_get($url);
+        $data = wp_remote_get($url, array('timeout' => (int) apply_filters('wpc_combine_fetch_timeout', 3)));
 
-        //todo Check if file is really js
 
         if (is_wp_error($data)) {
             return false;
         }
 
-        return wp_remote_retrieve_body($data);
+        
+        
+        
+        
+        
+        
+        if ((int) wp_remote_retrieve_response_code($data) !== 200) {
+            return false;
+        }
+        $wpc_body659 = wp_remote_retrieve_body($data);
+        $wpc_ct659 = strtolower((string) wp_remote_retrieve_header($data, 'content-type'));
+        if (strpos($wpc_ct659, 'text/html') !== false || $this->wpc_looks_like_html_doc659($wpc_body659)) {
+            return false;
+        }
+
+        return $wpc_body659;
     }
 
     public function getLocalContent($url)
     {
 
         if ($this->hmwpReplace) {
-            //go trougn their replacements and reverse them to get true path to files
+
             foreach ($this->hmwp_rewrite->_replace['to'] as $key => $value) {
                 $replace = $this->hmwp_rewrite->_replace['from'][$key];
                 $url = str_replace($value, $replace, $url);
@@ -338,12 +407,11 @@ class wps_ic_combine_js
         }
 
 
-        // denis start
-        //$url = preg_replace('/\?.*/', '', $url);
+        
 
-        //$path = wp_make_link_relative($url);
-        //$path = ltrim($path, '/');
-        // denis end
+        
+        
+
 
         if (strpos($url, '?') !== false) {
             $url = explode('?', $url);
@@ -357,7 +425,7 @@ class wps_ic_combine_js
             $path = ltrim($url, '/');
         }
 
-        //check if is folder install and if folder is in url remove it (it is already in ABSPATH)
+
         $last_abspath = basename(ABSPATH);
         $first_path = explode('/', $path)[0];
         if ($last_abspath == $first_path) {

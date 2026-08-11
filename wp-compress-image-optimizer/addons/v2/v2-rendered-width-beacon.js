@@ -1,12 +1,12 @@
-/**
- * WP Compress v7.01.107 — rendered-width measurement beacon (telemetry).
- *
- * Enqueued only when wpc_v2_rendered_width_beacon_enabled() is true. Measures the ACTUAL rendered
- * CSS width × devicePixelRatio of each optimized <img> against the width the CDN served, so the team
- * can quantify over-fetch and tune the width ladder / sizes logic with real data. Read-only on the
- * page; sends one small batch via navigator.sendBeacon (or a fire-and-forget XHR) AFTER load so it
- * never competes with the render. Client-side sampled to avoid write storms on high-traffic sites.
- */
+
+
+
+
+
+
+
+
+
 (function () {
     'use strict';
 
@@ -19,7 +19,7 @@
         return;
     }
 
-    // Client-side sampling: only a fraction of page loads report (default 0.1 from PHP).
+    
     var rate = (typeof cfg.sample === 'number') ? cfg.sample : 1;
     if (rate < 1 && Math.random() > rate) {
         return;
@@ -38,7 +38,7 @@
             var rect = el.getBoundingClientRect();
             var rendered = Math.round(rect.width * dpr);
             if (rendered <= 0) {
-                continue; // not laid out / display:none
+                continue; 
             }
             var url = el.currentSrc || el.src || '';
             if (!url || seen[url]) {
@@ -67,17 +67,17 @@
                 );
                 return;
             }
-        } catch (e) { /* fall through to XHR */ }
+        } catch (e) {  }
 
         try {
             var xhr = new XMLHttpRequest();
             xhr.open('POST', cfg.ajaxurl, true);
             xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
             xhr.send(payload);
-        } catch (e2) { /* best-effort telemetry; ignore */ }
+        } catch (e2) {  }
     }
 
-    // Measure once, after layout settles.
+    
     function schedule() { setTimeout(send, 800); }
     if (document.readyState === 'complete') {
         schedule();

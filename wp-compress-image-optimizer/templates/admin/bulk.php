@@ -10,7 +10,7 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
     $live_cdn = true;
 }
-// Also check CF CDN setting
+
 if (!$live_cdn) {
     $cfSettings = get_option(WPS_IC_CF);
     if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
@@ -66,23 +66,11 @@ if (!$live_cdn) {
 
             <div class="wp-compress-bulk-area">
                 <?php
-                /**
-                 * Find uncompressed images
-                 */
-                // v7.02 — Use the cheap COUNT-only path (60s cached) instead of the
-                // heavy prepareImages() multi-JOIN query. The page only needs counts
-                // here; the full ID list isn't needed until Start Bulk Compress fires.
-                // Old call: $libraryStatus = $local->prepareImages('', 'count');
-                //
-                // v7.03 — When NO bulk is active, the splash is about to render and the
-                // 60 s cache value is irrelevant (it only existed to dedupe queries
-                // during an active bulk). Bust it so the splash always reflects the
-                // post-bulk reality — otherwise users see stale counts for up to 60 s
-                // after a Stop or natural completion (late Phase B callbacks can also
-                // land in this window).
-                // Self-healing read: an orphaned bulk flag (dead JS loop / drain
-                // chain, queue transient drained or expired) is cleared here so the
-                // splash reflects reality instead of a phantom "running".
+                
+
+
+
+
                 $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
                 if (empty($bulkProcess)) {
                     delete_transient('wpc_bulk_library_counts');
@@ -624,7 +612,7 @@ if (!$live_cdn) {
                                     <h2 class="wpc-restore-complete-title"><?php esc_html_e('Restore Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
                                     <p class="wpc-restore-complete-subtitle">
                                         <?php
-                                        /* translators: %s = N images restored */
+                                        
                                         printf(
                                             esc_html__('Successfully restored all %s images to original quality.', WPS_IC_TEXTDOMAIN),
                                             '<strong data-field="final-count">0</strong>'
@@ -874,7 +862,7 @@ if (!$live_cdn) {
                               <h2 class="wpc-bulk-complete-title"><?php esc_html_e('Optimization Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
                               <p class="wpc-bulk-complete-subtitle">
                                 <?php
-                                /* translators: 1: N images optimized, 2: N variants generated */
+                                
                                 printf(
                                   esc_html__('Successfully optimized %1$s original images, generating %2$s modern variants.', WPS_IC_TEXTDOMAIN),
                                   '<strong data-field="final-count">0</strong>',
@@ -951,7 +939,7 @@ if (!$live_cdn) {
         </div>
 
         <?php
-        // TODO: Bottom bar with hidden message about bulk optimization
+        
         ?>
 
         <?php include WPS_IC_DIR . 'templates/admin/partials/popups/bulk/popups.php'; ?>

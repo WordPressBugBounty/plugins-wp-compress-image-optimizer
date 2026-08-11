@@ -1,44 +1,15 @@
 <?php
-/**
- * wp-cli commands.
- *
- * Loaded only under WP_CLI context. Each command handler explicitly
- * require_once's wp-compress-core.php — wp-compress.php's main bootstrap
- * (line 22) gates out the core load under WP_CLI to avoid running
- * page-load init code during cli sessions, so handlers must opt back in.
- */
+
 
 if (!defined('WP_CLI') || !WP_CLI) return;
 if (!class_exists('WP_CLI_Command')) return;
 
 class WPC_CLI_Command extends WP_CLI_Command
 {
-    /**
-     * Backfill missing AVIF variants for already-compressed images.
-     *
-     * Detects width slots in ic_local_variants that have WebP and/or JPEG
-     * entries but no matching AVIF — the result of a lazy ladder that ran
-     * before v7.01.24 hardened avif=1 in the body fields. Resizes the parent
-     * locally (using the v7.01.25 unscaled-source probe) and POSTs each
-     * missing-AVIF tuple as an AVIF-only request via the standard lazy-fill
-     * endpoint.
-     *
-     * ## OPTIONS
-     *
-     * [--id=<id>]
-     * : Single attachment ID. Mutually exclusive with --all.
-     *
-     * [--all]
-     * : Run on every attachment with ic_status=compressed.
-     *
-     * ## EXAMPLES
-     *
-     *     wp wpcompress backfill-avif --id=122
-     *     wp wpcompress backfill-avif --all
-     */
+
     public function backfill_avif($args, $assoc)
     {
-        // Bootstrap the plugin's core under wp-cli (normally gated out by wp-compress.php:22)
+        
         if (!function_exists('wpc_backfill_missing_avif')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -111,23 +82,10 @@ class WPC_CLI_Command extends WP_CLI_Command
         return array_map('intval', $ids ?: []);
     }
 
-    /**
-     * Surgical purge of variant tracking post_meta WITHOUT restoring
-     * disk bytes from backup.
-     *
-     * ## OPTIONS
-     *
-     * <id>
-     * : Attachment ID to purge variant post_meta for.
-     *
-     * ## EXAMPLES
-     *
-     *     wp wpcompress purge-variants 113
-     *     wp wpcompress purge-variants 122
-     */
+
     public function purge_variants($args, $assoc)
     {
-        // Bootstrap the plugin's core under wp-cli (gated out by wp-compress.php:22)
+        
         if (!function_exists('wpc_purge_variants_for_image')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -162,38 +120,21 @@ class WPC_CLI_Command extends WP_CLI_Command
     }
 }
 
-// v2 protocol smoke + staging tests. Adds CLI surface for
-// driving WPS_LocalV2 directly without the wp-admin UI (which is Day 5-6
-// work). Lets us verify the v2.2.0 staging orchestrator end-to-end before
-// the Settings UI lands.
+
+
+
+
 if (!class_exists('WPC_CLI_V2_Command')) {
 
 class WPC_CLI_V2_Command extends WP_CLI_Command
 {
-    /**
-     * Probe the orchestrator's /capabilities endpoint and print the parsed
-     * capability response. Force-refreshes the cache.
-     *
-     * ## OPTIONS
-     *
-     * [--orchestrator=<url>]
-     * : Override the orchestrator URL (e.g. http://local-mc-v2.zapwp.net:443).
-     *   Without this, uses WPC_V2_ORCHESTRATOR_URL constant or geolocation.
-     *
-     * ## EXAMPLES
-     *
-     *     wp wpcompress v2-capabilities
-     *     wp wpcompress v2-capabilities --orchestrator=http://local-mc-v2.zapwp.net:443
-     */
+
     public function v2_capabilities($args, $assoc)
     {
         if (!defined('WPC_CC_PLUGIN_FILE')) define('WPC_CC_PLUGIN_FILE', __DIR__ . '/wp-compress.php');
         require_once __DIR__ . '/wp-compress-core.php';
 
-        // Force-load v2 files DIRECTLY. The normal flow goes through
-        // v2-bootstrap.php which early-returns when wpc_protocol_version='v1',
-        // and PHP's require_once won't re-fire the bootstrap after WP's boot
-        // already touched it. Bypass: load the three v2 files in order.
+
         if (!defined('WPC_V2_LOADED')) {
             require_once __DIR__ . '/addons/v2/v2-capabilities.php';
             require_once __DIR__ . '/addons/v2/v2-client.php';
@@ -220,34 +161,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
         }
     }
 
-    /**
-     * Fire a v2 /optimize-v2 POST against the configured orchestrator. Use
-     * this for staging verification before the wp-admin Settings UI lands.
-     *
-     * Reuses the same compress flow scaffold as wps_ic_compress_live (sets
-     * the in-flight transient, calls backup_all_sizes, POSTs to /optimize-v2,
-     * applies Phase A response, reports timing). Phase B drains via the
-     * /wp-json/wpc/v2/bg_swap callbacks as usual; this command returns the
-     * moment Phase A response is parsed — bg-swaps continue asynchronously.
-     *
-     * ## OPTIONS
-     *
-     * <id>
-     * : Attachment ID to compress.
-     *
-     * [--orchestrator=<url>]
-     * : Override orchestrator URL.
-     *
-     * [--level=<level>]
-     * : intelligent | intelligent+ | lossless | lossless+ | ultra (default: intelligent).
-     *
-     * [--source-mode=<mode>]
-     * : inline | url (default: inline for files <=18 MB raw).
-     *
-     * ## EXAMPLES
-     *
-     *     wp wpcompress v2-test 113 --orchestrator=http://local-mc-v2.zapwp.net:443
-     */
+
     public function v2_test($args, $assoc)
     {
         if (!defined('WPC_CC_PLUGIN_FILE')) define('WPC_CC_PLUGIN_FILE', __DIR__ . '/wp-compress.php');
@@ -276,7 +190,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
 
         $client = new WPS_LocalV2($apikey, $orch_url);
 
-        // Variants — WP default sub-sizes + scaled + original. One marked parent.
+        
         $meta = wp_get_attachment_metadata($imageID);
         $variants = [];
         if (is_array($meta) && !empty($meta['sizes'])) {
@@ -331,29 +245,11 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
         WP_CLI::log('Tail debug.log for [WPC V2BgSwap ACK] entries to watch Phase B drain.');
     }
 
-    /**
-     * Print FPM telemetry stats — heartbeat + bg_swap batch handler timings
-     * captured in the rolling 200-entry transient. Use `enable` and `disable`
-     * subcommands to toggle capture. `clear` empties the buffer.
-     *
-     * ## OPTIONS
-     *
-     * [<subcommand>]
-     * : enable | disable | clear | show (default)
-     *
-     * ## EXAMPLES
-     *
-     *     wp wpcompress fpm-stats enable
-     *     wp wpcompress fpm-stats
-     *     wp wpcompress fpm-stats clear
-     */
+
     public function fpm_stats($args, $assoc)
     {
-        // In wp-cli context, wp-compress-core.php is NOT loaded
-        // (wp-compress.php only includes it for non-cron/non-CLI/non-REST).
-        // That means v2-bootstrap.php → v2-telemetry.php isn't pulled in
-        // automatically. Force-load on demand so this command works in CLI
-        // without requiring an admin/REST request first.
+
+
         $telemetry_file = __DIR__ . '/addons/v2/v2-telemetry.php';
         if (!function_exists('wpc_v2_telemetry_stats') && is_readable($telemetry_file)) {
             require_once $telemetry_file;
@@ -380,7 +276,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
             }
             return;
         }
-        // show (default)
+
         if (!function_exists('wpc_v2_telemetry_stats')) {
             WP_CLI::warning('Telemetry helper not loaded — plugin file missing?');
             return;
@@ -396,9 +292,7 @@ WP_CLI::add_command('wpcompress fpm-stats',       ['WPC_CLI_V2_Command', 'fpm_st
 
 }
 
-// Register the class so `wp wpcompress` shows the subcommand list,
-// and add explicit hyphenated aliases so `wp wpcompress <subcommand>` works
-// (PHP method names can't have hyphens, so the default mapping is underscore).
+
 WP_CLI::add_command('wpcompress', 'WPC_CLI_Command');
 WP_CLI::add_command('wpcompress backfill-avif', ['WPC_CLI_Command', 'backfill_avif']);
 WP_CLI::add_command('wpcompress purge-variants', ['WPC_CLI_Command', 'purge_variants']);

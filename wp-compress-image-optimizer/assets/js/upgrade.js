@@ -1,5 +1,12 @@
 jQuery(document).ready(function ($) {
 
+    var wpcConnT0 = 0;
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && wpcConnT0 && (Date.now() - wpcConnT0) > 15000) {
+            window.location.reload();
+        }
+    });
+
     window.lockedPopup = function lockedPopup() {
         WPCSwal.fire({
             title: '',
@@ -12,7 +19,7 @@ jQuery(document).ready(function ($) {
             customClass: {
                 container: 'in',
                 popup: 'wps-ic-lite-connect-popup'
-            }, //customClass:'wps-ic-connect-popup',
+            }, 
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
@@ -62,7 +69,7 @@ jQuery(document).ready(function ($) {
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        //$('.wps-ic-lite-input-field-error', swal_container).show();
+                        
                         return false;
                     }
 
@@ -76,15 +83,22 @@ jQuery(document).ready(function ($) {
                     $(loaderLite).hide();
                     $(tests).hide();
 
-                    $.post(ajaxurl, {
-                        action: 'wps_ic_live_connect',
-                        //action: 'wps_lite_connect',
-                        apikey: apikey,
-                        nonce: nonce,
-                        timeout: 60000
-                    }, function (response) {
-                        if (response.success) {
-                            // Inject full-page overlay so Lite dashboard never shows during reload
+                    wpcConnT0 = Date.now();
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        timeout: 90000,
+                        data: {
+                            action: 'wps_ic_live_connect',
+                            apikey: apikey,
+                            nonce: nonce
+                        }
+                    }).done(function (response) {
+                        wpcConnT0 = 0;
+                        var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
+                        if (response && response.success) {
+                            wpcConnT0 = Date.now() - 16000;
+                            
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -97,11 +111,11 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             window.location.reload();
                         } else {
-                            // Not OK
-                            // msg = 'Your api key does not match our records.';
-                            //                 title = 'API Key Validation';
+                            
+                            
+                            
 
-                            if (response.data.msg == 'site-already-connected') {
+                            if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
                                 $(error_message_container).show();
                                 $(error_message_text).hide();
@@ -110,7 +124,7 @@ jQuery(document).ready(function ($) {
                                 $(success_message).hide();
                                 $(loader).hide();
                                 $(tests).hide();
-                            } else if (response.data.msg == 'apikey-in-use') {
+                            } else if (wpcMsg == 'apikey-in-use') {
                                 $(apikeyInUse).show();
                                 $(error_message_container).show();
                                 $(error_message_text).hide();
@@ -129,9 +143,16 @@ jQuery(document).ready(function ($) {
                                 $(tests).hide();
                             }
 
-                            // $('.wps-ic-connect-retry', swal_container).bind('click');
+                            
 
                         }
+                    }).fail(function () {
+                        wpcConnT0 = 0;
+                        $(loader).hide();
+                        $(tests).hide();
+                        $(form_container).hide();
+                        $(error_message_text).show();
+                        $(error_message_container).show();
                     });
 
                     return false;
@@ -154,7 +175,7 @@ jQuery(document).ready(function ($) {
             customClass: {
                 container: 'in',
                 popup: 'wps-ic-lite-connect-popup'
-            }, //customClass:'wps-ic-connect-popup',
+            }, 
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
@@ -173,7 +194,7 @@ jQuery(document).ready(function ($) {
 
                 $('.wps-ic-lite-input-container', swal_container).on('click', function () {
                     $('.wps-ic-lite-input-container', swal_container).removeClass('wpc-error');
-                    //$('.wps-ic-lite-input-field-error', swal_container).fadeOut(500);
+                    
                 });
 
 
@@ -206,7 +227,7 @@ jQuery(document).ready(function ($) {
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        //$('.wps-ic-lite-input-field-error', swal_container).show();
+                        
                         return false;
                     }
 
@@ -220,15 +241,22 @@ jQuery(document).ready(function ($) {
                     $(loaderLite).hide();
                     $(tests).hide();
 
-                    $.post(ajaxurl, {
-                        action: 'wps_ic_live_connect',
-                        //action: 'wps_lite_connect',
-                        apikey: apikey,
-                        nonce: nonce,
-                        timeout: 60000
-                    }, function (response) {
-                        if (response.success) {
-                            // Inject full-page overlay so Lite dashboard never shows during reload
+                    wpcConnT0 = Date.now();
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        timeout: 90000,
+                        data: {
+                            action: 'wps_ic_live_connect',
+                            apikey: apikey,
+                            nonce: nonce
+                        }
+                    }).done(function (response) {
+                        wpcConnT0 = 0;
+                        var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
+                        if (response && response.success) {
+                            wpcConnT0 = Date.now() - 16000;
+                            
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -241,11 +269,11 @@ jQuery(document).ready(function ($) {
                             WPCSwal.close();
                             window.location.reload();
                         } else {
-                            // Not OK
-                            // msg = 'Your api key does not match our records.';
-                            //                 title = 'API Key Validation';
+                            
+                            
+                            
 
-                            if (response.data.msg == 'site-already-connected') {
+                            if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
                                 $(error_message_container).show();
                                 $(error_message_text).hide();
@@ -264,9 +292,16 @@ jQuery(document).ready(function ($) {
                                 $(tests).hide();
                             }
 
-                            // $('.wps-ic-connect-retry', swal_container).bind('click');
+                            
 
                         }
+                    }).fail(function () {
+                        wpcConnT0 = 0;
+                        $(loader).hide();
+                        $(tests).hide();
+                        $(form_container).hide();
+                        $(error_message_text).show();
+                        $(error_message_container).show();
                     });
 
                     return false;

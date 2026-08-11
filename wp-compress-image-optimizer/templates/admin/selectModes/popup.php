@@ -160,17 +160,14 @@
                             <div class="form-check <?php if (!empty($lockedClass)) { echo 'SwalTooltip'; } ?>"
                                  data-pop-text="<?php echo esc_attr__("<i class='wpc-sparkle-icon'></i> Optimize Plan Required", WPS_IC_TEXTDOMAIN); ?>">
                                 <?php
-                                /*if ($cdnLocked){ ?>
-                                    <input class="form-check-input checkbox mt-0" type="checkbox">
-                                    <label class="with-label" for="mode-options" style="pointer-events:none"><span></span></label>
-                                <?php #}else{*/ ?>
+                                 ?>
                                 <div class="wpc-cdn-mode-enabled">
                                     <input class="form-check-input checkbox mt-0" data-for-div-id="mode-options"
                                            type="checkbox" value="1" id="mode-options" name="mode-options"
                                            checked="checked">
                                     <label class="with-label" for="mode-options"><span></span></label>
                                 </div>
-                                <?php #} ?>
+                                <?php ?>
                             </div>
                         </div>
                     </div>

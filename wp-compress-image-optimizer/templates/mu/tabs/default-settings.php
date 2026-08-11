@@ -1,8 +1,8 @@
 <?php
 
-/**
- * GeoLocation Stuff
- */
+
+
+
 
 switch_to_blog(1);
 $options = new wps_ic_options();
@@ -79,8 +79,6 @@ $delayEnabled = $gui::isFeatureEnabled('delay-js');
                                     echo $gui::checkboxDescription_v4('Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, '', 'delay-js', $delayLocked, 'right', '', false, '', $delayEnabled); ?>
 
 
-
-
                                 </div>
                             </div>
                         </div>
@@ -145,7 +143,6 @@ $delayEnabled = $gui::isFeatureEnabled('delay-js');
                 </div>
             </div>
         </div>
-
 
 
     </div>

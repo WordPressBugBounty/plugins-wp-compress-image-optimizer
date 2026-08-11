@@ -28,12 +28,22 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
+                  
+                  
+                  
+                  $wpc_cf501     = get_option(WPS_IC_CF);
+                  $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
+                  $wpc_target501 = $wpc_cf_on501
+                      ? (string) apply_filters('wpc_cf_cname_target', 'cdn-mc.zapwp.net')
+                      : $zone_name;
                   ?>
                     <ul>
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
-                        <li><?php echo __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
+                        <li><?php echo $wpc_cf_on501
+                                ? __('<b>2. Nothing to do in DNS</b> — Cloudflare is connected, so the record is created and proxied for you, pointing at', WPS_IC_TEXTDOMAIN)
+                                : __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo esc_html($zone_name); ?></strong>
+                              echo esc_html($wpc_target501); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -45,7 +55,12 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
+                      
                       $custom_cname = get_option('ic_custom_cname');
+                      if ($wpc_cf_on501) {
+                          $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));
+                          if ($wpc_cfc501 !== '') { $custom_cname = $wpc_cfc501; }
+                      }
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php
                         echo esc_attr($custom_cname); ?>"/>
@@ -73,12 +88,22 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
+                  
+                  
+                  
+                  $wpc_cf501     = get_option(WPS_IC_CF);
+                  $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
+                  $wpc_target501 = $wpc_cf_on501
+                      ? (string) apply_filters('wpc_cf_cname_target', 'cdn-mc.zapwp.net')
+                      : $zone_name;
                   ?>
                     <ul>
                         <li><?php echo __('<b>1. Create a subdomain</b> or domain that you wish to use. It can take up to 24h to propagate globally.', WPS_IC_TEXTDOMAIN); ?></li>
-                        <li><?php echo __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
+                        <li><?php echo $wpc_cf_on501
+                                ? __('<b>2. Nothing to do in DNS</b> — Cloudflare is connected, so the record is created and proxied for you, pointing at', WPS_IC_TEXTDOMAIN)
+                                : __('<b>2. Edit the DNS records</b> for the domain to create a new CNAME pointed at', WPS_IC_TEXTDOMAIN); ?>
                             <strong class="wpc-copy-on-click" title="<?php echo esc_attr__('Click to copy', WPS_IC_TEXTDOMAIN); ?>"><?php
-                              echo esc_html($zone_name); ?></strong>
+                              echo esc_html($wpc_target501); ?></strong>
                         </li>
                         <li><?php echo __('<b>3. Enter the URL</b> you\'ve pointed to below:', WPS_IC_TEXTDOMAIN); ?></li>
                     </ul>
@@ -87,7 +112,12 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
+                      
                       $custom_cname = get_option('ic_custom_cname');
+                      if ($wpc_cf_on501) {
+                          $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));
+                          if ($wpc_cfc501 !== '') { $custom_cname = $wpc_cfc501; }
+                      }
                       ?>
                         <input type="text" name="custom-cdn" placeholder="<?php echo esc_attr__('Example: cdn.mysite.com', WPS_IC_TEXTDOMAIN); ?>" value="<?php
                         echo esc_attr($custom_cname); ?>"/>

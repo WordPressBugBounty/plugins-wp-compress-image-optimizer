@@ -1,42 +1,15 @@
 <?php
-/**
- * WP Compress v7.08.1 — Lazy-CDN support tools (apikey-gated nopriv endpoints).
- *
- * Production diagnostic + recovery utilities used by support workflows.
- * Every endpoint requires the customer's apikey via hash_equals (constant-time
- * compare against wpc_v2_get_apikey()). Without it, requests get HTTP 403.
- *
- * Endpoints exposed:
- *   - wpc_v2_lazy_opcache_invalidate    Reset opcache on deploys (needed on
- *                                       hosts with validate_timestamps=0 such
- *                                       as Cloudways production)
- *   - wpc_v2_lazy_backfill_postmeta     One-shot postmeta backfill for sites
- *                                       upgrading from pre-v7.08 plugin
- *                                       (writes ic_local_variants entries
- *                                       for lazy_cdn files that landed under
- *                                       the old code path)
- *   - wpc_v2_lazy_inspect_disk          Read-only postmeta + disk inspector
- *                                       for support diagnostics
- *   - wpc_v2_lazy_force_drain           Manual drain trigger (escalation
- *                                       path when wake-ping + cron belt
- *                                       both fail)
- *   - wpc_v2_lazy_force_config_sync     Re-syncs /v2/config to orch
- *   - wpc_v2_ajax_lazy_force_miss       Force a CDN cache-miss on a specific
- *                                       variant (for testing the
- *                                       encode-then-pull cycle)
- *
- * Revert: delete this file + remove the require_once line in v2-bootstrap.php.
- */
+
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('wpc_v2_lazy_test_check_apikey')) {
-    /**
-     * Apikey-gate via query param OR POST body. Returns true if matches the
-     * plugin's stored apikey (constant-time compare).
-     */
+    
+
+
+
     function wpc_v2_lazy_test_check_apikey()
     {
         $provided = '';
@@ -50,18 +23,7 @@ if (!function_exists('wpc_v2_lazy_test_check_apikey')) {
     }
 }
 
-// The canary-only test-page creator (wpc_v2_ajax_create_lazy_test_page) has
-// been removed for production. The diagnostic/support endpoints below stay in
-// place: they're apikey-gated and useful for ongoing customer support
-// workflows.
 
-/**
- * Force a CDN cache miss for one image's AVIF variant by deleting that
- * variant from disk. Apikey-gated. Returns the deleted path + the expected
- * CDN URL so the caller can verify post-test.
- *
- * Body: { apikey, image_id, size?: 'medium'|'large'|... }
- */
 if (!function_exists('wpc_v2_ajax_lazy_force_miss')) {
     function wpc_v2_ajax_lazy_force_miss()
     {
@@ -74,7 +36,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_miss')) {
             wp_send_json_error(['msg' => 'missing_image_id'], 400);
         }
 
-        // Resolve the sub-size path for AVIF + WebP variants.
+        
         $src = wp_get_attachment_image_src($image_id, $size);
         if (!$src) {
             wp_send_json_error(['msg' => 'size_not_available'], 404);
@@ -107,11 +69,11 @@ if (!function_exists('wpc_v2_ajax_lazy_force_miss')) {
 add_action('wp_ajax_wpc_v2_lazy_force_miss',        'wpc_v2_ajax_lazy_force_miss');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_miss', 'wpc_v2_ajax_lazy_force_miss');
 
-/**
- * Dump the plugin settings + state relevant to image-delivery behavior.
- * Apikey-gated. Used by support to diagnose why a customer's images render at
- * unexpected widths.
- */
+
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
     function wpc_v2_ajax_lazy_inspect_settings()
     {
@@ -124,9 +86,9 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             'fetchpriority-high',
             'lazySkipCount',
             'optimize-lcp',
-            'maxWidth',           // ← cap for buildLcpSrcset ladder (default 2560)
+            'maxWidth',           
             'retina',
-            'imageWidth',         // ← max image-tag width
+            'imageWidth',         
             'live-cdn',
             'picture_webp',
             'picture_avif',
@@ -142,12 +104,8 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
         foreach ($keys_of_interest as $k) {
             $picked[$k] = array_key_exists($k, $s) ? $s[$k] : '(unset)';
         }
-        // `?all=1` dumps ALL setting keys, not just the image-related 16. Used
-        // for the comprehensive setting/code-path audit when we suspect a UI
-        // toggle isn't wired through to where we read it. One such case: a UI
-        // label vs DB key mismatch where "Resize by Incoming Device" saves to
-        // `generate_adaptive` not `adaptive`, so the mobile cap was gating on
-        // the wrong key.
+
+
         $all_keys = !empty($_REQUEST['all']);
         $response = [
             'settings'                          => $picked,
@@ -158,7 +116,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             'sample_settings_total_keys'        => count($s),
         ];
         if ($all_keys) {
-            // Flatten nested arrays for easier audit reading; preserve raw structure too.
+            
             ksort($s);
             $response['all_settings_raw'] = $s;
         }
@@ -168,16 +126,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_settings',        'wpc_v2_ajax_lazy_inspect_settings');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_settings', 'wpc_v2_ajax_lazy_inspect_settings');
 
-/**
- * Patch plugin settings + force HTML cache purge in one call. Apikey-gated.
- * Accepts `set[key]=value` form-encoded params.
- *
- *   POST set[lazySkipCount]=1&set[fetchpriority-high]=0&apikey=...
- *
- * Whitelists keys to delivery-affecting options only. Always fires an HTML
- * cache purge after the merge, since the caller is explicitly requesting it.
- * Returns a before/after diff so support can confirm the change took effect.
- */
+
 if (!function_exists('wpc_v2_ajax_lazy_patch_setting')) {
     function wpc_v2_ajax_lazy_patch_setting()
     {
@@ -202,10 +151,8 @@ if (!function_exists('wpc_v2_ajax_lazy_patch_setting')) {
 
         $changes = [];
         foreach ($set as $k => $v) {
-            // Sanitize: strip everything except alphanumerics + dash/underscore.
-            // We can't use sanitize_key() because it lowercases, which breaks
-            // camelCase keys like `lazySkipCount`. That actually failed to match
-            // the whitelist on first deploy.
+
+
             $k = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $k);
             if ($k === '' || !in_array($k, $allowed, true)) continue;
             $val = is_scalar($v) ? (string) $v : '';
@@ -235,11 +182,11 @@ if (!function_exists('wpc_v2_ajax_lazy_patch_setting')) {
 add_action('wp_ajax_wpc_v2_lazy_patch_setting',        'wpc_v2_ajax_lazy_patch_setting');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_patch_setting', 'wpc_v2_ajax_lazy_patch_setting');
 
-/**
- * Tail recent WPC log entries. Apikey-gated. Returns last N lines matching
- * WPC patterns. For monitoring during canary tests when SSH access isn't
- * available.
- */
+
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
     function wpc_v2_ajax_lazy_log_tail()
     {
@@ -251,7 +198,7 @@ if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
         if (!file_exists($log_path) || !is_readable($log_path)) {
             wp_send_json_error(['msg' => 'no_debug_log', 'path' => $log_path], 404);
         }
-        // Read just the tail (last ~256KB) so we don't load the whole file
+        
         $fp = @fopen($log_path, 'r');
         if (!$fp) wp_send_json_error(['msg' => 'log_open_failed'], 500);
         fseek($fp, 0, SEEK_END);
@@ -261,7 +208,7 @@ if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
         $chunk = fread($fp, $tail_bytes);
         fclose($fp);
 
-        // Filter WPC-related lines
+        
         $all = explode("\n", (string) $chunk);
         $wpc = [];
         foreach ($all as $line) {
@@ -284,18 +231,7 @@ if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
 add_action('wp_ajax_wpc_v2_lazy_log_tail',        'wpc_v2_ajax_lazy_log_tail');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_log_tail', 'wpc_v2_ajax_lazy_log_tail');
 
-/**
- * One-shot local-mirror setter. For staging environments where orch flipped
- * agencySites.lazy_cdn_active=1 directly in DB (bypassing the plugin's
- * /v2/config sync), the plugin's local options wpc_v2_zone_id +
- * wpc_v2_lazy_enabled_<zone_id> won't be set. This endpoint lets us seed
- * them so wpc_v2_get_lazy_enabled() returns true → rewriteLogic.php
- * optimistic AVIF emission gate passes.
- *
- * Apikey-gated. Removed when this whole test-setup file is removed.
- *
- * Body: { apikey, zone_id, enabled }
- */
+
 if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
     function wpc_v2_ajax_lazy_set_local_mirror()
     {
@@ -308,13 +244,9 @@ if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
             wp_send_json_error(['msg' => 'missing_zone_id'], 400);
         }
         update_option('wpc_v2_zone_id', $zone_id, false);
-        update_option('wpc_v2_lazy_enabled_' . $zone_id, $enabled ? '1' : '0', false); // legacy mirror (no longer read)
-        // lazy_cdn is the Optimization Strategy now, the single source of truth:
-        // wpc_v2_get_lazy_enabled() ignores the per-zone flag above and keys off
-        // the mode. Seed the strategy so this tool actually flips lazy on/off.
-        // update_option fires wpc_v2_maybe_sync_image_config(), which handles the
-        // orch /v2/config sync + pull. Disable only downgrades when currently
-        // lazy_cdn, so it never clobbers a manual/legacy mode.
+        update_option('wpc_v2_lazy_enabled_' . $zone_id, $enabled ? '1' : '0', false);
+
+
         if (defined('WPS_IC_SETTINGS')) {
             $s = get_option(WPS_IC_SETTINGS, []);
             if (!is_array($s)) $s = [];
@@ -324,9 +256,9 @@ if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
             } elseif ($was_lazy_cdn) {
                 $s['wpc_optimization_mode'] = 'legacy';
             }
-            update_option(WPS_IC_SETTINGS, $s); // fires maybe_sync (orch + pull)
+            update_option(WPS_IC_SETTINGS, $s);
         }
-        // Backstop: keep the explicit pull coupling the production path also enforces.
+        
         if ($enabled) {
             $cur = (bool) get_site_option('wpc_v2_pull_enabled', false);
             if (!$cur) update_site_option('wpc_v2_pull_enabled', 1);
@@ -342,19 +274,18 @@ if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
 add_action('wp_ajax_wpc_v2_lazy_set_local_mirror',        'wpc_v2_ajax_lazy_set_local_mirror');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_set_local_mirror', 'wpc_v2_ajax_lazy_set_local_mirror');
 
-/**
- * Inspect plugin settings + optionally flip a key. Apikey-gated.
- * Body: { apikey, set?: "key=value", get?: 1 }
- */
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
     function wpc_v2_ajax_lazy_inspect_settings()
     {
         if (!wpc_v2_lazy_test_check_apikey()) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
-        // The actual option key is 'wps_ic_settings' (the WPS_IC_SETTINGS
-        // constant, defined at defines.php:83). 'wps_ic' is the class name, not
-        // the option.
+
+
         $opt_key  = defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings';
         $settings = get_option($opt_key, []);
         if (!is_array($settings)) $settings = [];
@@ -369,7 +300,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             }
         }
 
-        // Only return relevant picture/cdn-mode keys to keep response tight.
+        
         $interesting = [
             'picture_webp', 'picture_avif', 'generate_webp', 'generate_adaptive',
             'live-cdn', 'cdn', 'webp', 'adaptive_images',
@@ -393,10 +324,10 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_settings',        'wpc_v2_ajax_lazy_inspect_settings');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_settings', 'wpc_v2_ajax_lazy_inspect_settings');
 
-/**
- * Purge WPC HTML cache (wp-content/cache/wp-cio/ + wp-preload/).
- * Required to see rendered HTML changes after rewriteLogic.php updates.
- */
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_purge_cache')) {
     function wpc_v2_ajax_lazy_purge_cache()
     {
@@ -429,12 +360,7 @@ if (!function_exists('wpc_v2_ajax_lazy_purge_cache')) {
 add_action('wp_ajax_wpc_v2_lazy_purge_cache',        'wpc_v2_ajax_lazy_purge_cache');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_purge_cache', 'wpc_v2_ajax_lazy_purge_cache');
 
-/**
- * Verify deployed code state for debugging. Reports whether the v7.05.2 AVIF
- * optimistic-emission patch is actually present in the deployed
- * rewriteLogic.php, in case an SFTP upload silently failed, opcache is stale,
- * or staging-2's file sits on a different path.
- */
+
 if (!function_exists('wpc_v2_ajax_lazy_verify_patch')) {
     function wpc_v2_ajax_lazy_verify_patch()
     {
@@ -447,7 +373,7 @@ if (!function_exists('wpc_v2_ajax_lazy_verify_patch')) {
         $content = $exists ? @file_get_contents($rewriter_path) : '';
         $has_optimistic = $exists && strpos($content, '$optimistic_avif') !== false;
         $has_v7052_marker = $exists && strpos($content, 'v7.05.2') !== false;
-        // Check cdn-rewrite.php patch too
+        
         $cdn_content = file_exists($cdn_rewrite_path) ? @file_get_contents($cdn_rewrite_path) : '';
         $cdn_has_optimistic = strpos($cdn_content, '$optimistic_avif') !== false;
         $cdn_mtime = file_exists($cdn_rewrite_path) ? gmdate('Y-m-d H:i:s', filemtime($cdn_rewrite_path)) : null;
@@ -479,10 +405,10 @@ if (!function_exists('wpc_v2_ajax_lazy_verify_patch')) {
 add_action('wp_ajax_wpc_v2_lazy_verify_patch',        'wpc_v2_ajax_lazy_verify_patch');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_verify_patch', 'wpc_v2_ajax_lazy_verify_patch');
 
-/**
- * Force opcache invalidation on rewriteLogic.php (workaround for no-SSH
- * staging where touched files aren't picked up by stale opcache).
- */
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_opcache_invalidate')) {
     function wpc_v2_ajax_lazy_opcache_invalidate()
     {
@@ -499,12 +425,8 @@ if (!function_exists('wpc_v2_ajax_lazy_opcache_invalidate')) {
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-config-sync.php',
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-direct-entry.php',
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-html-cache-purge.php',
-            // Critical lazy_cdn files used to be missing from this list.
-            // Without them an opcache_invalidate-only path would skip the
-            // primary lazy_cdn ingest + manifest pull files on deploys where
-            // opcache_reset() is restricted. Cloudways production typically
-            // succeeds at the full reset, but this is defense-in-depth for hosts
-            // that disable it.
+
+
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-lazy-cdn.php',
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-pull-manifest.php',
             WP_CONTENT_DIR . '/plugins/wp-compress-image-optimizer/addons/v2/v2-wake.php',
@@ -536,25 +458,7 @@ if (!function_exists('wpc_v2_ajax_lazy_opcache_invalidate')) {
 add_action('wp_ajax_wpc_v2_lazy_opcache_invalidate',        'wpc_v2_ajax_lazy_opcache_invalidate');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_opcache_invalidate', 'wpc_v2_ajax_lazy_opcache_invalidate');
 
-/**
- * One-shot postmeta backfill for orphaned lazy_cdn variants.
- *
- * Pre-v7.08 lazy_cdn ingest wrote files to disk but never updated
- * ic_local_variants — so the ML chip stayed empty for any variant that
- * landed under that code path. This endpoint scans an attachment's uploads
- * subdir for .avif/.webp siblings of the main JPG + sub-size JPGs and
- * writes the missing postmeta entries via wpc_v2_lazy_cdn_write_postmeta.
- *
- * Usage:
- *   POST action=wpc_v2_lazy_backfill_postmeta&apikey=…&image_id=18
- *   POST action=wpc_v2_lazy_backfill_postmeta&apikey=…&all=1     (scan ALL
- *                                                                  attachments
- *                                                                  with .avif
- *                                                                  on disk)
- *
- * Returns per-attachment count of postmeta entries written. Idempotent —
- * re-running just re-merges the same data (no duplicates, no corruption).
- */
+
 if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
     function wpc_v2_ajax_lazy_backfill_postmeta()
     {
@@ -569,16 +473,15 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
         $basedir    = rtrim((string) $upload_dir['basedir'], '/');
         $baseurl    = rtrim((string) $upload_dir['baseurl'], '/');
 
-        // Resolve target attachment(s)
+        
         $target_ids = [];
         $image_id_arg = isset($_REQUEST['image_id']) ? (int) $_REQUEST['image_id'] : 0;
         $all_arg      = !empty($_REQUEST['all']);
         if ($image_id_arg > 0) {
             $target_ids = [$image_id_arg];
         } elseif ($all_arg) {
-            // Find every attachment whose subdir contains at least one .avif/.webp.
-            // Keep this bounded — cap at 500 attachments per call so an
-            // accidental run on a 100K-image library doesn't pin a worker.
+
+
             $atts = get_posts([
                 'post_type'      => 'attachment',
                 'post_mime_type' => ['image/jpeg', 'image/png', 'image/webp'],
@@ -605,12 +508,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
             $att_dir  = ($main_dir !== '' && $main_dir !== '.') ? $basedir . '/' . $main_dir : $basedir;
             if (!is_dir($att_dir)) continue;
 
-            // Build the set of "candidate basenames" we should look for AVIF/WebP
-            // siblings of:
-            //   (a) main file (scaled or un-scaled original) basename, no ext
-            //   (b) each sub-size's file basename, no ext
-            //   (c) un-scaled original basename if -scaled.* (so we catch
-            //       use_original lazy_cdn outputs)
+
             $candidates_no_ext = [];
             $candidates_no_ext[] = preg_replace('/\.[^.]+$/', '', basename($main_rel));
             if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
@@ -619,7 +517,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                     $candidates_no_ext[] = preg_replace('/\.[^.]+$/', '', basename((string) $sz_data['file']));
                 }
             }
-            // Un-scaled original (when WP scaled at upload time)
+            
             if (function_exists('wp_get_original_image_path')) {
                 $orig_path = (string) wp_get_original_image_path($att_id);
                 if ($orig_path !== '') {
@@ -628,13 +526,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
             }
             $candidates_no_ext = array_filter(array_unique($candidates_no_ext));
 
-            // Prune stale ic_local_variants entries that don't belong to this
-            // attachment. These came from an earlier glob over-match, e.g.
-            // image-12's un-scaled basename greedily matching image-18's
-            // `-4-Nw.avif` files. For each existing entry, verify its filename
-            // matches one of THIS attachment's candidate basenames exactly:
-            // either the same basename, or the `<basename>-<digits>w` /
-            // `<basename>-<digits>x<digits>` adaptive form. Drop it otherwise.
+
             $existing = function_exists('get_post_meta')
                 ? get_post_meta($att_id, 'ic_local_variants', true)
                 : [];
@@ -670,8 +562,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                 }
             }
 
-            // origin_url is the main file's URL: the canonical site-host form
-            // is what write_postmeta expects.
+
             $origin_url = $baseurl . '/' . ltrim($main_rel, '/');
 
             $written = 0;
@@ -682,11 +573,8 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                     if (!@is_file($candidate_path)) continue;
                     $size_bytes = (int) @filesize($candidate_path);
                     if ($size_bytes <= 0) continue;
-                    // Also look for adaptive-maximized siblings under
-                    // <no_ext>-{N}w.{ext} and <no_ext>-{W}x{H}.{ext}. Globbing
-                    // once outside this inner loop would be cleaner, but the
-                    // candidate count is small (<=20) so the cost is negligible.
-                    // write_postmeta is idempotent, so re-runs are harmless.
+
+
                     $ok = wpc_v2_lazy_cdn_write_postmeta(
                         $origin_url,
                         $candidate_path,
@@ -699,13 +587,8 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                         $entries[] = basename($candidate_path);
                     }
                 }
-                // Adaptive-maximized: glob <basename>-*w.{ext} and -*x*.{ext}
-                // for any extras the lazy_cdn fallback created. Iterate ALL
-                // candidate basenames (scaled, un-scaled, sub-size bases), not
-                // just the first. Adaptive files from use_original=on land under
-                // the UN-scaled basename, not the scaled one, so a glob against
-                // only the first candidate (typically the scaled basename)
-                // misses them.
+
+
                 $seen_paths = [];
                 foreach ($candidates_no_ext as $no_ext) {
                     if (!$no_ext) continue;
@@ -719,12 +602,8 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                         foreach ($hits as $candidate_path) {
                             if (isset($seen_paths[$candidate_path])) continue;
                             $seen_paths[$candidate_path] = true;
-                            // Strict suffix validation. Glob `<base>-*w.{ext}`
-                            // also matches `<base>-4-3020w.{ext}` (greedy *),
-                            // which actually belongs to a different attachment
-                            // carrying a `-4` duplicate suffix. Require the part
-                            // after `<base>-` to be EXACTLY `<digits>w` or
-                            // `<digits>x<digits>`, with no extra hyphens.
+
+
                             $cand_base    = basename($candidate_path);
                             $cand_no_ext  = preg_replace('/\.[^.]+$/', '', $cand_base);
                             $expected_pfx = $no_ext . '-';
@@ -732,7 +611,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                             $suffix = substr($cand_no_ext, strlen($expected_pfx));
                             if (!preg_match('/^\d+w$/', $suffix)
                                 && !preg_match('/^\d+x\d+$/', $suffix)) {
-                                continue; // belongs to different attachment
+                                continue;
                             }
                             if (!@is_file($candidate_path)) continue;
                             $size_bytes = (int) @filesize($candidate_path);
@@ -770,12 +649,12 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
 add_action('wp_ajax_wpc_v2_lazy_backfill_postmeta',        'wpc_v2_ajax_lazy_backfill_postmeta');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_backfill_postmeta', 'wpc_v2_ajax_lazy_backfill_postmeta');
 
-/**
- * Disk + postmeta inspector. Pass ?image_id=N to get:
- *   - ic_local_variants postmeta (what plugin THINKS exists)
- *   - directory listing of the image's uploads subdir (what REALLY exists)
- *   - per-sub-size disk-presence check for .avif/.webp siblings
- */
+
+
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
     function wpc_v2_ajax_lazy_inspect_disk()
     {
@@ -816,7 +695,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
                 }));
                 $out['directory_listing'] = $entries;
 
-                // Per sub-size: does .avif sibling exist? .webp sibling?
+                
                 $per_size = [];
                 if (isset($meta['sizes'])) {
                     foreach ($meta['sizes'] as $size_name => $size_data) {
@@ -845,9 +724,9 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_disk',        'wpc_v2_ajax_lazy_inspect_disk');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_disk', 'wpc_v2_ajax_lazy_inspect_disk');
 
-/**
- * Cache layer / plugin inspector — what's listening for purges?
- */
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_inspect_cache_layer')) {
     function wpc_v2_ajax_lazy_inspect_cache_layer()
     {
@@ -901,7 +780,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_cache_layer')) {
         $out['rocket_clean_post_exists'] = function_exists('rocket_clean_post');
         $out['wp_cache_post_change_exists'] = function_exists('wp_cache_post_change');
 
-        // Capture Varnish-related headers from a local request to check.
+        
         $out['varnish_seen_via_localhost'] = null;
         if (function_exists('wp_remote_head')) {
             $r = wp_remote_head(home_url('/sample-page/'), ['timeout' => 5, 'sslverify' => false]);
@@ -926,10 +805,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_cache_layer')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_cache_layer',        'wpc_v2_ajax_lazy_inspect_cache_layer');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_cache_layer', 'wpc_v2_ajax_lazy_inspect_cache_layer');
 
-/**
- * Force /v2/config sync with current state. Used to push the new wake_url
- * field to orch without needing the admin UI toggle.
- */
+
 if (!function_exists('wpc_v2_ajax_lazy_force_config_sync')) {
     function wpc_v2_ajax_lazy_force_config_sync()
     {
@@ -946,11 +822,8 @@ if (!function_exists('wpc_v2_ajax_lazy_force_config_sync')) {
         if ($zone_id === '') {
             wp_send_json_error(['msg' => 'no_zone_id'], 400);
         }
-        // Sync the STRATEGY-derived lazy_cdn state, the single source of truth,
-        // not the dead per-zone flag. Reading the stale flag here could push the
-        // orch a lazy_cdn_active that contradicts wpc_optimization_mode, the
-        // exact split that was removed. wpc_v2_get_lazy_enabled() now resolves to
-        // (mode === 'lazy_cdn' && zone).
+
+
         $cur = function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled();
         $result = wpc_v2_config_sync_lazy_enabled($zone_id, $cur);
         wp_send_json_success([
@@ -964,10 +837,10 @@ if (!function_exists('wpc_v2_ajax_lazy_force_config_sync')) {
 add_action('wp_ajax_wpc_v2_lazy_force_config_sync',        'wpc_v2_ajax_lazy_force_config_sync');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_config_sync', 'wpc_v2_ajax_lazy_force_config_sync');
 
-/**
- * Force pull-drain fire bypassing the 5-min page-load-poll throttle.
- * Extends drain_alive_until_ms first so the loop actually polls.
- */
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
     function wpc_v2_ajax_lazy_force_drain()
     {
@@ -977,7 +850,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
         if (!function_exists('wpc_v2_pull_drain_fire')) {
             wp_send_json_error(['msg' => 'pull_drain_helper_missing'], 500);
         }
-        // Extend deadline so loop actually polls
+        
         $now_ms = (int) (microtime(true) * 1000);
         $target = $now_ms + 60000;
         wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
@@ -985,7 +858,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
         if ($target > $current) {
             update_option('wpc_v2_drain_alive_until_ms', $target, false);
         }
-        // Bypass throttle too
+        
         delete_option('wpc_v2_last_pull_check_ms');
         $dispatched = (bool) wpc_v2_pull_drain_fire();
         wp_send_json_success([
@@ -998,45 +871,12 @@ add_action('wp_ajax_wpc_v2_lazy_force_drain',        'wpc_v2_ajax_lazy_force_dra
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_drain', 'wpc_v2_ajax_lazy_force_drain');
 
 
-// ─── Diagnostic wrapper for orch /admin/recent-manifest-writes ──────────────
-//
-// Wraps the orch admin ring buffer (manifest-write events, 2000-cap / 7d TTL,
-// per the orch v3.18.96 spec). This lets plugin-side T2 logs be correlated
-// against T1 (manifest-write-completed-at-Redis) without the operator having to
-// know the admin STATS_KEY or the orch hostname.
-//
-// The orch supports these server-side filters: n, apikey_hash, since, result.
-// Per-event fields (imageID, sizeLabel, format, trace_id, via) are NOT
-// server-filterable, so we pull then filter client-side here.
-//
-// Auth: same WPC_LAZY_TEST_KEY apikey gate as the other lazy_* endpoints.
-// Stats key: read from option `wpc_v2_orch_admin_stats_key` (must be set
-// out-of-band by operator: `wp option update wpc_v2_orch_admin_stats_key <key>`).
-//
-// Caveats surfaced in response:
-//   - trimmed_likely=true when oldest returned ts > since-floor (means buffer
-//     was rotated and our window is a sample, not census).
-//   - For high-volume apikeys, supply since=<ms> + n=500 and accept sampling.
-//
-// Request params (POST or GET):
-//   n               default 50, max 500
-//   apikey_hash     default sha256(apikey)[0..16] — auto from local apikey
-//   since           ms epoch, optional — narrow the window
-//   result          one of ok|failed|threw|no_handlers|init_failed
-//   imageID         client-side filter on events[].imageID
-//   sizeLabel       client-side filter on events[].sizeLabel
-//   format          client-side filter on events[].format (avif|webp|jpg)
-//   trace_id        client-side filter on events[].trace_id
-//   exclude_dedup   "1" to drop events with via=dedup_republish (legit silent
-//                   skips per spec — usually noise for race-detection)
-//   orch_host       override orch hostname (default reads option
-//                   wpc_v2_orch_admin_host or falls back to first known
-//                   region; operator should set out-of-band).
-//
-// Returns:
-//   { ok, orch_url, status, returned_raw, returned_filtered,
-//     trimmed_likely, oldest_ts, newest_ts, now_ms,
-//     summary: { ok, failed, threw }, events: [...] }
+
+
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
     function wpc_v2_ajax_lazy_check_orch_writes()
     {
@@ -1061,7 +901,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
                 'fix' => "wp option update wpc_v2_orch_admin_host '<orch.region.host>' (or pass ?orch_host=)",
             ], 503);
         }
-        // Strip any scheme the operator pasted in.
+        
         $orch_host = preg_replace('#^https?://#', '', $orch_host);
         $orch_host = trim($orch_host, "/ \t");
 
@@ -1070,7 +910,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
 
         $n = isset($_REQUEST['n']) ? max(1, min(500, (int) $_REQUEST['n'])) : 50;
 
-        // Build server-side query string with only the allowlisted params.
+        
         $server_params = ['key' => $stats_key, 'n' => $n];
         $server_params['apikey_hash'] = isset($_REQUEST['apikey_hash']) && $_REQUEST['apikey_hash'] !== ''
             ? (string) $_REQUEST['apikey_hash']
@@ -1110,7 +950,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
 
         $events_raw = isset($parsed['events']) && is_array($parsed['events']) ? $parsed['events'] : [];
 
-        // Client-side filters: the orch v3.18.96 spec doesn't support these server-side.
+
         $f_imageID   = isset($_REQUEST['imageID'])   ? (string) $_REQUEST['imageID']   : '';
         $f_sizeLabel = isset($_REQUEST['sizeLabel']) ? (string) $_REQUEST['sizeLabel'] : '';
         $f_format    = isset($_REQUEST['format'])    ? (string) $_REQUEST['format']    : '';
@@ -1128,9 +968,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
             $events[] = $ev;
         }
 
-        // Trim-detection: if caller supplied `since`, buffer is "complete" only
-        // when oldest_ts <= since (i.e. the window was fully covered). If
-        // oldest_ts > since, the ring rotated past our floor — sample, not census.
+
         $oldest_ts = !empty($events_raw) ? (int) ($events_raw[count($events_raw) - 1]['ts'] ?? 0) : 0;
         $newest_ts = !empty($events_raw) ? (int) ($events_raw[0]['ts'] ?? 0) : 0;
         $since_arg = isset($server_params['since']) ? (int) $server_params['since'] : 0;

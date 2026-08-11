@@ -2,18 +2,16 @@
 global $ic_running;
 global $wps_ic_cdn_instance;
 
-// Logs plugin PHP warnings to the DB for the debug tool. Only captures our own
-// files, dedupes, caps at 50 entries, always returns false so PHP still handles
-// the error normally.
+
 if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
     set_error_handler(function ($errno, $errstr, $errfile, $errline) {
         try {
-            // Honor the @-operator: error_reporting() is 0 during a suppressed
-            // call, and we shouldn't log what the developer chose to suppress.
+            
+            
             if (error_reporting() === 0) {
                 return false;
             }
-            // ONLY capture errors from our plugin directory — skip everything else
+            
             if (strpos($errfile, 'wp-compress') === false) {
                 return false;
             }
@@ -22,7 +20,7 @@ if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
                 return false;
             }
 
-            // Deduplicate: same file+line+message per request = skip
+            
             static $seen = [];
             $key = $errfile . ':' . $errline . ':' . $errstr;
             if (isset($seen[$key])) {
@@ -30,7 +28,7 @@ if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
             }
             $seen[$key] = true;
 
-            // Cap static array at 50 to prevent memory growth on long requests
+            
             if (count($seen) > 50) {
                 return false;
             }
@@ -39,32 +37,30 @@ if (!defined('WPC_ERROR_CAPTURE_DISABLED')) {
             $log[] = date('Y-m-d H:i:s') . ' | ' . $types[$errno] . ' | ' . basename($errfile) . ':' . $errline . ' | ' . $errstr;
             update_option('wpc_error_debug_log', array_slice($log, -50), false);
         } catch (\Throwable $e) {
-            // Never let the error handler itself cause issues
+            
         }
-        return false; // CRITICAL: always return false = PHP still handles error normally
+        return false; 
     }, E_WARNING | E_NOTICE | E_DEPRECATED);
 }
 
-// WPC URL Pattern Matcher — shared by dontRunif() and advanced-cache.php
-// Wildcard syntax: * = single path segment, ** = any depth, ? = single char,
-// plain text = case-insensitive substring (backwards compatible with old exact entries)
+
 if (!function_exists('wpc_url_matches_pattern')) {
     function wpc_url_matches_pattern($url, $pattern) {
         $pattern = trim($pattern);
         if ($pattern === '' || $pattern[0] === '#') return false;
 
-        // Strip leading slash for normalization (URL has host prefix, patterns may not)
+        
         $pattern = ltrim($pattern, '/');
 
-        // Wildcard pattern → build regex
+        
         if (strpos($pattern, '*') !== false || strpos($pattern, '?') !== false) {
-            // Escape regex meta chars first, then convert wildcards back
+            
             $regex = preg_quote($pattern, '#');
             $regex = str_replace(['\\*\\*', '\\*', '\\?'], ['.*', '[^/]*', '.'], $regex);
             return (bool) @preg_match('#' . $regex . '#i', $url);
         }
 
-        // No wildcards → case-insensitive substring match
+        
         return stripos($url, $pattern) !== false;
     }
 }
@@ -74,35 +70,35 @@ if (!function_exists('wpc_url_is_excluded')) {
         if (empty($patterns) || !is_array($patterns)) return false;
         foreach ($patterns as $pattern) {
             if (wpc_url_matches_pattern($currentUrl, $pattern)) {
-                return $pattern; // Return matched pattern for logging
+                return $pattern; 
             }
         }
         return false;
     }
 }
 
-/**
- * Diagnostic logger — info-level feature-tracking events surfaced in the Debug
- * Tool so customers can verify behavior without SSH. Writes to the
- * `wpc_diagnostic_log` option (capped at 100), deduped and per-tag sampled so a
- * high-image page can't flood it.
- */
+
+
+
+
+
+
 if (!function_exists('wpc_diagnostic_log')) {
     function wpc_diagnostic_log($tag, $detail = '') {
         try {
             static $seen = [];
             static $tagCounts = [];
 
-            // Per-tag sample cap: only log first 5 of each tag per request
+            
             $tagCounts[$tag] = ($tagCounts[$tag] ?? 0) + 1;
             if ($tagCounts[$tag] > 5) return;
 
-            // Per-request dedupe on exact tag+detail
+            
             $key = $tag . '|' . $detail;
             if (isset($seen[$key])) return;
             $seen[$key] = true;
 
-            // Hard memory cap
+            
             if (count($seen) > 100) return;
 
             $log = get_option('wpc_diagnostic_log', []);
@@ -110,39 +106,49 @@ if (!function_exists('wpc_diagnostic_log')) {
             $log[] = date('Y-m-d H:i:s') . ' | ' . $tag . ' | ' . $detail;
             update_option('wpc_diagnostic_log', array_slice($log, -100), false);
         } catch (\Throwable $e) {
-            // Never let diagnostic logging itself break things
+            
         }
     }
 }
 
 include_once __DIR__ . '/debug.php';
 include_once __DIR__ . '/defines.php';
+
+if (!function_exists('wpc_crit_meta_write')) {
+    
+    
+    function wpc_crit_meta_write($path, $value)
+    {
+        try {
+            return @file_put_contents($path, (string) $value) !== false;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+}
+
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
 include_once WPS_IC_DIR . 'addons/cdn/modern-delivery.php';
-include_once WPS_IC_DIR . 'addons/cdn/delivery-resolver.php'; // load before negotiated — its is_active() consults the resolver
-include_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php'; // inert until EMISSION_READY; gated by the resolver
+include_once WPS_IC_DIR . 'addons/cdn/delivery-resolver.php';
+include_once WPS_IC_DIR . 'addons/cdn/corp-guard.php';
+include_once WPS_IC_DIR . 'addons/cdn/negotiated-delivery.php';
 include_once WPS_IC_DIR . 'addons/legacy/compress.php';
 include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
 
-// v2 protocol bootstrap. Guards on the `wpc_protocol_version` option (default
-// 'v1' = no-op); when non-'v1' it loads the WPS_LocalV2 client, the
-// /wpc/v2/bg_swap REST endpoint, and the capability probe.
+
 include_once WPS_IC_DIR . 'addons/v2/v2-bootstrap.php';
 
-// Outermost natural-URL buffer. Catches /m:N/a: asset transform URLs printed
-// past a mid-page flush() (import-maps, late footers, prefetch JSON) that
-// cdnRewriter's buffer can't reach. Inert unless negotiated delivery is GA.
+
 include_once WPS_IC_DIR . 'addons/v2/v2-natural-url-buffer.php';
 
-//TRAITS
+
 include WPS_IC_DIR . 'traits/agency.php';
 
-// ─── Local Optimization Helpers ──────────────────────────────────────────
 
-/**
- * Get all locally-optimized attachment IDs as a flipped array for O(1) lookup.
- * Uses transient cache (5 min) + static cache per request.
- */
+
+
+
+
 function wpc_get_local_optimized_ids() {
     static $cache = null;
     if ($cache !== null) return $cache;
@@ -159,18 +165,18 @@ function wpc_get_local_optimized_ids() {
     return $cache;
 }
 
-/**
- * Resolve an image URL to its WordPress attachment ID.
- * Strips size suffixes (-300x200) to find the base attachment.
- * Static cache per request to avoid repeated DB lookups.
- */
+
+
+
+
+
 function wpc_url_to_attachment_id($url) {
     static $id_cache = [];
 
-    // Normalize URL — strip query strings and fragments
+    
     $clean_url = strtok($url, '?#');
 
-    // Strip size suffix to get base URL (e.g., photo-300x200.jpg → photo.jpg)
+    
     $base_url = preg_replace('/-\d+x\d+(?=\.\w{3,4}$)/', '', $clean_url);
 
     if (isset($id_cache[$base_url])) return $id_cache[$base_url];
@@ -180,64 +186,41 @@ function wpc_url_to_attachment_id($url) {
     return $id_cache[$base_url];
 }
 
-/**
- * Invalidate the local optimized IDs cache.
- * Call this whenever ic_status changes (optimize, restore, delete).
- */
+
+
+
+
 function wpc_invalidate_local_cache() {
     delete_transient('wpc_local_optimized_ids');
 }
 
-/**
- * Bulk liveness heartbeat — bump on every unit of bulk progress.
- *
- * The "Local is running" badge is driven by the autoloaded option
- * wps_ic_bulk_process (no TTL), which doubles as the worker's "keep going" flag.
- * If the driver dies mid-run — tab closed (JS-sequential), FPM/OOM kill — its
- * terminal cleanup never runs and the flag is orphaned, pinning the badge forever.
- *
- * This short-TTL transient is the liveness signal: each bulk action (per image /
- * per drain slice) refreshes it, so a genuinely-advancing bulk never lets it lapse.
- * Bump it ONLY on bulk progress — not on unrelated local actions (a manual single
- * compress later must not resurrect a dead bulk's heartbeat).
- */
+
 function wpc_bulk_heartbeat_touch() {
-    // 5 min TTL. Bulk actions are seconds apart (per image ~12s, per slice <=30s),
-    // so this never lapses mid-run; once the driver dies it expires within 5 min.
+    
+    
     set_transient('wpc_bulk_heartbeat', time(), 300);
 }
 
-/**
- * Read wps_ic_bulk_process with an orphan self-heal.
- *
- * Returns the bulk-process array while genuinely live (heartbeat fresh), or false
- * once the driver has died and the heartbeat lapsed — clearing the orphaned flag
- * at read time (which always runs), since the worker's own cleanup didn't.
- *
- * Use this anywhere the UI decides whether Local optimization is "running" — a raw
- * get_option can't tell a live bulk from a dead one.
- *
- * @return array|false The bulk-process array while genuinely live, else false.
- */
+
 function wpc_bulk_process_active() {
     $bp = get_option('wps_ic_bulk_process');
     if (empty($bp)) {
         return false;
     }
     if (get_transient('wpc_bulk_heartbeat')) {
-        return $bp; // a recent bulk action kept it alive → genuinely running
+        return $bp;
     }
-    // No heartbeat for the full TTL → the driver is dead. Mirror its terminal cleanup.
+    
     delete_option('wps_ic_bulk_process');
     delete_transient('wps_ic_bulk_running');
     return false;
 }
 
-/**
- * Purge CDN cache for a specific image and all its thumbnails.
- * Calls the MC pod per-URL purge endpoint + Cloudflare purge if connected.
- * Non-blocking — does not slow down the restore flow.
- */
+
+
+
+
+
 function wpc_purge_cdn_urls($attachment_id) {
     $options = get_option(WPS_IC_OPTIONS);
     if (empty($options['api_key'])) return;
@@ -245,16 +228,16 @@ function wpc_purge_cdn_urls($attachment_id) {
     $path = get_post_meta($attachment_id, '_wp_attached_file', true);
     if (!$path) return;
 
-    // Collect all URLs to purge: original + unscaled + all thumbnails
+    
     $urls_to_purge = ["/wp-content/uploads/{$path}"];
 
-    // Unscaled version (if exists)
+    
     $unscaled_path = str_replace('-scaled.', '.', $path);
     if ($unscaled_path !== $path) {
         $urls_to_purge[] = "/wp-content/uploads/{$unscaled_path}";
     }
 
-    // All thumbnail sizes
+    
     $metadata = wp_get_attachment_metadata($attachment_id);
     if (!empty($metadata['sizes'])) {
         $base_dir = dirname($path);
@@ -263,7 +246,7 @@ function wpc_purge_cdn_urls($attachment_id) {
         }
     }
 
-    // Also purge WebP/AVIF variants
+    
     foreach ($urls_to_purge as $url) {
         $pathinfo = pathinfo($url);
         $webp = $pathinfo['dirname'] . '/' . $pathinfo['filename'] . '.webp';
@@ -272,7 +255,7 @@ function wpc_purge_cdn_urls($attachment_id) {
         if (!in_array($avif, $urls_to_purge)) $urls_to_purge[] = $avif;
     }
 
-    // Purge MC pod cache — per-URL, non-blocking
+    
     foreach ($urls_to_purge as $url) {
         wp_remote_get(
             "https://cdn-mc.zapwp.net/health/cache-purge?apikey=" . urlencode($options['api_key']) . "&url=" . urlencode($url),
@@ -280,11 +263,7 @@ function wpc_purge_cdn_urls($attachment_id) {
         );
     }
 
-    // Also purge the CDN-transform variants. The cdn-mc purge above only clears the
-    // natural origin URL, but images are fetched via transform URLs
-    // (…/q:i/r:0/wp:2/w:1510/u:<origin>) — separate edge cache entries the origin purge
-    // doesn't touch. Purge each ladder width × format (jpg/webp/avif), non-blocking.
-    // `u:` needs the full URL including host (cdn-mc keys transforms by it).
+
     $site_url = site_url();
     $ladder_widths = [150, 221, 300, 400, 442, 480, 640, 720, 755, 768, 800,
                       960, 1100, 1132, 1200, 1280, 1366, 1440, 1510, 1536,
@@ -293,16 +272,15 @@ function wpc_purge_cdn_urls($attachment_id) {
     $custom_cname = get_option('ic_custom_cname');
     $cdn_zone = !empty($custom_cname) ? $custom_cname : (string) get_option('ic_cdn_zone_name');
     if ($cdn_zone !== '') {
-        // Iterate both the origin-host and cdn-zone-host forms of `u:`: uForCdn() can
-        // rewrite the `u:` host from origin to cdn-zone, so the same image+width has two
-        // distinct cache keys — purging only one leaves the other served stale.
+
+
         $u_hosts = ['https://' . $cdn_zone];
         if (rtrim($site_url, '/') !== rtrim($u_hosts[0], '/')) {
-            $u_hosts[] = $site_url;  // origin host as separate variant
+            $u_hosts[] = $site_url;
         }
         foreach ($urls_to_purge as $rel_url) {
-            // Skip the WebP/AVIF derivatives — only purge transforms of the JPG/PNG originals
-            // (cdn-mc keys transforms by the underlying source URL).
+            
+            
             if (preg_match('/\.(webp|avif)$/i', $rel_url)) continue;
             foreach ($u_hosts as $u_host_for_purge) {
                 $full_u = $u_host_for_purge . $rel_url;
@@ -319,7 +297,7 @@ function wpc_purge_cdn_urls($attachment_id) {
         }
     }
 
-    // Purge Cloudflare (if connected)
+    
     $cf = get_option(WPS_IC_CF);
     if (!empty($cf['token']) && !empty($cf['zone'])) {
         $site_url = site_url();
@@ -333,21 +311,13 @@ function wpc_purge_cdn_urls($attachment_id) {
     }
 }
 
-/**
- * Targeted single-URL CDN purge for bg-swap callbacks. Purges just the file we
- * rewrote, not the 16+ URL fan-out of wpc_purge_cdn_urls — callbacks fire 5-15×
- * per compress, so the full-attachment helper would burn 16×N requests.
- *
- * @param int    $attachment_id Image post ID (used to attribute the purge in logs).
- * @param string $abs_path      Absolute filesystem path of the just-written file.
- *                              Helper converts to uploads-relative URL internally.
- */
+
 function wpc_purge_cdn_urls_single($attachment_id, $abs_path) {
     $options = get_option(WPS_IC_OPTIONS);
     if (empty($options['api_key'])) return;
     if (!is_string($abs_path) || $abs_path === '') return;
 
-    // Convert absolute path → /wp-content/uploads/<rel> URL path.
+    
     $uploads = wp_upload_dir();
     $basedir = isset($uploads['basedir']) ? $uploads['basedir'] : (WP_CONTENT_DIR . '/uploads');
     $basedir = rtrim($basedir, '/');
@@ -356,13 +326,13 @@ function wpc_purge_cdn_urls_single($attachment_id, $abs_path) {
     if ($rel === '') return;
     $url  = '/wp-content/uploads/' . $rel;
 
-    // MC pod purge — non-blocking single GET.
+    
     wp_remote_get(
         "https://cdn-mc.zapwp.net/health/cache-purge?apikey=" . urlencode($options['api_key']) . "&url=" . urlencode($url),
         ['timeout' => 5, 'blocking' => false, 'sslverify' => false]
     );
 
-    // Cloudflare zone purge — single URL only.
+    
     $cf = get_option(WPS_IC_CF);
     if (!empty($cf['token']) && !empty($cf['zone']) && class_exists('WPC_CloudflareAPI')) {
         $cfsdk = new WPC_CloudflareAPI($cf['token']);
@@ -376,9 +346,9 @@ function wpc_purge_cdn_urls_single($attachment_id, $abs_path) {
     ));
 }
 
-/**
- * Get whitelabel support URL. Checks WL plugin header, then $whtlbl global, then default.
- */
+
+
+
 function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
     static $cached = null;
     if ($cached !== null) return $cached;
@@ -407,10 +377,64 @@ function wpc_get_whitelabel_url($fallback = 'https://www.wpcompress.com/') {
     return $cached;
 }
 
-/**
- * Get the whitelabel-aware plugin display name.
- * Reads from the Settings submenu (which whitelabel plugins override), falls back to 'WP Compress'.
- */
+
+
+
+
+
+
+function wpc_wl_mirror_sync() {
+    if (!class_exists('whtlbl_whitelabel_plugin') || !defined('WHITE_LABEL_DIR')) {
+        return;
+    }
+    $ver = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '0';
+    if (get_option('wpc_wl_mirror_ver') === $ver) {
+        return;
+    }
+    $mirror = rtrim((string) WHITE_LABEL_DIR, '/') . '/files/';
+    if (!@is_dir($mirror)) {
+        update_option('wpc_wl_mirror_ver', $ver);
+        return;
+    }
+    
+    $wpc_map346 = [];
+    foreach (['assets/v4/js/', 'assets/v4/css/', 'assets/js/admin/', 'assets/css/', 'assets/js/'] as $wpc_d346) {
+        foreach (['*.js', '*.css'] as $wpc_g346) {
+            foreach ((array) @glob(WPS_IC_DIR . $wpc_d346 . $wpc_g346) as $wpc_f346) {
+                $wpc_bn346 = basename((string) $wpc_f346);
+                if ($wpc_bn346 !== '' && !isset($wpc_map346[$wpc_bn346])) {
+                    $wpc_map346[$wpc_bn346] = $wpc_f346;
+                }
+            }
+        }
+    }
+    $wpc_n346 = 0;
+    foreach (['*.js', '*.css'] as $wpc_g346) {
+        foreach ((array) @glob($mirror . $wpc_g346) as $wpc_dest346) {
+            $wpc_bn346 = basename((string) $wpc_dest346);
+            if (!isset($wpc_map346[$wpc_bn346])) {
+                continue;
+            }
+            $wpc_src346 = $wpc_map346[$wpc_bn346];
+            if (@filesize($wpc_src346) === @filesize($wpc_dest346) && (int) @filemtime($wpc_dest346) >= (int) @filemtime($wpc_src346)) {
+                continue;
+            }
+            if (@copy($wpc_src346, $wpc_dest346)) {
+                $wpc_n346++;
+            }
+        }
+    }
+    update_option('wpc_wl_mirror_ver', $ver);
+    if ($wpc_n346 && function_exists('wpc_cache_first_log')) {
+        wpc_cache_first_log('wl-mirror-refresh', '', '', ['n' => $wpc_n346, 'ver' => $ver]);
+    }
+}
+add_action('admin_init', 'wpc_wl_mirror_sync');
+
+
+
+
+
 function wpc_get_plugin_name() {
     static $cached = null;
     if ($cached !== null) return $cached;
@@ -429,21 +453,12 @@ function wpc_get_plugin_name() {
     return $cached;
 }
 
-/**
- * Rewrite the CDN-transform URLs in an <img>'s src/srcset/data-* to natural
- * (CDN-passthrough) URLs when the underlying file exists on disk. The natural
- * file is preferred (higher quality, lower CDN load); the transform URL is only
- * useful as a fallback, so it's kept when the file is missing.
- *
- * Already-natural / external / data: URLs pass through. srcset width descriptors
- * are preserved exactly. Query strings are stripped for the disk lookup but kept
- * in the output URL.
- */
+
 function wpc_v2_rewrite_img_to_natural_urls($img_tag, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
     if (empty($cdn_zone) || empty($img_tag)) return $img_tag;
     if (strpos($img_tag, $cdn_zone) === false) return $img_tag;
 
-    // Attributes that may contain URLs. Each is handled with srcset-awareness.
+    
     $attrs = [
         ['name' => 'src',         'is_srcset' => false],
         ['name' => 'srcset',      'is_srcset' => true],
@@ -453,7 +468,7 @@ function wpc_v2_rewrite_img_to_natural_urls($img_tag, $cdn_zone, $upload_basedir
 
     foreach ($attrs as $a) {
         $name = $a['name'];
-        // Match attr="value" — accommodating values containing : (URLs do).
+        
         if (!preg_match('/\b' . preg_quote($name, '/') . '\s*=\s*"([^"]*)"/i', $img_tag, $m)) continue;
         $original_value = $m[1];
         if ($original_value === '') continue;
@@ -463,7 +478,7 @@ function wpc_v2_rewrite_img_to_natural_urls($img_tag, $cdn_zone, $upload_basedir
             : wpc_v2_rewrite_single_url_to_natural($original_value, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url);
 
         if ($new_value !== $original_value) {
-            // Replace only the first match to avoid collisions across attrs.
+            
             $img_tag = preg_replace(
                 '/(\b' . preg_quote($name, '/') . '\s*=\s*")' . preg_quote($original_value, '/') . '(")/i',
                 '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $new_value) . '$2',
@@ -482,8 +497,8 @@ function wpc_v2_rewrite_srcset_value($srcset, $cdn_zone, $upload_basedir, $uploa
     foreach ($entries as &$entry) {
         $entry = trim($entry);
         if ($entry === '') continue;
-        // Entry is "URL [descriptor]" — split on the first whitespace so URLs
-        // with embedded colons stay intact.
+        
+        
         if (preg_match('/^(\S+)(\s+.+)?$/', $entry, $em)) {
             $url = $em[1];
             $descriptor = isset($em[2]) ? $em[2] : '';
@@ -498,13 +513,10 @@ function wpc_v2_rewrite_srcset_value($srcset, $cdn_zone, $upload_basedir, $uploa
 function wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, $upload_baseurl, $site_url) {
     if (empty($url) || empty($cdn_zone)) return $url;
 
-    // Only rewrite our own CDN zone's transform URLs. External hosts pass through.
+    
     if (strpos($url, $cdn_zone) === false) return $url;
 
-    // Two CDN URL shapes carry the origin URL as a suffix (running to end of
-    // string, since the attr/srcset parsers already trimmed it):
-    //   /u:<origin_url>      — img-tag adaptive transforms (q:i/r:0/wp:N/w:N/u:URL)
-    //   /m:0/a:<origin_url>  — picture <source> AVIF wraps + asset passthroughs
+
     if (!preg_match('#/(?:u:|m:0/a:)(https?://[^\s]+)$#', $url, $m)) return $url;
 
     $origin_url = $m[1];
@@ -514,8 +526,8 @@ function wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, 
         $query = substr($origin_url, strpos($origin_url, '?'));
     }
 
-    // Map origin URL → disk path. Try uploads first (most common), then
-    // any path under site_url.
+    
+    
     $disk = null;
     if ($upload_baseurl && strpos($origin_clean, $upload_baseurl) === 0) {
         $relative = substr($origin_clean, strlen($upload_baseurl));
@@ -526,89 +538,47 @@ function wpc_v2_rewrite_single_url_to_natural($url, $cdn_zone, $upload_basedir, 
     }
 
     if ($disk === null || !@file_exists($disk)) {
-        // No mapping or file missing — leave the transform URL as fallback.
+        
         return $url;
     }
 
-    // Build natural URL via CDN passthrough.
+    
     $path_after_site = str_replace($site_url, '', $origin_clean);
     return 'https://' . $cdn_zone . $path_after_site . $query;
 }
 
-// ─── Picture-wrap srcset-selection helpers ───────────────────────────────────
-//
-// Make sizes="auto" actually fire on the <source> tags from
-// wpc_inject_picture_tags(). Per HTML spec auto is ignored unless the sibling
-// <img> is loading="lazy", and WP only lazies the first 1-2 images — leaving
-// every other content image eager and our auto hint dead.
-//
-// Both helpers are filterable so power users can opt out without disabling the
-// master picture_webp toggle:
-//   - wpc_picture_inject_lazy   (bool)  — gate the loading="lazy" injection
-//   - wpc_picture_lcp_sizes     (string)— override the smart-sizes ladder
 
 if (!function_exists('wpc_picture_should_inject_lazy')) {
-/**
- * Decide whether to add loading="lazy" to a content IMG inside the picture wrap.
- * Skip when it's the LCP target, already has loading=, or the user turned the
- * master lazy setting off (don't silently re-enable lazy they disabled).
- *
- * @param string $img_tag  raw <img …> tag captured by the picture-wrap regex
- * @param array  $settings full plugin settings array (reads lazy-load gate)
- * @return bool true ⇒ caller should inject loading="lazy"
- */
+
 function wpc_picture_should_inject_lazy($img_tag, $settings)
 {
-    // The "Native Lazy" toggle key is `nativeLazy` — NOT `lazy-load` (phantom
-    // key) and NOT `lazy` (that's the separate JS viewport-lazy loader). Unset
-    // is treated as default-on, matching the options.class.php presets.
+
+
     if (isset($settings['nativeLazy']) && (string) $settings['nativeLazy'] !== '1') {
         return (bool) apply_filters('wpc_picture_inject_lazy', false, $img_tag, $settings);
     }
-    // Don't double-inject if loading= is already present
+    
     if (preg_match('/\sloading\s*=\s*["\'][^"\']*["\']/i', $img_tag)) {
         return (bool) apply_filters('wpc_picture_inject_lazy', false, $img_tag, $settings);
     }
-    // Skip lazy injection for eager-LCP IMGs. Lazying the LCP image to get a
-    // sizes="auto" pick saves ~30KB but costs ~700ms LCP under throttling with
-    // render-blocking fonts (the intersection observer waits on layout, layout
-    // waits on font CSS). The smart-sizes ladder gets near-optimal picks anyway,
-    // and an eager img is preload-scanned immediately. Non-LCP content images
-    // still get lazy here (below the fold, so the observer delay is harmless).
-    // Filter wpc_picture_inject_lazy → __return_true to opt back into lazy LCP.
+
+
     $is_eager_lcp = wpc_picture_is_eager_lcp_marker($img_tag);
     return (bool) apply_filters('wpc_picture_inject_lazy', !$is_eager_lcp, $img_tag, $settings);
 }
 }
 
 if (!function_exists('wpc_picture_is_eager_lcp_marker')) {
-/**
- * Decide whether an IMG looks like an eager LCP candidate needing the
- * smart-sizes override (override applies; lazy injection skipped).
- *
- * Can't rely on class markers (wpc-lcp-optimized etc.) or fetchpriority="high":
- * rewriteLogic's ob_start runs after the_content where we run, so the class
- * isn't set yet, and fp=high may be stripped/never-added. The signal available
- * here is structural: width ≥ 1200 + sizes containing "100vw" — WP's full-width
- * hero pattern, which resolves to 100vw and over-fetches on mobile (wrong for
- * every theme that constrains hero width, i.e. all default block themes).
- *
- * Trade-off: also fires for wide images that will become lazy (where auto would
- * measure layout) — we over-override on bandwidth-correct but non-adaptive
- * picks. Mitigated by bailing when loading="lazy" is already present.
- *
- * @return bool true ⇒ smart-sizes override should apply (and lazy injection
- *              should NOT happen — these images are explicitly eager hero)
- */
+
 function wpc_picture_is_eager_lcp_marker($img_tag)
 {
-    // If the IMG is already lazy, leave sizes alone — auto will work correctly
+    
     if (preg_match('/\sloading\s*=\s*["\']lazy["\']/i', $img_tag)) return false;
 
-    // Fast path: explicit eager-LCP signals when they happen to be present
+    
     if (preg_match('/fetchpriority\s*=\s*["\']high["\']/i', $img_tag)) return true;
 
-    // Structural signal: wide image (width ≥ 1200) with 100vw in sizes
+    
     if (!preg_match('/\swidth\s*=\s*["\'](\d+)["\']/i', $img_tag, $wm)) return false;
     if ((int) $wm[1] < 1200) return false;
     if (!preg_match('/\ssizes\s*=\s*["\']([^"\']*)["\']/i', $img_tag, $sm)) return false;
@@ -617,36 +587,19 @@ function wpc_picture_is_eager_lcp_marker($img_tag)
 }
 
 if (!function_exists('wpc_picture_compute_lcp_sizes')) {
-/**
- * Compute a viewport-aware sizes ladder for eager LCP IMGs (per
- * wpc_picture_is_eager_lcp_marker) whose WP fallback would resolve to 100vw on
- * mobile. Returns '' to leave WP's sizes untouched. Desktop cap defaults to 1200
- * (the typical block-theme container) — larger caps overshoot hero images that
- * don't fill the window. Filterable via wpc_picture_lcp_sizes.
- *
- * @param string $img_tag  raw <img …> tag
- * @param array  $settings full plugin settings (reads maxWidth)
- * @return string sizes value to write, or '' to leave WP's sizes alone
- */
+
 if (!function_exists('wpc_get_theme_content_width')) {
-/**
- * Resolve the theme's real content-column width server-side — the width PSI
- * measures as the LCP image's displayed size on desktop. Using it as the desktop
- * sizes tier (vs a hardcoded 1200 guess) makes the browser request a
- * correctly-sized image and clears the "Improve image delivery" diagnostic.
- *
- * Sources: block-theme theme.json contentSize, then the classic $content_width
- * global. Returns 0 when unknown (caller falls back to the 1200 cap).
- * Filter wpc_lcp_content_width overrides per-site.
- */
+
 function wpc_get_theme_content_width()
 {
     $w = 0;
     if (function_exists('wp_get_global_settings')) {
         $layout = wp_get_global_settings(['layout']);
-        if (!empty($layout['contentSize'])) {
-            $px = (int) preg_replace('/[^0-9]/', '', (string) $layout['contentSize']);
-            if ($px >= 320 && $px <= 2000) $w = $px;
+        foreach (['wideSize', 'contentSize'] as $layout_key) {
+            if (!empty($layout[$layout_key])) {
+                $px = (int) preg_replace('/[^0-9]/', '', (string) $layout[$layout_key]);
+                if ($px >= 320 && $px <= 2000) { $w = $px; break; }
+            }
         }
     }
     if ($w === 0 && !empty($GLOBALS['content_width']) && (int) $GLOBALS['content_width'] >= 320) {
@@ -665,29 +618,28 @@ function wpc_picture_compute_lcp_sizes($img_tag, $settings)
     if (preg_match('/\swidth\s*=\s*["\'](\d+)["\']/i', $img_tag, $wm)) {
         $intrinsic_w = (int) $wm[1];
     }
-    // Below ~1200, WP's own width-hint fallback already self-limits on mobile.
+    
     if ($intrinsic_w < 1200) {
         return (string) apply_filters('wpc_picture_lcp_sizes', '', $img_tag, $settings);
     }
     $max_w       = !empty($settings['maxWidth']) ? (int) $settings['maxWidth'] : 2560;
-    // Prefer the theme's real content width for the desktop tier; fall back to
-    // the 1200 cap when the theme doesn't declare one.
+    
+    
     $content_w   = function_exists('wpc_get_theme_content_width') ? wpc_get_theme_content_width() : 0;
     $desktop_cap = $content_w > 0 ? $content_w : min(1200, max(400, $max_w));
-    // Phone/tablet vw kept low (50/40) so DPR-4 profiles don't overshoot the
-    // ladder. Mild softness on full-bleed themes is the trade-off (override via
-    // the filter). Keep in lockstep with the equivalent value in rewriteLogic.
+
+
     $smart       = '(max-width: 600px) 50vw, (max-width: 1024px) 40vw, ' . $desktop_cap . 'px';
     return (string) apply_filters('wpc_picture_lcp_sizes', $smart, $img_tag, $settings);
 }
 }
 
 if (!function_exists('wpc_picture_apply_sizes_to_img')) {
-/**
- * Replace (or add) the sizes= attribute on an IMG tag string.
- *
- * @return string updated IMG tag
- */
+
+
+
+
+
 function wpc_picture_apply_sizes_to_img($img_tag, $sizes_value)
 {
     if (preg_match('/\ssizes\s*=\s*["\'][^"\']*["\']/i', $img_tag)) {
@@ -701,16 +653,14 @@ function wpc_picture_apply_sizes_to_img($img_tag, $sizes_value)
 }
 }
 
-/**
- * Wrap locally-optimized <img> tags in <picture> elements with WebP/AVIF sources.
- * Runs on the_content filter at low priority (after other plugins).
- */
+
+
+
+
 function wpc_inject_picture_tags($content) {
     if (is_admin() || empty($content)) return $content;
 
-    // Feed/AMP/REST bypass: <picture> must not leak into RSS/JSON/AMP where it's
-    // invalid or chokes strict parsers. Allow the Gutenberg block-renderer
-    // through so editor previews still deliver.
+
     if (function_exists('is_feed') && is_feed()) return $content;
     if (function_exists('is_amp_endpoint') && is_amp_endpoint()) return $content;
     if (function_exists('amp_is_request') && amp_is_request()) return $content;
@@ -719,57 +669,38 @@ function wpc_inject_picture_tags($content) {
         if (strpos($wpc_route, '/wp/v2/block-renderer/') === false) return $content;
     }
 
-    // Single-authority delivery: once the resolver verifies CDN-edge, negotiated
-    // owns images as clean <img> + edge Accept-negotiation. This injector runs
-    // upstream of cdnRewriter, so it must stand down too — otherwise it wraps the
-    // <img> in <picture> before negotiated sees them. Inert until negotiated is
-    // GA, so legacy behavior is unchanged on non-CDN-edge sites.
+
     if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
         return $content;
     }
 
-    // Respect "Use Picture Tags" toggle — same setting controls CDN and local mode
+    
     $settings = get_option(WPS_IC_SETTINGS);
     if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return $content;
 
-    // AVIF ceiling gate: only emit an AVIF <source> when the next-gen ceiling is
-    // 'avif'. A 'webp'/'off' ceiling must not ship AVIF even if -avif variants
-    // exist on disk (intent violation). Falls open if the resolver is absent.
+
     $wpc_avif_ok = !class_exists('WPC_Delivery_Resolver')
                    || WPC_Delivery_Resolver::effective_ceiling($settings) === 'avif';
 
-    // WebP ceiling gate, parallel to the AVIF one. Without it, ceiling='off'
-    // still wrapped the <img> with a webp <source> (file on disk → browser picks
-    // webp) — the CDN-off + Next-Gen-off "served WebP not JPEG" leak. 'off' must
-    // emit neither avif nor webp. Falls open if resolver absent.
+
     $wpc_webp_ok = !class_exists('WPC_Delivery_Resolver')
                    || WPC_Delivery_Resolver::effective_ceiling($settings) !== 'off';
 
-    // Single authority on CDN sites: when live CDN is on, the output-buffer
-    // rewriteLogic (path B) owns <picture> for all images — it resolves the zone,
-    // builds the full ladder, and gates AVIF. This injector (path A) runs upstream
-    // and never resolves $cdn_zone, so it would emit degraded markup that path B
-    // then locks in via its stash. Stand down so content images route through B;
-    // local/non-CDN sites keep path A below as the only picture emitter.
-    //
-    // BUT only stand down when CDN images are actually on. With the "Images" tile
-    // OFF, path B doesn't touch content images and negotiated is gated off — so
-    // path A must still emit the origin <picture>, otherwise Images-off +
-    // Next-Gen-on would mean plain <img> with no next-gen at all.
+
     $wpc_cdn_imgs_on = !class_exists('WPC_Negotiated_Delivery')
                        || WPC_Negotiated_Delivery::cdn_images_enabled($settings);
     if (!empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1' && $wpc_cdn_imgs_on) {
         return $content;
     }
 
-    // Guard against double-wrapping (caching plugins, REST, nested filters)
+    
     if (strpos($content, 'wpc-picture') !== false) return $content;
 
     $optimized = wpc_get_local_optimized_ids();
     if (empty($optimized)) return $content;
 
-    // Stash existing <picture> blocks (restored after) so we don't nest ours
-    // inside a third-party one (Performance Lab, ShortPixel, etc.)
+    
+    
     $picture_placeholders = [];
     $content = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$picture_placeholders) {
         $key = '<!--WPC_PICTURE_' . count($picture_placeholders) . '-->';
@@ -777,13 +708,13 @@ function wpc_inject_picture_tags($content) {
         return $key;
     }, $content);
 
-    // Pre-resolve disk roots once; reused in the callback.
+    
     $upload_dir_for_rewrite = wp_get_upload_dir();
     $upload_basedir_for_rewrite = isset($upload_dir_for_rewrite['basedir']) ? $upload_dir_for_rewrite['basedir'] : '';
     $upload_baseurl_for_rewrite = isset($upload_dir_for_rewrite['baseurl']) ? $upload_dir_for_rewrite['baseurl'] : '';
     $site_url_for_rewrite = site_url();
 
-    // Match <img> tags with wp-image-{ID} class (WordPress standard)
+    
     $content = preg_replace_callback(
         '/<img\b[^>]*class="[^"]*wp-image-(\d+)[^"]*"[^>]*>/i',
         function ($matches) use ($optimized, $cdn_zone, $upload_basedir_for_rewrite, $upload_baseurl_for_rewrite, $site_url_for_rewrite, $settings, $wpc_avif_ok, $wpc_webp_ok) {
@@ -792,12 +723,10 @@ function wpc_inject_picture_tags($content) {
 
             if (!isset($optimized[$attachment_id])) return $img_tag;
 
-            // Skip SVG, GIF, ICO — matches CDN behavior
+            
             if (preg_match('/\.(svg|gif|ico)[\s"\'?]/i', $img_tag)) return $img_tag;
 
-            // Rewrite the <img>'s transform URLs to natural ones first (before
-            // the variants-empty bail), so even an optimized image with no
-            // variants at least gets natural URLs.
+
             if ($cdn_zone) {
                 $img_tag = wpc_v2_rewrite_img_to_natural_urls(
                     $img_tag,
@@ -811,14 +740,14 @@ function wpc_inject_picture_tags($content) {
             $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
             if (empty($variants) || !is_array($variants)) return $img_tag;
 
-            // Use data-srcset for lazy-loaded imgs (matches CDN behavior)
+            
             $srcsetAttr = (strpos($img_tag, 'data-srcset=') !== false) ? 'data-srcset' : 'srcset';
 
-            // Build srcset per format
+            
             $webp_srcset = [];
             $avif_srcset = [];
 
-            // Get upload directory info for building local URLs from filenames
+            
             $upload_dir = wp_get_upload_dir();
             $attached_file = get_post_meta($attachment_id, '_wp_attached_file', true);
             $upload_subdir = $attached_file ? dirname($attached_file) : '';
@@ -827,7 +756,7 @@ function wpc_inject_picture_tags($content) {
             foreach ($variants as $label => $data) {
                 if (empty($data['url'])) continue;
 
-                // Extract width from filename: -WIDTHxHEIGHT.ext or -scaled.ext
+                
                 $filename = basename($data['url']);
                 $width = 0;
                 if (preg_match('/-(\d+)x\d+\.\w+$/', $filename, $wm)) {
@@ -840,55 +769,42 @@ function wpc_inject_picture_tags($content) {
                 }
                 if ($width <= 0) continue;
 
-                // Only emit a natural-URL entry when the file exists on disk:
-                // ic_local_variants can list files that were restored/deleted but
-                // not cleared from postmeta, and emitting those 404s (Chrome
-                // ERR_BLOCKED_BY_ORB). Missing widths get the never-404 transform
-                // URL from the hybrid block below instead.
+
                 $disk_path = $upload_basedir . '/' . $upload_subdir . '/' . $filename;
                 if (!@file_exists($disk_path)) {
                     continue;
                 }
 
-                // Dimensional validity gate (disable via WPC_SKIP_PICTURE_VARIANT_VALIDATION).
-                // A next-gen <source> is type-pinned with NO onerror, so one
-                // degenerate variant poisons the render with no fallback to <img>:
-                // e.g. a -1x1 minted from a width=1 label, or a full-size encode
-                // emitted under a tiny width descriptor. file_exists() can't catch
-                // these; rejecting empties the srcset and the $sources==='' escape
-                // returns the bare (good) <img>.
-                //
-                // Fail-safe: the plugin downloads AVIF, never encodes it locally,
-                // so a host without an AVIF decoder makes getimagesize() return
-                // false for a VALID .avif. So: (1) a filename-only degenerate
-                // check runs on every host; (2) byte-validation runs only when
-                // getimagesize() actually decodes — false ⇒ keep, never drop.
+                
+                
+
+
                 if (!defined('WPC_SKIP_PICTURE_VARIANT_VALIDATION') || !WPC_SKIP_PICTURE_VARIANT_VALIDATION) {
-                    // (1) Filename-only — no decode → catches -1x1 / -Nx<=2 / -<=2xN.
+                    
                     if (preg_match('/-(\d+)x(\d+)\.\w+$/', $filename, $dm)
                         && ((int) $dm[1] <= 2 || (int) $dm[2] <= 2)) {
                         continue;
                     }
-                    // (2) Byte-validation — only when getimagesize() decodes the file.
+                    
                     $vdims = @getimagesize($disk_path);
                     if (is_array($vdims) && !empty($vdims[0]) && !empty($vdims[1])) {
                         $real_w = (int) $vdims[0];
                         $real_h = (int) $vdims[1];
                         if ($real_w <= 2 || $real_h <= 2) {
-                            continue; // decoded as degenerate
+                            continue;
                         }
-                        // name vs real-bytes mismatch; tolerance absorbs normal
-                        // sub-size rounding without false-rejecting good variants.
+
+
                         if ($width > 0 && abs($real_w - $width) > max(8, (int) ($width * 0.10))) {
                             continue;
                         }
                     }
                 }
 
-                // Build local URL (postmeta URLs are service download URLs, not local paths)
+                
                 $local_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $filename;
 
-                // If CDN active, serve via the CDN natural URL (edge passthrough)
+                
                 if ($cdn_zone) {
                     $local_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $local_url);
                 }
@@ -901,28 +817,23 @@ function wpc_inject_picture_tags($content) {
                 }
             }
 
-            // Ideal-width generator, path-A leg. In Images-off / CDN-off modes
-            // path A is the emitter and nothing regenerates adaptive rungs after
-            // a restore wipes them, so the ladder is registered-only and the
-            // browser rounds up (a 1240-class need grabs 1510). Queue the same
-            // ideal widths the nd builder would; every per-width guard lives in
-            // the queue helper. Full-bleed/builder classes are excluded.
+
             if (function_exists('wpc_v2_sized_trigger_queue')
                 && function_exists('wpc_get_theme_content_width')
                 && !preg_match('/\b(alignfull|alignwide|wp-block-cover|elementor|brz-|brxe-|et_pb)\b/i', $img_tag)) {
                 $pa_cap = (int) wpc_get_theme_content_width();
                 if ($pa_cap > 0) {
                     $pa_existing = array_keys($webp_srcset + $avif_srcset);
-                    // Per-image targets from this tag's own sizes attribute;
-                    // content-width model as fallback for sizes-less tags.
+                    
+                    
                     $pa_sizes  = preg_match('/sizes="([^"]*)"/i', $img_tag, $pa_sm) ? $pa_sm[1] : '';
                     $pa_targets = function_exists('wpc_v2_ideal_targets_from_sizes')
                         ? wpc_v2_ideal_targets_from_sizes($pa_sizes, $pa_cap)
                         : array_unique([(int) round(206 * 1.75), 412, (int) round(206 * 3), $pa_cap, (int) round($pa_cap * 1.75), $pa_cap * 2]);
                     foreach ($pa_targets as $pa_t) {
                         if ($pa_t < 200) continue;
-                        // asymmetric: only a rung AT/ABOVE the target within 8% satisfies it
-                        // (a smaller rung can't — the browser rounds up past it).
+
+
                         $pa_near = false;
                         foreach ($pa_existing as $pa_e) {
                             if ($pa_e >= $pa_t && ($pa_e - $pa_t) / $pa_t < 0.08) { $pa_near = true; break; }
@@ -935,37 +846,23 @@ function wpc_inject_picture_tags($content) {
                 }
             }
 
-            // Per-srcset-entry hybrid emission. For each WP sub-size, per format,
-            // emit the natural URL if the variant is on disk, else the CDN
-            // transform URL which serves the format on-the-fly (and for wp:2
-            // encodes AVIF in the background). Transform shapes:
-            //   wp:0 → JPG, wp:1 → WebP, wp:2 → AVIF (WebP placeholder first load,
-            //   real AVIF once encoded).
-            // A natural .avif that doesn't exist yet would 404 and trip
-            // ERR_BLOCKED_BY_ORB; the transform URL never 404s, so the srcset
-            // migrates entry-by-entry to natural URLs as each variant lands.
+
             $lazy_enabled_for_optimistic = function_exists('wpc_v2_get_lazy_enabled')
                                             && wpc_v2_get_lazy_enabled();
-            // Lazy is the gate for sight-unseen AVIF rungs: without the zone's
-            // lazy flag the pod serves webp-interim but fires NO backfill trigger
-            // (opt_out), so the rung stays interim forever. A site enabling lazy
-            // flips that flag via its own /v2/config save, so the rung lands ≤60s.
-            // Also require a LIVE CDN: $cdn_zone is just the zone name (set even
-            // when live-cdn=0, possibly disconnected), and srcset rungs have no
-            // onerror, so a dead-zone transform rung renders broken. CDN-off
-            // interim = registered naturals only; backfill fills the rest in ~90s.
+
+
             $cdn_live_for_optimistic = !empty($settings['live-cdn']) && (string) $settings['live-cdn'] === '1';
             if ($lazy_enabled_for_optimistic && $cdn_live_for_optimistic && $cdn_zone) {
                 $meta_for_lazy = wp_get_attachment_metadata($attachment_id);
                 if (is_array($meta_for_lazy) && !empty($meta_for_lazy['sizes'])) {
-                    // $upload_basedir already declared at the top of this filter
+                    
                     foreach ($meta_for_lazy['sizes'] as $size_name => $size_data) {
                         if (empty($size_data['file']) || empty($size_data['width'])) continue;
                         $w = (int) $size_data['width'];
                         if ($w <= 0) continue;
 
-                        // Only emit if this width isn't already covered by
-                        // ic_local_variants. Real variants take precedence.
+                        
+                        
                         $needs_webp = !isset($webp_srcset[$w]);
                         $needs_avif = !isset($avif_srcset[$w]);
                         if (!$needs_webp && !$needs_avif) continue;
@@ -974,36 +871,36 @@ function wpc_inject_picture_tags($content) {
                         $base_no_ext   = preg_replace('/\.[^.]+$/', '', $base_filename);
                         if ($base_no_ext === '' || $base_no_ext === null) continue;
 
-                        // Origin sub-size JPG URL (always exists — WP generates these)
+                        
                         $jpg_origin_url = $upload_dir['baseurl'] . '/' . $upload_subdir . '/' . $base_filename;
 
-                        // Disk paths for file_exists() check
+                        
                         $webp_disk = $upload_basedir . '/' . $upload_subdir . '/' . $base_no_ext . '.webp';
                         $avif_disk = $upload_basedir . '/' . $upload_subdir . '/' . $base_no_ext . '.avif';
 
                         if ($needs_webp) {
                             if (file_exists($webp_disk)) {
-                                // Variant landed — use natural URL (CDN serves directly)
+                                
                                 $webp_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $base_no_ext . '.webp';
                             } else {
-                                // Not yet on disk — CDN transforms JPG→WebP on-the-fly
+                                
                                 $webp_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:1/w:' . $w . '/u:' . $jpg_origin_url;
                             }
                             $webp_srcset[$w] = esc_url($webp_url) . ' ' . $w . 'w';
                         }
                         if ($needs_avif) {
                             if (file_exists($avif_disk)) {
-                                // Variant landed — use natural URL (CDN serves directly)
+                                
                                 $avif_url = 'https://' . $cdn_zone . str_replace(site_url(), '', $upload_dir['baseurl']) . '/' . $upload_subdir . '/' . $base_no_ext . '.avif';
                             } else {
-                                // Not on disk — CDN serves WebP placeholder, encodes
-                                // AVIF async; lazy_cdn lands the natural file later.
+                                
+                                
                                 $avif_url = 'https://' . $cdn_zone . '/q:i/r:0/wp:2/w:' . $w . '/u:' . $jpg_origin_url;
                             }
                             $avif_srcset[$w] = esc_url($avif_url) . ' ' . $w . 'w';
                         }
                     }
-                    // Also add the full-size (unscaled) AVIF/WebP if metadata has it.
+                    
                     if (!empty($meta_for_lazy['file']) && !empty($meta_for_lazy['width'])) {
                         $w = (int) $meta_for_lazy['width'];
                         if ($w > 0 && (!isset($avif_srcset[$w]) || !isset($webp_srcset[$w]))) {
@@ -1038,12 +935,7 @@ function wpc_inject_picture_tags($content) {
 
             if (empty($webp_srcset) && empty($avif_srcset)) return $img_tag;
 
-            // Universal fine-grained ladder: a sparse srcset over-fetches 4-10×
-            // on high-DPR devices, so add LCP-style widths + retina doubles to
-            // every image. Encoding stays on-demand via lazy_cdn (only requested
-            // widths get encoded). Portrait images cap width at maxWidth × aspect
-            // so the encoded height doesn't blow past the configured size cap
-            // (same maxdim rule as rewriteLogic's buildLcpSrcset).
+
             $lazy_enabled_for_uni_ladder = function_exists('wpc_v2_get_lazy_enabled')
                                             && wpc_v2_get_lazy_enabled();
             if ($lazy_enabled_for_uni_ladder && $cdn_zone && is_array($meta_for_lazy)) {
@@ -1057,19 +949,19 @@ function wpc_inject_picture_tags($content) {
                         $effective_max_uni = (int) floor($maxW_uni * ($sw_uni / $sh_uni));
                     }
                 }
-                // Base ladder + retina doubles of any width already in srcset
+                
                 $ladder_uni = [400, 480, 640, 720, 800, 960, 1100, 1200, 1280, 1366, 1440, 1600, 1800, 2048, 2560];
                 foreach (array_merge(array_keys($webp_srcset), array_keys($avif_srcset)) as $existing_w) {
                     $ladder_uni[] = (int) $existing_w * 2;
                 }
-                // Mobile srcset cap applied at final assembly below, so it covers
-                // widths added by every loop, not just this one.
+                
+                
                 $ladder_uni = array_values(array_unique(array_map(function ($w) use ($effective_max_uni) {
                     return min($w, $effective_max_uni);
                 }, $ladder_uni)));
                 sort($ladder_uni);
 
-                // u: base = the unscaled original (highest-quality encoder source).
+                
                 $orig_u_url_uni = '';
                 if (function_exists('wp_get_original_image_url') && function_exists('wp_get_original_image_path')) {
                     $orig_url_try = wp_get_original_image_url($attachment_id);
@@ -1085,10 +977,10 @@ function wpc_inject_picture_tags($content) {
 
                 foreach ($ladder_uni as $w_uni) {
                     if ($w_uni <= 0) continue;
-                    // Skip widths already covered by both formats.
+                    
                     if (isset($webp_srcset[$w_uni]) && isset($avif_srcset[$w_uni])) continue;
 
-                    // AVIF entry
+                    
                     if (!isset($avif_srcset[$w_uni])) {
                         $natural_avif = $base_no_ext_uni . '-' . $w_uni . 'w.avif';
                         $natural_avif_disk = str_replace(trailingslashit($upload_dir['baseurl']), trailingslashit($upload_basedir) . '', $natural_avif);
@@ -1100,7 +992,7 @@ function wpc_inject_picture_tags($content) {
                         }
                         $avif_srcset[$w_uni] = esc_url($avif_url) . ' ' . $w_uni . 'w';
                     }
-                    // WebP entry
+                    
                     if (!isset($webp_srcset[$w_uni])) {
                         $natural_webp = $base_no_ext_uni . '-' . $w_uni . 'w.webp';
                         $natural_webp_disk = str_replace(trailingslashit($upload_dir['baseurl']), trailingslashit($upload_basedir) . '', $natural_webp);
@@ -1115,8 +1007,8 @@ function wpc_inject_picture_tags($content) {
                 }
             }
 
-            // Activate sizes="auto" via lazy injection + smart LCP sizes override
-            // (see the helper docblocks above for the why).
+            
+            
             if (wpc_picture_should_inject_lazy($img_tag, $settings)) {
                 $img_tag = preg_replace('/<img\b/i', '<img loading="lazy"', $img_tag, 1);
                 if (function_exists('wpc_diagnostic_log')) {
@@ -1133,25 +1025,19 @@ function wpc_inject_picture_tags($content) {
                 }
             }
 
-            // Extract sizes from <img> tag, pass through to <source>
+            
             $sizes = '100vw';
             if (preg_match('/sizes="([^"]*)"/', $img_tag, $sz)) {
                 $sizes = $sz[1];
             }
-            // Prepend `auto,` so browsers measure rendered size and pick exact —
-            // but only when the IMG is lazy. auto is invalid on eager images and
-            // on the LCP hero it poisons sizes → Chrome falls back to 100vw and
-            // over-fetches the top of the ladder. Eager imgs keep their auto-free
-            // sizes so the picker resolves the same content-width slot.
+
+
             $img_is_lazy_for_auto = (stripos($img_tag, 'loading="lazy"') !== false);
             if ($img_is_lazy_for_auto && stripos($sizes, 'auto') === false) {
                 $sizes = 'auto, ' . $sizes;
             }
 
-            // Mobile srcset cap. Gates on `generate_adaptive` (the "Resize by
-            // Incoming Device" toggle) — the same key rewriteLogic uses, NOT the
-            // separate `adaptive` section header. Applied at final assembly so it
-            // filters widths from every loop above, not just one.
+
             $is_mobile_for_cap = class_exists('wps_ic_rewriteLogic')
                 ? (bool) wps_ic_rewriteLogic::$isMobile
                 : (function_exists('wp_is_mobile') && wp_is_mobile());
@@ -1172,17 +1058,17 @@ function wpc_inject_picture_tags($content) {
             }
 
             $sources = '';
-            if ($wpc_avif_ok && !empty($avif_srcset)) { // ceiling-gated: webp/off → no AVIF source
+            if ($wpc_avif_ok && !empty($avif_srcset)) {
                 ksort($avif_srcset);
                 $sources .= '<source type="image/avif" ' . $srcsetAttr . '="' . implode(', ', $avif_srcset) . '" sizes="' . esc_attr($sizes) . '">';
             }
-            if ($wpc_webp_ok && !empty($webp_srcset)) { // ceiling-gated: off → no WebP source
+            if ($wpc_webp_ok && !empty($webp_srcset)) {
                 ksort($webp_srcset);
                 $sources .= '<source type="image/webp" ' . $srcsetAttr . '="' . implode(', ', $webp_srcset) . '" sizes="' . esc_attr($sizes) . '">';
             }
 
-            // No next-gen source → don't wrap in an empty <picture>; return the
-            // plain <img> so the visitor still gets the optimized original.
+            
+            
             if ($sources === '') {
                 return $img_tag;
             }
@@ -1191,7 +1077,7 @@ function wpc_inject_picture_tags($content) {
         $content
     );
 
-    // Restore protected <picture> blocks
+    
     if (!empty($picture_placeholders)) {
         $content = str_replace(array_keys($picture_placeholders), array_values($picture_placeholders), $content);
     }
@@ -1200,22 +1086,23 @@ function wpc_inject_picture_tags($content) {
 }
 add_filter('the_content', 'wpc_inject_picture_tags', 999);
 
-// Inline CSS for <picture> tags — inherit img dimensions, prevent layout shifts
+
 function wpc_picture_tag_css() {
     $settings = get_option(WPS_IC_SETTINGS);
     if (empty($settings['picture_webp']) || $settings['picture_webp'] != '1') return;
-    // display:contents makes <picture> invisible to layout, so the child <img>
-    // inherits parent CSS as if the wrapper weren't there.
-    echo '<style>.wpc-picture{display:contents;}</style>' . "\n";
+
+
+    
+    
+    
+    
+    
+    
+    echo '<style>.wpc-picture:not([data-wpc-mir]){display:contents;}</style>' . "\n";
 }
 add_action('wp_head', 'wpc_picture_tag_css', 1);
 
-// Missing uploads-image variants must 404 clean, never 302. WP core's 404
-// permalink-guess matches a missing "…-1024x501.avif" to the attachment and 302s
-// to the original ".png" — the CDN edge then receives PNG bytes under the .avif
-// URL and has to sniff-reject them. A true 404 is a clean miss signal and keeps
-// the edge's self-heal honest. Scoped to uploads images; page/post guessing
-// untouched.
+
 function wpc_no_404_guess_for_upload_images($do_guess)
 {
     $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
@@ -1226,23 +1113,14 @@ function wpc_no_404_guess_for_upload_images($do_guess)
 }
 add_filter('do_redirect_guess_404_permalink', 'wpc_no_404_guess_for_upload_images');
 
-// Hard-stop the 404 for uploads images before redirect plugins run. The guard
-// above stops WP core's redirect, but SEO/redirect plugins (template_redirect@10)
-// still 302 missing variants to the homepage, feeding the edge HTML bytes on its
-// .avif fetch. Priority 0 wins: send the honest 404 and exit. Fires only when WP
-// already ruled the request a 404 on an uploads image (real files never reach PHP).
+
 function wpc_hard_404_for_upload_images()
 {
     if (!function_exists('is_404') || !is_404()) {
         return;
     }
-    // is_404() means WP's full request handling (incl. any offload integration) ALREADY ruled this a
-    // 404 — so a bare reply here is offload-safe (never a false-404 on a live image). Extend it to ANY
-    // image-ext path (uploads, /storage, page-builder, offloaded) — not just /wp-content/uploads — so a
-    // missing image stops rendering the theme's 404 template (often a multi-hundred-KB page: acrystalglass
-    // /storage misses were 447 KB / ~4 s). Returning ~9 bytes and exiting frees the FPM worker far sooner
-    // and slashes the per-miss bytes. This is the "make the 404 worker efficient" win for the paths the
-    // pre-core fast-404 (mu-plugin / advanced-cache) can't verify on local disk (offloaded /storage).
+
+
     $uri  = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
     $path = $uri !== '' ? (string) parse_url($uri, PHP_URL_PATH) : '';
     if ($path === '' || !preg_match('#\.(avif|webp|jpe?g|png|gif|svg|ico|bmp|tiff?)$#i', $path)) {
@@ -1251,17 +1129,13 @@ function wpc_hard_404_for_upload_images()
     status_header(404);
     nocache_headers();
     header('Content-Type: text/plain; charset=utf-8');
-    header('X-WPC-Fast-404: tr'); // template_redirect skip-theme path (distinct from the mu-plugin's :1)
+    header('X-WPC-Fast-404: tr');
     echo 'Not Found';
     exit;
 }
 add_action('template_redirect', 'wpc_hard_404_for_upload_images', 0);
 
-// Some redirect plugins run before template_redirect, so also catch this at
-// init@0 with a file-existence check. An uploads-image URI reaching PHP means
-// the web server found no file (statics never hit PHP); verify on disk and 404.
-// Anchored to the literal /wp-content/uploads/ prefix, so relocated-uploads
-// sites simply don't match (defense stays at template_redirect there).
+
 function wpc_early_404_for_missing_upload_images()
 {
     $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
@@ -1274,7 +1148,7 @@ function wpc_early_404_for_missing_upload_images()
     }
     $file = (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR : ABSPATH . 'wp-content') . '/uploads/' . $rel;
     if (@file_exists($file)) {
-        return; // real file — let whatever routed it here proceed
+        return;
     }
     status_header(404);
     nocache_headers();
@@ -1283,8 +1157,9 @@ function wpc_early_404_for_missing_upload_images()
     exit;
 }
 add_action('init', 'wpc_early_404_for_missing_upload_images', 0);
+add_action('wpc_upgrade_remote_lane', ['wps_ic', 'wpc_upgrade_remote_lane']);
 
-//CUSTOM_INCLUDE_HERE
+
 spl_autoload_register(function ($class_name) {
     if (strpos($class_name, 'wps_ic_') !== false) {
         $class_nameBase = str_replace('wps_ic_', '', $class_name);
@@ -1299,6 +1174,106 @@ spl_autoload_register(function ($class_name) {
         }
     }
 });
+
+if (!function_exists('wpc_caps_store')) {
+    
+
+
+
+
+
+
+
+
+
+
+    function wpc_caps_store($caps, $unrestricted = false)
+    {
+        $rec = [
+            'v'   => 1,
+            't'   => time(),
+            'un'  => $unrestricted ? 1 : 0,
+            'caps' => [],
+        ];
+        foreach ((array) $caps as $k => $v) {
+            $rec['caps'][(string) $k] = ((string) $v === '0') ? '0' : '1';
+        }
+        update_option('wpc_caps', $rec, false);
+        
+        foreach ($rec['caps'] as $k => $v) {
+            set_transient($k . 'Enabled', $v, 5 * 60);
+        }
+        return $rec;
+    }
+}
+
+if (!function_exists('wpc_caps_enabled')) {
+    
+
+
+
+
+
+
+
+    function wpc_caps_enabled($featureName)
+    {
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return true;
+        }
+        $name = (string) $featureName;
+
+        
+        $t = get_transient($name . 'Enabled');
+        if ($t !== false && $t !== null) {
+            return !((string) $t === '0');
+        }
+
+        $rec = get_option('wpc_caps');
+        if (!is_array($rec) || empty($rec['t'])) {
+            return false; 
+        }
+        if (isset($rec['caps'][$name])) {
+            return ((string) $rec['caps'][$name] !== '0');
+        }
+        
+        return !empty($rec['un']) || empty($rec['caps']);
+    }
+}
+
+if (!function_exists('wpc_spawn_cron')) {
+    
+
+
+
+
+
+
+
+
+
+
+
+
+    function wpc_spawn_cron($ctx = '')
+    {
+        if (!function_exists('spawn_cron') || !apply_filters('wpc_spawn_cron_on', true)) {
+            return false;
+        }
+        if (defined('DOING_CRON') && DOING_CRON) {
+            return false; 
+        }
+        $min  = (int) apply_filters('wpc_spawn_cron_min_interval', 60);
+        $last = (int) get_option('wpc_cron_spawn_at', 0);
+        $now  = time();
+        if ($min > 0 && ($now - $last) < $min) {
+            return false;
+        }
+        update_option('wpc_cron_spawn_at', $now, false);
+        spawn_cron();
+        return true;
+    }
+}
 
 class wps_ic
 {
@@ -1344,37 +1319,45 @@ class wps_ic
     public static $accStatusChecked;
     protected $excludes_class;
 
-    /**
-     * Our main class constructor
-     */
+    
+
+
     public function __construct()
     {
         global $wps_ic;
         self::debug_log('Constructor');
 
-        // Basic plugin info
+        
         self::$slug = 'wpcompress';
-        self::$version = '7.10.09';
+        self::$version = '7.20.01';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
-            self::$version = time();
+            
+            
+            
+            $wpc_dev_seen = (int) get_option('wpc_dev_flag_seen');
+            if (!$wpc_dev_seen) {
+                $wpc_dev_seen = time();
+                update_option('wpc_dev_flag_seen', $wpc_dev_seen, false);
+            }
+            if (time() - $wpc_dev_seen > 86400) {
+                delete_option('wps_ic_development');
+                delete_option('wpc_dev_flag_seen');
+            } else {
+                self::$version = (string) (600 * (int) floor(time() / 600));
+            }
         }
 
         $wps_ic = $this;
         self::$accStatusChecked = false;
-        // Do NOT swap self::$slug to the whitelabel slug. The whitelabel companion
-        // (cache-commander) hardcodes a list of `wpcompress-*` enqueue handles to
-        // find/copy/re-enqueue from its own /files/ dir; swapping the slug changed
-        // our handles so they never matched, leaving wp-compress-* asset URLs (and
-        // 404s in some multisite topologies). Keeping 'wpcompress' lets that
-        // pipeline match. The ?page redirect chain still works — one extra hop.
 
-        // Load translations
+
+        
         load_plugin_textdomain('wp-compress-image-optimizer', false, dirname(plugin_basename(WPC_CC_PLUGIN_FILE)) . '/langs');
 
         if ((!empty($_GET['wpc_visitor_mode']) && sanitize_text_field($_GET['wpc_visitor_mode']))) {
-            //It has to be here, init() is too late
+            
             new wps_ic_visitor_mode();
         }
 
@@ -1410,11 +1393,8 @@ class wps_ic
         $cache->purgeHooks();
 
         $this->integrations = new wps_ic_integrations();
-        // Light-ajax skip: the high-frequency compress handlers (variant_count,
-        // heartbeat) fire 4-6×/sec, and add_admin_hooks/apply_admin_filters cost
-        // 200-1500ms instantiating every plugin-check class to register admin_init/
-        // admin_menu callbacks that don't fire on admin-ajax anyway. Skip the
-        // registration; keep the instance for later $this->integrations access.
+
+
         if (!defined('WPC_IS_LIGHT_AJAX') || !WPC_IS_LIGHT_AJAX) {
             $this->integrations->add_admin_hooks();
             $this->integrations->apply_admin_filters();
@@ -1428,14 +1408,14 @@ class wps_ic
             });
         }
 
-        // Light-ajax skip: preload_warmup only registers cron handlers, which
-        // don't fire on admin-ajax — the light handlers don't need it.
+        
+        
         if (!defined('WPC_IS_LIGHT_AJAX') || !WPC_IS_LIGHT_AJAX) {
             $preload = new wps_ic_preload_warmup();
             $preload->setupCronPreload();
         }
 
-        //Temporary in 6.10.13. we changed where cname is saved, this is for users upgrading
+        
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $cf = get_option(WPS_IC_CF);
         if (!empty($cf) && !empty($cf['custom_cname']) && $cfCname === false) {
@@ -1443,17 +1423,11 @@ class wps_ic
         }
 
 
-        //$cache_warmup = new wps_ic_cache_warmup();
-        //$cache_warmup->add_hooks();
+        
+        
     }
 
-    /**
-     * Write Debug Log
-     *
-     * @param $message
-     *
-     * @return void
-     */
+
     public static function debug_log($message)
     {
         if (get_option('ic_debug') == 'log') {
@@ -1476,35 +1450,68 @@ class wps_ic
         $criticalCSS->generate_critical_cron();
     }
 
-    /**
-     * If Plugin Version Changed, do...
-     * @return void
-     */
+    
+
+
+
     public static function checkPluginVersion()
     {
+
+
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            return;
+        }
+
+
+        
+        
+        if (!preg_match('/^\d+\.\d+/', (string) self::$version)) {
+            return;
+        }
         if (is_admin()) {
             $installed_version = get_option('wpc_core_version');
 
-            if (version_compare($installed_version, self::$version, '<') || !empty($_GET['simulateVersionChange'])) {
 
-                // (v7.10.04) CRASH-PROOF UPGRADE PASS — world-class reliable, cron-free.
-                //
-                // Every upgrade-time step below is wrapped so that NO error can white-screen
-                // the admin/settings page (the symptom customers saw on a bad upgrade). Two layers:
-                //
-                //   1. try/catch (\Throwable) — catches any Error/Exception thrown by the upgrade
-                //      work and swallows it (logged, not rethrown) → the page still renders.
-                //   2. register_shutdown_function — traps a HARD fatal (OOM / max_execution_time /
-                //      a fatal the catch can't see) and logs it.
-                //
-                // Self-resuming WITHOUT cron: wpc_core_version is bumped ONLY after a full clean
-                // pass (moved to the very end of this block). If the pass dies partway — caught
-                // error OR hard fatal — the version stays behind, so the NEXT admin page load
-                // re-enters and runs the whole pass again. Every individual step here is
-                // idempotent (cache purges are repeatable; the one-time steps self-guard with
-                // their own done-flags: wpc_cf_bypass_v5, wpc_avif_natural_default_v70, the
-                // wpc_cf_cname_verified sentinel), so replay-on-retry is safe and converges.
-                // No behavior change on a healthy upgrade — same work, same order, just guarded.
+            if (!is_string($installed_version) || !preg_match('/^\d+(\.\d+)+$/', $installed_version)) {
+                if (function_exists('wpc_cache_first_log') && !empty($installed_version)) {
+                    wpc_cache_first_log('upgrade-version-garbage', '', '', ['v' => substr((string) $installed_version, 0, 24)]);
+                }
+                $installed_version = '0';
+            }
+
+            
+            
+            
+            
+            $wpc_realv189 = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : self::$version;
+            if (version_compare($installed_version, $wpc_realv189, '<') || !empty($_GET['simulateVersionChange'])) {
+
+
+                
+                
+                if (get_transient('wpc_upgrade_lock')) {
+                    return;
+                }
+                set_transient('wpc_upgrade_lock', 1, 300);
+
+
+                if (function_exists('wpc_update_window_open')) {
+                    wpc_update_window_open();
+                }
+
+
+                $wpc_up_tries = (int) get_option("wpc_upgrade_attempts_" . md5($wpc_realv189), 0);
+                if ($wpc_up_tries >= 3) {
+                    update_option("wpc_core_version", $wpc_realv189, false);
+                    delete_option("wpc_upgrade_attempts_" . md5($wpc_realv189));
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('upgrade-degraded', '', '', ['tries' => $wpc_up_tries]);
+                    }
+                    return;
+                }
+                update_option("wpc_upgrade_attempts_" . md5($wpc_realv189), $wpc_up_tries + 1, false);
+
+
                 $wpc_upgrade_done = false;
                 if (function_exists('register_shutdown_function')) {
                     register_shutdown_function(function () use (&$wpc_upgrade_done) {
@@ -1522,30 +1529,37 @@ class wps_ic
 
                 try {
 
-                // Purge Cache
+                
                 $cache = new wps_ic_cache_integrations();
-                $cache::purgeAll(false, false, false, true, false, true); // preserve wp-cio/css on update
-                $cache::purgeCriticalFiles();
-                $cache::purgeCacheFiles(false, true); // preserve wp-cio/css on update
+                $cache::purgeAll(false, false, false, true, false, true);
 
-                // Purge Object Cache
+
+                if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('upgrade')) {
+                    $cache::purgeCriticalFiles();
+                }
+                $cache::purgeCacheFiles(false, true);
+
+                
                 $cacheObject = new wps_ic_cache();
                 $cacheObject->purgeObjectCache();
 
-                // Invalidate the durable CSS/JS asset-MIME proof on upgrade: the
-                // edge rules or our emit host may have changed across versions, so
-                // re-verify the live edge from scratch rather than trust a stale verdict.
-                if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'invalidate_asset_mime_proof')) {
-                    wps_rewriteLogic::invalidate_asset_mime_proof();
+                
+                
+                
+                
+                
+                
+                
+                if (function_exists('wpc_v2_asset_mime_probe_run')) {
+                    try {
+                        delete_transient('wpc_v2_cf_asset_mime_retry');
+                        delete_transient('wpc_v2_asset_probe_inflight');
+                        wpc_v2_asset_mime_probe_run();
+                    } catch (\Throwable $e) {
+                    }
                 }
 
-                // (v7.03.119) Force a DELIVERY (image-edge) re-verify on upgrade — the automatic
-                // equivalent of clicking "Re-check now", so every site self-promotes to the Bunny CDN-edge
-                // tier on update without anyone touching it. Above only re-verified the CSS/JS asset lane;
-                // this covers the IMAGE lane. Promote-on-proof: force_provision makes the next resolve run a
-                // fresh verify (re-promotes to edge IF it verifies, else stays on the safe tier — never
-                // forces a bad edge), and ensure_bg re-asserts Bunny provisioning (AVIF Vary + edge rules,
-                // non-blocking). Reset the self-heal counter/backoff so the upgrade attempt isn't throttled.
+
                 if (function_exists('update_option'))    update_option('wpc_v2_force_provision', 1, false);
                 if (function_exists('delete_option'))    delete_option('wpc_v2_selfheal_attempts');
                 if (function_exists('delete_transient')) delete_transient('wpc_v2_selfheal_backoff');
@@ -1553,18 +1567,7 @@ class wps_ic
                     wpc_v2_provision_ensure_bg('upgrade');
                 }
 
-                // Regen advanced-cache.php from the updated template so new
-                // features take effect on upgrade without a settings save. Also
-                // re-assert WP_CACHE=true — some upgrade paths (uploader, managed-
-                // host snapshots) skip activation() so the constant can drift false.
-                //
-                // (v7.10.04) GATED on WPC page caching being enabled. Previously this ran
-                // unconditionally on every update, so it clobbered another caching plugin's
-                // advanced-cache.php (e.g. W3TC) and forced WP_CACHE=true on sites that
-                // deliberately run WPC for images/CDN only with caching OFF. When caching is
-                // OFF we now leave advanced-cache.php AND WP_CACHE untouched. The gated
-                // admin-load re-assert (checkHtaccess, ~3633) restores the drop-in the moment
-                // caching is turned back on, so nothing is lost by deferring here.
+
                 $wpc_cache_settings = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
                 if (!empty($wpc_cache_settings['cache']['advanced']) && $wpc_cache_settings['cache']['advanced'] == '1') {
                     if (!class_exists('wps_ic_htaccess')) {
@@ -1577,20 +1580,7 @@ class wps_ic
                     }
                 }
 
-                // (v7.10.04) The stored-version bump MOVED to the very end of this block
-                // (after the final step) so the upgrade pass is atomic + self-resuming: the
-                // version only advances once a full clean pass completes. Bumping it HERE
-                // (mid-block) is what let a fatal in a later step abandon the remaining work
-                // AND suppress retry (version already matched → block never re-ran).
 
-                // Verified-gate backfill: the cdn-rewrite emit-gate now requires
-                // wpc_cf_cname_verified before emitting the CF cname. A currently-
-                // serving zone (cname set + cf.cdn on) is live by definition, so
-                // mark it verified on upgrade — else the gate blanks its host on
-                // the first post-update pageview. Only backfill a NEVER-SET flag,
-                // not an explicit '0' (a mid-change suppress from a cname save);
-                // the sentinel default distinguishes the two, so an update during
-                // an in-flight cname change can't promote a broken host to verified.
                 if (get_option('wpc_cf_cname_verified', '__unset__') === '__unset__') {
                     $wpc_cf_bf  = (defined('WPS_IC_CF')) ? get_option(WPS_IC_CF) : false;
                     $wpc_cfc_bf = (defined('WPS_IC_CF_CNAME')) ? trim((string) get_option(WPS_IC_CF_CNAME)) : '';
@@ -1599,12 +1589,7 @@ class wps_ic
                     }
                 }
 
-                // Fire the orch /v2/config provisioning sync on every update, for
-                // every zone — lays the Bunny Edge Rules + AVIF/WebP Vary + re-signs
-                // the config blob, unconditionally, so a zone the install/heartbeat
-                // never reached gets provisioned. Background cron, never blocks admin.
-                // The force-provision flag re-provisions past the heartbeat throttle
-                // and persists until a 2xx lands — the can't-be-stranded backstop.
+
                 update_option('wpc_v2_force_provision', 1, false);
                 if (function_exists('wpc_v2_schedule_config_sync')) {
                     wpc_v2_schedule_config_sync();
@@ -1613,15 +1598,9 @@ class wps_ic
                     wp_schedule_single_event(time(), 'wpc_v2_deferred_config_sync');
                 }
 
-                // Auto-enable picture_webp for existing users who have WebP enabled
-                // (v7.10.04) GUARD: only operate if the stored option is the expected ARRAY
-                // shape. A legacy/corrupt install can hold WPS_IC_SETTINGS as a string (or other
-                // scalar); the writes below ($migrateSettings['picture_webp'] = '1' etc.) on a
-                // string are a PHP-8 string-offset assignment = FATAL. This is the kind of
-                // "happens once on upgrade against the real DB" fault that white-screens on the
-                // first post-update admin load then never recurs (and can't be reproduced without
-                // restoring that exact malformed option). is_array() makes the whole migrate block
-                // a no-op on a bad shape instead of fataling. No change for the normal array case.
+                
+
+
                 $migrateSettings = get_option(WPS_IC_SETTINGS);
                 $migrateDirty = false;
                 if (is_array($migrateSettings)
@@ -1630,23 +1609,7 @@ class wps_ic
                     $migrateDirty = true;
                 }
 
-                // Self-heal: re-couple picture_avif to the single Next-Gen switch.
-                // Lite writers set generate_webp=1 without picture_avif/wpc_nextgen,
-                // so the ceiling derives 'webp' even though the switch shows ON and
-                // defaults ship avif — leaving these installs stuck at the webp
-                // ceiling with the front-end AVIF block never running. Add the avif
-                // intent, but only when next-gen is on AND the user never explicitly
-                // chose a ceiling AND picture_avif is off; a deliberate webp/off
-                // choice is left untouched.
-                //
-                // Safe: this only enables the AVIF *block*. Whether a <source> emits
-                // a natural .avif vs the never-404 wp:2 transform is the independent,
-                // proof-based per-zone flavor gate — an un-converged zone falls back
-                // to the transform, so this heal can't produce a 404ing source.
-                // (v7.10.04) GUARD: same array-shape protection as the picture_webp migrate
-                // above — the writes below assign string keys on $migrateSettings, which fatal
-                // if a legacy/corrupt install holds WPS_IC_SETTINGS as a scalar. is_array() short-
-                // circuits to a no-op on a bad shape; identical behavior for the normal array case.
+
                 $ng = is_array($migrateSettings) && isset($migrateSettings['wpc_nextgen']) ? strtolower((string) $migrateSettings['wpc_nextgen']) : '';
                 $ngUnchosen = ($ng === '' || $ng === 'auto');
                 $gwOn = is_array($migrateSettings) && !empty($migrateSettings['generate_webp']) && (string) $migrateSettings['generate_webp'] === '1';
@@ -1656,7 +1619,7 @@ class wps_ic
                     if (empty($migrateSettings['picture_webp'])) {
                         $migrateSettings['picture_webp'] = '1';
                     }
-                    $migrateSettings['wpc_nextgen'] = 'auto'; // pin the intent so re-renders + future saves are coherent
+                    $migrateSettings['wpc_nextgen'] = 'auto';
                     $migrateDirty = true;
                 }
 
@@ -1664,74 +1627,80 @@ class wps_ic
                     update_option(WPS_IC_SETTINGS, $migrateSettings);
                 }
 
-                // Re-assert respect-origin on the CF static-assets rule on update.
-                // An old 30d override_origin pins not-yet-landed .avif interims (and
-                // wrong-MIME css/js) for 30 days on a vary-blind CF edge. PATCH-only
-                // (flips TTL modes, keeps expression + domains); no-op without CF.
-                $cfReassert = get_option(WPS_IC_CF);
-                if (!empty($cfReassert['token']) && !empty($cfReassert['zone'])) {
-                    if (!class_exists('WPC_CloudflareAPI')) {
-                        require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
-                    }
-                    if (class_exists('WPC_CloudflareAPI')) {
-                        $cfReassertSdk = new WPC_CloudflareAPI($cfReassert['token']);
-                        $cfReassertSdk->patchStaticAssetsRespectOrigin($cfReassert['zone']);
+                
+                
+                $wpc_opts214 = get_option(WPS_IC_OPTIONS);
+                if (is_array($wpc_opts214) && !empty($wpc_opts214['api_key'])
+                    && function_exists('wpc_apply_link_preset')
+                    && apply_filters('wpc_upgrade_apply_preset', true)) {
+                    wpc_apply_link_preset('upgrade');
+                }
 
-                        // Flush the CF edge HTML cache so post-update delivery markup regenerates.
-                        // HTML-ONLY — we must NEVER purge_everything on a plugin update: that wipes every
-                        // edge-cached IMAGE too, and the CDN then re-probes the (often slow) origin for
-                        // every image on the next visit → PHP-worker saturation → 40-60s HTML (the v7.02.x
-                        // incident root cause). A plugin update only changes delivery MARKUP, so purge just
-                        // the HTML entry points; images stay edge-cached. Non-blocking. Filter
-                        // wpc_cf_html_purge_urls to add pages (e.g. shop/landing); wpc_purge_cf_on_update
-                        // to opt out entirely.
-                        if (apply_filters('wpc_purge_cf_on_update', true)
-                            && method_exists($cfReassertSdk, 'purgeFilesAsync')) {
-                            $wpc_html_purge_urls = apply_filters('wpc_cf_html_purge_urls', [home_url('/')]);
-                            $cfReassertSdk->purgeFilesAsync($cfReassert['zone'], (array) $wpc_html_purge_urls);
+
+                
+                update_option('wpc_upgrade_prev_version', (string) $installed_version, false);
+                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
+                    if (!wp_next_scheduled('wpc_upgrade_remote_lane')) {
+                        wp_schedule_single_event(time(), 'wpc_upgrade_remote_lane');
+                    }
+                    if (function_exists('spawn_cron')) {
+                        wpc_spawn_cron();
+                    }
+                } else {
+                    self::wpc_upgrade_remote_lane();
+                }
+
+
+                try {
+                    $wpc_ss61 = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+                    if (is_array($wpc_ss61) && !empty($wpc_ss61['static-serve']) && $wpc_ss61['static-serve'] == '1') {
+                        if (!class_exists('wps_ic_htaccess')) {
+                            @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
                         }
+                        if (class_exists('wps_ic_htaccess')) {
+                            (new wps_ic_htaccess())->applyStaticServe();
+                        }
+                    }
+                } catch (\Throwable $e) {
+                }
+
+
+                update_option("wpc_core_version", $wpc_realv189, false);
+                delete_option("wpc_upgrade_attempts_" . md5($wpc_realv189));
+
+
+                if (apply_filters('wpc_purge_html_on_update', true)
+                    && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                    try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+                    
+                    if (function_exists('wpc_purge_rewarm_hot_set')) {
+                        wpc_purge_rewarm_hot_set('core-upgrade');
                     }
                 }
 
-                // (v7.10.04) FINAL STEP — bump the stored version ONLY after the whole pass
-                // above ran clean. Doing it last (was mid-block) makes the upgrade atomic +
-                // self-resuming: any earlier failure leaves the version behind so the next
-                // admin load retries the full (idempotent) pass. No cron involved.
-                update_option('wpc_core_version', self::$version);
-
-                // Mark the pass complete so the shutdown trap below stays silent on a clean run.
+                
                 $wpc_upgrade_done = true;
 
                 } catch (\Throwable $wpc_upgrade_err) {
-                    // Any Error/Exception in the upgrade work lands here — logged, NOT rethrown,
-                    // so the admin/settings page renders normally. wpc_core_version stays UNBUMPED
-                    // (we never reached the bump above), so the next admin page load re-runs the
-                    // whole pass. This is the guard that stops a bad upgrade from white-screening
-                    // the settings page the way customers reported.
+
+
                     error_log('[WPC Upgrade] CAUGHT upgrade-pass error — wpc_core_version left UNBUMPED, next admin load will retry: '
                         . $wpc_upgrade_err->getMessage() . ' @ ' . $wpc_upgrade_err->getFile() . ':' . $wpc_upgrade_err->getLine());
                 }
             }
 
-            // One-time: create CDN bypass rule + whitelist IPs for existing CF connections
+            
             if (empty(get_option('wpc_cf_bypass_v5'))) {
-                $cf = get_option(WPS_IC_CF);
-                if (!empty($cf['token']) && !empty($cf['zone'])) {
-                    require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
-                    $cfsdk = new WPC_CloudflareAPI($cf['token']);
-                    $cfsdk->addCdnBypassRule($cf['zone']);
-                    $cfsdk->whitelistIPs($cf['zone']);
+                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
+                    if (!wp_next_scheduled('wpc_upgrade_remote_lane')) {
+                        wp_schedule_single_event(time(), 'wpc_upgrade_remote_lane');
+                    }
+                } else {
+                    self::wpc_upgrade_remote_lane();
                 }
-                // Mark done even on failure — retrying would block every admin load on CF API errors
-                update_option('wpc_cf_bypass_v5', '1');
             }
 
-            // One-time: default-on the natural-AVIF picture source for existing
-            // installs. setMissingSettings() forces absent keys to '0', so a preset
-            // default alone won't enable it on upgrade — set it explicitly, once
-            // (a new feature, so no prior user choice to clobber). Safe: this is
-            // only the master toggle; avif_natural_source_ok() still gates each
-            // rung on the edge witness and falls back to the never-404 transform.
+
             if (get_option('wpc_avif_natural_default_v70') !== '1') {
                 $avifNatSettings = get_option(WPS_IC_SETTINGS);
                 if (is_array($avifNatSettings)) {
@@ -1743,22 +1712,137 @@ class wps_ic
         }
     }
 
+    
+    public static function wpc_upgrade_remote_lane()
+    {
+        
+        
+        
+        
+        try {
+            if (function_exists('wpc_v2_asset_mime_probe_run')
+                && (string) get_option('wpc_v2_cf_asset_mime_ok', '') !== '1') {
+                $wpc_us819 = get_option(WPS_IC_SETTINGS);
+                if (is_array($wpc_us819) && !empty($wpc_us819['live-cdn']) && (string) $wpc_us819['live-cdn'] === '1'
+                    && !(function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())
+                    && wpc_v2_asset_mime_probe_run()
+                    && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                    wps_ic_cache::removeHtmlCacheFiles('all');
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('natural-converged', '', '', ['src' => 'upgrade']);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        try {
+            $cfReassert = get_option(WPS_IC_CF);
+            if (!empty($cfReassert['token']) && !empty($cfReassert['zone'])) {
+                if (!class_exists('WPC_CloudflareAPI')) {
+                    require_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                }
+                if (class_exists('WPC_CloudflareAPI')) {
+                    $cfReassertSdk = new WPC_CloudflareAPI($cfReassert['token']);
+                    
+                    $wpc_cfs217 = isset($cfReassert['settings']) && is_array($cfReassert['settings']) ? $cfReassert['settings'] : [];
+                    if (method_exists($cfReassertSdk, 'configureCF')) {
+                        $cfReassertSdk->configureCF(
+                            isset($wpc_cfs217['edge-cache']) ? (string) $wpc_cfs217['edge-cache'] : 'home',
+                            !empty($wpc_cfs217['assets']) && (string) $wpc_cfs217['assets'] === '1'
+                        );
+                    }
+                    $cfReassertSdk->patchStaticAssetsRespectOrigin($cfReassert['zone']);
+                    if (method_exists($cfReassertSdk, 'patchHtmlRulesRespectOrigin')) {
+                        $cfReassertSdk->patchHtmlRulesRespectOrigin($cfReassert['zone'], null, true);
+                    }
+                    
+                    
+                    $wpc_prev217 = (string) get_option('wpc_upgrade_prev_version', '');
+                    if ($wpc_prev217 !== '' && version_compare($wpc_prev217, apply_filters('wpc_edge_reset_below', '7.10.210'), '<')
+                        && method_exists($cfReassertSdk, 'purgeCacheAsync')) {
+                        $cfReassertSdk->purgeCacheAsync($cfReassert['zone']);
+                        if (function_exists('wpc_auto_journal')) {
+                            wpc_auto_journal('edge-reset-on-upgrade', ['from' => substr($wpc_prev217, 0, 16)]);
+                        }
+                    } elseif (apply_filters('wpc_purge_cf_on_update', true)
+                        && method_exists($cfReassertSdk, 'purgeByTags')) {
+                        
+                        
+                        
+                        
+                        
+                        $cfReassertSdk->purgeByTags($cfReassert['zone'], ['wpc-html']);
+                    }
+                    if (method_exists($cfReassertSdk, 'addRendererAllowRule')) {
+                        try { $cfReassertSdk->addRendererAllowRule($cfReassert['zone']); } catch (\Throwable $e) {}
+                    }
+                    if (method_exists($cfReassertSdk, 'addBrowserTtlRules')) {
+                        try { $cfReassertSdk->addBrowserTtlRules($cfReassert['zone']); } catch (\Throwable $e) {}
+                    }
+                    if (empty(get_option('wpc_cf_bypass_v5'))) {
+                        $cfReassertSdk->addCdnBypassRule($cfReassert['zone']);
+                        $cfReassertSdk->whitelistIPs($cfReassert['zone']);
+                        
+                        update_option('wpc_cf_bypass_v5', '1');
+                    }
+                }
+            } elseif (empty(get_option('wpc_cf_bypass_v5'))) {
+                update_option('wpc_cf_bypass_v5', '1');
+            }
+        } catch (\Throwable $e) {
+            error_log('[WPC Upgrade] remote lane CF step failed: ' . $e->getMessage());
+        }
+        try {
+            if (function_exists('wpc_repull_kick_now')) {
+                
+                
+                
+                wpc_repull_kick_now('');
+            }
+        } catch (\Throwable $e) {
+        }
+        try {
+            
+            
+            
+            
+            
+            
+            $wpc_set830 = get_option(WPS_IC_SETTINGS);
+            $wpc_ver830 = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : 'x';
+            if (is_array($wpc_set830) && !empty($wpc_set830['critical']['css']) && (string) $wpc_set830['critical']['css'] === '1'
+                && apply_filters('wpc_upgrade_resync', true)
+                && (string) get_option('wpc_upgrade_resync_v', '') !== $wpc_ver830) {
+                update_option('wpc_upgrade_resync_v', $wpc_ver830, false);
+                if (function_exists('wpc_crit_purge_redispatch')) {
+                    wpc_crit_purge_redispatch(true);
+                }
+                if (function_exists('wpc_pl_sched') && class_exists('wps_ic_url_key') && function_exists('home_url')) {
+                    $wpc_k830 = ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
+                    if ($wpc_k830 !== '') {
+                        foreach ([150, 330] as $wpc_w830) {
+                            wpc_pl_sched(time() + $wpc_w830, 'wpc_crit_resync_wave', [$wpc_k830, (int) $wpc_w830]);
+                        }
+                    }
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('upgrade-resync', '', '', ['v' => $wpc_ver830]);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
     public static function deleteTests()
     {
-        // Remove Tests
+        
         delete_transient('wpc_test_running');
         delete_transient('wpc_initial_test');
         delete_option(WPC_WARMUP_LOG_SETTING);
         delete_option('wps_ic_gen_hp_url');
     }
 
-    /***
-     * Get file size from WP filesystem
-     *
-     * @param $imageID
-     *
-     * @return string
-     */
+
     public static function get_wp_filesize($imageID)
     {
         $filepath = get_attached_file($imageID);
@@ -1791,7 +1875,7 @@ class wps_ic
         $liveQuota = 0;
 
         if ($data->account->quotaType == 'requests' || $data->account->quotaType == 'requests-combined') {
-            // Requests
+            
             $liveCredits = $data->account->leftover . ' Requests Left';
 
             if (empty($data->liveCredits)) {
@@ -1810,7 +1894,7 @@ class wps_ic
                 $localQuota = $data->liveCredits->value;
             }
         } else {
-            // Bandwidth
+            
             $liveCredits = $data->account->leftover . ' Left';
 
             if (!empty($data->liveCredits->value)) {
@@ -1821,8 +1905,8 @@ class wps_ic
                 $localCredits = 'Unlimited';
                 $localQuota = 'Unlimited';
             } else {
-                #$localCredits = $data->localCredits->formatted->number . ' ' . $data->localCredits->formatted->unit . ' Left';
-                #$localQuota = $data->localCredits->value;
+                
+                
                 $localCredits = 0;
                 $localQuota = 0;
             }
@@ -1848,13 +1932,7 @@ class wps_ic
         return ['local' => $localCredits, 'live' => $liveCredits, 'liveQuota' => $liveQuota, 'localQuota' => $localQuota, 'liveShared' => $liveShared, 'localShared' => $localShared];
     }
 
-    /**
-     * Retrieve account information from memory IF it's in memory
-     *
-     * @param $force
-     *
-     * @return false|mixed|object
-     */
+
     public static function getAccountStatusMemory($force = false)
     {
         if (!empty($_GET['refresh']) || $force) {
@@ -1876,9 +1954,81 @@ class wps_ic
         }
     }
 
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public static function wpc_account_gate_live_cdn($account_status, &$settings)
+    {
+        if (!is_array($settings)) {
+            return false;
+        }
+        $st = is_string($account_status) ? strtolower(trim($account_status)) : '';
+        $cur = isset($settings['live-cdn']) ? (string) $settings['live-cdn'] : '';
+        $kill = (array) apply_filters('wpc_account_status_disables_cdn',
+            ['suspended', 'cancelled', 'canceled', 'expired', 'inactive', 'deleted', 'terminated']);
+
+        
+        if ($st === '') {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('account-gate-no-status', '', '', ['cur' => $cur, 'action' => 'none']);
+            }
+            return false;
+        }
+
+        if (in_array($st, $kill, true)) {
+            if ($cur === '0') {
+                return false; 
+            }
+            
+            update_option('wpc_live_cdn_pre_gate', $cur, false);
+            $settings['live-cdn'] = '0';
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('account-gate-cdn-off', '', '', ['status' => $st, 'was' => $cur]);
+            }
+            return true;
+        }
+
+        if ($st === 'active') {
+            $prev = get_option('wpc_live_cdn_pre_gate', null);
+            $have = ($prev !== null && $prev !== false && $prev !== '');
+            if ($have && $cur === '0') {
+                $settings['live-cdn'] = (string) $prev;
+                delete_option('wpc_live_cdn_pre_gate');
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('account-gate-cdn-restored', '', '', ['to' => (string) $prev]);
+                }
+                return true;
+            }
+            if ($have) {
+                
+                
+                delete_option('wpc_live_cdn_pre_gate');
+            }
+            return false;
+        }
+
+        
+        
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('account-gate-status-unhandled', '', '', ['status' => $st, 'action' => 'none']);
+        }
+        return false;
+    }
+
     public static function check_account_status($ignore_transient = false)
     {
-        //Call once every admin load
+        
         self::debug_log('Check Account Status');
 
         if (!empty($_GET['refresh']) || $ignore_transient) {
@@ -1892,14 +2042,42 @@ class wps_ic
             return $transient_data;
         }
 
+        
+        if (!empty($transient_data) && $transient_data !== 'no-site-found' && !$ignore_transient && empty($_GET['refresh'])) {
+            $wpc_cca61 = (int) get_option('wpc_credits_checked_at');
+            if (time() - $wpc_cca61 < 60) {
+                self::$accStatusChecked = true;
+
+                return $transient_data;
+            }
+        }
+
+        
+        
+        
+        
+        
+        if (!empty($transient_data) && $transient_data !== 'no-site-found'
+            && !$ignore_transient && empty($_GET['refresh'])
+            && !(defined('DOING_CRON') && DOING_CRON)
+            && apply_filters('wpc_account_status_async', true)) {
+            if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                && !wp_next_scheduled('wpc_account_status_refresh')) {
+                wp_schedule_single_event(time() + 2, 'wpc_account_status_refresh');
+                wpc_spawn_cron();
+            }
+            self::$accStatusChecked = true;
+            return $transient_data;
+        }
+
         self::debug_log('Check Account Status - Call API');
 
         $options = get_option(WPS_IC_OPTIONS);
         $settings = get_option(WPS_IC_SETTINGS);
 
-        /**
-         * Site is not connected
-         */
+        
+
+
         if (!$options || empty($options['api_key'])) {
             $data = [];
             $data['account']['allow_local'] = false;
@@ -1917,7 +2095,7 @@ class wps_ic
             $data['bytes']['bandwidth_savings_bytes'] = '0';
             $data['bytes']['original_bandwidth'] = '0';
             $data['bytes']['projected'] = '0';
-            // Local
+            
             $data['bytes']['local_requests'] = '0';
             $data['bytes']['local_savings'] = '0';
             $data['bytes']['local_original'] = '0';
@@ -1934,7 +2112,7 @@ class wps_ic
             $data['formatted']['original_bandwidth'] = '0 MB';
             $data['formatted']['projected'] = '0 MB';
 
-            // Local
+            
             $data['formatted']['local_requests'] = '0';
             $data['formatted']['local_savings'] = '0 MB';
             $data['formatted']['local_original'] = '0 MB';
@@ -1950,13 +2128,16 @@ class wps_ic
             return $data;
         }
 
-        // Check if we have saved results from a previous successful call
+        
         $saved_credits_call = get_option('wps_ic_credits_call');
 
-        // Set timeout based on whether we have saved results
+        
         $api_timeout = !empty($saved_credits_call) ? 2 : 5;
 
-        // Check privileges
+        
+        update_option('wpc_credits_checked_at', time(), false);
+
+        
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $call = wp_remote_get($url, ['timeout' => $api_timeout, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => self::$version]]);
 
@@ -1966,7 +2147,7 @@ class wps_ic
 
             $body = json_decode($body);
 
-            // Save successful API call results
+            
             if (!empty($body) && $body !== 'no-site-found') {
                 update_option('wps_ic_credits_call', $body);
             }
@@ -1974,15 +2155,15 @@ class wps_ic
             set_transient('wps_ic_account_status_call', $body, WPS_IC_ACCOUNT_STATUS_MEMORY);
 
             if (!empty($body) && $body !== 'no-site-found') {
-                // Vars
+                
                 $body = self::createObjectFromJson($json);
 
-                //Check if url changed
+                
                 $site_url = trim(site_url());
                 $api_url  = trim(($body->site->site_url ?? ''));
 
-                if (!empty($site_url) && $api_url !== $site_url) {
-                    // Append to log
+                if (!empty($site_url) && !empty($api_url) && $api_url !== $site_url) {
+                    
                     $logs = get_option('wps_ic_url_changed_log', []);
                     if (!is_array($logs)) {
                         $logs = [];
@@ -2001,7 +2182,7 @@ class wps_ic
 
                     update_option('wps_ic_url_changed_log', $logs, false);
 
-                    // Disconnect, prompt url changed msg
+                    
                     $options = get_option(WPS_IC_OPTIONS);
                     if (!is_array($options)) {
                         $options = [];
@@ -2034,6 +2215,7 @@ class wps_ic
                 $proSite = $body->account->proSite;
 
                 if ($quota_type == 'pageviews') {
+                    $wpc_pkg760 = isset($body->packageConfiguration) ? (array) $body->packageConfiguration : [];
 
                     $data = [];
                     $data['account']['quotaType'] = 'pageviews';
@@ -2042,7 +2224,7 @@ class wps_ic
 
                     $data['bytes']['bandwidth_savings'] = $body->bytes->bandwidth_savings;
                     $data['formatted']['bandwidth_savings'] = $body->formatted->bandwidth_savings;
-                    //
+                    
                     $data['bytes']['original_bandwidth'] = $body->bytes->original_bandwidth;
                     $data['formatted']['original_bandwidth'] = $body->formatted->original_bandwidth;
 
@@ -2067,21 +2249,33 @@ class wps_ic
                     $body = ['success' => true, 'data' => $data];
                     $body = (object)$body;
 
-                    // Account Status Transient
+                    
                     set_transient('wps_ic_account_status', $body->data, WPS_IC_ACCOUNT_STATUS_MEMORY);
                     self::$accStatusChecked = true;
+                    
+                    
+                    
+                    
+                    
+                    if (function_exists('wpc_caps_store')) {
+                        if (empty($wpc_pkg760)) {
+                            wpc_caps_store([], true);
+                        } else {
+                            wpc_caps_store($wpc_pkg760, false);
+                        }
+                    }
                     return $body->data;
                 }
                 else {
 
-                    // If pro site,raise flag
+                    
                     if (!empty($proSite) && $proSite == '1') {
                         update_option('wps_ic_prosite', true);
                     } else {
                         update_option('wps_ic_prosite', false);
                     }
 
-                    // Account Status Transient
+                    
                     set_transient('wps_ic_account_status', $body, WPS_IC_ACCOUNT_STATUS_MEMORY);
                     self::$accStatusChecked = true;
 
@@ -2092,33 +2286,38 @@ class wps_ic
                         }
                     }
 
-                    // Allow Local
-                    $updated_local = update_option('wps_ic_allow_local', $allow_local);
-                    $updated_live = update_option('wps_ic_allow_live', $allow_live);
+                    
+                    
+                    $updated_local = ((bool) $allow_local !== (bool) get_option('wps_ic_allow_local')) ? update_option('wps_ic_allow_local', $allow_local) : false;
+                    $updated_live = ((bool) $allow_live !== (bool) get_option('wps_ic_allow_live')) ? update_option('wps_ic_allow_live', $allow_live) : false;
 
-                    // If Local or Live Capabilities Changed, Purge
+                    
                     if ($updated_local || $updated_live) {
                         $cache = new wps_ic_cache_integrations();
                         $cache::purgeAll();
                     }
 
-                    // Is account active?
-                    if ($account_status != 'active') {
-                        $settings['live-cdn'] = '0'; // TODO: Fix
+                    
+                    if (self::wpc_account_gate_live_cdn($account_status, $settings)) {
                         update_option(WPS_IC_SETTINGS, $settings);
                     }
                 }
 
-                // Account configuration
+                
                 if (empty($body->packageConfiguration)) {
-                    // Show all options
+                    
+                    
+                    if (function_exists('wpc_caps_store')) { wpc_caps_store([], true); }
                 }
                 else {
-                    // Block some options
+                    
                     $packageConfig = (array)$body->packageConfiguration;
+                    
+                    
+                    if (function_exists('wpc_caps_store')) { wpc_caps_store($packageConfig, false); }
                     if (!empty($packageConfig)) {
                         foreach ($packageConfig as $key => $value) {
-                            set_transient($key . 'Enabled', $value, 5 * 60); // 5 Minutes
+                            set_transient($key . 'Enabled', $value, 5 * 60); 
 
                             if ($value == '0') {
                                 switch ($key) {
@@ -2166,21 +2365,27 @@ class wps_ic
 
                 return $body;
             } else {
-                $options = get_option(WPS_IC_OPTIONS);
-                $options['api_key'] = '';
-                $options['response_key'] = '';
-                $options['orp'] = '';
-                $options['regExUrl'] = '';
-                $options['regexpDirectories'] = '';
-                update_option(WPS_IC_OPTIONS, $options);
+                
+                
+                
+                
+                if (!empty($saved_credits_call)) {
+                    set_transient('wps_ic_account_status_call', $saved_credits_call, WPS_IC_ACCOUNT_STATUS_MEMORY);
+                    return $saved_credits_call;
+                }
                 return false;
             }
         } else if (wp_remote_retrieve_response_code($call) == 401) {
-            $cache = new wps_ic_cache_integrations();
-            $cache->remove_key();
+            
+            
+            
+            
+            if (!empty($saved_credits_call)) {
+                return $saved_credits_call;
+            }
             return false;
         } else {
-            // If API call failed but we have saved results, use them
+            
             if (!empty($saved_credits_call)) {
                 self::debug_log('Check Account Status - Using Saved Results');
 
@@ -2190,7 +2395,7 @@ class wps_ic
                 set_transient('wps_ic_account_status_call', $body, WPS_IC_ACCOUNT_STATUS_MEMORY);
 
                 if (!empty($body) && $body !== 'no-site-found') {
-                    // Vars
+                    
                     $body = self::createObjectFromJson($json);
                     $account_status = $body->account->status;
 
@@ -2208,7 +2413,7 @@ class wps_ic
 
                         $data['bytes']['bandwidth_savings'] = $body->bytes->bandwidth_savings;
                         $data['formatted']['bandwidth_savings'] = $body->formatted->bandwidth_savings;
-                        //
+                        
                         $data['bytes']['original_bandwidth'] = $body->bytes->original_bandwidth;
                         $data['formatted']['original_bandwidth'] = $body->formatted->original_bandwidth;
 
@@ -2233,21 +2438,21 @@ class wps_ic
                         $body = ['success' => true, 'data' => $data];
                         $body = (object)$body;
 
-                        // Account Status Transient
+                        
                         set_transient('wps_ic_account_status', $body->data, WPS_IC_ACCOUNT_STATUS_MEMORY);
                         self::$accStatusChecked = true;
 
                         return $body->data;
                     } else {
 
-                        // If pro site,raise flag
+                        
                         if (!empty($proSite) && $proSite == '1') {
                             update_option('wps_ic_prosite', true);
                         } else {
                             update_option('wps_ic_prosite', false);
                         }
 
-                        // Account Status Transient
+                        
                         set_transient('wps_ic_account_status', $body, WPS_IC_ACCOUNT_STATUS_MEMORY);
                         self::$accStatusChecked = true;
 
@@ -2258,31 +2463,32 @@ class wps_ic
                             }
                         }
 
-                        // Allow Local
-                        $updated_local = update_option('wps_ic_allow_local', $allow_local);
-                        $updated_live = update_option('wps_ic_allow_live', $allow_live);
+                        
+                        $updated_local = ((bool) $allow_local !== (bool) get_option('wps_ic_allow_local')) ? update_option('wps_ic_allow_local', $allow_local) : false;
+                        $updated_live = ((bool) $allow_live !== (bool) get_option('wps_ic_allow_live')) ? update_option('wps_ic_allow_live', $allow_live) : false;
 
-                        // If Local or Live Capabilities Changed, Purge
+                        
                         if ($updated_local || $updated_live) {
                             $cache = new wps_ic_cache_integrations();
                             $cache::purgeAll();
                         }
 
-                        // Is account active?
-                        if ($account_status != 'active') {
-                            $settings['live-cdn'] = '0'; // TODO: Fix
+                        
+                        if (self::wpc_account_gate_live_cdn($account_status, $settings)) {
                             update_option(WPS_IC_SETTINGS, $settings);
                         }
                     }
-                    // Account configuration
+                    
                     if (empty($body->packageConfiguration)) {
-                        // Show all options
+                        
+                        if (function_exists('wpc_caps_store')) { wpc_caps_store([], true); }
                     } else {
-                        // Block some options
+                        
                         $packageConfig = (array)$body->packageConfiguration;
+                        if (function_exists('wpc_caps_store')) { wpc_caps_store($packageConfig, false); }
                         if (!empty($packageConfig)) {
                             foreach ($packageConfig as $key => $value) {
-                                set_transient($key . 'Enabled', $value, 5 * 60); // 5 Minutes
+                                set_transient($key . 'Enabled', $value, 5 * 60); 
 
                                 if ($value == '0') {
                                     switch ($key) {
@@ -2332,7 +2538,7 @@ class wps_ic
                 }
             }
 
-            // No saved results available, return default data
+            
             $data = [];
             $data['account']['allow_local'] = false;
             $data['account']['allow_live'] = false;
@@ -2350,7 +2556,7 @@ class wps_ic
             $data['bytes']['original_bandwidth'] = '0';
             $data['bytes']['projected'] = '0';
 
-            // Local
+            
             $data['bytes']['local_requests'] = '0';
             $data['bytes']['local_savings'] = '0';
             $data['bytes']['local_original'] = '0';
@@ -2367,7 +2573,7 @@ class wps_ic
             $data['formatted']['original_bandwidth'] = '0';
             $data['formatted']['projected'] = '0';
 
-            // Local
+            
             $data['formatted']['local_requests'] = '0';
             $data['formatted']['local_savings'] = '0 MB';
             $data['formatted']['local_original'] = '0 MB';
@@ -2379,7 +2585,7 @@ class wps_ic
             $body = ['success' => true, 'data' => $data];
             $body = (object)$body;
 
-            // Account Status Transient
+            
             set_transient('wps_ic_account_status', $body->data, WPS_IC_ACCOUNT_STATUS_MEMORY);
             self::$accStatusChecked = true;
 
@@ -2393,14 +2599,14 @@ class wps_ic
     {
         $data = json_decode($json);
 
-        // Create the object structure
+        
         $object = new stdClass();
 
-        // ASite object
+        
         $object->site = new stdClass();
         $object->site->site_url = $data->site_url;
 
-        // Account object
+        
         $object->account = new stdClass();
         $object->account->status = "active";
         $object->account->quotaType = $data->quotaType ?? 'bandwidth';
@@ -2412,18 +2618,18 @@ class wps_ic
         $object->account->leftover = $data->display->leftover;
         $object->account->displayQuota = $data->display->credits;
         $object->account->suspended = $data->suspended;
-        //$object->account->localShared = "1";
+        
 
-        // Bytes object
+        
         $object->bytes = new stdClass();
         $object->bytes->cdn_requests = $data->requests;
         $object->bytes->cdn_bandwidth = $data->bytes;
-        //$object->bytes->projected = $data->bytes * 2.5; // Just an example calculation for projected
+        
         $object->bytes->bandwidth_savings_bytes = $data->savedBytes;
         $object->bytes->bandwidth_savings = $data->savings * 100;
         $object->bytes->original_bandwidth = $data->originalBytes;
 
-        // Formatted
+        
         $object->formatted = new stdClass();
         $object->formatted->cdn_requests = (string)$data->requests;
         $object->formatted->cdn_bandwidth = $data->display->bytes;
@@ -2431,7 +2637,7 @@ class wps_ic
         $object->formatted->bandwidth_savings = $data->savings * 100;
         $object->formatted->original_bandwidth = $data->display->originalBytes;
 
-        // Monthly Stats
+        
         $object->monthly = new stdClass();
         $object->monthly->requests = $data->requests;
         $object->monthly->bytes = $data->bytes;
@@ -2439,7 +2645,7 @@ class wps_ic
         $object->monthly->formatted->requests = $data->requests;
         $object->monthly->formatted->bytes = $data->display->bytes;
 
-        // Package Configuration
+        
         $object->packageConfiguration = new stdClass();
         foreach ($data->configuration as $key => $value) {
             $object->packageConfiguration->$key = $value;
@@ -2448,13 +2654,13 @@ class wps_ic
         return $object;
     }
 
-    /**
-     * Activation of the plugin
-     */
-    /**
-     * Snapshot of active feature toggles — sent with PageSpeed test requests
-     * so the MC can correlate score deltas with enabled features.
-     */
+    
+
+
+    
+
+
+
     public static function getActiveFeatures() {
         $settings = get_option(WPS_IC_SETTINGS);
         $options  = get_option(WPS_IC_OPTIONS);
@@ -2482,21 +2688,37 @@ class wps_ic
 
     public static function activation()
     {
-        // Reset loopback status so it re-tests on next upload
+
+
+        if (get_option('wpc_install_fresh') === false) {
+            $wpc_af_settings = get_option(WPS_IC_SETTINGS);
+            $wpc_af_fresh = get_option('wpc_settings_initialized') !== '1'
+                && (!is_array($wpc_af_settings) || count($wpc_af_settings) <= 3)
+                && get_option('wpc_link_preset_applied') === false;
+            update_option('wpc_install_fresh', $wpc_af_fresh ? '1' : '0', false);
+        }
+
+        
         delete_option('wpc_loopback_status');
 
-        // Ensure the telemetry table exists. Also runs on plugins_loaded each
-        // request (idempotent, version-gated) for upgrades that skip the hook.
+
+        if (function_exists('delete_transient')) {
+            delete_transient('wpc_font_rescan_lock');
+        }
+        $wpc_act_set126 = get_option(WPS_IC_SETTINGS);
+        if (is_array($wpc_act_set126) && (isset($wpc_act_set126['replace-fonts']) ? $wpc_act_set126['replace-fonts'] : '') === 'local'
+            && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_font_rescan')) {
+            wp_schedule_single_event(time() + 30, 'wpc_font_rescan');
+        }
+
+        
+        
         if (class_exists('WPC_Modern_Delivery') && method_exists('WPC_Modern_Delivery', 'maybe_create_emissions_table')) {
             WPC_Modern_Delivery::maybe_create_emissions_table();
         }
 
-        // Fire the orch /v2/config provisioning sync on activation. Registration
-        // creates the agencySites row but never provisions — only /v2/config lays
-        // the Edge Rules + AVIF/WebP Vary + signed blob, so without this a fresh
-        // zone could live un-provisioned forever. Background cron, never blocks.
-        // The force-provision flag persists/retries until a 2xx so the zone can't
-        // be stranded if the self-loopback is blocked and wp-cron never ticks.
+
         update_option('wpc_v2_force_provision', 1, false);
         if (function_exists('wpc_v2_schedule_config_sync')) {
             wpc_v2_schedule_config_sync();
@@ -2505,73 +2727,73 @@ class wps_ic
             wp_schedule_single_event(time(), 'wpc_v2_deferred_config_sync');
         }
 
-        // Purge Object Cache
+        
         $cache = new wps_ic_cache();
         $cache->purgeObjectCache();
 
-        // Setup User Privileges
+        
         $users = new wps_ic_users();
 
         if (!class_exists('wps_ic_htaccess')) {
             include_once WPS_IC_DIR . 'classes/htaccess.class.php';
         }
 
-        // Add WP_CACHE to wp-config.php
+        
         $htaccess = new wps_ic_htaccess();
 
-        // Setup config file
+        
         $config = new wps_ic_config();
         $config->generateCacheConfig();
 
-        // (v7.10.04) Only take over advanced-cache.php + WP_CACHE when WPC page caching is
-        // enabled — otherwise (re)activation would clobber another caching plugin's drop-in
-        // (e.g. W3TC) on a site that runs WPC for images/CDN only. A fresh install has no
-        // settings yet here, so this skips; the admin-load re-assert (checkHtaccess, ~3633),
-        // which first writes the recommended defaults, then installs the drop-in on the next
-        // admin load if the default has caching on.
+
         $wpc_cache_settings = get_option(WPS_IC_SETTINGS);
         if (!empty($wpc_cache_settings['cache']['advanced']) && $wpc_cache_settings['cache']['advanced'] == '1') {
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
         }
 
-        // Setup inline JS Defaults
+        
         $wpc_excludes = get_option('wpc-inline');
         $wpc_excludes['inline_js'] = explode(',', "jquery.min,adaptive,jquery-migrate,wp-includes");
         update_option('wpc-inline', $wpc_excludes);
 
-        // Remove generateCriticalCSS Options
+        
         delete_option('wps_ic_gen_hp_url');
         update_option('wpsShowAdvanced', 'true');
 
-        // Purge All
+        
         $cache = new wps_ic_cache_integrations();
         $cache::purgeAll();
 
         if (is_multisite()) {
-            // Nothing
+            
         } else {
             $options = get_option(WPS_IC_OPTIONS);
 
             if (!$options || empty($options['api_key'])) {
                 return;
             } else {
-                // check if site was removed from portal when plugin was not active
+
                 self::check_account_status(true);
 
-                // Setup Default Options
+                
                 $options = new wps_ic_options();
                 $settings = get_option(WPS_IC_SETTINGS);
 
-                if (!$settings || count($settings) <= 3) {
-                    $options->set_defaults();
+
+                $wpc_settings_init = get_option('wpc_settings_initialized') === '1';
+                if (!$wpc_settings_init) {
+                    if (!$settings || count($settings) <= 3) {
+                        $options->set_defaults();
+                    }
+                    update_option('wpc_settings_initialized', '1', false);
                 }
 
                 $purge_rules = get_option('wps_ic_purge_rules');
 
                 if ($purge_rules === false) {
                     $purge_rules = $options->get_preset('purge_rules');
-                    update_option('wps_ic_purge_rules', $purge_rules);
+                    update_option('wps_ic_purge_rules', $purge_rules, false);
                 }
 
                 $cache_cookies = get_option('wps_ic_cache_cookies');
@@ -2582,10 +2804,10 @@ class wps_ic
                 }
 
                 if (!file_exists(WPS_IC_DIR . 'cache')) {
-                    // Folder does not exist
+                    
                     mkdir(WPS_IC_DIR . 'cache', 0755);
                 } else {
-                    // Folder exists
+                    
                     if (!is_writable(WPS_IC_DIR . 'cache')) {
                         chmod(WPS_IC_DIR . 'cache', 0755);
                     }
@@ -2594,14 +2816,14 @@ class wps_ic
         }
     }
 
-    /**
-     * Deactivation of the plugin
-     * Notify our API the plugin is disconnected
-     */
+    
+
+
+
     public static function deactivation($plugin)
     {
         if ($plugin === 'wp-compress-image-optimizer/wp-compress.php') {
-            // Remove cron jobs
+            
             $timestamp = wp_next_scheduled('runCronPreload');
             if ($timestamp) {
                 wp_unschedule_event($timestamp, 'runCronPreload');
@@ -2611,22 +2833,29 @@ class wps_ic
                 include_once WPS_IC_DIR . 'classes/htaccess.class.php';
             }
 
-            // Remove HtAccess Rules
+            
             $htaccess = new wps_ic_htaccess();
             $htaccess->removeHtaccessRules();
+            
+            
+            
+            
+            $htaccess->removeStaticServe();
 
-            // Add WP_CACHE to wp-config.php
+            
+            
+            
+            if (function_exists('wp_clear_scheduled_hook')) {
+                wp_clear_scheduled_hook('wpc_v2_journal_drain_cron');
+                wp_clear_scheduled_hook('wpc_v2_pull_cron');
+                wp_clear_scheduled_hook('wpc_v2_provheal_cron');
+            }
+
+            
             $htaccess->setWPCache(false);
             $htaccess->removeAdvancedCache();
 
-            // Purge the CF edge before wiping the local cache. After deactivate
-            // the plugin stops rewriting, but CF keeps serving its cached optimized
-            // HTML against an origin that no longer produces it → broken pages until
-            // TTL. Fire the zone purge directly (not via purgeAll, whose integration
-            // hooks may already be torn down). Differs from wpc_purgeCF(): no
-            // sleep(6) (a clicked Deactivate must not hang the response), and a
-            // one-shot guard since deactivation() is wired to two hooks and can run
-            // twice per request. No-op without CF.
+
             static $wpc_deact_cf_purged = false;
             if (!$wpc_deact_cf_purged && !empty(get_option(WPS_IC_CF))) {
                 $wpc_deact_cf_purged = true;
@@ -2638,8 +2867,8 @@ class wps_ic
                     try {
                         $wpc_cfapi = new WPC_CloudflareAPI($wpc_cf['token']);
                         if ($wpc_cfapi) {
-                            // Fire-and-forget (blocking=false, timeout=0.01) — dispatches the zone
-                            // purge_everything without delaying the deactivation HTTP response.
+                            
+                            
                             if (method_exists($wpc_cfapi, 'purgeCacheAsync')) {
                                 $wpc_cfapi->purgeCacheAsync($wpc_cf['zone']);
                             } else {
@@ -2647,40 +2876,37 @@ class wps_ic
                             }
                         }
                     } catch (\Throwable $e) {
-                        // A CF API error (bad token / network) must never block or fatal deactivation.
+                        
                     }
                 }
             }
 
-            // Purge Cached Files
+            
             $cacheLogic = new wps_ic_cache();
             if (file_exists(WPS_IC_CACHE)) {
                 $cacheLogic::deleteFolder(WPS_IC_CACHE);
             }
 
-            if (file_exists(WPS_IC_CRITICAL)) {
-                $cacheLogic::deleteFolder(WPS_IC_CRITICAL);
-            }
 
             if (file_exists(WPS_IC_COMBINE)) {
                 $cacheLogic::deleteFolder(WPS_IC_COMBINE);
             }
 
-            // Remove Stats Transients
+            
             delete_transient('wps_ic_live_stats');
             delete_transient('wps_ic_local_stats');
 
-            // Remove generateCriticalCSS Options
+            
             delete_option('wps_ic_gen_hp_url');
             delete_option(WPS_IC_GUI);
             delete_option('wps_log_critCombine');
 
-            // Multisite Settings
+            
             $settings = get_option(WPS_IC_MU_SETTINGS);
             $settings['hide_compress'] = 0;
             update_option(WPS_IC_MU_SETTINGS, $settings);
 
-            // Remove from active on API
+            
             $options = get_option(WPS_IC_OPTIONS);
             $site = site_url();
             $apikey = $options['api_key'];
@@ -2690,41 +2916,62 @@ class wps_ic
             $newOptions['regexpDirectories'] = '';
             update_option(WPS_IC_OPTIONS, $newOptions);
 
-            // Setup URI
+            
             $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $apikey . '&site=' . urlencode($site);
 
-            // Verify API Key is our database and user has is confirmed getresponse
+            
             $get = wp_remote_get($uri, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
         }
     }
 
     public static function checkQuotaStatus()
     {
-        // Update Stats
-        $lastUpdate = get_transient('wps_icQuotaStatus');
-        if (empty($lastUpdate) || !$lastUpdate) {
-            $settings = get_option(WPS_IC_OPTIONS);
-            if (!empty($settings['api_key'])) {
-                // Check Quota Status
-                $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_account_status_v6&apikey=' . $settings['api_key'] . '&range=month&hash=' . md5(mt_rand(999, 9999)), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
-
-                // Set transient only if the response is 200 for stats update
-                if (wp_remote_retrieve_response_code($call) == 200) {
-                    set_transient('wps_icQuotaStatus', 'true', 60 * 30);
-                }
+        if (get_transient('wps_icQuotaStatus')) {
+            return;
+        }
+        
+        if (time() - (int) get_option('wpc_quota_checked_at') < 300) {
+            return;
+        }
+        $settings = get_option(WPS_IC_OPTIONS);
+        if (empty($settings['api_key'])) {
+            return;
+        }
+        update_option('wpc_quota_checked_at', time(), false);
+        
+        
+        
+        if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_quota_status_refresh')
+            && apply_filters('wpc_quota_status_async', true)) {
+            wp_schedule_single_event(time() + 2, 'wpc_quota_status_refresh');
+            if (function_exists('spawn_cron')) {
+                wpc_spawn_cron();
             }
         }
     }
 
-    /**
-     * Popup on plugin deactivation button
-     * @return void
-     */
+    public static function checkQuotaStatusRefresh()
+    {
+        $settings = get_option(WPS_IC_OPTIONS);
+        if (empty($settings['api_key'])) {
+            return;
+        }
+        $call = wp_remote_get(WPS_IC_KEYSURL . '?action=get_account_status_v6&apikey=' . $settings['api_key'] . '&range=month&hash=' . md5(mt_rand(999, 9999)), ['timeout' => 10, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        if (wp_remote_retrieve_response_code($call) == 200) {
+            set_transient('wps_icQuotaStatus', 'true', 60 * 30);
+        }
+    }
+
+    
+
+
+
     public static function deactivate_script()
     {
         wp_enqueue_style('wp-pointer');
         wp_enqueue_script('wp-pointer');
-        wp_enqueue_script('utils'); // for user settings
+        wp_enqueue_script('utils');
         $nonceVar = wp_create_nonce('wps_ic_nonce_action');
         ?>
         <script type="text/javascript">
@@ -2894,19 +3141,19 @@ class wps_ic
         $offloader = new wps_ic_offloading();
     }
 
-    /**
-     * WP Init helper
-     */
+    
+
+
     public function init()
     {
         if (!is_admin()) {
-            // Raise memory limit
+            
             if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
                 ini_set('memory_limit', '1024M');
             }
         }
 
-        //Display notice if site url changed
+        
         if (get_option('wps_ic_url_changed')){
             add_action('admin_notices', function () {
                 $class   = 'notice notice-error';
@@ -2925,13 +3172,13 @@ class wps_ic
             });
         }
 
-        // Critical API
+        
         $this->fetchCritical();
         $this->fetchPageSpeed();
 
-        /**
-         * Force Show WP Compress
-         */
+        
+
+
         if (!empty($_GET['show_optimizer'])) {
             $settings = get_option(WPS_IC_SETTINGS);
             $settings['hide_compress'] = '0';
@@ -2980,16 +3227,16 @@ class wps_ic
         }
 
         if (is_admin() || !empty($_GET['_locale'])) {
-            //to hook on_upload in block editor
+
             self::$local = new wps_local_compress();
         }
 
-        // Get Options
+        
         $this::$js_debug = get_option('wps_ic_js_debug');
         $this::$settings = get_option(WPS_IC_SETTINGS);
         $this::$options = get_option(WPS_IC_OPTIONS);
 
-        // Add User Capabilities
+        
         $user = new wps_ic_users();
 
         if (empty($this::$settings)) {
@@ -3002,20 +3249,15 @@ class wps_ic
         }
 
 
-        //CUSTOM_CONSTRUCT_HERE
+        
 
         if (!empty($_GET['ignore_ic'])) {
             return;
         }
 
-        /***
-         * Local Remote Hooks
-         * TODO: Make Pretty
-         */
-
 
         if (!empty($_GET['wpc_optimization_done']) && sanitize_text_field($_GET['apikey']) == self::$options['api_key']) {
-            //todo set it to done and scheck in js
+
             delete_transient('wpc-page-optimizations-status');
             die('Ended');
         }
@@ -3047,19 +3289,7 @@ class wps_ic
                     update_option(WPS_IC_TESTS, $tests);
                     update_option(WPS_IC_LITE_GPS, ['result' => $body, 'failed' => false, 'lastRun' => time()]);
 
-                    // PSI-MC v1.47+: structured audit insights extracted server-side.
-                    // Stored locally for admin UI + customer-visible stats. Service backend
-                    // already has the underlying data from running the test, so no plugin→backend
-                    // forwarding needed.
-                    //
-                    // Compat gates (per service team contract 2026-04-17):
-                    //   1. Plugin consumes schema_version === 1 only. Future v2+ shapes ignored
-                    //      until plugin gets explicit support (prevents silent corruption if
-                    //      service bumps to v2 before plugin updated).
-                    //   2. error === false required. If service couldn't extract (missing audits,
-                    //      PSI timeout, etc.), skip save to keep any previous good data intact.
-                    //   3. Graceful fallback: pre-v1.47 responses have no insights field, same
-                    //      condition evaluates false and plugin continues unchanged.
+
                     if (!empty($body['insights'])
                         && (int) ($body['insights']['schema_version'] ?? 0) === 1
                         && empty($body['insights']['error'])) {
@@ -3090,13 +3320,12 @@ class wps_ic
         }
 
 
-        //hide plugin if it's whitelabel
         if (get_option('hide_wpcompress_plugin')) {
             function whitelabel_hide_specific_plugin($plugins)
             {
-                // Check if the specific plugin is set in the list
+                
                 if (isset($plugins['wp-compress-image-optimizer/wp-compress.php'])) {
-                    // Remove the specific plugin from the list
+                    
                     unset($plugins['wp-compress-image-optimizer/wp-compress.php']);
                 }
 
@@ -3121,7 +3350,7 @@ class wps_ic
 
         $this::$settings = $this->fillMissingSettings($this::$settings);
 
-        // Sync live-cdn from actual state: CF CDN or any CDN file type on
+
         if (empty($this::$settings['live-cdn']) || $this::$settings['live-cdn'] != '1') {
             $cfSettings = get_option(WPS_IC_CF);
             if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
@@ -3140,9 +3369,9 @@ class wps_ic
             }
         }
 
-        /**
-         * Figure out ZoneName
-         */
+        
+
+
         if (empty($this::$settings['cname']) || !$this::$settings['cname']) {
             $this::$zone_name = get_option('ic_cdn_zone_name');
         } else {
@@ -3150,9 +3379,9 @@ class wps_ic
             $this::$zone_name = $custom_cname;
         }
 
-        /**
-         * Figure out Quality
-         */
+        
+
+
         if (empty($this::$settings['optimization']) || $this::$settings['optimization'] == '' || $this::$settings['optimization'] == '0') {
             $this::$quality = 'intelligent';
         } else {
@@ -3179,14 +3408,14 @@ class wps_ic
             define('WPS_IC_JS_HASH', $this::$options['js_hash']);
         }
 
-        // Plugin Settings
+        
         if (empty($this::$options['api_key'])) {
             self::$api_key = '';
         } else {
             self::$api_key = $this::$options['api_key'];
         }
 
-        // Required to Extract Key - DO NOT REMOVE!
+        
         $this->isAgencyPortal();
 
         if (empty($this::$options['response_key'])) {
@@ -3195,17 +3424,17 @@ class wps_ic
             self::$response_key = $this::$options['response_key'];
         }
 
-        #$this->offloading = new wps_ic_offloading();
+        
         $this->upgrader = new wps_ic_upgrader();
         $this->mainwp = new wps_ic_mainwp();
 
         if ($this->isAgencyPortal()) {
 
-            #$this->inAdmin();
+            
             $this->enqueues = new wps_ic_enqueues();
             $this->ajax = new wps_ic_ajax();
 
-            // Output the #select-mode popup template in wp_footer (agency runs in frontend context)
+            
             $modes = new wps_ic_modes();
             add_action('wp_footer', [$modes, 'showPopup']);
 
@@ -3214,7 +3443,7 @@ class wps_ic
             if (is_admin()) {
                 $this->inAdmin();
             } else {
-                // Add Elementor Bg Lazy
+                
                 $bgLazy = new wps_ic_bgLazy();
                 $this->inFrontEnd();
             }
@@ -3225,7 +3454,7 @@ class wps_ic
             return;
         }
 
-        // Change PHP Limits
+        
         $wps_ic = $this;
         do_action('wps_ic_init');
     }
@@ -3240,14 +3469,75 @@ class wps_ic
     {
         if (!empty($_GET['criticalDone'])) {
             $jobStatus = [];
-            $uuid = sanitize_text_field($_GET['uuid']);
-            $apikey = sanitize_text_field($_GET['apikey']);
+
+
+            $wpc_cb_body = json_decode((string) @file_get_contents('php://input'), true);
+            if (!is_array($wpc_cb_body)) { $wpc_cb_body = []; }
+            foreach (['uuid', 'apikey', 'pageUrl', 'lcp_url', 'delay_url', 'used_css_url', 'tpl_key', 'ready'] as $wpc_ck) {
+                if ((!isset($_GET[$wpc_ck]) || $_GET[$wpc_ck] === '') && isset($wpc_cb_body[$wpc_ck])
+                    && is_scalar($wpc_cb_body[$wpc_ck]) && $wpc_cb_body[$wpc_ck] !== '') {
+                    $_GET[$wpc_ck] = (string) $wpc_cb_body[$wpc_ck];
+                }
+            }
+
+            
+            
+            
+            
+            if ((string) ($wpc_cb_body['event'] ?? '') === 'generation_complete'
+                && !empty($wpc_cb_body['manifest_url']) && !empty($wpc_cb_body['gen_id'])
+                && apply_filters('wpc_manifest_webhook', true)) {
+                $wpc_mo697 = get_option(WPS_IC_OPTIONS);
+                $wpc_mk697key = is_array($wpc_mo697) && !empty($wpc_mo697['api_key']) ? (string) $wpc_mo697['api_key'] : '';
+                
+                
+                $wpc_msig697 = (string) ($_SERVER['HTTP_X_WPC_SIG'] ?? ($wpc_cb_body['sig'] ?? ''));
+                $wpc_mexp697 = $wpc_mk697key === '' ? '' : hash_hmac('sha256',
+                    (string) $wpc_cb_body['gen_id'] . '|' . (string) ($wpc_cb_body['url_key'] ?? '') . '|' . (string) ($wpc_cb_body['ts'] ?? ''),
+                    $wpc_mk697key);
+                $wpc_mok697 = ($wpc_mexp697 !== '' && $wpc_msig697 !== '' && hash_equals($wpc_mexp697, $wpc_msig697))
+                    || ($wpc_mk697key !== '' && !empty($_GET['apikey']) && $wpc_mk697key === sanitize_text_field((string) $_GET['apikey']));
+                if (!$wpc_mok697) {
+                    wp_send_json_error('sig-failure');
+                }
+                @ignore_user_abort(true);
+                if (function_exists('set_time_limit')) { @set_time_limit(180); }
+                if (!headers_sent()) { http_response_code(200); }
+                if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+                elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
+                if (!class_exists('wps_ic_url_key')) {
+                    include_once WPS_IC_DIR . 'traits/url_key.php';
+                }
+                
+                
+                $wpc_mpu697 = (string) strtok((string) ($wpc_cb_body['url_key'] ?? ''), '?');
+                if ($wpc_mpu697 === '' && !empty($_SERVER['HTTP_HOST'])) {
+                    $wpc_mpu697 = (string) $_SERVER['HTTP_HOST'] . (string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+                }
+                $wpc_mlk697 = (new wps_ic_url_key())->setup($wpc_mpu697);
+                $wpc_mres697 = 0;
+                if (!empty($wpc_mlk697) && function_exists('wpc_manifest_consume')) {
+                    $wpc_mres697 = (int) wpc_manifest_consume((string) $wpc_mlk697, (string) $wpc_cb_body['manifest_url'], (string) $wpc_cb_body['gen_id'], $wpc_mpu697);
+                }
+                wp_send_json_success(['manifest' => $wpc_mres697]);
+            }
+
+            $uuid = sanitize_text_field($_GET['uuid'] ?? '');
+            $apikey = sanitize_text_field($_GET['apikey'] ?? '');
 
             if (!empty($uuid) && !empty($apikey)) {
                 $options = get_option(WPS_IC_OPTIONS);
                 $dbApiKey = $options['api_key'];
 
                 if ($dbApiKey == $apikey) {
+
+                    
+                    
+                    @ignore_user_abort(true);
+                    if (function_exists('set_time_limit')) { @set_time_limit(180); }
+                    if (!headers_sent()) { http_response_code(200); }
+                    if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+                    elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
 
                     if (!empty($_GET['debug'])) {
                         ini_set('display_errors', 1);
@@ -3259,16 +3549,71 @@ class wps_ic
                     }
 
                     $urlKey = new wps_ic_url_key();
-                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
-                    $urlKey = $urlKey->setup($pageUrl);
+                    $pageUrl = sanitize_url(urldecode($_GET['pageUrl'] ?? ''));
+                    
+                    
+                    
+                    
+                    
+                    if ($pageUrl === '' && !empty($_SERVER['HTTP_HOST'])) {
+                        $pageUrl = (string) $_SERVER['HTTP_HOST'] . (string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+                    }
+                    $urlKey = $urlKey->setup((string) strtok($pageUrl, '?'));
 
-                    // UUID
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    if (defined('WPS_IC_CRITICAL') && function_exists('wpc_crit_meta_write')) {
+                        $wpc_cbdir = rtrim(WPS_IC_CRITICAL, '/') . '/' . ltrim((string) $urlKey, '/') . '/';
+                        if (!is_dir($wpc_cbdir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($wpc_cbdir); }
+                        if (!empty($wpc_cb_body['delay_inline']) && !empty($wpc_cb_body['delay']) && is_array($wpc_cb_body['delay'])
+                            && function_exists('wpc_delay_inline_fresher') && wpc_delay_inline_fresher($wpc_cbdir . 'delay.json', $wpc_cb_body['delay'])
+                            && class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_measured_shape($wpc_cb_body['delay'])
+                            && apply_filters('wpc_delay_inline_consume', true)) {
+                            $wpc_dib382 = wp_json_encode($wpc_cb_body['delay']);
+                            if (is_string($wpc_dib382) && $wpc_dib382 !== '' && strlen($wpc_dib382) <= 524288) {
+                                wpc_crit_meta_write($wpc_cbdir . 'delay.json', $wpc_dib382);
+                                delete_option('wpc_delay_v3_manifest_off');
+                                delete_option('wpc_delay_v3_promoted');
+                                if (function_exists('wpc_delay_aggr_rearm')) { wpc_delay_aggr_rearm(); }
+                                if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('delay-inline-landed', (string) $urlKey, '', ['via' => 'criticalDone', 'bytes' => strlen($wpc_dib382)]); }
+                            }
+                        }
+                        $wpc_cblcp382 = (isset($wpc_cb_body['lcp_json']) && is_array($wpc_cb_body['lcp_json'])) ? $wpc_cb_body['lcp_json']
+                            : ((isset($wpc_cb_body['lcp']) && is_array($wpc_cb_body['lcp'])) ? $wpc_cb_body['lcp'] : null);
+                        if (!empty($wpc_cb_body['lcp_inline']) && is_array($wpc_cblcp382)
+                            && (isset($wpc_cblcp382['lcp_element']) || isset($wpc_cblcp382['hints']))
+                            && apply_filters('wpc_lcp_inline_consume', true)) {
+                            $wpc_lib382 = wp_json_encode($wpc_cblcp382);
+                            if (is_string($wpc_lib382) && $wpc_lib382 !== '' && strlen($wpc_lib382) <= 524288) {
+                                $wpc_oldauth383c = function_exists('wpc_lcp_first_auth')
+                                    ? wpc_lcp_first_auth(json_decode((string) @file_get_contents($wpc_cbdir . 'lcp.json'), true)) : null;
+                                wpc_crit_meta_write($wpc_cbdir . 'lcp.json', $wpc_lib382);
+                                @unlink($wpc_cbdir . 'lcp_none.txt');
+                                
+                                if ($wpc_oldauth383c !== false && function_exists('wpc_lcp_first_auth') && wpc_lcp_first_auth($wpc_cblcp382) === false
+                                    && function_exists('wpc_lcp_edge_flip_purge')) {
+                                    wpc_lcp_edge_flip_purge((string) strtok((string) $pageUrl, '?'));
+                                }
+                                if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
+                                    function_exists('wpc_land_purge_coalesced') ? wpc_land_purge_coalesced((string) $urlKey, '', 'lcp-inline-criticalDone') : wps_ic_cache_integrations::purgeUrlHtml((string) $urlKey, '', ['context' => 'lcp-inline-criticalDone']);
+                                }
+                                if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('lcp-inline-landed', (string) $urlKey, '', ['via' => 'criticalDone', 'bytes' => strlen($wpc_lib382)]); }
+                            }
+                        }
+                    }
+
+                    
                     $uuidPart = substr($uuid, 0, 4);
 
-                    // Mobile CSS
+                    
                     $mobileCriticalCSS = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/' . $uuid . '-mobile.css';
 
-                    // Desktop CSS
+                    
                     $desktopCriticalCSS = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/' . $uuid . '-desktop.css';
 
                     if (!class_exists('wps_criticalCss')) {
@@ -3276,18 +3621,225 @@ class wps_ic
                     }
 
                     $criticalCSS = new wps_criticalCss();
-                    // (v7.03.86) lcp_url rides the criticalDone callback too now (crit-push v3.25.10, gated to
-                    // LCP-enabled domains) — read it from $_GET and pass it so saveCriticalCss stashes it for the
-                    // render-side healer. This covers the PULL path (the callback fires here); the SMART/push
-                    // path is covered by the /status poll (.85). Empty on non-LCP domains → no stash → inert.
-                    $wpc_cb_lcp_url = !empty($_GET['lcp_url']) ? sanitize_url(urldecode($_GET['lcp_url'])) : '';
-                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS], 'lcp_url' => $wpc_cb_lcp_url, 'lcp_src' => 'callback']);
 
-                    // Check if LCP Exists
+                    
+                    
+
+                    $wpc_cb_lcp_url = !empty($_GET['lcp_url']) ? sanitize_url(urldecode($_GET['lcp_url'])) : '';
+
+                    $wpc_cb_delay_url = !empty($_GET['delay_url']) ? sanitize_url(urldecode($_GET['delay_url'])) : '';
+
+
+                    $wpc_cb_used_css = !empty($_GET['used_css_url']) ? sanitize_url(urldecode($_GET['used_css_url'])) : '';
+                    
+                    if (function_exists('wpc_used_css_echo_note')) {
+                        wpc_used_css_echo_note('legacy-get', $_GET);
+                    }
+                    $wpc_cb_tpl_key  = !empty($_GET['tpl_key']) ? sanitize_text_field(urldecode($_GET['tpl_key'])) : '';
+
+
+                    if ($wpc_cb_tpl_key !== '' && function_exists('wpc_used_css_store_sheets')) {
+
+
+                        if (!empty($wpc_cb_body['used_css_sheets']) && is_array($wpc_cb_body['used_css_sheets'])) {
+                            wpc_used_css_store_sheets($wpc_cb_tpl_key, $wpc_cb_body['used_css_sheets']);
+                        }
+                    }
+
+
+                    try {
+
+                        $wpc_fonts67 = (!empty($wpc_cb_body['fonts']) && is_array($wpc_cb_body['fonts']))
+                            ? $wpc_cb_body['fonts']
+                            : ((!empty($_GET['fonts']) && is_array(json_decode(urldecode((string) $_GET['fonts']), true))) ? json_decode(urldecode((string) $_GET['fonts']), true) : []);
+                        if (!empty($wpc_fonts67) && defined('WPS_IC_FONTS_DIR')
+                            && apply_filters('wpc_fonts_artifact_consume', true)) {
+                            if (!is_dir(WPS_IC_FONTS_DIR)) {
+                                @wp_mkdir_p(WPS_IC_FONTS_DIR);
+                            }
+                            $wpc_f_n = 0;
+                            $wpc_metrics67 = [];
+                            foreach ($wpc_fonts67 as $wpc_fe) {
+                                if ($wpc_f_n >= 6 || !is_array($wpc_fe) || empty($wpc_fe['url'])) {
+                                    continue;
+                                }
+                                $wpc_fu = (string) $wpc_fe['url'];
+                                $wpc_fh = (string) parse_url($wpc_fu, PHP_URL_HOST);
+                                $wpc_fb = basename((string) parse_url($wpc_fu, PHP_URL_PATH));
+                                if (stripos($wpc_fh, 'critical-css-mc.b-cdn.net') === false
+                                    || !preg_match('/^[A-Za-z0-9._-]+\.woff2$/', $wpc_fb)) {
+                                    continue;
+                                }
+                                $wpc_dst = rtrim(WPS_IC_FONTS_DIR, '/') . '/' . $wpc_fb;
+                                if (!file_exists($wpc_dst) || (int) @filesize($wpc_dst) !== (int) ($wpc_fe['bytes'] ?? -1)) {
+                                    $wpc_fr = wp_remote_get($wpc_fu, ['timeout' => 8]);
+                                    $wpc_fbody = (!is_wp_error($wpc_fr) && wp_remote_retrieve_response_code($wpc_fr) === 200)
+                                        ? wp_remote_retrieve_body($wpc_fr) : '';
+                                    if ($wpc_fbody !== '' && strlen($wpc_fbody) <= 65536 && strncmp($wpc_fbody, 'wOF2', 4) === 0) {
+                                        $wpc_ftmp = $wpc_dst . '.tmp.' . getmypid();
+                                        if (wpc_crit_meta_write($wpc_ftmp, $wpc_fbody) !== false) {
+                                            @rename($wpc_ftmp, $wpc_dst);
+                                            $wpc_f_n++;
+                                        }
+                                    }
+                                } else {
+                                    $wpc_f_n++;
+                                }
+                                if (!empty($wpc_fe['fallback']) && is_array($wpc_fe['fallback']) && !empty($wpc_fe['family'])) {
+                                    $wpc_metrics67[(string) $wpc_fe['family']] = $wpc_fe['fallback'];
+                                }
+                            }
+                            if (!empty($wpc_metrics67) && defined('WPS_IC_CRITICAL') && !empty($urlKey)) {
+                                $wpc_md = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+                                if (!is_dir($wpc_md)) {
+                                    @wp_mkdir_p($wpc_md);
+                                }
+                                wpc_crit_meta_write($wpc_md . 'font-metrics.json', wp_json_encode($wpc_metrics67));
+                            }
+                            if ($wpc_f_n > 0 && function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('fonts-landed', $urlKey, '', ['n' => $wpc_f_n, 'metrics' => count($wpc_metrics67)]);
+                            }
+
+
+                            if (apply_filters('wpc_atf_subset_inline', true) && defined('WPS_IC_CRITICAL') && !empty($urlKey)) {
+                                $wpc_sub_css = '';
+                                $wpc_sub_n   = 0;
+
+
+                                
+                                $wpc_all_v2  = true;
+                                foreach ($wpc_fonts67 as $wpc_sfe) {
+                                    $wpc_e_v2 = is_array($wpc_sfe) && (int) ($wpc_sfe['subset_v'] ?? 1) >= 2;
+                                    $wpc_cap69 = $wpc_e_v2 ? 6 : 2;
+                                    if ($wpc_sub_n >= $wpc_cap69 || !is_array($wpc_sfe) || empty($wpc_sfe['url']) || empty($wpc_sfe['family'])) {
+                                        continue;
+                                    }
+                                    if ((int) ($wpc_sfe['bytes'] ?? 999999) > 12288) {
+                                        continue;
+                                    }
+                                    $wpc_sfb = basename((string) parse_url((string) $wpc_sfe['url'], PHP_URL_PATH));
+                                    $wpc_sfp = rtrim(WPS_IC_FONTS_DIR, '/') . '/' . $wpc_sfb;
+                                    if (!preg_match('/^[A-Za-z0-9._-]+\.woff2$/', $wpc_sfb) || !@is_readable($wpc_sfp)) {
+                                        continue;
+                                    }
+                                    $wpc_sfw = @file_get_contents($wpc_sfp);
+                                    if ($wpc_sfw === false || $wpc_sfw === '' || strncmp($wpc_sfw, 'wOF2', 4) !== 0) {
+                                        continue;
+                                    }
+                                    $wpc_sfam = str_replace(["'", "\\", "\r", "\n", '<', '>'], '', (string) $wpc_sfe['family']);
+
+                                    
+                                    
+                                    $wpc_swt = trim(preg_replace('/[^0-9 ]/', '', (string) ($wpc_sfe['weight'] ?? '400')));
+                                    if (!($wpc_e_v2 && !empty($wpc_sfe['variable']) && preg_match('/^\d{2,4} \d{2,4}$/', $wpc_swt))) {
+                                        $wpc_swt = strtok($wpc_swt, ' ');
+                                    }
+                                    $wpc_sst  = (strtolower((string) ($wpc_sfe['style'] ?? 'normal')) === 'italic') ? 'italic' : 'normal';
+                                    $wpc_sur  = preg_replace('/[^0-9A-Fa-fUu+,\- ]/', '', (string) ($wpc_sfe['unicode_range'] ?? ''));
+                                    
+                                    
+                                    
+                                    
+                                    $wpc_srr  = preg_replace('/[^0-9A-Fa-fUu+,\- ]/', '', (string) ($wpc_sfe['remote_range'] ?? ''));
+                                    if ($wpc_sfam === '' || $wpc_swt === '') {
+                                        continue;
+                                    }
+                                    if (!isset($wpc_rr_map)) { $wpc_rr_map = []; }
+                                    
+                                    
+                                    
+                                    if (!isset($wpc_rr_diag)) { $wpc_rr_diag = []; }
+                                    $wpc_rr_diag[] = strtolower($wpc_sfam) . '|' . $wpc_swt . '|' . $wpc_sst
+                                        . ' keys=' . implode(',', array_keys($wpc_sfe))
+                                        . ' ur=' . ($wpc_sur !== '' ? $wpc_sur : '(none)')
+                                        . ' rr=' . ($wpc_srr !== '' ? $wpc_srr : '(NONE)');
+                                    if ($wpc_srr !== '' && $wpc_sur !== '') {
+                                        $wpc_rr_map[strtolower($wpc_sfam) . '|' . $wpc_swt . '|' . $wpc_sst] = $wpc_srr;
+                                    }
+
+
+                                    if (!$wpc_e_v2) { $wpc_all_v2 = false; }
+                                    $wpc_sub_css .= "@font-face{font-family:'" . $wpc_sfam . "';font-weight:" . $wpc_swt
+                                        . ';font-style:' . $wpc_sst . ';src:url(data:font/woff2;base64,' . base64_encode($wpc_sfw)
+                                        . ") format('woff2');" . ($wpc_sur !== '' ? 'unicode-range:' . $wpc_sur . ';' : '')
+                                        . 'font-display:block}';
+                                    $wpc_sub_n++;
+                                }
+                                $wpc_sub_path = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/font-subsets.css';
+                                if ($wpc_sub_css !== '' && $wpc_all_v2 && $wpc_sub_n > 0) {
+                                    $wpc_sub_css = '/*wpc-subsets-v2*/' . $wpc_sub_css;
+                                }
+                                if ($wpc_sub_css !== '') {
+                                    if (!is_dir(dirname($wpc_sub_path))) { @wp_mkdir_p(dirname($wpc_sub_path)); }
+                                    wpc_crit_meta_write($wpc_sub_path, $wpc_sub_css);
+                                    if (function_exists('wpc_cache_first_log')) {
+                                        wpc_cache_first_log('font-subset-built', $urlKey, '', ['n' => $wpc_sub_n, 'bytes' => strlen($wpc_sub_css)]);
+                                    }
+                                } elseif (@is_readable($wpc_sub_path)) {
+                                    @unlink($wpc_sub_path);
+                                }
+                                
+                                
+                                
+                                if (!empty($wpc_rr_diag)) {
+                                    update_option('wpc_fonts_consume_diag', ['t' => time(), 'src' => 'core-callback', 'rows' => array_slice($wpc_rr_diag, 0, 8)], false);
+                                }
+                                if (!empty($wpc_rr_map) && $wpc_sub_css !== '') {
+                                    if (get_option('wpc_font_remote_ranges') !== $wpc_rr_map) {
+                                        update_option('wpc_font_remote_ranges', $wpc_rr_map, false);
+                                        if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('font-remote-ranges', (string) $urlKey, '', ['n' => count($wpc_rr_map), 'src' => 'core']); }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                    }
+                    $wpc_cb_ready = !empty($_GET['ready']) ? sanitize_text_field(urldecode($_GET['ready'])) : '';
+                    if ($wpc_cb_ready !== '' && function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('land-bundle-' . $wpc_cb_ready, $urlKey, (string) $pageUrl, []);
+                    }
+
+
+                    if ($wpc_cb_ready !== '' && function_exists('set_transient')) {
+                        set_transient('wpc_land_ready_' . md5((string) $urlKey), $wpc_cb_ready, 600);
+                    }
+                    $jobStatus[] = $criticalCSS->saveCriticalCss($urlKey, ['url' => ['desktop' => $desktopCriticalCSS, 'mobile' => $mobileCriticalCSS], 'lcp_url' => $wpc_cb_lcp_url, 'lcp_src' => 'callback', 'delay_url' => $wpc_cb_delay_url, 'used_css_url' => $wpc_cb_used_css, 'tpl_key' => $wpc_cb_tpl_key], 'meta', $pageUrl);
+
+                    
                     $mobileLCP = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-mobile';
                     $desktopLCP = 'https://critical-css-mc.b-cdn.net/' . $uuidPart . '/lcp-' . $uuid . '-desktop';
 
                     $jobStatus[] = $criticalCSS->saveLCP($urlKey, ['url' => ['desktop' => $desktopLCP, 'mobile' => $mobileLCP]]);
+
+                    
+                    
+                    
+                    
+                    
+                    try {
+                        $wpc_wire_url67 = !empty($wpc_cb_body['wire_url']) ? sanitize_url((string) $wpc_cb_body['wire_url'])
+                            : (!empty($_GET['wire_url']) ? sanitize_url(urldecode((string) $_GET['wire_url'])) : '');
+                        $wpc_wire_rev67 = isset($wpc_cb_body['wire_rev']) ? (int) $wpc_cb_body['wire_rev']
+                            : (isset($_GET['wire_rev']) ? (int) $_GET['wire_rev'] : 0);
+                        $wpc_wire_sig67 = !empty($wpc_cb_body['wire_sig']) ? (string) $wpc_cb_body['wire_sig']
+                            : (!empty($_GET['wire_sig']) ? sanitize_text_field(urldecode((string) $_GET['wire_sig'])) : '');
+                        if (($wpc_wire_url67 !== '' || $wpc_wire_rev67 > 0) && function_exists('wpc_consume_wire_artifact')) {
+                            wpc_consume_wire_artifact($urlKey, $wpc_wire_url67, $wpc_wire_rev67, $wpc_wire_sig67);
+                        }
+                    } catch (\Throwable $e) {
+                    }
+
+                    if (apply_filters('wpc_lcp_async', true) && defined('WPS_IC_CRITICAL')
+                        && !@is_readable(rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/lcp.json')
+                        && @is_readable(rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/lcp_url.txt')
+                        && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                        && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, 1])) {
+                        if (function_exists('wpc_pl_sched')) {
+                            wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, 1]);
+                        } else {
+                            wp_schedule_single_event(time() + 45, 'wpc_lcp_repull', [$urlKey, 1]);
+                        }
+                    }
 
                     wp_send_json_success($jobStatus);
                 }
@@ -3316,6 +3868,14 @@ class wps_ic
 
                 if ($dbApiKey == $apikey) {
 
+                    
+                    
+                    @ignore_user_abort(true);
+                    if (function_exists('set_time_limit')) { @set_time_limit(180); }
+                    if (!headers_sent()) { http_response_code(200); }
+                    if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+                    elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
+
                     if (!empty($_GET['debug'])) {
                         ini_set('display_errors', 1);
                         error_reporting(E_ALL);
@@ -3329,13 +3889,13 @@ class wps_ic
                     $pageUrl = sanitize_url(urldecode($_GET['pageUrl']));
                     $urlKey = $urlKey->setup($pageUrl);
 
-                    // UUID
+                    
                     $uuidPart = substr($uuid, 0, 4);
 
-                    // Mobile CSS
+                    
                     $mobileCriticalCSS = 'https://critical-css.b-cdn.net/' . $uuidPart . '/' . $uuid . '-mobile.css';
 
-                    // Desktop CSS
+                    
                     $desktopCriticalCSS = 'https://critical-css.b-cdn.net/' . $uuidPart . '/' . $uuid . '-desktop.css';
 
                     if (!class_exists('wps_criticalCss')) {
@@ -3375,10 +3935,10 @@ class wps_ic
     }
 
 
-    /**
-     * Various checks if the plugin should not be running
-     * @return bool
-     */
+    
+
+
+
     public static function dontRunif()
     {
 
@@ -3398,7 +3958,7 @@ class wps_ic
             return true;
         }
 
-        // Fix for Feedzy RSS Feed
+        
         if (!empty($_POST['action']) && ($_POST['action'] == 'feedzy' || $_POST['action'] == 'action' || $_POST['action'] == 'elementor')) {
             return true;
         }
@@ -3431,7 +3991,7 @@ class wps_ic
             return true;
         }
 
-        //GiveWP routes
+        
         if (isset($_GET['givewp-route'])) {
             return true;
         }
@@ -3442,9 +4002,9 @@ class wps_ic
     public static function hiddenAdminArea()
     {
 
-        // AIOS
+        
         if (class_exists('AIO_WP_Security')) {
-            // Hide Login Exists
+            
             $configs = get_option('aio_wp_security_configs');
             if (!empty($configs['aiowps_login_page_slug'])) {
                 if (strpos($_SERVER['REQUEST_URI'], $configs['aiowps_login_page_slug']) !== false) {
@@ -3453,9 +4013,9 @@ class wps_ic
             }
         }
 
-        // WPS Hide Login
+        
         if (class_exists('WPS\WPS_Hide_Login\Plugin')) {
-            // Hide Login Exists
+            
             $loginPage = get_option('whl_page');
             if (!empty($loginPage)) {
                 if (strpos($_SERVER['REQUEST_URI'], '/' . $loginPage) !== false) {
@@ -3464,7 +4024,7 @@ class wps_ic
             }
         }
 
-        // Hide My WP - Ghost
+        
         if (class_exists('HMWP_Classes_ObjController')) {
             $option = get_option('hmwp_options');
 
@@ -3482,43 +4042,43 @@ class wps_ic
     }
 
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilder()
     {
-        $page_builders = ['run_compress', //wpc
-                'run_restore', //wpc
-                'bwc', //bwc
-                'elementor-preview', //elementor
-                'fl_builder', //beaver builder
-                'et_fb', //divi
-                'preview', //WP Preview
-                'builder', //builder
-                'brizy', //brizy
-                'fb-edit', //avada
-                'bricks', //bricks
-                'ct_template', //ct_template
-                'ct_builder', //ct_builder
-                'cs-render', //cs-render
-                'tatsu', //tatsu
-                'trp-edit-translation', //thrive
-                'brizy-edit-iframe', //brizy
-                'ct_builder', //oxygen
-                'livecomposer_editor', //livecomposer
-                'tatsu', //tatsu
-                'tatsu-header', //tatsu-header
-                'tatsu-footer', //tatsu-footer
-                'tve',//thrive
-                'is-editor-iframe',//thrive
+        $page_builders = ['run_compress',
+                'run_restore',
+                'bwc',
+                'elementor-preview',
+                'fl_builder',
+                'et_fb',
+                'preview', 
+                'builder',
+                'brizy',
+                'fb-edit',
+                'bricks',
+                'ct_template',
+                'ct_builder',
+                'cs-render',
+                'tatsu',
+                'trp-edit-translation',
+                'brizy-edit-iframe',
+                'ct_builder',
+                'livecomposer_editor',
+                'tatsu',
+                'tatsu-header',
+                'tatsu-footer',
+                'tve',
+                'is-editor-iframe',
                 'pagelayer-live'];
 
         if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false) {
             return true;
         }
 
-        if (!empty($_POST['_cs_nonce'])) { //cornerstone
+        if (!empty($_POST['_cs_nonce'])) {
             return false;
         }
 
@@ -3527,12 +4087,12 @@ class wps_ic
         }
 
         if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
-            //brizyFrontend fix
+
             return true;
         }
 
         if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-            //optimizePress builder fix
+
             return true;
         }
 
@@ -3554,10 +4114,10 @@ class wps_ic
     }
 
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilderFE()
     {
         if (class_exists('BT_BB_Root')) {
@@ -3610,9 +4170,7 @@ class wps_ic
         return $settings;
     }
 
-    /***
-     * In Admin Area
-     */
+
     public function inAdmin()
     {
         add_action('current_screen', function () {
@@ -3634,18 +4192,18 @@ class wps_ic
         $this->enqueues = new wps_ic_enqueues();
         $this->runInitialTest();
 
-        // Force Disable Elementor Cache
+        
+        
+        
+        
+        
         $elementCache = get_option('elementor_element_cache_ttl');
-        if (!empty($elementCache)) {
-            if (!empty($elementCache) && $elementCache !== 'disable') {
-                update_option('elementor_element_cache_ttl', false);
+        if ($elementCache !== false && !get_option('wpc_elementor_ec_set')) {
+            if ((string) $elementCache !== 'disable') {
+                update_option('elementor_element_cache_ttl', 'disable');
             }
+            update_option('wpc_elementor_ec_set', 1, false);
         }
-
-        // Connectivity probe removed (v7.03.31): simpleConnectivityTest() blocked the admin render up to
-        // 30s on first link to set wpc-connectivity-status. That verdict is now orphaned — critical CSS
-        // moved to crit-push.zapwp.net (which self-checks reachability from its own vantage) and nothing
-        // in warmup/bulk reads it. Do NOT re-add a blocking reachability probe on the render path here.
 
 
         if (current_user_can('manage_wpc_settings') && !empty($this::$options['api_key'])) {
@@ -3653,17 +4211,20 @@ class wps_ic
                 include_once WPS_IC_DIR . 'classes/htaccess.class.php';
             }
 
-            // Htaccess
+            
             $htaccess = new wps_ic_htaccess();
-            // Integrations
+            
             $this->integrations->init();
         }
 
 
-        //check if zone name needs fixing
-        if (!empty($this::$options['api_key']) && empty($this::$zone_name) && get_option('wps_ic_allow_live') !== false) {
+        if (!empty($this::$options['api_key']) && empty($this::$zone_name) && get_option('wps_ic_allow_live') !== false
+            && !(function_exists('wp_doing_ajax') && wp_doing_ajax())
+            && (time() - (int) get_option('wpc_zone_backfill_at')) > HOUR_IN_SECONDS) {
+            
+            update_option('wpc_zone_backfill_at', time(), false);
             $url = 'https://apiv3.wpcompress.com/api/site/credits';
-            $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $this::$options['api_key'], 'plugin-version' => self::$version]]);
+            $call = wp_remote_get($url, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $this::$options['api_key'], 'plugin-version' => self::$version]]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
@@ -3676,65 +4237,63 @@ class wps_ic
             }
         }
 
-        // Run Multisite
+        
         if (is_multisite()) {
             $this->mu = new wps_ic_mu();
         }
 
-        // Setup Plugin Settings if Empty
+        
         if (!$this::$settings) {
             $options = new wps_ic_options();
             $options->set_recommended_options();
         }
 
-        // Fix to enabled preload-scripts on all sites!
+        
         $settings = get_option(WPS_IC_SETTINGS);
         if (empty($this::$settings['preload-scripts'])) {
             $settings['preload-scripts'] = '1';
             update_option(WPS_IC_SETTINGS, $settings);
         }
 
-        // Is cache enabled?
+        
         if (!empty(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') {
             if (!class_exists('wps_ic_htaccess')) {
                 include_once WPS_IC_DIR . 'classes/htaccess.class.php';
             }
 
-            //Check if another plugin set it to false
+            
             $htacces = new wps_ic_htaccess();
 
             if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
-                // Modify HTAccess
-                #$htacces->checkHtaccess();
+                
+                
             } else {
                 $htacces->removeHtaccessRules();
             }
 
-            // On CDN sites the edge owns format negotiation, so an origin
-            // .htaccess webp rewrite would double-negotiate (and silently re-add
-            // the block each admin load). Emit the origin rule only on non-CDN
-            // sites; strip it when live CDN is on (mirrors the settings-save writer).
+
             $wpc_livecdn = !empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1';
             if (!$wpc_livecdn && !empty(self::$settings['generate_webp']) && self::$settings['generate_webp'] == '1') {
-                $htacces->addWebpReplace(); // SHould be addWebP
+                $htacces->addWebpReplace(); 
             } else {
                 $htacces->removeWebpReplace();
             }
 
-            // Add WP_CACHE to wp-config.php
+            
             $htacces->setWPCache(true);
             $htacces->setAdvancedCache();
 
-            // Add mod_Deflate to Htaccess
+            
             if ($htacces->isApache()) {
                 $htacces->addGzip();
             }
         }
 
 
-        // Deactivate Notification
+        
         add_action('admin_footer', ['wps_ic', 'deactivate_script']);
         add_action('admin_footer', ['wps_ic', 'checkQuotaStatus']);
+        add_action('wpc_quota_status_refresh', ['wps_ic', 'checkQuotaStatusRefresh']);
 
         $this->cache = new wps_ic_cache_integrations();
         $this->cacheLogic = new wps_ic_cache();
@@ -3745,27 +4304,29 @@ class wps_ic
             include_once WPS_IC_DIR . 'classes/log.class.php';
         }
 
-        $this->log = new wps_ic_log();
+        if (class_exists('wps_ic_log')) {
+            $this->log = new wps_ic_log();
+        }
 
         $this->templates = new wps_ic_templates();
         $this->notices = new wps_ic_notices();
 
-        // Elementor Purge Integration
+        
         add_action('elementor/document/after_save', [$this->cacheLogic, 'purgeElementorCache'], 10, 2);
 
-        // Select Modes
+        
         $modes = new wps_ic_modes();
         add_action('admin_footer', [$modes, 'showPopup']);
 
-        // Purge Hooks
+        
         $this->cacheLogic->purgeHooks();
 
         add_filter('big_image_size_threshold', [$this, 'maxImageWidth'], 999, 1);
 
-        // Connect to API Notice
+        
         $this->notices->connect_api_notice();
 
-        // Ajax
+        
         if (empty(self::$settings['css']) && empty(self::$settings['js']) && empty(self::$settings['serve']['jpg']) && empty(self::$settings['serve']['png']) && empty(self::$settings['serve']['gif']) && empty(self::$settings['serve']['svg'])) {
             $this->localMode();
         } else {
@@ -3789,7 +4350,7 @@ class wps_ic
         $this::$settings = $this->fillMissingSettings($this::$settings);
 
         if (empty($this::$settings['live-cdn']) || $this::$settings['live-cdn'] == '0') {
-            // Is it some remote call?
+            
             if (!empty($_GET['apikey'])) {
                 if (self::$api_key !== sanitize_text_field($_GET['apikey'])) {
                     die('Bad Call');
@@ -3810,7 +4371,7 @@ class wps_ic
     {
 
         if (!empty($_GET['forceInitial'])) {
-            // Set flag to run the test
+            
             set_transient('wpc_run_initial_test', 'true', 5 * 60);
         }
 
@@ -3818,19 +4379,19 @@ class wps_ic
             delete_transient('wpc_initial_test');
         }
 
-        // Flag should we force run test?
+        
         $initial = get_transient('wpc_run_initial_test');
 
-        // Flag if the test is running
+        
         $initialTestRunning = get_transient('wpc_initial_test');
 
-        // Get previous score (if any)
+        
         $initialPageSpeedScore = get_option(WPS_IC_LITE_GPS);
 
-        // Get Settings
+        
         $options = get_option(WPS_IC_OPTIONS);
 
-        // Don't run if api_key not existing!
+        
         if (empty($options['api_key'])) {
             return false;
         }
@@ -3839,13 +4400,13 @@ class wps_ic
 
             $apikey = $options['api_key'];
 
-            // Set the flag that test is ran
+            
             set_transient('wpc_initial_test', 'true', 24 * 60 * 60);
 
-            // Delete flag which forces the run of the test
+            
             delete_transient('wpc_run_initial_test');
 
-            // Save history of tests
+            
             $history = get_option(WPS_IC_LITE_GPS_HISTORY);
             if (empty($history)) {
                 $history = [];
@@ -3853,7 +4414,7 @@ class wps_ic
             $history[time()] = get_option(WPS_IC_LITE_GPS);
             update_option(WPS_IC_LITE_GPS_HISTORY, $history);
 
-            // Remove Tests
+            
             delete_option(WPS_IC_TESTS);
             delete_option(WPS_IC_LITE_GPS);
             delete_option(WPC_WARMUP_LOG_SETTING);
@@ -3861,21 +4422,19 @@ class wps_ic
 
             $requests = new wps_ic_requests();
 
-            // (v7.10.08) Thread a PLUGIN-generated uuid end-to-end so the fire-and-forget result is
-            // POLLABLE. The old dispatch sent a throwaway `hash` the server ignored (it self-assigned an
-            // id + the worker overwrote it with its own uuidv4), so get-results was keyed on an id nothing
-            // outside the worker could ever learn — the plugin waited on a push callback that doesn't exist
-            // → the card hung forever (activeJobs:0). pagespeed-mc v1.49.0 accepts this client uuid|hash and
-            // threads it to the file name. We stash it so the first-run self-heal can pull
-            // get-results/{uuid} status-first (symmetric with crit's /status?uuid=). Backward-compatible:
-            // an older server keys on its own id, get-results 404s, and the self-heal re-dispatches.
+
             $psiUuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
             set_transient('wpc_psi_uuid', $psiUuid, 30 * 60);
 
-            // Test
+            
             $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'uuid' => $psiUuid, 'hash' => $psiUuid, 'apikey' => $apikey];
             $args['features'] = self::getActiveFeatures();
-            // Fire-and-forget dispatch; the plugin PULLS get-results/{uuid} (no push callback exists).
+
+
+            if (apply_filters('wpc_psi_clean_after', true)) {
+                $args['clean_after'] = 1;
+            }
+            
             $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
         }
     }
@@ -3891,9 +4450,9 @@ class wps_ic
         $this->mu = new wps_ic_mu();
     }
 
-    /**
-     * Reset local image status
-     */
+    
+
+
     public function reset_local_compress()
     {
         $queue = $this->media_library->find_compressed_images();
@@ -3910,9 +4469,9 @@ class wps_ic
         }
     }
 
-    /**
-     * In Frontend Area
-     */
+    
+
+
     public function inFrontEnd()
     {
         add_action('wp', [$this, 'do_enqueues']);
@@ -3920,49 +4479,64 @@ class wps_ic
         $local = new wps_local_compress();
         $local->routes();
 
-        /**
-         * Integrations
-         */
+        
+
+
         $this->integrations->apply_frontend_filters();
 
-        /**
-         * Disable oEmbed if Enabled
-         */
+        
+
+
         if (!empty($this::$settings['disable-oembeds']) && $this::$settings['disable-oembeds'] == '1') {
             $oEmbed = new wps_ic_oEmbed();
             $oEmbed->run();
         }
 
-        /**
-         * Disable Dashicons if Enabled
-         */
+        
+
+
         if (!empty($this::$settings['disable-dashicons']) && $this::$settings['disable-dashicons'] == '1') {
             add_action('wp_enqueue_scripts', [$this, 'disableDashicons'], 999);
         }
 
-        /**
-         * Disable Gutenberg if Enabled
-         */
+        
+
+
         if (!empty($this::$settings['disable-gutenberg']) && $this::$settings['disable-gutenberg'] == '1') {
             add_action('wp_enqueue_scripts', [$this, 'disableGutenberg'], 1);
         }
 
 
-        /**
-         * Run API Critical CSS Generating
-         * - Our API calls url with this GET parameter so that it runs critical generating
-         */
+        
+
+
+
         if (!empty($_GET['apiGenerateCritical'])) {
+            $wpc_agc_opts = get_option(WPS_IC_OPTIONS);
+            $wpc_agc_key = isset($_GET['apikey']) ? (string) $_GET['apikey'] : '';
+            if (empty($wpc_agc_opts['api_key']) || $wpc_agc_key === '' || !hash_equals((string) $wpc_agc_opts['api_key'], $wpc_agc_key)
+                || ((time() - (int) get_option('wpc_apigen_at')) < 60 && !update_option('wpc_apigen_at', time(), false))) {
+                wp_send_json_error('unauthorized');
+            }
+            update_option('wpc_apigen_at', time(), false);
+            
+            
+            $GLOBALS['wpc_gen_force496'] = 1;
             $criticalCSS = new wps_criticalCss();
             $criticalCSS->sendCriticalUrl('', 0);
             wp_send_json_success();
         }
 
-        /**
-         * Run Preloader API
-         * - Our API calls url with this GET parameter so that it runs critical generating
-         */
+        
+
+
+
         if (!empty($_GET['apiPreload'])) {
+            $wpc_apl_opts = get_option(WPS_IC_OPTIONS);
+            $wpc_apl_key = isset($_GET['apikey']) ? (string) $_GET['apikey'] : '';
+            if (empty($wpc_apl_opts['api_key']) || $wpc_apl_key === '' || !hash_equals((string) $wpc_apl_opts['api_key'], $wpc_apl_key)) {
+                wp_send_json_error('unauthorized');
+            }
             $criticalCSS = new wps_criticalCss();
             $criticalCSS->sendCriticalUrl('', 0);
             wp_send_json_success();
@@ -3970,18 +4544,18 @@ class wps_ic
 
         $this->ajax = new wps_ic_ajax();
 
-        /**
-         * Run only if Current URL is not login or register
-         * TODO: Maybe add some way to recognize custom login/register urls?
-         */
+        
+
+
+
         if (!in_array($_SERVER['PHP_SELF'], ['/wp-login.php', '/wp-register.php'])) {
             $this->menu = new wps_ic_menu();
 
-            /**
-             * Live CDN is Disabled
-             */
+            
+
+
             if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
-                //Moved this to buffer_callback_v3 because here we dont have page ID yet
+                
                 $this->comms = new wps_ic_comms();
             } else {
                 if (!empty(self::$api_key)) {
@@ -4017,12 +4591,8 @@ class wps_ic
                 self::$settings['serve']['svg'] = $page_excludes['cdn'];
             }
 
-            // Per-page Force On / Off / Global for the JavaScript row in Smart
-            // Optimization writes to $page_excludes['delay_js']. The active V2 placeholder
-            // gate at enqueues.class.php:181 reads self::$settings['delay-js-v2'], so the
-            // override has to drive THAT key (not the dead V1 'delay-js' setting). Backward
-            // compat fallback handles any pre-7.01.13 installs that saved under the legacy
-            // 'delay_js_v2' storage key.
+
+            
             if (isset($page_excludes['delay_js'])) {
                 self::$settings['delay-js-v2'] = $page_excludes['delay_js'];
             } elseif (isset($page_excludes['delay_js_v2'])) {
@@ -4034,7 +4604,7 @@ class wps_ic
             }
         }
 
-        //enqueue inherits these settings
+
         $this->enqueues = new wps_ic_enqueues();
     }
 
@@ -4047,10 +4617,10 @@ class wps_ic
         return $home_url === $current_url;
     }
 
-    /**
-     * Remove Dashicons if the admin bar is not showing and user is not in customizer
-     * @return void
-     */
+    
+
+
+
     public function disableDashicons()
     {
         if (!is_admin_bar_showing() && !is_customize_preview()) {
@@ -4059,23 +4629,23 @@ class wps_ic
         }
     }
 
-    /**
-     * Remove Gutenberg CSS Block
-     * @return void
-     */
+    
+
+
+
     public function disableGutenberg()
     {
-        // blocks
+
         wp_deregister_style('wp-block-library');
         wp_dequeue_style('wp-block-library');
         wp_deregister_style('wp-block-library-theme');
         wp_dequeue_style('wp-block-library-theme');
 
-        // theme.json
+
         wp_deregister_style('global-styles');
         wp_dequeue_style('global-styles');
 
-        // svg
+
         remove_action('wp_enqueue_scripts', 'wp_enqueue_global_styles');
         remove_action('wp_body_open', 'wp_global_styles_render_svg_filters');
     }
@@ -4086,7 +4656,7 @@ class wps_ic
             return 2560;
         }
 
-        return self::$settings['max-original-width']; // new threshold
+        return self::$settings['max-original-width'];
     }
 
 
@@ -4119,10 +4689,10 @@ class wps_ic
     }
 
 
-    /**
-     * GeoLocation which is required for Local to work faster
-     * @return void
-     */
+    
+
+
+
     public function geoLocate()
     {
         $call = wp_remote_get('https://cdn.zapwp.net/?action=geo_locate&domain=' . urlencode(site_url()), ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
@@ -4162,19 +4732,19 @@ function wpc_convert_to_bytes($value) {
 
 function wps_ic_format_bytes($bytes, $force_unit = null, $format = null, $si = false)
 {
-    // Format string
+    
     $format = ($format === null) ? '%01.2f %s' : (string)$format;
 
-    // IEC prefixes (binary)
+    
     if (!$si or strpos($force_unit, 'i') !== false) {
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $mod = 1000;
-    } // SI prefixes (decimal)
+    } 
     else {
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $mod = 1000;
     }
-    // Determine unit to use
+    
     if (($power = array_search((string)$force_unit, $units)) === false) {
         $power = ($bytes > 0) ? floor(log($bytes, $mod)) : 0;
     }
@@ -4205,22 +4775,16 @@ function wps_ic_size_format($bytes, $decimals)
 }
 
 
-// Bootstrap-skip gate for /wpc/v2/bg_swap REST callbacks. Everything the handler
-// needs is already loaded above (helpers, the REST route, the autoloader, the
-// wps_ic class def). Below this point we'd instantiate wps_ic + the CDN rewriter
-// + 40+ hooks, none of which the bg_swap callback uses — it runs purely from the
-// REST route and WP core. Returning here saves the ~5-7s of that bootstrap.
-// Universal-host safe; no behavioral change for any other request type.
 if (defined('WPC_IS_BG_SWAP') && WPC_IS_BG_SWAP) {
     return;
 }
 
-// TODO: Maybe it's required on some themes?
-// Backend
+
+
 $wpsIc = new wps_ic();
 add_action('init', [$wpsIc, 'init'], 100);
 
-// Frontend do replace
+
 if (!class_exists('wps_cdn_rewrite', false)) {
     $cdn_file = __DIR__ . '/addons/cdn/cdn-rewrite.php';
     if (is_readable($cdn_file)) {
@@ -4232,11 +4796,11 @@ if (!$wpsIc->isAgencyPortal() && class_exists('wps_cdn_rewrite', false)) {
     $cdn = new wps_cdn_rewrite();
     $wps_ic_cdn_instance = $cdn;
 } else {
-    // Fail closed: prevent fatal if CDN module is unavailable or agency portal is active
+    
     $wps_ic_cdn_instance = null;
 }
 
-// Check if plugin is connected with API
+
 if (isset($cdn) && $cdn->isActive()) {
     add_action('plugins_loaded', [$cdn, 'checkCache_plugins_loaded'], 1);
     add_action('init', [$cdn, 'checkCache'], 1);
@@ -4246,15 +4810,15 @@ if (isset($cdn) && $cdn->isActive()) {
     add_action('template_redirect', [$elementor, 'intercept_css_404'], 1);
 }
 
-// Upgrader - After Install
+
 add_filter('upgrader_post_install', ['wps_ic_cache', 'updateCSSHash'], 1);
 add_filter('upgrader_post_install', [$wpsIc, 'deleteTests'], 1);
 
-// Upgrader - On Complete
+
 add_action('upgrader_process_complete', ['wps_ic_cache', 'updateCSSHash'], 1);
 add_action('upgrader_process_complete', ['wps_ic_cache', 'purgeCDNUpdate'], 1);
 
-// One-time CF bypass rule migration (async via WP Cron)
+
 add_action('wpc_migrate_cf_bypass', function() {
     $cf = get_option(WPS_IC_CF);
     if (!empty($cf['token']) && !empty($cf['zone'])) {
@@ -4263,54 +4827,60 @@ add_action('wpc_migrate_cf_bypass', function() {
     }
 });
 
-// Activation of Plugin
+
 add_action('activate_plugin', ['wps_ic_cache', 'updateCSSHash'], 1);
 add_action('activate_plugin', [$wpsIc, 'deleteTests'], 1);
 add_action('activated_plugin', ['wps_ic_cache', 'purgeCDNUpdate'], 1);
 
-// Deactivation of Plugin
+
 add_action('deactivate_plugin', [$wpsIc, 'deactivation'], 1, 1);
 
-// On Plugins Loaded - Every build of WP-Admin
-add_action('plugins_loaded', [$wpsIc, 'checkPluginVersion'], PHP_INT_MAX);
+
+
+
+add_action('admin_init', [$wpsIc, 'checkPluginVersion'], 1);
 add_action('plugins_loaded', 'wpcCheckCredits', PHP_INT_MAX);
 
-// WP Core Hooks
+
 register_activation_hook(WPC_CC_PLUGIN_FILE, [$wpsIc, 'activation']);
 register_deactivation_hook(WPC_CC_PLUGIN_FILE, [$wpsIc, 'deactivation']);
 register_uninstall_hook(WPC_CC_PLUGIN_FILE, 'wpcUninstall');
 
-// Register API Hooks
+
 add_action('rest_api_init', function () {
-    // Rest API
+    
     $local = new wps_local_compress();
     $local->registerEndpoints();
 });
 
-// Re-test loopback whenever plugin settings change
+
 add_action('update_option_' . WPS_IC_SETTINGS, function () {
     delete_option('wpc_loopback_status');
-    // testLoopback() caches via a 1h transient to avoid a blocking re-POST on
-    // every admin pageview; clear it on a save so the re-test runs fresh (the
-    // hourly cap only suppresses unrelated pageviews).
+
+
     delete_transient('wpc_loopback_test_at');
 });
 
-// Test loopback once on admin load (non-blocking, cached after first run)
+
 add_action('admin_init', function () {
-    // testLoopback() is a blocking ~5s POST. Never run it on admin-ajax — it
-    // would stall the post-save round-trip; it runs on the next regular page load.
+
+
     if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     if (get_option('wpc_loopback_status', '') !== '') return;
-    $local = new wps_local_compress();
-    $local->testLoopback();
+    
+    
+    add_action('shutdown', function () {
+        
+        
+        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+        elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
+        if (function_exists('ignore_user_abort')) { ignore_user_abort(true); }
+        $local = new wps_local_compress();
+        $local->testLoopback();
+    }, PHP_INT_MAX);
 }, 99);
 
-// One-time reconcile of the legacy per-format image serve-keys to the single
-// "Images" tile. Old installs could persist a split state (jpg=1, png=0); the
-// tile binds to serve[jpg] but the rewriters read each format key separately, so
-// a split would show the tile ON while other formats serve from origin. Collapse
-// all four to one value (ON if any was on). Idempotent; self-disables via the flag.
+
 add_action('admin_init', function () {
     if (get_option('wpc_serve_keys_reconciled_v70121')) return;
     $s = get_option(WPS_IC_SETTINGS);
@@ -4329,60 +4899,25 @@ add_action('admin_init', function () {
     update_option('wpc_serve_keys_reconciled_v70121', 1);
 }, 98);
 
-// v7.02.48 — Auto-enable CloudFlare's FREE Tiered Cache on the connected zone (once per site).
-// Tiered Cache serves every CF edge POP from a warm regional upper-tier instead of hitting the origin
-// per-POP, so the homepage origin warm (.47) propagates to the whole edge off ONE origin fetch. The CF
-// PATCH is idempotent ('on' when already on = no-op); runs once (flag), backs off 6h on failure, and is
-// opt-out via the wpc_cf_tiered_cache filter. Only touches zones the customer already connected to WPC.
-add_action('admin_init', function () {
-    if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
-    if (get_option('wpc_cf_tiered_cache_done')) return;
-    if (!apply_filters('wpc_cf_tiered_cache', true)) return;
-    if (get_transient('wpc_cf_tiered_cache_retry')) return; // failure backoff — don't hammer the CF API
-    $cf = get_option(WPS_IC_CF);
-    if (empty($cf['zone']) || empty($cf['token'])) return; // CF not connected → nothing to enable
-    if (!defined('WPS_IC_DIR') || !file_exists(WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php')) return;
-    require_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
-    if (!class_exists('WPC_CloudflareAPI')) return;
-    try {
-        $api = new WPC_CloudflareAPI($cf['token']);
-        // The SDK already has setTieredCache($zoneId, $enabled) — but its only caller
-        // (updateWPCCacheConfig) is dead code, so Tiered Cache never actually got turned on. This
-        // admin_init pass is what makes it real for connected zones (idempotent CF PATCH).
-        $res = $api->setTieredCache($cf['zone'], true);
-        if (!is_wp_error($res) && !empty($res)) {
-            update_option('wpc_cf_tiered_cache_done', time(), false); // success → run once
-        } else {
-            set_transient('wpc_cf_tiered_cache_retry', 1, 6 * HOUR_IN_SECONDS);
-        }
-    } catch (\Throwable $e) {
-        set_transient('wpc_cf_tiered_cache_retry', 1, 6 * HOUR_IN_SECONDS);
-    }
-}, 97);
 
-// v7.02.51 — "Source Hints" toggle (Other Optimizations → Media & Assets), binary to match the grid.
-// settings['emit-src-hints'] = '1' (ON) | '0' (OFF) | unset (default → the baked-ON baseline). It rides
-// the wpc_src_hint_enabled filter, which src_hint_enabled() applies LAST — after the per-zone orch mirror
-// and the baked-ON global baseline — so an explicit ON/OFF beats the orch; unset = no override.
+
+
+
+
 add_filter('wpc_src_hint_enabled', function ($on) {
     $s = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : null;
     if (is_array($s) && isset($s['emit-src-hints'])) {
         $v = (string) $s['emit-src-hints'];
-        if ($v === '1') return true;   // toggle ON  → emit hints
-        if ($v === '0') return false;  // toggle OFF → escape hatch (beats the orch)
+        if ($v === '1') return true;
+        if ($v === '0') return false;
     }
-    return $on; // unset → baked-on baseline / orch decision
+    return $on;
 }, 20);
 
 
-// ─── Backup cleanup: delete files older than 30 days ─────────────
-// TODO: Enable when backup cleanup is a toggle in plugin settings
-/*
-add_action('wpc_cleanup_backups', 'wpc_do_cleanup_backups');
-if (!wp_next_scheduled('wpc_cleanup_backups')) {
-    wp_schedule_event(time(), 'daily', 'wpc_cleanup_backups');
-}
-*/
+
+
+
 
 function wpc_do_cleanup_backups() {
     $backupDir = WP_CONTENT_DIR . '/wpc-backups/';
@@ -4404,14 +4939,14 @@ function wpc_do_cleanup_backups() {
         }
     }
 
-    // Clean up empty directories
+    
     $dirs = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($backupDir, RecursiveDirectoryIterator::SKIP_DOTS),
         RecursiveIteratorIterator::CHILD_FIRST
     );
     foreach ($dirs as $dir) {
         if ($dir->isDir()) {
-            @rmdir($dir->getPathname()); // Only removes if empty
+            @rmdir($dir->getPathname()); 
         }
     }
 
@@ -4421,7 +4956,7 @@ function wpc_do_cleanup_backups() {
 }
 
 
-// Fired when someone clicks "Deactivate (keep data)"
+
 add_action('admin_action_deactivate_and_disconnect', 'wpc_deactivate_delete_date');
 
 add_action( 'init', 'wps_ic_load_textdomain' );
@@ -4434,7 +4969,7 @@ function wps_ic_load_textdomain() {
     );
 }
 
-// Purge HTML cache when redirect plugins save rules (admin only)
+
 add_action('update_option_wf301_redirect_rules', 'wpc_purge_redirect_cache', 10, 2);
 add_action('update_option_301_redirects', 'wpc_purge_redirect_cache', 10, 2);
 add_action('update_option_ts_301_redirection', 'wpc_purge_redirect_cache', 10, 2);
@@ -4470,7 +5005,7 @@ function wpcUninstall()
 
         $json_data = json_encode($data);
 
-        $url = 'https://frankfurt.zapwp.net/uninstall/uninstall.php'; // Replace with your actual URL
+        $url = 'https://frankfurt.zapwp.net/uninstall/uninstall.php'; 
 
         $args = ['body' => $json_data, 'timeout' => '5', 'redirection' => '5', 'httpversion' => '1.0', 'blocking' => true, 'headers' => ['Content-Type' => 'application/json',],];
 
@@ -4489,8 +5024,20 @@ function wpcGetHeader($headerName)
 function wpcCheckCredits()
 {
 
+    
+    if (!is_admin()) {
+        return;
+    }
+
     $transient_key = 'wps_ic_credits_check';
     if (get_transient($transient_key)) {
+        return;
+    }
+
+    
+    
+    $wpc_ccf12 = (int) get_option('wpc_credits_check_at');
+    if (time() - $wpc_ccf12 < 12 * HOUR_IN_SECONDS) {
         return;
     }
 
@@ -4500,11 +5047,15 @@ function wpcCheckCredits()
         return;
     }
 
+    update_option('wpc_credits_check_at', time(), false);
+
     $url = 'https://apiv3.wpcompress.com/api/site/credits';
-    $call = wp_remote_get($url, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
+
+
+    $call = wp_remote_get($url, ['timeout' => (int) apply_filters('wpc_credits_check_timeout', 2), 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'], 'plugin-version' => wps_ic::$version]]);
 
     if (is_wp_error($call)) {
-        // Short cooldown so a sick API isn't re-hit on every request
+        
         set_transient($transient_key, true, MINUTE_IN_SECONDS);
         return;
     }
@@ -4513,7 +5064,7 @@ function wpcCheckCredits()
     $response_code = wp_remote_retrieve_response_code($call);
 
     if ($response_code !== 200) {
-        // Short cooldown so a sick API isn't re-hit on every request
+        
         set_transient($transient_key, true, MINUTE_IN_SECONDS);
         return;
     }
@@ -4521,6 +5072,7 @@ function wpcCheckCredits()
     $data = json_decode($body);
 
     if (json_last_error() !== JSON_ERROR_NONE) {
+        set_transient($transient_key, true, 15 * MINUTE_IN_SECONDS);
         return;
     }
 
@@ -4532,10 +5084,10 @@ function wpcCheckCredits()
         $allow_live = false;
     }
 
-    $updated_local = update_option('wps_ic_allow_local', $allow_local);
-    $updated_live = update_option('wps_ic_allow_live', $allow_live);
+    $updated_local = ((bool) $allow_local !== (bool) get_option('wps_ic_allow_local')) ? update_option('wps_ic_allow_local', $allow_local) : false;
+    $updated_live = ((bool) $allow_live !== (bool) get_option('wps_ic_allow_live')) ? update_option('wps_ic_allow_live', $allow_live) : false;
 
-    // If Local or Live Capabilities Changed, Purge
+    
     if ($updated_local || $updated_live) {
         if (class_exists('wps_ic_cache_integrations')) {
             $cache = new wps_ic_cache_integrations();
@@ -4546,7 +5098,26 @@ function wpcCheckCredits()
     set_transient($transient_key, true, 43200);
 }
 
-// Fired when someone clicks "Deactivate & delete data"
+
+add_action('admin_init', function () {
+    if (!apply_filters('wpc_autoload_debloat', true)) {
+        return;
+    }
+    $ver = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '0';
+    if (get_option('wpc_autoload_debloat_v') === $ver) {
+        return;
+    }
+    global $wpdb;
+    $names = ['wps_ic_purge_rules', 'wps_ic_parsed_images', 'wps_ic_excluded_list', 'wps-ic-background-compress-queue', 'wps_ic_mu_site_list'];
+    $in = implode(',', array_map(function ($n) { return "'" . esc_sql($n) . "'"; }, $names));
+    $wpdb->query("UPDATE {$wpdb->options} SET autoload = 'no' WHERE option_name IN ($in) AND autoload IN ('yes','on','auto','auto-on','auto-yes')");
+    if (function_exists('wp_cache_delete')) {
+        wp_cache_delete('alloptions', 'options');
+    }
+    update_option('wpc_autoload_debloat_v', $ver, false);
+}, 1);
+
+
 function wpc_deactivate_delete_date()
 {
     $plugin = isset($_GET['plugin']) ? sanitize_text_field(wp_unslash($_GET['plugin'])) : '';
@@ -4559,7 +5130,7 @@ function wpc_deactivate_delete_date()
 
 function wpc_delete_and_remove_data()
 {
-    // Remove cron jobs
+    
     $timestamp = wp_next_scheduled('runCronPreload');
     if ($timestamp) {
         wp_unschedule_event($timestamp, 'runCronPreload');
@@ -4569,15 +5140,15 @@ function wpc_delete_and_remove_data()
         include_once WPS_IC_DIR . 'classes/htaccess.class.php';
     }
 
-    // Remove HtAccess Rules
+    
     $htaccess = new wps_ic_htaccess();
     $htaccess->removeHtaccessRules();
 
-    // Add WP_CACHE to wp-config.php
+    
     $htaccess->setWPCache(false);
     $htaccess->removeAdvancedCache();
 
-    // Purge Cached Files
+    
     $cacheLogic = new wps_ic_cache();
     if (file_exists(WPS_IC_CACHE)) {
         $cacheLogic::deleteFolder(WPS_IC_CACHE);
@@ -4591,16 +5162,16 @@ function wpc_delete_and_remove_data()
         $cacheLogic::deleteFolder(WPS_IC_COMBINE);
     }
 
-    // Remove Stats Transients
+    
     delete_transient('wps_ic_live_stats');
     delete_transient('wps_ic_local_stats');
 
-    // Remove generateCriticalCSS Options
+    
     delete_option('wps_ic_gen_hp_url');
     delete_option(WPS_IC_GUI);
     delete_option('wps_log_critCombine');
 
-    // Remove Tests
+    
     delete_option(WPS_IC_TESTS);
     delete_transient('wpc_test_running');
     delete_transient('wpc_initial_test');
@@ -4608,12 +5179,12 @@ function wpc_delete_and_remove_data()
     delete_option(WPC_WARMUP_LOG_SETTING);
     delete_option('wpc_psi_insights');
 
-    // Multisite Settings
+    
     $settings = get_option(WPS_IC_MU_SETTINGS);
     $settings['hide_compress'] = 0;
     update_option(WPS_IC_MU_SETTINGS, $settings);
 
-    // Remove from active on API
+    
     $options = get_option(WPS_IC_OPTIONS);
     $site = site_url();
     $apikey = $options['api_key'];
@@ -4632,16 +5203,16 @@ function wpc_delete_and_remove_data()
         $cfapi->removeCacheRules($zone);
     }
 
-    // Setup URI
+    
     $uri = WPS_IC_KEYSURL . '?action=disconnect&apikey=' . $apikey . '&site=' . urlencode($site);
 
-    // Verify API Key is our database and user has is confirmed getresponse
+    
     $get = wp_remote_get($uri, ['timeout' => 5, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
     deactivate_plugins('wp-compress-image-optimizer/wp-compress.php');
 
     if (get_option('pause_wpcompress_plugin_full_delete')){
-        //request from WL
+
         delete_option('pause_wpcompress_plugin_full_delete');
         delete_plugins(['wp-compress-image-optimizer/wp-compress.php']);
 
@@ -4655,17 +5226,10 @@ function wpc_delete_and_remove_data()
     }
     wp_safe_redirect(admin_url('plugins.php?deactivate=true'));
 }
-/**
- * Favicon micro-optimization — core's /favicon.ico is an uncached 302 to the
- * w-logo png (two requests per session). Only fires when WP handles the favicon
- * (a physical favicon.ico is served by the webserver and never reaches here):
- *   - Site Icon set: 301 (cacheable a day) instead of core's 302;
- *   - no Site Icon:  stream the default w-logo png directly with a 1-year cache.
- * Disable via the wpc_favicon_optimize filter.
- */
+
 add_action('do_faviconico', function () {
     if (!apply_filters('wpc_favicon_optimize', true) || headers_sent()) {
-        return; // fall through to core's default redirect
+        return;
     }
     $icon = function_exists('get_site_icon_url') ? (string) get_site_icon_url(32) : '';
     if ($icon !== '') {
@@ -4687,14 +5251,7 @@ add_action('do_faviconico', function () {
     exit;
 }, 1);
 
-/**
- * Universal LCP sizes floor. With CDN + Next-Gen off no plugin pass runs, so
- * core's "100vw, {W}px" default makes the hero over-fetch. Hooking
- * wp_calculate_image_sizes (WP's own content-image sizing) is the mode-
- * independent floor: plain mode gets the ladder, path-A sources inherit it, and
- * the nd/legacy emitters still override downstream. Scope: front-end,
- * optimize-lcp on, the first wide (≥1200w) image per request only.
- */
+
 add_filter('wp_calculate_image_sizes', function ($sizes, $size, $image_src, $image_meta, $attachment_id) {
     static $done = false;
     if ($done || is_admin()) return $sizes;
@@ -4703,7 +5260,7 @@ add_filter('wp_calculate_image_sizes', function ($sizes, $size, $image_src, $ima
     $w = 0;
     if (is_array($size) && !empty($size[0])) $w = (int) $size[0];
     if ($w <= 0 && is_array($image_meta) && !empty($image_meta['width'])) $w = (int) $image_meta['width'];
-    if ($w < 1200) return $sizes; // small slot: core's width-hint form is already right
+    if ($w < 1200) return $sizes;
     $done = true;
     $maxW = !empty($s['maxWidth']) ? (int) $s['maxWidth'] : 2560;
     $cw   = function_exists('wpc_get_theme_content_width') ? (int) wpc_get_theme_content_width() : 0;
@@ -4712,19 +5269,20 @@ add_filter('wp_calculate_image_sizes', function ($sizes, $size, $image_src, $ima
     return (string) apply_filters('wpc_picture_lcp_sizes', $ladder, ['width' => $w], $s);
 }, 20, 5);
 
-/**
- * Format/delivery settings changes purge the page cache. The format-fill scanner
- * runs in the output buffer, so toggling Generate WebP on a cached page did
- * nothing until an unrelated cache miss. Watches the format keys; purges once per
- * real change.
- */
+
+
+
+
+
+
 add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
     if (!is_array($old)) $old = [];
     if (!is_array($new)) $new = [];
     foreach (['generate_webp', 'picture_avif', 'wpc_nextgen'] as $k) {
         if ((string) ($old[$k] ?? '') !== (string) ($new[$k] ?? '')) {
-            if (class_exists('wps_ic_cache')) {
-                try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+            if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                && !wp_next_scheduled('wpc_sitechange_trailing')) {
+                wp_schedule_single_event(time() + 8, 'wpc_sitechange_trailing');
             }
             do_action('breeze_clear_all_cache');
             if (function_exists('error_log')) {
@@ -4735,30 +5293,21 @@ add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
     }
 }, 10, 2);
 
-/**
- * (v7.10.06) Keep the drop-in's baked exclude constants (WPC_URL_EXCLUDES / WPC_CACHE_EXCLUDES) in
- * sync with the options. The zero-DB hit path in advanced-cache.php reads those constants, so a stale
- * bake would silently honour an out-of-date exclude list. Re-template on ANY change to either option —
- * this catches the save paths (per-page settings, import, recovery) that don't call setAdvancedCache
- * directly. No-ops unless page caching is on and the drop-in exists (setAdvancedCache guards both), and
- * only writes when the rendered content actually changed.
- */
+
 $wpc_rebake_dropin_excludes = function () {
     $s = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
     if (empty($s['cache']['advanced']) || $s['cache']['advanced'] != '1') {
         return;
     }
-    // COMPATIBILITY: only ever re-bake OUR OWN drop-in. If advanced-cache.php is absent (activation
-    // installs it) or belongs to another cache plugin (WP Rocket / W3TC / LiteSpeed / WP Super Cache —
-    // they don't carry our WP_COMPRESS_ADVANCED_CACHE marker), do NOT touch it. Prevents clobbering a
-    // co-installed cache plugin's drop-in when WPC caching was left on.
+
+
     $wpc_dropin = ABSPATH . 'wp-content/advanced-cache.php';
     if (!file_exists($wpc_dropin)) {
         return;
     }
     $wpc_dropin_head = @file_get_contents($wpc_dropin, false, null, 0, 256);
     if ($wpc_dropin_head === false || strpos($wpc_dropin_head, 'WP_COMPRESS_ADVANCED_CACHE') === false) {
-        return; // not our drop-in — leave it alone
+        return;
     }
     if (!class_exists('wps_ic_htaccess')) {
         @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
@@ -4775,31 +5324,458 @@ add_action('add_option_wpc-excludes', $wpc_rebake_dropin_excludes);
 add_action('update_option_wpc-url-excludes', $wpc_rebake_dropin_excludes);
 add_action('add_option_wpc-url-excludes', $wpc_rebake_dropin_excludes);
 
-/**
- * (v7.10.07) FIRST-RUN SELF-HEAL — a fresh site's Critical CSS + PageSpeed can never stay stuck.
- *
- * A freshly-provisioned site's initial crit run rides ONE crit-push /generate round-trip (which also
- * populates the PageSpeed card, criticalCss-v2.php:535). The render-time trigger is disabled, so that
- * first run depends on the dashboard AJAX firing AND returning — if it's dropped (dispatched-but-lost,
- * or completed-but-callback-lost), crit never generates and "Analyzing…" spins forever. This runs on
- * admin load and, when the site is provisioned but the home has no crit, (re)dispatches the run —
- * bounded, non-blocking, and self-healing:
- *   - re-dispatches a STUCK run once it passes the round-trip timeout (default 180s), so a lost run heals;
- *   - re-dispatch goes through the plugin's real initCritical, which polls /status for the in-flight uuid
- *     — so it also recovers a completed-but-UNRETURNED run, not just a never-dispatched one;
- *   - after N fast attempts (default 5) it sets wpc_first_run_failed so the UI can show a retry/error
- *     instead of an infinite spinner, but KEEPS retrying hourly so a transient crit-push outage recovers
- *     on its own (never a permanent stuck state);
- *   - clears its state the instant crit lands.
- * The dispatch runs on shutdown AFTER the response has flushed (fastcgi_finish_request), so it adds zero
- * latency to the admin page. On a healthy site it's a single file_exists per admin load (early return).
- * Tunables: filters wpc_first_run_timeout_seconds / wpc_first_run_max_attempts.
- */
+
+add_filter('wpc_static_serve', function ($v) {
+    if ($v) {
+        return $v; 
+    }
+    $s = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
+    return is_array($s) && !empty($s['static-serve']) && $s['static-serve'] == '1';
+});
+add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
+    static $reentry = false;
+    if ($reentry) {
+        return;
+    }
+    $wasOn = is_array($old) && !empty($old['static-serve']) && $old['static-serve'] == '1';
+    $isOn  = is_array($new) && !empty($new['static-serve']) && $new['static-serve'] == '1';
+    if ($wasOn === $isOn) {
+        return;
+    }
+    if (!class_exists('wps_ic_htaccess')) {
+        @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+    }
+    if (!class_exists('wps_ic_htaccess')) {
+        return;
+    }
+    try {
+        $h = new wps_ic_htaccess();
+        if ($isOn) {
+            $res = $h->applyStaticServe();
+            if (empty($res['ok'])) {
+                
+                update_option('wpc_static_serve_failed', isset($res['reason']) ? $res['reason'] : 'failed', false);
+                if (is_array($new)) {
+                    $new['static-serve'] = '0';
+                    $reentry = true;
+                    update_option(WPS_IC_SETTINGS, $new);
+                    $reentry = false;
+                }
+            }
+        } else {
+            
+            
+            
+            
+            $wpc_was_ss357 = ($wasOn || get_option('wpc_ttfb_ss_auto') === '1' || get_option('wpc_static_serve_active') == 1);
+            if ($wasOn) {
+                update_option('wpc_ttfb_ss_optout', 1, false);
+            }
+            $h->removeStaticServe();
+            
+            
+            
+            
+            if ($wpc_was_ss357 && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+                try { wps_ic_cache::cfPurgeAllHtml(false, true); } catch (\Throwable $e) {}
+            }
+        }
+    } catch (\Throwable $e) {}
+}, 10, 2);
+
+
+add_action('update_option_' . WPS_IC_SETTINGS, function ($old, $new) {
+    static $bcReentry = false;
+    if ($bcReentry) {
+        return;
+    }
+    $wasOn = is_array($old) && !empty($old['browser-cache-headers']) && $old['browser-cache-headers'] == '1';
+    $isOn  = is_array($new) && !empty($new['browser-cache-headers']) && $new['browser-cache-headers'] == '1';
+    if ($wasOn === $isOn) {
+        return;
+    }
+    if (!class_exists('wps_ic_htaccess')) {
+        @include_once WPS_IC_DIR . 'classes/htaccess.class.php';
+    }
+    if (!class_exists('wps_ic_htaccess')) {
+        return;
+    }
+    try {
+        $h = new wps_ic_htaccess();
+        if ($isOn) {
+            $bcReentry = true;
+            $h->wpcApplyBrowserCache();
+            $bcReentry = false;
+        } else {
+            $h->wpcRemoveBrowserCache();
+        }
+    } catch (\Throwable $e) {
+        $bcReentry = false;
+    }
+}, 10, 2);
+
+
+if (!function_exists('wpc_delay_v3_report_handler')) {
+    function wpc_delay_v3_report_handler()
+    {
+        $rate = (int) get_transient('wpc_delay_v3_report_rate');
+        if ($rate > 200) {
+            wp_send_json_error('rate', 429);
+        }
+        set_transient('wpc_delay_v3_report_rate', $rate + 1, HOUR_IN_SECONDS);
+
+
+        $wpc_src = !empty($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : (!empty($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '');
+        $wpc_sh  = strtolower((string) parse_url(home_url(), PHP_URL_HOST));
+        $wpc_oh  = strtolower((string) parse_url($wpc_src, PHP_URL_HOST));
+        $wpc_strip = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
+        if ($wpc_oh === '' || $wpc_strip($wpc_oh) !== $wpc_strip($wpc_sh)) {
+            wp_send_json_error('bad-origin');
+        }
+        
+        
+        
+        $raw = isset($_POST['payload']) ? (string) wp_unslash($_POST['payload'])
+             : (isset($_GET['payload']) ? (string) wp_unslash($_GET['payload']) : '');
+        if ($raw === '' || strlen($raw) > 2048) {
+            wp_send_json_error('bad-payload');
+        }
+        $data = json_decode($raw, true);
+        $wpc_bootfail360 = is_array($data) && isset($data['b']) && (int) $data['b'] === 0;
+        $wpc_bootretr360 = is_array($data) && isset($data['b']) && (int) $data['b'] === 1;
+        $wpc_lcpmx440 = is_array($data) && !empty($data['lcpmx']);
+        $wpc_lcpok447 = is_array($data) && !empty($data['lcpok']);
+        $wpc_lcptr452 = is_array($data) && !empty($data['lcptrace']);
+        if (!is_array($data) || ((empty($data['e']) || !is_array($data['e']))
+            && !$wpc_bootfail360 && !$wpc_bootretr360 && !$wpc_lcpmx440 && !$wpc_lcpok447 && !$wpc_lcptr452)) {
+            wp_send_json_error('bad-payload');
+        }
+        if (!isset($data['e']) || !is_array($data['e'])) {
+            $data['e'] = [];
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        if ($wpc_bootfail360 || $wpc_bootretr360) {
+            $wpc_bf360 = get_option('wpc_delay_v3_bootfails', []);
+            if (!is_array($wpc_bf360) || (isset($wpc_bf360['t']) && time() - (int) $wpc_bf360['t'] > DAY_IN_SECONDS)) {
+                $wpc_bf360 = [];
+            }
+            if (empty($wpc_bf360)) {
+                $wpc_bf360 = ['t' => time(), 'u' => [], 'p' => []];
+            }
+            if (!isset($wpc_bf360['p']) || !is_array($wpc_bf360['p'])) {
+                $wpc_bf360['p'] = [];
+            }
+            $wpc_bp360 = isset($data['u']) ? sanitize_text_field(substr((string) $data['u'], 0, 120)) : '';
+            $wpc_bu360 = substr(md5($wpc_bp360), 0, 8);
+            if ($wpc_bootretr360) {
+                $wpc_bi360 = array_search($wpc_bu360, (array) $wpc_bf360['u'], true);
+                if ($wpc_bi360 !== false) {
+                    array_splice($wpc_bf360['u'], (int) $wpc_bi360, 1);
+                    unset($wpc_bf360['p'][$wpc_bu360]);
+                    update_option('wpc_delay_v3_bootfails', $wpc_bf360, false);
+                }
+            } elseif (count((array) $wpc_bf360['u']) < 10 && !in_array($wpc_bu360, (array) $wpc_bf360['u'], true)) {
+                $wpc_bf360['u'][] = $wpc_bu360;
+                if (count($wpc_bf360['p']) < 3 && $wpc_bp360 !== '' && strpos($wpc_bp360, '/') === 0) {
+                    $wpc_bf360['p'][$wpc_bu360] = $wpc_bp360;
+                }
+                update_option('wpc_delay_v3_bootfails', $wpc_bf360, false);
+            }
+            if ($wpc_bootfail360 && count((array) $wpc_bf360['u']) >= 3 && !get_option('wpc_delay_aggr_off')) {
+                $wpc_fails360 = (int) get_option('wpc_delay_aggr_fails', 0);
+                update_option('wpc_delay_aggr_off', time(), false);
+                update_option('wpc_delay_aggr_fails', $wpc_fails360 + 1, false);
+                foreach ((array) $wpc_bf360['p'] as $wpc_pp360) {
+                    try {
+                        if (class_exists('wps_ic_url_key') && class_exists('wps_ic_cache_integrations')
+                            && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
+                            $wpc_pk360 = (new wps_ic_url_key())->setup(home_url($wpc_pp360));
+                            if ($wpc_pk360) {
+                                wps_ic_cache_integrations::purgeUrlHtml($wpc_pk360, '', ['context' => 'aggr-demote']);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                    }
+                }
+                delete_option('wpc_delay_v3_bootfails');
+                if (function_exists('wpc_diagnostic_log')) {
+                    wpc_diagnostic_log('DELAY_AGGR_DEMOTED', 'boot watchdog: 3 distinct aggr paths failed to boot — demoted to timer (targeted purge)');
+                }
+            }
+        }
+        if ($wpc_bootretr360 && empty($data['e'])) {
+            wp_send_json_success('retracted');
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if ($wpc_lcptr452) {
+            $wpc_trs452 = get_option('wpc_lcp_trace_reports', []);
+            if (!is_array($wpc_trs452)) { $wpc_trs452 = []; }
+            $wpc_num452 = function ($v) { return is_numeric($v) ? (int) $v : 0; };
+            $wpc_trs452[] = [
+                't'   => time(),
+                'u'   => sanitize_text_field(substr((string) ($data['u'] ?? ''), 0, 60)),
+                'fcp' => $wpc_num452($data['fcp'] ?? 0),
+                'lcp' => $wpc_num452($data['lcp'] ?? 0),
+                'gap' => $wpc_num452($data['gap'] ?? 0),
+                'own' => $wpc_num452($data['own'] ?? 0),
+                'pct' => $wpc_num452($data['pct'] ?? 0),
+                'v'   => sanitize_text_field(substr((string) ($data['v'] ?? ''), 0, 20)),
+                'ch'  => in_array(($data['ch'] ?? ''), ['b', 'i'], true) ? (string) $data['ch'] : '?',
+                'hum' => isset($data['hum']) ? (int) $data['hum'] : -1,
+                'ltn' => $wpc_num452($data['ltn'] ?? 0),
+                'ltms'=> $wpc_num452($data['ltms'] ?? 0),
+                'top' => isset($data['top']) ? (int) $data['top'] : -1,
+                'vh'  => isset($data['vh'])  ? (int) $data['vh']  : -1,
+                'inv' => isset($data['inv']) ? (int) $data['inv'] : -1,
+                'el'  => sanitize_text_field(substr((string) ($data['el'] ?? ''), 0, 32)),
+                'url' => sanitize_text_field(substr((string) ($data['url'] ?? ''), 0, 48)),
+                'r'   => is_array($data['r'] ?? null) ? array_map($wpc_num452, array_slice($data['r'], 0, 8)) : [],
+                'net' => is_array($data['net'] ?? null) ? array_slice($data['net'], 0, 6) : [],
+                'lt'  => is_array($data['lt'] ?? null) ? array_slice($data['lt'], 0, 5) : [],
+            ];
+            
+            
+            
+            
+            update_option('wpc_lcp_trace_reports',
+                array_slice($wpc_trs452, -(int) apply_filters('wpc_lcp_trace_keep', 8)), false);
+            if (empty($data['e'])) {
+                wp_send_json_success('lcptrace');
+            }
+        }
+        if ($wpc_lcpok447) {
+            $wpc_ok447 = get_option('wpc_lcp_preload_ok', []);
+            if (!is_array($wpc_ok447)) { $wpc_ok447 = []; }
+            $wpc_ok447 = [
+                't' => time(),
+                'n' => isset($wpc_ok447['n']) ? min((int) $wpc_ok447['n'] + 1, 1000000) : 1,
+            ];
+            update_option('wpc_lcp_preload_ok', $wpc_ok447, false);
+            if (empty($data['e'])) {
+                wp_send_json_success('lcpok');
+            }
+        }
+        if ($wpc_lcpmx440) {
+            $wpc_mx440 = get_option('wpc_lcp_preload_mismatch', []);
+            if (!is_array($wpc_mx440)) { $wpc_mx440 = []; }
+            $wpc_mxu440 = isset($data['u'])    ? sanitize_text_field(substr((string) $data['u'], 0, 120)) : '';
+            $wpc_mxg440 = isset($data['got'])  ? sanitize_text_field(substr((string) $data['got'], 0, 80)) : '';
+            $wpc_mxw440 = isset($data['want']) ? sanitize_text_field(substr((string) $data['want'], 0, 80)) : '';
+            if ($wpc_mxw440 !== '') {
+                $wpc_mxk440 = substr(md5($wpc_mxu440 . '|' . $wpc_mxg440 . '|' . $wpc_mxw440), 0, 10);
+                $wpc_mx440[$wpc_mxk440] = [
+                    't'    => time(),
+                    'u'    => $wpc_mxu440,
+                    'got'  => $wpc_mxg440,
+                    'want' => $wpc_mxw440,
+                    'n'    => isset($wpc_mx440[$wpc_mxk440]['n']) ? (int) $wpc_mx440[$wpc_mxk440]['n'] + 1 : 1,
+                ];
+                update_option('wpc_lcp_preload_mismatch', array_slice($wpc_mx440, -20, null, true), false);
+            }
+            if (empty($data['e'])) {
+                wp_send_json_success('lcpmx');
+            }
+        }
+        $log = get_option('wpc_delay_v3_errors', []);
+        if (!is_array($log)) {
+            $log = [];
+        }
+        $url = isset($data['u']) ? sanitize_text_field(substr((string) $data['u'], 0, 120)) : '';
+        foreach (array_slice($data['e'], 0, 10) as $e) {
+            if (!is_array($e)) {
+                continue;
+            }
+            $msg  = isset($e['m']) ? sanitize_text_field(substr((string) $e['m'], 0, 180)) : '';
+            $file = isset($e['f']) ? sanitize_text_field(substr((string) $e['f'], 0, 160)) : '';
+            if ($msg === '') {
+                continue;
+            }
+            $key = md5($msg . '|' . $file);
+            $log[$key] = ['t' => time(), 'm' => $msg, 'f' => $file, 'u' => $url, 'n' => isset($log[$key]['n']) ? (int) $log[$key]['n'] + 1 : 1];
+        }
+        update_option('wpc_delay_v3_errors', array_slice($log, -30, null, true), false);
+
+
+        $wpc_dur = isset($data['d']) ? (int) $data['d'] : 0;
+        if ($wpc_dur > 0 && $wpc_dur < 60000) {
+            $stats = get_option('wpc_delay_v3_stats', []);
+            if (!is_array($stats)) {
+                $stats = [];
+            }
+            $stats[] = $wpc_dur;
+            update_option('wpc_delay_v3_stats', array_slice($stats, -50), false);
+        }
+
+
+        $wpc_promoted = get_option('wpc_delay_v3_promoted', []);
+        if (!is_array($wpc_promoted)) {
+            $wpc_promoted = [];
+        }
+        if (!empty($wpc_promoted) && !get_option('wpc_delay_v3_manifest_off')
+            && apply_filters('wpc_delay_v3_autotune', true)) {
+            foreach ($log as $entry) {
+                if (empty($entry['f']) || (int) $entry['n'] < 2) {
+                    continue;
+                }
+                $wpc_m = (string) $entry['m'];
+                if (stripos($wpc_m, 'is not defined') === false
+                    && stripos($wpc_m, "can't find variable") === false) {
+                    continue; 
+                }
+                $wpc_fh = strtolower((string) parse_url((string) $entry['f'], PHP_URL_HOST));
+                if ($wpc_fh !== '' && $wpc_strip($wpc_fh) !== $wpc_strip($wpc_sh)
+                    && strpos($wpc_fh, 'zapwp') === false && strpos($wpc_fh, 'b-cdn') === false) {
+                    continue;
+                }
+                $wpc_pb = basename((string) parse_url((string) $entry['f'], PHP_URL_PATH));
+                if ($wpc_pb === '' || !in_array($wpc_pb, $wpc_promoted, true)) {
+                    continue;
+                }
+                update_option('wpc_delay_v3_manifest_off', time(), false);
+                set_transient('wpc_delay_v3_manifest_notice', $wpc_pb, WEEK_IN_SECONDS);
+                if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                    try {
+                        wps_ic_cache::removeHtmlCacheFiles('all');
+                    } catch (\Throwable $t) {
+                    }
+                }
+                break;
+            }
+        }
+
+
+        if (apply_filters('wpc_delay_v3_autotune', true)) {
+            $tuned = get_option('wpc_delay_v3_autotuned', []);
+            if (!is_array($tuned)) {
+                $tuned = [];
+            }
+            if (count($tuned) < 5) {
+                foreach ($log as $entry) {
+                    if ((int) $entry['n'] < 3 || empty($entry['f'])) {
+                        continue;
+                    }
+                    
+                    
+                    
+                    
+                    
+                    
+                    if (preg_match('/\.\s*(?:on|each|extend|hasclass|ready|ajax|fn)\b[^a-z]{0,4}is not a function|pseudos|jquery is not|\$ is not/i', (string) $entry['m'])
+                        && !apply_filters('wpc_autotune_jqenv_ok', false, (string) $entry['f'])) {
+                        continue;
+                    }
+
+
+                    $wpc_fh = strtolower((string) parse_url((string) $entry['f'], PHP_URL_HOST));
+                    if ($wpc_fh !== '' && $wpc_strip($wpc_fh) !== $wpc_strip($wpc_sh)
+                        && strpos($wpc_fh, 'zapwp') === false && strpos($wpc_fh, 'b-cdn') === false) {
+                        continue;
+                    }
+                    $base = basename((string) parse_url($entry['f'], PHP_URL_PATH));
+
+                    if ($base === '' || strlen($base) < 6 || strpos($base, 'delay-v3-loader') !== false || strpos($base, 'optimize') === 0) {
+                        continue;
+                    }
+
+
+                    if ((strpos($base, 'jquery') !== false || preg_match('/-js-(after|before)$/', $base))
+                        && !apply_filters('wpc_autotune_jquery_ok', false, $base)) {
+                        continue;
+                    }
+
+                    
+                    if (in_array($base, $wpc_promoted, true)) {
+                        continue;
+                    }
+                    if (isset($tuned[$base])) {
+                        continue;
+                    }
+                    $ex = get_option('wpc-excludes', []);
+                    if (!is_array($ex)) {
+                        $ex = [];
+                    }
+                    if (empty($ex['delay_js_v2']) || !is_array($ex['delay_js_v2'])) {
+                        $ex['delay_js_v2'] = [];
+                    }
+                    if (!in_array($base, $ex['delay_js_v2'], true)) {
+                        $ex['delay_js_v2'][] = $base;
+                        update_option('wpc-excludes', $ex);
+                        set_transient('wpc_delay_v3_autotune_notice', $base, WEEK_IN_SECONDS);
+                        if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                            try {
+                                wps_ic_cache::removeHtmlCacheFiles('all');
+                            } catch (\Throwable $t) {
+                            }
+                        }
+                    }
+                    $tuned[$base] = time();
+                    update_option('wpc_delay_v3_autotuned', $tuned, false);
+                    break;
+                }
+            }
+        }
+        wp_send_json_success();
+    }
+    add_action('wp_ajax_wpc_delay_v3_report', 'wpc_delay_v3_report_handler');
+    add_action('wp_ajax_nopriv_wpc_delay_v3_report', 'wpc_delay_v3_report_handler');
+    add_action('admin_notices', function () {
+        $base = get_transient('wpc_delay_v3_autotune_notice');
+        if (empty($base)) {
+            return;
+        }
+        echo '<div class="notice notice-info is-dismissible"><p><strong>WP Compress — JavaScript delay self-tuned:</strong> visitors repeatedly hit errors from <code>'
+            . esc_html($base) . '</code> while it was delayed, so it was automatically added to your "Scripts to Exclude" list (Optimize JavaScript → Excludes) and the page cache was refreshed. You can remove it there any time.</p></div>';
+        delete_transient('wpc_delay_v3_autotune_notice');
+    });
+    add_action('admin_notices', function () {
+        $wpc_pb = get_transient('wpc_delay_v3_manifest_notice');
+        if (empty($wpc_pb)) {
+            return;
+        }
+        echo '<div class="notice notice-info is-dismissible"><p><strong>WP Compress — JavaScript delay self-healed:</strong> visitors hit errors from <code>'
+            . esc_html($wpc_pb) . '</code> after the render analysis moved it earlier in the load, so this site was automatically reverted to the standard (safe) delay behavior and the page cache was refreshed. It re-evaluates automatically after the next page analysis; nothing needs your attention.</p></div>';
+        delete_transient('wpc_delay_v3_manifest_notice');
+    });
+    add_action('admin_notices', function () {
+        if (!get_option('wpc_delay_aggr_off') || !current_user_can('manage_options')) {
+            return;
+        }
+        echo '<div class="notice notice-info"><p><strong>WP Compress — instant-boot mode paused:</strong> visitor reports showed delayed scripts failing to finish booting on a few pages, so this site was automatically switched back to the standard (timed) delay behavior. It re-arms on the next optimization refresh; nothing needs your attention.</p></div>';
+    });
+    add_action('admin_notices', function () {
+        if ((int) get_option('wpc_v2_direct_entry_403s', 0) < 3 || !current_user_can('manage_options')) {
+            return;
+        }
+        echo '<div class="notice notice-warning"><p><strong>WP Compress — fast image handling blocked by your host:</strong> your web server denies PHP execution inside the plugin folder (HTTP 403 on our health endpoint — common nginx hardening; the bundled .htaccess is Apache-only). The plugin keeps working through its fallback path, but the faster direct mode stays off. Ask your host to allow PHP execution for '
+            . '<code>wp-content/plugins/wp-compress-image-optimizer/api/v2/(health|bg_swap|bg_swap_announce|bg_swap_batch).php</code>'
+            . ' above their wp-content PHP deny rule. We re-check daily; this notice clears automatically once reachable.</p></div>';
+    });
+}
+
+
 if (!function_exists('wpc_first_run_home_crit_exists')) {
     function wpc_first_run_home_crit_exists()
     {
         if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
-            return true; // can't tell → treat as present (fail-safe: never hammer)
+            return true;
         }
         $homePage = function_exists('get_option') ? get_option('page_on_front') : 0;
         $url = (!empty($homePage) && function_exists('get_permalink')) ? get_permalink($homePage) : home_url('/');
@@ -4815,7 +5791,7 @@ if (!function_exists('wpc_first_run_dispatch_now')) {
     function wpc_first_run_dispatch_now()
     {
         if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request(); // flush the response first — the admin page is never blocked
+            @fastcgi_finish_request();
         }
         if (!class_exists('wps_criticalCss')) {
             @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
@@ -4823,15 +5799,67 @@ if (!function_exists('wpc_first_run_dispatch_now')) {
         if (class_exists('wps_criticalCss')) {
             try {
                 $c = new wps_criticalCss();
-                $c->generateCriticalCSS('home', true); // real round-trip; /status poll recovers a lost callback
+                $c->generateCriticalCSS('home', true);
             } catch (\Throwable $e) {}
         }
     }
 }
+
+
+
+add_action('wpc_account_status_refresh', function () {
+    if (class_exists('wps_ic') && method_exists('wps_ic', 'check_account_status')) {
+        wps_ic::check_account_status(true);
+    }
+});
+
+
+
+
+
+if (!function_exists('wpc_apiv3_recover_surviving_key')) {
+    function wpc_apiv3_recover_surviving_key() {
+        $key = '';
+        foreach (['wps_ic_options', 'wps_ic_settings'] as $src) {
+            $o = get_option($src);
+            if (is_array($o) && !empty($o['api_key'])) { $key = (string) $o['api_key']; break; }
+        }
+        return $key;
+    }
+    function wpc_apiv3_recover_needed() {
+        $canon = get_option('wps_ic');
+        return !(is_array($canon) && !empty($canon['api_key']) && !empty($canon['response_key']));
+    }
+}
+add_action('admin_init', function () {
+    if (get_option('wpc_apiv3_reconnect_done')) { return; }
+    if (!wpc_apiv3_recover_needed()) { update_option('wpc_apiv3_reconnect_done', 1, false); return; }
+    if (wpc_apiv3_recover_surviving_key() === '') { return; }   
+    if (get_transient('wpc_apiv3_reconnect_backoff')) { return; }
+    if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+        && !wp_next_scheduled('wpc_apiv3_reconnect')) {
+        set_transient('wpc_apiv3_reconnect_backoff', 1, 15 * MINUTE_IN_SECONDS);
+        wp_schedule_single_event(time() + 5, 'wpc_apiv3_reconnect');
+        wpc_spawn_cron();
+    }
+}, 5);
+add_action('wpc_apiv3_reconnect', function () {
+    if (get_option('wpc_apiv3_reconnect_done')) { return; }
+    if (!wpc_apiv3_recover_needed()) { update_option('wpc_apiv3_reconnect_done', 1, false); return; }
+    $key = wpc_apiv3_recover_surviving_key();
+    if ($key === '') { update_option('wpc_apiv3_reconnect_done', 1, false); return; }
+    if (class_exists('wps_ic_connect')) {
+        $res = (new wps_ic_connect())->connectWithKey($key);
+        if (is_array($res) && !empty($res['success'])) {
+            update_option('wpc_apiv3_reconnect_done', 1, false);   
+        }
+        
+    }
+});
 add_action('admin_init', function () {
     $opts = function_exists('get_option') ? get_option(WPS_IC_OPTIONS) : [];
     if (empty($opts['api_key'])) {
-        return; // not provisioned yet — nothing to dispatch
+        return;
     }
     if (wpc_first_run_home_crit_exists()) {
         if (get_option('wpc_first_run_attempts') !== false) {
@@ -4839,33 +5867,26 @@ add_action('admin_init', function () {
             delete_option('wpc_first_run_attempts');
             delete_option('wpc_first_run_failed');
         }
-        return; // crit is there — done
+        return;
     }
     $dispatchedAt = (int) get_option('wpc_first_run_dispatched_at');
     $attempts     = (int) get_option('wpc_first_run_attempts');
     $timeout      = (int) apply_filters('wpc_first_run_timeout_seconds', 180);
     $maxAttempts  = (int) apply_filters('wpc_first_run_max_attempts', 5);
-    // Fast retries while under the cap; then an hourly backstop — never permanently give up, never hammer.
+    
     $interval = ($attempts < $maxAttempts) ? $timeout : 3600;
     if ($dispatchedAt > 0 && (time() - $dispatchedAt) < $interval) {
-        return; // a dispatch is in flight / backing off — let it be
+        return;
     }
     if ($attempts >= $maxAttempts && !get_option('wpc_first_run_failed')) {
-        update_option('wpc_first_run_failed', 1, false); // UI: surface a retry/error, not a spinner
+        update_option('wpc_first_run_failed', 1, false); 
     }
     update_option('wpc_first_run_dispatched_at', time(), false);
     update_option('wpc_first_run_attempts', $attempts + 1, false);
     register_shutdown_function('wpc_first_run_dispatch_now');
 }, 20);
 
-/**
- * (v7.10.08) PSI first-run self-heal — the PageSpeed card twin of the crit self-heal above.
- * PSI is a SEPARATE run-pagespeed dispatch + get-results poll (NOT part of the crit round-trip — verified
- * with the pagespeed team). There is no push callback, and pagespeed-mc v1.49.0 keys the benchmark on the
- * plugin-supplied uuid (stashed as wpc_psi_uuid at dispatch). So recovery is PULL: poll get-results/{uuid}
- * status-first; if no uuid is stashed (never dispatched / expired), dispatch a fresh run with a new uuid.
- * Bounded (5 fast, then hourly), non-blocking (shutdown), no-op once the card is populated.
- */
+
 if (!function_exists('wpc_first_run_psi_now')) {
     function wpc_first_run_psi_now()
     {
@@ -4878,7 +5899,7 @@ if (!function_exists('wpc_first_run_psi_now')) {
         }
         $uuid = function_exists('get_transient') ? get_transient('wpc_psi_uuid') : '';
         if (!empty($uuid)) {
-            // PULL: poll get-results/{uuid}; saveBenchmark() fills WPS_IC_LITE_GPS when the run is complete.
+            
             if (!class_exists('wps_criticalCss')) {
                 @include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
             }
@@ -4892,7 +5913,7 @@ if (!function_exists('wpc_first_run_psi_now')) {
             }
             return;
         }
-        // No uuid stashed → dispatch a fresh run keyed on a plugin uuid (pull-recoverable next cycle).
+        
         $uuid = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(8));
         set_transient('wpc_psi_uuid', $uuid, 30 * 60);
         try {
@@ -4920,7 +5941,7 @@ add_action('admin_init', function () {
             delete_option('wpc_first_run_psi_at');
             delete_option('wpc_first_run_psi_attempts');
         }
-        return; // PageSpeed card is populated — done
+        return; 
     }
     $at          = (int) get_option('wpc_first_run_psi_at');
     $attempts    = (int) get_option('wpc_first_run_psi_attempts');
@@ -4937,3 +5958,19 @@ add_action('admin_init', function () {
     update_option('wpc_first_run_psi_attempts', $attempts + 1, false);
     register_shutdown_function('wpc_first_run_psi_now');
 }, 21);
+
+
+include_once WPS_IC_DIR . 'addons/cache/warm.php';
+include_once WPS_IC_DIR . 'addons/rail/rail.php';
+include_once WPS_IC_DIR . 'addons/vitals/vitals.php';
+
+
+include_once WPS_IC_DIR . 'addons/cache/beacon.php';
+
+
+include_once WPS_IC_DIR . 'addons/cache/link-preset.php';
+
+include_once WPS_IC_DIR . 'addons/debug/db-health.php';
+
+
+include_once WPS_IC_DIR . 'addons/cache/invalidation.php';

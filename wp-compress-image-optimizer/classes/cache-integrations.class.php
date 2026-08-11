@@ -1,27 +1,18 @@
 <?php
-//This file has to be self-contained, include everything used
+
 include_once __DIR__ . '/../traits/url_key.php';
 include_once __DIR__ . '/../defines.php';
 
 class wps_ic_cache_integrations
 {
-    // Tracks what has been purged in the current request to avoid duplicate purges.
+    
     private static $purged = ['all' => false, 'keys' => []];
 
     public function __construct()
     {
     }
 
-    /**
-     * Purge cache for a specific post by ID.
-     *
-     * Usage: (new wps_ic_cache_integrations())->purge_id(42);
-     *        (new wps_ic_cache_integrations())->purge_id(42, false);
-     *
-     * @param int  $post_id  WordPress post ID whose cache should be purged.
-     * @param bool $critical Whether to also purge the critical CSS for this page. Default true.
-     * @return bool          True on success, false if the permalink could not be resolved.
-     */
+
     public function purge_id($post_id, $critical = true)
     {
         $url = get_permalink($post_id);
@@ -41,16 +32,7 @@ class wps_ic_cache_integrations
         return true;
     }
 
-    /**
-     * Purge cache for a specific URL.
-     *
-     * Usage: (new wps_ic_cache_integrations())->purge_url('https://example.com/my-page/');
-     *        (new wps_ic_cache_integrations())->purge_url('https://example.com/my-page/', false);
-     *
-     * @param string $url      Full URL of the page whose cache should be purged.
-     * @param bool   $critical Whether to also purge the critical CSS for this page. Default true.
-     * @return bool            Always true.
-     */
+
     public function purge_url($url, $critical = true)
     {
         $url_key_class = new wps_ic_url_key();
@@ -65,15 +47,7 @@ class wps_ic_cache_integrations
         return true;
     }
 
-    /**
-     * Purge cache for the entire site.
-     *
-     * Usage: (new wps_ic_cache_integrations())->purge_site();
-     *        (new wps_ic_cache_integrations())->purge_site(false);
-     *
-     * @param bool $critical Whether to also purge all critical CSS files. Default true.
-     * @return bool          Always true.
-     */
+
     public function purge_site($critical = true)
     {
         if (self::$purged['all']) {
@@ -111,8 +85,7 @@ class wps_ic_cache_integrations
 
         update_option(WPS_IC_OPTIONS, $options);
 
-        // v7.02.07 — clear the provisioning witnesses so a later reconnect re-provisions cleanly for
-        // this host (the env fingerprint + host baseline shouldn't survive a disconnect).
+
         delete_option('wpc_v2_provisioned_fingerprint');
         delete_option('wpc_v2_provisioned_site_url');
 
@@ -139,12 +112,14 @@ class wps_ic_cache_integrations
         $options['css_hash'] = $CSSHash;
         $options['js_hash'] = $JSHash;
 
-        if (!class_exists('wps_ic_log')) {
-            include_once WPS_IC_DIR . 'classes/log.class.php';
+        if (!class_exists('wps_ic_log') && defined('WPS_IC_DIR')) {
+            @include_once WPS_IC_DIR . 'classes/log.class.php';
         }
-
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'purgeCombinedFiles');
+        
+        if (class_exists('wps_ic_log')) {
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'purgeCombinedFiles');
+        }
 
         update_option(WPS_IC_OPTIONS, $options);
         return true;
@@ -161,19 +136,12 @@ class wps_ic_cache_integrations
         }
 
         if (is_dir($path)) {
-            rmdir($path);
+            
+            @rmdir($path);
         }
     }
 
-    /**
-     * Remove a directory's contents EXCEPT named top-level entries (kept verbatim). The root dir
-     * itself is kept (it holds the preserved subdir). Used by the plugin-update purge to clear
-     * cached HTML pages under wp-cio/ while PRESERVING the content-addressed optimized CSS
-     * (wp-cio/css): cached HTML at ANY layer (CF/Varnish/local) may still reference those exact
-     * filenames, so deleting them on update while that HTML lives = a 404 until the page is purged.
-     * Stale preserved assets are content-addressed (a real CSS change = a new filename) and are
-     * harmless; GC them by age separately if needed.
-     */
+
     public static function removeDirectoryExcept($path, $except = [])
     {
         $path = rtrim($path, '/');
@@ -191,7 +159,7 @@ class wps_ic_cache_integrations
 
     public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false, $preserve_assets = false)
     {
-        // Deduplicate: skip if this url_key (or full site) was already purged in this request
+        
         if ($url_key === false) {
             if (self::$purged['all']) {
                 return;
@@ -211,17 +179,17 @@ class wps_ic_cache_integrations
                 empty($settings['cache']['purge-hooks']) ||
                 $settings['cache']['purge-hooks'] == '0' ||
                 (!empty($settings['developer_mode']) && $settings['developer_mode'] == '1')) {
-                //Do not purge if cache OFF, or cache purge OFF or developer mode ON
+
                 return;
             }
         }
 
-        // Allow integrations to modify parameters
-        $url_key = apply_filters('wps_ic_purge_all_url_key', $url_key, $critSave); //If set to false purge all cache
-        $varnish = apply_filters('wps_ic_purge_all_varnish', $varnish, $url_key); //Allow enabling/disabling varnish purge
+        
+        $url_key = apply_filters('wps_ic_purge_all_url_key', $url_key, $critSave); 
+        $varnish = apply_filters('wps_ic_purge_all_varnish', $varnish, $url_key); 
         $purgeJS = apply_filters('wps_ic_purge_all_purge_js', $purgeJS);
 
-        // Change CSS Hash
+        
         $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
         $CSSHash = substr(md5(microtime(true)), 0, 6);
@@ -233,62 +201,130 @@ class wps_ic_cache_integrations
             $options['js_hash'] = $JSHash;
         }
 
-        if (!class_exists('wps_ic_log')) {
-            include_once WPS_IC_DIR . 'classes/log.class.php';
+        if (!class_exists('wps_ic_log') && defined('WPS_IC_DIR')) {
+            @include_once WPS_IC_DIR . 'classes/log.class.php';
         }
-
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'purgeAll');
+        if (class_exists('wps_ic_log')) {
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'purgeAll');
+        }
 
         update_option(WPS_IC_OPTIONS, $options);
 
-        // Purge internal cache files (preserve content-addressed optimized CSS/JS on plugin update)
+        
         self::purgeCacheFiles($url_key, $preserve_assets);
 
-        // Action hook for all integrations to clear their cache
-        do_action('wps_ic_purge_all_cache', $url_key);
+        
+        wpc_foreign_purge610($url_key, 'integrations');
 
-        // Varnish — full-site eviction when this is a site-wide purge ($url_key === false), else the
-        // configured single path. A site-wide purge (e.g. crit purge) must evict EVERY cached page, or
-        // interior pages keep serving a stale crit-less HIT and their regen stays walled.
+
         if ($varnish) {
             self::purgeVarnish(0, ($url_key === false));
         }
 
-        // Final action hook after all purges
+        
         do_action('wps_ic_purge_all_complete', $url_key, $varnish, $critSave, $purgeJS);
     }
 
     public static function purgeCriticalFiles($url_key = false)
     {
+
+
+        if (function_exists('wpc_cache_first_log')) {
+            $wpc_tw_via = [];
+            foreach (array_slice(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 9), 1, 7) as $wpc_tw_f) {
+                $wpc_tw_via[] = (isset($wpc_tw_f['class']) ? $wpc_tw_f['class'] . '::' : '') . ($wpc_tw_f['function'] ?? '?');
+            }
+            wpc_cache_first_log('crit-wipe', $url_key ? (string) $url_key : 'all', '', [
+                'hook' => function_exists('current_action') ? (string) current_action() : '',
+                'via'  => implode('<', $wpc_tw_via),
+            ]);
+        }
         $cache_dir = WPS_IC_CRITICAL;
 
         if (!$url_key) {
-            self::removeDirectory($cache_dir);
+            self::wipeCriticalPreservingStores($cache_dir);
+
+
+            if (function_exists('wpc_land_cooldown_clear')) { wpc_land_cooldown_clear('all'); }
         } else {
             self::removeFiles($cache_dir . $url_key);
+            if (function_exists('wpc_land_cooldown_clear')) { wpc_land_cooldown_clear((string) $url_key); }
+        }
+
+
+        try {
+            if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
+                $wpc_rk133 = $url_key ? (string) $url_key : '';
+                if ($wpc_rk133 === '' && class_exists('wps_ic_url_key') && function_exists('home_url')) {
+                    $wpc_rk133 = ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
+                }
+                if ($wpc_rk133 !== '' && !wp_next_scheduled('wpc_lcp_repull', [$wpc_rk133, 1])) {
+                    wpc_pl_sched(time() + 60, 'wpc_lcp_repull', [$wpc_rk133, 1]);
+                }
+            }
+        } catch (\Throwable $e) {
         }
         return true;
     }
 
+
+    public static function wipeCriticalPreservingStores($dir)
+    {
+        $dir  = rtrim((string) $dir, '/');
+        $keep = (array) apply_filters('wpc_crit_wipe_preserve', ['used-css', 'inv2', '.kicklocks']);
+        if (empty($keep)) {
+            self::removeDirectory($dir);
+            return;
+        }
+        $items = @scandir($dir);
+        if (!is_array($items)) {
+            return;
+        }
+        foreach ($items as $it) {
+            if ($it === '.' || $it === '..' || in_array($it, $keep, true)) {
+                continue;
+            }
+            $p = $dir . '/' . $it;
+            if (is_dir($p)) {
+                
+                
+                
+                
+                self::removeFiles($p);
+                foreach ((array) @glob($p . '/*', GLOB_ONLYDIR) as $wpc_s1) {
+                    self::removeFiles($wpc_s1);
+                    foreach ((array) @glob($wpc_s1 . '/*', GLOB_ONLYDIR) as $wpc_s2) {
+                        self::removeFiles($wpc_s2);
+                    }
+                }
+            } else {
+                @unlink($p);
+            }
+        }
+    }
+
     public static function removeFiles($path)
     {
+
+
+        $keep = (array) apply_filters('wpc_crit_purge_preserve', ['tpl.txt', 'url.txt', 'used_tpl.txt']);
         $path = rtrim($path, '/');
         $files = glob($path . '/*');
         if (!empty($files)) {
             foreach ($files as $file) {
-                if (is_file($file)) {
+                if (is_file($file) && !in_array(basename($file), $keep, true)) {
                     unlink($file);
                 }
             }
         }
     }
 
-    // TODO: Maybe it will cause errors with non SSL sites?
+    
 
     public static function purgeBreeze()
     {
-        do_action('breeze_clear_all_cache'); //working
+        do_action('breeze_clear_all_cache');
 
         if (defined('BREEZE_VERSION')) {
             global $wp_filesystem;
@@ -300,7 +336,7 @@ class wps_ic_cache_integrations
             $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
 
             if (function_exists('wp_cache_flush')) {
-                wp_cache_flush();
+                if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
             }
         }
     }
@@ -311,15 +347,31 @@ class wps_ic_cache_integrations
 
         if (!$url_key) {
             if ($preserve_assets) {
-                // Plugin-update purge: clear cached HTML pages but PRESERVE the content-addressed
-                // optimized CSS (wp-cio/css) + JS. Cached HTML (CF/Varnish/local) still references
-                // those exact filenames; deleting them on update = a 404 until that HTML is purged.
+
+
                 self::removeDirectoryExcept($cache_dir, ['css', 'js']);
             } else {
                 self::removeDirectory($cache_dir);
             }
         } else {
             self::removeFiles($cache_dir . $url_key);
+            
+            
+            
+            
+            
+            
+            
+            
+            foreach ([
+                $cache_dir . $url_key . '_*',
+                $cache_dir . '*/' . $url_key,
+                $cache_dir . '*/' . $url_key . '_*',
+            ] as $wpc_pat643) {
+                foreach ((array) @glob($wpc_pat643, GLOB_ONLYDIR) as $wpc_v643) {
+                    self::removeFiles($wpc_v643);
+                }
+            }
         }
 
         return true;
@@ -327,6 +379,8 @@ class wps_ic_cache_integrations
 
     public static function wpc_purgeCF($return = false)
     {
+        return false; 
+
         $cfSettings = get_option(WPS_IC_CF);
 
         if (!empty($cfSettings)) {
@@ -345,11 +399,14 @@ class wps_ic_cache_integrations
         wp_send_json_success();
     }
 
-    public static function purgeVarnish($post_id = 0, $full_site = false)
+    public static function purgeVarnish($post_id = 0, $full_site = false, $url = '')
     {
         global $wpdb, $current_blog;
 
-        if ($post_id != 0) {
+
+        if (!empty($url) && is_string($url)) {
+            $parseUrl = parse_url($url);
+        } elseif ($post_id != 0) {
             $parseUrl = parse_url(get_permalink($post_id));
         } else {
             $parseUrl = parse_url(site_url());
@@ -366,26 +423,23 @@ class wps_ic_cache_integrations
         $x_purge_method = 'default';
         $regex = '';
 
-        // (v7.03.91) Full-site eviction for a SITE-WIDE purge (e.g. a critical-CSS purge): a single-path
-        // PURGE only evicts the homepage, leaving interior pages walled (a cached crit-less HIT blocks the
-        // crit regen because WP never re-renders). A regex purge against every path clears them all. Filters
-        // below can still override per host (some Varnish VCLs use BAN instead of an X-Purge-Method: regex).
+
         if ($full_site) {
             $x_purge_method = 'regex';
             $regex = '.*';
         }
 
 
-        // Filter the HTTP protocol (scheme) for Varnish purge
+        
         $scheme = apply_filters('wps_ic_varnish_purge_scheme', isset($parseUrl['scheme']) ? $parseUrl['scheme'] : 'http');
 
-        //Filter the Varnish purge method
+        
         $x_purge_method = apply_filters('wps_ic_varnish_purge_method', $x_purge_method);
 
-        //Filter the regex pattern for Varnish purge
+        
         $regex = apply_filters('wps_ic_varnish_purge_regex', $regex);
 
-        //Filter the headers to send with the Varnish purge request
+        
         $headers = apply_filters(
             'wps_ic_varnish_purge_headers',
             [
@@ -395,7 +449,7 @@ class wps_ic_cache_integrations
         );
 
 
-        //Filter the arguments passed to the Varnish purge request
+        
         $args = apply_filters(
             'wps_ic_varnish_purge_request_args',
             [
@@ -406,27 +460,48 @@ class wps_ic_cache_integrations
             ]
         );
 
-        //Filter the Varnish IP addresses to send purge requests to
+
         $varnish_ips = apply_filters('wps_ic_varnish_ips', []);
 
-        // If no IPs specified, use empty string to use the host
+        
         if (empty($varnish_ips)) {
             $varnish_ips = [''];
         } elseif (is_string($varnish_ips)) {
             $varnish_ips = (array) $varnish_ips;
         }
 
-        // Send purge request to each Varnish IP
+
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_lb_has = false;
+        foreach ($varnish_ips as $wpc_lb_ip) {
+            if (is_string($wpc_lb_ip) && strpos($wpc_lb_ip, '127.0.0.1') !== false) {
+                $wpc_lb_has = true;
+                break;
+            }
+        }
+        $wpc_lb_dead = function_exists('get_transient') ? (bool) get_transient('wpc_varnish_lb_dead') : false;
+        if (!$wpc_lb_has && !$wpc_lb_dead && apply_filters('wpc_varnish_loopback_fallback', true)) {
+            $varnish_ips[] = '127.0.0.1';
+        }
+
+        
         foreach ($varnish_ips as $ip) {
             $host = !empty($ip) ? $ip : $parseUrl['host'];
             $purge_url_main = $scheme . '://' . $host . $parseUrl['path'];
 
-            /**
-             * Filter the final purge URL
-             * @param string $purge_url_full Full URL with regex pattern
-             * @param string $purge_url_main Main purge URL without additions
-             * @param string $regex          Regex string
-             */
+            
+
+
+
+
+
             $purge_url = apply_filters(
                 'wps_ic_varnish_purge_url',
                 $purge_url_main . $regex,
@@ -434,15 +509,370 @@ class wps_ic_cache_integrations
                 $regex
             );
 
+            $ipArgs = $args;
+            $wpc_is_lb = (is_string($ip) && strpos($ip, '127.0.0.1') !== false);
+            if ($wpc_is_lb) {
+                
+                
+                $ipArgs['sslverify'] = false;
+                
+                
+                $ipArgs['timeout'] = max(1, (int) apply_filters('wpc_varnish_loopback_timeout', 2));
+            }
+
             try {
-                wp_remote_request($purge_url, $args);
+                $wpc_lb_t0 = microtime(true);
+                $wpc_pr = wp_remote_request($purge_url, $ipArgs);
+                
+                
+                if ($wpc_is_lb && $ip === '127.0.0.1' && function_exists('set_transient')
+                    && (is_wp_error($wpc_pr) || (microtime(true) - $wpc_lb_t0) > 1.5)) {
+                    set_transient('wpc_varnish_lb_dead', 1,
+                        (int) apply_filters('wpc_varnish_lb_dead_ttl', 1800));
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('varnish-loopback-dead', '', '', [
+                            'ms'  => (int) round((microtime(true) - $wpc_lb_t0) * 1000),
+                            'ttl' => (int) apply_filters('wpc_varnish_lb_dead_ttl', 1800),
+                        ]);
+                    }
+                }
             } catch (exception $e) {
-                // Continue to next IP on error
+                
                 continue;
             }
         }
 
         return true;
+    }
+
+
+    private static $purgedUrls = [];
+
+
+    public static function purgeUrlHtml($url_key, $url = '', $opts = [])
+    {
+        $opts   = array_merge(['context' => '', 'warm' => true, 'varnish' => true], is_array($opts) ? $opts : []);
+        $layers = [];
+        if (empty($url_key) || !is_string($url_key)) {
+            return $layers;
+        }
+        if (isset(self::$purgedUrls[$url_key])) {
+            return self::$purgedUrls[$url_key];
+        }
+
+        
+        
+        $clean = '';
+        if (class_exists('wps_ic_url_key')) {
+            if (!empty($url) && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+                $clean = wps_ic_url_key::sanitizeSameHostUrl($url);
+            }
+            if ($clean === '' && method_exists('wps_ic_url_key', 'getUrlFromKey')) {
+                $raw = wps_ic_url_key::getUrlFromKey($url_key);
+                if (!empty($raw) && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+                    $clean = wps_ic_url_key::sanitizeSameHostUrl($raw);
+                }
+            }
+            if ($clean !== '' && method_exists('wps_ic_url_key', 'persistKeyUrl')) {
+                wps_ic_url_key::persistKeyUrl($url_key, $clean);
+            }
+        }
+
+
+        $rebuild = !empty($opts['warm']) && $clean !== ''
+            && function_exists('wpc_warm_url_queue')
+            && function_exists('wpc_cache_first_enabled') && wpc_cache_first_enabled()
+            && apply_filters('wpc_build_before_purge', false);
+
+        
+        if ($rebuild) {
+            $layers['local'] = 'rebuild';
+        } else {
+            $layers['local'] = (bool) self::purgeCacheFiles($url_key);
+        }
+
+        if ($clean === '') {
+            
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('url-map-miss', $url_key, '', ['context' => $opts['context']]);
+            }
+            self::$purgedUrls[$url_key] = $layers;
+            return $layers;
+        }
+
+        
+        
+        try {
+            if ($rebuild) {
+                $layers['mirror'] = 'rebuild';
+            } elseif (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'removeStaticMirror')) {
+                wps_cacheHtml::removeStaticMirror($clean);
+                $layers['mirror'] = true;
+            }
+        } catch (\Throwable $e) {
+            $layers['mirror'] = false;
+        }
+
+        
+        if (!empty($opts['varnish'])) {
+            try {
+                $layers['varnish'] = (bool) self::purgeVarnish(0, false, $clean);
+            } catch (\Throwable $e) {
+                $layers['varnish'] = false;
+            }
+        }
+
+        
+        
+
+
+        try {
+            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
+                $forms   = [$clean];
+                $forms[] = (substr($clean, -1) === '/') ? rtrim($clean, '/') : $clean . '/';
+                wps_ic_cache::purgeEdgeHtmlUrls(array_filter($forms));
+                $layers['cf'] = 'queued';
+            }
+        } catch (\Throwable $e) {
+            $layers['cf'] = false;
+        }
+
+        
+        $wpc_tp325 = self::purgeThirdPartyUrl($clean);
+        $layers = array_merge($layers, $wpc_tp325);
+
+        
+        
+        $layers['fullonly'] = self::maybeFullPurgeFullOnlyLayers(array_keys(array_filter($wpc_tp325)));
+
+        
+
+        do_action('wps_ic_purge_url_html', $clean, $url_key, $opts['context']);
+
+        
+        if (!empty($opts['warm']) && function_exists('wpc_warm_url_queue')) {
+            wpc_warm_url_queue($clean, $opts['context']);
+        }
+
+
+        if ($rebuild && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')) {
+
+
+            $wpc_sw_delay = 75;
+            if (function_exists('get_transient') && get_transient('wpc_land_ready_' . md5((string) $url_key)) === 'crit_only') {
+                $wpc_sw_delay = 240;
+            }
+            if (!wp_next_scheduled('wpc_land_second_wave', [$clean])) {
+                if (function_exists('wpc_pl_sched')) {
+                    wpc_pl_sched(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
+                } else {
+                    wp_schedule_single_event(time() + $wpc_sw_delay, 'wpc_land_second_wave', [$clean]);
+                }
+            }
+        }
+
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log($opts['context'] !== '' ? $opts['context'] : 'purge-url', $url_key, $clean, $layers);
+        }
+        self::$purgedUrls[$url_key] = $layers;
+        return $layers;
+    }
+
+    
+
+
+
+    private static function purgeThirdPartyUrl($url)
+    {
+        $out = [];
+        try { 
+            if (function_exists('rocket_clean_files')) {
+                rocket_clean_files($url);
+                $out['rocket'] = true;
+            }
+        } catch (\Throwable $e) {
+            $out['rocket'] = false;
+        }
+        try { 
+            if (function_exists('w3tc_flush_url')) {
+                w3tc_flush_url($url);
+                $out['w3tc'] = true;
+            }
+        } catch (\Throwable $e) {
+            $out['w3tc'] = false;
+        }
+        try { 
+            if (function_exists('wpsc_delete_url_cache')) {
+                wpsc_delete_url_cache($url);
+                $out['wpsc'] = true;
+            }
+        } catch (\Throwable $e) {
+            $out['wpsc'] = false;
+        }
+        try { 
+            if (defined('LSCWP_V') || class_exists('\LiteSpeed\Purge')) {
+                do_action('litespeed_purge_url', $url);
+                $out['litespeed'] = true;
+            } elseif (!headers_sent() && !empty($_SERVER['SERVER_SOFTWARE'])
+                && stripos($_SERVER['SERVER_SOFTWARE'], 'litespeed') !== false) {
+                
+                $path = (string) parse_url($url, PHP_URL_PATH);
+                if ($path !== '') {
+                    header('X-LiteSpeed-Purge: ' . $path, false);
+                    $out['litespeed'] = true;
+                }
+            }
+            
+            
+            
+            
+            
+            if (function_exists('wpc_ls_purge_ping')) {
+                $out['ls_ping'] = (bool) wpc_ls_purge_ping($url);
+            }
+        } catch (\Throwable $e) {
+            $out['litespeed'] = false;
+        }
+        try { 
+            if (has_action('swcfpc_purge_cache')) {
+                do_action('swcfpc_purge_cache', [$url]);
+                $out['swcfpc'] = true;
+            }
+        } catch (\Throwable $e) {
+            $out['swcfpc'] = false;
+        }
+        try { 
+            if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)
+                && method_exists($GLOBALS['kinsta_cache']->kinsta_cache_purge, 'purge_url')) {
+                $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_url($url);
+                $out['kinsta'] = true;
+            }
+        } catch (\Throwable $e) {
+            $out['kinsta'] = false;
+        }
+
+        
+        
+        
+        $wpc_pid325 = 0;
+        
+        
+        $wpc_adapters325 = defined('WPHB_VERSION') || function_exists('wpfc_clear_post_cache_by_id')
+            || is_callable(['comet_cache', 'clearPost'])
+            || is_callable(['Swift_Performance_Cache', 'clear_post_cache'])
+            || is_callable(['Swift_Performance_Cache', 'clear_permalink_cache']);
+        try {
+            if ($wpc_adapters325 && function_exists('url_to_postid')) {
+                $wpc_pid325 = (int) url_to_postid($url);
+            }
+            if ($wpc_adapters325 && $wpc_pid325 === 0 && function_exists('home_url')
+                && untrailingslashit((string) parse_url($url, PHP_URL_PATH)) === untrailingslashit((string) parse_url(home_url('/'), PHP_URL_PATH))) {
+                $wpc_pid325 = (int) get_option('page_on_front');
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($wpc_pid325 > 0) {
+            try { 
+                if (defined('WPHB_VERSION')) {
+                    do_action('wphb_clear_page_cache', $wpc_pid325);
+                    $out['wphb_page'] = true;
+                }
+            } catch (\Throwable $e) {
+            }
+            try { 
+                if (function_exists('wpfc_clear_post_cache_by_id')) {
+                    wpfc_clear_post_cache_by_id($wpc_pid325);
+                    $out['wpfc_page'] = true;
+                }
+            } catch (\Throwable $e) {
+            }
+            try { 
+                if (is_callable(['comet_cache', 'clearPost'])) {
+                    call_user_func(['comet_cache', 'clearPost'], $wpc_pid325);
+                    $out['comet_page'] = true;
+                }
+            } catch (\Throwable $e) {
+            }
+            try { 
+                if (is_callable(['Swift_Performance_Cache', 'clear_post_cache'])) {
+                    call_user_func(['Swift_Performance_Cache', 'clear_post_cache'], $wpc_pid325);
+                    $out['swift_page'] = true;
+                } elseif (is_callable(['Swift_Performance_Cache', 'clear_permalink_cache'])) {
+                    call_user_func(['Swift_Performance_Cache', 'clear_permalink_cache'], $wpc_pid325);
+                    $out['swift_page'] = true;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+        try { 
+            if (is_callable(['WPO_Page_Cache', 'delete_cache_by_url'])) {
+                call_user_func(['WPO_Page_Cache', 'delete_cache_by_url'], $url);
+                $out['wpo_page'] = true;
+            }
+        } catch (\Throwable $e) {
+        }
+        return $out;
+    }
+
+    
+
+
+
+
+
+    private static function maybeFullPurgeFullOnlyLayers($handled = [])
+    {
+        if (!apply_filters('wpc_purge_fullonly_on_crit', true)) {
+            return 'off';
+        }
+        $handled = is_array($handled) ? $handled : [];
+        
+        $need = [
+            'breeze'  => (class_exists('Breeze_PurgeCache') || defined('BREEZE_VERSION')),
+            'wphb'    => defined('WPHB_VERSION') && !in_array('wphb_page', $handled, true),
+            'wpfc'    => function_exists('wpfc_clear_all_cache') && !in_array('wpfc_page', $handled, true),
+            'cachify' => function_exists('cachify_flush_cache'),
+            'comet'   => is_callable(['comet_cache', 'clear']) && !in_array('comet_page', $handled, true),
+            'swift'   => is_callable(['Swift_Performance_Cache', 'clear_all_cache']) && !in_array('swift_page', $handled, true),
+            'wpo'     => class_exists('WP_Optimize') && !in_array('wpo_page', $handled, true),
+        ];
+        $need = array_filter($need);
+        if (empty($need)) {
+            return 'scoped'; 
+        }
+        if (get_transient('wpc_fullonly_purge_lock')) {
+            return 'coalesced';
+        }
+        set_transient('wpc_fullonly_purge_lock', 1, max(60, (int) apply_filters('wpc_fullonly_purge_window', 600)));
+        try {
+            if (!empty($need['breeze'])) {
+                do_action('breeze_clear_all_cache');
+                if (class_exists('Breeze_PurgeCache') && is_callable(['Breeze_PurgeCache', 'breeze_cache_flush'])) {
+                    call_user_func(['Breeze_PurgeCache', 'breeze_cache_flush']);
+                }
+            }
+            if (!empty($need['wphb'])) {
+                do_action('wphb_clear_page_cache');
+            }
+            if (!empty($need['wpfc'])) {
+                wpfc_clear_all_cache();
+            }
+            if (!empty($need['cachify'])) {
+                cachify_flush_cache();
+            }
+            if (!empty($need['comet'])) {
+                call_user_func(['comet_cache', 'clear']);
+            }
+            if (!empty($need['swift'])) {
+                call_user_func(['Swift_Performance_Cache', 'clear_all_cache']);
+            }
+            if (!empty($need['wpo'])) {
+                WP_Optimize()->get_page_cache()->purge();
+            }
+        } catch (\Throwable $e) {
+            return 'error';
+        }
+        return 'purged:' . implode(',', array_keys($need));
     }
 
 }

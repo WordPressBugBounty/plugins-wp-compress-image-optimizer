@@ -1,9 +1,9 @@
 <?php
 
 
-/**
- * Class - Templates
- */
+
+
+
 class wps_ic_templates extends wps_ic {
 
 

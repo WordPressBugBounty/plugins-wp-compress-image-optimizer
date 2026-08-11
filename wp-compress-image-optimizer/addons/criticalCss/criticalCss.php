@@ -84,16 +84,16 @@ class wps_criticalCss
         ]);
 
         if (is_wp_error($CSS)) {
-            // Get the error message
+            
             $error_message = $CSS->get_error_message();
 
-            // Optional: Get the error code
+            
             $error_code = $CSS->get_error_code();
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css file: ' . $error_message,
-                'code' => $error_code, // Optional
+                'code' => $error_code, 
                 'url' => $url
             ]);
         }
@@ -101,13 +101,17 @@ class wps_criticalCss
             mkdir($critical_path, 0777, true);
         }
 
-        $fp = fopen($critical_path . 'critical_' . $mode . '.css', 'w+');
-        fwrite($fp, wp_remote_retrieve_body($CSS));
-        fclose($fp);
+        $fp = @fopen($critical_path . 'critical_' . $mode . '.css', 'w+');
+        if ($fp) {
+            fwrite($fp, wp_remote_retrieve_body($CSS));
+            fclose($fp);
+        } elseif (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('crit-write-fail', (string) $urlKey, '', ['f' => 'critical_' . $mode . '.css']);
+        }
 
         $cache::purgeAll($urlKey, false, false, false);
 
-        //remove criticalCombine temp folder
+
         $files = scandir(WPS_IC_COMBINE . $urlKey);
         foreach ($files as $file) {
             if ($file != "." && $file != "..") {
@@ -454,7 +458,7 @@ class wps_criticalCss
 
         if (is_wp_error($cssContent) || empty($cssContent)) {
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css content - empty API response',
             ]);
@@ -462,11 +466,14 @@ class wps_criticalCss
 
         mkdir($critical_path, 0777, true);
 
-        $fp = fopen($critical_path . $criticalCSSPath, 'w+');
+        $fp = @fopen($critical_path . $criticalCSSPath, 'w+');
+        if (!$fp) {
+            wp_send_json_error(['msg' => 'Error writing critical css file.']);
+        }
         fwrite($fp, $cssContent);
         fclose($fp);
 
-        //remove criticalCombine temp folder
+
         $files = scandir(WPS_IC_COMBINE . $urlKey);
         foreach ($files as $file) {
             if ($file != "." && $file != "..") {
@@ -480,8 +487,6 @@ class wps_criticalCss
         if (file_exists($critical_path . $criticalCSSPath) && filesize($critical_path . $criticalCSSPath) > 5) {
             if ($type == 'meta') {
                 update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
-            } else {
-                update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
             }
         }
 
@@ -526,33 +531,39 @@ class wps_criticalCss
         ]);
 
         if (is_wp_error($desktop)) {
-            // Get the error message
+            
             $error_message = $desktop->get_error_message();
 
-            // Optional: Get the error code
+            
             $error_code = $desktop->get_error_code();
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css file: ' . $error_message,
-                'code' => $error_code, // Optional
+                'code' => $error_code, 
                 'url' => $json['desktop']
             ]);
         }
         mkdir($critical_path, 0777, true);
 
-        $fp = fopen($critical_path . 'critical_desktop.css', 'w+');
+        $fp = @fopen($critical_path . 'critical_desktop.css', 'w+');
+        if (!$fp) {
+            wp_send_json_error(['msg' => 'Error writing critical css file.']);
+        }
         fwrite($fp, wp_remote_retrieve_body($desktop));
         fclose($fp);
 
         if (is_wp_error($mobile)) {
             wp_send_json_error(['msg' => 'Error downloading css file.', 'url' => $json['mobile']]);
         }
-        $fp = fopen($critical_path . 'critical_mobile.css', 'w+');
+        $fp = @fopen($critical_path . 'critical_mobile.css', 'w+');
+        if (!$fp) {
+            wp_send_json_error(['msg' => 'Error writing critical css file.']);
+        }
         fwrite($fp, wp_remote_retrieve_body($mobile));
         fclose($fp);
 
-        //remove criticalCombine temp folder
+
         $files = scandir(WPS_IC_COMBINE . $urlKey);
         foreach ($files as $file) {
             if ($file != "." && $file != "..") {
@@ -566,8 +577,6 @@ class wps_criticalCss
         if (file_exists($critical_path . 'critical_desktop.css') && filesize($critical_path . 'critical_desktop.css') > 5) {
             if ($type == 'meta') {
                 update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
-            } else {
-                update_option('wps_critical_css_' . sanitize_title($urlKey), $critical_path . 'critical.css');
             }
         }
 
@@ -589,12 +598,12 @@ class wps_criticalCss
             if (is_array($call) && !empty($call['desktop'])) {
                 $this->saveCriticalCss($url_key, $call, $type);
             } else {
-                //delete_transient('wpc_api_' . $postID);
+
                 wp_send_json_error(['msg' => 'API Done returned empty response.', 'response body' => $call]);
             }
 
         } else {
-            //delete_transient('wpc_api_' . $postID);
+
             wp_send_json_error(['code' => $call, 'api' => $criticalAPI]);
         }
     }
@@ -647,7 +656,22 @@ class wps_criticalCss
 
 
         $args = ['url' => $url];
-        $call = wp_remote_post(self::$API_ASSETS_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        
+        
+        
+        
+        
+        if (get_transient('wpc_v1_assets_down515')) {
+            return 0;
+        }
+        $call = wp_remote_post(self::$API_ASSETS_URL, ['timeout' => (int) apply_filters('wpc_v1_assets_timeout', 20), 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        if (is_wp_error($call)) {
+            set_transient('wpc_v1_assets_down515', 1, (int) apply_filters('wpc_v1_assets_breaker_s', 900));
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('v1-assets-unreachable', '', '', ['err' => substr((string) $call->get_error_message(), 0, 80)]);
+            }
+            return 0;
+        }
 
         $body = wp_remote_retrieve_body($call);
         if (!empty($body)) {
@@ -696,7 +720,7 @@ class wps_criticalCss
     {
         $args = ['pages' => urldecode(json_encode(['ajax' => $this->serverRequest]))];
 
-        $call = wp_remote_post(self::$API_URL, ['timeout' => 300, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+        $call = wp_remote_post(self::$API_URL, ['timeout' => (int) apply_filters('wpc_v1_generate_timeout', 20), 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         $body = wp_remote_retrieve_body($call);
 

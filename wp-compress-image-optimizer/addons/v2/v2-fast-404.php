@@ -1,25 +1,5 @@
 <?php
-/**
- * WP Compress — Fast-404 mu-plugin manager.
- *
- * Genuine missing-image requests (typos, purged / not-yet-landed variants, off-library / page-builder
- * assets) fall through to index.php and boot the whole WP stack — theme, main query, 404 template —
- * the ~1-2s PHP "Not Found" that saturates PHP-FPM under a CDN cold-probe storm. The real fix is to
- * not generate misses (?src removes the probing); this is the BACKSTOP for the genuine misses that
- * survive: an auto-managed mu-plugin that answers a bare 404 BEFORE regular plugins, the theme, the
- * query and the template run — turning ~1-2s into a few hundred ms, from a file we ship (no host /
- * server config). It can't reach the webserver's ~5ms (PHP + core still boot before any plugin), but
- * it's a big cut we fully control, and with ?src + the CDN negative-cache the residual misses are rare.
- *
- * The mu-plugin is SELF-CONTAINED (no WPC dependency — it runs before WPC loads) and SAFE: it acts on
- * a request only when (a) it ends in an image extension, (b) it resolves to a path under the docroot
- * whose PARENT directory actually exists, and (c) the file is genuinely absent. It NEVER 404s an
- * existing file, and the parent-dir guard means a dynamic/virtual endpoint (no real directory) or any
- * path it can't resolve simply falls through to WordPress untouched. Covers /wp-content/uploads AND
- * /storage AND any other docroot image path — no per-path config.
- *
- * Kill switch: define('WPC_FAST404_OFF', true) or add_filter('wpc_fast404_enabled', '__return_false').
- */
+
 
 if (!defined('ABSPATH')) {
     exit;
@@ -43,11 +23,7 @@ if (!function_exists('wpc_v2_fast404_file')) {
 }
 
 if (!function_exists('wpc_v2_fast404_body')) {
-    /**
-     * The mu-plugin source. Resolves any image request under the docroot (ABSPATH) at runtime — no
-     * baked paths — so it covers /wp-content/uploads, /storage, and any other docroot media path on
-     * every install. ABSPATH is defined before mu-plugins load, so this is safe that early.
-     */
+
     function wpc_v2_fast404_body($ver)
     {
         $v   = preg_replace('/[^0-9A-Za-z.\-]/', '', (string) $ver);
@@ -101,10 +77,10 @@ if (!function_exists('wpc_v2_fast404_remove')) {
 }
 
 if (!function_exists('wpc_v2_fast404_sync')) {
-    /**
-     * Write/refresh the mu-plugin when missing or stale (version drift), or remove it when disabled.
-     * Best-effort: a read-only mu-plugins dir just leaves the in-WP early-404 handler as the fallback.
-     */
+    
+
+
+
     function wpc_v2_fast404_sync()
     {
         $file = wpc_v2_fast404_file();
@@ -120,7 +96,7 @@ if (!function_exists('wpc_v2_fast404_sync')) {
 
         $existing = @is_file($file) ? (string) @file_get_contents($file) : '';
         if ($existing === $body) {
-            return; // already current — no churn
+            return;
         }
         $dir = dirname($file);
         if (!is_dir($dir)) {
@@ -132,8 +108,8 @@ if (!function_exists('wpc_v2_fast404_sync')) {
     }
 }
 
-// Self-install / keep-fresh on admin loads (re-writes on version drift) + on activation; remove on
-// deactivation. All guarded + best-effort.
+
+
 add_action('admin_init', 'wpc_v2_fast404_sync');
 if (defined('WPC_CC_PLUGIN_FILE')) {
     register_activation_hook(WPC_CC_PLUGIN_FILE, 'wpc_v2_fast404_sync');

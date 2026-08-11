@@ -52,15 +52,12 @@ class wps_ic_combine_css
         self::$rewrite = new wps_cdn_rewrite();
         self::$site_url = site_url();
         $this->settings = get_option(WPS_IC_SETTINGS);
-        $this->filesize_cap = '100000000000'; //in bytes
+        $this->filesize_cap = '100000000000';
         $this->combine_inline_scripts = true;
         $this->combine_external = false;
         $this->allExcludes = self::$excludes->combineCSSExcludes();
 
-        // This used to be an AND of all four image serve-keys, but under the consolidated single
-        // "Images" tile that only holds post-mirror. Use ANY image-key (OR) instead so combined-CSS
-        // @font-face→CDN tracks "images are on the CDN" the way every other per-format reader and the
-        // single tile imply.
+
         if (!empty($this->settings['serve']['jpg']) || !empty($this->settings['serve']['png']) || !empty($this->settings['serve']['gif']) || !empty($this->settings['serve']['svg'])) {
             $this->enabledCDN = true;
             $cf = get_option(WPS_IC_CF);
@@ -72,7 +69,7 @@ class wps_ic_combine_css
         if (!empty($_GET['criticalCombine']) || !empty(wpcGetHeader('criticalCombine'))) {
             $this->settings['inline-css'] = '0';
             $this->criticalCombine = true;
-            $this->filesize_cap = '10000000000'; //in bytes
+            $this->filesize_cap = '10000000000';
             $this->combine_inline_scripts = true;
             $this->combine_external = true;
             $this->allExcludes = array_merge(['media="print"', 'media=\'print\''], $this->allExcludes);
@@ -80,13 +77,7 @@ class wps_ic_combine_css
 
         $this->patterns = '/(<link[^>]*rel=["\']stylesheet["\'][^>]*>)|((?<!<noscript>)<style\b[^>]*>(.*?)<\/style>)|(<link\b[^>]*?onload=["\']this.rel=["\']stylesheet["\']["\'][^>]*>)/si';
 
-        // The CF cname lives in the WPS_IC_CF_CNAME option, not $cf['cname'], which was never
-        // populated — the legacy read here was dead. Mirror the canonical emit path exactly: require
-        // CF CDN delivery active (cf.settings.cdn) AND the fail-open verified-gate, so combined CSS
-        // (a) never emits a mid-change ('0') cname and (b) never emits an orphaned cname after a CF
-        // disconnect / CDN-off (when WPS_IC_CF_CNAME persists but cf.settings.cdn is gone). Without the
-        // settings.cdn guard, combine diverged from cdn-rewrite/enqueues and could route combined-CSS
-        // asset + @font-face url() to a disconnected/disabled CF host. Falls back to the working host.
+
         $cf = get_option(WPS_IC_CF);
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
@@ -96,7 +87,7 @@ class wps_ic_combine_css
             $this->zone_name = $custom_cname;
         }
 
-        //Check if Hide my WP is active and get replaces
+        
         $this->hmwpReplace = false;
         if (class_exists('HMWP_Classes_ObjController')) {
             $this->hmwpReplace = true;
@@ -119,23 +110,23 @@ class wps_ic_combine_css
             $userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
         }
 
-        // Desktop Detection
+        
         $desktopKeywords = ['windows nt', 'macintosh', 'linux', 'cros', 'x11'];
 
         foreach ($desktopKeywords as $keyword) {
             if (strpos($userAgent, $keyword) !== false) {
-                return false; // Detected a desktop identifier, so it's not a mobile device
+                return false; 
             }
         }
 
         if (isset($_SERVER['HTTP_USER_AGENT'])) {
-            // Define an array of mobile device keywords to check against
+            
             $mobileKeywords = ['android', 'iphone', 'ipad', 'ipod', 'windows phone', 'blackberry', 'bb10', 'webos', 'symbian', 'playbook', 'kindle', 'silk', 'opera mini', 'opera mobi', 'palm'];
 
-            // Check if the user agent contains any of the mobile device keywords
+            
             foreach ($mobileKeywords as $keyword) {
                 if (strpos($userAgent, $keyword) !== false) {
-                    return true; // Found a match, so it's a mobile device
+                    return true; 
                 }
             }
         }
@@ -156,41 +147,15 @@ class wps_ic_combine_css
     }
 
 
-    /**
-     * Build <link rel="preload"> tags for the LCP image so the browser preload
-     * scanner fetches it before finishing HTML parse. This measurably cuts LCP
-     * on throttled mobile (verified: 2.98s down to ~1.3s).
-     *
-     * Strategy:
-     *   1. Find the LCP candidate IMG — prefer fetchpriority="high", fall back to
-     *      first IMG inside <picture class="wpc-picture"> (our LCP-optimized wrap),
-     *      fall back to first IMG with class wpc-lcp-optimized, fall back to first IMG.
-     *   2. If the IMG is inside a <picture>, harvest the FIRST <source>'s srcset +
-     *      sizes (typically the AVIF source — best-quality modern format) and emit
-     *      `<link rel="preload" as="image" imagesrcset="…" imagesizes="…" fetchpriority="high">`
-     *      so the preload scanner picks the SAME variant the picture would.
-     *   3. If no picture wrap, use the IMG's own srcset+sizes (or just src as
-     *      single-URL preload).
-     *   4. Type hint: imageset/avif if the source was AVIF (modern Chrome
-     *      respects this for selecting AVIF early when supported).
-     *
-     * Returns an array of preload <link …> tag strings (typically 1 entry — just
-     * the LCP candidate). Caller string-joins and substitutes into the
-     * <!--WPC_INSERT_PRELOAD_MAIN--> placeholder injected in <head> via
-     * injectPreloadImages().
-     *
-     * Filterable via 'wpc_preload_lcp_links' (array of tag strings) so themes/
-     * mu-plugins can override or augment.
-     */
     public function preloadLCP($html)
     {
         $preloadLCP = [];
 
-        // (1) Try picture-wrapped LCP first — gives us AVIF/WebP srcset to preload
+        
         if (preg_match('/<picture[^>]*class="[^"]*wpc-picture[^"]*"[^>]*>(.*?)<\/picture>/is', $html, $picMatch)) {
             $pictureInner = $picMatch[1];
 
-            // Harvest the first <source> (highest-priority format, typically AVIF)
+            
             $sourceData = null;
             if (preg_match('/<source\s+[^>]*type=["\']image\/(avif|webp)["\'][^>]*>/i', $pictureInner, $sourceMatch)) {
                 $sourceTag = $sourceMatch[0];
@@ -207,7 +172,7 @@ class wps_ic_combine_css
                 }
             }
 
-            // Find the inner IMG for src fallback + fetchpriority detection
+            
             $innerImgSrc = '';
             $innerImgIsLcp = false;
             if (preg_match('/<img\s+[^>]*>/i', $pictureInner, $imgMatch)) {
@@ -218,7 +183,7 @@ class wps_ic_combine_css
                 }
             }
 
-            // Emit preload from source data
+            
             if ($sourceData !== null) {
                 $tag = '<link rel="preload" as="image"'
                      . ' imagesrcset="' . esc_attr($sourceData['srcset']) . '"'
@@ -227,12 +192,12 @@ class wps_ic_combine_css
                      . ' fetchpriority="high">';
                 $preloadLCP[] = $tag;
             } elseif ($innerImgSrc !== '') {
-                // No AVIF/WebP source found — preload the IMG src directly
+                
                 $preloadLCP[] = '<link rel="preload" as="image" href="' . esc_url($innerImgSrc) . '" fetchpriority="high">';
             }
         }
 
-        // (2) Fallback — first IMG with fetchpriority="high" outside any picture wrap
+        
         if (empty($preloadLCP)) {
             if (preg_match('/<img\s+[^>]*fetchpriority\s*=\s*["\']high["\'][^>]*>/is', $html, $imgMatch)) {
                 $imgTag = $imgMatch[0];
@@ -251,7 +216,7 @@ class wps_ic_combine_css
             }
         }
 
-        // Allow themes/mu-plugins to override or augment
+        
         return (array) apply_filters('wpc_preload_lcp_links', $preloadLCP, $html);
     }
 
@@ -271,15 +236,21 @@ class wps_ic_combine_css
                     continue;
                 }
 
-                // Href is local
+                
                 $cleanHref = explode('?', trim($href));
                 $cleanHref = trim($cleanHref[0]);
 
                 if (strpos($cleanHref, self::$site_url) !== false) {
+                    
+                    
+                    
+                    continue;
+                }
+                if (false) {
                     $path = str_replace([self::$site_url, $this->zone_name, 'https:///m:0/a:', 'https://' . $this->zone_name . '/m:0/a:','https:///m:1/a:', 'https://' . $this->zone_name . '/m:1/a:'], '', $cleanHref);
                     $path = urldecode(ltrim($path, '/'));
 
-                    // Skip if CDN URL patterns leaked through the str_replace
+                    
                     if (preg_match('#^https?://#i', $path)) {
                         continue;
                     }
@@ -293,44 +264,43 @@ class wps_ic_combine_css
                     $content = @file_get_contents($relativePath);
 
                     if (!empty($content)) {
-                        // Get the filename
+                        
                         $cssFilename = basename($href);
                         $cssUrlPath = str_replace($cssFilename, '', $href);
 
-                        // Remove the site URL from the Path to retrieve just the path
-                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath); // strip both schemes — a scheme-mismatched href otherwise survived behind a proxy
+                        
+                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
                         $cssPath = rtrim($cssPath, '/');
                         $this->cssPath = self::$site_url . '/' . $cssPath;
 
-                        // Find All The Fonts
+                        
                         $css = $this->fixUrlPaths($content);
-                        #$foundFonts = $this->findFonts($css);
+                        
                         if (!empty($foundFonts)) {
                             $AlreadyLoaded = [];
                             foreach ($foundFonts as $i => $font) {
                                 if (!in_array($font, $AlreadyLoaded)) {
                                     $AlreadyLoaded[] = $font;
-                                    #$wpcPreloads[] = "<link rel='preload' href='" . $font . "' as='font' />";
                                 }
                             }
                         }
 
-                        // Find All The Images
+                        
                         $foundBackgrounds = $this->findBackgrounds($css);
                         if (!empty($foundBackgrounds)) {
                             $AlreadyLoaded = [];
                             foreach ($foundBackgrounds as $i => $bg) {
                                 if (!in_array($bg, $AlreadyLoaded)) {
                                     $AlreadyLoaded[] = $bg;
-                                    #$wpcPreloads[] = "<link rel='preload' href='" . $bg . "' as='image' />";
+                                    
                                 }
                             }
                         }
 
                     }
                 } elseif (strpos($href, 'fonts.google')) {
-                    #$preload = "<link rel='preload' href='" . $href . "' as='style' />";
-                    #$wpcPreloads[] = $preload;
+                    
+                    
                 } elseif (strpos($href, 'fontawesome.com')) {
                     if (!in_array($href, $AlreadyLoadedLocaLFonts)) {
                         $AlreadyLoadedLocaLFonts[] = $href;
@@ -354,9 +324,9 @@ class wps_ic_combine_css
 
     public function fixUrlPaths($css)
     {
-        $css = preg_replace_callback('/url(\(((?:[^()]+|(?1))+)\))/m', [$this, 'fixPathsWalker'], $css);
+        $css = preg_replace_callback('/url\(([^)]*)\)/i', [$this, 'fixPathsWalker'], $css);
 
-        // Fix URLs inside @import statements
+        
         $css = preg_replace_callback('/@import\s+["\']([^"\']+)["\'];?/i', [$this, 'fixImportPaths'], $css);
 
         return $css;
@@ -364,20 +334,20 @@ class wps_ic_combine_css
 
     public function findBackgrounds($css)
     {
-        $pattern = '/(?:background(?:-image)?\s*:\s*url\s*\(\s*([\'"]?)(.*?)\1\s*\))/si';
+        $pattern = '/(?:background(?:-image)?\s*:\s*url\s*\(\s*([\'"]?)([^)\'"]*)\1\s*\))/i';
 
-        // Perform the regular expression match
+        
         preg_match_all($pattern, $css, $matches);
 
-        // Extracted URLs will be in $matches[1]
+        
         $fontUrls = $matches[2];
 
-        // Filter the URLs based on file extensions (eot, woff, etc.)
+        
         $filteredUrls = array_filter($fontUrls, function ($url) {
             return preg_match('/\.(svg|jpeg|jpg|gif|png)\b/', $url);
         });
 
-        // Remove quotes from the filtered URLs
+        
         $filteredUrls = array_filter(array_map(function ($url) {
             return trim($url, '"\'');
         }, $filteredUrls));
@@ -393,7 +363,7 @@ class wps_ic_combine_css
     public function is_home_url()
     {
         $home_url = rtrim(home_url(), '/');
-        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]"; // proxy-aware; the bare $_SERVER['HTTPS'] check made the homepage preload miss behind Cloudflare
+        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
         $current_url = rtrim($current_url, '/');
         $current_url = explode('?', $current_url);
         $current_url = $current_url[0];
@@ -443,32 +413,32 @@ class wps_ic_combine_css
 
     public function moveUpDirectories($url, $upCount = 1)
     {
-        // Validate input
+        
         if (!is_string($url) || $upCount < 0) {
             return false;
         }
 
-        // Remove any trailing slashes from the URL
+        
         $url = rtrim($url, '/');
 
-        // Split the URL into parts
+        
         $urlParts = parse_url($url);
 
-        // If the URL doesn't have a path, there's nothing to move up
+        
         if (!isset($urlParts['path'])) {
             return $url;
         }
 
-        // Get the path and split it into segments
+        
         $path = explode('/', trim($urlParts['path'], '/'));
 
-        // Move up the specified number of directories
+        
         $path = array_slice($path, 0, -$upCount);
 
-        // Reconstruct the URL
+        
         $urlParts['path'] = '/' . implode('/', $path);
 
-        // Reassemble the URL
+        
         $resultUrl = $urlParts['scheme'] . '://' . $urlParts['host'] . (isset($urlParts['port']) ? ':' . $urlParts['port'] : '') . $urlParts['path'];
 
         return $resultUrl . '/';
@@ -477,6 +447,30 @@ class wps_ic_combine_css
     public function isHtml($string)
     {
         return preg_match("/<[^<]+>/", $string) === 1;
+    }
+
+    
+    
+    
+    
+    
+    
+    public function wpc_looks_like_html_doc657($s)
+    {
+        if (!is_string($s) || $s === '') {
+            return false;
+        }
+        
+        
+        
+        
+        
+        $head = strtolower(ltrim($s));
+        return strncmp($head, '<!doctype html', 14) === 0
+            || strncmp($head, '<html', 5) === 0
+            || strncmp($head, '<head>', 6) === 0
+            || strncmp($head, '<head ', 6) === 0
+            || strncmp($head, '<body', 5) === 0;
     }
 
     public function doInline($html)
@@ -493,11 +487,15 @@ class wps_ic_combine_css
                     continue;
                 }
 
+                if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_consent_family($matches[0][$k])) {
+                    continue;
+                }
+
                 if (strpos($href, '.css') === false && strpos($href, 'fonts.google') === false) {
                     continue;
                 }
 
-                // Href is local
+                
                 $cleanHref = explode('?', trim($href));
                 $cleanHref = trim($cleanHref[0]);
 
@@ -513,13 +511,13 @@ class wps_ic_combine_css
                     $content = @file_get_contents($relativePath);
 
                     if (!empty($content)) {
-                        // Check if it's valid CSS
-                        // Get the filename
+                        
+                        
                         $cssFilename = basename($href);
                         $cssUrlPath = str_replace($cssFilename, '', $href);
 
-                        // Remove the site URL from the Path to retrieve just the path
-                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath); // strip both schemes — a scheme-mismatched href otherwise survived behind a proxy
+                        
+                        $cssPath = str_replace([self::$site_url . '/', 'http://' . $_SERVER['HTTP_HOST'] . '/', 'https://' . $_SERVER['HTTP_HOST'] . '/'], '', $cssUrlPath);
                         $cssPath = rtrim($cssPath, '/');
                         $this->cssPath = self::$site_url . '/' . $cssPath;
 
@@ -529,10 +527,10 @@ class wps_ic_combine_css
                         $content = $this->fixAnimations($content);
                         $content = $this->fixUrlPaths($content);
 
-                        // Find FontFaces
+                        
                         $content = $this->findFontFace($content);
 
-                        // Find All The Fonts
+                        
                         $foundFonts = $this->findFonts($content);
                         if (!empty($foundFonts)) {
                             $AlreadyLoaded = [];
@@ -540,8 +538,8 @@ class wps_ic_combine_css
                                 if (!in_array($font, $AlreadyLoaded)) {
                                     $AlreadyLoaded[] = $font;
 
-                                    #$content = str_replace('src:url("'.$font.'") format("woff2");', '', $content);
-                                    #$content = str_replace("src:url('".$font."') format('woff2');", '', $content);
+                                    
+                                    
 
                                     if (strpos($font, 'icon') !== false) continue;
                                     $figurePreloadType = $this->figurePreloadType($font);
@@ -550,8 +548,8 @@ class wps_ic_combine_css
                             }
                         }
 
-                        // Find All The Images
-                        #$foundBackgrounds = $this->findBackgrounds($content);
+                        
+                        
                         if (!empty($foundBackgrounds)) {
                             $AlreadyLoaded = [];
                             foreach ($foundBackgrounds as $i => $bg) {
@@ -573,11 +571,11 @@ class wps_ic_combine_css
                         $html = str_replace($matches[0][$k], $inlinedStyle, $html);
                     }
                 } elseif (strpos($href, 'fonts.google')) {
-                    // <link rel='preload' id='et-gf-open-sans-css' href='https://fonts.googleapis.com/css?family=Open+Sans%3A400%2C700&#038;ver=1.3.12' as='style' media='all' onload="this.onload=null;this.rel='stylesheet'" />
+
                     $preload = "<link rel='preload' href='" . $href . "' as='style' />";
                     $html = str_replace($matches[0][$k], $preload . $matches[0][$k], $html);
                 } elseif (strpos($href, 'fontawesome.com')) {
-                    // <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v5.13.1/css/all.css" integrity="sha384-B9BoFFAuBaCfqw6lxWBZrhg/z4NkwqdBci+E+Sc2XlK/Rz25RYn8Fetb+Aw5irxa" crossorigin="anonymous">
+
                     $preload = "<link rel='preload' href='" . $href . "' as='style' />";
                     $html = str_replace($matches[0][$k], $preload . $matches[0][$k], $html);
                 }
@@ -599,15 +597,15 @@ class wps_ic_combine_css
 
     public function removeCommentsFromCSS($css)
     {
-        // Use a regular expression to remove comments (/* ... */)
-        $cssWithoutComments = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\//', '', $css);
-        #$cssWithoutCommentsAndNewLines = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\s*\*\//', '', $css);
+        
+        $cssWithoutComments = preg_replace('#/\*.*?\*/#s', '', $css);
+        
         return $cssWithoutComments;
     }
 
     public function removeCharsetFromCSS($css)
     {
-        // Use a regular expression to remove @charset declarations
+        
         $cssWithoutCharset = preg_replace('/@charset[^;]+;/', '', $css);
         return $cssWithoutCharset;
     }
@@ -620,39 +618,12 @@ class wps_ic_combine_css
         return $modifiedCss;
     }
 
-    /**
-     * Apply the existing font-display setting to inline @font-face rules
-     * embedded in <style> tags in the rendered HTML.
-     *
-     * Why this exists: rewriteCSSContent() in addons/cdn/cdn-rewrite.php
-     * already rewrites @font-face inside CSS FILES served via cdn-zone. But
-     * modern WP block themes (TwentyTwentyFour, twentytwentyfive, blockified
-     * themes generally) emit @font-face DIRECTLY inside <style> tags in the
-     * page HTML — bypassing CSS-file rewriting entirely. Net effect on those
-     * themes: font-display setting is silently ignored.
-     *
-     * This helper pipes every <style>…</style> block's @font-face rules
-     * through the existing findFontFace() rewriter, which:
-     *   - replaces font-display:fallback/block/etc with the user's setting
-     *     (default 'swap')
-     *   - auto-detects icon fonts (fa-, awesome, material, etc.) and uses
-     *     icon-font-display setting instead (default 'block', prevents
-     *     garbled icon glyphs during swap period)
-     *
-     * Always runs when the page has <style> tags with @font-face. No new
-     * setting — uses the existing 'font-display' + 'icon-font-display' values.
-     *
-     * @return string updated HTML
-     */
+
     public function rewriteInlineFontFaces($html)
     {
         if (strpos($html, '@font-face') === false) return $html;
-        // Inline @font-face gap: block themes emit @font-face directly in inline <style> (never an
-        // external CSS file), so process_css_for_fonts() never sees them. When the Fonts-CDN flag is
-        // on (plus the fonts toggle, a zone, CSS-combine off so we don't collide with the combine
-        // path's changeFontToCDN, and not cdn_disabled, which is the master kill), also route those
-        // inline @font-face url() through the CDN zone via the shared rewriter. The flag gates this
-        // off by default, so it's inert.
+
+
         $wpc_inline_cdn = (class_exists('wps_cdn_rewrite')
             && apply_filters('wpc_fonts_cdn_serve', (bool) get_site_option('wpc_fonts_cdn_serve', true))
             && !empty($this->settings['fonts']) && $this->settings['fonts'] == '1'
@@ -672,34 +643,16 @@ class wps_ic_combine_css
         }, $html);
     }
 
-    /**
-     * Extract font preload <link> tags for any @font-face URLs found in the
-     * rendered HTML's inline <style> blocks. This wires the existing
-     * `preload-crit-fonts` setting into the production rendering path.
-     * Previously the setting only fired inside ?testCritical debug returns at
-     * cdn-rewrite.php:1387 + 3444, which never reach a real page render.
-     *
-     * Strategy:
-     *   - Walk every <style>…</style> in the HTML
-     *   - Find woff2 URLs inside @font-face declarations
-     *   - Skip icon fonts (fa-, la-, icon name patterns)
-     *   - Limit to first N (cap protects against bloated <head>; Google
-     *     recommends ≤4 critical font preloads)
-     *   - Emit `<link rel="preload" href="..." as="font" type="font/woff2"
-     *     crossorigin="anonymous">` per URL
-     *
-     * Gated by the existing 'preload-crit-fonts' setting — opt-in (default 0)
-     * because preloading too many fonts wastes bandwidth on sites with
-     * many @font-face declarations.
-     *
-     * @param string $html  rendered page HTML
-     * @param int    $cap   max fonts to preload (default 4 per Google guidance)
-     * @return array        list of <link> tag strings to inject
-     */
+
     public function extractFontPreloadLinks($html, $cap = 4)
     {
         $settings = get_option(WPS_IC_SETTINGS);
-        if (empty($settings['preload-crit-fonts']) || (string) $settings['preload-crit-fonts'] !== '1') {
+        $wpc_pcf54 = isset($settings['preload-crit-fonts']) ? (string) $settings['preload-crit-fonts'] : '';
+        if ($wpc_pcf54 === '' && isset($settings['replace-fonts']) && $settings['replace-fonts'] === 'local'
+            && apply_filters('wpc_atf_faces_auto', true)) {
+            $wpc_pcf54 = '1';
+        }
+        if ($wpc_pcf54 !== '1') {
             return [];
         }
         if (strpos($html, '@font-face') === false) return [];
@@ -710,7 +663,7 @@ class wps_ic_combine_css
                 if (strpos($css, '@font-face') === false) continue;
                 if (preg_match_all('/@font-face\s*\{([^}]+)\}/is', $css, $faceMatches)) {
                     foreach ($faceMatches[1] as $faceBody) {
-                        // Skip icon fonts
+                        
                         if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $faceBody, $famM)) {
                             $fam = strtolower(trim($famM[1]));
                             if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $fam)) {
@@ -728,32 +681,42 @@ class wps_ic_combine_css
                 }
             }
         }
+        
         $links = [];
-        foreach ($found as $url) {
-            $links[] = '<link rel="preload" href="' . esc_url($url)
-                     . '" as="font" type="font/woff2" crossorigin="anonymous">';
+        if ($found && function_exists('wpc_font_preload_postpaint_tag')) {
+            $wpc_fpb689 = wpc_font_preload_postpaint_tag(array_map('esc_url', $found));
+            if ($wpc_fpb689 !== '') {
+                $links[] = $wpc_fpb689;
+            }
         }
         return (array) apply_filters('wpc_font_preload_links', $links, $html);
     }
 
     public function findFontFace($css)
     {
-        // Read settings once outside the callback to avoid repeated DB queries
+        
         $settings = get_option(WPS_IC_SETTINGS);
-        $textFontDisplay = !empty($settings['font-display']) ? $settings['font-display'] : 'swap';
+        $textFontDisplay = !empty($settings['font-display']) ? $settings['font-display'] : 'smart';
+        
+        
+        
+        $textFontDisplayRaw = $textFontDisplay;
+        if (function_exists('wpc_font_display_effective')) {
+            $textFontDisplay = wpc_font_display_effective($textFontDisplay);
+        }
         $iconFontDisplay = !empty($settings['icon-font-display']) ? $settings['icon-font-display'] : 'block';
 
-        return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) use ($textFontDisplay, $iconFontDisplay) {
+        return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) use ($textFontDisplay, $textFontDisplayRaw, $iconFontDisplay) {
             $fontFamily = $fontStyle = $fontWeight = $woffUrl = '';
             $urlFound = false;
 
-            // Try to match .woff or .woff2 URL
+            
             if (preg_match('/url\((["\']?)([^)]+\.(woff2?))\1\)/si', $fontface[0], $matchesWoffUrl)) {
                 $woffUrl = $matchesWoffUrl[2];
                 $urlFound = true;
             }
 
-            // Extract font-family, font-style, and font-weight
+            
             if (preg_match('/font-family\s*:\s*([^;]+);/si', $fontface[0], $matchesFontFamily)) {
                 $fontFamily = "font-family: " . $matchesFontFamily[1] . ";";
             }
@@ -767,11 +730,19 @@ class wps_ic_combine_css
             if ($urlFound) {
                 $format = strpos($woffUrl, '.woff2') !== false ? 'woff2' : 'woff';
 
-                // Detect icon fonts — use block to prevent garbled characters
+                
                 $fontDisplayValue = $textFontDisplay;
                 $familyRaw = isset($matchesFontFamily[1]) ? strtolower(trim($matchesFontFamily[1])) : '';
                 if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $familyRaw)) {
                     $fontDisplayValue = $iconFontDisplay;
+                } elseif ($familyRaw !== '' && function_exists('wpc_font_display_effective')) {
+                    
+                    
+                    
+                    $wpc_fd485 = wpc_font_display_effective($textFontDisplayRaw, trim($familyRaw, " \t\"'"));
+                    if (in_array($wpc_fd485, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
+                        $fontDisplayValue = $wpc_fd485;
+                    }
                 }
 
                 return "@font-face{{$fontFamily}{$fontStyle}{$fontWeight}font-display:{$fontDisplayValue};src:url(\"$woffUrl\") format(\"$format\");}";
@@ -783,21 +754,21 @@ class wps_ic_combine_css
 
     public function findFonts($css)
     {
-        // Define the regular expression pattern
+        
         $pattern = '/url\(([^)]+)\)/si';
 
-        // Perform the regular expression match
+        
         preg_match_all($pattern, $css, $matches);
 
-        // Extracted URLs will be in $matches[1]
+        
         $fontUrls = $matches[1];
 
-        // Filter the URLs based on file extensions (eot, woff, etc.)
+        
         $filteredUrls = array_filter($fontUrls, function ($url) {
             return preg_match('/\.(woff2)\b/', $url);
         });
 
-        // Remove quotes from the filtered URLs
+        
         $filteredUrls = array_filter(array_map(function ($url) {
             return trim($url, '"\'');
         }, $filteredUrls));
@@ -869,16 +840,16 @@ class wps_ic_combine_css
 
     public function minifyCSS($css)
     {
-        // Remove spaces after colons
+        
         $css = str_replace(': ', ':', $css);
 
-        // Remove whitespace
+        
         $css = str_replace(["\r\n", "\r", "\n", "\t", '  ', '    ', '    '], '', $css);
 
-        $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); // Remove comments
-        $css = preg_replace('/\s+/', ' ', $css); // Remove multiple whitespaces
-        $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); // Remove spaces around selectors and declarations
-        $css = preg_replace('/;}/', '}', $css); // Remove trailing semicolons before closing brace
+        $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); 
+        $css = preg_replace('/\s+/', ' ', $css); 
+        $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); 
+        $css = preg_replace('/;}/', '}', $css); 
 
         return $css;
     }
@@ -888,6 +859,7 @@ class wps_ic_combine_css
         preg_match_all('/<link\b[^>]*>/is', $html, $matches);
 
         if (!empty($matches[0])) {
+            $seen = [];
             foreach ($matches[0] as $tag) {
                 preg_match('/\brel=(["\'])(.*?)\1/i', $tag, $relMatch);
                 preg_match('/\bhref=(["\'])(.*?)\1/i', $tag, $hrefMatch);
@@ -902,8 +874,17 @@ class wps_ic_combine_css
                         strpos($href, 'font-awesome') !== false
                     )
                 ) {
-                    $preload = "<link rel='preload' href='" . $href . "' as='style' media='all' onload=\"this.onload=null;this.rel='stylesheet'\" />";
-                    $html = str_replace($tag, $preload, $html);
+                    
+                    if (isset($seen[$href])) {
+                        $replacement = '';
+                    } else {
+                        $seen[$href] = true;
+                        $replacement = "<link rel='preload' href='" . $href . "' as='style' media='all' onload=\"this.onload=null;this.rel='stylesheet'\" />";
+                    }
+                    $new = preg_replace('/' . preg_quote($tag, '/') . '/', $replacement, $html, 1);
+                    if (is_string($new)) {
+                        $html = $new;
+                    }
                 }
             }
         }
@@ -928,44 +909,44 @@ class wps_ic_combine_css
                 $foundUrls = str_replace('")', '', $foundUrls);
                 $foundUrls = str_replace("')", '', $foundUrls);
 
-                // Remove the wrapping brackets
+                
                 $foundUrls = rtrim($foundUrls, ')');
                 $foundUrls = ltrim($foundUrls, '(');
                 $foundUrls = trim($foundUrls);
 
-                // If the found url has // or http/s, just set on CDN?
+                
                 if (strpos($foundUrls, '//') === 0 || strpos($foundUrls, 'http') === 0) {
-                    // Real URL, leave alone?
+                    
                     return 'url("' . $foundUrls . '")';
                 } else {
 
-                    // Remove the wrapping brackets
+                    
                     $foundUrls = rtrim($foundUrls, ')');
                     $foundUrls = ltrim($foundUrls, '(');
 
-                    // If the found url has at least one ../ then do something with it
+
                     if (strpos($foundUrls, '../') !== false) {
                         $count = substr_count($foundUrls, '../');
 
-                        #return print_r(array($this->cssPath, $count),true);
+                        
 
                         $newUrl = $this->moveUpDirectories($this->cssPath, $count);
                         $path = str_replace('../', '', $foundUrls);
 
-                        // Once again, check if the file exists in figured out path
-                        #if (file_exists($dirName . '/' . $walker)) {
+                        
+                        
                         return 'url("' . $newUrl . $path . '")';
-                        #}
+                        
                     } elseif (strpos($foundUrls, './') !== false) {
 
-                        // Same folder
+                        
                         $foundUrls = ltrim($foundUrls, '(');
                         $foundUrls = rtrim($foundUrls, ')');
 
-                        // Get just the clean path, without ../
+                        
                         $removeRelative = str_replace('./', '', $foundUrls);
 
-                        // Once again, check if the file exists in figured out path
+                        
                         return 'url("' . $this->cssPath . '/' . $removeRelative . '")';
                     } elseif (strpos($foundUrls, '/wp-content') !== false && strpos($foundUrls, '/wp-content') == 0) {
 
@@ -975,10 +956,10 @@ class wps_ic_combine_css
                         $foundUrls = str_replace("')", '', $foundUrls);
                         return 'url("' . self::$site_url . $foundUrls . '")';
                     } elseif (strpos($foundUrls, '/') === 0) {
-                        // Handle URLs starting with '/'
+                        
                         return 'url("' . $cssPath . $foundUrls . '")';
                     } else {
-                        // its relative to the css script
+
                         return 'url("' . $cssPath . '/' . $foundUrls . '")';
                     }
                 }
@@ -1011,7 +992,7 @@ class wps_ic_combine_css
             $this->logger = new wps_ic_logger('criticalCombine');
         }
 
-        // Disabled for some reason?!
+        
         if (1 == 0 && $this->combine_exists() && (empty($_GET['forceRecombine']) && !$this->criticalCombine)) {
             $this->no_content_excludes = get_option('wps_no_content_excludes_css');
             if ($this->no_content_excludes !== false) {
@@ -1029,12 +1010,35 @@ class wps_ic_combine_css
 
         $this->setup_dirs();
 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_lock_fp657 = null;
+        $wpc_have_lock657 = false;
+        if (!$this->criticalCombine) {
+            $wpc_lock_fp657 = @fopen($this->combined_dir . '.combine.lock', 'c');
+            if ($wpc_lock_fp657) {
+                $wpc_have_lock657 = @flock($wpc_lock_fp657, LOCK_EX | LOCK_NB);
+                if (!$wpc_have_lock657) {
+                    @fclose($wpc_lock_fp657);
+                    return $html;
+                }
+            }
+        }
+
         $this->current_section = 'header';
         $html = preg_replace_callback('/<head(.*?)<\/head>/si', [$this, 'combine'], $html);
-        #return 'bla'.$html;
+        
 
         if (!$this->criticalCombine) {
-            //we want 1 file in criticalCombine so we dont do this
+
             $this->write_file_and_next();
             $this->current_section = 'footer';
             $this->file_count = 1;
@@ -1043,6 +1047,12 @@ class wps_ic_combine_css
         $html = preg_replace_callback('/<\/head>(.*?)<\/body>/si', [$this, 'combine'], $html);
 
         $this->write_file_and_next();
+        $this->wpc_sweep_unwritten644('css');
+
+        if ($wpc_have_lock657 && $wpc_lock_fp657) {
+            @flock($wpc_lock_fp657, LOCK_UN);
+            @fclose($wpc_lock_fp657);
+        }
 
         update_option('wps_no_content_excludes_css', $this->no_content_excludes);
         $html = $this->insert_combined_scripts($html);
@@ -1052,9 +1062,16 @@ class wps_ic_combine_css
 
     public function combine_exists()
     {
-        $exists = is_dir($this->combined_dir);
-        if ($exists) {
-            $exists = (new \FilesystemIterator($this->combined_dir))->valid();
+        
+        
+        $exists = false;
+        if (is_dir($this->combined_dir)) {
+            foreach (new \FilesystemIterator($this->combined_dir) as $wpc_f642) {
+                if (strpos($wpc_f642->getFilename(), '.') !== 0) {
+                    $exists = true;
+                    break;
+                }
+            }
         }
 
         return $exists;
@@ -1069,20 +1086,58 @@ class wps_ic_combine_css
         return $html;
     }
 
+    
+    
+    
+    
+    private function wpc_mark_live642()
+    {
+        try {
+            $wpc_lv642 = rtrim($this->combined_dir, '/') . '/.wpc-live';
+            if (!@is_file($wpc_lv642) || (int) @filemtime($wpc_lv642) < time() - 86400) {
+                @file_put_contents($wpc_lv642, (string) time());
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
     public function insert_combined_scripts($html)
     {
         $combined_files = new \FilesystemIterator($this->combined_dir);
 
         if ($this->criticalCombine) {
+            $link = '';
             foreach ($combined_files as $file) {
+                if (strpos($file->getFilename(), '.') === 0) {
+                    continue;
+                }
+                
+                
+                
+                
+                
+                
+                if (substr($file->getFilename(), -4) !== '.css') {
+                    continue;
+                }
                 $url = $this->combined_url_base . basename($file);
                 if (strpos($url, 'http://') !== false) {
-                    //force https
+
                     $url = str_replace('http://', 'https://', $url);
                 }
-                $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash=' . time() . '" type="text/css" media="all">' . PHP_EOL;
+                
+                
+                
+                
+                $wpc_h646 = (string) @file_get_contents($file . '.md5');
+                if (strlen($wpc_h646) !== 32) { $wpc_h646 = (string) @md5_file((string) $file); }
+                $wpc_h642 = substr($wpc_h646, 0, 10);
+                $link = '<link rel="stylesheet" id="wpc-critical-combined-css" href="' . $url . '?hash=' . $wpc_h642 . '" type="text/css" media="all">' . PHP_EOL;
             }
 
+            if ($link !== '') {
+                $this->wpc_mark_live642();
+            }
             $html = str_replace('<!--WPC_INSERT_COMBINED_CSS-->', $link, $html);
             return $html;
         }
@@ -1091,6 +1146,15 @@ class wps_ic_combine_css
         $footer_links = '';
 
         foreach ($combined_files as $file) {
+            if (strpos($file->getFilename(), '.') === 0) {
+                continue;
+            }
+            
+            
+            
+            if (substr($file->getFilename(), -4) !== '.css') {
+                continue;
+            }
             $url = $this->combined_url_base . basename($file);
             $criticalCSS = new wps_criticalCss();
 
@@ -1101,16 +1165,15 @@ class wps_ic_combine_css
 
 
             if (!empty($this->settings['critical']['css']) && $this->settings['critical']['css'] == '1' && $criticalCSS->criticalExists() !== false) {
-                /////////////// Critical CSS Option is Enabled
+                
 
-                //        if (strpos($file, 'wps_header') !== false) {
-                //          $header_links .= '<link rel="'.$styleSheetType.'" href="' . self::$rewrite->adjust_src_url($url) . '" type="'.$styleSheetType.'" media="all">' . PHP_EOL;
-                //        } else {
-                //          $footer_links .= '<link rel="'.$styleSheetType.'" href="' . self::$rewrite->adjust_src_url($url) . '" type="'.$styleSheetType.'" media="all">' . PHP_EOL;
-                //        }
+
+                
+
+                
 
                 if (self::$isMobile) {
-                    // Mobile
+                    
                     if (strpos($file, 'wps_mobile') !== false) {
                         if (strpos($file, 'wps_mobile_header') !== false) {
                             $header_links .= '<link rel="stylesheet" href="' . self::$rewrite->adjust_src_url($url) . '" type="text/css" media="all"/>' . PHP_EOL;
@@ -1119,7 +1182,7 @@ class wps_ic_combine_css
                         }
                     }
                 } else {
-                    // Desktop
+                    
                     if (strpos($file, 'wps_mobile') === false) {
                         if (strpos($file, 'wps_header') !== false) {
                             $header_links .= '<link rel="stylesheet" href="' . self::$rewrite->adjust_src_url($url) . '" type="text/css" media="all"/>' . PHP_EOL;
@@ -1131,7 +1194,7 @@ class wps_ic_combine_css
 
 
             } else if (!empty($this->settings['remove-render-blocking']) && $this->settings['remove-render-blocking'] == '1') {
-                //////////////// Remove render blocking option is Enabled
+                
 
                 if (strpos($file, 'wps_header') !== false) {
                     $header_links .= '<link rel="preload" as="style"  onload="this.rel=\'stylesheet\'" defer href="' . $url . '" type="text/css" media="all">' . PHP_EOL;
@@ -1140,7 +1203,7 @@ class wps_ic_combine_css
                 }
 
             } else if (!empty($this->settings['inline-css']) && $this->settings['inline-css'] == '1') {
-                /////////////// Inline CSS Option is Enabled
+                
 
                 if (strpos($file, 'wps_header') !== false) {
                     $combineContent = file_get_contents($file->getPathname());
@@ -1163,27 +1226,25 @@ class wps_ic_combine_css
 
             } else {
 
-                // Inline is not enabled, critical is not enabled
+                
                 if (self::$isMobile) {
-                    // Mobile
+                    
                     if (strpos($file, 'wps_mobile') !== false) {
 
-                        #$combineContent = file_get_contents($file->getPathname());
+                        
 
                         if (strpos($file, 'wps_mobile_header') !== false) {
                             $header_links .= '<link rel="preload" as="style" onload="this.rel=\'stylesheet\'" href="' . self::$rewrite->adjust_src_url($url) . '" type="text/css" media="all"/>' . PHP_EOL;
-                            //              $header_links .= '<style type="text/css" id="' . basename($file) . '">';
-                            //              $header_links .= $this->minifyCss($combineContent);
-                            //              $header_links .= '</style>';
+
+
                         } else {
                             $footer_links .= '<link rel="preload" as="style" onload="this.rel=\'stylesheet\'" href="' . self::$rewrite->adjust_src_url($url) . '" type="text/css" media="all"/>' . PHP_EOL;
-                            //              $footer_links .= '<style type="text/css" id="' . basename($file) . '">';
-                            //              $footer_links .= $this->minifyCss($combineContent);
-                            //              $footer_links .= '</style>';
+
+
                         }
                     }
                 } else {
-                    // Desktop
+                    
                     if (strpos($file, 'wps_mobile') === false) {
                         if (strpos($file, 'wps_header') !== false) {
                             $header_links .= '<link rel="preload" as="style" onload="this.rel=\'stylesheet\'" href="' . self::$rewrite->adjust_src_url($url) . '" type="text/css" media="all"/>' . PHP_EOL;
@@ -1197,7 +1258,7 @@ class wps_ic_combine_css
         }
 
         if ($this->hmwpReplace) {
-            //apply their replacements to our combined files because they are doing them before our insert
+
             foreach ($this->hmwp_rewrite->_replace['from'] as $key => $value) {
                 $replace = $this->hmwp_rewrite->_replace['to'][$key];
                 $header_links = str_replace($value, $replace, $header_links);
@@ -1205,7 +1266,7 @@ class wps_ic_combine_css
             }
         }
 
-        //header
+
         if (!empty($_GET['testcombine'])) {
             $html = preg_replace('/<\/head>/', $header_links . '</head>', $html);
         } else {
@@ -1214,9 +1275,12 @@ class wps_ic_combine_css
             }
         }
 
-        //footer
+
         $html = preg_replace('/<\/body>/', $footer_links . '</body>', $html);
 
+        if ($header_links !== '' || $footer_links !== '') {
+            $this->wpc_mark_live642();
+        }
         return $html;
     }
 
@@ -1233,13 +1297,7 @@ class wps_ic_combine_css
             $prefix = 'mobile_';
         }
 
-        // This is the last unswept CSS writer. Live wpcompress receipt: the 4
-        // q:u/w:1 transforms plus the nested old-zone monster all initiate from
-        // combine output, and combine's own rewriters re-create the wraps on
-        // every rebuild, including wrapping old-zone URLs baked into source CSS.
-        // Run the same sweep the cio writer does: collapse no-work/nested
-        // transforms to naturals and zone-swap origin SVGs. Both gates are
-        // re-checked inside.
+
         if ($this->current_file != '' && class_exists('wps_cdn_rewrite')) {
             if (method_exists('wps_cdn_rewrite', 'wpc_raster_naturalize')) {
                 $this->current_file = wps_cdn_rewrite::wpc_raster_naturalize($this->current_file);
@@ -1253,35 +1311,84 @@ class wps_ic_combine_css
         }
 
         if ($this->criticalCombine) {
-            file_put_contents($this->combined_dir . 'wps_combined.css', $this->current_file);
+            $this->wpc_write_if_changed646('wps_combined.css');
             return;
         }
 
         if ($this->current_file != '') {
-            file_put_contents($this->combined_dir . 'wps_' . $prefix . $this->current_section . '_' . $this->file_count . '.css', $this->current_file);
+            $this->wpc_write_if_changed646('wps_' . $prefix . $this->current_section . '_' . $this->file_count . '.css');
         }
 
         $this->file_count++;
         $this->current_file = '';
     }
 
+    
+    
+    
+    
+    
+    
+    public function wpc_write_if_changed646($wpc_name646)
+    {
+        
+        
+        
+        
+        
+        
+        if ($this->wpc_looks_like_html_doc657($this->current_file)) {
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Refused to write HTML-containing combined CSS: ' . $wpc_name646, true);
+            }
+            return;
+        }
+        $wpc_path646 = $this->combined_dir . $wpc_name646;
+        $wpc_md5646 = md5($this->current_file);
+        if (!@is_file($wpc_path646) || (string) @file_get_contents($wpc_path646 . '.md5') !== $wpc_md5646) {
+            file_put_contents($wpc_path646, $this->current_file);
+            file_put_contents($wpc_path646 . '.md5', $wpc_md5646);
+        }
+        $this->wpc_written644[] = $wpc_name646;
+    }
+
+    
+    
+    
+    
+    public $wpc_written644 = [];
+    public function wpc_sweep_unwritten644($ext)
+    {
+        try {
+            $wpc_pfx644 = (self::$isMobile ? 'wps_mobile_' : 'wps_');
+            foreach ((array) @glob($this->combined_dir . 'wps_*.' . $ext) as $wpc_f644) {
+                $wpc_b644 = basename($wpc_f644);
+                if ($ext === 'css' && !self::$isMobile && strpos($wpc_b644, 'wps_mobile_') === 0) {
+                    continue;
+                }
+                if ($ext === 'css' && self::$isMobile && strpos($wpc_b644, 'wps_mobile_') !== 0 && $wpc_b644 !== 'wps_combined.css') {
+                    continue;
+                }
+                if (!in_array($wpc_b644, $this->wpc_written644, true)) {
+                    @unlink($wpc_f644);
+                    @unlink($wpc_f644 . '.md5');
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
     public function minifyCssOld($css)
     {
         if (!empty($this->settings['css_minify']) && $this->settings['css_minify'] == '1') {
-            //      // Remove line breaks and multiple spaces
-            //      $css = preg_replace('/\s+/', ' ', $css);
-            //
-            //      // Remove spaces before and after braces
-            //      $css = str_replace(array('{ ', ' }'), array('{', '}'), $css);
-            //
-            //      // Remove spaces before and after colons
-            //      $css = str_replace(': ', ':', $css);
-            $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); // Remove comments
-            $css = preg_replace('/\s+/', ' ', $css); // Remove multiple whitespaces
-            $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); // Remove spaces around selectors and declarations
-            $css = preg_replace('/;}/', '}', $css); // Remove trailing semicolons before closing brace
+
+
+            $css = preg_replace('/\/\*(.*?)\*\//s', '', $css); 
+            $css = preg_replace('/\s+/', ' ', $css); 
+            $css = preg_replace('/\s?([,:;{}])\s?/', '$1', $css); 
+            $css = preg_replace('/;}/', '}', $css); 
         } else {
-            // Remove line breaks and multiple spaces
+            
             $css = preg_replace('/\s+/', ' ', $css);
         }
         return $css;
@@ -1300,27 +1407,25 @@ class wps_ic_combine_css
         $src = '';
         $media_query = null;
 
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'before') {
-            return print_r([$tag], true);
+        
+        if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_consent_family($tag)) {
+            return $tag;
         }
 
-        // Check if the CSS is Excluded
+        
         if (self::$excludes->strInArray($tag, $this->allExcludes)) {
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                return print_r([$tag, 'excluded'], true);
-            }
             if ($this->log_criticalCombine) {
                 $this->logger->log('It is excluded.', true);
             }
             return $tag;
         }
 
-        // If it has ie9 tag exclude by default
+        
         if (strpos($tag, 'ie9') !== false) {
             return $tag;
         }
 
-        // Extract media query if present
+        
         if (preg_match('/media=["\']([^"\']+)["\']/', $tag, $media_match)) {
             $media_query = $media_match[1];
             if ($this->log_criticalCombine) {
@@ -1334,10 +1439,6 @@ class wps_ic_combine_css
             $is_src_set = preg_match('/<style\b[^>]*\bhref=["\'](.*?)["\'][^>]*>/i', $tag, $src);
         }
 
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'preg') {
-            return print_r([$tag], true);
-        }
-
         if ($is_src_set == 1) {
             $src = str_replace('href=', '', $src);
             $src = str_replace("'", "", $src);
@@ -1348,14 +1449,7 @@ class wps_ic_combine_css
                 $this->logger->log('Src: ' . $src);
             }
 
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
-                return print_r([$tag, 'file', $this->combine_external, $src], true);
-            }
-
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
-                if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r([$tag, 'external'], true);
-                }
                 if ($this->log_criticalCombine) {
                     $this->logger->log('Is External.');
                 }
@@ -1368,21 +1462,10 @@ class wps_ic_combine_css
 
             if (!$content) {
                 $this->no_content_excludes[] = $src;
-                if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r([$tag, 'no content', 'external' => $this->combine_external, 'is_external' => $this->url_key_class->is_external($src)], true);
-                }
                 return $tag;
             }
 
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
-                return print_r(['no-content', $content], true);
-            }
 
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile1') {
-                return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
-            }
-
-            //replace relative urls
             $this->asset_url = $src;
 
             if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'oldrewrite') {
@@ -1404,7 +1487,7 @@ class wps_ic_combine_css
                         $new = $this->rewrite_relative_url($url);
                         if ($new === '' || $new === null) return $m[0];
 
-                        // Unwrap if rewrite_relative_url mistakenly returned url(...)
+                        
                         if (is_string($new) && preg_match('~^\s*url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)\s*$~i', $new, $mm)) {
                             foreach ([1, 2, 3] as $i) {
                                 if (isset($mm[$i]) && $mm[$i] !== '') {
@@ -1422,9 +1505,6 @@ class wps_ic_combine_css
             }
 
 
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile2') {
-                return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
-            }
         } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
@@ -1436,26 +1516,12 @@ class wps_ic_combine_css
             $content = preg_replace('/<style(.*?)>/', '', $content, -1, $count);
             $content = preg_replace('/<\/style>/', '', $content);
 
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'pre-output') {
-                return print_r([$tag, 'inline', $this->combine_inline_scripts, $content], true);
-            }
-
             if (!$count) {
-                //no href, and not a <style> tag
-                if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                    return print_r([$tag, 'not a style tag'], true);
-                }
+
                 return $tag;
             }
         } else {
-            if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'outputs') {
-                return print_r([$tag, 'unknown'], true);
-            }
             return $tag;
-        }
-
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'checkFile3') {
-            return print_r(['check-content', $src, 'external', $this->url_key_class->is_external($src), $content], true);
         }
 
         if ($this->log_criticalCombine) {
@@ -1463,21 +1529,36 @@ class wps_ic_combine_css
         }
 
 
-        //sometimes php injects a zero width space char at the start of a new script, this clears it
         $content = preg_replace('/^[\pZ\pC]+|[\pZ\pC]+$/u', '', $content);
-        $content = str_replace(['@font-face{', '@font-face {'], '@font-face{font-display: swap;', $content);
+        
+        
+        
+        $content = preg_replace_callback('/@font-face\s*\{([^}]*)\}/is', function ($m) {
+            $body = (string) preg_replace('/(?:^|;)\s*font-display\s*:\s*[a-zA-Z-]+\s*(?=;|$)/i', '', $m[1]);
+            $body = ltrim($body, "; \t\r\n");
+            
+            
+            
+            
+            $disp = 'swap';
+            if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $body, $wpc_ff)
+                && wpc_css_is_icon_font($wpc_ff[1])) {
+                $disp = 'block';
+            }
+            return '@font-face{font-display: ' . $disp . ';' . ($body !== '' ? $body : '') . '}';
+        }, $content);
 
-        // Find BG and replace with mobile BG
-        #if ($this::$isMobile) {
-        #$content = preg_replace_callback("/background-image:\s*url\((.*?)\)/is", array($this, 'changeBgImageToMobile'), $content);
-        #}
+        
+        
+        
+        
 
         if ($this->enabledCDN) {
             $content = preg_replace_callback('/src:\s*url\("([^"]+\.woff2)"\)\s*format\(\s*\'woff2\'\s*\);/is', [$this, 'changeFontToCDN'], $content);
         }
 
         $this->current_file .= "/* SCRIPT : $src */" . PHP_EOL;
-        // Wrap content in media query if it exists
+        
         if ($media_query) {
             $this->current_file .= "@media " . $media_query . " {" . PHP_EOL;
             $this->current_file .= $content . PHP_EOL;
@@ -1486,9 +1567,9 @@ class wps_ic_combine_css
             $this->current_file .= $content . PHP_EOL;
         }
 
-        #if (mb_strlen($this->current_file, '8bit') >= $this->filesize_cap) {
+        
         $this->write_file_and_next();
-        #}
+        
 
         if (!$this->firstFoundStyle) {
             $this->firstFoundStyle = true;
@@ -1508,12 +1589,13 @@ class wps_ic_combine_css
             $url = 'https:' . $url;
         }
 
-        $args = array('user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36', 'headers' => array('Accept' => 'text/css,*/*;q=0.1', 'Accept-Language' => 'en-US,en;q=0.9',));
+        
+        
+        $args = array('timeout' => (int) apply_filters('wpc_combine_fetch_timeout', 3), 'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36', 'headers' => array('Accept' => 'text/css,*/*;q=0.1', 'Accept-Language' => 'en-US,en;q=0.9',));
 
 
         $data = wp_remote_get($url, $args);
 
-        //todo Check if file is really css
 
         if (is_wp_error($data)) {
             if ($this->log_criticalCombine) {
@@ -1531,11 +1613,26 @@ class wps_ic_combine_css
             return false;
         }
 
+        $wpc_body657 = wp_remote_retrieve_body($data);
+
+        
+        
+        
+        
+        
+        $wpc_ct657 = strtolower((string) wp_remote_retrieve_header($data, 'content-type'));
+        if (strpos($wpc_ct657, 'text/html') !== false || $this->wpc_looks_like_html_doc657($wpc_body657)) {
+            if ($this->log_criticalCombine) {
+                $this->logger->log('Rejected non-CSS response (soft-404 / HTML) for: ' . $url, true);
+            }
+            return false;
+        }
+
         if ($this->log_criticalCombine) {
             $this->logger->log('Script content fetched.');
         }
 
-        return wp_remote_retrieve_body($data);
+        return $wpc_body657;
     }
 
     public function getLocalContent($url)
@@ -1547,7 +1644,7 @@ class wps_ic_combine_css
         }
 
         if ($this->hmwpReplace) {
-            //go trougn their replacements and reverse them to get true path to files
+
             foreach ($this->hmwp_rewrite->_replace['to'] as $key => $value) {
                 $replace = $this->hmwp_rewrite->_replace['from'][$key];
                 $url = str_replace($value, $replace, $url);
@@ -1562,54 +1659,40 @@ class wps_ic_combine_css
             $url = trim($match[1]);
         }
 
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
-            $output['abs_path'] = ABSPATH;
-            $output['first_url'] = $url;
-        }
-
-        // url is: example https://site.com/wp-content/plugins/jeg-elementor-kit/assets/css/elements/main.css
 
         $url = preg_replace('/\?.*/', '', $url);
-
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
-            $output['preg_replace_url'] = $url;
-        }
 
         $path = wp_make_link_relative($url);
         $path = ltrim($path, '/');
 
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
-            $output['relative'] = $path;
-        }
-
-        // Upload Dir Path
+        
         $uploadDir = wp_upload_dir();
         $uploadDir = $uploadDir['basedir'];
 
-        // Includes Path
+        
         $includesPath = ABSPATH . WPINC;
 
-        // Theme Dir Path (Without Active Theme)
+        
         $themePath = get_theme_root();
 
-        // $path relative is example: wp-content/plugins/jeg-elementor-kit/assets/css/elements/main.css
+        
         if (strpos($path, 'wp-content/plugins/') !== false) {
-            // Plugins DIR: WP_PLUGIN_DIR
+            
             $pathExploded = explode('wp-content/plugins/', $path);
             $justPath = $pathExploded[1];
             $finalPath = WP_PLUGIN_DIR . '/' . $justPath;
         } else if (strpos($path, 'wp-includes/') !== false) {
-            // Uploads DIR: wp_upload_dir()
+            
             $pathExploded = explode('wp-includes/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $includesPath . '/' . $justPath;
         } else if (strpos($path, 'wp-content/uploads/') !== false) {
-            // Uploads DIR: wp_upload_dir()
+            
             $pathExploded = explode('wp-content/uploads/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $uploadDir . '/' . $justPath;
         } else if (strpos($path, 'wp-content/themes/') !== false) {
-            // Themes Dir: TEMPLATEPATH
+            
             $pathExploded = explode('wp-content/themes/', $path);
             $justPath = $pathExploded[1];
             $finalPath = $themePath . '/' . $justPath;
@@ -1617,34 +1700,6 @@ class wps_ic_combine_css
             $finalPath = ABSPATH . $path;
         }
 
-        if (!empty($_GET['dbgCombine']) && $_GET['dbgCombine'] == 'getLocalContent') {
-            $output['relative_abs'] = $path;
-            $output['file_get_content_path'] = ABSPATH . $path;
-            $output['plugin_dir'] = WP_PLUGIN_DIR;
-            $output['theme_dir'] = TEMPLATEPATH;
-            $output['upload_dir'] = $uploadDir;
-            $output['justPath'] = $justPath;
-            $output['finalPath'] = $finalPath;
-            $output['file_exists'] = file_exists($finalPath);
-            $output['content'] = file_get_contents($finalPath);
-            #$output['read'] = file_get_contents($justPath);
-
-            /** Workaround if file_get_contents failed */ global $wp_filesystem;
-
-            if (!function_exists('WP_Filesystem')) {
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-            }
-
-            WP_Filesystem();
-
-            $content = false;
-            if ($wp_filesystem && $wp_filesystem->exists($finalPath)) {
-                $output['contentWPFS'] = $wp_filesystem->get_contents($finalPath);
-            }
-
-
-            return $output;
-        }
 
         if ($this->log_criticalCombine) {
             $this->logger->log('Fetching script content.' . $finalPath);
@@ -1656,7 +1711,7 @@ class wps_ic_combine_css
 
         if (!$content) {
 
-            /** Workaround if file_get_contents failed */ global $wp_filesystem;
+             global $wp_filesystem;
 
             if (!function_exists('WP_Filesystem')) {
                 require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -1689,15 +1744,13 @@ class wps_ic_combine_css
     public function rewrite_relative_url(string $matched_url): string
     {
         $matched_url = trim($matched_url);
-        $matched_url = trim($matched_url, " \t\n\r\0\x0B'\""); // remove quotes if any
+        $matched_url = trim($matched_url, " \t\n\r\0\x0B'\"");
 
-        // Skip already-rewritten / external / data URLs
+        
         if ($matched_url === '') return '';
         if (stripos($matched_url, 'data:') === 0) return $matched_url;
 
-        // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep natural origin (matches replaceFonts:604,
-        // cdn_rewrite_url font branch, changeFontToCDN). Same-host but under /wp-content/, so the /storage
-        // origin-skip below won't catch it — needs its own skip.
+
         if (stripos($matched_url, '/cache/wp-cio-fonts/') !== false) return $matched_url;
 
         if (strpos($matched_url, $this->zone_name) !== false || strpos($matched_url, 'zapwp.net') !== false) {
@@ -1714,55 +1767,57 @@ class wps_ic_combine_css
         $scheme = $parsed_asset['scheme'] ?? ($home['scheme'] ?? 'https');
         $host = $parsed_asset['host'] ?? ($home['host'] ?? '');
 
-        // If it's already absolute (http/https or protocol-relative), just normalize
+        
         if (preg_match('~^https?://~i', $matched_url)) {
             $absolute = $matched_url;
         } elseif (strpos($matched_url, '//') === 0) {
             $absolute = $scheme . ':' . $matched_url;
         } else {
-            // Build base directory of the asset (CSS) file
+            
             $asset_path = $parsed_asset['path'] ?? '/';
             $base_dir = rtrim(str_replace(basename($asset_path), '', $asset_path), '/');
 
             if (strpos($matched_url, '/') === 0) {
-                // Root-relative
+                
                 $path = $matched_url;
             } else {
-                // Relative to CSS directory
+                
                 $path = $base_dir . '/' . $matched_url;
             }
 
-            // Normalize /./ and /../ segments
+            
             $path = $this->normalize_path($path);
 
             $absolute = $scheme . '://' . $host . $path;
         }
 
-        // Apply your "serve" logic BUT return plain URL (no url("..."))
+        
         $lower = strtolower($matched_url);
 
         $is_font = (strpos($lower, '.eot') !== false || strpos($lower, '.woff') !== false || strpos($lower, '.woff2') !== false || strpos($lower, '.ttf') !== false);
         $is_img = (strpos($lower, '.jpg') !== false || strpos($lower, '.jpeg') !== false || strpos($lower, '.png') !== false || strpos($lower, '.gif') !== false || strpos($lower, '.svg') !== false || strpos($lower, '.webp') !== false);
 
         if ($is_font && !empty($this->settings['serve']['fonts'])) {
-            // Path scope, same as changeFontToCDN / replaceFonts / process_css_for_fonts:
-            // rewrite_relative_url() is the first font->zone lane in the combine pass (called at
-            // ~line 1402, before the changeFontToCDN pass at ~1474). A same-site custom store path
-            // like /storage/ (e.g. Elementor's local Google Fonts) gets 302'd by the CDN cross-origin,
-            // so the font fetch is CORS-blocked and fails (live: anacletababy). Leave such same-site,
-            // non-/wp-content/ fonts on the origin, which is always CORS-safe. Third-party fonts (a
-            // different host) keep their existing CDN behaviour.
+
+
             $rru_fhost = function_exists('wp_parse_url') ? wp_parse_url($absolute, PHP_URL_HOST) : '';
             $rru_shost = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
             if (!empty($rru_fhost) && !empty($rru_shost) && strcasecmp((string) $rru_fhost, (string) $rru_shost) === 0
                 && stripos((string) wp_parse_url($absolute, PHP_URL_PATH), '/wp-content/') === false) {
                 return $absolute;
             }
+            $wpc_fp746 = (string) wp_parse_url($absolute, PHP_URL_PATH);
+            if (!empty($rru_fhost) && !empty($rru_shost) && strcasecmp((string) $rru_fhost, (string) $rru_shost) === 0
+                && stripos($wpc_fp746, '/wp-content/') !== false
+                && strcasecmp((string) $this->zone_name, (string) $rru_shost) !== 0
+                && apply_filters('wpc_combine_css_natural_fonts', true)) {
+                return 'https://' . $this->zone_name . $wpc_fp746;
+            }
             return 'https://' . $this->zone_name . '/m:0/a:' . $absolute;
         }
 
         if ($is_img) {
-            // respect your per-type flags (minimal example; keep your exact checks if you prefer)
+
             $serve = false;
             if (strpos($lower, '.jpg') !== false && !empty($this->settings['serve']['jpg'])) $serve = true;
             if (strpos($lower, '.jpeg') !== false && !empty($this->settings['serve']['jpg'])) $serve = true;
@@ -1771,18 +1826,28 @@ class wps_ic_combine_css
             if (strpos($lower, '.svg') !== false && !empty($this->settings['serve']['svg'])) $serve = true;
 
             if ($serve) {
-                // you had the same URL for mobile/non-mobile currently
+
+
+                $wpc_ih = function_exists('wp_parse_url') ? (string) wp_parse_url($absolute, PHP_URL_HOST) : '';
+                $wpc_sh = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+                $wpc_ip = function_exists('wp_parse_url') ? (string) wp_parse_url($absolute, PHP_URL_PATH) : '';
+                if ($wpc_ih !== '' && $wpc_sh !== '' && strcasecmp($wpc_ih, $wpc_sh) === 0
+                    && stripos($wpc_ip, '/wp-content/') !== false
+                    && strcasecmp((string) $this->zone_name, $wpc_sh) !== 0
+                    && apply_filters('wpc_combine_css_natural_rasters', true)) {
+                    return 'https://' . $this->zone_name . $wpc_ip;
+                }
                 return 'https://' . $this->zone_name . '/q:u/r:0/wp:0/w:1/u:' . $absolute;
             }
         }
 
-        // default: return absolute URL
+
         return $absolute;
     }
 
-    /**
-     * Normalize a URL path by resolving /./ and /../ segments.
-     */
+    
+
+
     private function normalize_path(string $path): string
     {
         $is_abs = (strpos($path, '/') === 0);
@@ -1803,24 +1868,18 @@ class wps_ic_combine_css
 
     public function changeFontToCDN($html)
     {
-        // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep natural origin so it matches the inline
-        // @font-face + preload + deferred .css (one URL, fetched once). $html[1] is the captured woff2 URL.
+        
+        
         if (stripos($html[1], '/cache/wp-cio-fonts/') !== false) {
             return 'src:url("' . $html[1] . '");';
         }
-        // Zone-skip guard. This was the root cause of the live double-wrap on
-        // wpcompress.com (m:0/a:https://zone/m:0/a:origin.woff2): this rewriter
-        // re-wrapped an already-zoned URL. replaceFonts has this guard, but this
-        // one never did. The outermost collapse pass repairs such output, but
-        // better not to produce it in the first place.
+
+
         if (!empty($this->zone_name) && strpos($html[1], $this->zone_name) !== false) {
             return 'src:url("' . $html[1] . '");';
         }
-        // Path scope, same as replaceFonts / process_css_for_fonts: this is the CSS-combine-on
-        // font→zone lane. A same-site custom store path like /storage/ (e.g. Elementor's local Google
-        // Fonts) gets 302'd by the CDN cross-origin, so the font fetch is CORS-blocked and fails
-        // (live: anacletababy). Leave such same-site, non-/wp-content/ fonts on the origin, which is
-        // always CORS-safe. Third-party fonts (a different host) keep their existing subsetting behaviour.
+
+
         $cf2_host = function_exists('wp_parse_url') ? wp_parse_url($html[1], PHP_URL_HOST) : '';
         $cf2_site = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
         if (!empty($cf2_host) && !empty($cf2_site) && strcasecmp((string) $cf2_host, (string) $cf2_site) === 0
@@ -1833,6 +1892,13 @@ class wps_ic_combine_css
             }
         }
 
+        $wpc_ffp746 = (string) wp_parse_url($html[1], PHP_URL_PATH);
+        if (!empty($cf2_host) && !empty($cf2_site) && strcasecmp((string) $cf2_host, (string) $cf2_site) === 0
+            && stripos($wpc_ffp746, '/wp-content/') !== false
+            && strcasecmp((string) $this->zone_name, (string) $cf2_site) !== 0
+            && apply_filters('wpc_combine_css_natural_fonts', true)) {
+            return 'src:url("https://' . $this->zone_name . $wpc_ffp746 . '");';
+        }
         return 'src:url("https://' . $this->zone_name . '/m:0/a:' . $html[1] . '");';
     }
 
@@ -1848,7 +1914,7 @@ class wps_ic_combine_css
         $MobileBg = str_replace('m:0/', 'mo:1/', $bgUrl);
         $html = str_replace($bgUrl, $MobileBg, $bgEntire);
 
-        #return print_r(array($bgEntire, $bgUrl, $MobileBg, $html),true);
+        
         return $html;
     }
 
@@ -1857,15 +1923,15 @@ class wps_ic_combine_css
         $tag = $tag[0];
         $src = '';
 
-        // Never combine/defer WPC's own CRITICAL inline styles — they must stay inline + ACTIVE at first
-        // paint: the critical CSS, the ATF @font-face block (font-display:block only holds a weight
-        // invisible if its face is active at first paint — combining/deferring it = fallback then swap =
-        // FOUT), and the Elementor entrance-animation start-state. Mirrors rewriteLogic::cssStyleLazy's skip
-        // so BOTH deferral paths protect them. (wpc-gfont-atf matches both -atf and -atf-local.)
+
         if (strpos($tag, 'wpc-critical-css') !== false
             || strpos($tag, 'wpc-gfont-atf') !== false
             || strpos($tag, 'wpc-elementor-anim-start') !== false
-            || strpos($tag, 'wpc-lazy-thumb-bgfix') !== false) {
+            || strpos($tag, 'wpc-lazy-thumb-bgfix') !== false
+
+
+            || strpos($tag, 'wpc-lcp-bg-authority') !== false
+            || strpos($tag, 'wpc-bgvideo-contain') !== false) {
             return $tag;
         }
 
@@ -1884,7 +1950,7 @@ class wps_ic_combine_css
 
         $is_src_set = preg_match('/href=["|\'](.*?)["|\']/', $tag, $src);
         if ($is_src_set == 1) {
-            //nothing
+
         } else if ($this->combine_inline_scripts) {
             $src = 'Inline Script';
 
@@ -1892,7 +1958,7 @@ class wps_ic_combine_css
             $content = preg_replace('/<style(.*?)>/', '', $content, -1, $count);
 
             if (!$count) {
-                //no href, and not a <style> tag
+
                 return $tag;
             }
         } else {
@@ -1909,17 +1975,17 @@ class wps_ic_combine_css
 
     public function get_combined_css($html)
     {
-        // Reset for processing
+        
         $this->current_file = '';
         $this->combine_external = false;
         $this->combine_inline_scripts = true;
 
-        // Process head section
+        
         if (preg_match('/<head(.*?)<\/head>/si', $html, $head_match)) {
             $this->combine($head_match);
         }
 
-        // Process body section
+        
         if (preg_match('/<\/head>(.*?)<\/body>/si', $html, $body_match)) {
             $this->combine($body_match);
         }
@@ -1931,12 +1997,12 @@ class wps_ic_combine_css
     {
         $html = $html[0];
 
-        // Run for Cookie Compliant CSS
+        
         if (!empty($_GET['testCompliant'])) {
             $html = $this->cookieCompliantCSS($html);
         }
 
-        // STEP 1: Extract and preserve all <script> tags (including their content)
+        
         $script_placeholders = [];
         $script_counter = 0;
 
@@ -1947,10 +2013,10 @@ class wps_ic_combine_css
             return $placeholder;
         }, $html);
 
-        // STEP 2: Now process CSS (scripts are temporarily removed)
+        
         $html = preg_replace_callback($this->patterns, [$this, 'script_combine_and_replace'], $html);
 
-        // STEP 3: Restore all <script> tags
+        
         foreach ($script_placeholders as $placeholder => $original_script) {
             $html = str_replace($placeholder, $original_script, $html);
         }
@@ -1964,28 +2030,12 @@ class wps_ic_combine_css
         if (preg_match($pattern, $html, $matches)) {
             $script_content = $matches[1];
 
-            if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
-                return print_r(array($matches), true);
-            }
-
-            // 2. Extract the JSON: var complianz = {...};
+            
             if (preg_match('/var complianz\s*=\s*(\{.*?\});/s', $script_content, $json_match)) {
                 $json_string = $json_match[1];
 
-                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '2') {
-                    return print_r(array($json_match), true);
-                }
-
-                // 3. Decode JSON to PHP array
+                
                 $complianz = json_decode($json_string, true);
-
-                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '3') {
-                    return print_r(array($json_string), true);
-                }
-
-                if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '4') {
-                    return print_r(array($complianz, $complianz['css_file']), true);
-                }
 
 
                 if ($complianz && isset($complianz['css_file'])) {
@@ -1993,11 +2043,11 @@ class wps_ic_combine_css
                     $banner_id = $complianz['user_banner_id'] ?? '1';
                     $type = $complianz['consenttype'] ?? 'optin';
 
-                    // 4. Replace placeholders
+                    
                     $css_file_final = str_replace(['{banner_id}', '{type}'], [$banner_id, $type], $css_file);
 
-                    // 5. Insert <link> before </head>
-                    #$link_tag = '<link rel="stylesheet" href="' . $css_file_final . '">';
+                    
+                    
 
                     if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == 'inject-entities') {
                         $link_tag = htmlentities("<link rel='stylesheet' id='wpc-cmplz-banner' href='" . $css_file_final . "' type='text/css' media='all' />");
@@ -2005,24 +2055,12 @@ class wps_ic_combine_css
                         $link_tag = '<link rel="stylesheet" id="wpc-cmplz-banner" href="' . $css_file_final . '" type="text/css" media="all" />';
                     }
 
-                    if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '5') {
-                        return print_r(array($link_tag, $css_file_final), true);
-                    }
-
-                    if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '6') {
-                        return 'LT:[' . htmlentities($link_tag) . "] CF:[" . htmlentities($css_file_final) . "]";
-                    }
-
                     $pattern = '/<script[^>]*id="cmplz-cookiebanner-js-extra"[^>]*>.*?<\/script>/si';
 
                     if (preg_match($pattern, $html, $matches)) {
                         $matched_script = $matches[0];
 
-                        // Debug match
-                        if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '8') {
-                            return print_r(['MATCHED_SCRIPT' => $matched_script, 'LinkRaw' => $link_tag, 'linkEnc' => htmlentities($link_tag)], true);
-                        }
-
+                        
                         $html = str_replace($matched_script, $link_tag, $html);
                     } else {
                         return 'REGEX DID NOT MATCH';
@@ -2031,10 +2069,6 @@ class wps_ic_combine_css
                     return $html;
                 }
             }
-        }
-
-        if (!empty($_GET['dbgCmplz']) && $_GET['dbgCmplz'] == '1') {
-            return print_r(array('not-found', $html), true);
         }
 
         return $html;

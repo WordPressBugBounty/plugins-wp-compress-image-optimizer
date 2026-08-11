@@ -1,120 +1,134 @@
 <?php
-/**
- * Plugin: WP Compress – Instant Performance & Speed Optimization
- * Description: Legitimate script handling for WP Compress Optimizer
- */
+
+
+
+
 class wps_ic_js_delay_v2
 {
 
-    private $script_registry;
-    private $script_id;
-    private $excludes;
-    private $priority_run;
 
-    private $userExcludes;
-    private $deferPatterns;
-    private $userDeferScripts;
+    protected $script_registry;
+    protected $script_id;
+    protected $excludes;
+    protected $priority_run;
+
+    protected $userExcludes;
+    protected $deferPatterns;
+    protected $userDeferScripts;
+    protected $userForceDelay;
     public static $settings;
     public function __construct()
     {
 		self::$settings = get_option(WPS_IC_SETTINGS);
         $this->script_registry = array();
         $this->script_id = 0;
-        $this->excludes = ['dark-mode', // dark mode switcher
-          'n489D_var', // WPC js_delay config vars (inline block must run at parse time)
-          'ngf298gh738qwbdh0s87v_vars', // WPC adaptive optimizer config vars (inline wp_localize_script output)
+        $this->excludes = ['dark-mode',
+          'n489D_var', 
+          'ngf298gh738qwbdh0s87v_vars', 
           'wpcRunningCritical',
-          'trustLogo', // css safety service, uses document.write
-          'turnstile', // had delayed loading detection, throws error
+          'wpc-presc-reserve', 
+          'wpc-icon-belt', 
+          'trustLogo',
+          'turnstile',
+
+
+          'captcha',
+          'grecaptcha',
+          'Captcha',
+
+
+          'jetformbuilder',
+          'jet-form-builder',
+          'JetFormBuilder',
+
+
+          'wp-includes/js/dist/hooks',
+          'wp-includes/js/dist/i18n',
+          'wp-polyfill',
           'document.write',
           'wpc-ga-bot-shield',
-          'sourcebuster', //woo script, incompatible with delay
-          'SR7.', // Slider Revolution inline scripts, load ugly if delayed
-          // GDPR / Cookie consent plugins — must run immediately to show/hide banners
-          'gdpr-cookie-consent', // WP Cookie Consent (GDPR Cookie Consent)
-          'cookie-law-info', // CookieYes / Cookie Law Info
-          'cookieyes', // CookieYes
-          'complianz', // Complianz GDPR
-          'cmplz', // Complianz shorthand
-          'cookie-notice', // Cookie Notice by dFactory
-          'cookie-consent', // Generic cookie consent
-          'moove_gdpr', // Moove GDPR Cookie Compliance
-          'osano', // Osano Cookie Consent
-          'termly', // Termly Consent
-          'iubenda', // iubenda Cookie Solution
-          'wpl_cookie_consent', // WP Legal Pages cookie consent
-          'wpl_viewed_cookie', // WP Cookie Consent inline check
-          'CookieConsent', // Cookiebot / CookieConsent
-          'cookiebot', // Cookiebot
-          'tarteaucitron', // tarteaucitron.js
-          'onetrust', // OneTrust
-          'quantcast', // Quantcast Choice
-          'usercentrics', // Usercentrics
-          'consently', // Consently — manages script (un)blocking + redefines document.readyState, so it
-                       // MUST run immediately. Delaying it collides with WPC's own delay loader (both
-                       // redefine readyState) → Consently falls back to "unblock all" → scripts re-run →
-                       // SmartMenus re-inits (5x duplicate sub-arrow chevrons) + "Cannot redefine readyState".
-          // Form / booking / chat widget LOADERS (v7.03.47) — these inject or REVEAL a (often hidden,
-          // off-screen) iframe/DOM on load and size it via postMessage. Delaying them holds the reveal until
-          // first interaction, so the embedded form/widget looks broken (blank/invisible) on initial view —
-          // a real customer report (GoHighLevel form stopped rendering after update). Distinctive script-src
-          // substrings only (substring match), so they can't over-exclude unrelated scripts.
-          'form_embed',       // GoHighLevel / LeadConnector form_embed.js (sizes + reveals the form iframe)
-          'msgsndr',          // GoHighLevel / LeadConnector (link.msgsndr.com)
-          'leadconnectorhq',  // LeadConnector widget host
-          'hsforms',          // HubSpot Forms loader (js.hsforms.net)
-          'hbspt',            // HubSpot inline embed (hbspt.forms.create)
-          'calendly',         // Calendly embed (reveals/sizes the booking iframe)
-          'typeform',         // Typeform embed
-          'jotform',          // JotForm embed
+          'sourcebuster',
+          'SR7.', 
+          
+          'gdpr-cookie-consent', 
+          'cookie-law-info',
+          'cookieyes', 
+          'complianz', 
+          'cmplz', 
+          'cookie-notice', 
+          'cookie-consent', 
+          'moove_gdpr', 
+          'osano', 
+          'termly', 
+          'iubenda',
+          'wpl_cookie_consent', 
+          'wpl_viewed_cookie', 
+          'CookieConsent', 
+          'cookiebot', 
+          'tarteaucitron',
+          'onetrust', 
+          'quantcast', 
+          'usercentrics', 
+          'consently',
+          'didomi', 
+          'trustarc', 
+          'truste.com', 
+          'sourcepoint', 
+          'axeptio', 
+          'klaro', 
+          'securiti.ai', 
+          'real-cookie-banner', 
+          'devowl',
+          'realCookieBanner',  
+
+
+          'form_embed',       
+          'msgsndr',          
+          'leadconnectorhq',  
+          'hsforms',          
+          'hbspt',            
+          'calendly',         
+          'typeform',         
+          'jotform',          
         ];
 
-        // If a cookie consent plugin is active, also exclude jQuery (their dependency).
-        // Only done conditionally to avoid impacting sites without cookie plugins.
-        // NOTE: historical typos (complianz-gpdr.php) caused Complianz sites to silently skip
-        // the jQuery exclusion block for years. Both the correct AND typo'd paths are listed
-        // so sites that upgraded before the typo fix still work.
+
         $cookiePlugins = [
             'gdpr-cookie-consent/gdpr-cookie-consent.php',
             'cookie-law-info/cookie-law-info.php',
             'cookie-notice/cookie-notice.php',
-            'complianz-gdpr/complianz-gdpr.php',            // correct path
-            'complianz-gdpr-premium/complianz-gdpr.php',    // correct path (premium)
-            'complianz-gdpr/complianz-gpdr.php',            // legacy typo fallback
-            'complianz-gdpr-premium/complianz-gpdr.php',    // legacy typo fallback (premium)
+            'complianz-gdpr/complianz-gdpr.php',
+            'complianz-gdpr-premium/complianz-gdpr.php',
+            'complianz-gdpr/complianz-gpdr.php',
+            'complianz-gdpr-premium/complianz-gpdr.php',
             'iubenda-cookie-law-solution/iubenda_cookie_solution.php',
             'moove-gdpr-cookie-compliance/moove-gdpr-cookie-compliance.php',
+            'real-cookie-banner/index.php',
+            'real-cookie-banner-pro/index.php',
         ];
         foreach ($cookiePlugins as $plugin) {
             if (is_plugin_active($plugin)) {
-                // Full jQuery + WooCommerce dependency chain — all must load eagerly when
-                // a cookie-consent plugin is active, otherwise we get cascading
-                // "X is not defined" ReferenceErrors as each script references the next.
-                //
-                // Order matters: jQuery → js-cookie → jquery.blockUI → woocommerce.min.js
-                // → wc-add-to-cart → wc-checkout. Any one missing kills the chain.
+
+
                 $cookieEcosystem = [
                     'jquery.min.js',
                     'jquery.js',
                     'jquery-migrate',
                     'jquery-ui',
                     'jquery.blockUI',
-                    'js-cookie',        // enqueue handle
-                    'js.cookie',        // filename (js.cookie.min.js — provides window.Cookies)
+                    'js-cookie',
+                    'js.cookie',
                     'woocommerce.min.js',
                     'wc-cart-fragments',
                     'wc-add-to-cart',
                     'wc-checkout',
                 ];
-                // Exclude from delay (must load eagerly for Complianz / consent gates)
+                
                 foreach ($cookieEcosystem as $script) {
                     $this->excludes[] = $script;
                 }
-                // ALSO defer them — otherwise they're render-blocking in the critical path.
-                // `defer` lets them download in parallel with HTML parsing, executing in document
-                // order after parse completes but before DOMContentLoaded. Complianz, WC, etc.
-                // only reference each other via DOMContentLoaded handlers, so load order is
-                // preserved. Gets these scripts OUT of the LCP critical path (PageSpeed wins).
+
+
                 foreach ($cookieEcosystem as $script) {
                     $this->deferPatterns[] = $script;
                 }
@@ -125,25 +139,69 @@ class wps_ic_js_delay_v2
                 break;
             }
         }
+        
+        
+        
+        if (class_exists('WooCommerce') && !in_array('wc-cart-fragments', (array) $this->excludes, true)) {
+            foreach (['jquery.min.js', 'jquery.js', 'jquery-migrate', 'jquery-ui', 'jquery.blockUI',
+                         'js-cookie', 'js.cookie', 'woocommerce.min.js', 'wc-cart-fragments',
+                         'wc-add-to-cart', 'wc-checkout'] as $wpc_ws360) {
+                $this->excludes[] = $wpc_ws360;
+                $this->deferPatterns[] = $wpc_ws360;
+            }
+        }
 
 	    if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '0') {
 		    $this->excludes[] = 'gtag';
 		    $this->excludes[] = 'googletag';
 	    }
 
+
+        if (function_exists('is_plugin_active') && is_plugin_active('jetformbuilder/jet-form-builder.php')
+            && apply_filters('wpc_delay_exclude_jquery_for_jfb', true)) {
+            foreach (['jquery.min.js', 'jquery.js', 'jquery-migrate'] as $wpc_jq_dep) {
+                $this->excludes[] = $wpc_jq_dep;
+            }
+            if (function_exists('wpc_diagnostic_log')) {
+                wpc_diagnostic_log('JFB_DETECTED', 'JetFormBuilder active → jQuery chain excluded-from-delay (dependency closure for the parse-time JFB/captcha excludes)');
+            }
+        }
+
         $this->priority_run = ['document.addEventListener("DOMContentLoaded",()=>(document.body.style.visibility="inherit"));'];
 
         $this->userExcludes = new wps_ic_excludes();
 
-        // Auto-defer WPC's own scripts — no inline dependencies, safe on all sites
-        $this->deferPatterns = [
+        
+        
+        
+        $this->deferPatterns = array_values(array_unique(array_merge((array) $this->deferPatterns, [
             'optimizer.adaptive',
             'optimizer.pixel',
             'optimizer.local',
             'optimizer.min',
             'wpcompress-aio',
-        ];
+        ])));
         $this->userDeferScripts = $this->userExcludes->deferScripts();
+
+
+        if (is_array(self::$settings) && !empty(self::$settings['revslider-instant']) && self::$settings['revslider-instant'] == '1'
+            && apply_filters('wpc_revslider_instant', true)) {
+            $this->userDeferScripts[] = 'revslider';
+
+
+            foreach ((array) apply_filters('wpc_revslider_instant_deps', ['sr7', 'frontend-modules']) as $wpc_rsd47) {
+                $this->userDeferScripts[] = $wpc_rsd47;
+            }
+        }
+
+
+        $this->userForceDelay = $this->userExcludes->lastLoadScripts();
+
+
+        foreach ((array) apply_filters('wpc_builtin_force_delay', ['sr7-elementor-preview']) as $wpc_bfd48) {
+            if (!is_array($this->userForceDelay)) { $this->userForceDelay = []; }
+            $this->userForceDelay[] = $wpc_bfd48;
+        }
     }
 
 
@@ -155,7 +213,7 @@ class wps_ic_js_delay_v2
 
         $tagLower = strtolower($tag);
 
-        // It's excluded
+        
         if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
             $tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
         }
@@ -170,6 +228,15 @@ class wps_ic_js_delay_v2
             return $html;
         }
 
+
+        if (strpos($html, 'recaptcha/api.js?render=') !== false
+            && apply_filters('wpc_delay_bail_on_recaptcha_v3', false)) {
+            if (function_exists('wpc_diagnostic_log')) {
+                wpc_diagnostic_log('DELAY_BAIL_RECAPTCHA_V3', 'v3 site key on page — JS delay skipped (per-site opt-in)');
+            }
+            return $html;
+        }
+
         $this->script_registry = array();
         $this->script_id = 0;
 
@@ -177,7 +244,7 @@ class wps_ic_js_delay_v2
 
         $html = preg_replace_callback($pattern, array($this, 'process_script_tag'), $html);
 
-        //Integrations
+        
         $html = $this->elementor_integration($html);
 
         $delay_script = '';
@@ -202,7 +269,7 @@ class wps_ic_js_delay_v2
         return $html;
     }
 
-    private function elementor_integration($html)
+    protected function elementor_integration($html)
     {
         $elementor_result = $this->process_elementor_animations($html);
         if ($elementor_result) {
@@ -219,9 +286,9 @@ class wps_ic_js_delay_v2
         return $html;
     }
 
-    private function process_elementor_animations($html)
+    protected function process_elementor_animations($html)
     {
-        // Check if there are hidden elements
+        
         if (!preg_match_all('/<div[^>]*\belementor-invisible\b[^>]*>/i', $html, $matches)) {
             return null;
         }
@@ -241,7 +308,7 @@ class wps_ic_js_delay_v2
 
                     $new_match = $match;
 
-                    // Add wpc-lazyload class
+                    
                     if (strpos($new_match, 'wpc-lazyload') === false) {
                         if (preg_match('/class=["\']([^"\']*)["\']/', $new_match, $class_match)) {
                             $existing_classes = $class_match[1];
@@ -252,7 +319,7 @@ class wps_ic_js_delay_v2
                         }
                     }
 
-                    // Add wpc-elementor-animation attribute
+                    
                     $animation_attr = ' wpc-elementor-animation="animated ' . esc_attr($animation) . '"';
 
                     if (substr($new_match, -1) === '>') {
@@ -297,66 +364,66 @@ class wps_ic_js_delay_v2
         return array('script' => $animation_script, 'html' => $modified_html);
     }
 
-    /**
-     * Generate JavaScript for handling Elementor animations
-     *
-     * @return string JavaScript code
-     */
-    private function generate_animation_script()
+    
+
+
+
+
+    protected function generate_animation_script()
     {
         return '<script>
 (function() {
     // Flag to track if our handler is active
     let isHandlerActive = true;
-    
+
     // Listen for a custom event that signals all scripts are loaded
     window.addEventListener("wpc-scripts-loaded", function() {
         // Disable our handler when all scripts are loaded
         isHandlerActive = false;
         console.log("[WPC Elementor] Disabling custom animation handler - all scripts loaded");
     });
-    
+
     // Elementor animation handler with visibility check
     function handleElementorAnimations() {
         // Exit if handler is no longer active
         if (!isHandlerActive) return;
-        
+
         const elements = document.querySelectorAll(".wpc-lazyload[wpc-elementor-animation]");
-        
+
         // Process each element with wpc-elementor-animation attribute
         elements.forEach(element => {
             // Check if element is already processed
             if (element.classList.contains("wpc-animation-processed")) {
                 return;
             }
-            
+
             // Check if element is visible - apply immediately if it is
             if (isElementInViewport(element)) {
                 applyAnimation(element);
             }
         });
     }
-    
+
     // Apply animation to an element
     function applyAnimation(element) {
         // Remove data-settings attribute to prevent Elementor from triggering the animation again
         element.removeAttribute("data-settings");
-        
+
         // Get animation classes from attribute
         const animationClasses = element.getAttribute("wpc-elementor-animation").split(" ");
-        
+
         // Remove elementor-invisible class
         element.classList.remove("elementor-invisible");
-        
+
         // Add animation classes
         animationClasses.forEach(cls => {
             element.classList.add(cls);
         });
-        
+
         // Mark as processed
         element.classList.add("wpc-animation-processed");
     }
-    
+
     // Check if element is in viewport
     function isElementInViewport(el) {
         const rect = el.getBoundingClientRect();
@@ -367,8 +434,8 @@ class wps_ic_js_delay_v2
             rect.right >= 0
         );
     }
-    
-    
+
+
     // Run on DOMContentLoaded
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", handleElementorAnimations);
@@ -376,20 +443,36 @@ class wps_ic_js_delay_v2
         // If DOMContentLoaded already fired, run immediately
         handleElementorAnimations();
     }
-    
+
 })();</script>';
     }
 
-    private function process_script_tag($matches)
+    protected function process_script_tag($matches)
     {
         $full_script = $matches[0];
         $script_content = isset($matches[1]) ? $matches[1] : '';
 
         $attributes = $this->parse_script_attributes($full_script);
 
+        
+        
+        
+        
+        $wpc_dg805 = true;
+        $wpc_id805 = isset($attributes['id']) ? strtolower(trim((string) $attributes['id'])) : '';
+        if ($wpc_id805 !== '') {
+            if (!empty($this->wpc_inline_pairs494[$wpc_id805])) {
+                $wpc_dg805 = false;
+            }
+            if ($wpc_dg805 && !empty($this->wpc_jq_parse_need803)
+                && method_exists($this, 'wpc_is_jquery_id803') && static::wpc_is_jquery_id803($wpc_id805)) {
+                $wpc_dg805 = false;
+            }
+        }
+
         if ($this->should_exclude_script($attributes, $script_content)) {
-            // Excluded from delay — but still add defer if user opted in via "Scripts to Defer"
-            if ($this->should_defer_script($attributes)) {
+            
+            if ($wpc_dg805 && $this->should_defer_script($attributes)) {
                 if (strpos($full_script, 'defer') === false && strpos($full_script, 'async') === false) {
                     return str_replace('<script ', '<script defer ', $full_script);
                 }
@@ -398,26 +481,16 @@ class wps_ic_js_delay_v2
         }
 
         if ($this->should_defer_script($attributes)) {
+            if (!$wpc_dg805) {
+                return $full_script;
+            }
             if (strpos($full_script, 'defer') === false && strpos($full_script, 'async') === false) {
                 return str_replace('<script ', '<script defer ', $full_script);
             }
             return $full_script;
         }
 
-        // v7.08.45/46 — Naturalize the delayed-script src AND inline content BEFORE base64-encoding
-        // into the registry. loader.min.js decodes these and preloads/loads/injects them; storing the
-        // /m:N/a: transform form makes the browser 302→native per delayed asset. The HTML naturalize
-        // passes can't reach these — they're base64-encoded. The src field covers external scripts;
-        // the content body covers inline scripts that REFERENCE module/asset URLs in /m:N/a: form
-        // (e.g. WP's script-module preload/import inline script → interactivity/index, wp-emoji).
-        // v7.02.45 — The delayed-script registry was the ONLY asset surface still on the m:0/a: transform
-        // form while the page's CSS/JS/fonts all went natural. Those collapse via the UNGATED
-        // wpc_asset_naturalize() buffer pass (filter wpc_asset_naturalize_enabled, default on);
-        // natural_assets_on() reads false here because it's evaluated at script_loader_tag, BEFORE the
-        // negotiated-delivery verdict settles — so the delayed JS fell out of lockstep with every other
-        // asset. Gate on natural_assets_on() OR that same single off-ramp so the delayed-JS registry and
-        // the page assets always naturalize together (one filter disables both). naturalize_asset_urls()
-        // still no-ops safely if the zone is empty, and m:0 is a pass-through, so delivery is byte-identical.
+
         $do_nat = class_exists('wps_rewriteLogic')
             && method_exists('wps_rewriteLogic', 'naturalize_asset_urls')
             && (
@@ -446,9 +519,9 @@ class wps_ic_js_delay_v2
 
         foreach ($attributes as $attr => $value) {
             if (!in_array($attr, array('src', 'type'))) {
-                // v7.08.49 — belt-and-suspenders: a data-* attribute could carry a /m:N/a: asset
-                // URL (loader.min.js replays these onto the injected tag). Naturalize it too, same
-                // gate as src/content. No-op unless natural assets are on AND the value contains /a:.
+
+                
+                
                 if ($do_nat && is_string($value) && $value !== '' && strpos($value, '/a:') !== false) {
                     $nv = wps_rewriteLogic::naturalize_asset_urls($value);
                     if (is_string($nv) && $nv !== '') $value = $nv;
@@ -473,7 +546,7 @@ class wps_ic_js_delay_v2
         return '<script type="text/placeholder" data-script-id="' . $script_data['id'] . '"></script>';
     }
 
-    private function parse_script_attributes($script_tag)
+    protected function parse_script_attributes($script_tag)
     {
         $attributes = array();
 
@@ -492,7 +565,7 @@ class wps_ic_js_delay_v2
         return $attributes;
     }
 
-    private function should_exclude_script($attributes, $content = '')
+    protected function should_exclude_script($attributes, $content = '')
     {
         if (!empty($attributes['data-priority']) && $attributes['data-priority'] === 'high') {
             return true;
@@ -502,13 +575,36 @@ class wps_ic_js_delay_v2
             return true;
         }
 
-        if (!empty($attributes['type']) && in_array($attributes['type'], ['text/mf', 'application/ld+json', 'text/template', 'wpc-delay-placeholder'])) {
+        if (!empty($attributes['type']) && in_array($attributes['type'], ['text/mf', 'application/ld+json', 'application/json', 'speculationrules', 'importmap', 'text/template', 'wpc-delay-placeholder'])) {
             return true;
         }
 
+        if ($content !== ''
+            && (strpos($content, 'jqueryParams') !== false || strpos($content, 'customHeadScripts') !== false)
+            && apply_filters('wpc_keep_jquery_stub', true)) {
+            return true;
+        }
+
+        if (!empty($this->userForceDelay)) {
+            if (!empty($attributes['src']) && $this->checkKeyword($attributes['src'], $this->userForceDelay)) {
+                return false;
+            }
+            if (!empty($content) && $this->checkKeyword($content, $this->userForceDelay)) {
+                return false;
+            }
+        }
+
         if (!empty($attributes['src'])) {
-            if ($this->checkKeyword($attributes['src'], $this->excludes)) {
-                // Diagnostic: capture when jQuery-ecosystem or WPC vars fire on the exclude path
+            
+            
+            
+            
+            
+            $wpc_keep495 = (string) $attributes['src']
+                . (apply_filters('wpc_keep_match_id', false) && !empty($attributes['id'])
+                    ? ' ' . (string) $attributes['id'] : '');
+            if ($this->checkKeyword($wpc_keep495, $this->excludes)) {
+                
                 if (function_exists('wpc_diagnostic_log')) {
                     $src = $attributes['src'];
                     if (stripos($src, 'jquery') !== false || stripos($src, 'blockui') !== false || stripos($src, 'woocommerce') !== false || stripos($src, 'wc-') !== false) {
@@ -518,14 +614,14 @@ class wps_ic_js_delay_v2
                 return true;
             }
 
-            // User excludes
+            
             if ($this->userExcludes->excludedFromDelayV2($attributes['src'])) {
                 return true;
             }
         }
 
         if (!empty($content) && $this->checkKeyword($content, $this->excludes)) {
-            // Diagnostic: capture when WPC inline vars are preserved (not delayed)
+            
             if (function_exists('wpc_diagnostic_log')) {
                 if (stripos($content, 'ngf298gh738qwbdh0s87v_vars') !== false) {
                     wpc_diagnostic_log('VARS_PRESERVED', 'ngf298gh738qwbdh0s87v_vars (adaptive optimizer)');
@@ -536,7 +632,7 @@ class wps_ic_js_delay_v2
             return true;
         }
 
-        // User excludes
+        
         if ($this->userExcludes->excludedFromDelayV2($content)) {
             return true;
         }
@@ -544,7 +640,7 @@ class wps_ic_js_delay_v2
         return false;
     }
 
-    private function should_defer_script($attributes)
+    protected function should_defer_script($attributes)
     {
         if (empty($attributes['src'])) {
             return false;
@@ -568,15 +664,15 @@ class wps_ic_js_delay_v2
         if (!empty($keywordArray)) {
             foreach ($keywordArray as $needle) {
                 if (strpos($tag, $needle) !== false) {
-                    return true; // Match found
+                    return true; 
                 }
             }
         }
 
-        return false; // No match found
+        return false; 
     }
 
-    private function is_priority_run($attributes = [], $content = '')
+    protected function is_priority_run($attributes = [], $content = '')
     {
         if (!empty($content) && $this->checkKeyword($content, $this->priority_run)) {
             return true;

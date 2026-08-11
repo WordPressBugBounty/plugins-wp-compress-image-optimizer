@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_cloudflare extends wps_ic_integrations {
@@ -11,11 +11,11 @@ class wps_ic_cloudflare extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
     public function add_admin_hooks() {
@@ -41,27 +41,56 @@ class wps_ic_cloudflare extends wps_ic_integrations {
             return;
         }
 
-        // (v7.03.51) A per-PAGE HTML purge (save_post, comment, image variant-landing, per-page
-        // critical-CSS — these pass the page permalink as $url_key) must NOT flush the whole CF zone.
-        // purgeCacheAsync() = purge_everything, which wipes every edge-cached IMAGE → a fleet-wide
-        // cold-miss storm (the same failure the plugin-update purge had, fixed in v7.03.50). CF usually
-        // doesn't even cache HTML, so a full-zone purge for one page is all cost, no benefit. Scope it to
-        // the URL(s) instead (purgeFilesAsync, ≤30 files, fire-and-forget). Only a TRUE full-cache intent
-        // ($url_key empty/'all' — delivery-mode flips, the manual "Purge CDN" button, zone changes) still
-        // purges the whole zone. wpc_customer_purge('all') / the manual button call CF purge_everything on
-        // their own paths, so genuine full purges are unaffected.
+
         $urls = [];
+        $wpc_had_slug = false;
         foreach ((array) $url_key as $u) {
             if (is_string($u) && $u !== '' && $u !== 'all' && filter_var($u, FILTER_VALIDATE_URL)) {
                 $urls[] = $u;
+            } elseif (is_string($u) && $u !== '' && $u !== 'all') {
+
+
+                if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey')) {
+                    $resolved = wps_ic_url_key::getUrlFromKey($u);
+                    if (!empty($resolved) && filter_var($resolved, FILTER_VALIDATE_URL)) {
+                        $urls[] = $resolved;
+                        continue;
+                    }
+                }
+                $wpc_had_slug = true;
             }
         }
         if (!empty($urls)) {
-            $cfapi->purgeFilesAsync($zone, $urls);
+
+
+            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
+                wps_ic_cache::purgeEdgeHtmlUrls($urls);
+            } else {
+                $cfapi->purgeFilesAsync($zone, $urls);
+            }
             return;
         }
 
-        // Full-cache intent (no specific URL): purge the whole zone.
+
+        if ($wpc_had_slug) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('cf-skip-unresolvable', is_string($url_key) ? $url_key : '', '', []);
+            }
+            return;
+        }
+
+
+        if (!apply_filters('wpc_cf_purge_html_full', false)
+            && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+            wps_ic_cache::cfPurgeAllHtml();
+            return;
+        }
+        if (!apply_filters('wpc_cf_purge_html_full', false)
+            && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls')) {
+
+            wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);
+            return;
+        }
         $cfapi->purgeCacheAsync($zone);
     }
 

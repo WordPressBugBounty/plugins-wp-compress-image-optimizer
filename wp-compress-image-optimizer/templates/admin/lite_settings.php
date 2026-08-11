@@ -2,7 +2,7 @@
 global $wps_ic, $wpdb;
 
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// For Lite Settings
+
 $settings = get_option(WPS_IC_SETTINGS);
 if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
     if (!empty($settings['generate_adaptive']) || !empty($settings['retina']) || !empty($settings['generate_webp'])) {
@@ -24,9 +24,9 @@ if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
 
     update_option(WPS_IC_SETTINGS, $settings);
 }
-// End
 
-// reset GPS Test
+
+
 if (!empty($_GET['resetTest'])) {
     delete_transient('wpc_test_running');
     delete_transient('wpc_initial_test');
@@ -58,9 +58,9 @@ if (!empty($_POST)) {
         $newSettings['retina'] = '1';
         $newSettings['generate_adaptive'] = '1';
         $newSettings['generate_webp'] = '1';
-        // v7.01.87 — ITEM 2 (stop the de-sync at the source): couple the next-gen ceiling to the single
-        // Next-Gen control. Writing generate_webp=1 alone made ceiling_from_settings() derive 'webp'
-        // (defaults ship picture_avif=1 → fresh install = avif; this lite path silently dropped to webp).
+
+        
+        
         $newSettings['picture_webp'] = '1';
         $newSettings['picture_avif'] = '1';
         $newSettings['wpc_nextgen'] = 'auto';
@@ -69,8 +69,8 @@ if (!empty($_POST)) {
         $newSettings['retina'] = '0';
         $newSettings['generate_adaptive'] = '0';
         $newSettings['generate_webp'] = '0';
-        // v7.01.87 — off-branch hygiene: ceiling_from_settings() already returns 'off' on generate_webp!=1
-        // regardless of picture_avif, but keep the state internally coherent.
+
+
         $newSettings['picture_webp'] = '0';
         $newSettings['picture_avif'] = '0';
         $newSettings['wpc_nextgen'] = 'off';
@@ -117,30 +117,32 @@ if (!empty($_POST)) {
 
     $cache = new wps_ic_cache_integrations();
 
-    // Get Purge List
+    
     $options_class = new wps_ic_options();
     $purgeList = $options_class->getPurgeList($options);
 
-    $cache::purgeAll(false, false, false, false); //this only clears cache files
-    //To edit what setting purges what, go to wps_ic_options->__construct()
+    $cache::purgeAll(false, false, false, false);
+
     if (in_array('combine', $purgeList)) {
         $cache::purgeCombinedFiles();
     }
 
     if (in_array('critical', $purgeList)) {
+        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
         $cache::purgeCriticalFiles();
+    }
     }
 
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN(false);
-	    $cache::purgeCriticalFiles();
+	    if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
+        $cache::purgeCriticalFiles();
+    }
 	    $cache::purgePreloads();
     }
 
-    // v7.08.2 — Image-delivery settings altered HTML output. Purge HTML
-    // cache (Breeze/Varnish/WPC advanced-cache/W3TC/etc) via the canonical
-    // purger so the next render rebuilds with the new rules.
+
     if (in_array('html', $purgeList)) {
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all');
@@ -156,24 +158,24 @@ if (!empty($_POST)) {
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
-            // Modify HTAccess
-            #$htacces->checkHtaccess();
+            
+            
         } else {
             $htacces->removeHtaccessRules();
         }
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(true);
         $htacces->setAdvancedCache();
 
         $this->cacheLogic = new wps_ic_cache();
-        $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-        $this->cacheLogic::preloadPage(0); // Purge & Preload
+        $this->cacheLogic::removeHtmlCacheFiles(0); 
+        $this->cacheLogic::preloadPage(0); 
     } else {
-        // Modify HTAccess
+        
         $htacces->removeHtaccessRules();
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(false);
         $htacces->removeAdvancedCache();
     }
@@ -324,25 +326,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                         </a>
 
                         <?php
-                        /*
-                        $preload_class = new wps_ic_preload_warmup();
-                        $pagesToPreload = $preload_class->getPagesToOptimize();
-                        if (!empty($preload_class->get_optimization_status())) { ?>
-                            <script>
-                                jQuery('.wpc-page-optimizations-running').show();
-                            </script>
-                        <?php
-                        } else if ($pagesToPreload['unoptimized'] > 0) { ?>
-                            <script>
-                                jQuery('.wpc-start-optimizations').show();
-                            </script>
-                        <?php
-                        } else { ?>
-                            <script>
-                                jQuery('.wpc-optimization-complete').show();
-                            </script>
-                          <?php
-                        } */ ?>
+                         ?>
                     </div>
                     <div class="wpc-header-advanced-btn">
                         <?php if ($liteActive) { ?>
@@ -393,7 +377,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 			                            if ($liteActive) {
 				                            echo $gui::simpleCheckbox( esc_html__('CDN', WPS_IC_TEXTDOMAIN), '', false, '0', 'cdnAll', true );
 			                            } else if (!$allowLive){
-				                            //dont display the toggle, off in portal
+
 			                            } else {
 				                            echo $gui::simpleCheckbox( esc_html__('CDN', WPS_IC_TEXTDOMAIN), '', false, '0', 'cdnAll', false );
 			                            }
@@ -454,7 +438,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                             <!-- Stats -->
                             <?php
-                            // Parse the bytes value to extract number and unit
+                            
                             preg_match('/([0-9.,]+)\s*([a-zA-Z]+)/', $apiStats->display->bytes, $bytesMatch);
                             $bytesNum = isset($bytesMatch[1]) ? $bytesMatch[1] : $apiStats->display->bytes;
                             $bytesUnit = isset($bytesMatch[2]) ? $bytesMatch[2] : '';
@@ -522,7 +506,9 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                     <div class="wpc-settings-content-inner">
                         <div class="wpc-rounded-box wpc-rounded-box-full">
 	                        <?php
-	                        if ($cf){
+	                        if ($gui::vitalsHasData()){
+		                        echo $gui::vitalsGraph();
+	                        } elseif ($cf){
 		                        echo $gui::CFGraph();
 	                        } else {
 		                        echo $gui::usageGraph();
@@ -576,10 +562,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <?php } else {
                                     $date = new DateTime();
 
-                                    // Get the WordPress timezone
+                                    
                                     $timezone = get_option('timezone_string');
 
-                                    // Fallback if timezone_string is not set
+                                    
                                     if (!$timezone) {
                                         $gmt_offset = get_option('gmt_offset');
                                         if ($gmt_offset == 0) {
@@ -587,22 +573,22 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         } else {
                                             $timezone = timezone_name_from_abbr('', $gmt_offset * 3600, 0);
 
-                                            // If timezone_name_from_abbr() fails, set default timezone
+                                            
                                             if (!$timezone) {
-                                                $timezone = 'UTC'; // Default to UTC to prevent errors
+                                                $timezone = 'UTC'; 
                                             }
                                         }
                                     }
 
-                                    // Patch: IF-ovi su losi
+                                    
                                     if (!empty($initialPageSpeedScore)) {
-                                        // Apply the timezone to the DateTime object
+                                        
 
                                         try {
                                             $date->setTimezone(new DateTimeZone($timezone));
                                         } catch (Exception $e) {
-                                            #error_log("Invalid timezone: $timezone - Falling back to UTC");
-                                            $date->setTimezone(new DateTimeZone('UTC')); // Default to UTC
+                                            
+                                            $date->setTimezone(new DateTimeZone('UTC')); 
                                         }
 
                                         $date->setTimestamp($initialPageSpeedScore['lastRun']);
@@ -665,13 +651,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         <span><?php echo esc_html__('Usually takes about 10 minutes...', WPS_IC_TEXTDOMAIN); ?></span>
                                     </div>
                                 <?php } else {
-                                /**
-                                 * Possible values
-                                 * $initialPageSpeedScore['desktop']['before']['performanceScore']
-                                 * $initialPageSpeedScore['desktop']['before']['ttfb']
-                                 * $initialPageSpeedScore['desktop']['before']['requests']
-                                 * $initialPageSpeedScore['desktop']['before']['pageSize']
-                                 */
+
 
                                 if (!empty($initialPageSpeedScore['result'])) {
                                     $initialPageSpeedScore = $initialPageSpeedScore['result'];
@@ -873,7 +853,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                          (Identical markup to Advanced dashboard stats.php)
                          ═══════════════════════════════════════════════════════════ -->
                     <?php
-                    // Recompute GPS data for v2 section
+
                     $v2_gps = get_option(WPS_IC_LITE_GPS);
                     $v2_hasGPS = false;
                     if (!empty($v2_gps) && !empty($v2_gps['result'])) {
@@ -1007,12 +987,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     $isPerfect = ($v2_dev['diff'] === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN));
                                     $beforeScore = round($v2_dev['before'] * 100);
                                     $afterScore = round($v2_dev['after'] * 100);
-                                    // SVG circle math
+                                    
                                     $smSize = 50; $smR = 21; $smStroke = 5; $smCirc = 2 * M_PI * $smR;
                                     $lgSize = 50; $lgR = 21; $lgStroke = 5; $lgCirc = 2 * M_PI * $lgR;
                                     $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
                                     $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
-                                    // Color by score
+                                    
                                     $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
                                     $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
                                     $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');

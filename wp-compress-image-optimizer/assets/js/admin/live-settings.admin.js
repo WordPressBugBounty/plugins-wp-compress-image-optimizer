@@ -23,7 +23,7 @@ jQuery(document).ready(function ($) {
                 container: 'in',
                 popup: 'wps-ic-connect-popup'
             },
-            //customClass:'wps-ic-connect-popup',
+            
             showCloseButton: false,
             showCancelButton: false,
             showConfirmButton: false,
@@ -61,7 +61,7 @@ jQuery(document).ready(function ($) {
 
                     var apikey = $('input[name="apikey"]', form_container).val();
 
-                    // Connect
+                    
                     $('.wps-ic-connect-inner').addClass('padded');
                     $(success_message).show();
                     $(success_message_choice_text).show();
@@ -72,7 +72,7 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    //swalFunc();
+    
 
     $('.cname-disabled').hover(function (e) {
         if (!$('.cname-container').hasClass('active-hover')) {
@@ -114,10 +114,10 @@ jQuery(document).ready(function ($) {
         var value = $(this).is(':checked');
 
         if (value == true) {
-            // ON
+            
             $('a[data-value="html+css"]', '.wp-ic-select-box').trigger('click');
         } else {
-            // OFF
+            
             $('a[data-value="html"]', '.wp-ic-select-box').trigger('click');
         }
     });
@@ -129,7 +129,7 @@ jQuery(document).ready(function ($) {
 
         if (setting_name == 'fonts') {
             if (value == true) {
-                // Set to checked
+                
                 $('#fonts-enabled,#fonts').attr('checked', 'checked');
             } else {
                 $('#fonts-enabled,#fonts').removeAttr('checked');
@@ -139,7 +139,7 @@ jQuery(document).ready(function ($) {
 
 
     $('body').on('click', '.close-toggle', function (e) {
-        //var closeWhat = $(this).data('close-target');
+        
         $(this).parent().fadeOut();
     });
 
@@ -194,14 +194,14 @@ jQuery(document).ready(function ($) {
             var cname_field = $('[name="custom-cdn"]', popupData).val();
 
             if (cname_field == '') {
-                //wps-ic-mu-popup-empty-cname
+                
                 WPCSwal.fire({
                     title: '', position: 'center', html: jQuery('.wps-ic-mu-popup-empty-cname').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
                     }, onOpen: function () {
 
                     }, onClose: function () {
-                        //openConfigurePopup(popup_modal);
+                        
                     }
                 });
                 return false;
@@ -456,14 +456,14 @@ jQuery(document).ready(function ($) {
 
                     $('.wpc-dynamic-text', popup).html('We have detected that your server is located in ' + country_name + ' (' + continent + '), if that\'s not correct, please select the nearest region below.');
 
-                    // OK
-                    /*$(top).show();
-                    $(content).show();
-                    $(loading).hide();*/
+                    
+                    
+
+
                     window.location.reload();
                 }
                 else {
-                    // Error Popup
+                    
                 }
             });
 
@@ -490,13 +490,13 @@ jQuery(document).ready(function ($) {
 
                     $('.wpc-dynamic-text', popup).html('We have detected that your server is located in ' + country_name + ' (' + continent + '), if that\'s not correct, please select the nearest region below.');
 
-                    // OK
+                    
                     $(top).show();
                     $(content).show();
                     $(loading).hide();
                 }
                 else {
-                    // Error Popup
+                    
                 }
             });
 
@@ -539,9 +539,9 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    /**
-     * Ajax Checkbox
-     */
+    
+
+
     $('.wpc-ajax-checkbox').on('change', function (e) {
         e.preventDefault();
 
@@ -559,19 +559,19 @@ jQuery(document).ready(function ($) {
             wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.success) {
-                // OK
+                
             }
             else {
-                // Error Popup
+                
             }
         });
         return false;
     });
 
 
-    /**
-     * Detect Option change
-     */
+    
+
+
     $('.ic-advanced-settings-v2 input[type="checkbox"]').on('change', function (e) {
         if ($(this).hasClass('disabled-checkbox')) {
             return false;
@@ -597,18 +597,18 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    /**
-     * @since 5.00.59
-     */
+    
+
+
     $('.wps-ic-service-status').on('click', function (e) {
         e.preventDefault();
         $('.wps-ic-live-cdn-ajax').trigger('click');
         return false;
     });
 
-    /**
-     * @since 5.00.59
-     */
+    
+
+
     $('.wps-ic-ajax-checkbox-cdn').on('click', function (e) {
         e.preventDefault();
 
@@ -630,9 +630,9 @@ jQuery(document).ready(function ($) {
         var span = $('span', parent);
         var label_holder = $('.label-holder', parent);
 
-        /**
-         * Is this service status change?
-         */
+        
+
+
         if (setting_name == 'live-cdn') {
 
             if (allow_live_popup && 1==0) {
@@ -668,9 +668,9 @@ jQuery(document).ready(function ($) {
         var checked = $(checkbox).is(':checked');
 
 
-        /*
-         * If label change on status change should occur
-         */
+        
+
+
         if (typeof on_span !== 'undefined' && typeof off_span !== 'undefined') {
             if (on_span != '' && off_span != '') {
                 if (!checked) {
@@ -682,9 +682,9 @@ jQuery(document).ready(function ($) {
             }
         }
 
-        /*
-         * If label change on status change should occur
-         */
+        
+
+
         if (typeof label_holder !== 'undefined' && typeof label_holder !== 'undefined') {
             if (checked) {
                 $(label_holder).html('Off');
@@ -702,27 +702,27 @@ jQuery(document).ready(function ($) {
             wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.success) {
-                // OK
+                
             }
             else {
-                // Error Popup
+                
             }
         });
 
         return false;
     });
 
-    /** New Above **/
+    
 
 
     var tooltips = 0;
     var ajax_run = true;
 
 
-    /**
-     * Additional configuration in advanced settings
-     * @since 5.00.59
-     */
+    
+
+
+
     $('.button-save-settings').on('click', function (e) {
         e.preventDefault();
 
@@ -769,76 +769,76 @@ jQuery(document).ready(function ($) {
                     }
                 });
 
-                //WPCSwal.close();
+                
 
             }
         });
 
-        // saving-settings-popup
-        // settings-saved-popup
+        
+        
 
         return false;
     });
 
 
-    /**
-     * Additional configuration in advanced settings
-     * @since 5.00.54
-     */
+    
+
+
+
     $('.wps-ic-additional-configuration').on('click', function (e) {
         e.preventDefault();
         return false;
     })
 
 
-    /*
-    * Circle
-    */
+    
+
+
     $('#circle-big').circleProgress({
         size: 120, startAngle: -Math.PI / 6 * 3, lineCap: 'round', thickness: '4', fill: {
             gradient: ["#1c87f1", "#3c4cdf"], gradientAngle: Math.PI / 7
         }
     });
 
-    /**
-     * @since 4.0.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.projected-flag-ok').tooltipster({
         maxWidth: '300', delay: 50, speed: 100
     });
 
 
-    /**
-     * @since 4.0.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.projected-flag-warning').tooltipster({
         maxWidth: '300', delay: 50, speed: 100, theme: 'warning-tooltip-theme',
     });
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.setting-value.ic-custom-tooltip').tooltipster({
         maxWidth: '235',
         position: 'left'
     });
 
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.tooltip').tooltipster({
         maxWidth: '300',
     });
 
 
-    /**
-     * @since 5.00.20
-     */
+    
+
+
     $('.btn-purge-cdn').on('click', function (e) {
         e.preventDefault();
         var btn = $(this);
@@ -867,10 +867,10 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.whole-checkbox-autopilot>div').on('click', function (e) {
         e.preventDefault();
 
@@ -878,7 +878,7 @@ jQuery(document).ready(function ($) {
             return false;
         }
         if ($(this).parent().hasClass('disabled')) {
-            // Disable Local Popup
+            
             return false;
 
             WPCSwal.fire({
@@ -903,7 +903,7 @@ jQuery(document).ready(function ($) {
         var ap_status = $(parent).data('autopilot-status');
 
         if (ap_status == '1') {
-            // Turning OFF
+            
             WPCSwal.fire({
                 title: '', html: jQuery('#legacy-enable-popup').html(), width: 900, showCancelButton: true, cancelButtonColor: '#fdfdfd', confirmButtonColor: '#fdfdfd', confirmButtonText: 'Switch to Local', cancelButtonText: "Stay on Live", customClass: {
                     container: 'no-padding-popup-bottom-bg switch-legacy-popup',
@@ -949,7 +949,7 @@ jQuery(document).ready(function ($) {
                         wps_ic_nonce: wpc_ajaxVar.nonce
                     }, function (response) {
                         if (response.success) {
-                            // Nothing
+                            
                             saving_settings = false;
 
                             $('.wps-ic-legacy-option').removeClass('wps-ic-legacy-hide').show();
@@ -1001,10 +1001,10 @@ jQuery(document).ready(function ($) {
                 wps_ic_nonce: wpc_ajaxVar.nonce
             }, function (response) {
                 if (response.success) {
-                    // Nothing
+                    
                     saving_settings = false;
 
-                    //$('.wps-ic-legacy-option').addClass('wps-ic-legacy-hide').hide();
+                    
                     window.location.reload();
                 }
                 else {
@@ -1030,9 +1030,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Change Optimization
-     */
+    
+
+
     $('.wps-ic-change-optimization').on('click', function (e) {
         e.preventDefault();
 
@@ -1048,7 +1048,7 @@ jQuery(document).ready(function ($) {
             wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.success) {
-                // Nothing
+                
             }
             else {
                 alert('Oops! We weren\'t able to save your settings! :(');
@@ -1077,14 +1077,14 @@ jQuery(document).ready(function ($) {
 
     $('.checkbox-container-v2.locked').on('click', function (e) {
         e.preventDefault();
-        //lockedPopup();
+        
         return false;
     });
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.whole-checkbox>div').on('click', function (e) {
         e.preventDefault();
 
@@ -1100,14 +1100,14 @@ jQuery(document).ready(function ($) {
         if (!checked) {
             if ($(this).hasClass('locked') || $(this).parent().hasClass('locked')) {
                 e.preventDefault();
-                //lockedPopup();
+                
                 return false;
             }
         }
 
         disable_other_toggles('disable');
 
-        // If setting is CSS/JS then change minify also
+        
         if (setting_name == 'css' || setting_name == 'js') {
             if ($(input).is(':checked')) {
 
@@ -1121,8 +1121,8 @@ jQuery(document).ready(function ($) {
                         wps_ic_nonce: wpc_ajaxVar.nonce
                     }, function (response) {
                         if (response.success) {
-                            // Nothing
-                            //saving_settings = false;
+                            
+                            
                             $('#' + setting_name + '-minify-toggle').prop('checked', false);
                         }
                         else {
@@ -1167,12 +1167,12 @@ jQuery(document).ready(function ($) {
         }
 
 
-        // Turning On?
+        
         if (value == 1) {
             show_popup_for(setting_name);
         }
 
-        // Is AutoPilot?
+        
         if (setting_name == 'autopilot') {
             if ($(input).is(':checked')) {
                 $(div).css('padding-top', '13px');
@@ -1189,9 +1189,9 @@ jQuery(document).ready(function ($) {
 
         if (setting_name == 'live_api') {
             if (checked) {
-                /**
-                 * Enabled Live
-                 */
+                
+
+
                 $('.live-option-row').attr('style', 'opacity:1;');
                 $('.ic-live-overlay').attr('style', 'display:none;opacity:0;visibility:hidden;');
 
@@ -1199,9 +1199,9 @@ jQuery(document).ready(function ($) {
                 $('#ic-legacy-overlay').attr('style', 'display:block;opacity:1;visibility:visible;');
             }
             else {
-                /**
-                 * Disabled Live
-                 */
+                
+
+
                 $('.live-option-row').attr('style', 'opacity:0.3;position:relative;');
                 $('.ic-live-overlay').attr('style', 'display:block;opacity:1;visibility:visible;');
 
@@ -1211,7 +1211,7 @@ jQuery(document).ready(function ($) {
         }
 
 
-        // Show CDN scanning popup
+        
         if (setting_name == 'cdn' && value == 1 && checked == true) {
             show_cdn_popup();
         }
@@ -1228,7 +1228,7 @@ jQuery(document).ready(function ($) {
             disable_other_toggles('enable');
 
             if (response.success) {
-                // Nothing
+                
                 saving_settings = false;
             }
             else {
@@ -1247,10 +1247,10 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     function show_compatibility_popup(popupID) {
         WPCSwal.fire({
             title: '', html: jQuery('#' + popupID + '-compatibility-popup').html(), width: 600, showCancelButton: false, showConfirmButton: true, confirmButtonText: 'Okay, I Understand', allowOutsideClick: false, customClass: {
@@ -1263,10 +1263,10 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.wp-ic-ajax-checkbox-v2').on('click', function (e) {
         e.preventDefault();
 
@@ -1296,7 +1296,7 @@ jQuery(document).ready(function ($) {
             }
         }
 
-        // Show CDN scanning popup
+        
         if (setting == 'cdn' && value == 1 && checked == true) {
             show_cdn_popup();
         }
@@ -1310,7 +1310,7 @@ jQuery(document).ready(function ($) {
             wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.success) {
-                // Nothing
+                
                 saving_settings = false;
             }
             else {
@@ -1320,10 +1320,10 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.wp-ic-ajax-input').focusout(function (e) {
         e.preventDefault();
 
@@ -1341,7 +1341,7 @@ jQuery(document).ready(function ($) {
             wps_ic_nonce: wpc_ajaxVar.nonce
         }, function (response) {
             if (response.success) {
-                // Nothing
+                
             }
             else {
                 alert('Oops! We weren\'t able to save your settings! :(');
@@ -1350,10 +1350,10 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
     if ($('.wps-ic-trigger_connect').length) {
         var link = $('.wps-ic-authorize-api').attr('href');
         $.ajaxSetup({async: false, cache: false});
@@ -1371,10 +1371,10 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
     $('.button-tooltips').on('click', function (e) {
         e.preventDefault;
 
@@ -1382,7 +1382,7 @@ jQuery(document).ready(function ($) {
         var tooltips_on = $(this).data('tooltips');
 
         if (tooltips_on == '0') {
-            // Turn  it on
+            
             $('span', link).html('On');
             tooltips = 1;
         }
@@ -1395,10 +1395,10 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
     $('form#wps_ic_activate_form').submit(function (e) {
         e.preventDefault();
 
@@ -1481,10 +1481,10 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
     function run_Ajax() {
         if (ajax_run == false) {
             console.log('Ajax Canceled');
@@ -1496,10 +1496,10 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
     function test_finished(form, loading, test, status, message) {
         var swalcontainer = $('#swal2-content');
         var msg = '';
@@ -1573,11 +1573,11 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Authorize with remote API
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
+
     $('.wps-ic-authorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
@@ -1593,11 +1593,11 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * Deauthorize with remote API
-     * @since 3.3.0
-     * Status: Maybe not required? TODO
-     */
+    
+
+
+
+
     $('.wps-ic-deauthorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});

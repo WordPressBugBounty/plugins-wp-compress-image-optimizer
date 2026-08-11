@@ -1,0 +1,9 @@
+# Long-cache the plugin's own static JS.
+# "None" TTL on both live sites. Safe: every reference is versioned (?v=WPC_PLUGIN_VERSION),
+# so a plugin update busts the cache by URL. Apache + LiteSpeed honor this; nginx ignores it
+# (harmless). Same pattern as the fonts-dir htaccess the plugin already writes.
+<IfModule mod_headers.c>
+<FilesMatch "\.(js|css)$">
+Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+</IfModule>

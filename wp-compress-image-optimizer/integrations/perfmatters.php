@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_perfmatters extends wps_ic_integrations
@@ -30,7 +30,7 @@ class wps_ic_perfmatters extends wps_ic_integrations
 
   public function do_checks()
   {
-    // Logic to check for conflicts
+    
     $perfmatters_options = get_option('perfmatters_options');
     $updated = false;
 
@@ -38,32 +38,14 @@ class wps_ic_perfmatters extends wps_ic_integrations
       $perfmatters_options['assets']['delay_js'] = 0;
       $updated = true;
 
-      /*
-			$this->notices_class->show_notice( 'WPCompress - Delay JS conflict detected',
-				'Click "Fix" to use WPCompress and disable Perfmatters setting, or "Dismiss" to continue.',
-				'warning', true, 'wpc_perfmatters_delay_js_dismiss_tag', [
-					'plugin'  => 'perfmatters',
-					'setting' => [
-						'delay_js'
-					]
-				] );
-*/
+
     }
 
     if (!empty($this->wps_settings['lazy']) && $this->wps_settings['lazy'] == 1 && !empty($perfmatters_options['lazyload']['lazy_loading']) && $perfmatters_options['lazyload']['lazy_loading']) {
       $perfmatters_options['lazyload']['lazy_loading'] = 0;
       $updated = true;
 
-      /*
-			$this->notices_class->show_notice( 'WPCompress - Lazy Load conflict detected',
-				'Click "Fix" to use WPCompress and disable Perfmatters setting, or "Dismiss" to continue.',
-				'warning', true, 'wpc_perfmatters_lazyload_dismiss_tag', [
-					'plugin'  => 'perfmatters',
-					'setting' => [
-						'lazy_loading'
-					]
-				] );
-*/
+
     }
 
     if ($updated) {

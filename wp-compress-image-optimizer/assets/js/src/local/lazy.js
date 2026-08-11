@@ -1,4 +1,4 @@
-// Lazy
+
 var lazyImages = [];
 var active;
 var activeRegular;
@@ -71,14 +71,14 @@ function lazyLoad() {
                     }
                 }
 
-                // Integrations
+                
                 masonry = lazyImage.closest(".masonry");
 
                 if (typeof lazyImage.dataset.src !== 'undefined' && typeof lazyImage.dataset.src !== undefined) {
                     lazyImage.src = lazyImage.dataset.src;
                 }
 
-                // Handle <picture> <source> lazy loading
+                
                 var parentPicture = lazyImage.closest('picture');
                 if (parentPicture) {
                     parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
@@ -88,8 +88,8 @@ function lazyLoad() {
                 }
 
                 var imageSrc = lazyImage.src;
-                //imageSrc = imageSrc.replace(/\.jpeg|\.jpg/g, '.webp');
-                //lazyImage.src = imageSrc;
+                
+                
 
                 lazyImage.classList.add("ic-fade-in");
                 lazyImage.classList.remove("wps-ic-lazy-image");

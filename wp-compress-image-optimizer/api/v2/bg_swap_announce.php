@@ -1,23 +1,5 @@
 <?php
-/**
- * WP Compress v7.02 — Direct PHP entry for /wpc/v2/bg_swap_announce
- *
- * Announce-only stream: NO bytes, NO disk write, NO journal. Just a transient
- * write per image (wpc_v2_announced_$id). Bulk heartbeat reads it to surface
- * pending pills in the UI before the bytes batch lands.
- *
- * This handler is even simpler than bg_swap_batch:
- *   1. HMAC verify
- *   2. Parse + validate
- *   3. Gap 3 race-guard: discard if variant already in ic_local_variants
- *   4. Append to wpc_v2_announced_$id transient
- *   5. Respond 200
- *
- * Total handler time: 5-30 ms. ~10x faster than the REST equivalent.
- *
- * @see SPEC-direct_entry.md
- * @see SPEC-bg_swap_announce.md
- */
+
 
 define('WPC_V2_DIRECT_ENTRY', true);
 require __DIR__ . '/_shared.php';
@@ -56,7 +38,7 @@ $jobId       = isset($body['jobId']) ? (string) $body['jobId'] : '';
 $serverTime  = isset($body['serverTime']) ? (int) $body['serverTime'] : 0;
 $clockSkewMs = $serverTime > 0 ? (int) round(($entry_t * 1000) - $serverTime) : null;
 
-// Restored-image guard
+
 if (wpc_v2_direct_callbacks_blocked($imageID)) {
     error_log(sprintf(
         '[wpc_v2_direct_announce restored_reject] imageID=%d items=%d job=%s',
@@ -65,7 +47,7 @@ if (wpc_v2_direct_callbacks_blocked($imageID)) {
     wpc_v2_direct_respond(410, ['error' => 'image_restored', 'imageID' => $imageID]);
 }
 
-// Stale-job (batch-level)
+
 if ($jobId !== '') {
     $pending = function_exists('get_transient')
         ? get_transient('wpc_v2_pending_' . $imageID)
@@ -79,20 +61,20 @@ if ($jobId !== '') {
     }
 }
 
-// Gap 3 guard — read ic_local_variants once. SHORTINIT provides $wpdb but not
-// get_post_meta out of the box; load post.php on demand for it.
+
+
 if (!function_exists('get_post_meta')) {
     require_once ABSPATH . WPINC . '/post.php';
 }
 $persisted = get_post_meta($imageID, 'ic_local_variants', true);
 if (!is_array($persisted)) $persisted = [];
 
-// Variant key helper — keep in sync with wpc_v2_variant_key() in REST handler.
+
 $variant_key = function ($size_label, $format) {
     return $size_label . '-' . $format;
 };
 
-// Read current announce transient for append-merge
+
 $announced = function_exists('get_transient')
     ? get_transient('wpc_v2_announced_' . $imageID)
     : null;
@@ -125,7 +107,7 @@ foreach ($items as $idx => $item) {
 
     $key = $variant_key($sz, $fmt);
 
-    // Gap 3 — discard if already persisted
+    
     if (isset($persisted[$key])) {
         $results[] = ['ok' => true, 'kind' => 'discarded_already_persisted', 'sizeLabel' => $sz, 'format' => $fmt];
         $discarded_count++;
@@ -162,11 +144,11 @@ foreach ($items as $idx => $item) {
     $announced_count++;
 }
 
-// Persist the transient via set_transient (handles 5-min TTL + cleanup)
+
 if (function_exists('set_transient')) {
     set_transient('wpc_v2_announced_' . $imageID, $announced, 5 * MINUTE_IN_SECONDS);
 } else {
-    // SHORTINIT fallback: raw $wpdb write
+    
     global $wpdb;
     $opt_name = '_transient_wpc_v2_announced_' . $imageID;
     $expires_name = '_transient_timeout_wpc_v2_announced_' . $imageID;

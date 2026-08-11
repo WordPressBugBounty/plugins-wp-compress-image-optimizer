@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_kinsta extends wps_ic_integrations {
@@ -10,11 +10,11 @@ class wps_ic_kinsta extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
     public function add_admin_hooks() {
@@ -31,7 +31,7 @@ class wps_ic_kinsta extends wps_ic_integrations {
         global $kinsta_cache;
 
         if (!empty($kinsta_cache) && !empty($kinsta_cache->kinsta_cache_purge)) {
-            // Full cache purge
+            
             $kinsta_cache->kinsta_cache_purge->purge_complete_caches();
         }
     }

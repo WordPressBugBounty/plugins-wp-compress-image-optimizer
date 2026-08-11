@@ -1,28 +1,15 @@
 <?php
-/**
- * Next-Gen Images — one-control + auto-verified status card.
- * Renders WPC_Delivery_Resolver::resolve_verbose() into a plain-language, accurate status card.
- * Included from the Image Optimization tab. Requires WPC_Delivery_Resolver.
- *
- * @since 7.08.x
- */
+
 if (!defined('ABSPATH')) exit;
 if (!class_exists('WPC_Delivery_Resolver')) return;
 
 $rv = WPC_Delivery_Resolver::resolve_verbose();
 
-// v7.01.22 — deterministic pending-recovery (the no-cron, no-loopback belt). If the state is
-// UNVERIFIED (env changed; the save-time loopback worker and/or the cron fallback didn't land —
-// Basic-Auth/WAF hosts can block both), verify INLINE on this dashboard render, rate-limited.
-// This is exactly what the manual Re-check does; the user is already looking at the card, so
-// the card shows the verified truth instead of a stuck "pending" that needs a click. Worst
-// case (dead edge) this adds probe time to OUR settings page only, at most once per 2 min.
+
 $wpc_ngd_pending = is_array($rv['warnings'] ?? null)
     && (in_array('cdn_pending_verify', $rv['warnings'], true) || in_array('htaccess_pending_verify', $rv['warnings'], true));
-// v7.02.03 — also force a fresh full verify on the FIRST render after Next-Gen was just ENABLED (a
-// one-shot transient set by the save), so the card auto-lands on the best VERIFIED tier instead of the
-// 'Universal' fallback a not-yet-probed save resolves to — the auto-check that previously required a
-// manual Re-check click. Consumed here so it runs once.
+
+
 $wpc_ngd_just_enabled = (function_exists('get_transient') && get_transient('wpc_ngd_just_enabled'));
 if (($wpc_ngd_pending || $wpc_ngd_just_enabled) && !get_transient('wpc_delivery_card_verify_rl')) {
     set_transient('wpc_delivery_card_verify_rl', 1, 2 * MINUTE_IN_SECONDS);
@@ -34,9 +21,8 @@ $ceiling  = isset($rv['ceiling']) ? $rv['ceiling'] : 'off';
 $override = isset($rv['override']) ? $rv['override'] : 'auto';
 $warnings = isset($rv['warnings']) && is_array($rv['warnings']) ? $rv['warnings'] : [];
 $caps     = isset($rv['capabilities']) && is_array($rv['capabilities']) ? $rv['capabilities'] : [];
-// v7.01.21 — the Images-master gate (cdn_images_enabled) controls whether ANY image routes through
-// the CDN. The resolver tier is (correctly) image-gate-agnostic, so when Images is OFF the card must
-// NOT claim "Automatic (CDN)" — zero images touch the CDN; they're served from origin (path A).
+
+
 $images_on = !class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled();
 
 $has = function ($needle) use ($warnings) {
@@ -44,33 +30,33 @@ $has = function ($needle) use ($warnings) {
     return false;
 };
 
-// ── Derive the card STATE + plain-language copy (never overclaim) ─────────────
+
 $pending    = $has('cdn_pending_verify') || $has('htaccess_pending_verify');
-$optimizing = $has('cdn_pending_orch'); // edge reachable + generating AVIF in background (x-avif-source: pending-orch)
+$optimizing = $has('cdn_pending_orch');
 $degraded   = $has('cdn_verify_failed') || $has('htaccess_verify_failed') || $has('override_');
 $jpeg_forced_off = $has('next_gen_disabled_jpeg_only');
 
-// The sub-line describes the METHOD (the "how"), not the value prop — the hero already states
-// "best format per browser", so repeating it here is just noise.
+
+
 if ($ceiling === 'off') {
     $state = 'off';   $badge = 'Off';        $method = 'Next-gen images are off'; $sub = 'Delivering optimized JPEG/PNG to every visitor.';
 } elseif ($tier === WPC_Delivery_Resolver::TIER_CDN_EDGE) {
     $rt = isset($rv['redirect_target']) ? (string) $rv['redirect_target'] : 'samehost';
     if (!$images_on) {
-        // v7.01.21 — edge is verified, but the "Images" tile is OFF → no images route through the
-        // CDN; next-gen is served from origin (path A <picture>). Don't claim CDN/fastest (a lie).
+
+        
         $state = 'ok';    $badge = '✓ Active';   $method = 'Served from origin';   $sub = 'Images delivery is off — next-gen images are served from your origin, not the CDN.';
     } elseif ($rt === 'origin') {
-        // v7.01.22 — Edge negotiate (Mode-B proven): the edge picks the format; the ORIGIN serves
-        // the bytes. On a Cloudflare-fronted site the origin URLs are CF-served — say so.
+
+
         $wpc_cf_fronted = !empty($_SERVER['HTTP_CF_RAY']) || !empty($_SERVER['HTTP_CF_VISITOR']);
         $state = 'ok';    $badge = '✓ Verified'; $method = 'Edge negotiate';
         $sub = $wpc_cf_fronted
             ? 'Next-gen on clean URLs, no picture tags — the edge picks the format, Cloudflare serves the bytes.'
             : 'Next-gen on clean URLs, no picture tags — the edge picks the format, your origin serves the bytes.';
     } elseif ($override === 'edge') {
-        // v7.01.22 — Edge negotiate selected with CDN bytes ON (samehost flavor): same delivery as
-        // Automatic (CDN), but keep the CHOSEN mode visible so the radio and the status agree.
+
+        
         $state = 'ok';    $badge = '✓ Verified'; $method = 'Edge negotiate';
         $sub = 'Next-gen on clean URLs, no picture tags — delivered &amp; cached at the edge.';
     } else {
@@ -79,39 +65,29 @@ if ($ceiling === 'off') {
 } elseif ($tier === WPC_Delivery_Resolver::TIER_HTACCESS) {
     $state = 'ok';    $badge = '✓ Verified'; $method = 'Automatic (server-level)'; $sub = 'Served by your server on clean URLs.';
 } elseif ($tier === WPC_Delivery_Resolver::TIER_PICTURE) {
-    // The universal <picture> path IS a complete, working next-gen delivery — NEVER alarm on it.
-    // A failed htaccess/cdn probe just means "use <picture> instead" (not a problem), and CDN-off is
-    // a deliberate user choice — so we stay calm + positive. The old code escalated this to a scary
-    // orange "faster delivery couldn't be confirmed on your host" warning on a perfectly-fine state.
+
+
     $state  = 'ok';
     $badge  = '✓ Active';
     $method = 'Universal';
     $sub    = $optimizing
         ? 'Generating optimized versions in the background — switches to faster CDN delivery automatically once ready.'
         : 'Broadly compatible with every theme.';
-} else { // JPEG floor
+} else { 
     $state  = $jpeg_forced_off ? 'warn' : 'off';
     $badge  = $jpeg_forced_off ? '⚠ Heads up' : 'Off';
     $method = $jpeg_forced_off ? 'Next-gen unavailable for visitors' : 'Optimized JPEG/PNG';
     $sub    = $jpeg_forced_off ? 'Variants exist but no delivery path is enabled — visitors get JPEG only.'
                                : 'No next-gen variants yet — they appear as images are optimized.';
 }
-// v7.01.20 — Deliberately NO "warn" escalation on a failed htaccess/cdn probe. A working tier
-// (cdn-edge / server-level / universal-picture) stays calm + green; only the genuine "variants
-// exist but nothing can deliver them" case (jpeg_forced_off, above) warns. $degraded is retained
-// only for the Advanced diagnostics line.
 
-// Formats the visitor gets when On — the best-first cascade AVIF → WebP → JPEG.
-// v7.01.21 — show the INTENT, not the loopback-probe's proven classes. The probe usually can't
-// Accept AVIF, so reading verify.cdn.classes made AVIF vanish from the card even though On = best
-// (avif-capable browsers DO get avif; the edge/origin negotiates DOWN per browser). Off hides the hero.
+
+
+
+
 $formats = ($ceiling === 'off') ? ['JPEG'] : (($ceiling === 'webp') ? ['WebP', 'JPEG'] : ['AVIF', 'WebP', 'JPEG']);
 
-// v7.01.20 — ONE world-class control: Off / On. "On" = best format each browser supports
-// (AVIF→WebP→JPEG), auto + verified-safe — no format picking by the user (the edge/picture path
-// negotiates per browser; a WebP-vs-AVIF choice is a near-no-op on the edge and only a footgun).
-// A pre-existing webp/avif ceiling shows as "On" (non-destructive); clicking On (re)sets best/auto.
-// Power users can still pin a ceiling via the wpc_nextgen option / wpc_nextgen filter.
+
 $sel = ($ceiling === 'off') ? 'off' : 'on';
 $nonce = wp_create_nonce('wps_ic_nonce_action');
 ?>
@@ -126,55 +102,39 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
   </div>
 
   <?php
-  // Hidden source-of-truth fields named like the legacy checkboxes (options[...]) so the main
-  // settings save (replace-not-merge) and the preset JS (reads options[generate_webp]/picture_avif)
-  // keep working unchanged. The segmented control mirrors these on change.
+
+
   $gw = $ceiling !== 'off';
   $pw = $ceiling !== 'off';
   $pa = $ceiling === 'avif';
   ?>
   <div class="wpc-ngd-fields" style="display:none" aria-hidden="true">
     <?php
-    // v7.01.87 — ITEM 2 (de-sync fix): the 3 hidden source-of-truth checkboxes carried NO collector
-    // class, so the v4 Save collector (tabs.js — collects only wpc-ic-settings-v2-checkbox /
-    // -v4-iconcheckbox / -v4-checkbox / wpc-eu-routing-checkbox) NEVER sent them. Only the hidden
-    // wpc_nextgen text was collected, pre-seeded from the CURRENT ceiling — so on an already-ON-but-webp
-    // (de-synced) card a user who toggled the switch sent no changed key, picture_avif was never
-    // re-derived to 1, and the front-end AVIF block (cdn-rewrite.php:2861, needs raw picture_avif===1)
-    // never ran. Adding the already-collected class wpc-ic-settings-v4-checkbox makes them participate
-    // in seed/diff/collect with ZERO tabs.js change; the diff-vs-initial gate means an untouched card
-    // still sends nothing (no over-collection). These are the only options[generate_webp]/[picture_webp]/
-    // [picture_avif] inputs in the v4 body (no name collision).
+
+
     ?>
     <input type="checkbox" class="wpc-ic-settings-v4-checkbox" name="options[generate_webp]" value="1" <?php checked($gw); ?>>
     <input type="checkbox" class="wpc-ic-settings-v4-checkbox" name="options[picture_webp]"  value="1" <?php checked($pw); ?>>
     <input type="checkbox" class="wpc-ic-settings-v4-checkbox" name="options[picture_avif]"  value="1" <?php checked($pa); ?>>
     <?php
-    // v7.01.87 — ITEM 2 no-op-flip self-correct. Render the hidden wpc_nextgen field to the value the
-    // switch ACTUALLY means (ON ⇒ best/avif = 'auto', OFF = 'off'), so a DE-SYNCED card (ceiling derived
-    // to 'webp' because an upstream writer set generate_webp=1 without picture_avif) produces a genuine
-    // wpc_nextgen diff on any flip → drives both the picture_avif derive (ajax.class.php nextgenChanged)
-    // and the post-save reload (tabs.js cfReloadSettings). A user who DELIBERATELY pinned 'webp' via the
-    // wpc_nextgen option is respected — never silently upgraded to avif. (resolve_verbose() has no
-    // 'nextgen' key, so read the saved option directly — driftless.)
+
+
     $wpc_saved_ng = strtolower((string) (get_option(WPS_IC_SETTINGS)['wpc_nextgen'] ?? ''));
     $wpc_ng_field = ($sel === 'off') ? 'off' : ($wpc_saved_ng === 'webp' ? 'webp' : 'auto');
     ?>
     <input type="hidden"   name="options[wpc_nextgen]"   value="<?php echo esc_attr($wpc_ng_field); ?>">
     <?php
-    // v7.01.91 — Advanced-override now DEFERS to the standard Save bar (parity with the switch).
-    // The radios mirror their value into THIS hidden options[...] input; the v4 batch collector
-    // (tabs.js) seeds/diffs/collects it exactly like options[wpc_nextgen], so a changed override
-    // raises the Save pill and persists through wps_ic_ajax_v2_checkbox_batch — NO auto-save.
+
+
     ?>
     <input type="hidden"   name="options[wpc_delivery_override]" value="<?php echo esc_attr($override); ?>">
   </div>
 
   <div class="wpc-ngd-status">
 
-    <?php // ── HERO — the value prop leads the section: best format per browser, automatically ──
-    // v7.01.22 — always rendered (hidden when off) so the switch can flip the FULL card
-    // optimistically before Save, instead of leaving a mixed dot-new/status-old state. ?>
+    <?php 
+
+    ?>
       <div class="wpc-ngd-hero"<?php echo $ceiling === 'off' ? ' style="display:none"' : ''; ?> title="<?php echo esc_attr__('Each visitor is served the single best format their browser supports; older browsers automatically fall back to the next one.', WPS_IC_TEXTDOMAIN); ?>">
         <span class="wpc-ngd-hero-label"><?php echo esc_html__('Every visitor gets the best format their browser supports', WPS_IC_TEXTDOMAIN); ?></span>
         <div class="wpc-ngd-formats">
@@ -198,10 +158,8 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     <?php endif; ?>
 
     <?php
-    // v7.03.37 — forced-override clarity. If a delivery method is pinned (override != auto) but the CDN
-    // edge is verified + available, the site is NOT "stuck" — it's a deliberate/leftover pin, and a better
-    // tier is sitting right there. "Re-check now" re-verifies but (correctly) KEEPS the override, which
-    // reads as stuck. Surface it so a forced sub-optimal tier is never mistaken for a fault.
+
+
     $wpc_ngd_caps    = (isset($rv['capabilities']) && is_array($rv['capabilities'])) ? $rv['capabilities'] : [];
     $wpc_ngd_edge_ok = !empty($rv['verify']['cdn']['ok']) && !empty($wpc_ngd_caps['edge_available']) && !empty($wpc_ngd_caps['cdn_on']);
     $wpc_ngd_on_edge = (isset($rv['tier_name']) && $rv['tier_name'] === 'cdn-edge');

@@ -14,7 +14,7 @@ class wpc_gui_v4 extends wps_ic
     public static $accountQuota;
     public static $slug;
 
-    // Popup ID → [option_group, option_key] for override detection
+    
     private static $popup_option_map = [
         'exclude-critical-css'          => ['wpc-excludes', 'critical_css'],
         'exclude-js-delay-v2'           => ['wpc-excludes', 'delay_js_v2'],
@@ -27,6 +27,7 @@ class wpc_gui_v4 extends wps_ic
         'exclude-js-minify'             => ['wpc-excludes', 'js_minify'],
         'exclude-css-minify'            => ['wpc-excludes', 'css_minify'],
         'exclude-css-render-blocking'   => ['wpc-excludes', 'css_render_blocking'],
+        'exclude-font-display'          => ['wpc-excludes', 'font_display'],
         'exclude-css-combine'           => ['wpc-excludes', 'css_combine'],
         'exclude-scripts-to-footer'     => ['wpc-excludes', 'exclude-scripts-to-footer'],
         'delay-js-configuration'        => ['wpc-excludes', 'lastLoadScript'],
@@ -38,9 +39,9 @@ class wpc_gui_v4 extends wps_ic
 
     private static $excludes_cache = null;
 
-    /**
-     * Check if a configure popup has stored overrides (non-empty exclude list)
-     */
+    
+
+
     public static function hasPopupOverrides($popup_id) {
         if (empty($popup_id) || !isset(self::$popup_option_map[$popup_id])) {
             return false;
@@ -87,21 +88,8 @@ class wpc_gui_v4 extends wps_ic
             self::$options = $options;
         }
 
-        // Update Stats
-        /*
-        $lastUpdate = get_transient('wps_ic_stats_update');
-        if (empty($lastUpdate) || !$lastUpdate) {
-            $settings = get_option(WPS_IC_OPTIONS);
-            if (!empty($settings['api_key'])) {
-                $getStats = wp_remote_get(WPS_IC_KEYSURL . '?apikey=' . $settings['api_key'] . '&action=pullStats', ['timeout' => 10, 'sslverify' => 'false', 'user-agent' => WPS_IC_API_USERAGENT]);
+        
 
-                // Set transient only if the response is 200 for stats update
-                if (wp_remote_retrieve_response_code($getStats) == 200) {
-                    set_transient('wps_ic_stats_update', 'true', 60 * 5);
-                }
-            }
-        }
-        */
 
         $statsclass = new wps_ic_stats();
 
@@ -118,7 +106,7 @@ class wpc_gui_v4 extends wps_ic
                 self::$user_credits->account->quotaType = 'requests';
             }
 
-            // Get Account Quota
+            
             self::$accountQuota = parent::getAccountQuota(self::$user_credits, self::$user_credits->account->quotaType);
         }
     }
@@ -328,7 +316,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -349,7 +337,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            #$optionName = $option[0].','.$option[1];
+            
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -410,19 +398,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
         $html .= '</div>';
-        /*
-        $html .= '<div class="form-check">';
 
-        if ($active) {
-          $html .= '<input class="form-check-input checkbox mt-0 wpc-ic-settings-v2-checkbox" data-option-name="' . $optionName . '" type="checkbox" checked="checked" value="1" id="' . $optionName . '" name="' . $optionName . '"  data-recommended="' . $default . '" data-safe="' . $safe . '">';
-          $html .= '<label for="' . $optionName . '"><span></span></label>';
-        } else {
-          $html .= '<input class="form-check-input checkbox mt-0 wpc-ic-settings-v2-checkbox" data-option-name="' . $optionName . '"  type="checkbox" value="1" id="' . $optionName . '" name="' . $optionName . '"  data-recommended="' . $default . '" data-safe="' . $safe . '">';
-          $html .= '<label for="' . $optionName . '"><span></span></label>';
-        }
-
-        $html .= '</div>';
-        */
 
         $html .= '<div class="wpc-switch-holder">';
         if ($locked) {
@@ -483,17 +459,7 @@ class wpc_gui_v4 extends wps_ic
         return $html;
     }
 
-    /**
-     * @param array $args
-     * $args = [
-     * 'title' => Title of box
-     * 'description' => Description
-     * 'icon' => icon inside v4/images folder
-     * 'optionID' => some unique option id
-     * 'connected_to' => option name of other checkbox to connect to
-     * ]
-     * @return string
-     */
+
     public static function checkboxTabTitle_connected(array $args)
     {
         $html = '<div class="d-flex align-items-top gap-3 tab-title-checkbox">';
@@ -509,9 +475,9 @@ class wpc_gui_v4 extends wps_ic
         $html .= '</div>';
 
 
-        /**
-         * Check if connected option is active or not
-         */
+        
+
+
         $active = false;
 
         if (is_array($args['connected_to'])) {
@@ -519,20 +485,20 @@ class wpc_gui_v4 extends wps_ic
             $optionNameClean = 'options_' . $option[0] . '_' . $option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             if (isset(self::$options[$option[0]][$option[1]]) && self::$options[$option[0]][$option[1]] == '1') {
-                // Active
+                
                 $active = true;
             } else {
-                // Not Active
+                
             }
         } else {
             $option = $args['connected_to'];
             $optionNameClean = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             if (isset(self::$options[$option]) && self::$options[$option] == '1') {
-                // Active
+                
                 $active = true;
             } else {
-                // Not Active
+                
             }
         }
 
@@ -588,7 +554,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -609,7 +575,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            #$optionName = $option[0].','.$option[1];
+            
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -632,24 +598,9 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        // Persistent "Purge CDN" ghost button next to Select All, ON THE CDN CARD ONLY,
-        // when the CDN is connected. The admin-bar "Purge CDN Cache" item (menu.class.php) is gated on
-        // serve[]/css/js being set in get_option(WPS_IC_SETTINGS) and is missing on first page load
-        // (option not yet warm), so it appears only on a SECOND refresh. And the tiny arrows-ccw icon in the
-        // tiles row (advanced_settings_v4.php:1063) is easy to miss. This static, server-rendered button
-        // is always present on first load (no async/option-warmth dependency) and discoverable. Scoped to
-        // the 'cdn-delivery-options' card so it does NOT appear on the other cards that reuse this title
-        // row (Adaptive Images, etc.), and gated on an active CDN (live-cdn==1) so it only shows when
-        // there is actually a CDN edge to purge. Reuses the existing .wpc-purge-cdn-cache delegated
-        // click handler (scripts.js:2041 → wps_ic_purge_cdn), so no JS change is needed.
-        // Emitted INSIDE the .form-check div (below) so it picks up the .form-check-scoped
-        // .wpc-purge-cdn-ghost rule (which carries the full ghost-pill base itself — it deliberately does
-        // NOT use the .wpc-select-all-btn class; see the note on the button markup just below).
         $wpc_cdn_connected = (isset(self::$options['live-cdn']) && self::$options['live-cdn'] == '1');
-        // Class is wpc-purge-cdn-ghost (NOT wpc-select-all-btn): the Select All delegated
-        // handler (tabs.js) matches .wpc-select-all-btn, and the purge handler uses stopPropagation
-        // (not stopImmediatePropagation), so sharing that class made one Purge click ALSO toggle Select
-        // All. The ghost rule carries the full pill styling itself (see _section-cards.less).
+
+
         $wpc_purge_cdn_btn = ($option === 'cdn-delivery-options' && $wpc_cdn_connected)
             ? '<a href="#" class="wpc-purge-cdn-ghost wpc-purge-cdn-cache" title="' . esc_attr__('Purge the CDN cache', WPS_IC_TEXTDOMAIN) . '">'
               . '<i class="icon-arrows-ccw" aria-hidden="true"></i>' . esc_html__('Purge CDN', WPS_IC_TEXTDOMAIN) . '</a>'
@@ -710,7 +661,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -731,7 +682,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            #$optionName = $option[0].','.$option[1];
+            
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -754,10 +705,10 @@ class wpc_gui_v4 extends wps_ic
         }
 
         if (!empty($option)) {
-            //    $html .= '<div class="form-check">';
-            //      $html .= '<input class="form-check-input checkbox mt-0 wpc-checkbox-select-all" data-for-div-id="' . $option . '" type="checkbox" value="1" id="select-all-' . $option . '" name="select-all-' . $option . '">';
-            //      $html .= '<label class="with-label" for="select-all-' . $option . '"><div>Select All</div><span></span></label>';
-            //      $html .= '</div>';
+            
+
+            
+            
 
             $html .= '<label class="wpc-switch" for="select-all-' . $option . '">';
             $html .= '<input type="checkbox" data-for-div-id="' . $option . '" class="form-check-input checkbox mt-0 wpc-checkbox-select-all" value="1" id="select-all-' . $option . '" name="select-all-' . $optionName . '"/>';
@@ -778,7 +729,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        // Hide for Whitelabel users
+        
         if (!class_exists('whtlbl_whitelabel_plugin')) {
             if (!empty($helpBtn)) {
                 $html .= '<div class="form-check" style="max-width:120px;">';
@@ -802,7 +753,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -883,7 +834,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -908,7 +859,7 @@ class wpc_gui_v4 extends wps_ic
             $cssClass = 'no-description';
         }
 
-        // Is it locked?
+        
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1019,7 +970,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1069,7 +1020,7 @@ class wpc_gui_v4 extends wps_ic
             $cssClass = 'no-description';
         }
 
-        // Is it locked?
+        
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1136,7 +1087,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1181,7 +1132,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        // Is it locked?
+        
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1329,12 +1280,12 @@ class wpc_gui_v4 extends wps_ic
             $circleActive = '';
         }
 
-        // Inline SVG for dynamic coloring via CSS currentColor
+        
         $iconPath = WPS_IC_DIR . 'assets/v4/images/' . $icon;
         $svgContent = '';
         if (file_exists($iconPath) && pathinfo($iconPath, PATHINFO_EXTENSION) === 'svg') {
             $svgContent = file_get_contents($iconPath);
-            // Strip XML declaration and comments, add class for CSS targeting
+            
             $svgContent = preg_replace('/<!--.*?-->/s', '', $svgContent);
             $svgContent = preg_replace('/<\?xml[^>]*\?>/', '', $svgContent);
             $svgContent = str_replace('<svg ', '<svg class="wpc-iconcheckbox-svg" ', $svgContent);
@@ -1390,7 +1341,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1435,7 +1386,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        // Is it locked?
+        
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1532,7 +1483,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            #$optionName = $option;
+            
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
             if (isset(self::$options[$option]) && self::$options[$option] == '1') {
@@ -1552,7 +1503,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            #$optionName = $option[0].','.$option[1];
+            
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -1743,14 +1694,14 @@ class wpc_gui_v4 extends wps_ic
         $cfSettings = get_option(WPS_IC_CF);
         $cfCdnActive = !empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1';
 
-        // Show CF CNAME when CF is connected AND CF CDN is active
+        
         $isCfActive = !empty($cfSettings) && $cfCdnActive;
         if ($isCfActive) {
             $popup = 'cf-cdn';
             $zone_name = get_option(WPS_IC_CF_CNAME, '');
         }
 
-        $html = '<div class="wpc-tab-content-box wpc-tab-content-cname ' . $lockedClass . '" 
+        $html = '<div class="wpc-tab-content-box wpc-tab-content-cname ' . $lockedClass . '"
     style="display:flex;align-items:center;justify-content: space-between;">
                                 <div style="display:flex;align-items:center;">
                                     <div class="wpc-cname-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M296 288c57.4 0 104-46.6 104-104S353.4 80 296 80L152 80c-57.4 0-104 46.6-104 104 0 34 16.3 64.1 41.4 83.1-5.2 16.2-8.3 33.3-9.2 50.9-47.8-25.6-80.2-76-80.2-134 0-83.9 68.1-152 152-152l144 0c83.9 0 152 68.1 152 152S379.9 336 296 336l-72 0 0-48 72 0zm232 40c0-31-13.6-58.9-35.2-78 5.7-16.3 9.4-33.7 10.6-51.6 43.5 26.7 72.5 74.8 72.5 129.6 0 83.9-68.1 152-152 152l-144 0c-83.9 0-152-68.1-152-152s68.1-152 152-152l72 0 0 48-72 0c-57.4 0-104 46.6-104 104s46.6 104 104 104l144 0c57.4 0 104-46.6 104-104z"/></svg></div>';
@@ -1787,11 +1738,11 @@ class wpc_gui_v4 extends wps_ic
               <div>';
 
         if (!empty($zone_name) && $isCfActive) {
-            // CF is active with a CNAME — show Configure (CF popup), not Remove
+            
             $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup-width="600" data-popup="cf-cdn">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
 
         } elseif (!empty($zone_name)) {
-            // Generic/Bunny CNAME is set — show Remove + hidden Configure
+            
             $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup="remove-custom-cdn">
                 <i class="icon-trash"></i> ' . esc_html__('Remove', WPS_IC_TEXTDOMAIN) . '</a>
                 <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="' . $popup . '" style="display:none;">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
@@ -1819,16 +1770,16 @@ class wpc_gui_v4 extends wps_ic
 
     public static function isFeatureEnabled($featureName)
     {
+        
+        
+        if (function_exists('wpc_caps_enabled')) {
+            return wpc_caps_enabled($featureName);
+        }
         if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
             return true;
         }
-
         $feature = get_transient($featureName . 'Enabled');
-        if (!$feature || $feature == '0') {
-            return false;
-        }
-
-        return true;
+        return !(!$feature || $feature == '0');
     }
 
     public static function usageGraph()
@@ -1842,6 +1793,25 @@ class wpc_gui_v4 extends wps_ic
     {
 
         include WPS_IC_DIR . 'templates/admin/partials/v4/CFChart.php';
+
+    }
+
+
+    public static function vitalsHasData()
+    {
+        if (!function_exists('wpc_vitals_p75') || !function_exists('wpc_vitals_enabled') || !wpc_vitals_enabled()) {
+            return false;
+        }
+        
+        
+        
+        return true;
+    }
+
+    public static function vitalsGraph()
+    {
+
+        include WPS_IC_DIR . 'templates/admin/partials/v4/vitalsPanel.php';
 
     }
 
@@ -1863,7 +1833,7 @@ class wpc_gui_v4 extends wps_ic
     }
 
 
-    public static function dropdown($optionName = '', $title, $description = '', $values = [], $recommended = '')
+    public static function dropdown($optionName, $title, $description = '', $values = [], $recommended = '', $configure = false)
     {
 
         if (empty(self::$options[$optionName])) {
@@ -1884,12 +1854,21 @@ class wpc_gui_v4 extends wps_ic
             $currentSetting = array_key_first($values);
         }
 
+        $titleHtml = '<h4>' . $title . '</h4>';
+        if (!empty($configure)) {
+            $hasOverrides = self::hasPopupOverrides($configure);
+            $overrideClass = $hasOverrides ? ' wpc-has-overrides' : '';
+            $titleHtml = '<h4>' . $title
+                . '<a href="#" class="wps-ic-configure-popup' . $overrideClass . '" data-popup="' . $configure . '" data-popup-width="750">'
+                . '<svg class="wpc-gear-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M200.1-16l112 0 19.7 95.5c14.1 6 27.3 13.7 39.3 22.8l92.6-30.7 56 97-72.9 64.8c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l72.9 64.8-56 97-92.6-30.7c-12.1 9.1-25.3 16.7-39.3 22.8l-19.7 95.5-112 0-19.7-95.5c-14.1-6-27.2-13.7-39.3-22.8l-92.6 30.7-56-97 72.9-64.8c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7l-72.9-64.8 56-97 92.6 30.7c12.1-9.1 25.3-16.7 39.3-22.8L200.1-16zm56 352a80 80 0 1 0 -.1-160 80 80 0 1 0 .1 160z"/></svg>'
+                . '</a></h4>';
+        }
 
         $html = '<div class="wpc-box-for-dropdown ' . $cssClass . '">
                    <div class="wpc-box-content">
                    <div class="wpc-checkbox-title-holder">
                    <div class="circle-check active"></div>
-                       <h4>' . $title . '</h4>
+                       ' . $titleHtml . '
                    </div>';
 
         if (!empty($description)) {
@@ -1900,13 +1879,13 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        // Clean parenthesized text from button label
+        
         $buttonLabel = $values[$currentSetting];
         if (preg_match('/^(.+?)\s*\(.+?\)\s*$/', $buttonLabel, $bm)) {
             $buttonLabel = trim($bm[1]);
         }
 
-        // Generate dropdown HTML with unique classes
+        
         $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $currentSetting . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
@@ -1921,7 +1900,7 @@ class wpc_gui_v4 extends wps_ic
             if ($k == $currentSetting) {
                 $s = 'wpc-cf-active';
             }
-            // Extract parenthesized text as badge
+            
             $badge = '';
             $label = $v;
             if (preg_match('/^(.+?)\s*\((.+?)\)\s*$/', $v, $m)) {
@@ -1929,7 +1908,7 @@ class wpc_gui_v4 extends wps_ic
                 $badgeClass = (stripos($m[2], 'Recommended') !== false) ? 'wpc-recommended-badge' : 'wpc-info-badge';
                 $badge = '<span class="' . $badgeClass . '">' . esc_html($m[2]) . '</span>';
             }
-            // Explicit recommended param overrides
+            
             if ($recommended !== '' && $k === $recommended && empty($badge)) {
                 $badge = '<span class="wpc-recommended-badge">' . esc_html__('Recommended', WPS_IC_TEXTDOMAIN) . '</span>';
             }
@@ -1947,10 +1926,10 @@ class wpc_gui_v4 extends wps_ic
 
     public static function cf_dropdown($title = 'Demo', $description = 'Demo')
     {
-        // Dropdown options
+        
         $cf_preset = ['off' => 'Off', 'home' => 'Home Page', 'all' => 'Full Site'];
 
-        // Fixed option path
+        
         $option = ['cf', 'edge-cache'];
         $optionName_cleaned = 'options_cf_edge-cache';
         $optionName = 'options[cf][edge-cache]';
@@ -1958,7 +1937,7 @@ class wpc_gui_v4 extends wps_ic
 
         $cfOptions = get_option(WPS_IC_CF);
 
-        // Get current value
+        
         $cf_preset_config = $cfOptions['settings']['edge-cache'] ?? 'off';
 
         if (empty($cf_preset_config)) {
@@ -1985,7 +1964,7 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        // Generate dropdown HTML with unique classes
+        
         $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $cf_preset_config . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
@@ -2018,7 +1997,7 @@ class wpc_gui_v4 extends wps_ic
         $active = false;
         $circleActive = '';
 
-        // Get CF settings from WPS_IC_CF option
+        
         $cf = get_option(WPS_IC_CF);
         $cf_settings = isset($cf['settings']) ? $cf['settings'] : ['assets' => '1', 'edge-cache' => 'home'];
 
@@ -2026,7 +2005,7 @@ class wpc_gui_v4 extends wps_ic
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
 
-            // Check CF settings
+            
             if (isset($cf_settings[$option]) && $cf_settings[$option] == '1') {
                 $active = true;
                 $circleActive = 'active';
@@ -2035,7 +2014,7 @@ class wpc_gui_v4 extends wps_ic
             $optionName_cleaned = 'options_' . $option[0] . '_' . $option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
 
-            // Check CF settings using the second array key
+            
             if (isset($cf_settings[$option[1]]) && $cf_settings[$option[1]] == '1') {
                 $active = true;
                 $circleActive = 'active';
@@ -2088,7 +2067,7 @@ class wpc_gui_v4 extends wps_ic
 
     public static function font_dropdown($title = 'Demo', $description = 'Demo')
     {
-        // Dropdown options
+        
         $font_display_options = [
             'off' => 'Off',
             'auto' => 'Auto (Browser Default)',
@@ -2103,7 +2082,7 @@ class wpc_gui_v4 extends wps_ic
 
         $settings = get_option(WPS_IC_SETTINGS);
 
-        // Get current value
+        
         $current_value = $settings['font-display'] ?? 'swap';
 
         if (empty($current_value)) {
@@ -2130,7 +2109,7 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        // Generate dropdown HTML
+        
         $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $current_value . '" />
 <div class="wpc-font-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-font-select-button" type="button">

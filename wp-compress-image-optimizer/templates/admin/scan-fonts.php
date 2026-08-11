@@ -4,7 +4,7 @@ $gui = new wpc_gui_v4();
 $fontSettings = get_option(WPS_IC_SETTINGS);
 $fontsMode = !empty($fontSettings['replace-fonts']) ? $fontSettings['replace-fonts'] : 'off';
 
-// Handle purge font cache before any output (skip in agency mode — handled via AJAX relay instead)
+
 if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
     delete_option(WPS_IC_FONTS_MAP);
 
@@ -28,14 +28,17 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
     echo $gui::checkboxTabTitle(esc_html__('Font Display', WPS_IC_TEXTDOMAIN), esc_html__('Controls how fonts render while loading. Swap shows text immediately using a fallback font — recommended for PageSpeed.', WPS_IC_TEXTDOMAIN), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M24 32l-24 0 0 128 48 0 0-80 88 0 0 352-72 0 0 48 192 0 0-48-72 0 0-352 88 0 0 80 48 0 0-128-296 0zM280 224l-24 0 0 128 48 0 0-80 88 0 0 160-72 0 0 48 192 0 0-48-72 0 0-160 88 0 0 80 48 0 0-128-296 0z"/></svg>', '', ''); ?>
 
     <div class="wpc-perf-grid">
-        <?php echo $gui::dropdown('font-display', esc_html__('Text Font Display', WPS_IC_TEXTDOMAIN), esc_html__('How browsers handle text font loading. Swap shows fallback text immediately — fixes the PageSpeed font-display warning. Icon fonts automatically use a separate display setting to prevent garbled characters — configure in Icon Fonts below.', WPS_IC_TEXTDOMAIN), array(
-            'swap'     => esc_html__('Swap', WPS_IC_TEXTDOMAIN),
-            'off'      => esc_html__('Off', WPS_IC_TEXTDOMAIN),
-            'auto'     => esc_html__('Auto (Browser Default)', WPS_IC_TEXTDOMAIN),
-            'block'    => esc_html__('Block (FOIT)', WPS_IC_TEXTDOMAIN),
-            'fallback' => esc_html__('Fallback', WPS_IC_TEXTDOMAIN),
-            'optional' => esc_html__('Optional', WPS_IC_TEXTDOMAIN),
-        ), 'swap');
+        <?php echo $gui::dropdown('font-display', esc_html__('Text Font Display', WPS_IC_TEXTDOMAIN), esc_html__('Automatic verifies fallback font metrics, then serves zero-shift Optional — Swap until verified. Fixes the PageSpeed font-display warning with no layout shift. Icon fonts use their own setting below to prevent garbled characters.', WPS_IC_TEXTDOMAIN), array(
+            
+            
+            'smart'    => 'Automatic (Recommended)',
+            'swap'     => 'Swap',
+            'off'      => 'Off',
+            'auto'     => 'Auto (Browser Default)',
+            'block'    => 'Block (FOIT)',
+            'fallback' => 'Fallback',
+            'optional' => 'Optional',
+        ), 'smart', 'exclude-font-display');
 
         echo $gui::checkboxDescription_v4(
             esc_html__('Preload Critical Fonts', WPS_IC_TEXTDOMAIN),
@@ -53,11 +56,12 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
     <div class="wpc-perf-grid wpc-perf-grid-single">
         <?php
         echo $gui::dropdown('icon-font-display', esc_html__('Icon Font Display', WPS_IC_TEXTDOMAIN), esc_html__('How browsers handle icon font loading. Block (recommended) keeps icons invisible until loaded — prevents garbled characters that appear with swap. Override this if you prefer a different strategy.', WPS_IC_TEXTDOMAIN), array(
-            'block'    => esc_html__('Block', WPS_IC_TEXTDOMAIN),
-            'swap'     => esc_html__('Swap', WPS_IC_TEXTDOMAIN),
-            'auto'     => esc_html__('Auto (Browser Default)', WPS_IC_TEXTDOMAIN),
-            'fallback' => esc_html__('Fallback', WPS_IC_TEXTDOMAIN),
-            'optional' => esc_html__('Optional', WPS_IC_TEXTDOMAIN),
+            
+            'block'    => 'Block',
+            'swap'     => 'Swap',
+            'auto'     => 'Auto (Browser Default)',
+            'fallback' => 'Fallback',
+            'optional' => 'Optional',
         ), 'block');
         ?>
     </div>
@@ -132,25 +136,31 @@ if (!empty($listFonts)) {
     <div class="wpc-font-list">
         <?php
         foreach ($listFonts as $foundFont => $savedLocally) {
-            $fontName = $foundFont;
-            $weights = [];
-            $decoded = urldecode($foundFont);
 
-            if (preg_match('/family=([^&]+)/', $decoded, $m)) {
-                $familyPart = str_replace('+', ' ', $m[1]);
-                if (strpos($familyPart, ':') !== false) {
-                    list($fontName, $weightStr) = explode(':', $familyPart, 2);
-                    $weights = explode(',', $weightStr);
-                } else {
-                    $fontName = $familyPart;
+
+            $decoded  = urldecode($foundFont);
+            $families = []; 
+            if (preg_match_all('/family=([^&]+)/', $decoded, $mm)) {
+                foreach ($mm[1] as $fam) {
+                    $familyPart = str_replace('+', ' ', $fam);
+                    if (strpos($familyPart, ':') !== false) {
+                        list($fn, $weightStr) = explode(':', $familyPart, 2);
+                        $families[trim($fn)] = explode(',', $weightStr);
+                    } else {
+                        $families[trim($familyPart)] = [];
+                    }
                 }
             } elseif (strpos($decoded, ':') !== false) {
-                list($fontName, $weightStr) = explode(':', $decoded, 2);
-                $weights = explode(',', $weightStr);
+                list($fn, $weightStr) = explode(':', $decoded, 2);
+                $families[trim($fn)] = explode(',', $weightStr);
+            } else {
+                $families[$foundFont] = [];
             }
-
-            $weights = array_map(function($w) { return str_replace('italic', 'i', trim($w)); }, $weights);
-            $weights = array_filter($weights);
+            $fontIdx = 0;
+            foreach ($families as $fontName => $weights) {
+                $fontIdx++;
+                $weights = array_map(function($w) { return str_replace('italic', 'i', trim($w)); }, (array) $weights);
+                $weights = array_filter($weights);
             ?>
             <div class="wpc-font-item" data-font-row="<?php echo esc_attr($foundFont); ?>">
                 <div class="wpc-font-item-name">
@@ -164,14 +174,17 @@ if (!empty($listFonts)) {
                     </div>
                     <?php endif; ?>
                 </div>
+                <?php if ($fontIdx === count($families)) : ?>
                 <a href="#" class="wpc-remove-fonts wpc-font-remove-btn" data-font-id="<?php echo esc_attr($foundFont); ?>">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     <?php echo esc_html__('Remove', WPS_IC_TEXTDOMAIN); ?>
                 </a>
+                <?php endif; ?>
             </div>
             <?php
+            }
         }
         ?>
     </div>
 </div>
-<?php } // end if listFonts ?>
+<?php } ?>

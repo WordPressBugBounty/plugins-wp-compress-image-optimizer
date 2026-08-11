@@ -1,25 +1,15 @@
 <?php
-/**
- * Plugin: WP Compress – Instant Performance & Speed Optimization
- * Description: Legitimate script handling for WP Compress Optimizer
- */
+
+
+
+
 
 if (!function_exists('wpc_force_natural')) {
-    /**
-     * Operator override (default OFF) to emit clean natural URLs everywhere instead of /q:i/wp:N/w:N/
-     * transforms. NOT a safe default: it bypasses the orch's native_accept_vary witness, the gate that
-     * blocks vary-blind CF cache-poisoning — only enable on a zone you've confirmed is vary-correct AND
-     * OTF-live. The safe road to all-natural is to provision the zone (orch then echoes the witness).
-     *
-     * Enable via WPC_FORCE_NATURAL in wp-config.php, the wpc_force_natural filter, OR the
-     * "Force Natural URLs" toggle (Other Optimizations → force-natural). Cached per-request.
-     */
+
     function wpc_force_natural()
     {
-        // KILL is absolute and wins over force. This is the first OR-term of $otf_live in the
-        // bare-<img>/CSS-bg naturalize lane, which isn't gated by natural_assets_on(); without the
-        // guard a site with both KILL and force defined would still naturalize under KILL. Check it
-        // before the static cache too, so a force value cached earlier this request can't survive a kill.
+
+
         if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) {
             return false;
         }
@@ -28,8 +18,8 @@ if (!function_exists('wpc_force_natural')) {
             return $cached;
         }
         $on = defined('WPC_FORCE_NATURAL') && WPC_FORCE_NATURAL;
-        // UI setting (Other Optimizations → "Force Natural URLs"). Same effect as the constant; the
-        // constant/filter still win so a wp-config force can't be undone by a stale saved '0'.
+        
+        
         if (!$on && function_exists('get_option') && defined('WPS_IC_SETTINGS')) {
             $s = get_option(WPS_IC_SETTINGS);
             if (is_array($s) && !empty($s['force-natural']) && (string) $s['force-natural'] === '1') {
@@ -42,17 +32,176 @@ if (!function_exists('wpc_force_natural')) {
 }
 
 if (!function_exists('wpc_cf_cname_verified_ok')) {
-    /**
-     * Shared FAIL-OPEN verified-gate for emitting the CF custom CNAME. Returns true unless the cname was
-     * EXPLICITLY cleared by a cname change (flag === '0') — the brief window between a save and
-     * verifyCfCnameLive promoting it. A never-set flag (default 'legacy') counts as verified: an
-     * already-serving zone and a fresh connect both legitimately have no flag yet, and blocking them
-     * would degrade the live fleet. Used by every CF-cname emit surface so they stay consistent.
-     */
+
     function wpc_cf_cname_verified_ok()
     {
         $v = function_exists('get_option') ? get_option('wpc_cf_cname_verified', 'legacy') : 'legacy';
         return !($v === '0' || $v === 0);
+    }
+}
+
+if (!function_exists('wpc_face_gate710')) {
+
+    
+    
+    
+    
+    
+    function wpc_stack_splice732($html)
+    {
+        if (!is_string($html) || $html === '' || !function_exists('wpc_css_insert_fallbacks')
+            || stripos($html, 'font-family') === false
+            || !apply_filters('wpc_stack_splice', true)) {
+            return $html;
+        }
+        $out = preg_replace_callback('/(<style\b[^>]*>)(.*?)(<\/style>)/is', function ($m) {
+            if (stripos($m[2], 'font-family') === false) {
+                return $m[0];
+            }
+            $s = wpc_css_insert_fallbacks($m[2]);
+            return (is_string($s) && $s !== '') ? $m[1] . $s . $m[3] : $m[0];
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    function wpc_face_gate710($html, $delayOn = false, &$moved = 0)
+    {
+        $moved = 0;
+        if (!$delayOn || !is_string($html) || $html === ''
+            || !apply_filters('wpc_face_gate', true)) {
+            return $html;
+        }
+        $late = '';
+        
+        
+        
+        $wpc_pin731 = [];
+        if (preg_match_all('/<style\b([^>]*)>(.*?)<\/style>/is', $html, $wpc_eb731, PREG_SET_ORDER)) {
+            foreach ($wpc_eb731 as $wpc_sb731) {
+                if (stripos($wpc_sb731[1], 'wpc-late-faces') !== false
+                    || (stripos($wpc_sb731[1], 'media=') !== false && !preg_match('/media=["\']?\s*(?:all|screen)\b/i', $wpc_sb731[1]))) {
+                    continue;
+                }
+                if (stripos($wpc_sb731[2], '@font-face') === false
+                    || !preg_match_all('/@font-face\s*\{[^{}]*\}/is', $wpc_sb731[2], $wpc_fb731)) {
+                    continue;
+                }
+                foreach ($wpc_fb731[0] as $wpc_fr731) {
+                    if (!preg_match('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $wpc_fr731, $wpc_fn731)) {
+                        continue;
+                    }
+                    $wpc_nm731 = strtolower(trim($wpc_fn731[1], " \t\"'"));
+                    if ($wpc_nm731 === '') {
+                        continue;
+                    }
+                    if (substr($wpc_nm731, -9) === ' fallback') {
+                        $wpc_pin731[rtrim(substr($wpc_nm731, 0, -9))] = 1;
+                    } elseif (preg_match('/src\s*:[^;}]*url\(\s*["\']?data:/i', $wpc_fr731)) {
+                        $wpc_pin731[$wpc_nm731] = 1;
+                    }
+                }
+            }
+        }
+        $wpc_scan712 = preg_replace_callback('/<style\b([^>]*)>(.*?)<\/style>/is', function ($sm) use ($wpc_pin731, &$late) {
+            $attrs = $sm[1];
+            $block = $sm[2];
+            if (stripos($attrs, 'wpc-late-faces') !== false
+                || (stripos($attrs, 'media=') !== false && !preg_match('/media=["\']?\s*(?:all|screen)\b/i', $attrs))) {
+                return $sm[0];
+            }
+            if (stripos($block, '@font-face') === false
+                || !preg_match('/url\(\s*["\']?(?:https?:)?\/\//i', $block)) {
+                return $sm[0];
+            }
+            $kept = preg_replace_callback('/@font-face\s*\{[^{}]*\}/is', function ($fm) use ($wpc_pin731, &$late) {
+                $rule = $fm[0];
+                if (!preg_match('/url\(\s*["\']?(?:https?:)?\/\//i', $rule)) {
+                    return $rule;
+                }
+                if (!preg_match('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $rule, $fam)) {
+                    return $rule;
+                }
+                if (empty($wpc_pin731[strtolower(trim($fam[1], " \t\"'"))])) {
+                    return $rule;
+                }
+                $late .= $rule;
+                return '';
+            }, $block);
+            if ($kept === null || $kept === $block) {
+                return $sm[0];
+            }
+            return '<style' . $attrs . '>' . $kept . '</style>';
+        }, $html);
+        if (is_string($wpc_scan712)) {
+            $html = $wpc_scan712;
+        } else {
+            $late = '';
+        }
+        if ($late === '') {
+            return $html;
+        }
+        $moved = substr_count($late, '@font-face');
+        if (preg_match('/<style\b[^>]*\bid=(["\'])wpc-late-faces\1[^>]*>/i', $html, $lm, PREG_OFFSET_CAPTURE)) {
+            $html = substr_replace($html, $late, $lm[0][1] + strlen($lm[0][0]), 0);
+        } else {
+            $lane = '<style id="wpc-late-faces" media="not all">' . $late . '</style>';
+            $bp = strripos($html, '</body>');
+            $html = ($bp !== false) ? substr_replace($html, $lane, $bp, 0) : $html . $lane;
+        }
+        return $html;
+    }
+}
+
+if (!function_exists('wpc_yield_checkpoints707')) {
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    function wpc_yield_checkpoints707($html, $delayOn = false)
+    {
+        if (!$delayOn || !is_string($html) || strlen($html) < 150000
+            || !apply_filters('wpc_parse_checkpoints', false)
+            || strpos($html, 'wpc-yield-a.js') !== false) {
+            return $html;
+        }
+        $h1 = stripos($html, '<h1');
+        if ($h1 === false) {
+            return $html;
+        }
+        $heroOpen  = strripos(substr($html, 0, $h1), '<section');
+        $heroClose = stripos($html, '</section>', $h1);
+        if ($heroOpen === false || $heroClose === false) {
+            return $html;
+        }
+        $bodyPos = stripos($html, '<body');
+        if ($bodyPos === false || $heroOpen <= $bodyPos) {
+            return $html;
+        }
+        $heroClose += 10;
+        $base = (defined('WPS_IC_URI') ? WPS_IC_URI : '/wp-content/plugins/wp-compress-image-optimizer/') . 'assets/js/';
+        $ver  = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1';
+        $ta = '<script src="' . $base . 'wpc-yield-a.js?v=' . $ver . '" data-nodefer="1"></script>';
+        $tb = '<script src="' . $base . 'wpc-yield-b.js?v=' . $ver . '" data-nodefer="1"></script>';
+        return substr($html, 0, $heroOpen) . $ta
+            . substr($html, $heroOpen, $heroClose - $heroOpen) . $tb
+            . substr($html, $heroClose);
     }
 }
 
@@ -70,6 +219,7 @@ class wps_cdn_rewrite
     public static $excluded_list;
     public static $default_excluded_list;
     public static $cdnEnabled;
+    public static $fd_raw484 = '';
     public static $preloaderAPI;
     public static $excludes_class;
     public static $assets_to_preload;
@@ -80,26 +230,26 @@ class wps_cdn_rewrite
     public static $brizyActive;
     public static $regExURL;
 
-    // Regexp Url & Dirs
+    
     public static $regExDir;
     public static $findImages;
     public static $apiUrl;
 
-    // Predefined API URLs
+    
     public static $apiAssetUrl;
     public static $updir;
 
-    // Site URL, Upload Dir
+    
     public static $home_url;
     public static $site_url;
     public static $site_url_scheme;
     public static $svg_placeholder;
 
-    // SVG Placeholder (empty svg)
+    
     public static $excludes;
 
 
-    // CSS / JS Variables
+    
     public static $fonts;
     public static $css;
     public static $css_img_url;
@@ -108,7 +258,7 @@ class wps_cdn_rewrite
     public static $js_minify;
     public static $replaceAllLinks;
 
-    // Image Compress Variables
+    
     public static $external_url_excluded;
     public static $externalUrlEnabled;
     public static $zone_test;
@@ -127,7 +277,7 @@ class wps_cdn_rewrite
     public static $keys;
     public static $delay_js_override;
 
-    //Overrides
+    
     public static $defer_js_override;
     public static $lazy_override;
     public static $rewriteLogic;
@@ -143,6 +293,7 @@ class wps_cdn_rewrite
     private static $isAmp;
     private static $themeIntegrations;
     private static $lazyLoadedImages;
+    private static $deviceHiddenSet717 = [];
     private static $lazyLoadedImagesLimit;
     private static $lazyLoadSkipFirstImages;
     private static $removeSrcset;
@@ -156,25 +307,31 @@ class wps_cdn_rewrite
     public function __construct()
     {
 
-        // Theme Integrations
+        
         require_once WPS_IC_DIR . 'integrations/themes/theme.integrations.php';
         self::$themeIntegrations = new ThemeIntegrations();
 
-        // Lazy Limits
+        
         self::$lazyLoadedImages = 0;
         self::$lazyLoadedImagesLimit = 1;
 
         self::$settings = get_option(WPS_IC_SETTINGS);
         self::$excludes = get_option('wpc-excludes');
 
-//        self::$settings['mcCriticalCSS'] = '';
-//        update_option(WPS_IC_SETTINGS, self::$settings);
-//        self::$settings = get_option(WPS_IC_SETTINGS);
 
-        // Decide to Load new API or Old Api for Critical CSS
+        
         if (empty(self::$settings['mcCriticalCSS']) || self::$settings['mcCriticalCSS'] == 'mc') {
             include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
         } else {
+            
+            
+            
+            
+            
+            
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('crit-v1-branch', '', '', ['mcCriticalCSS' => (string) self::$settings['mcCriticalCSS']]);
+            }
             include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss.php';
         }
 
@@ -192,16 +349,21 @@ class wps_cdn_rewrite
             self::$excludes['cdn'] = [];
         }
 
-        self::$excludes['cdn'][] = '.php'; //pagelayer .php requests fix
-        self::$excludes['cdn'][] = '/wp-fastest-cache/'; //icon in admin bugfix
-        self::$excludes['cdn'][] = '/wp-content/plugins/ameliabooking/v3/public/assets/'; //amelia fix
-        self::$excludes['cdn'][] = '/vue3'; //issues with vue libraries on cdn
+        self::$excludes['cdn'][] = '.php';
+        self::$excludes['cdn'][] = '/wp-fastest-cache/';
+        self::$excludes['cdn'][] = '/wp-content/plugins/ameliabooking/v3/public/assets/';
+        self::$excludes['cdn'][] = '/vue3';
         self::$excludes['cdn'][] = 'sharethis.js';
         if (defined('ELEMENTOR_VERSION')) {
-            // Elementor's webpack runtime resolves its own lazy-loaded chunk URLs; CDN-rewriting the
-            // base path breaks chunk loading, so both runtimes stay on origin.
+
+
             self::$excludes['cdn'][] = 'webpack.runtime.min.js';
             self::$excludes['cdn'][] = 'webpack-pro.runtime.min.js';
+        }
+
+        $wpc_cdnex804 = apply_filters('wpc_cdn_excludes', self::$excludes['cdn']);
+        if (is_array($wpc_cdnex804)) {
+            self::$excludes['cdn'] = array_values(array_filter($wpc_cdnex804, 'is_string'));
         }
 
         self::$removeSrcset = self::$settings['remove-srcset'];
@@ -236,7 +398,7 @@ class wps_cdn_rewrite
     public function is_home_url()
     {
         $home_url = rtrim(home_url(), '/');
-        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]"; // proxy-aware scheme
+        $current_url = wpc_request_scheme() . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
         $current_url = rtrim($current_url, '/');
         $current_url = explode('?', $current_url);
         $current_url = $current_url[0];
@@ -280,12 +442,12 @@ class wps_cdn_rewrite
 
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
 
-        // Don't run in admin side!
+        
         if (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") {
             return true;
         }
 
-        // TODO: Check this for wpadmin and frontend ajax
+        
         if (!self::$isAjax) {
             if (wp_is_json_request() || is_admin() || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['trp-edit-translation']) || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || isset($_GET['is-editor-iframe']) || !empty($_GET['et_fb']) || !empty($_GET['tatsu']) || !empty($_GET['tve']) || !empty($_GET['fb-edit']) || !empty($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor')) {
                 return true;
@@ -298,14 +460,13 @@ class wps_cdn_rewrite
 
     public static function dontRunif()
     {
-        // Hard bypass via ?disableWPC=true OR HTTP_DISABLEWPC header
-        // Mirrors the plugin-entry-point check in wp-compress.php so any code path
-        // that reaches here also respects the runtime kill switch.
+
+
         if (!empty($_GET['disableWPC']) || isset($_SERVER['HTTP_DISABLEWPC'])) {
             return false;
         }
 
-        // URL exclusions (wildcard support) — auto-enabled when patterns exist
+        
         $url_excludes = get_option('wpc-url-excludes');
         if (!empty($url_excludes['exclude-url-from-all']) && function_exists('wpc_url_is_excluded')) {
             $url = $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
@@ -322,16 +483,16 @@ class wps_cdn_rewrite
             return false;
         }
 
-        // Any hide login plugins active?
+        
         if (self::hiddenAdminArea()) {
             return false;
         }
 
-        //WP User Frontend check
+        
         if (class_exists('WP_User_Frontend')) {
             $content = get_post_field('post_content', get_the_ID());
 
-            // Check if the content contains wpuf shorcode
+            
             if (preg_match('/\[wpuf/', $content)) {
                 return false;
             }
@@ -357,7 +518,7 @@ class wps_cdn_rewrite
             return false;
         }
 
-        if (!empty($_POST['_cs_nonce'])) { //cornerstone
+        if (!empty($_POST['_cs_nonce'])) {
             return false;
         }
 
@@ -386,17 +547,17 @@ class wps_cdn_rewrite
         }
 
         if ((!empty($_GET['action']) && $_GET['action'] == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-            //optimizePress builder fix
+
             return false;
         }
 
         if (!empty($_POST['pp_action'])) {
-            //power pack for beaver builder ajax get posts fix
+
             return false;
         }
 
         if (!empty($_POST['add-to-cart'])) {
-            //woo on some themes slow add to cart fix
+
             return false;
         }
 
@@ -412,12 +573,12 @@ class wps_cdn_rewrite
             return false;
         }
 
-        //GiveWP routes
+        
         if (isset($_GET['givewp-route'])) {
             return false;
         }
 
-        //Groundhogg calendar
+        
         if (!empty($_SERVER['REQUEST_URI'])) {
             if (strpos($_SERVER['REQUEST_URI'], '/gh/calendar')) {
                 return false;
@@ -430,9 +591,9 @@ class wps_cdn_rewrite
     public static function hiddenAdminArea()
     {
 
-        // AIOS
+        
         if (class_exists('AIO_WP_Security')) {
-            // Hide Login Exists
+            
             $configs = get_option('aio_wp_security_configs');
             if (!empty($configs['aiowps_login_page_slug'])) {
                 if (strpos($_SERVER['REQUEST_URI'], $configs['aiowps_login_page_slug']) !== false) {
@@ -441,9 +602,9 @@ class wps_cdn_rewrite
             }
         }
 
-        // WPS Hide Login
+        
         if (class_exists('WPS\WPS_Hide_Login\Plugin')) {
-            // Hide Login Exists
+            
             $loginPage = get_option('whl_page');
             if (!empty($loginPage)) {
                 if (strpos($_SERVER['REQUEST_URI'], '/' . $loginPage) !== false) {
@@ -452,7 +613,7 @@ class wps_cdn_rewrite
             }
         }
 
-        // Hide My WP - Ghost
+        
         if (class_exists('HMWP_Classes_ObjController')) {
             $option = get_option('hmwp_options');
 
@@ -515,25 +676,21 @@ class wps_cdn_rewrite
     {
         $url = trim($url);
 
-        if (!empty($_GET['dbg_reformaturl_first'])) {
-            return print_r([$url, $remove_site_url], true);
-        }
-
         if (strpos($url, 'login') !== false) {
             return $url;
         }
 
-        // Check if url is maybe a relative URL (no http or https)
+        
         if (strpos($url, 'http') === false) {
-            // Check if url is maybe absolute but without http/s
+            
             if (strpos($url, '//') === 0) {
-                // Just needs http/s
+                
                 $url = 'https:' . $url;
             } else {
 
                 if (strpos($url, '/') !== 0) {
                     $url = str_replace('../wp-content', 'wp-content', $url);
-                    //if we replace all we break things like '.../wp-content/cache/min/1/wp-content/...'
+
                     $url_replace = preg_replace('/\/wp-content/', 'wp-content', $url, 1);
                     $url = self::$site_url;
                     $url = rtrim($url, '/');
@@ -554,18 +711,17 @@ class wps_cdn_rewrite
 
 
         if (strpos($formatted_url, '?brizy_media') === false && strpos($formatted_url, '.php') === false) {
+            $wpc_uv824 = '';
+            if (strpos($formatted_url, '/used-css/') !== false && preg_match('/[?&](uv=\d+)/', $formatted_url, $wpc_uvm824)) {
+                $wpc_uv824 = $wpc_uvm824[1];
+            }
             $formatted_url = explode('?', $formatted_url);
             $formatted_url = $formatted_url[0];
+            if ($wpc_uv824 !== '') {
+                $formatted_url .= '?' . $wpc_uv824;
+            }
         }
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'log_url_format') {
-            $fp = fopen(WPS_IC_LOG . 'url_Format.txt', 'a+');
-            fwrite($fp, 'URL: ' . $formatted_url . "\r\n");
-            fwrite($fp, 'Site URL: ' . self::$site_url . "\r\n");
-            fwrite($fp, 'Slashes: ' . addcslashes(self::$site_url, '/') . "\r\n");
-            fwrite($fp, '---' . "\r\n");
-            fclose($fp);
-        }
 
         if ($remove_site_url) {
             $formatted_url = str_replace(self::$site_url, '', $formatted_url);
@@ -575,23 +731,19 @@ class wps_cdn_rewrite
             $formatted_url = ltrim($formatted_url, '/');
         }
 
-        if (!empty($_GET['dbg_reformaturl'])) {
-            return print_r([$url, $formatted_url], true);
-        }
 
-        //if (!empty(self::$cdnEnabled) && self::$cdnEnabled == '1') {
         if (self::$randomHash == 0 && strpos($formatted_url, '.css') !== false) {
-            $formatted_url .= '?icv=' . WPS_IC_HASH;
+            $formatted_url .= (strpos($formatted_url, '?') === false ? '?' : '&') . 'icv=' . WPS_IC_HASH;
         }
 
         if (self::$randomHash == 0 && preg_match('/\.js(?:[?#]|$)/i', $formatted_url)) {
-            $formatted_url .= '?js_icv=' . WPS_IC_JS_HASH;
+            $formatted_url .= (strpos($formatted_url, '?') === false ? '?' : '&') . 'js_icv=' . WPS_IC_JS_HASH;
         }
 
         if (self::$randomHash != 0) {
             return $formatted_url . '?icv_random=' . self::$randomHash;
         }
-        //}
+        
 
         return $formatted_url;
     }
@@ -601,16 +753,16 @@ class wps_cdn_rewrite
         if (strpos($image, '.webp') === false && strpos($image, '.jpg') === false && strpos($image, '.jpeg') === false && strpos($image, '.png') === false && strpos($image, '.ico') === false && strpos($image, '.svg') === false && strpos($image, '.gif') === false) {
             return false;
         } else {
-            // Serve JPG Enabled?
+            
             if (strpos($image, '.jpg') !== false || strpos($image, '.jpeg') !== false) {
-                // is JPEG enabled
+
                 if (self::$settings['serve']['jpg'] == '0') {
                     return false;
                 }
             }
 
-            // Serve GIF? Never via the Bunny CDN: GIFs get no next-gen conversion, so on Bunny it's
-            // pure WPC egress. CF-direct zones only.
+            
+            
             if (strpos($image, '.gif') !== false) {
                 if (self::$settings['serve']['gif'] == '0'
                     || !class_exists('wps_rewriteLogic') || !wps_rewriteLogic::cf_is_delivery()) {
@@ -618,25 +770,23 @@ class wps_cdn_rewrite
                 }
             }
 
-            // Serve PNG Enabled?
+            
             if (strpos($image, '.png') !== false) {
-                // is PNG enabled
+
                 if (self::$settings['serve']['png'] == '0') {
                     return false;
                 }
             }
 
-            // Serve SVG Enabled?
+            
             if (strpos($image, '.svg') !== false) {
-                // is SVG enabled
+
                 if (self::$settings['serve']['svg'] == '0') {
                     return false;
                 }
             }
 
-            // Images-master gate for .webp/.ico — the only formats with no per-serve-key check above.
-            // When the "Images" tile is OFF, image CDN delivery stands down (jpg/gif/png/svg are
-            // already gated by their serve keys).
+
             if ((strpos($image, '.webp') !== false || strpos($image, '.ico') !== false)
                 && (!class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings))) {
                 return false;
@@ -670,10 +820,10 @@ class wps_cdn_rewrite
             return $tag;
         }
 
-        // TODO: Hrvoje
+
         if (strpos(strtolower($src), 'tweenmax') !== false) {
             $urlGet = false;
-            // TODO: Move to default defers
+            
             $check = wp_http_validate_url($src);
             if ($check || strpos($src, '//') === 0) {
                 if (strpos($src, 'http') === false) {
@@ -721,14 +871,23 @@ class wps_cdn_rewrite
                 $tag .= '<script type="text/javascript" id="' . $handle . '-js-before">' . $wp_scripts->registered[$handle]->extra['before'][1] . '</script>';
             }
 
-            // TODO: Make more elegant
+            
             if (strpos($handle, 'awesome') !== false) {
                 $tag .= '<script type="text/javascript" defer class="wps-inline" id="' . $handle . '-js">' . $this->get_script_content($url) . '</script>';
             } else {
                 if (strpos($handle, 'aio') !== false || strpos($handle, 'theme') !== false) {
                     $tag .= '<script type="text/javascript" class="wps-inline" id="' . $handle . '-js" defer>' . $this->get_script_content($url) . '</script>';
                 } else {
-                    $tag .= '<script type="wpc-delay-script" class="wps-inline" id="' . $handle . '-js">' . $this->get_script_content($url) . '</script>';
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_delay_executor = !(function_exists('is_user_logged_in') && is_user_logged_in())
+                        && ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')
+                            || (isset(self::$settings['delay-js']) && self::$settings['delay-js'] == '1'));
+                    $tag .= '<script type="' . ($wpc_delay_executor ? 'wpc-delay-script' : 'text/javascript') . '" class="wps-inline" id="' . $handle . '-js">' . $this->get_script_content($url) . '</script>';
                 }
             }
 
@@ -742,33 +901,60 @@ class wps_cdn_rewrite
 
     public function get_script_content_url($url)
     {
+        
+        
+        
+        
+        
+        
+        
+        
+        $key = 'wpc_surl_' . md5((string) $url);
+        if (function_exists('get_transient') && get_transient($key)) {
+            return ''; 
+        }
+        if (!isset($GLOBALS['wpc_surlms532'])) {
+            $GLOBALS['wpc_surlms532'] = 0.0;
+        }
+        $budget = (float) apply_filters('wpc_script_fetch_budget_ms', 3000);
+        if ($GLOBALS['wpc_surlms532'] >= $budget) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('script-fetch-budget-spent', '', (string) $url, []);
+            }
+            return '';
+        }
+
+        $t0 = microtime(true);
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_URL, $url);
-        // Bound the fetch — this runs during front-end output buffering, and with no timeout a
-        // slow/dead remote URL stalls real visitors (curl falls back to max_execution_time). Degrade
-        // to '' on failure so the caller keeps the original markup.
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) apply_filters('wpc_script_fetch_timeout', 2));
         $data = curl_exec($ch);
         curl_close($ch);
+        $spent = (microtime(true) - $t0) * 1000;
+        $GLOBALS['wpc_surlms532'] += $spent;
+        if (function_exists('wpc_prof_mark')) {
+            wpc_prof_mark('scriptfetch', $t0);
+        }
 
-        return ($data === false) ? '' : $data;
+        if ($data === false || $data === '') {
+            if (function_exists('set_transient')) {
+                set_transient($key, 1, (int) apply_filters('wpc_script_fetch_fail_ttl', 300));
+            }
+            return '';
+        }
+        return $data;
     }
 
     public function get_script_content($url)
     {
-        //
-        //    $ch = curl_init();
-        //    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        //    curl_setopt($ch, CURLOPT_URL, $url);
-        //    $data = curl_exec($ch);
-        //    curl_close($ch);
+
 
         $relativePath = wp_make_link_relative($url);
         $path = ltrim($relativePath, '/');
 
-        //check if is folder install and if folder is in url remove it (it is already in ABSPATH)
+
         $last_abspath = basename(ABSPATH);
         $first_path = explode('/', $path)[0];
         if ($last_abspath == $first_path) {
@@ -779,28 +965,36 @@ class wps_cdn_rewrite
         $path = explode('?', $path);
         $path = $path[0];
 
-        // TODO: What if file does not exist?
+        
         if (!file_exists(ABSPATH . $path)) {
-            // Can't just return empty , because it's in script tags, fix!!
+            
         }
 
         $content = file_get_contents(ABSPATH . $path);
 
-        // Remove comments
-        $jsCode = preg_replace('!/\*[^*]*\*+([^/][^*]*\*+)*/!', '', $content);
+        
+        $jsCode = preg_replace('#/\*.*?\*/#s', '', $content);
 
         return $jsCode;
     }
 
     public function dnsPrefetch()
     {
-        // Honor "Exclude from Plugin" — skip DNS prefetch / preconnect injection on excluded URLs
+        
         if (!self::dontRunif()) {
             return;
         }
+        
+        
+        
+        
+        
+        
+        echo '<style id="wpc-img-ratio">img:where([wpc-size][width][height]),img:where(.wpc-nd[width][height]),img:where([data-wpc-md][width][height]){height:auto}</style>';
         if (strlen(trim(self::$zone_name)) > 0) {
             if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
-                if (!empty($_GET['custom_server'])) {
+                if (!empty($_GET['custom_server'])
+                    && function_exists('wpc_cdn_debug_allowed649') && wpc_cdn_debug_allowed649()) {
                     $custom_server = sanitize_text_field($_GET['custom_server']);
 
                     if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
@@ -809,18 +1003,19 @@ class wps_cdn_rewrite
                     }
                 }
             } else {
-//				echo '<link rel="dns-prefetch" href="https://cdn.zapwp.net" />';
-//				echo '<link rel="preconnect" href="https://cdn.zapwp.net">';
-                echo '<link rel="dns-prefetch" href="https://optimizerwpc.b-cdn.net" />';
-                echo '<link rel="preconnect" href="https://optimizerwpc.b-cdn.net">';
-                echo '<link rel="preconnect" href="https://optimize-v2.b-cdn.net/">';
+
+
+                if (!((!isset(self::$settings['delay-js-v3']) || self::$settings['delay-js-v3'] != '0')
+                    && (isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1'
+                        || class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings)))) {
+                    echo '<link rel="dns-prefetch" href="https://optimizerwpc.b-cdn.net" />';
+                    echo '<link rel="preconnect" href="https://optimizerwpc.b-cdn.net">';
+                    echo '<link rel="preconnect" href="https://optimize-v2.b-cdn.net/">';
+                }
+
+
                 echo '<link rel="dns-prefetch" href="//' . self::$zone_name . '" />';
                 echo '<link rel="preconnect" href="https://' . self::$zone_name . '">';
-                // Crossorigin preconnect for the cdn zone. The non-crossorigin tag above only warms
-                // the connection for non-CORS resources (images); fonts are fetched with crossorigin
-                // per spec and need their own preconnect, or the browser pays a full TLS handshake on
-                // the first font. Both tags let it pick the right connection per resource type.
-                echo '<link rel="preconnect" href="https://' . self::$zone_name . '" crossorigin>';
             }
         }
     }
@@ -833,10 +1028,6 @@ class wps_cdn_rewrite
     public function rewrite_script_tag($tag, $handle, $src)
     {
         $src = trim($src);
-
-        if (!empty($_GET['dbg_src_excludes'])) {
-            return print_r([$tag, $src, self::isExcludedFrom('cdn', $src), self::$excludes]);
-        }
 
         if (self::isExcludedFrom('cdn', $src)) {
             return $tag;
@@ -854,49 +1045,43 @@ class wps_cdn_rewrite
             return $tag;
         }
 
-        //remove version, needed for cdn
+
         if (strpos($src, '.js')) {
             $verPosition = strpos($src, '?ver=');
             if ($verPosition !== false) {
-                // Truncate the src to remove '?ver=' and everything after it
+
                 $src = substr($src, 0, $verPosition);
             }
         }
 
-        /**
-         * TODO:
-         * check if external is enabled
-         */
-        // (v7.03.49) EXTERNAL assets are never routed through the CDN — leave them on their origin (direct).
-        // A third-party-host asset carries CORS + availability risk and gains little (it's already on its own
-        // CDN); routing it produced the broken {origin}/m:0/a:… 404s. Unconditional now (was only when the
-        // external-URL feature was off). Same-site assets (below) are unaffected — that's the core CDN.
+        
+
+
+
+
+
         if (!self::image_url_matching_site_url($src)) {
             return $tag;
         }
 
-        // ORIGIN FLOOR for JS: until the per-zone JS-MIME proof is satisfied (natural_assets_on() —
-        // Bunny by construction, CF once proven), leave the origin <script> untouched (real
-        // application/javascript from the filesystem, can never wrong-MIME). Proven → falls through.
+
         if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && !wps_rewriteLogic::natural_assets_on()) {
             return $tag;
         }
         if (self::$cdnEnabled == '1' && self::$js == '1') {
-            if (strpos($src, self::$zone_name) === false) {
+            
+            
+            
+            
+            
+            
+            if (strpos($src, self::$zone_name) === false && !apply_filters('wpc_scripts_same_origin', true)) {
                 $fileMinify = self::$js_minify;
                 if (self::isExcluded('js_minify', $src)) {
                     $fileMinify = '0';
                 }
 
-                /**
-                 * Same-site JS. When NOT minified (m:0) emit a clean NATURAL zone URL instead of the
-                 * m:0/a: transform: m:0 is pure pass-through, so the natural URL is byte-identical (the
-                 * edge serves the same origin asset — verified m:0 and natural both 302 to the file).
-                 * This also makes a webpack bundle's auto-publicPath natural, so its runtime-loaded
-                 * chunks become natural too (they derive their base from this script's src). When the
-                 * edge IS minifying (m:1+) keep the transform — a natural URL wouldn't be minified.
-                 * Only reached when natural_assets_on() (the JS-MIME proof) is satisfied (gated above).
-                 */
+
                 $abs = self::reformat_url($src, false);
                 if (empty($fileMinify)) {
                     $pp = function_exists('wp_parse_url') ? wp_parse_url($abs) : parse_url($abs);
@@ -905,7 +1090,7 @@ class wps_cdn_rewrite
                              . (isset($pp['query']) ? '?' . $pp['query'] : '')
                              . (isset($pp['fragment']) ? '#' . $pp['fragment'] : '');
                     } else {
-                        $src = 'https://' . self::$zone_name . '/m:0/a:' . $abs; // unparsable → keep transform (never break)
+                        $src = 'https://' . self::$zone_name . '/m:0/a:' . $abs;
                     }
                 } else {
                     $src = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . $abs;
@@ -922,7 +1107,7 @@ class wps_cdn_rewrite
                         }
                     }
                 } else {
-                    // FIXED: Only replace src in the opening script tag, not in any content after
+                    
                     $tag = preg_replace('/^(\s*<script[^>]*)\ssrc=["\']([^"\']*)["\']([^>]*>)/i', '$1 src="' . $src . '"$3', $tag);
                 }
             } else {
@@ -937,7 +1122,7 @@ class wps_cdn_rewrite
                     return $tag;
                 }
 
-                // FIXED: Only replace src in the opening script tag, not in any content after
+                
                 $tag = preg_replace('/^(\s*<script[^>]*)\ssrc=["\']([^"\']*)["\']([^>]*>)/i', '$1 src="' . $src . '"$3', $tag);
             }
 
@@ -988,19 +1173,7 @@ class wps_cdn_rewrite
         return false;
     }
 
-    /**
-     * A stylesheet/script whose asset lives ENTIRELY in the query string — the URL path carries
-     * no .css/.js (e.g. the Sonaar/Iron theme's "https://site/?load=custom-style.css&ver=123", or
-     * any "/?load=…", "/styles?file=….css" dynamic endpoint). These are PHP-generated, NOT static
-     * files: CDN-rewriting them strips the query + points at the zone root, so the browser fetches
-     * HTML instead of CSS/JS and the styling/scripts silently vanish. They must stay on origin.
-     *
-     * Distinguishes a real versioned asset ("/style.css?ver=1" → path HAS .css → fine to rewrite)
-     * from a query-driven one ("/?load=style.css" → path has no .css → keep on origin).
-     *
-     * @param string $link
-     * @return bool  true = dynamic query-driven asset, do NOT CDN-rewrite
-     */
+
     public static function is_dynamic_query_asset($link)
     {
         if (empty($link) || !is_string($link)) {
@@ -1009,32 +1182,29 @@ class wps_cdn_rewrite
         $hasCss = stripos($link, '.css') !== false;
         $hasJs  = stripos($link, '.js') !== false;
         if (!$hasCss && !$hasJs) {
-            return false; // not a css/js url — unaffected
+            return false;
         }
         $path = (string) (function_exists('wp_parse_url')
             ? wp_parse_url($link, PHP_URL_PATH)
             : parse_url($link, PHP_URL_PATH));
-        // Real static asset: the .css/.js is in the PATH (a trailing ?ver= query is fine).
+        
         if (($hasCss && stripos($path, '.css') !== false) || ($hasJs && stripos($path, '.js') !== false)) {
             return false;
         }
-        // .css/.js appears ONLY in the query string → dynamic endpoint → leave on origin.
+        
         return true;
     }
 
     public static function is_excluded_link($link)
     {
-        /**
-         * Is the link in excluded list?
-         */
+        
+
+
         if (empty($link)) {
             return false;
         }
 
-        // (v7.10.04) Theme/plugin dynamic CSS/JS served from a query string (path has no .css/.js,
-        // e.g. Sonaar/Iron "/?load=custom-style.css&ver=…") is excluded from the CDN — rewriting it
-        // strips the query / points at the zone root → it returns HTML, not the asset, so styles or
-        // scripts silently disappear. Keep on origin. (Fixes gentiana.cz "bg shows then removes".)
+
         if (self::is_dynamic_query_asset($link)) {
             return true;
         }
@@ -1050,7 +1220,7 @@ class wps_cdn_rewrite
         if (!empty(self::$excluded_list)) {
             foreach (self::$excluded_list as $i => $value) {
                 if (strpos($link, $value) !== false) {
-                    // Link is excluded
+                    
                     return true;
                 }
             }
@@ -1059,37 +1229,43 @@ class wps_cdn_rewrite
         return false;
     }
 
-    /**
-     * Is link matching the site url?
-     *
-     * @param $image
-     *
-     * @return bool
-     */
+
     public static function image_url_matching_site_url($image)
     {
-        // Single leading slash = root-relative local path.
-        // Double leading slash = protocol-relative external URL (e.g. //cdnjs.cloudflare.com/...) — treat as external.
+        
+        
         if (strpos($image, '//') !== 0 && (strpos($image, '/') === 0 || strpos($image, 'wp-content') === 0)) {
             return true;
         }
         $site_url = self::$site_url;
-        $image = str_replace(['https://', 'http://'], '', $image);
+        $stripped = str_replace(['https://', 'http://'], '', $image);
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
-        if (strpos($image, '.css') !== false || strpos($image, '.js') !== false) {
+        if (strpos($stripped, '.css') !== false || strpos($stripped, '.js') !== false) {
             foreach (self::$default_excluded_list as $i => $excluded_string) {
-                if (strpos($image, $excluded_string) !== false) {
+                if (strpos($stripped, $excluded_string) !== false) {
                     return false;
                 }
             }
         }
 
-        if (strpos($image, $site_url) === false) {
-            // Image not on site
+
+        $site_host = preg_replace('/^www\./i', '', (string) strtok($site_url, '/'));
+        if ($site_host !== '' && preg_match_all('#https?://([^/"\'\s>)]+)#i', $image, $host_matches) && !empty($host_matches[1])) {
+            foreach ($host_matches[1] as $h) {
+                $h = preg_replace('/^www\./i', '', (string) strtok($h, ':'));
+                if (strcasecmp($h, $site_host) === 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (strpos($stripped, $site_url) === false) {
+            
             return false;
         } else {
-            // Image on site
+            
             return true;
         }
     }
@@ -1127,10 +1303,25 @@ class wps_cdn_rewrite
     public function inlineCSS($html, $handle, $href, $media)
     {
         if (strpos($html, 'src=')) {
-            // It has a src attribute, inline it
+
             if (strpos($href, self::$site_url) !== false) {
-                // Href is local
-                $content = file_get_contents($href);
+                
+                
+                
+                
+                
+                $wpc_lp543 = ABSPATH . ltrim((string) parse_url($href, PHP_URL_PATH), '/');
+                if (@is_readable($wpc_lp543)) {
+                    $content = (string) @file_get_contents($wpc_lp543);
+                } else {
+                    $wpc_r543 = function_exists('wp_remote_get')
+                        ? wp_remote_get($href, ['timeout' => 3, 'redirection' => 1]) : null;
+                    $content  = (!$wpc_r543 || is_wp_error($wpc_r543))
+                        ? '' : (string) wp_remote_retrieve_body($wpc_r543);
+                }
+                if ($content === '') {
+                    return $html; 
+                }
                 $content = self::$combineCss->minifyCSS($content);
                 $return = '<style id="inline-css-' . mt_rand(999, 9999) . '">';
                 $return .= $content;
@@ -1143,7 +1334,7 @@ class wps_cdn_rewrite
         return $html;
     }
 
-    // TODO: IMPORANT! If you don't want to run it needs to return false!
+    
 
     public function adjust_style_tag($html, $handle, $href, $media)
     {
@@ -1156,10 +1347,10 @@ class wps_cdn_rewrite
                 if (strpos($href, $preload_key) !== false) {
                     if (!strpos($html, 'preload')) {
                         if (strpos($html, 'rel=') !== false) {
-                            // Rel exists, change it
+
                             $html = preg_replace('/rel\=["|\'](.*?)["|\']/', 'rel="preload" as="style" onload="this.rel=\'stylesheet\'" ', $html);
                         } else {
-                            // Rel does not exist, create it
+
                             $html = str_replace('/>', 'rel="preload" as="style" onload="this.rel=\'stylesheet\'"/>', $html);
                         }
                     }
@@ -1200,13 +1391,7 @@ class wps_cdn_rewrite
         return false;
     }
 
-    /**
-     * Natural-URL source emission. When natural assets are on, emit the clean cname URL from the
-     * enqueue filter rather than the /m:N/a: transform form. The buffer pass naturalizes these for
-     * normal page output anyway, but content printed AFTER the buffer flushes (late import-maps,
-     * flush()'d footers, etc.) never reaches it and would otherwise ship the transform form.
-     * Naturalizing at the source makes the URL form independent of buffer/flush timing. Idempotent.
-     */
+
     public function adjust_src_url($src)
     {
         $out = $this->adjust_src_url_raw($src);
@@ -1244,27 +1429,25 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        /**
-         * TODO:
-         * check if external is enabled
-         */
-        // (v7.03.49) EXTERNAL css/js/assets are never routed through the CDN — leave them on their origin
-        // (direct). A third-party-host asset carries CORS + availability risk and gains little (already on
-        // its own CDN); routing it produced the broken {origin}/m:0/a:… 404s. Unconditional now (was only
-        // when the external-URL feature was off). Same-site assets (below) are unaffected — that's the core CDN.
+        
+
+
+
+
+
         if (!self::image_url_matching_site_url($src)) {
             return $src;
         }
 
-        //remove version, needed for cdn
+
         if (strpos($src, '.css')) {
             if (strpos($src, '?ver=')) {
                 $src = remove_query_arg('ver', $src);
             }
         }
 
-        // ORIGIN FLOOR for same-origin css/js: unproven zone → leave the origin href (proven → the
-        // m:N/a: build below runs and adjust_src_url naturalizes it).
+        
+        
         if ((strpos($src, '.css') !== false || strpos($src, '.js') !== false)
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
             && !wps_rewriteLogic::natural_assets_on()) {
@@ -1278,7 +1461,9 @@ class wps_cdn_rewrite
                     $fileMinify = '0';
                 }
 
-                if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+
+                if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1'
+                    && apply_filters('wpc_font_subset_forces_css_minify', false, $src)) {
                     $fileMinify = '1';
                 }
 
@@ -1294,6 +1479,13 @@ class wps_cdn_rewrite
                     }
                 }
             } elseif (strpos($src, '.js') !== false) {
+                
+                
+                
+                
+                if (apply_filters('wpc_scripts_same_origin', true)) {
+                    return $src;
+                }
                 $fileMinify = self::$js_minify;
                 if (self::isExcluded('js_minify', $src)) {
                     $fileMinify = '0';
@@ -1310,13 +1502,7 @@ class wps_cdn_rewrite
         return $src;
     }
 
-    /**
-     * SVGs are vector — no raster transform applies — yet the legacy emitters route them through
-     * /q:/r:/wp:/w:/u: transform URLs. The edge serves uploads-path natural URLs verbatim by
-     * extension, so collapse zone-transform SVG URLs back to the clean host-swapped form. Uploads
-     * only: theme/plugin SVG paths 404 on some zone configs, so those keep their transform URLs.
-     * Runs as the outermost buffer pass (catches every emitter, srcset + CSS url() included).
-     */
+
     public static function wpc_svg_naturalize($html)
     {
         if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
@@ -1330,37 +1516,36 @@ class wps_cdn_rewrite
                 if ($pos === false) {
                     return $m[0];
                 }
-                // substr keeps the origin URL's exact path+query bytes — no re-encoding.
+
+
+                if (preg_match_all('#https?://([^/"\'()\s<>]+)#i', substr($m[1], 0, $pos), $host_matches) && !empty($host_matches[1])) {
+                    $asset_host = preg_replace('/^www\./i', '', (string) end($host_matches[1]));
+                    $site_host  = preg_replace('/^www\./i', '', (string) wp_parse_url(home_url(), PHP_URL_HOST));
+                    if ($site_host !== '' && strcasecmp($asset_host, $site_host) !== 0) {
+                        return $m[0];
+                    }
+                }
+
                 return 'https://' . self::$zone_name . substr($m[1], $pos);
             },
             $html
         );
     }
 
-    /**
-     * CSS-background image-set() master gate. Default ON. Piggybacks wpc_svg_zoneify_active() (cdn on
-     * + live-cdn + images tile on + not suppressed + zone != origin) so it can only be active where
-     * the same-ext host-swap already runs. KILL is the absolute off-ramp.
-     */
+    
+
+
+
+
     public static function wpc_css_bg_imageset_active()
     {
-        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return false; // absolute off-ramp
-        if (!self::wpc_svg_zoneify_active()) return false;                        // inherit the lane's gate
-        $on = function_exists('get_option') ? get_option('wpc_css_bg_imageset', 1) : 1; // DEFAULT ON
+        if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return false;
+        if (!self::wpc_svg_zoneify_active()) return false;
+        $on = function_exists('get_option') ? get_option('wpc_css_bg_imageset', 1) : 1;
         return (bool) apply_filters('wpc_css_bg_imageset', !empty($on));
     }
 
-    /**
-     * CSS-bg on-disk sibling resolver: origin uploads url -> local path -> file_exists on .avif/.webp.
-     * A concrete css url maps directly to {base}.avif/.webp — no width inference.
-     *
-     * Never-404: an image-set() entry is type()-selected and commits (no onerror fall-through), so a
-     * format is listed only when its file is on disk now. The arms also pass picture_variant_dims_ok()
-     * so a dimensionally-corrupt sibling is dropped rather than committed.
-     *
-     * @param string $origin_url same-site origin uploads url
-     * @return array ['avif'=>bool,'webp'=>bool]
-     */
+
     public static function wpc_css_bg_disk_siblings($origin_url)
     {
         $out = ['avif' => false, 'webp' => false];
@@ -1370,12 +1555,12 @@ class wps_cdn_rewrite
         $site = trailingslashit(site_url());
         $host = wp_parse_url($url, PHP_URL_HOST);
         $shst = wp_parse_url($site, PHP_URL_HOST);
-        if (!$host || !$shst || strcasecmp((string) $host, (string) $shst) !== 0) return $out; // same-site
-        if (strpos($url, '/wp-content/uploads/') === false) return $out;                       // uploads only
+        if (!$host || !$shst || strcasecmp((string) $host, (string) $shst) !== 0) return $out;
+        if (strpos($url, '/wp-content/uploads/') === false) return $out;
 
         $base = str_replace($site, trailingslashit(ABSPATH), $url);
         $base = str_replace('/', DIRECTORY_SEPARATOR, $base);
-        if (strpos($base, trailingslashit(ABSPATH)) !== 0) return $out;                         // traversal guard
+        if (strpos($base, trailingslashit(ABSPATH)) !== 0) return $out;
 
         $avif = preg_replace('/\.(jpe?g|png)$/i', '.avif', $base);
         $webp = preg_replace('/\.(jpe?g|png)$/i', '.webp', $base);
@@ -1390,57 +1575,35 @@ class wps_cdn_rewrite
         return $out;
     }
 
-    /**
-     * Build the CSS-bg image-set() format-upgrade for ONE matched background url(). Returns the full
-     * two-declaration replacement, or '' to fall through to the caller's same-ext host-swap.
-     *
-     *   background-image:url(<zone same-ext>);                  <- pre-image-set floor (always 200)
-     *   background-image:-webkit-image-set(<entries>);          <- prefix-only WebKit
-     *   background-image:image-set(url(<avif>) type("image/avif"), url(<webp>) type("image/webp"),
-     *                              url(<same-ext>) type("<mime>"));   <- self-select by type()
-     *
-     * Verified CDN-edge (Bunny+Vary): returns a single clean .webp natural URL; the edge negotiates
-     * format by Accept, so no image-set and no .avif. Non-edge (CF / vary-blind / picture / off):
-     * on-disk image-set only — type() self-selection is browser-side (vary-blind-safe, like a typed
-     * <picture> <source>) and never-404 by on-disk existence; same-ext entry is always last.
-     *
-     * @param string $origin_url   ORIGIN clean url (for on-disk sibling resolution)
-     * @param string $sameext_zone the zone-hosted same-ext url the caller already built
-     * @param string $quote        original quote char inside url() ('' | "'" | '"')
-     */
+
     public static function wpc_css_bg_imageset_build($origin_url, $sameext_zone, $quote = '')
     {
-        if (!self::wpc_css_bg_imageset_active()) return '';                 // gate/KILL → caller keeps same-ext
+        if (!self::wpc_css_bg_imageset_active()) return '';
         $origin_url   = (string) $origin_url;
         $sameext_zone = (string) $sameext_zone;
         if ($origin_url === '' || $sameext_zone === '') return '';
 
         $clean = preg_replace('/[?#].*$/', '', $origin_url);
         $ext   = strtolower(pathinfo($clean, PATHINFO_EXTENSION));
-        // wpc_natural_nw lets the edge OTF avif/webp from a webp source too (E1), so webp origins join the
-        // upgrade; otherwise raster only. gif/svg/data: stay excluded.
+
+
         $css_nw   = wps_rewriteLogic::wpc_natural_nw();
         $css_exts = $css_nw ? ['jpg', 'jpeg', 'png', 'webp'] : ['jpg', 'jpeg', 'png'];
-        if (!in_array($ext, $css_exts, true)) return '';                   // gif/svg/data:/next-gen excluded
+        if (!in_array($ext, $css_exts, true)) return '';
         $base_mime = ($ext === 'png') ? 'image/png' : (($ext === 'webp') ? 'image/webp' : 'image/jpeg');
 
         $q = ($quote === '"' || $quote === "'") ? $quote : '';
 
-        // Verified CDN-edge (Bunny + Vary): emit ONE clean .webp natural URL. The edge negotiates
-        // format by Accept (AVIF up / WebP across / JPEG down), so .webp is the single negotiable base
-        // for a CSS background. No image-set and no explicit .avif here: a .avif URL is a fixed format
-        // the edge can't downgrade for a non-avif UA — only .webp varies both up and down.
+
         if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
             $webp_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.webp$2', $sameext_zone);
             if (is_string($webp_zone) && $webp_zone !== '' && $webp_zone !== $sameext_zone) {
                 return 'background-image:url(' . $q . $webp_zone . $q . ')';
             }
-            return '';                                     // ext-swap failed → caller keeps same-ext
+            return '';
         }
 
-        // CONVERGED (wpc_natural_nw): non-edge zones emit the OTF image-set — typed avif + webp entries the
-        // edge resizes/transcodes from ANY source (E1), floor never-404s, no on-disk dependency. This is what
-        // gives CSS backgrounds avif on CF-direct (+ webp origins). type() self-selection is browser-side.
+
         if ($css_nw) {
             $avif_zone_nw = preg_replace('/\.(jpe?g|png|webp)(\?.*)?$/i', '.avif$2', $sameext_zone);
             $webp_zone_nw = preg_replace('/\.(jpe?g|png|webp)(\?.*)?$/i', '.webp$2', $sameext_zone);
@@ -1451,7 +1614,7 @@ class wps_cdn_rewrite
             if (is_string($webp_zone_nw) && $webp_zone_nw !== '' && $webp_zone_nw !== $sameext_zone) {
                 $nw_entries[] = 'url(' . $q . $webp_zone_nw . $q . ') type("image/webp")';
             }
-            $nw_entries[] = 'url(' . $q . $sameext_zone . $q . ') type("' . $base_mime . '")'; // same-ext floor (always 200)
+            $nw_entries[] = 'url(' . $q . $sameext_zone . $q . ') type("' . $base_mime . '")';
             if (count($nw_entries) < 2) return '';
             $nw_set = implode(',', $nw_entries);
             return 'background-image:url(' . $q . $sameext_zone . $q . ');'
@@ -1459,13 +1622,11 @@ class wps_cdn_rewrite
                  . 'background-image:image-set(' . $nw_set . ')';
         }
 
-        // Non-edge (CF / vary-blind / picture-mode / off): on-disk image-set only. type()
-        // self-selection is browser-side and never-404 by on-disk existence — the vary-blind-safe
-        // path. No fabricated natural URLs here.
-        $sib = self::wpc_css_bg_disk_siblings($origin_url);
-        if (empty($sib['avif']) && empty($sib['webp'])) return '';         // no disk siblings → caller keeps same-ext
 
-        // Ext-swap on the ZONE url (host-swap already done by the caller); swap only the extension.
+        $sib = self::wpc_css_bg_disk_siblings($origin_url);
+        if (empty($sib['avif']) && empty($sib['webp'])) return '';
+
+        
         $avif_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.avif$2', $sameext_zone);
         $webp_zone = preg_replace('/\.(jpe?g|png)(\?.*)?$/i', '.webp$2', $sameext_zone);
 
@@ -1476,9 +1637,9 @@ class wps_cdn_rewrite
         if (!empty($sib['webp']) && is_string($webp_zone) && $webp_zone !== '' && $webp_zone !== $sameext_zone) {
             $entries[] = 'url(' . $q . $webp_zone . $q . ') type("image/webp")';
         }
-        // Same-ext floor entry — guarantees a 200 inside image-set even for an exotic UA.
+        
         $entries[] = 'url(' . $q . $sameext_zone . $q . ') type("' . $base_mime . '")';
-        if (count($entries) < 2) return '';                                // only the floor survived → no upgrade
+        if (count($entries) < 2) return '';
 
         $set = implode(',', $entries);
         return 'background-image:url(' . $q . $sameext_zone . $q . ');'
@@ -1486,25 +1647,39 @@ class wps_cdn_rewrite
              . 'background-image:image-set(' . $set . ')';
     }
 
-    /**
-     * CSS/inline-background image-set sweep. Runs AFTER wpc_raster_naturalize_passes (so background URLs
-     * are already the clean natural ZONE-host form, e.g. cdn/wp-content/uploads/X.png) and upgrades each
-     * raster background to the never-404 image-set() via wpc_css_bg_imageset_build (AVIF+WebP+same-ext
-     * floor, type()-self-selected → Vary-blind-safe, OTF so no on-disk dependency on a nw/edge zone).
-     *
-     * One call site (inside wpc_raster_naturalize) covers EVERY caller: the CSS combiner (combine_css),
-     * process_css_for_fonts, the page output buffer (inline style backgrounds), and css_content. Scoped
-     * to the media-base catalog (uploads + storage + filtered). IDEMPOTENT: the negative-lookahead skips
-     * the image-set's own same-ext floor (a floor url is immediately followed by ;background-image:
-     * [-webkit-]image-set), and the belt skips any declaration that already contains image-set(. NULL-safe.
-     */
+
+    
+
+
+
+
+
+
+
+    public static function wpc_css_bg_prior_layers($prefix)
+    {
+        $prefix = (string) $prefix;
+        if (!preg_match('/^(background(?:-image)?\s*:\s*)(.*)(url\(\s*)$/is', $prefix, $m)) {
+            return ['skip' => false, 'layers' => ''];
+        }
+        $extra = trim($m[2]);
+        if ($extra === '') {
+            return ['skip' => false, 'layers' => ''];
+        }
+        if (!preg_match('/^background-image\s*:/i', $prefix) || substr($extra, -1) !== ',') {
+            return ['skip' => true, 'layers' => ''];
+        }
+        return ['skip' => false, 'layers' => $m[2]];
+    }
+
+
     public static function wpc_css_bg_imageset_sweep($css)
     {
         if (!is_string($css) || $css === '' || empty(self::$zone_name)) {
             return $css;
         }
         if (stripos($css, 'background') === false || !self::wpc_css_bg_imageset_active()) {
-            return $css; // no backgrounds present, or gate/KILL off
+            return $css;
         }
         $zone = preg_quote(self::$zone_name, '#');
         $origin_host = function_exists('wp_parse_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
@@ -1516,27 +1691,107 @@ class wps_cdn_rewrite
         }
         if (empty($alts)) { $alts[] = preg_quote('wp-content/uploads', '#'); }
         $base_alt = '(?:' . implode('|', array_unique($alts)) . ')';
-        $rx = '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)(https?://' . $zone . '/' . $base_alt . '/[^"\'()\s<>]+?)\.(png|jpe?g|webp)((?:\?[^"\'()\s<>]*)?)\2(\s*\))(?!\s*;\s*background-image\s*:\s*(?:-webkit-)?image-set)#i';
-        $out = preg_replace_callback($rx, static function ($m) use ($origin_host) {
+        
+        
+        
+        
+        
+        
+        $zone_host785 = strtok((string) self::$zone_name, '/');
+        $zone_plain785 = ($zone_host785 === (string) self::$zone_name);
+        $hosts785 = $zone;
+        if ($zone_plain785 && $origin_host !== '' && strcasecmp($origin_host, $zone_host785) !== 0) {
+            $hosts785 = '(?:' . $zone . '|' . preg_quote($origin_host, '#') . ')';
+        }
+        
+        
+        
+        $rx = '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)(https?://' . $hosts785 . '/' . $base_alt . '/[^"\'()\s<>]+?)\.(png|jpe?g|webp)((?:\?[^"\'()\s<>]*)?)\2(\s*\))(?=\s*(?:[;}<&\\\\]|[\'"]|$))(?!\s*;\s*background-image\s*:\s*[^;{}]*?(?:-webkit-)?image-set)#i';
+        $out = preg_replace_callback($rx, static function ($m) use ($origin_host, $zone_host785, $zone_plain785) {
             if (stripos($m[0], 'image-set(') !== false) {
-                return $m[0]; // already upgraded
+                return $m[0];
             }
-            $sameext_zone = $m[3] . '.' . $m[4] . $m[5];
-            $rel = function_exists('wp_parse_url') ? (string) wp_parse_url($sameext_zone, PHP_URL_PATH) : '';
-            $origin_url = ($origin_host !== '' && $rel !== '') ? ('https://' . $origin_host . $rel) : $sameext_zone;
+            $wpc_pl822 = self::wpc_css_bg_prior_layers($m[1]);
+            if (!empty($wpc_pl822['skip'])) {
+                return $m[0];
+            }
+            $wpc_url785 = $m[3] . '.' . $m[4] . $m[5];
+            $rel = function_exists('wp_parse_url') ? (string) wp_parse_url($wpc_url785, PHP_URL_PATH) : '';
+            $wpc_isorigin785 = ($origin_host !== '' && stripos($m[3], '://' . $origin_host . '/') !== false);
+            if ($wpc_isorigin785 && (!$zone_plain785 || $rel === '')) {
+                return $m[0]; 
+            }
+            $sameext_zone = $wpc_isorigin785
+                ? ('https://' . $zone_host785 . $rel . $m[5])
+                : $wpc_url785;
+            $origin_url = ($origin_host !== '' && $rel !== '') ? ('https://' . $origin_host . $rel) : $wpc_url785;
             $iset = self::wpc_css_bg_imageset_build($origin_url, $sameext_zone, $m[2]);
-            return ($iset !== '') ? $iset : $m[0]; // upgrade, or leave the natural same-ext (already correct)
+            if ($iset !== '' && $wpc_pl822['layers'] !== '') {
+                $iset = str_replace('background-image:', 'background-image:' . $wpc_pl822['layers'], $iset);
+            }
+            return ($iset !== '') ? $iset : $m[0];
         }, $css);
-        return is_string($out) ? $out : $css; // NULL-safe: a backtrack returns the original, never blanks
+        return is_string($out) ? $out : $css; 
     }
 
-    /**
-     * Gate for the SVG positive sweep. The naturalize pass only cleans SVGs the legacy rewriter
-     * already lifted to the zone; SVGs referenced from CSS background-image, inline style url(),
-     * root-relative hrefs etc. were never zone-served at all. The sweep host-swaps any origin
-     * uploads-SVG to the clean zone URL. Hard-gated: live CDN, Images master on, zone not suppressed,
-     * zone != origin.
-     */
+
+    
+    
+
+
+
+
+
+
+
+
+    public static function wpc_font_subset_families()
+    {
+        static $wpc_fam478 = null;
+        if ($wpc_fam478 !== null) { return $wpc_fam478; }
+        $wpc_fam478 = [];
+        try {
+            $wpc_p478 = '';
+            if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_lcp_json_file')) {
+                $wpc_lj478 = (string) wps_rewriteLogic::wpc_lcp_json_file();
+                if ($wpc_lj478 !== '') { $wpc_p478 = dirname($wpc_lj478) . '/font-subsets.css'; }
+            }
+            if ($wpc_p478 === '' && defined('WPS_IC_CRITICAL') && class_exists('wps_ic_url_key')
+                && function_exists('home_url')) {
+                $wpc_k478 = (string) (new wps_ic_url_key())->setup(home_url('/'));
+                if ($wpc_k478 !== '') {
+                    $wpc_p478 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_k478 . '/font-subsets.css';
+                }
+            }
+            if ($wpc_p478 !== '' && @is_readable($wpc_p478)) {
+                $wpc_b478 = (string) @file_get_contents($wpc_p478);
+                if ($wpc_b478 !== '' && preg_match_all('/font-family\s*:\s*["\']?([^"\';}]+)/i', $wpc_b478, $wpc_m478)) {
+                    foreach ($wpc_m478[1] as $wpc_fn478) {
+                        $wpc_key478 = strtolower(trim((string) $wpc_fn478, " \t\"'"));
+                        if ($wpc_key478 !== '') { $wpc_fam478[$wpc_key478] = 1; }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return $wpc_fam478;
+    }
+
+    public static function wpc_font_remote_ranges()
+    {
+        static $wpc_rr = null;
+        if ($wpc_rr !== null) { return $wpc_rr; }
+        $wpc_rr = [];
+        if (!function_exists('get_option') || !apply_filters('wpc_font_remote_range', true)) { return $wpc_rr; }
+        $raw = get_option('wpc_font_remote_ranges', []);
+        if (!is_array($raw)) { return $wpc_rr; }
+        foreach ($raw as $k => $v) {
+            $v = preg_replace('/[^0-9A-Fa-fUu+,\- ]/', '', (string) $v);
+            if ($v !== '' && is_string($k) && strpos($k, '|') !== false) { $wpc_rr[strtolower($k)] = $v; }
+        }
+        return $wpc_rr;
+    }
+
     public static function wpc_svg_zoneify_active()
     {
         if (empty(self::$zone_name)) {
@@ -1546,9 +1801,8 @@ class wps_cdn_rewrite
         if (!is_array($s) || empty($s['live-cdn']) || (string) $s['live-cdn'] !== '1') {
             return false;
         }
-        // No serve['svg'] check: the UI is one Images tile now, but legacy presets wrote svg='0',
-        // which would permanently block this gate on pre-consolidation sites. The cdn_images_enabled()
-        // check below is the tile's real gate and covers svg.
+
+
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
             return false;
         }
@@ -1556,26 +1810,132 @@ class wps_cdn_rewrite
             return false;
         }
         $origin = wp_parse_url(home_url(), PHP_URL_HOST);
-        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
-            return false; // zone derives from origin host → swapping would self-loop
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { 
+            return false;
+        }
+        if (!self::wpc_zone_natural_witnessed750()) {
+            return false;
         }
         return true;
     }
 
+    
+    
+    
+    
+    
+    public static function wpc_zone_natural_witnessed750()
+    {
+        if (function_exists('wpc_force_natural') && wpc_force_natural()) {
+            return true;
+        }
+        return class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
+            && wps_rewriteLogic::natural_assets_on();
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_eager_nextgen752($html)
+    {
+        if (!is_string($html) || $html === '' || empty(self::$zone_name) || stripos($html, '<img') === false) {
+            return $html;
+        }
+        if (!apply_filters('wpc_eager_nextgen', true)) {
+            return $html;
+        }
+        
+        
+        
+        $wpc_gate754 = class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'picture_avif_emit_natural')
+            && (wps_rewriteLogic::picture_avif_emit_natural()
+                || (function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled()
+                    && self::wpc_zone_natural_witnessed750()));
+        if (!$wpc_gate754) {
+            return $html;
+        }
+        
+        
+        
+        $wpc_hosts752 = [preg_quote((string) self::$zone_name, '#')];
+        
+        
+        
+        
+        
+        
+        $wpc_rx752 = '#(?<!:)https?://(?:' . implode('|', $wpc_hosts752)
+            . ')/[^\s"\'<>,:]*?(?:-\d+x\d+)?\.(jpe?g|png)(?=[\s"\',])#i';
+        
+        
+        $wpc_pstems752 = [];
+        if (preg_match_all('#<link\b[^>]*rel="preload"[^>]*as="image"[^>]*href="([^"]+)"#i', $html, $wpc_pm752)) {
+            foreach ($wpc_pm752[1] as $wpc_pu752) {
+                $wpc_pb752 = basename((string) preg_replace('/\?.*$/', '', $wpc_pu752));
+                $wpc_pb752 = (string) preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', $wpc_pb752);
+                $wpc_pb752 = (string) preg_replace('/\.[a-z0-9]+$/i', '', $wpc_pb752);
+                if ($wpc_pb752 !== '') { $wpc_pstems752[strtolower($wpc_pb752)] = 1; }
+            }
+        }
+        $wpc_pic752 = [];
+        if (stripos($html, '<picture') !== false) {
+            $html = preg_replace_callback('#<picture\b[^>]*>.*?</picture>#is', static function ($m) use (&$wpc_pic752) {
+                $k = "\x01WPCEN" . count($wpc_pic752) . "\x01";
+                $wpc_pic752[$k] = $m[0];
+                return $k;
+            }, $html);
+            if (!is_string($html)) { return strtr(implode('', array_keys($wpc_pic752)), $wpc_pic752); }
+        }
+        $out = preg_replace_callback('#<img\b[^>]*>#i', static function ($m) use ($wpc_rx752, $wpc_pstems752) {
+            $tag = $m[0];
+            if (!preg_match('/\bfetchpriority\s*=\s*["\']high["\']|\bloading\s*=\s*["\']eager["\']/i', $tag)) {
+                return $tag;
+            }
+            if (preg_match('/\bloading\s*=\s*["\']lazy["\']/i', $tag)
+                || stripos($tag, 'data-wpc-nd') !== false || stripos($tag, 'data-wpc-md') !== false
+                || stripos($tag, 'data-wpc-skip') !== false || stripos($tag, 'avif?src=') !== false) {
+                return $tag;
+            }
+            if (!empty($wpc_pstems752) && preg_match('/\bsrc\s*=\s*["\']([^"\']+)/i', $tag, $wpc_sm752)) {
+                $wpc_sb752 = basename((string) preg_replace('/\?.*$/', '', $wpc_sm752[1]));
+                $wpc_sb752 = (string) preg_replace('/-\d+x\d+(\.[a-z0-9]+)$/i', '$1', $wpc_sb752);
+                $wpc_sb752 = strtolower((string) preg_replace('/\.[a-z0-9]+$/i', '', $wpc_sb752));
+                if ($wpc_sb752 !== '' && isset($wpc_pstems752[$wpc_sb752])) {
+                    return $tag;
+                }
+            }
+            $swapped = preg_replace_callback($wpc_rx752, static function ($u) {
+                $ext = strtolower($u[1]);
+                return substr($u[0], 0, -strlen($u[1])) . 'avif?src=' . $ext;
+            }, $tag);
+            return is_string($swapped) ? $swapped : $tag;
+        }, $html);
+        $html = is_string($out) ? $out : $html;
+        if (!empty($wpc_pic752)) {
+            $html = strtr($html, $wpc_pic752);
+        }
+        return $html;
+    }
+
     public static function wpc_svg_zoneify($html)
     {
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:wpc_svg_zoneify') : null;
         if (!is_string($html) || $html === '' || !self::wpc_svg_zoneify_active()) {
             return $html;
         }
         $origin = wp_parse_url(home_url(), PHP_URL_HOST);
         $o = preg_quote($origin, '#');
-        // Absolute origin URLs (src/href/srcset/CSS url()).
+        
         $html = self::wpc_preg_safe(
             '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.svg(?:\?[^"\'()\s<>]*)?)#i',
             'https://' . self::$zone_name . '$1',
             $html
         );
-        // Root-relative references (quoted attributes + CSS url(...)).
+        
         $html = self::wpc_preg_safe(
             '#(["\'(])(/wp-content/uploads/[^"\'()\s<>]+?\.svg(?:\?[^"\'()\s<>]*)?)#i',
             '$1https://' . self::$zone_name . '$2',
@@ -1600,51 +1960,42 @@ class wps_cdn_rewrite
             return false;
         }
         $origin = wp_parse_url(home_url(), PHP_URL_HOST);
-        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
-            return false; // zone derives from origin host → swapping would self-loop
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { 
+            return false;
+        }
+        if (!self::wpc_zone_natural_witnessed750()) {
+            return false;
         }
         return true;
     }
 
-    /**
-     * Raster-zoneify backstop. nd-skipped origin rasters (metadata-broken attachments the
-     * negotiated/img lane never touched, plus theme/CSS-background uploads outside the srcset
-     * rewriter) leak to the origin host — SVGs got a backstop in wpc_svg_zoneify(), rasters didn't.
-     * Host-swaps absolute + root-relative origin /wp-content/uploads/ png/jpg/gif refs onto the zone,
-     * SAME extension — same bytes 200 from the CDN, no format change. No blanket webp swap: <link
-     * rel=icon>/og:image would break favicon parsers + webp-blind scrapers, and a GIF would flatten to
-     * a static webp. <picture> blocks are masked first so the builder-owned typed <source>s and their
-     * u: targets are never touched.
-     */
+
     public static function wpc_raster_zoneify($html)
     {
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:wpc_raster_zoneify') : null;
         if (!is_string($html) || $html === '' || !self::wpc_raster_zoneify_active()) {
             return $html;
         }
         $wpc_pic_blocks = [];
         if (stripos($html, '<picture') !== false) {
-            // String-based <picture> masking (NOT regex). The old '#<picture\b.*?</picture>#is' returned
-            // NULL on pcre.backtrack_limit on large Elementor pages, and the bail-to-original below then
-            // silently skipped ALL naturalization — so gallery / background / storage transforms stayed
-            // /q: on exactly the heavy pages that need it (acrystalglass). A linear strpos scan can't
-            // backtrack, so the naturalize ALWAYS runs. Mirrors the old \b (skips <pictureX) and masks
-            // each first <picture>..</picture> block.
+
+
             $masked = '';
             $offset = 0;
             $hlen   = strlen($html);
             while (($start = stripos($html, '<picture', $offset)) !== false) {
                 $after = ($start + 8 < $hlen) ? $html[$start + 8] : '';
                 if ($after !== '' && (ctype_alnum($after) || $after === '_')) {
-                    // not a <picture> tag (e.g. <picturex) — emit through it and continue
+
                     $masked .= substr($html, $offset, ($start + 8) - $offset);
                     $offset  = $start + 8;
                     continue;
                 }
                 $end = stripos($html, '</picture>', $start);
                 if ($end === false) {
-                    break; // unclosed — leave the remainder unmasked (old regex wouldn't match it either)
+                    break;
                 }
-                $end += 10; // strlen('</picture>')
+                $end += 10;
                 $k = "\x01WPCPIC" . count($wpc_pic_blocks) . "\x01";
                 $wpc_pic_blocks[$k] = substr($html, $start, $end - $start);
                 $masked .= substr($html, $offset, $start - $offset) . $k;
@@ -1655,40 +2006,34 @@ class wps_cdn_rewrite
         }
         $origin = wp_parse_url(home_url(), PHP_URL_HOST);
         $o = preg_quote($origin, '#');
-        // GIF host-swaps to the zone ONLY on a CF-direct zone: on Bunny a GIF gets no next-gen
-        // conversion, so naturalizing it is pure WPC egress for zero benefit — leave it on origin.
-        // (Runs AFTER the per-image gate, so it must exclude gif too or it re-host-swaps a gif the
-        // gate left on origin.)
+
+
         $nat_gif = (class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery()) ? '|gif' : '';
-        // Emit .webp for transcodable rasters on a proven negotiating edge. This outermost pass
-        // host-swaps any leftover origin uploads URL (gallery <a href>, data-large_image, the nd
-        // data-wpc-fb fallback) and was same-ext, so on a CF-fronted Bunny zone those double-fetched
-        // alongside the nd .webp. Derive CF-direct from emit-host-vs-cname (NOT zone_is_cf()'s CF-RAY
-        // false-positive); only swap when nd is active. gif stays gif; un-witnessed CF / nd-inactive →
-        // same-ext. The edge down-negotiates .webp→jpeg for non-webp Accept, so scraper/legacy paths
-        // stay valid by Content-Type.
+        $wpc_ng738 = apply_filters('wpc_raster_zoneify_nextgen', true) ? '|webp|avif' : '';
+
+
         $zn = self::$zone_name;
         $cf_cname_z  = (defined('WPS_IC_CF_CNAME') && function_exists('get_option')) ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
         $z_cf_direct = ($cf_cname_z !== '' && stripos((string) $zn, $cf_cname_z) !== false);
         $z_edge_webp = (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_single_url_format'));
         $z_swap = static function ($path) use ($z_edge_webp, $z_cf_direct) {
-            if (!preg_match('#^(.*\.)(png|jpe?g|gif)(\?.*)?$#i', $path, $mm)) return $path; // no ext → verbatim
+            if (!preg_match('#^(.*\.)(png|jpe?g|gif)(\?.*)?$#i', $path, $mm)) return $path;
             $ext = strtolower($mm[2]);
             $fmt = $z_edge_webp ? wps_rewriteLogic::wpc_single_url_format($ext, $z_cf_direct, true) : $ext;
-            $out = (is_string($fmt) && $fmt !== '') ? $fmt : $ext; // gif→gif, un-witnessed/KILL → same-ext
+            $out = (is_string($fmt) && $fmt !== '') ? $fmt : $ext;
             return $mm[1] . $out . (isset($mm[3]) ? $mm[3] : '');
         };
-        // Absolute origin uploads rasters.
+        
         $z_abs = preg_replace_callback(
-            '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . ')(?:\?[^"\'()\s<>]*)?)#i',
+            '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . $wpc_ng738 . ')(?:\?[^"\'()\s<>]*)?)#i',
             static function ($m) use ($zn, $z_swap) { return 'https://' . $zn . $z_swap($m[1]); },
             $html
         );
         if (is_string($z_abs)) $html = $z_abs;
-        // Root-relative refs.
+        
         $z_rel = preg_replace_callback(
-            '#(["\'(])(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . ')(?:\?[^"\'()\s<>]*)?)#i',
+            '#(["\'(])(/wp-content/uploads/[^"\'()\s<>]+?\.(?:png|jpe?g' . $nat_gif . $wpc_ng738 . ')(?:\?[^"\'()\s<>]*)?)#i',
             static function ($m) use ($zn, $z_swap) { return $m[1] . 'https://' . $zn . $z_swap($m[2]); },
             $html
         );
@@ -1699,24 +2044,16 @@ class wps_cdn_rewrite
         return $html;
     }
 
-    /**
-     * webp-immediate gate. Bunny chains: always safe (edge negotiates AND downgrades natively). CF
-     * chains: only when the zone's pod is >= 2.89.18.2 — below that a legacy browser's jpg-downgrade
-     * could cache-pin itself under a .webp URL at CF's full TTL (the vary-blind poisoning lane). Pod
-     * version comes from the asset probe's x-cdn-version capture.
-     */
+
     public static function wpc_webp_immediate_ok()
     {
-        // KILL is the single emergency off-ramp. This witness feeds the bare-<img>/CSS-bg naturalize
-        // lane, which isn't gated by natural_assets_on() (the lane that honors KILL), so without this a
-        // KILL'd CF site would still naturalize wp:1→.webp there. Symmetric with avif_natural_source_ok.
+
+
         if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) {
             return false;
         }
-        // Config-authoritative CF detection. Request-header detection is blind to a CF-direct CNAME
-        // zone over a non-orange origin (no CF header on any origin render); without zone_is_cf() the
-        // optimistic `return true` below would promote a vary-blind .webp on the CF edge (CSS-bg /
-        // slideshow have no fallback). zone_is_cf() routes such a zone to the witness path instead.
+
+
         $cf = !empty($_SERVER['HTTP_CF_RAY']) || !empty($_SERVER['HTTP_CF_VISITOR']) || get_option('wpc_v2_cf_assets_seen', 0);
         if (!$cf && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'zone_is_cf')) {
             $cf = wps_rewriteLogic::zone_is_cf();
@@ -1724,94 +2061,95 @@ class wps_cdn_rewrite
         if (!$cf) {
             return true;
         }
-        // Force-natural operator override (default OFF): promote natural .webp on a CF zone the
-        // operator confirmed vary-correct + OTF-live, before the orch echoes the witness. Short-circuits
-        // the vary-blind-poisoning gate below, so only ever true on a confirmed zone.
+
+
         if (function_exists('wpc_force_natural') && wpc_force_natural()) {
             return true;
         }
-        // Honor the orch's per-zone native_accept_vary witness, symmetric with avif:
-        //   true  → promote (provisioned, vary-correct — webp lands in lockstep with avif);
-        //   false → orch asserts this CF zone is NOT vary-correct → stay on the wp:1 transform. A
-        //           capable pod binary doesn't guarantee EnableWebPVary, and a natural .webp would let a
-        //           legacy jpg-downgrade pin under the .webp URL on the vary-blind edge — the orch's
-        //           zone-config-level witness is the stronger authority, so it wins;
-        //   null  → orch hasn't reported → fall through to the pod-version witness below.
+
+
         if (class_exists('WPC_Delivery_Resolver')) {
             $nav = WPC_Delivery_Resolver::orch_nav_signal();
             if ($nav === true)  return true;
             if ($nav === false) return false;
         }
-        // Un-provisioned CF fallback is optimistic, symmetric with the AVIF witness. The pod-version
-        // probe below stays a capability signal but must not lag the AVIF leg, or a fresh CF zone ships
-        // natural-avif + transform-webp (half-natural <picture>). WebP is emitted only as a typed
-        // <source>, so a no-webp UA never fetches the .webp URL → no vary-blind pin. Still overridable:
-        // nav=false above hard-disables, KILL/force handled above.
+
+
         $pv = (string) get_transient('wpc_v2_cf_pod_version');
-        // Promote-on-proof self-capture. The pod-version transient is otherwise only written by the
-        // healthcheck asset-probe, so on a normal CF frontend render it's frequently unset, wrongly
-        // dropping WebP to wp:1 even though the pod is capable. If unset, capture it off-render
-        // (admin/cron); frontend renders only read the cached verdict.
+
+
         if ($pv === '' && (is_admin() || (defined('DOING_CRON') && DOING_CRON))) {
             $zone = (string) get_option('ic_cdn_zone_name', '');
             if ($zone !== '') {
                 $r  = wp_remote_get('https://' . $zone . '/wp-includes/css/dist/block-library/style.min.css', ['timeout' => 3, 'sslverify' => false, 'redirection' => 2, 'limit_response_size' => 2048]);
                 $pv = is_wp_error($r) ? '' : (string) wp_remote_retrieve_header($r, 'x-cdn-version');
-                // good → cache 12h; empty/unreachable → 2h '0' sentinel so we don't re-probe every admin load
+
                 set_transient('wpc_v2_cf_pod_version', $pv !== '' ? $pv : '0', $pv !== '' ? 12 * HOUR_IN_SECONDS : 2 * HOUR_IN_SECONDS);
             }
         }
-        // Optimistic return. The probe verdict is kept for diagnostics but no longer gates: a capable,
-        // OTF-live edge is the fleet baseline and WebP-in-<picture> is type-safe, so we keep WebP
-        // natural in lockstep with the optimistic AVIF leg. The ONE hard-no is a definite-old probed
-        // version ($pv present, not the '0' unreachable sentinel, < 2.89.18.2) — the '0' sentinel and an
-        // empty probe are optimistic. nav=false above is the hard-off; KILL at the top reverts all.
+
+
         if ($pv !== '' && $pv !== '0' && version_compare(ltrim($pv, 'v'), '2.89.18.2', '<')) {
-            return false; // probe positively says this pod is too old for natural .webp
+            return false;
         }
         return true;
     }
 
-    /**
-     * NULL-safe preg_replace. A preg_replace that hits the PCRE backtrack/JIT-stack limit returns
-     * NULL; assigning that straight to the output-buffer $html serves a BLANK PAGE. Every buffer-pass
-     * rewrite routes through this: on NULL (or non-string) it returns the original subject unchanged,
-     * so the rewrite is skipped, never the page lost.
-     */
+    
+
+
+
+
+
     private static function wpc_preg_safe($pattern, $replacement, $subject)
     {
         $out = preg_replace($pattern, $replacement, $subject);
         return is_string($out) ? $out : $subject;
     }
 
-    /**
-     * Asset (CSS/JS) transform -> natural. Collapses the m:0 no-minify pass-through transform
-     * (cdn/m:0/a:ORIGIN_URL) to a clean natural zone URL (cdn host + the origin path). m:0 = no
-     * minify, so the natural URL is byte-identical — the edge fetches the same origin asset either
-     * way (confirmed: CSS "passes through fully"). ONLY m:0 (m:1+ are minified; collapsing would lose
-     * the minification). NULL-safe (a backtrack returns the original, never blanks the page).
-     * Kill switch: add_filter('wpc_asset_naturalize_enabled', '__return_false').
-     */
+
     public static function wpc_asset_naturalize($html)
     {
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:wpc_asset_naturalize') : null;
         if (!is_string($html) || $html === '' || empty(self::$zone_name) || stripos($html, '/m:0') === false) {
             return $html;
         }
         if (!apply_filters('wpc_asset_naturalize_enabled', true)) {
             return $html;
         }
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on')
+            && !wps_rewriteLogic::natural_assets_on()) {
+            return $html;
+        }
         $zone = preg_quote(self::$zone_name, '#');
         $bs = '\\\\?/';
         $zone_name = self::$zone_name;
-        // $bs-tolerant throughout (not just the a: target) so a FULLY JSON-escaped m:0 transform inside
-        // a JS/loader config (https:\/\/zone\/m:0\/a:...) also collapses; the closure re-escapes on output.
-        $rx = '#https?:' . $bs . $bs . '(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)' . $bs . 'm:0' . $bs . 'a:(https?:' . $bs . $bs . '[^"\'()\s<>]+?\.(?:css|js)(?:\?[^"\'()\s<>]*)?)#i';
+        
+        
+        $wpc_ext746 = 'css|js|mjs|svg|png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|json';
+        $rx = '#https?:' . $bs . $bs . '(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)' . $bs . 'm:0' . $bs . 'a:(https?:' . $bs . $bs . '[^"\'()\s<>]+?\.(?:' . $wpc_ext746 . ')(?:\?[^"\'()\s<>]*)?)#i';
         $out = preg_replace_callback($rx, static function ($m) use ($zone_name) {
             $u_esc = (strpos($m[1], '\\/') !== false);
             $u_plain = $u_esc ? str_replace('\\/', '/', $m[1]) : $m[1];
+            $wpc_hops746 = 0;
+            while ($wpc_hops746 < 4 && preg_match('#^https?://[^/]+/m:0/a:(https?://.+)$#i', $u_plain, $wpc_n746)) {
+                $u_plain = $wpc_n746[1];
+                $wpc_hops746++;
+            }
             $p = function_exists('wp_parse_url') ? wp_parse_url($u_plain) : parse_url($u_plain);
             if (empty($p['path'])) {
                 return $m[0];
+            }
+
+
+            if (!empty($p['host'])) {
+                $asset_host = preg_replace('/^www\./i', '', (string) $p['host']);
+                $site_host  = preg_replace('/^www\./i', '', (string) wp_parse_url(home_url(), PHP_URL_HOST));
+                $zone_host  = preg_replace('/^www\./i', '', (string) $zone_name);
+                $wpc_self746 = ($zone_host !== '' && strcasecmp($asset_host, $zone_host) === 0);
+                if (!$wpc_self746 && $site_host !== '' && strcasecmp($asset_host, $site_host) !== 0) {
+                    return $m[0];
+                }
             }
             $natural = 'https://' . $zone_name . $p['path'] . (isset($p['query']) ? '?' . $p['query'] : '');
             if ($u_esc) {
@@ -1829,28 +2167,24 @@ class wps_cdn_rewrite
         }
         $wpc_pic_blocks = [];
         if (stripos($html, '<picture') !== false) {
-            // String-based <picture> masking (NOT regex). The old '#<picture\b.*?</picture>#is' returned
-            // NULL on pcre.backtrack_limit on large Elementor pages, and the bail-to-original below then
-            // silently skipped ALL naturalization — so gallery / background / storage transforms stayed
-            // /q: on exactly the heavy pages that need it (acrystalglass). A linear strpos scan can't
-            // backtrack, so the naturalize ALWAYS runs. Mirrors the old \b (skips <pictureX) and masks
-            // each first <picture>..</picture> block.
+
+
             $masked = '';
             $offset = 0;
             $hlen   = strlen($html);
             while (($start = stripos($html, '<picture', $offset)) !== false) {
                 $after = ($start + 8 < $hlen) ? $html[$start + 8] : '';
                 if ($after !== '' && (ctype_alnum($after) || $after === '_')) {
-                    // not a <picture> tag (e.g. <picturex) — emit through it and continue
+
                     $masked .= substr($html, $offset, ($start + 8) - $offset);
                     $offset  = $start + 8;
                     continue;
                 }
                 $end = stripos($html, '</picture>', $start);
                 if ($end === false) {
-                    break; // unclosed — leave the remainder unmasked (old regex wouldn't match it either)
+                    break;
                 }
-                $end += 10; // strlen('</picture>')
+                $end += 10;
                 $k = "\x01WPCPIC" . count($wpc_pic_blocks) . "\x01";
                 $wpc_pic_blocks[$k] = substr($html, $start, $end - $start);
                 $masked .= substr($html, $offset, $start - $offset) . $k;
@@ -1860,14 +2194,156 @@ class wps_cdn_rewrite
             $html = $masked;
         }
         $html = self::wpc_raster_naturalize_passes($html);
-        // Upgrade the now-natural raster backgrounds (CSS files + inline styles) to never-404 image-set
-        // (AVIF+WebP, type()-selected, Vary-free). Runs on the picture-masked html, so <picture> source
-        // URLs are untouched. Self-gated + idempotent + NULL-safe.
+
+
         $html = self::wpc_css_bg_imageset_sweep($html);
+        $html = self::wpc_css_bg_external_sweep($html);
         if (!empty($wpc_pic_blocks)) {
             $html = strtr($html, $wpc_pic_blocks);
         }
         return $html;
+    }
+
+    
+    public static function wpc_css_path_collapse795($path)
+    {
+        $seg = explode('/', (string) $path);
+        $out = [];
+        foreach ($seg as $s) {
+            if ($s === '.' || ($s === '' && !empty($out))) { continue; }
+            if ($s === '..') { if (count($out) > 1) { array_pop($out); } continue; }
+            $out[] = $s;
+        }
+        return implode('/', $out);
+    }
+
+    
+
+
+
+
+
+
+    public static function wpc_css_rebase_urls795($css, $sheet_url)
+    {
+        $wpc_sp795 = (string) wp_parse_url((string) $sheet_url, PHP_URL_PATH);
+        $wpc_sh795 = (string) wp_parse_url((string) $sheet_url, PHP_URL_HOST);
+        if ($wpc_sp795 === '' || $wpc_sh795 === '') { return $css; }
+        $wpc_dir795 = rtrim(str_replace('\\', '/', dirname($wpc_sp795)), '/');
+        $wpc_out795 = preg_replace_callback('/\burl\(\s*(["\']?)([^"\')\s]+)\1\s*\)/i',
+            static function ($um) use ($wpc_dir795, $wpc_sh795) {
+                $u = (string) $um[2];
+                if ($u === '' || $u[0] === '/' || $u[0] === '#'
+                    || preg_match('#^(?:https?:)?//|^data:#i', $u)) {
+                    return $um[0];
+                }
+                $abs = self::wpc_css_path_collapse795($wpc_dir795 . '/' . $u);
+                return 'url(' . $um[1] . 'https://' . $wpc_sh795 . $abs . $um[1] . ')';
+            }, (string) $css);
+        return is_string($wpc_out795) ? $wpc_out795 : $css;
+    }
+
+    
+
+
+
+
+
+
+
+
+    public static function wpc_css_bg_external_sweep($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, '.css') === false
+                || !self::wpc_css_bg_imageset_active()
+                || !apply_filters('wpc_css_bg_sweep_external', true)) {
+                return $html;
+            }
+            $wpc_oh795 = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+            $wpc_site795 = (string) site_url('/');
+            $wpc_sitep795 = (string) wp_parse_url($wpc_site795, PHP_URL_PATH);
+            if ($wpc_oh795 === '' || !defined('WP_CONTENT_DIR')) { return $html; }
+            $wpc_idx795 = get_option('wpc_bgset_idx');
+            if (!is_array($wpc_idx795)) { $wpc_idx795 = []; }
+            $wpc_dirty795 = false;
+            $wpc_n795 = 0;
+            $out = preg_replace_callback('/<link\b[^>]*\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1[^>]*>/i',
+                static function ($lm) use ($wpc_oh795, $wpc_sitep795, &$wpc_idx795, &$wpc_dirty795, &$wpc_n795) {
+                    if ($wpc_n795 >= (int) apply_filters('wpc_css_bg_sweep_external_max', 40)) { return $lm[0]; }
+                    $href = (string) $lm[2];
+                    $bn = strtolower(basename((string) wp_parse_url($href, PHP_URL_PATH)));
+                    
+                    if (strpos($href, '/cache/wpc-bgset/') !== false
+                        || preg_match('/^(?:wps_|critical_|font-subsets|used)/', $bn)) {
+                        return $lm[0];
+                    }
+                    $h = (string) wp_parse_url($href, PHP_URL_HOST);
+                    if ($h !== '' && strcasecmp($h, $wpc_oh795) !== 0) { return $lm[0]; } 
+                    $path = (string) wp_parse_url($href, PHP_URL_PATH);
+                    if ($path === '' || strpos($path, '/wp-') === false) { return $lm[0]; }
+                    
+                    $rel = $path;
+                    if ($wpc_sitep795 !== '' && $wpc_sitep795 !== '/' && strpos($rel, rtrim($wpc_sitep795, '/') . '/') === 0) {
+                        $rel = substr($rel, strlen(rtrim($wpc_sitep795, '/')));
+                    }
+                    $disk = rtrim(ABSPATH, '/') . $rel;
+                    $wpc_n795++;
+                    $sz = @filesize($disk);
+                    $mt = @filemtime($disk);
+                    if (!$sz || !$mt || $sz < 64 || $sz > (int) apply_filters('wpc_css_bg_sweep_external_cap', 1048576)) {
+                        return $lm[0];
+                    }
+                    $key = md5($path);
+                    $sig = $mt . ':' . $sz;
+                    if (isset($wpc_idx795[$key]) && $wpc_idx795[$key]['sig'] === $sig) {
+                        $o = (string) $wpc_idx795[$key]['out'];
+                        if ($o === '' || !@is_readable(WP_CONTENT_DIR . '/cache/wpc-bgset/' . $o)) {
+                            return $lm[0];
+                        }
+                        return str_replace($lm[1] . $lm[2] . $lm[1],
+                            $lm[1] . content_url('cache/wpc-bgset/' . $o) . $lm[1], $lm[0]);
+                    }
+                    $css = (string) @file_get_contents($disk);
+                    $verdict = '';
+                    if ($css !== '' && stripos($css, 'background') !== false) {
+                        $based = self::wpc_css_rebase_urls795($css, 'https://' . $wpc_oh795 . $path);
+                        $swept = self::wpc_css_bg_imageset_sweep($based);
+                        if (is_string($swept) && substr_count($swept, 'image-set(') > substr_count($css, 'image-set(')) {
+                            $wpc_dd795 = WP_CONTENT_DIR . '/cache/wpc-bgset';
+                            if (!is_dir($wpc_dd795)) { @mkdir($wpc_dd795, 0755, true); }
+                            $stem = preg_replace('/\.css$/', '', basename($path));
+                            $name = $stem . '-' . substr(md5($swept), 0, 10) . '.css';
+                            if (@file_put_contents($wpc_dd795 . '/' . $name, $swept) !== false) {
+                                
+                                
+                                $wpc_sib795 = (array) @glob($wpc_dd795 . '/' . $stem . '-*.css');
+                                if (count($wpc_sib795) > 3) {
+                                    usort($wpc_sib795, static function ($a, $b) {
+                                        return (int) @filemtime($a) - (int) @filemtime($b);
+                                    });
+                                    foreach (array_slice($wpc_sib795, 0, count($wpc_sib795) - 3) as $old) {
+                                        if (basename($old) !== $name) { @unlink($old); }
+                                    }
+                                }
+                                $verdict = $name;
+                            }
+                        }
+                    }
+                    $wpc_idx795[$key] = ['sig' => $sig, 'out' => $verdict];
+                    $wpc_dirty795 = true;
+                    if ($verdict === '') { return $lm[0]; }
+                    return str_replace($lm[1] . $lm[2] . $lm[1],
+                        $lm[1] . content_url('cache/wpc-bgset/' . $verdict) . $lm[1], $lm[0]);
+                }, $html);
+            if ($wpc_dirty795) {
+                if (count($wpc_idx795) > 80) { $wpc_idx795 = array_slice($wpc_idx795, -60, null, true); }
+                update_option('wpc_bgset_idx', $wpc_idx795, false);
+            }
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
     }
 
     private static function wpc_raster_naturalize_passes($html)
@@ -1885,32 +2361,28 @@ class wps_cdn_rewrite
         if (!class_exists('WPC_Negotiated_Delivery') || !WPC_Negotiated_Delivery::cdn_images_enabled($s)) {
             return $html;
         }
+        if (!self::wpc_zone_natural_witnessed750()) {
+            return $html;
+        }
         $zone = preg_quote((string) self::$zone_name, '#');
-        // Pass 0 — double-zone collapse, any mode. A transform wrapping an already-zoned URL
-        // (/q:i/…/u:https://{zone}/…) 302s as text/plain and wastes a request before the natural 200:
-        // the edge can't treat itself as the origin at any width/format. The fonts lane double-wraps
-        // too (a rewriter without a zone-skip guard re-wrapping an already-zoned URL — works via a
-        // double hop but fragments the cache). Collapse any zone-prefixed wrap (q:/r:/wp:/w:/m:/
-        // font:true chains ending in a:/u:) whose target is already the zone, down to the inner URL.
+
+
         $html = self::wpc_preg_safe(
             '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:(?:q|r|wp|w|m):[a-z0-9]+/|font:true/){1,40}(?:a|u):(https?://' . $zone . '/[^"\'()\s<>]+)#i',
             '$1',
             $html
         );
         $origin = wp_parse_url(home_url(), PHP_URL_HOST);
-        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { // EQUALITY not substring: cdn.{origin} contains origin, so a substring guard false-positives every custom-CNAME zone
-            return $html; // zone derives from origin host → swapping would self-loop
+        if (!$origin || strcasecmp((string) self::$zone_name, $origin) === 0) { 
+            return $html;
         }
-        // Any width (not just w:1): the srcset ladder owns responsive widths, so uploads rasters go
-        // to natural zone URLs across the board — per-request edge resizing isn't part of the contract.
-        // Uploads-scoped (theme/plugin-path transforms keep their working form). The "/" or "\/" lets
-        // JSON-escaped u: targets naturalize too.
+        
+
+        
+        
         $bs = '\\\\?/';
-        // Media-base scope for the transform->natural collapse. Was hardcoded to /wp-content/uploads;
-        // now derived from wpc_v2_upload_base_paths() so offloaded / page-builder media (e.g. /storage)
-        // collapse to natural too — riding the SAME $otf_live witness gate /uploads already passes, so
-        // no new risk (uploads already proves natural delivery works on the zone). Each base's path
-        // segments are joined by $bs so JSON-escaped u: targets still match.
+
+
         $wpc_bases = function_exists('wpc_v2_upload_base_paths') ? wpc_v2_upload_base_paths() : ['/wp-content/uploads'];
         $base_parts = [];
         foreach ($wpc_bases as $wpc_b) {
@@ -1921,15 +2393,13 @@ class wps_cdn_rewrite
         $base_alt = !empty($base_parts) ? '(?:' . implode('|', array_unique($base_parts)) . ')' : 'wp-content' . $bs . 'uploads';
         $rx = '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:q:[a-z0-9]+/)?r:\d+/wp:(\d)/w:\d+/u:(https?:' . $bs . $bs . '[^"\'()\s<>]+?' . $bs . $base_alt . $bs . '[^"\'()\s<>]+?\.(?:png|jpe?g|webp|gif)(?:\?[^"\'()\s<>]*)?)#i';
         $naturalize = static function ($m, $allow_webp) use ($wpc_bases) {
-            // Never collapse a wp:2 (avif-intent) transform: its u: target is a jpg/png, so collapsing
-            // changes the served format class — the jpg-under-an-avif-slot corruption. No natural
-            // equivalent to synthesize (the builder emits the natural .avif when the file exists);
-            // leave the transform to do its interim+trigger work.
+
+
             if ($m[1] === '2') {
                 return $m[0];
             }
-            // Escape-tolerant: a u: target inside JSON arrives slash-escaped — unescape to find the
-            // path, re-escape on output.
+            
+            
             $u_esc = (strpos($m[2], '\\/') !== false);
             $u_plain = $u_esc ? str_replace('\\/', '/', $m[2]) : $m[2];
             $pos = false;
@@ -1942,32 +2412,49 @@ class wps_cdn_rewrite
             if ($pos === false) {
                 return $m[0];
             }
-            $rel = substr($u_plain, $pos); // exact origin path+query bytes — no re-encoding
+
+
+            if (preg_match_all('#https?://([^/"\'()\s<>]+)#i', substr($u_plain, 0, $pos), $host_matches) && !empty($host_matches[1])) {
+                $asset_host = preg_replace('/^www\./i', '', (string) end($host_matches[1]));
+                $site_host  = preg_replace('/^www\./i', '', (string) wp_parse_url(home_url(), PHP_URL_HOST));
+                if ($site_host !== '' && strcasecmp($asset_host, $site_host) !== 0) {
+                    return $m[0];
+                }
+            }
+
+
+            
+            
+            $wpc_w96 = preg_match('#/w:(\d+)/(?:a|u):#i', $m[0], $wpc_wm96) ? (int) $wpc_wm96[1] : 1;
+            if ($wpc_w96 > 1) {
+                $wpc_path96 = preg_replace('/\?.*$/', '', $u_plain);
+                if (!preg_match('/-(\d+)x\d+\.(?:png|jpe?g|webp|gif)$/i', $wpc_path96, $wpc_sm96)
+                    || (int) $wpc_sm96[1] > $wpc_w96) {
+                    return $m[0];
+                }
+            }
+            $rel = substr($u_plain, $pos);
             if ($allow_webp && $m[1] === '1') {
                 $rel = preg_replace('/\.(?:png|jpe?g)(\?|$)/i', '.webp$1', $rel);
             }
             $natural = 'https://' . self::$zone_name . $rel;
             if ($u_esc) {
-                $natural = str_replace('/', '\\/', $natural); // keep JSON valid
+                $natural = str_replace('/', '\\/', $natural);
             }
             return $natural;
         };
-        // Pass 1 — <link>/<meta> tags: same-ext natural, any mode. These tags are never
-        // JS-width-managed, so the nd/jpeg gate below doesn't apply, and w:1 does no resize work anyway.
+        
+        
         $html = preg_replace_callback('#<(?:link|meta)\b[^>]*>#i', static function ($tag) use ($rx, $naturalize) {
             return preg_replace_callback($rx, static function ($m) use ($naturalize) {
                 return $naturalize($m, false);
             }, $tag[0]);
         }, $html);
-        // Pass 1.5 — no-work transforms (w:1), any mode, same-ext (picture-mode sites, where the
-        // nd-gated pass below never ran): q:u/wp:0/w:1 transforms of origin uploads, plus the
-        // nested-monster class — a transform wrapping the site's OLD zone host which wraps origin
-        // (old-era content re-wrapped by a rewriter with no foreign-zone guard). The capture runs
-        // through the nested junk to the innermost uploads target, so one pass digests the whole chain.
+
+
         $rx_w1 = '#https?://(?:' . $zone . '|[a-z0-9-]+\.zapwp\.com)/(?:q:[a-z0-9]+/)?r:\d+/wp:(\d)/w:1/u:(https?:' . $bs . $bs . '[^"\'()\s<>]+?' . $bs . $base_alt . $bs . '[^"\'()\s<>]+?\.(?:png|jpe?g|webp|gif)(?:\?[^"\'()\s<>]*)?)#i';
-        // Route the webp-vs-same-ext decision through the resolver per-match: an un-witnessed CF zone
-        // collapses to same-ext (no vary-blind .webp on a no-fallback URL), Bunny/witnessed-CF get
-        // negotiated .webp.
+
+
         $html = preg_replace_callback($rx_w1, static function ($m) use ($naturalize) {
             $u   = ($m[1] === '1') ? (strpos($m[2], '\\/') !== false ? str_replace('\\/', '/', $m[2]) : $m[2]) : '';
             $ext = $u !== '' ? strtolower(pathinfo(preg_replace('/\?.*$/', '', $u), PATHINFO_EXTENSION)) : '';
@@ -1977,32 +2464,19 @@ class wps_cdn_rewrite
         }, $html);
         $nd_webp = WPC_Negotiated_Delivery::is_active();
         $nd_jpeg = !$nd_webp && WPC_Negotiated_Delivery::is_active_jpeg();
-        // OTF-live Pass-2 ungate. When the zone is OTF-live (the CDN resizes a natural -WxH URL by its
-        // filename suffix and negotiates format off Accept), the q:i/wp:N/w:N transform does no work a
-        // natural URL can't reproduce — collapsing to natural is byte-equivalent at the slot width and
-        // better-cached. Then Pass 2 must run regardless of nd/jpeg mode — picture/adaptive-mode sites
-        // (both $nd_webp/$nd_jpeg false) were still shipping w:N transforms in CSS/srcset/data-attrs.
-        // Witness is the same trichotomy the picture builder gates on — never a blind promotion:
-        //   • wpc_force_natural()        — operator-confirmed vary-correct + OTF-live zone;
-        //   • avif_natural_source_ok()   — provisioned (orch_nav_signal()===true) OR Bunny/CF-flag;
-        //   • wpc_webp_immediate_ok()    — symmetric webp witness (optimistic on un-witnessed CF; the
-        //                                  pod-version is only a negative hard-no, nav=false is the
-        //                                  authoritative hard-off, KILL reverts everything).
+
+
         $otf_live = (function_exists('wpc_force_natural') && wpc_force_natural())
             || (class_exists('wps_rewriteLogic') && wps_rewriteLogic::avif_natural_source_ok())
             || self::wpc_webp_immediate_ok();
         if (!$nd_webp && !$nd_jpeg && !$otf_live) {
-            return $html; // not OTF-live and not nd/jpeg → keep transforms (current conservative form)
+            return $html;
         }
-        // Pass 2 — everything else (CSS url(), style attrs, srcset, data attrs): webp ext-swap in nd
-        // mode or when OTF-live, origin ext in jpeg mode. The wp:2-avif-skip, uploads-scope, self-loop
-        // equality and <picture> masking all still hold — this only widens WHEN Pass 2 runs. nd-webp
-        // mode forces its own typed-webp URL; otherwise the per-match resolver collapses an un-witnessed
-        // CF zone to same-ext (no vary-blind .webp on a no-fallback URL) and gives Bunny/witnessed-CF
-        // negotiated .webp.
+
+
         $html = preg_replace_callback($rx, static function ($m) use ($naturalize, $nd_webp) {
             if ($nd_webp) {
-                return $naturalize($m, true); // nd-mode owns its typed-webp delivery URL
+                return $naturalize($m, true);
             }
             $u   = (strpos($m[2], '\\/') !== false) ? str_replace('\\/', '/', $m[2]) : $m[2];
             $ext = strtolower(pathinfo(preg_replace('/\?.*$/', '', $u), PATHINFO_EXTENSION));
@@ -2010,10 +2484,8 @@ class wps_cdn_rewrite
                 && wps_rewriteLogic::wpc_single_url_format($ext, null, null) === 'webp');
             return $naturalize($m, $allow);
         }, $html);
-        // Pass 3 — splash un-stick. Legacy-lane images ship the base64 SVG placeholder in src with the
-        // real URL in data-src, but the un-splash JS is intentionally dequeued on nd/jpeg paths →
-        // placeholder forever, invisible images. Native loading="lazy" already lazy-loads these, so
-        // restore the real URL into src and drop data-src. Only fires on the exact splash signature.
+
+
         $html = preg_replace_callback('#<img\b[^>]*\bdata-src="[^"]+"[^>]*>#i', static function ($m) {
             $tag = $m[0];
             if (strpos($tag, 'src="data:image/svg+xml;base64,') === false) {
@@ -2030,81 +2502,1032 @@ class wps_cdn_rewrite
 
     public function buffer_local_callback_wrapped($html)
     {
-        $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html)))))));
-        $html = self::wpc_lazy_srcset_buffer_pass($html);
-        $html = self::wpc_lcp_hint_pass($html);
-        return self::wpc_freshness_marker($html);
+        $wpc_span530 = class_exists('Wpc_Prof_Span530')
+            ? new Wpc_Prof_Span530('OBCHAIN:buffer_local_callback_wrapped') : null;
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (function_exists('wpc_is_low_value_page') && function_exists('did_action')
+            && did_action('template_redirect') && wpc_is_low_value_page()) {
+            $GLOBALS['wpc_shed520'] = 1;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rewrite-skip-lowvalue', '', '', ['fn' => __FUNCTION__]);
+            }
+            return $html;
+        }
+        if ((function_exists('wpc_render_slot_acquire') && !wpc_render_slot_acquire())
+            || (function_exists('wpc_memory_pressure') && wpc_memory_pressure())
+            || (function_exists('wpc_under_pressure') && wpc_under_pressure())
+            || (function_exists('wpc_safe_mode') && wpc_safe_mode())) {
+            $GLOBALS['wpc_shed520'] = 1;
+            if (function_exists('wpc_prof_mark')) { wpc_prof_mark('shed:' . __FUNCTION__, microtime(true)); }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rewrite-shed', '', '', ['fn' => __FUNCTION__, 'bytes' => strlen((string) $html)]);
+            }
+            return $html;
+        }
+        
+        
+        if (function_exists('wpc_inv2_stash')) {
+            wpc_inv2_stash($html);
+        }
+        $wpc_in71 = $html;
+        try {
+            $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_eager_nextgen752(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html))))))));
+            $wpc_fb735a = self::add_asset_failover($html);
+            if (is_string($wpc_fb735a) && $wpc_fb735a !== '') { $html = $wpc_fb735a; }
+            if (class_exists('wps_cacheHtml')) {
+                $html = wps_cacheHtml::critlessUndefer($html);
+                $html = wps_cacheHtml::varsGuard($html);
+                $html = wps_cacheHtml::bricksAtfUnveil($html);
+                $html = wps_cacheHtml::critBgPreload($html);
+            }
+            $html = self::wpc_lazy_srcset_buffer_pass($html);
+            $html = self::wpc_srcset_space_encode_pass($html);
+            $html = self::wpc_lcp_hint_pass($html);
+            $html = self::wpc_afold_sizes_pass($html);
+            $html = self::wpc_quiet_wire_pass($html);
+            $html = self::wpc_below_fold_cv_tag($html);
+            $html = self::wpc_picture_sizes_parity_pass($html);
+            $html = self::wpc_picture_fidelity_pass($html);
+            $html = self::wpc_lcp_img_preload_pass($html);
+            $html = self::wpc_embed_facade_pass($html);
+            $html = self::wpc_rum_beacon_pass($html);
+            $html = self::wpc_font_preconnect_pass($html);
+            $html = self::wpc_zone_font_preconnect_pass($html);
+            $html = self::wpc_fonts_drop_remote_dup($html);
+            $html = self::wpc_zone_preconnect_prune_pass($html);
+            $html = self::wpc_svg_dims_pass($html);
+            $html = self::wpc_img_aspect_pass($html);
+            $html = self::wpc_lcp_eager_invariant_pass($html);
+            $html = self::wpc_hoist_viewport_pass($html);
+            $html = self::wpc_prune_idle_preconnects_pass($html);
+            $html = self::wpc_video_delay_pass($html);
+            $html = self::wpc_trim_preset_vars_page($html);
+            $html = self::wpc_slider_settle_pass($html);
+            $html = self::wpc_preload_img_coherence796($html);
+            $html = self::wpc_freshness_marker($html);
+        } catch (\Throwable $wpc_t71) {
+            return self::wpc_never_blank($wpc_in71, '', $wpc_t71);
+        }
+        return self::wpc_never_blank($wpc_in71, $html);
+    }
+
+
+    
+    
+    public static function wpc_video_delay_pass($html)
+    {
+        if (!is_string($html) || $html === '' || !apply_filters('wpc_video_delay', true)
+            || stripos($html, '<video') === false) {
+            return $html;
+        }
+        $out = preg_replace_callback('/<video\b[^>]*>/i', function ($m) {
+            $t = $m[0];
+            if (stripos($t, 'autoplay') === false || stripos($t, 'data-wpc-src') !== false
+                || !preg_match('/\bposter\s*=\s*["\'][^"\']{8,}["\']/i', $t)
+                || !preg_match('/(?<![-\w])src\s*=\s*["\']([^"\']+\.(?:mp4|webm)(?:\?[^"\']*)?)["\']/i', $t, $sm)) {
+                return $t;
+            }
+            $t = (string) preg_replace('/(?<![-\w])src\s*=\s*["\'][^"\']*["\']/i', 'data-wpc-src="' . esc_attr($sm[1]) . '"', $t, 1);
+            if (preg_match('/\bclass\s*=\s*["\']([^"\']*)["\']/i', $t)) {
+                $t = (string) preg_replace('/\bclass\s*=\s*(["\'])([^"\']*)\1/i', 'class=$1$2 wpc-video-delay$1', $t, 1);
+            } else {
+                $t = (string) preg_replace('/<video\b/i', '<video class="wpc-video-delay"', $t, 1);
+            }
+            return $t;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+
+    
+    
+    
+    
+    
+    public static function wpc_elementor_bands797($html)
+    {
+        if (!is_string($html) || $html === '') {
+            return [];
+        }
+        $i = strpos($html, '"responsive":{"breakpoints":');
+        if ($i === false) {
+            return [];
+        }
+        $chunk = substr($html, $i, 2400);
+        $order = ['mobile', 'mobile_extra', 'tablet', 'tablet_extra', 'laptop'];
+        $maxes = [];
+        foreach ($order as $dev) {
+            if (preg_match('/"' . $dev . '":\{[^{}]*"value":(\d+)[^{}]*"direction":"max"[^{}]*"is_enabled":true/', $chunk, $m)) {
+                $maxes[] = ['dev' => $dev, 'v' => (int) $m[1]];
+            }
+        }
+        if (!$maxes) {
+            return [];
+        }
+        $wide = 0;
+        if (preg_match('/"widescreen":\{[^{}]*"value":(\d+)[^{}]*"direction":"min"[^{}]*"is_enabled":true/', $chunk, $wm)) {
+            $wide = (int) $wm[1];
+        }
+        $bands = [];
+        
+        $bands['mobile'] = [0, $maxes[0]['v'] - 1];
+        for ($k = 1; $k < count($maxes); $k++) {
+            $bands[$maxes[$k]['dev']] = [$maxes[$k - 1]['v'], $maxes[$k]['v'] - 1];
+        }
+        $last = $maxes[count($maxes) - 1];
+        $bands['desktop'] = [$last['v'], $wide ? $wide - 1 : 0];
+        if ($wide) {
+            $bands['widescreen'] = [$wide, 0];
+        }
+        return $bands;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_slider_settle_pass($html)
+    {
+        if (!is_string($html) || $html === ''
+            || strpos($html, 'slides_per_view') === false
+            || stripos($html, 'swiper') === false
+            || strpos($html, 'wpc-slider-settle797') !== false
+            || stripos($html, '</head>') === false) {
+            return $html;
+        }
+        if (empty(self::$settings['delay-js']) && empty(self::$settings['delay-js-v2'])) {
+            return $html;
+        }
+        if (!apply_filters('wpc_slider_settle', true)) {
+            return $html;
+        }
+        try {
+            $bands = self::wpc_elementor_bands797($html);
+            if (!$bands) {
+                return $html;
+            }
+            if (!preg_match_all('/<div\b[^>]*class="([^"]*\belementor-element-([a-z0-9]+)\b[^"]*)"[^>]*data-settings="([^"]*slides_per_view[^"]*)"/i', $html, $wm, PREG_SET_ORDER)) {
+                return $html;
+            }
+            $css = '';
+            $n_widgets = 0;
+            foreach ($wm as $w) {
+                if (++$n_widgets > 6) {
+                    break;
+                }
+                $cfg = json_decode(html_entity_decode($w[3], ENT_QUOTES), true);
+                if (!is_array($cfg)) {
+                    continue;
+                }
+                $sel = '.elementor-element-' . $w[2];
+                $rules = '';
+                foreach ($bands as $dev => $mm) {
+                    $nk = ($dev === 'desktop') ? 'slides_per_view' : 'slides_per_view_' . $dev;
+                    $gk = ($dev === 'desktop') ? 'space_between' : 'space_between_' . $dev;
+                    $n = isset($cfg[$nk]) ? $cfg[$nk] : null;
+                    if ($n === null && $dev === 'widescreen'
+                        && (isset($cfg['space_between_widescreen']) || isset($cfg['slides_to_scroll_widescreen']))) {
+                        $n = isset($cfg['slides_per_view']) ? $cfg['slides_per_view'] : null;
+                    }
+                    if ($n === null || !preg_match('/^\d+$/', (string) $n) || (int) $n < 2) {
+                        continue;
+                    }
+                    $n = (int) $n;
+                    $gap = (isset($cfg[$gk]['size']) && is_numeric($cfg[$gk]['size'])) ? (float) $cfg[$gk]['size'] : $gap_desk;
+                    $gap = rtrim(rtrim(sprintf('%.2F', $gap), '0'), '.');
+                    $q = '@media(min-width:' . (int) $mm[0] . 'px)' . ($mm[1] ? ' and (max-width:' . (int) $mm[1] . 'px)' : '');
+                    $rules .= $q . '{' . $sel . ' .swiper-slide{flex-shrink:0;width:calc((100% - '
+                        . ($n - 1) . '*' . $gap . 'px)/' . $n . ');margin-right:' . $gap . 'px}}';
+                }
+                if ($rules === '') {
+                    continue;
+                }
+                $css .= $sel . ' .swiper,' . $sel . ' .swiper-container,' . $sel . ' .elementor-main-swiper{overflow:hidden}'
+                    . $sel . ' .swiper-wrapper{display:flex}' . $rules;
+            }
+            if ($css === '' || strlen($css) > 8192) {
+                return $html;
+            }
+            $tag = '<style id="wpc-slider-settle797">' . $css . '</style>';
+            $out = preg_replace('#</head>#i', $tag . '</head>', $html, 1);
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $wpc_e797) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    public static function wpc_preload_stem796($url)
+    {
+        $u = html_entity_decode((string) $url, ENT_QUOTES);
+        $u = (string) preg_replace('/[?#].*$/', '', $u);
+        
+        
+        $cp = strrpos($u, '/wp-content/');
+        $b = ($cp !== false) ? substr($u, $cp) : basename($u);
+        $b = (string) preg_replace('/\.(avif|webp)$/i', '', $b);
+        $b = (string) preg_replace('/\.[a-z0-9]+$/i', '', $b);
+        $b = (string) preg_replace('/-\d+x\d+$/', '', $b);
+        return strtolower($b);
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_preload_img_coherence796($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<img') === false
+            || stripos($html, 'rel="preload"') === false
+            || !apply_filters('wpc_preload_img_coherence', true)) {
+            return $html;
+        }
+        try {
+            $wpc_imgs796 = [];
+            if (preg_match_all('#<img\b[^>]*>#i', $html, $wpc_im796)) {
+                foreach ($wpc_im796[0] as $wpc_t796) {
+                    if (!preg_match('/(?<![-\w])src\s*=\s*["\']([^"\']+)["\']/i', $wpc_t796, $wpc_sm796)) {
+                        continue;
+                    }
+                    $wpc_src796 = trim($wpc_sm796[1]);
+                    $wpc_lazy796 = (bool) preg_match('/\bloading\s*=\s*["\']lazy["\']/i', $wpc_t796);
+                    $wpc_real796 = $wpc_src796;
+                    if (stripos($wpc_src796, 'data:') === 0) {
+                        $wpc_lazy796 = true;
+                        if (preg_match('/\bdata-wpc-qw-src\s*=\s*["\']([^"\']+)["\']/i', $wpc_t796, $wpc_qm796)
+                            || preg_match('/\bdata-(?:wpc-)?lazy-?src\s*=\s*["\']([^"\']+)["\']/i', $wpc_t796, $wpc_qm796)) {
+                            $wpc_real796 = trim($wpc_qm796[1]);
+                        } else {
+                            continue;
+                        }
+                    }
+                    $wpc_st796 = self::wpc_preload_stem796($wpc_real796);
+                    if ($wpc_st796 === '') {
+                        continue;
+                    }
+                    
+                    if (isset($wpc_imgs796[$wpc_st796]) && !$wpc_imgs796[$wpc_st796]['lazy']) {
+                        continue;
+                    }
+                    $wpc_imgs796[$wpc_st796] = [
+                        'src'    => $wpc_src796,
+                        'lazy'   => $wpc_lazy796,
+                        'srcset' => preg_match('/(?<![-\w])srcset\s*=\s*["\']([^"\']+)["\']/i', $wpc_t796, $wpc_ss796) ? trim($wpc_ss796[1]) : '',
+                        'sizes'  => preg_match('/(?<![-\w])sizes\s*=\s*["\']([^"\']+)["\']/i', $wpc_t796, $wpc_sz796) ? trim($wpc_sz796[1]) : '',
+                    ];
+                }
+            }
+            if (empty($wpc_imgs796)) {
+                return $html;
+            }
+            $wpc_mob796 = function_exists('wpc_ua_is_mobile') ? (bool) wpc_ua_is_mobile() : false;
+            $wpc_fixed796 = 0;
+            $wpc_dropped796 = 0;
+            $out = preg_replace_callback(
+                '#<link\b[^>]*\brel\s*=\s*["\']preload["\'][^>]*>#i',
+                function ($m) use ($wpc_imgs796, $wpc_mob796, &$wpc_fixed796, &$wpc_dropped796) {
+                    $t = $m[0];
+                    if (!preg_match('/\bas\s*=\s*["\']image["\']/i', $t)
+                        || !preg_match('/\bhref\s*=\s*["\']([^"\']+)["\']/i', $t, $hm)) {
+                        return $t;
+                    }
+                    
+                    if (preg_match('/\bid\s*=\s*["\'][^"\']*bg-preload/i', $t)) {
+                        return $t;
+                    }
+                    
+                    if (preg_match('/\bmedia\s*=\s*["\']([^"\']+)["\']/i', $t, $mm)) {
+                        $wpc_maxw796 = (stripos($mm[1], 'max-width') !== false);
+                        $wpc_minw796 = (stripos($mm[1], 'min-width') !== false);
+                        if (($wpc_maxw796 && !$wpc_minw796 && !$wpc_mob796)
+                            || ($wpc_minw796 && !$wpc_maxw796 && $wpc_mob796)) {
+                            return $t;
+                        }
+                    }
+                    $st = self::wpc_preload_stem796($hm[1]);
+                    if ($st === '' || !isset($wpc_imgs796[$st])) {
+                        return $t;
+                    }
+                    $img = $wpc_imgs796[$st];
+                    if (!empty($img['lazy'])) {
+                        $wpc_dropped796++;
+                        return apply_filters('wpc_preload_img_drop_lazy', true) ? '' : $t;
+                    }
+                    
+                    
+                    
+                    $new = preg_replace_callback('/\bhref\s*=\s*["\'][^"\']*["\']/i', function () use ($img) {
+                        return 'href="' . $img['src'] . '"';
+                    }, $t, 1);
+                    if (!is_string($new) || $new === '') {
+                        return $t;
+                    }
+                    $new = (string) preg_replace('/\s*\bimagesrcset\s*=\s*["\'][^"\']*["\']/i', '', $new);
+                    $new = (string) preg_replace('/\s*\bimagesizes\s*=\s*["\'][^"\']*["\']/i', '', $new);
+                    
+                    $new = (string) preg_replace('/\s*\btype\s*=\s*["\'][^"\']*["\']/i', '', $new);
+                    $add = '';
+                    if ($img['srcset'] !== '') {
+                        $add = ' imagesrcset="' . $img['srcset'] . '"';
+                        if ($img['sizes'] !== '') {
+                            $add .= ' imagesizes="' . $img['sizes'] . '"';
+                        }
+                    }
+                    if ($add !== '') {
+                        $new = (string) preg_replace_callback('#\s*/?>$#', function () use ($add) {
+                            return $add . '>';
+                        }, $new, 1);
+                    }
+                    if ($new !== $t) {
+                        $wpc_fixed796++;
+                    }
+                    return $new;
+                },
+                $html
+            );
+            if (!is_string($out)) {
+                return $html;
+            }
+            if (($wpc_fixed796 || $wpc_dropped796) && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('preload-coherence', '', '', [
+                    'mirrored' => $wpc_fixed796,
+                    'dropped'  => $wpc_dropped796,
+                    'dev'      => $wpc_mob796 ? 'm' : 'd',
+                ]);
+            }
+            return $out;
+        } catch (\Throwable $wpc_e796) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    public static function wpc_img_aspect_pass($html)
+    {
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_own482 = '/\b(?:data-count-lazy|ic-fade-in|wps-ic-cdn|wpc-nd|wpc-lcp-optimized|wpc-lazy-skipped)|data-wpc-/i';
+        if (!is_string($html) || $html === '' || !apply_filters('wpc_img_aspect', true)
+            || !preg_match($wpc_own482, $html)) {
+            return $html;
+        }
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($wpc_own482) {
+            $t = $m[0];
+            if (!preg_match($wpc_own482, $t)) {
+                return $t;
+            }
+            if (stripos($t, 'aspect-ratio') !== false) {
+                return $t;
+            }
+            
+            
+            
+            
+            
+            
+            
+            if (!apply_filters('wpc_img_aspect_inline_all', false)
+                && !preg_match('/\b(?:data-count-lazy|ic-fade-in)\b/i', $t)
+                && !preg_match('/\bsrc\s*=\s*["\'](?:data:|[^"\']*\bblank\b)/i', $t)) {
+                return $t;
+            }
+            if (!preg_match('/\bwidth="(\d{2,5})"/i', $t, $w) || !preg_match('/\bheight="(\d{2,5})"/i', $t, $h)) {
+                return $t;
+            }
+            $ar = ' style="aspect-ratio:' . (int) $w[1] . '/' . (int) $h[1] . '"';
+            if (preg_match('/\bstyle\s*=\s*"([^"]*)"/i', $t)) {
+                return (string) preg_replace('/\bstyle\s*=\s*"([^"]*)"/i', 'style="aspect-ratio:' . (int) $w[1] . '/' . (int) $h[1] . ';$1"', $t, 1);
+            }
+            return (string) preg_replace('/<img\b/i', '<img' . str_replace('$', '\$', $ar), $t, 1);
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    public static function wpc_svg_dims_pass($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, '.svg') === false) {
+                return $html;
+            }
+            if (!apply_filters('wpc_svg_dims', true)) {
+                return $html;
+            }
+            $wpc_n132 = 0;
+            
+            
+            
+            
+            
+            $wpc_carr489 = function ($t) {
+                foreach (['src', 'data-wpc-qw-src', 'data-wpc-src', 'data-src'] as $wpc_a489) {
+                    if (preg_match('/\s' . preg_quote($wpc_a489, '/') . '=["\']([^"\']+\.svg)(?:\?[^"\']*)?["\']/i', $t, $wpc_m489)) {
+                        return $wpc_m489[1];
+                    }
+                }
+                return '';
+            };
+            $out = preg_replace_callback(
+                '/<img\b[^>]*>/i',
+                function ($m) use (&$wpc_n132, $wpc_carr489) {
+                    if ($wpc_n132 >= 5) { return $m[0]; }
+                    if (stripos($m[0], '.svg') === false) { return $m[0]; }
+                    
+                    $wpc_su489 = $wpc_carr489($m[0]);
+                    if ($wpc_su489 === '') { return $m[0]; }
+                    
+                    
+                    
+                    if (preg_match('/\bheight\s*=\s*["\']?(\d{1,4})/i', $m[0], $hm0)
+                        && preg_match('/\bwidth\s*=\s*["\']?(\d{1,4})/i', $m[0], $wm0)) {
+                        if (stripos($m[0], 'aspect-ratio') !== false) { return $m[0]; }
+                        $wpc_n132++;
+                        $ar0 = ' style="aspect-ratio:' . (int) $wm0[1] . '/' . (int) $hm0[1] . '"';
+                        if (preg_match('/\bstyle\s*=\s*"([^"]*)"/i', $m[0])) {
+                            return (string) preg_replace('/\bstyle\s*=\s*"([^"]*)"/i',
+                                'style="$1;aspect-ratio:' . (int) $wm0[1] . '/' . (int) $hm0[1] . '"', $m[0], 1);
+                        }
+                        return (string) preg_replace('/<img\b/i', '<img' . $ar0, $m[0], 1);
+                    }
+                    if (preg_match('/\bheight\s*=/i', $m[0])) { return $m[0]; }
+                    
+                    $w = 0;
+                    if (preg_match('/\bwidth\s*=\s*["\']?(\d{1,4})/i', $m[0], $wm)) {
+                        $w = (int) $wm[1];
+                        if ($w < 8 || $w > 4000) { return $m[0]; }
+                    }
+                    $src = html_entity_decode($wpc_su489, ENT_QUOTES);
+                    $cp  = strrpos($src, 'wp-content/'); 
+                    if ($cp === false) { return $m[0]; }
+                    $rel = (string) preg_replace('/[?#].*$/', '', substr($src, $cp));
+                    if ($rel === '' || strpos($rel, '..') !== false) { return $m[0]; }
+                    $tk = 'wpc_svgar2_' . md5($rel);
+                    $dim = get_transient($tk);
+                    if (!is_array($dim)) {
+                        $dim = ['ar' => 0, 'w' => 0];
+                        $head = @file_get_contents(trailingslashit(ABSPATH) . $rel, false, null, 0, 4096);
+                        if (is_string($head) && $head !== '') {
+                            if (preg_match('/<svg\b[^>]*\bviewBox\s*=\s*["\']\s*[\d.+-]+[\s,]+[\d.+-]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i', $head, $vb) && (float) $vb[1] > 0) {
+                                $dim = ['ar' => (float) $vb[2] / (float) $vb[1], 'w' => (float) $vb[1]];
+                            } elseif (preg_match('/<svg\b[^>]*\bwidth\s*=\s*["\']?([\d.]+)(?:px)?["\']?[^>]*\bheight\s*=\s*["\']?([\d.]+)/i', $head, $wh) && (float) $wh[1] > 0) {
+                                $dim = ['ar' => (float) $wh[2] / (float) $wh[1], 'w' => (float) $wh[1]];
+                            }
+                        }
+                        set_transient($tk, $dim, WEEK_IN_SECONDS);
+                    }
+                    $ar = (float) $dim['ar'];
+                    if ($ar <= 0.01 || $ar > 20) { return $m[0]; }
+                    if ($w < 1) {
+                        $w = (int) round((float) $dim['w']);
+                        if ($w < 8 || $w > 4000) { return $m[0]; }
+                    }
+                    $wpc_n132++;
+                    $h = max(1, (int) round($w * $ar));
+                    
+                    
+                    $wpc_ins0 = ' height="' . $h . '"';
+                    if (stripos($m[0], 'aspect-ratio') === false && !preg_match('/\bstyle\s*=/i', $m[0])) {
+                        $wpc_ins0 .= ' style="aspect-ratio:' . $w . '/' . $h . '"';
+                    }
+                    if (preg_match('/\bwidth\s*=\s*["\']?\d{1,4}/i', $m[0])) {
+                        return (string) preg_replace('/(\bwidth\s*=\s*["\']?\d{1,4}["\']?)/i', '$1' . $wpc_ins0, $m[0], 1);
+                    }
+                    return (string) preg_replace('/<img\b/i', '<img width="' . $w . '"' . $wpc_ins0, $m[0], 1);
+                },
+                $html, 20);
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_trim_preset_vars_page($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || strpos($html, '--wp--preset--') === false
+                || !class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'wpc_trim_preset_vars')) {
+                return $html;
+            }
+            $out = preg_replace_callback('/(<style\b[^>]*>)(.*?)(<\/style>)/is', function ($m) use ($html) {
+                if (strpos($m[2], '--wp--preset--') === false) {
+                    return $m[0];
+                }
+                $trimmed = wps_rewriteLogic::wpc_trim_preset_vars($m[2], $html);
+                return (is_string($trimmed) && $trimmed !== '') ? $m[1] . $trimmed . $m[3] : $m[0];
+            }, $html);
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
     }
 
     public function cdnRewriter_wrapped($html)
     {
-        $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html)))))));
-        $html = self::wpc_lazy_srcset_buffer_pass($html);
-        $html = self::wpc_lcp_hint_pass($html);
-        return self::wpc_freshness_marker($html);
+        $wpc_span530 = class_exists('Wpc_Prof_Span530')
+            ? new Wpc_Prof_Span530('OBCHAIN:cdnRewriter_wrapped') : null;
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (function_exists('wpc_is_low_value_page') && function_exists('did_action')
+            && did_action('template_redirect') && wpc_is_low_value_page()) {
+            $GLOBALS['wpc_shed520'] = 1;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rewrite-skip-lowvalue', '', '', ['fn' => __FUNCTION__]);
+            }
+            return $html;
+        }
+        if ((function_exists('wpc_render_slot_acquire') && !wpc_render_slot_acquire())
+            || (function_exists('wpc_memory_pressure') && wpc_memory_pressure())
+            || (function_exists('wpc_under_pressure') && wpc_under_pressure())
+            || (function_exists('wpc_safe_mode') && wpc_safe_mode())) {
+            $GLOBALS['wpc_shed520'] = 1;
+            if (function_exists('wpc_prof_mark')) { wpc_prof_mark('shed:' . __FUNCTION__, microtime(true)); }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rewrite-shed', '', '', ['fn' => __FUNCTION__, 'bytes' => strlen((string) $html)]);
+            }
+            return $html;
+        }
+        
+        if (function_exists('wpc_inv2_stash')) {
+            wpc_inv2_stash($html);
+        }
+        $wpc_in71 = $html;
+        try {
+            $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_eager_nextgen752(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html))))))));
+            $wpc_fb735b = self::add_asset_failover($html);
+            if (is_string($wpc_fb735b) && $wpc_fb735b !== '') { $html = $wpc_fb735b; }
+            $html = self::wpc_lazy_srcset_buffer_pass($html);
+            $html = self::wpc_srcset_space_encode_pass($html);
+            $html = self::wpc_lcp_hint_pass($html);
+            $html = self::wpc_afold_sizes_pass($html);
+            $html = self::wpc_quiet_wire_pass($html);
+            $html = self::wpc_below_fold_cv_tag($html);
+            $html = self::wpc_picture_sizes_parity_pass($html);
+            $html = self::wpc_picture_fidelity_pass($html);
+            $html = self::wpc_lcp_img_preload_pass($html);
+            $html = self::wpc_embed_facade_pass($html);
+            $html = self::wpc_rum_beacon_pass($html);
+            $html = self::wpc_font_preconnect_pass($html);
+            $html = self::wpc_zone_font_preconnect_pass($html);
+            $html = self::wpc_fonts_drop_remote_dup($html);
+            $html = self::wpc_zone_preconnect_prune_pass($html);
+            $html = self::wpc_svg_dims_pass($html);
+            $html = self::wpc_img_aspect_pass($html);
+            $html = self::wpc_lcp_eager_invariant_pass($html);
+            $html = self::wpc_hoist_viewport_pass($html);
+            $html = self::wpc_prune_idle_preconnects_pass($html);
+            $html = self::wpc_video_delay_pass($html);
+            $html = self::wpc_trim_preset_vars_page($html);
+            if (class_exists('wps_cacheHtml')) {
+                $html = wps_cacheHtml::critlessUndefer($html);
+                $html = wps_cacheHtml::varsGuard($html);
+                $html = wps_cacheHtml::bricksAtfUnveil($html);
+                $html = wps_cacheHtml::critBgPreload($html);
+            }
+            $html = self::wpc_slider_settle_pass($html);
+            $html = self::wpc_preload_img_coherence796($html);
+            $html = self::wpc_freshness_marker($html);
+        } catch (\Throwable $wpc_t71) {
+            return self::wpc_never_blank($wpc_in71, '', $wpc_t71);
+        }
+        return self::wpc_never_blank($wpc_in71, $html);
     }
 
-    /**
-     * (v7.03.59) Buffer-level SAFETY NET for the lazy over-fetch fix. The per-image promotion at
-     * rewriteLogic.php:5024 only runs inside the $build_image_tag rebuild; a theme-lazy thumbnail that takes a
-     * different emit path (or any <img> the rebuild missed) keeps its INERT data-srcset and over-fetches the
-     * full `src`. This final pass catches EVERY native-lazy <img> in the rendered HTML — regardless of which
-     * builder produced it — and promotes data-srcset -> active srcset + sizes="auto" so the browser self-sizes.
-     * Reuses the EXACT per-image guards from wps_rewriteLogic (loading="lazy" only, no data-src / no active
-     * srcset, not a carousel, aspect-safe), so it's idempotent (an already-promoted img is skipped) and never
-     * touches eager/LCP/slider images. Gated by the SAME "Right-size Lazy Images" toggle, read here via
-     * get_option so it's correct independent of rewriteLogic's static cache. Default OFF => exact no-op.
-     */
+
+    private static function wpc_never_blank($in, $out, $e = null)
+    {
+        $inFull = is_string($in) && strlen($in) >= 255 && stripos($in, '</body>') !== false;
+        $outThin = !is_string($out) || strlen($out) < 255 || stripos($out, '</body>') === false;
+        if ($e !== null) {
+            
+            
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('never-blank-restore', '', isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '', [
+                    'in' => is_string($in) ? strlen($in) : -1,
+                    'out' => 'exception',
+                    'err' => substr($e->getMessage(), 0, 120),
+                ]);
+            }
+            return $in;
+        }
+        if ($inFull && $outThin) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('never-blank-restore', '', isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '', [
+                    'in' => strlen($in),
+                    'out' => is_string($out) ? strlen($out) : -1,
+                    'err' => $e ? substr($e->getMessage(), 0, 120) : '',
+                ]);
+            }
+            return $in;
+        }
+        return $out;
+    }
+
+
+    
+    
+    
+    public static function wpc_srcset_space_encode_pass($html)
+    {
+        if (!is_string($html) || stripos($html, 'srcset') === false) {
+            return $html;
+        }
+        $out = preg_replace_callback('/\b(srcset|data-srcset)\s*=\s*(["\'])(.*?)\2/is', function ($m) {
+            if (strpos($m[3], ' ') === false) {
+                return $m[0];
+            }
+            $v = preg_replace('/,\s+/', ', ', $m[3]);
+            $v = preg_replace('/(?<!,) (?!\d+(?:\.\d+)?[wx]\s*(?:,|$))/', '%20', $v);
+            return is_string($v) ? $m[1] . '=' . $m[2] . $v . $m[2] : $m[0];
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
     public static function wpc_lazy_srcset_buffer_pass($html)
     {
         if (!is_string($html) || $html === '' || stripos($html, 'data-srcset') === false) return $html;
         if (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'activate_lazy_srcset_auto')) return $html;
         $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
-        if (!is_array($set) || empty($set['lazy-auto-sizes'])) return $html; // toggle OFF => exact no-op
-        return preg_replace_callback('/<img\b[^>]*?>/is', function ($m) {
+        if (!is_array($set) || empty($set['lazy-auto-sizes'])) return $html;
+
+        
+        $wpc_out50 = preg_replace_callback('/<img\b[^>]*?>/is', function ($m) {
             $t = wps_rewriteLogic::activate_lazy_srcset_auto($m[0]);
             if (method_exists('wps_rewriteLogic', 'auto_sizes_for_lazy_img')) {
                 $t = wps_rewriteLogic::auto_sizes_for_lazy_img($t);
             }
             return $t;
         }, $html);
+        return is_string($wpc_out50) ? $wpc_out50 : $html;
     }
 
-    /**
-     * (v7.03.58) Stamp the rendered HTML with the plugin version + render UNIX time (tiny comment before
-     * </body>) so freshness is verifiable at a glance via View-Source/curl. A page-cache (LiteSpeed/GridPane)
-     * serves the BAKED-IN time, so an old r: value = you're looking at STALE cache → purge it. Ends the
-     * "is this fresh?" guessing that masked the over-fetch/zone fixes behind 7-day server caches. The
-     * ?wpc_fresh request also appends FRESH. Filter 'wpc_freshness_marker' => false to suppress (white-label).
-     */
+
     public static function wpc_freshness_marker($html)
     {
         if (!is_string($html) || $html === '' || stripos($html, '</body>') === false) return $html;
+
+
+        
+        
         if (function_exists('apply_filters') && !apply_filters('wpc_freshness_marker', true)) return $html;
+
+
+        if (isset($_GET['wpc_census_dbg']) && class_exists('wps_rewriteLogic')
+            && !empty(wps_rewriteLogic::$wpc_census_dbg)) {
+            $html = wpc_body_inject809($html, '<!--WPC-CDBG ' . wp_json_encode(wps_rewriteLogic::$wpc_census_dbg) . '-->');
+        }
         $ver   = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?';
         $now   = time();
         $fresh = !empty($_GET['wpc_fresh']) ? ' FRESH' : '';
-        // (v7.03.59) Stamp the "Right-size Lazy Images" toggle (la:1/0) so freshness AND the over-fetch gate
-        // are both verifiable from View-Source — la:0 on a page whose thumbnails over-fetch = the toggle just
-        // isn't saved on, full stop (no more guessing whether it's code or config).
+
+
         $set   = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
         $la    = (is_array($set) && !empty($set['lazy-auto-sizes'])) ? '1' : '0';
         $marker = "\n<!-- wpc " . $ver . ' r:' . $now . ' (' . gmdate('Y-m-d H:i:s', $now) . ' UTC) la:' . $la . $fresh . " -->\n";
-        return preg_replace('#</body>#i', $marker . '</body>', $html, 1);
+        return wpc_body_inject809($html, $marker);
     }
 
-    /**
-     * (v7.03.75) LCP fetchpriority consumer. WPC's per-tag rewriter can't identify the LCP image — its
-     * candidate logic only looks at the first-N images by DOM order, and it has no ancestor context to tell
-     * the hero <img> apart from the grid (same class). The crit side renders per-viewport (Penthouse) and
-     * DOES know the LCP element, so it provides a hint — per-viewport {stem,width} via option/filter
-     * 'wpc_lcp_hint' (the filename STEM, because that's the only thing this per-tag pass can match through the
-     * CDN rewrite). When an <img>'s src carries that stem we give it the Lighthouse-correct LCP shape:
-     * fetchpriority="high", eager (NOT lazy — Lighthouse penalises a lazy LCP), and a FIXED sizes=<width>px
-     * (auto is ignored by the spec on a non-lazy img, so eager+auto would over-fetch; the render-measured
-     * width right-sizes it). INERT until the hint is populated => zero change on every site that hasn't wired
-     * the crit side yet. Contract: wpc-lcp-fetchpriority-contract.md.
-     */
+
+    
+
+
+
+
+
+    public static function wpc_quiet_wire_pass($html)
+    {
+        if (!is_string($html) || $html === '') return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_quiet_wire', true)) return $html;
+        $wpc_qwd387 = function_exists('apply_filters') ? (bool) apply_filters('wpc_quiet_wire_defer_imgs', true) : true;
+        $wpc_qwn387 = 0;
+        $wpc_qweager387 = false; 
+                                 
+                                 
+        
+        
+        
+        $wpc_qwseen392 = [];
+        $wpc_qwstem392 = function ($t) {
+            if (!preg_match('/\ssrc=(["\'])(.*?)\1/i', $t, $sm)) return '';
+            $u = strtolower((string) strtok($sm[2], '?'));
+            return preg_replace('/-\d+x\d+(\.[a-z0-9]{2,5})$/', '$1', $u);
+        };
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($wpc_qwd387, &$wpc_qwn387, &$wpc_qweager387, &$wpc_qwseen392, $wpc_qwstem392) {
+            $t = $m[0];
+            if (stripos($t, 'loading="lazy"') === false && stripos($t, "loading='lazy'") === false) {
+                $wpc_qweager387 = true;
+                $wpc_qws392 = $wpc_qwstem392($t);
+                if ($wpc_qws392 !== '') $wpc_qwseen392[$wpc_qws392] = 1;
+                return $t;
+            }
+            if (stripos($t, 'fetchpriority') !== false) return $t;
+            $wpc_qws392 = $wpc_qwstem392($t);
+            if ($wpc_qws392 !== '' && isset($wpc_qwseen392[$wpc_qws392])) return $t;
+            $t = preg_replace('/<img\b/i', '<img fetchpriority="low"', $t, 1);
+            if ($wpc_qwd387 && $wpc_qweager387 && stripos($t, 'data-wpc-qw') === false && preg_match('/\ssrc=/i', $t)) {
+                $wpc_qworig389 = $m[0];
+                $t = preg_replace('/\ssrc=(["\'])/i', ' data-wpc-qw-src=$1', $t, 1);
+                $t = preg_replace('/\ssrcset=(["\'])/i', ' data-wpc-qw-srcset=$1', $t, 1);
+                $t = preg_replace('/\ssizes=(["\'])/i', ' data-wpc-qw-sizes=$1', $t, 1);
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                $wpc_qwph387 = '';
+                if (preg_match('/\swidth=(["\'])(\d{1,5})\1/i', $t, $wpc_qww387)
+                    && preg_match('/\sheight=(["\'])(\d{1,5})\1/i', $t, $wpc_qwh387)
+                    && (int) $wpc_qww387[2] > 0 && (int) $wpc_qwh387[2] > 0) {
+                    $wpc_qwph387 = 'data:image/svg+xml;base64,' . base64_encode(
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="' . (int) $wpc_qww387[2]
+                        . '" height="' . (int) $wpc_qwh387[2] . '"/>'
+                    );
+                }
+                if ($wpc_qwph387 === '') {
+                    $wpc_qwph387 = (!empty(self::$svg_placeholder) && is_string(self::$svg_placeholder))
+                        ? self::$svg_placeholder
+                        : 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
+                }
+                if (!preg_match('/\ssrc=/i', $t)) {
+                    $t = preg_replace('/<img\b/i', '<img src="' . $wpc_qwph387 . '"', $t, 1);
+                }
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                if (apply_filters('wpc_qw_pin_aspect_ratio', true)
+                    && stripos($t, 'aspect-ratio') === false
+                    && preg_match('/\swidth=(["\'])(\d{1,5})\1/i', $t, $wpc_arw481)
+                    && preg_match('/\sheight=(["\'])(\d{1,5})\1/i', $t, $wpc_arh481)
+                    && (int) $wpc_arw481[2] > 0 && (int) $wpc_arh481[2] > 0) {
+                    $wpc_ar481 = 'aspect-ratio:' . (int) $wpc_arw481[2] . '/' . (int) $wpc_arh481[2];
+                    if (preg_match('/\sstyle\s*=\s*"/i', $t)) {
+                        
+                        $t = (string) preg_replace('/\sstyle\s*=\s*"/i', ' style="' . $wpc_ar481 . ';', $t, 1);
+                    } else {
+                        $t = (string) preg_replace('/<img\b/i', '<img style="' . $wpc_ar481 . '"', $t, 1);
+                    }
+                }
+                $wpc_qwn387++;
+                
+                $t .= '<noscript>' . preg_replace('/\sonerror=(["\']).*?\1/i', '', $wpc_qworig389) . '</noscript>';
+            }
+            return $t;
+        }, $html);
+        if (is_string($out)) $html = $out;
+        
+        
+        $wpc_qwseen389 = [];
+        $wpc_qwlive393 = null;
+        $out = preg_replace_callback('/<link\b[^>]*rel=(["\'])preconnect\1[^>]*>/i', function ($m) use (&$wpc_qwseen389, &$wpc_qwlive393, $html) {
+            $h = preg_match('/href=(["\'])(.*?)\1/i', $m[0], $hm) ? strtolower($hm[2]) : '';
+            if ($h === '') return $m[0];
+            $k = $h . '|' . (stripos($m[0], 'crossorigin') !== false ? 'c' : '');
+            if (isset($wpc_qwseen389[$k])) return '';
+            $wpc_qwseen389[$k] = 1;
+            
+            
+            
+            
+            $wpc_qwhost393 = strtolower((string) parse_url($h, PHP_URL_HOST));
+            if ($wpc_qwhost393 !== ''
+                && (!function_exists('apply_filters') || apply_filters('wpc_preconnect_prune', true))
+                && strpos($wpc_qwhost393, 'gstatic') === false && strpos($wpc_qwhost393, 'googleapis') === false
+                && strpos($wpc_qwhost393, 'typekit') === false && strpos($wpc_qwhost393, 'bunny.net') === false) {
+                if ($wpc_qwlive393 === null) {
+                    $wpc_qwl393 = preg_replace('/<link\b[^>]*rel=(["\'])preconnect\1[^>]*>/i', '', $html);
+                    if (preg_match_all('/\s(?:src|href|srcset|imagesrcset)=(["\'])(.*?)\1/i', (string) $wpc_qwl393, $wpc_qwa393)) {
+                        $wpc_qwlive393 = strtolower(implode(' ', $wpc_qwa393[2]));
+                    } else {
+                        $wpc_qwlive393 = '';
+                    }
+                }
+                if (strpos($wpc_qwlive393, $wpc_qwhost393) === false) return '';
+            }
+            return $m[0];
+        }, $html);
+        if (is_string($out)) $html = $out;
+        if ($wpc_qwn387 > 0 && stripos($html, '</body>') !== false) {
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            $wpc_qwjs387 = '<script id="wpc-qw-restore">(function(){var d=false;'
+                . 'function r(){d=true;var i=document.querySelectorAll("img[data-wpc-qw-src]"),n;for(n=0;n<i.length;n++){var e=i[n];'
+                . 'if(!e.getAttribute("data-wpc-qw-src"))continue;'
+                . 'if(e.getAttribute("data-wpc-qw-sizes"))e.setAttribute("sizes",e.getAttribute("data-wpc-qw-sizes"));'
+                . 'if(e.getAttribute("data-wpc-qw-srcset"))e.setAttribute("srcset",e.getAttribute("data-wpc-qw-srcset"));'
+                . 'e.setAttribute("src",e.getAttribute("data-wpc-qw-src"));e.removeAttribute("data-wpc-qw-src");}}'
+                . 'window.wpcQwRestore=r;'
+                . 'var v=["scroll","wheel","touchstart","keydown","pointerdown"],x=function(){'
+                . 'for(var j=0;j<v.length;j++)window.removeEventListener(v[j],x,{passive:true});r();};'
+                . 'function boot(){'
+                . 'if((typeof window.pageYOffset==="number"?window.pageYOffset:(document.documentElement||{}).scrollTop||0)>0){r();return;}'
+                . 'for(var j=0;j<v.length;j++)window.addEventListener(v[j],x,{passive:true});'
+                . 'try{if(window.IntersectionObserver){var o=new IntersectionObserver(function(en){'
+                . 'for(var k=0;k<en.length;k++){if(en[k].isIntersecting){o.disconnect();r();return;}}},{rootMargin:"50px"});'
+                . 'var m=document.querySelectorAll("img[data-wpc-qw-src]");for(var q=0;q<m.length;q++)o.observe(m[q]);}}catch(e){}}'
+                . 'if(window.requestAnimationFrame){requestAnimationFrame(boot);}else{boot();}'
+                . 'document.addEventListener("DOMContentLoaded",function(){if(d)r();});'
+                . 'window.addEventListener("pageshow",function(e){if(e&&e.persisted)r();},{once:true});'
+                . '})();</script>';
+            $html = wpc_body_inject809($html, $wpc_qwjs387);
+        }
+        
+        
+        
+        
+        
+        
+        
+        $wpc_nd788 = apply_filters('wpc_quiet_wire_never_demote',
+            ['/jquery.min.js', '/jquery.js', 'jquery-migrate', 'jquery-core', 'jquery-ui']);
+        $out = preg_replace_callback('/<script\b[^>]*\bsrc=[^>]*>/i', function ($m) use ($wpc_nd788) {
+            $t = $m[0];
+            if (stripos($t, 'fetchpriority') !== false || !preg_match('/\bdefer\b/i', $t)
+                || stripos($t, 'delay-v3-loader') !== false || stripos($t, 'wpc-yield') !== false
+                || stripos($t, 'type=') !== false && !preg_match('/type=["\']text\/javascript["\']/i', $t)) return $t;
+            foreach ((array) $wpc_nd788 as $wpc_n788) {
+                if ($wpc_n788 !== '' && stripos($t, (string) $wpc_n788) !== false) { return $t; }
+            }
+            return preg_replace('/<script\b/i', '<script fetchpriority="low"', $t, 1);
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_below_fold_cv_tag($html)
+    {
+        if (!is_string($html) || $html === '') return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_below_fold_cv', true)) return $html;
+        if (stripos($html, 'elementor-top-section') === false) return $html;
+        $atf = 0;
+        if (preg_match_all('/<img\b[^>]*>/i', $html, $im, PREG_OFFSET_CAPTURE)) {
+            foreach ($im[0] as $t) {
+                if (stripos($t[0], 'loading="lazy"') === false && stripos($t[0], "loading='lazy'") === false) { $atf = $t[1]; break; }
+            }
+        }
+        if (!preg_match_all('/<(?:section|main|footer)\b[^>]*class=(["\'])[^"\']*\belementor-top-section\b[^"\']*\1[^>]*>/i', $html, $mm, PREG_OFFSET_CAPTURE)) return $html;
+        $keep = function_exists('apply_filters') ? (int) apply_filters('wpc_below_fold_cv_keep', 3) : 3;
+        $idx = 0; $add = array();
+        foreach ($mm[0] as $t) {
+            $idx++;
+            if ($idx <= $keep || $t[1] <= $atf) continue;
+            if (stripos($t[0], 'data-wpc-cv') !== false) continue;
+            $add[] = array($t[1], strlen($t[0]), preg_replace('/^<(\w+)/', '<$1 data-wpc-cv="1"', $t[0], 1));
+        }
+        for ($i = count($add) - 1; $i >= 0; $i--) {
+            $html = substr($html, 0, $add[$i][0]) . $add[$i][2] . substr($html, $add[$i][0] + $add[$i][1]);
+        }
+        return $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    private static $wpc_afold_szmap = null;
+    private static function wpc_afold_sizes_map()
+    {
+        if (self::$wpc_afold_szmap !== null) return self::$wpc_afold_szmap;
+        self::$wpc_afold_szmap = array();
+        if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) return self::$wpc_afold_szmap;
+        $url = (function_exists('is_ssl') && is_ssl() ? 'https://' : 'http://')
+            . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+            . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?');
+        $key = (new wps_ic_url_key())->setup($url);
+        if ($key === '') return self::$wpc_afold_szmap;
+        $f = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/lcp.json';
+        if (!@is_readable($f)) return self::$wpc_afold_szmap;
+        $j = json_decode((string) @file_get_contents($f), true);
+        $atf = (is_array($j) && isset($j['atf_images']) && is_array($j['atf_images'])) ? $j['atf_images'] : null;
+        if ($atf === null) return self::$wpc_afold_szmap;
+        $mob = (isset($atf['mobile']) && is_array($atf['mobile'])) ? $atf['mobile'] : array();
+        $des = (isset($atf['desktop']) && is_array($atf['desktop'])) ? $atf['desktop'] : array();
+        if (empty($mob) && empty($des)) { $mob = $atf; $des = $atf; }
+        $map = array();
+        foreach (array('m' => $mob, 'd' => $des) as $slot => $list) {
+            foreach ((array) $list as $im) {
+                if (!is_array($im) || empty($im['stem']) || empty($im['css_w'])) continue;
+                $st = strtolower((string) $im['stem']);
+                if ($st === '') continue;
+                if (!isset($map[$st])) $map[$st] = array('m' => 0, 'd' => 0);
+                if ($map[$st][$slot] === 0) $map[$st][$slot] = (int) round((float) $im['css_w']);
+            }
+        }
+        self::$wpc_afold_szmap = $map;
+        return self::$wpc_afold_szmap;
+    }
+
+    public static function wpc_afold_sizes_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<img') === false) return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_afold_sizes', true)) return $html;
+        $map = self::wpc_afold_sizes_map();
+        if (empty($map)) return $html;
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($map) {
+            $tag = $m[0];
+            $srcAttr = preg_match('/\sdata-wpc-qw-src=(["\'])(.*?)\1/i', $tag, $qm) ? $qm[2]
+                     : (preg_match('/\ssrc=(["\'])(.*?)\1/i', $tag, $sm) ? $sm[2] : '');
+            if ($srcAttr === '') return $tag;
+            $stem = strtolower(preg_replace('/(-\d+x\d+|-scaled)?\.[^.]+$/', '', basename(strtok($srcAttr, '?#'))));
+            if ($stem === '' || !isset($map[$stem])) return $tag;
+            $mW = (int) $map[$stem]['m']; $dW = (int) $map[$stem]['d'];
+            if ($mW > 0 && $dW > 0) { $nv = '(max-width: 768px) ' . $mW . 'px, ' . $dW . 'px'; }
+            elseif ($dW > 0) { $nv = (string) $dW . 'px'; }
+            elseif ($mW > 0) { $nv = (string) $mW . 'px'; }
+            else { return $tag; }
+            
+            
+            
+            if (preg_match('/\ssizes=(["\'])([^"\']*)\1/i', $tag, $cur)) {
+                if ($dW > 0 && preg_match_all('/(\d+)px/', $cur[2], $cw) && !empty($cw[1])) {
+                    $curDesktop = (int) $cw[1][count($cw[1]) - 1];
+                    if ($curDesktop > 0 && $curDesktop <= $dW) return $tag; 
+                }
+                $tag = preg_replace('/\ssizes=(["\'])[^"\']*\1/i', ' sizes="' . $nv . '"', $tag, 1);
+            } else {
+                $tag = preg_replace('/<img\b/i', '<img sizes="' . $nv . '"', $tag, 1);
+            }
+            if (preg_match('/\sdata-wpc-qw-sizes=(["\'])/i', $tag)) {
+                $tag = preg_replace('/\sdata-wpc-qw-sizes=(["\'])[^"\']*\1/i', ' data-wpc-qw-sizes="' . $nv . '"', $tag, 1);
+            }
+            return $tag;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
     public static function wpc_lcp_hint_pass($html)
     {
         if (!is_string($html) || $html === '' || stripos($html, '<img') === false) return $html;
@@ -2112,25 +3535,43 @@ class wps_cdn_rewrite
             ? apply_filters('wpc_lcp_hint', (function_exists('get_option') ? get_option('wpc_lcp_hint') : null))
             : (function_exists('get_option') ? get_option('wpc_lcp_hint') : null);
         if (empty($hint) || !is_array($hint)) return $html;
-        // Accept a flat {stem,width} OR a per-viewport {desktop:{...},mobile:{...}}. Viewport via WP's UA
-        // check (the same basis WPC uses to pick the per-viewport crit); fall back to whichever entry exists.
+
+
+        
+        
+        $is_m = !empty($_GET['simulate_mobile']) || (function_exists('wp_is_mobile') && wp_is_mobile());
         if (isset($hint['stem'])) {
             $entry = $hint;
+            
+            
+            if ($is_m && isset($entry['width']) && (int) $entry['width'] > 0) {
+                $entry['width'] = min((int) $entry['width'], (int) apply_filters('wpc_lcp_hint_mobile_cap', 412));
+            }
         } else {
-            $vp = (function_exists('wp_is_mobile') && wp_is_mobile()) ? 'mobile' : 'desktop';
+            $vp = $is_m ? 'mobile' : 'desktop';
             $entry = (isset($hint[$vp]) && is_array($hint[$vp])) ? $hint[$vp]
                    : ((isset($hint['desktop']) && is_array($hint['desktop'])) ? $hint['desktop']
                    : ((isset($hint['mobile']) && is_array($hint['mobile'])) ? $hint['mobile'] : null));
+            
+            
+            if ($is_m && is_array($entry) && isset($entry['width']) && (int) $entry['width'] > 0) {
+                $entry['width'] = min((int) $entry['width'], (int) apply_filters('wpc_lcp_hint_mobile_cap', 412));
+            }
         }
         if (!is_array($entry) || empty($entry['stem'])) return $html;
         $stem  = (string) $entry['stem'];
         $width = isset($entry['width']) ? (int) $entry['width'] : 0;
-        if (strlen($stem) < 4) return $html; // too-short stem would match unrelated images — refuse it
-        $applied = false;
-        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($stem, $width, &$applied) {
+        if (strlen($stem) < 4) return $html;
+        
+        
+        
+        
+        $applied = 0;
+        $wpc_hmax392 = function_exists('apply_filters') ? (int) apply_filters('wpc_lcp_hint_max_copies', 4) : 4;
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($m) use ($stem, $width, &$applied, $wpc_hmax392) {
             $tag = $m[0];
-            if ($applied || stripos($tag, $stem) === false) return $tag; // LCP is one element: first match only
-            $applied = true;
+            if ($applied >= $wpc_hmax392 || stripos($tag, $stem) === false) return $tag;
+            $applied++;
             if (stripos($tag, 'fetchpriority') === false) {
                 $tag = preg_replace('/<img\b/i', '<img fetchpriority="high"', $tag, 1);
             }
@@ -2150,15 +3591,1032 @@ class wps_cdn_rewrite
         return ($out === null) ? $html : $out;
     }
 
-    /**
-     * (v7.03.56) Collapse a doubled SAME-extension that a naturalize/zoneify pass can produce when the
-     * SOURCE is ALREADY next-gen — e.g. a .webp ORIGINAL used as a CSS background or an <img> fallback
-     * (…-1.webp.webp → 404), common on .webp-upload portfolios. SAME-ext only (backreference) so it NEVER
-     * touches a valid cross-ext like .webp.avif (natural AVIF from a webp source). Fast-path skips the regex
-     * unless a double is actually present; idempotent + safe on already-correct URLs.
-     */
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_picture_fidelity_pass($html)
+    {
+        try {
+            if (!is_string($html) || stripos($html, 'wpc-picture') === false
+                || !function_exists('wpc_pic_scan_page631')
+                || (function_exists('apply_filters') && !apply_filters('wpc_picture_fidelity', true))) {
+                return $html;
+            }
+            $wpc_scan631 = wpc_pic_scan_page631($html);
+            
+            
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient')
+                && !get_transient('wpc_picfid_log633')) {
+                if (function_exists('set_transient')) {
+                    set_transient('wpc_picfid_log633', 1, 600);
+                }
+                wpc_cache_first_log('pic-fidelity-scan', '', isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '', [
+                    'cls' => count($wpc_scan631['cls']),
+                    'tags' => count($wpc_scan631['tags']),
+                    'capped' => isset($wpc_scan631['capped']) ? (int) $wpc_scan631['capped'] : 0,
+                    'ir' => in_array('img-repeat', $wpc_scan631['cls'], true) ? 1 : 0,
+                    'len' => strlen((string) $html),
+                    'styles' => substr_count((string) $html, '<style'),
+                ]);
+            }
+
+            if (!empty($wpc_scan631['cls'])) {
+                
+                
+                
+                $wpc_set631 = array_flip($wpc_scan631['cls']);
+                $wpc_pos631 = 0;
+                $wpc_iter631 = 0;
+                while (($wpc_ps631 = strpos($html, '<picture class="wpc-picture', $wpc_pos631)) !== false && $wpc_iter631++ < 400) {
+                    $wpc_pos631 = $wpc_ps631 + 16;
+                    $wpc_pe631 = strpos($html, '</picture>', $wpc_ps631);
+                    if ($wpc_pe631 === false || $wpc_pe631 - $wpc_ps631 > 12000) {
+                        continue;
+                    }
+                    $wpc_blk631 = substr($html, $wpc_ps631, $wpc_pe631 - $wpc_ps631);
+                    if (strpos(substr($wpc_blk631, 0, 200), 'data-wpc-mir') !== false) {
+                        continue;
+                    }
+                    if (!preg_match('/^<picture class="(wpc-picture[^"]*)">/', $wpc_blk631, $wm)
+                        || !preg_match('/<img\b[^>]*?class=["\']([^"\']+)["\']/i', $wpc_blk631, $im)) {
+                        continue;
+                    }
+                    $have = preg_split('/\s+/', $wm[1], -1, PREG_SPLIT_NO_EMPTY);
+                    $add = [];
+                    foreach (preg_split('/\s+/', $im[1], -1, PREG_SPLIT_NO_EMPTY) as $c) {
+                        if (isset($wpc_set631[$c]) && !in_array($c, $have, true) && !in_array($c, $add, true)) {
+                            $add[] = $c;
+                        }
+                    }
+                    if (!$add) {
+                        continue;
+                    }
+                    
+                    
+                    
+                    $wpc_new631 = '<picture class="' . $wm[1] . ' ' . implode(' ', $add) . '" data-wpc-mir="1">';
+                    $html = substr_replace($html, $wpc_new631, $wpc_ps631, strlen($wm[0]));
+                    $wpc_pos631 = $wpc_ps631 + strlen($wpc_new631);
+                }
+            }
+
+            $wpc_inj631 = '';
+            if (strpos($html, 'wpc-picture-contract') === false && strpos($html, 'data-wpc-mir') !== false) {
+                
+                
+                
+                
+                
+                $wpc_inj631 .= '<style id="wpc-picture-contract">:where(picture.wpc-picture[data-wpc-mir]){display:inline-block}picture.wpc-picture[data-wpc-mir]{border:0;padding:0;background:none;box-shadow:none}picture.wpc-picture[data-wpc-mir]>img{opacity:1;transform:none;filter:none}</style>';
+            }
+            if (!empty($wpc_scan631['tags']) && strpos($html, 'wpc-pic-guard') === false) {
+                $wpc_list631 = [];
+                foreach ($wpc_scan631['tags'] as $t) {
+                    $wpc_list631[] = [(string) $t['s'], (string) $t['m']];
+                }
+                $wpc_json631 = json_encode($wpc_list631, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+                if (is_string($wpc_json631) && strlen($wpc_json631) <= 6144) {
+                    $wpc_inj631 .= '<script id="wpc-pic-guard">/*wpc-arm-sentinel*/(function(){var L=' . $wpc_json631 . ';'
+                        . 'function T(p){try{if(p.__wpcPG)return;for(var i=0;i<L.length;i++){var m=L[i][1];'
+                        . 'if(m){try{if(window.matchMedia&&!matchMedia(m).matches)continue}catch(e){}}'
+                        . 'var h=false;try{h=p.matches(L[i][0])}catch(e){}'
+                        . 'if(h){p.__wpcPG=1;var im=p.querySelector("img");if(!im||!p.parentNode)return;'
+                        . 'try{if(im.complete&&im.currentSrc&&im.currentSrc.indexOf("data:")!==0){im.src=im.currentSrc}}catch(e){}'
+                        . 'try{p.parentNode.insertBefore(im,p);p.parentNode.removeChild(p)}catch(e){}return}}}catch(e){}}'
+                        . 'try{var d=document,q=d.getElementsByTagName("picture"),i;for(i=q.length-1;i>=0;i--)T(q[i]);'
+                        . 'var mo=new MutationObserver(function(ms){for(var a=0;a<ms.length;a++){var ns=ms[a].addedNodes;'
+                        . 'for(var b=0;b<ns.length;b++){var n=ns[b];if(!n.tagName)continue;'
+                        . 'if(n.tagName==="PICTURE")T(n);else if(n.querySelectorAll){var ps=n.querySelectorAll("picture");'
+                        . 'for(var c=0;c<ps.length;c++)T(ps[c])}}}});'
+                        . 'mo.observe(d.documentElement,{childList:true,subtree:true});'
+                        . 'addEventListener("load",function(){setTimeout(function(){'
+                        . 'try{var z=d.getElementsByTagName("picture");for(var i=z.length-1;i>=0;i--)T(z[i])}catch(e){}'
+                        . 'try{mo.disconnect()}catch(e){}},2500)})}catch(e){}})();</script>';
+                }
+            }
+            if ($wpc_inj631 !== '' && ($wpc_hp631 = stripos($html, '</head>')) !== false) {
+                $html = substr_replace($html, $wpc_inj631, $wpc_hp631, 0);
+            }
+            return $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_picture_sizes_parity_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<picture') === false) {
+            return $html;
+        }
+        if (function_exists('apply_filters') && !apply_filters('wpc_picture_sizes_parity', true)) {
+            return $html;
+        }
+        $out = preg_replace_callback('#<picture\b[^>]*>.*?</picture>#is', function ($m) {
+            $pic = $m[0];
+            if (!preg_match('/<img\b[^>]*\bsizes\s*=\s*(["\'])(.*?)\1/is', $pic, $im)) {
+                return $pic;
+            }
+            $sz = trim($im[2]);
+            if ($sz === '' || strpos($sz, '"') !== false) {
+                return $pic;
+            }
+            $fixed = preg_replace_callback('/<source\b[^>]*>/i', function ($sm) use ($sz) {
+                if (stripos($sm[0], 'srcset') === false) {
+                    return $sm[0];
+                }
+                if (preg_match('/\bsizes\s*=\s*(["\'])(.*?)\1/is', $sm[0], $cur) && trim($cur[2]) === $sz) {
+                    return $sm[0];
+                }
+                if (preg_match('/\bsizes\s*=\s*(["\']).*?\1/is', $sm[0])) {
+                    return preg_replace('/\bsizes\s*=\s*(["\']).*?\1/is', 'sizes="' . $sz . '"', $sm[0], 1);
+                }
+                return preg_replace('/<source\b/i', '<source sizes="' . $sz . '"', $sm[0], 1);
+            }, $pic);
+            return is_string($fixed) ? $fixed : $pic;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_prune_idle_preconnects_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, 'preconnect') === false
+            && stripos($html, 'dns-prefetch') === false) {
+            return $html;
+        }
+        if (function_exists('apply_filters') && !apply_filters('wpc_prune_idle_preconnects', true)) {
+            return $html;
+        }
+        
+        if (stripos($html, 'text/placeholder') === false && stripos($html, 'wpc-delay-script') === false) {
+            return $html;
+        }
+        if (!preg_match_all('/<link\b[^>]*\brel\s*=\s*["\'](?:preconnect|dns-prefetch)["\'][^>]*>/i', $html, $wpc_pcm698)) {
+            return $html;
+        }
+        
+        
+        $wpc_probe698 = preg_replace([
+            '/<script\b[^>]*(?:text\/placeholder|wpc-delay-script)[^>]*>.*?<\/script>/is',
+            '/<noscript\b[^>]*>.*?<\/noscript>/is',
+            '/<link\b[^>]*\brel\s*=\s*["\'](?:preconnect|dns-prefetch)["\'][^>]*>/i',
+        ], '', $html);
+        if (!is_string($wpc_probe698) || $wpc_probe698 === '') {
+            return $html;
+        }
+        $wpc_own698 = function_exists('home_url') ? strtolower((string) parse_url(home_url('/'), PHP_URL_HOST)) : '';
+        $out = $html;
+        foreach (array_unique($wpc_pcm698[0]) as $wpc_tag698) {
+            if (!preg_match('/\bhref\s*=\s*["\']([^"\']+)["\']/i', $wpc_tag698, $wpc_hm698)) {
+                continue;
+            }
+            $wpc_h698 = strtolower((string) parse_url(trim($wpc_hm698[1]), PHP_URL_HOST));
+            if ($wpc_h698 === '' || $wpc_h698 === $wpc_own698) {
+                continue;
+            }
+            if (stripos($wpc_probe698, $wpc_h698) !== false) {
+                continue;
+            }
+            $out = str_replace($wpc_tag698, '', $out);
+        }
+        return $out;
+    }
+
+    public static function wpc_hoist_viewport_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, 'viewport') === false) {
+            return $html;
+        }
+        if (function_exists('apply_filters') && !apply_filters('wpc_hoist_viewport', true)) {
+            return $html;
+        }
+        if (!preg_match('/<meta\b[^>]*\bname\s*=\s*["\']?viewport["\']?[^>]*>/i', $html, $wpc_vm444, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $wpc_vt444 = (string) $wpc_vm444[0][0];
+        $wpc_va444 = (int) $wpc_vm444[0][1];
+        
+        if (!preg_match('/<meta\b[^>]*\bcharset\b[^>]*>/i', $html, $wpc_am444, PREG_OFFSET_CAPTURE)
+            && !preg_match('/<head\b[^>]*>/i', $html, $wpc_am444, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $wpc_ip444 = (int) $wpc_am444[0][1] + strlen((string) $wpc_am444[0][0]);
+        
+        if ($wpc_va444 <= $wpc_ip444 + 200) {
+            return $html;
+        }
+        $wpc_cut444 = substr($html, 0, $wpc_va444) . substr($html, $wpc_va444 + strlen($wpc_vt444));
+        return substr($wpc_cut444, 0, $wpc_ip444) . "\n" . $wpc_vt444 . substr($wpc_cut444, $wpc_ip444);
+    }
+
+    public static function wpc_lcp_eager_invariant_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, 'fetchpriority') === false) {
+            return $html;
+        }
+        
+        
+        
+        
+        if (function_exists('apply_filters') && !apply_filters('wpc_lcp_eager_invariant', false)) {
+            return $html;
+        }
+        $out = preg_replace_callback('/<img\b[^>]*>/i', function ($wpc_m438) {
+            $wpc_t438 = $wpc_m438[0];
+            
+            
+            
+            if (!preg_match('/(?<![-\w])fetchpriority\s*=\s*(["\'])\s*high\s*\1/i', $wpc_t438)) { return $wpc_t438; }
+            if (!preg_match('/(?<![-\w])loading\s*=\s*(["\'])\s*lazy\s*\1/i', $wpc_t438)) { return $wpc_t438; }
+            if (preg_match('/(?<![-\w])sizes\s*=\s*(["\'])[^"\']*\bauto\b[^"\']*\1/i', $wpc_t438)) { return $wpc_t438; }
+            $wpc_r438 = preg_replace('/(?<![-\w])\s*loading\s*=\s*(["\'])\s*lazy\s*\1/i', ' loading="eager"', $wpc_t438, 1);
+            return is_string($wpc_r438) ? $wpc_r438 : $wpc_t438;
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    public static function wpc_lcp_img_preload_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, 'fetchpriority') === false) return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_lcp_img_preload', true)) return $html;
+        
+        
+
+
+        $wpc_own_preload107 = '';
+        if (preg_match('/<link\b[^>]*\bid=["\']wpc-lcp-img-preload(?:-\d+)?["\'][^>]*>\s*/i', $html, $wpc_opm107)) {
+            $wpc_own_preload107 = $wpc_opm107[0];
+        } else {
+
+
+            $wpc_rest125 = preg_replace('/<link\b[^>]*\bid=["\']wpc-atf-bg-preload["\'][^>]*>\s*/i', '', $html);
+            if (!is_string($wpc_rest125)) { $wpc_rest125 = $html; }
+            if (stripos($wpc_rest125, 'wpc-lcp-bg-preload') !== false
+                || preg_match('/<link\b[^>]*\brel\s*=\s*["\']?preload["\']?[^>]*\bas\s*=\s*["\']?image\b/i', $wpc_rest125)
+                || preg_match('/<link\b[^>]*\bas\s*=\s*["\']?image["\']?[^>]*\brel\s*=\s*["\']?preload\b/i', $wpc_rest125)) {
+                return $html;
+            }
+        }
+
+
+        $wpc_lcp_stem96 = '';
+        $wpc_lcp_url96  = '';
+        $wpc_lcp_type96 = '';
+        try {
+            if (class_exists('wps_criticalCss') && class_exists('wps_rewriteLogic')) {
+
+
+                {
+                    $wpc_f96 = method_exists('wps_rewriteLogic', 'wpc_lcp_json_file')
+                        ? wps_rewriteLogic::wpc_lcp_json_file() : '';
+                    if ($wpc_f96 !== '' && @is_readable($wpc_f96)) {
+                        $wpc_j96 = json_decode((string) @file_get_contents($wpc_f96), true);
+
+
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        $wpc_cands814 = function ($d) use ($wpc_j96) {
+                            $c = [];
+                            if (isset($wpc_j96['lcp'][$d]) && is_array($wpc_j96['lcp'][$d])) { $c[] = $wpc_j96['lcp'][$d]; }
+                            if (isset($wpc_j96['lcp_element'][$d]) && is_array($wpc_j96['lcp_element'][$d])) { $c[] = $wpc_j96['lcp_element'][$d]; }
+                            if (isset($wpc_j96['lcp_element']) && is_array($wpc_j96['lcp_element'])
+                                && (isset($wpc_j96['lcp_element']['stem']) || isset($wpc_j96['lcp_element']['url']))) {
+                                $c[] = (array) $wpc_j96['lcp_element'];
+                            }
+                            return $c;
+                        };
+                        $wpc_pick96 = function ($d) use ($wpc_cands814) {
+                            $e = [];
+                            foreach ($wpc_cands814($d) as $wpc_c814) {
+                                foreach (['stem', 'url'] as $wpc_k814) {
+                                    if (!isset($e[$wpc_k814]) && isset($wpc_c814[$wpc_k814]) && is_string($wpc_c814[$wpc_k814])
+                                        && trim($wpc_c814[$wpc_k814]) !== '') {
+                                        $e[$wpc_k814] = $wpc_c814[$wpc_k814];
+                                    }
+                                }
+                            }
+                            $s = (isset($e['stem']) && is_string($e['stem'])) ? trim($e['stem']) : '';
+                            if ($s === '' && isset($e['url']) && is_string($e['url'])) {
+                                $s = strtolower(basename((string) preg_replace('/[?#].*$/', '', $e['url'])));
+                                $s = (string) preg_replace('/\.(?:jpe?g|png|webp|avif|gif|svg)$/i', '', $s);
+                                $s = (string) preg_replace('/(?:-\d+x\d+)?$/', '', (string) preg_replace('/-scaled$/', '', $s), 1);
+                            }
+                            return (strlen($s) >= 3 && preg_match('/^[A-Za-z0-9._@-]+$/', $s)) ? strtolower($s) : '';
+                        };
+
+
+                        $wpc_picke96 = function ($d) use ($wpc_cands814) {
+                            $t = ''; $u = '';
+                            foreach ($wpc_cands814($d) as $wpc_c814) {
+                                if ($t === '' && isset($wpc_c814['type']) && is_string($wpc_c814['type'])) {
+                                    $t = strtolower(trim($wpc_c814['type']));
+                                }
+                                if ($u === '' && isset($wpc_c814['url']) && is_string($wpc_c814['url'])) {
+                                    $u = trim($wpc_c814['url']);
+                                }
+                            }
+                            return ['t' => $t, 'u' => $u];
+                        };
+                        $wpc_lm96 = $wpc_pick96('mobile');
+                        $wpc_ld96 = $wpc_pick96('desktop');
+                        if (wps_rewriteLogic::wpc_combined_crit_on()) {
+
+
+                            if ($wpc_lm96 !== '' && $wpc_ld96 !== '') {
+                                $wpc_lcp_stem96 = $wpc_lm96;
+                            } else {
+                                $wpc_lcp_stem96 = ($wpc_lm96 !== '') ? $wpc_lm96 : $wpc_ld96;
+                            }
+                        } else {
+                            $wpc_lcp_stem96 = !empty(wps_rewriteLogic::$isMobile) ? $wpc_lm96 : $wpc_ld96;
+                        }
+                        $wpc_win96 = ($wpc_lcp_stem96 !== '' && $wpc_lcp_stem96 === $wpc_ld96 && $wpc_lcp_stem96 !== $wpc_lm96) ? 'desktop' : 'mobile';
+                        $wpc_ent96 = $wpc_picke96($wpc_win96);
+                        if ($wpc_ent96['u'] === '') { $wpc_ent96 = $wpc_picke96($wpc_win96 === 'mobile' ? 'desktop' : 'mobile'); }
+                        $wpc_lcp_type96 = $wpc_ent96['t'];
+                        $wpc_lcp_url96  = $wpc_ent96['u'];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            $wpc_lcp_stem96 = '';
+        }
+
+
+        if ($wpc_own_preload107 !== '') {
+            if ($wpc_lcp_stem96 === '' || stripos($wpc_own_preload107, $wpc_lcp_stem96) !== false) {
+
+
+                $wpc_lane_dead122 = false;
+                if (preg_match('/\bimagesrcset\s*=\s*(["\'])(.*?)\1/is', $wpc_own_preload107, $wpc_ops122)) {
+                    $wpc_rest122 = str_replace($wpc_own_preload107, '', $html);
+                    $wpc_lane_dead122 = true;
+                    foreach (preg_split('/\s*,\s*/', trim(html_entity_decode($wpc_ops122[2], ENT_QUOTES))) as $wpc_cand122) {
+                        $wpc_cu122 = trim((string) preg_replace('/\s+\d+(?:w|x)\s*$/', '', trim($wpc_cand122)));
+                        if ($wpc_cu122 !== '' && stripos($wpc_rest122, $wpc_cu122) !== false) {
+                            $wpc_lane_dead122 = false;
+                            break;
+                        }
+                    }
+                }
+                if (!$wpc_lane_dead122) {
+                    return $html;
+                }
+            }
+            $html = str_replace($wpc_own_preload107, '', $html);
+
+            $wpc_fam133 = preg_replace('/<link\b[^>]*\bid=["\']wpc-lcp-img-preload(?:-\d+)?["\'][^>]*>\s*/i', '', $html);
+            if (is_string($wpc_fam133)) { $html = $wpc_fam133; }
+        }
+        
+        
+        
+        
+        
+        
+        
+        $wpc_idsrc813 = ($wpc_lcp_stem96 !== '') ? 'json' : '';
+        if ($wpc_lcp_stem96 === '' && apply_filters('wpc_lcp_census_keeper', true)) {
+            $wpc_cs783 = self::wpc_lcp_census_stem783();
+            if ($wpc_cs783 !== '') { $wpc_lcp_stem96 = $wpc_cs783; $wpc_idsrc813 = 'census'; }
+        }
+        $tag = ''; $imgPos = -1;
+        if ($wpc_lcp_stem96 !== ''
+            && preg_match('#<img\b[^>]*(?:src|srcset)="[^"]*/' . preg_quote($wpc_lcp_stem96, '#') . '(?:-scaled)?(?:-\d+x\d+)?\.(?:png|jpe?g|webp|avif|gif)[^"]*"[^>]*>#i', $html, $im96, PREG_OFFSET_CAPTURE)) {
+            $tag    = $im96[0][0];
+            $imgPos = (int) $im96[0][1];
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if ($tag !== '' && $wpc_lcp_stem96 !== ''
+            && stripos($html, 'fetchpriority="high"') !== false
+            && apply_filters('wpc_lcp_demote_competitors', true)) {
+            $wpc_dem474 = 0;
+            $wpc_stemq474 = preg_quote($wpc_lcp_stem96, '#');
+            $wpc_html474 = preg_replace_callback('#<img\b[^>]*>#i', function ($m) use ($wpc_stemq474, &$wpc_dem474) {
+                $t = $m[0];
+                if (stripos($t, 'fetchpriority="high"') === false) {
+                    return $t;
+                }
+                
+                
+                if (preg_match('#(?:src|srcset|data-wpc-fb)="[^"]*/' . $wpc_stemq474 . '#i', $t)) {
+                    return $t;
+                }
+                $wpc_dem474++;
+                return preg_replace('#\s*fetchpriority="high"#i', '', $t);
+            }, $html);
+            if (is_string($wpc_html474) && $wpc_html474 !== '') {
+                $html = $wpc_html474;
+                if ($wpc_dem474 > 0) {
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_np474 = ($tag !== '') ? stripos($html, $tag) : false;
+                    if ($wpc_np474 !== false) { $imgPos = (int) $wpc_np474; }
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('lcp-demote-competitors', '', '', [
+                            'n'    => $wpc_dem474,
+                            'stem' => substr($wpc_lcp_stem96, -28),
+                        ]);
+                    }
+                }
+            }
+        }
+
+
+        if ($tag === '' && $wpc_lcp_type96 === 'bg' && $wpc_lcp_url96 !== ''
+            && stripos($wpc_lcp_url96, 'data:') !== 0
+            && (!class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed')
+                || wps_rewriteLogic::wpc_lcp_bg_url_allowed($wpc_lcp_url96))) {
+            $wpc_bglink115 = '<link rel="preload" as="image" fetchpriority="high" id="wpc-lcp-img-preload" href="' . esc_url($wpc_lcp_url96) . '">';
+            return self::wpc_inject_after_viewport($html, $wpc_bglink115);
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if ($tag === '') {
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            if ($wpc_lcp_type96 === 'text' && apply_filters('wpc_lcp_preload_honour_text', true)) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('lcp-preload-text-lcp', '', '', [
+                        'why' => 'artifact says the LCP is text — no image to preload',
+                    ]);
+                }
+                return $html;
+            }
+            if ($wpc_lcp_stem96 !== '') {
+                
+                
+                
+                
+                
+                if (function_exists('wpc_cache_first_log')) {
+                    $wpc_sq441 = preg_quote($wpc_lcp_stem96, '#');
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    wpc_cache_first_log('lcp-preload-no-stem-match', '', '', [
+                        'inhtml' => (stripos($html, $wpc_lcp_stem96) !== false) ? 1 : 0,
+                        'qw'     => preg_match('#data-wpc-qw-(?:src|srcset)="[^"]*' . $wpc_sq441 . '#i', $html) ? 1 : 0,
+                        'idsrc'  => $wpc_idsrc813 !== '' ? $wpc_idsrc813 : '-',
+                        't'      => $wpc_lcp_type96 !== '' ? $wpc_lcp_type96 : '-',
+                        'u'      => $wpc_lcp_url96 !== '' ? 1 : 0,
+                        'allow'  => ($wpc_lcp_url96 !== '' && class_exists('wps_rewriteLogic')
+                                     && method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed'))
+                                    ? (wps_rewriteLogic::wpc_lcp_bg_url_allowed($wpc_lcp_url96) ? 1 : 0) : '-',
+                        'imgs'   => preg_match_all('#<img\b#i', $html),
+                        'uri'    => isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 40) : '',
+                        'stem'   => substr($wpc_lcp_stem96, -28),
+                    ]);
+                }
+                return $html;
+            }
+            if (!apply_filters('wpc_lcp_preload_guess', true)) { return $html; }
+            $wpc_cand438 = [];
+            if (preg_match_all('/<img\b[^>]*\bfetchpriority\s*=\s*["\']?high["\']?[^>]*>/i', $html, $wpc_cm438, PREG_OFFSET_CAPTURE)) {
+                $wpc_cand438 = $wpc_cm438[0];
+            }
+            if (count($wpc_cand438) !== 1) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('lcp-preload-ambiguous', '', '', ['candidates' => count($wpc_cand438)]);
+                }
+                return $html;
+            }
+            $tag    = $wpc_cand438[0][0];
+            $imgPos = (int) $wpc_cand438[0][1];
+
+
+            if (preg_match('/\s(?:src|srcset)\s*=\s*["\'][^"\']*\.svg(?:[?#"\']|\s)/i', $tag)) {
+                return $html;
+            }
+        }
+        
+        if (preg_match('/\bloading\s*=\s*["\']?lazy["\']?/i', $tag)) return $html;
+
+
+        $before = substr($html, 0, $imgPos);
+        $pOpen  = strripos($before, '<picture');
+        $pClose = strripos($before, '</picture');
+        if ($pOpen !== false && ($pClose === false || $pOpen > $pClose)) {
+            if ($wpc_lcp_stem96 === '') return $html;
+            $wpc_pic96 = substr($html, $pOpen, $imgPos - $pOpen);
+
+
+            if (preg_match_all('/<source\b[^>]*\btype=["\']image\/(avif|webp)["\'][^>]*>/i', $wpc_pic96, $wpc_srcall133, PREG_SET_ORDER)) {
+                $wpc_links133 = [];
+                foreach ($wpc_srcall133 as $wpc_sr133) {
+                    $wpc_stag96 = $wpc_sr133[0];
+                    $wpc_media133 = (preg_match('/\smedia\s*=\s*(["\'])(.*?)\1/is', $wpc_stag96, $wpc_md133)) ? trim($wpc_md133[2]) : '';
+
+
+                    $wpc_arm133 = ($wpc_media133 !== '') ? 'm:' . md5($wpc_media133) : 'd';
+                    if (isset($wpc_links133[$wpc_arm133]) || count($wpc_links133) >= 3) { continue; }
+                    $wpc_ssrcset96 = (preg_match('/\ssrcset\s*=\s*(["\'])(.*?)\1/is', $wpc_stag96, $wpc_ss96)) ? trim($wpc_ss96[2]) : '';
+                    $wpc_ssizes96  = (preg_match('/\ssizes\s*=\s*(["\'])(.*?)\1/is', $wpc_stag96, $wpc_sz96m)) ? trim($wpc_sz96m[2]) : '';
+                    $wpc_sprobe96  = ($wpc_ssrcset96 !== '') ? (string) preg_split('/[\s,]+/', ltrim($wpc_ssrcset96))[0] : '';
+                    if ($wpc_ssrcset96 === '' || $wpc_sprobe96 === '' || stripos($wpc_sprobe96, 'data:') === 0
+                        || (method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed') && !wps_rewriteLogic::wpc_lcp_bg_url_allowed($wpc_sprobe96))) {
+                        continue;
+                    }
+                    $wpc_seen133[$wpc_arm133] = true;
+
+
+                    $wpc_lmedia133 = $wpc_media133;
+                    $wpc_links133[$wpc_arm133] = [
+                        'srcset' => $wpc_ssrcset96, 'sizes' => $wpc_ssizes96,
+                        'type' => strtolower($wpc_sr133[1]), 'media' => $wpc_lmedia133,
+                    ];
+                }
+                if (!empty($wpc_links133)) {
+
+
+                    if ($wpc_lcp_type96 !== 'bg') {
+                        $wpc_nobg133 = preg_replace('/<link\b[^>]*\bid=["\']wpc-atf-bg-preload["\'][^>]*>\s*/i', '', $html);
+                        if (is_string($wpc_nobg133)) { $html = $wpc_nobg133; }
+                    }
+                    
+                    
+                    if (isset($wpc_links133['d']) && $wpc_links133['d']['media'] === '' && count($wpc_links133) > 1) {
+                        $wpc_links133['d']['media'] = '(min-width: 768px)';
+                    }
+                    $wpc_out133 = '';
+                    $wpc_n133 = 0;
+                    foreach ($wpc_links133 as $wpc_l133) {
+                        $wpc_n133++;
+                        $wpc_out133 .= '<link rel="preload" as="image" fetchpriority="high" id="wpc-lcp-img-preload'
+                            . ($wpc_n133 > 1 ? '-' . $wpc_n133 : '') . '"'
+                            . ' imagesrcset="' . esc_attr($wpc_l133['srcset']) . '"'
+                            . (($wpc_l133['sizes'] !== '') ? ' imagesizes="' . esc_attr($wpc_l133['sizes']) . '"' : '')
+                            . (($wpc_l133['media'] !== '') ? ' media="' . esc_attr($wpc_l133['media']) . '"' : '')
+                            . ' type="image/' . $wpc_l133['type'] . '">';
+                    }
+
+                    return self::wpc_inject_after_viewport($html, $wpc_out133);
+                }
+            }
+            return $html;
+        }
+        
+        $srcset = (preg_match('/\ssrcset\s*=\s*(["\'])(.*?)\1/is', $tag, $sm)) ? trim($sm[2]) : '';
+        $sizes  = (preg_match('/\ssizes\s*=\s*(["\'])(.*?)\1/is',  $tag, $zm)) ? trim($zm[2]) : '';
+        $src    = (preg_match('/\ssrc\s*=\s*(["\'])(.*?)\1/is',    $tag, $cm)) ? trim($cm[2]) : '';
+        
+        $probe  = ($srcset !== '') ? (string) preg_split('/[\s,]+/', ltrim($srcset))[0] : $src;
+        if ($probe === '' || stripos($probe, 'data:') === 0) return $html;
+        
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_lcp_bg_url_allowed')
+            && !wps_rewriteLogic::wpc_lcp_bg_url_allowed($probe)) {
+            return $html;
+        }
+        if ($srcset !== '') {
+            $link = '<link rel="preload" as="image" fetchpriority="high" id="wpc-lcp-img-preload"'
+                  . ' imagesrcset="' . esc_attr($srcset) . '"'
+                  . (($sizes !== '') ? ' imagesizes="' . esc_attr($sizes) . '"' : '')
+                  . '>';
+        } else {
+            if ($src === '' || stripos($src, 'data:') === 0) return $html;
+            $link = '<link rel="preload" as="image" fetchpriority="high" id="wpc-lcp-img-preload"'
+                  . ' href="' . esc_url($src) . '">';
+        }
+        return self::wpc_inject_after_viewport($html, $link);
+    }
+
+
+    private static function wpc_inject_after_viewport($html, $link)
+    {
+        if (preg_match('/<meta\b[^>]*\bname\s*=\s*["\']?viewport["\']?[^>]*>/i', $html, $hm, PREG_OFFSET_CAPTURE)
+            || preg_match('/<meta\b[^>]*\bcharset\b[^>]*>/i', $html, $hm, PREG_OFFSET_CAPTURE)
+            || preg_match('/<head\b[^>]*>/i', $html, $hm, PREG_OFFSET_CAPTURE)) {
+            $pos = (int) $hm[0][1] + strlen($hm[0][0]);
+            return substr($html, 0, $pos) . "\n" . $link . substr($html, $pos);
+        }
+        return $link . "\n" . $html;
+    }
+
+
+    public static function wpc_lcp_census_stem783()
+    {
+        static $wpc_c783 = null;
+        if ($wpc_c783 !== null) { return $wpc_c783; }
+        $wpc_c783 = '';
+        try {
+            if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) { return $wpc_c783; }
+            $wpc_u783 = (function_exists('is_ssl') && is_ssl() ? 'https://' : 'http://')
+                . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+                . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?');
+            $wpc_k783 = (new wps_ic_url_key())->setup($wpc_u783);
+            if ($wpc_k783 === '') { return $wpc_c783; }
+            $wpc_f783 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_k783 . '/lcp.json';
+            if (!@is_readable($wpc_f783)) { return $wpc_c783; }
+            $wpc_j783 = json_decode((string) @file_get_contents($wpc_f783), true);
+            if (!is_array($wpc_j783) || empty($wpc_j783['atf_images']) || !is_array($wpc_j783['atf_images'])) {
+                return $wpc_c783;
+            }
+            $wpc_m783 = (!empty($_GET['simulate_mobile']) || (function_exists('wp_is_mobile') && wp_is_mobile()));
+            $wpc_g783 = $wpc_m783 ? 'mobile' : 'desktop';
+            $wpc_l783 = (isset($wpc_j783['atf_images'][$wpc_g783]) && is_array($wpc_j783['atf_images'][$wpc_g783]))
+                ? $wpc_j783['atf_images'][$wpc_g783] : [];
+            if (empty($wpc_l783)) {
+                foreach (['mobile', 'desktop'] as $wpc_o783) {
+                    if (!empty($wpc_j783['atf_images'][$wpc_o783]) && is_array($wpc_j783['atf_images'][$wpc_o783])) {
+                        $wpc_l783 = $wpc_j783['atf_images'][$wpc_o783];
+                        break;
+                    }
+                }
+            }
+            if (empty($wpc_l783) && isset($wpc_j783['atf_images'][0])) { $wpc_l783 = $wpc_j783['atf_images']; }
+            $wpc_best783 = 0;
+            $wpc_fold783 = (int) apply_filters('wpc_lcp_census_fold', 1200);
+            foreach ((array) $wpc_l783 as $wpc_e783) {
+                if (!is_array($wpc_e783) || empty($wpc_e783['stem']) || !is_string($wpc_e783['stem'])) { continue; }
+                if (!preg_match('/^[A-Za-z0-9._@-]{3,}$/', $wpc_e783['stem'])) { continue; }
+                $wpc_w783 = (int) (isset($wpc_e783['css_w']) ? $wpc_e783['css_w'] : 0);
+                $wpc_h783 = (int) (isset($wpc_e783['css_h']) ? $wpc_e783['css_h'] : 0);
+                
+                
+                if ($wpc_w783 < 64 || $wpc_h783 < 64
+                    || $wpc_w783 * $wpc_h783 < (int) apply_filters('wpc_lcp_census_min_area', 20000)) { continue; }
+                
+                if (isset($wpc_e783['top']) && (int) $wpc_e783['top'] > $wpc_fold783) { continue; }
+                $wpc_a783 = $wpc_w783 * $wpc_h783;
+                if ($wpc_a783 > $wpc_best783) {
+                    $wpc_best783 = $wpc_a783;
+                    $wpc_c783 = strtolower((string) $wpc_e783['stem']);
+                }
+            }
+        } catch (\Throwable $e) {
+            $wpc_c783 = '';
+        }
+        return $wpc_c783;
+    }
+
+    public static function wpc_zone_preconnect_prune_pass($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
+                return $html;
+            }
+            if (!apply_filters('wpc_zone_preconnect_prune', true)) {
+                return $html;
+            }
+            
+            
+            
+            
+            
+            $wpc_zh782 = strtok((string) self::$zone_name, '/');
+            if (!is_string($wpc_zh782) || $wpc_zh782 === '') {
+                return $html;
+            }
+            $wpc_zp782 = '/<link\b[^>]*rel=["\'](?:preconnect|dns-prefetch)["\'][^>]*'
+                . preg_quote($wpc_zh782, '/') . '[^>]*>/i';
+            $wpc_zs782 = preg_replace($wpc_zp782, '', $html);
+            if (!is_string($wpc_zs782) || $wpc_zs782 === $html) {
+                return $html;
+            }
+            return (stripos($wpc_zs782, $wpc_zh782) !== false) ? $html : $wpc_zs782;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_zone_font_preconnect_pass($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || empty(self::$zone_name)) {
+                return $html;
+            }
+            if (!apply_filters('wpc_zone_font_preconnect', true)) {
+                return $html;
+            }
+            $wpc_zq132 = preg_quote((string) self::$zone_name, '/');
+            if (preg_match('/<link\b[^>]*rel=["\']preconnect["\'][^>]*' . $wpc_zq132 . '[^>]*\bcrossorigin\b/i', $html)) {
+                return $html;
+            }
+            
+            $wpc_early132 =
+                preg_match('/<link\b[^>]*as=["\']font["\'][^>]*href=["\']https:\/\/' . $wpc_zq132 . '\//i', $html)
+                || preg_match('/<link\b[^>]*href=["\']https:\/\/' . $wpc_zq132 . '\/[^"\']*\.woff2?[^"\']*["\'][^>]*as=["\']font["\']/i', $html)
+                || preg_match('/@font-face[^}]{0,600}?url\(\s*["\']?https:\/\/' . $wpc_zq132 . '\/[^"\')]*\.woff2?/i', $html);
+            if (!$wpc_early132) {
+                return $html;
+            }
+            $wpc_twin132 = '<link rel="preconnect" href="https://' . self::$zone_name . '" crossorigin>';
+            $wpc_plain132 = '<link rel="preconnect" href="https://' . self::$zone_name . '">';
+            if (strpos($html, $wpc_plain132) !== false) {
+                return str_replace($wpc_plain132, $wpc_plain132 . $wpc_twin132, $html);
+            }
+            return self::wpc_inject_after_viewport($html, $wpc_twin132);
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_fonts_drop_remote_dup($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<link') === false) return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_fonts_drop_remote_dup', true)) return $html;
+        $set = function_exists('get_option') ? get_option('wps_ic_fonts_remote_dup') : null;
+        if (!is_array($set) || empty($set)) return $html;
+        $hrefs = []; $hosts = []; $fams = [];
+        foreach ($set as $tok) {
+            if (!is_string($tok)) continue;
+            if (strpos($tok, '@href:') === 0) { $h = substr($tok, 6); if ($h !== '') $hrefs[] = $h; }
+            elseif (strpos($tok, '@host:') === 0) { $h = substr($tok, 6); if ($h !== '') $hosts[] = $h; }
+            elseif (strpos($tok, 'fam:') === 0) { $f = substr($tok, 4); if ($f !== '') $fams[] = $f; }
+        }
+        if (empty($hrefs) && empty($hosts)) return $html;
+        $out = preg_replace_callback('/<link\b[^>]*>/i', function ($m) use ($hrefs, $hosts, $fams) {
+            $tag = $m[0];
+            if (!preg_match('/\bhref=(["\'])(.*?)\1/i', $tag, $hm)) return $tag;
+            $href = strtolower(html_entity_decode($hm[2]));
+            
+            foreach ($hrefs as $h) { if (strpos($href, $h) !== false) return ''; }
+            
+            $hostHit = false;
+            foreach ($hosts as $h) { if (strpos($href, $h) !== false) { $hostHit = true; break; } }
+            if (!$hostHit) return $tag;
+            if (!preg_match('/[?&]family=([^&"\']*)/i', $href, $fm)) return $tag; 
+            foreach (explode('|', urldecode($fm[1])) as $fpart) {
+                $fname = trim(preg_replace('/:.*$/', '', str_replace('+', ' ', $fpart)));
+                if ($fname !== '' && !in_array($fname, $fams, true)) return $tag; 
+            }
+            return '';
+        }, $html);
+        return is_string($out) ? $out : $html;
+    }
+
+    public static function wpc_font_preconnect_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<head') === false) {
+            return $html;
+        }
+        if (!apply_filters('wpc_font_preconnect', true)) {
+            return $html;
+        }
+
+
+        if (isset(self::$settings['replace-fonts']) && self::$settings['replace-fonts'] === 'local') {
+            $wpc_stripped107 = preg_replace(
+                [
+                    '#<link\b[^>]*rel=["\']?(?:preconnect|dns-prefetch)["\']?[^>]*(?:fonts\.gstatic\.com|fonts\.googleapis\.com|fonts\.bunny\.net)[^>]*>\s*#i',
+                    '#<link\b[^>]*(?:fonts\.gstatic\.com|fonts\.googleapis\.com|fonts\.bunny\.net)[^>]*rel=["\']?(?:preconnect|dns-prefetch)["\']?[^>]*>\s*#i',
+                ],
+                '',
+                $html
+            );
+            if (is_string($wpc_stripped107) && $wpc_stripped107 !== '') {
+                $html = $wpc_stripped107;
+            }
+            return $html;
+        }
+        $links = '';
+        if (stripos($html, 'fonts.gstatic.com') !== false
+            && !preg_match('/<link\b[^>]*rel=["\']?preconnect["\']?[^>]*fonts\.gstatic\.com/i', $html)
+            && !preg_match('/<link\b[^>]*fonts\.gstatic\.com[^>]*rel=["\']?preconnect/i', $html)) {
+            $links .= '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+        }
+        if (stripos($html, 'fonts.googleapis.com/css') !== false
+            && !preg_match('/<link\b[^>]*rel=["\']?preconnect["\']?[^>]*fonts\.googleapis\.com/i', $html)
+            && !preg_match('/<link\b[^>]*fonts\.googleapis\.com[^>]*rel=["\']?preconnect/i', $html)) {
+            $links .= '<link rel="preconnect" href="https://fonts.googleapis.com">';
+        }
+        if (stripos($html, 'fonts.bunny.net') !== false
+            && !preg_match('/<link\b[^>]*rel=["\']?preconnect["\']?[^>]*fonts\.bunny\.net/i', $html)) {
+            $links .= '<link rel="preconnect" href="https://fonts.bunny.net" crossorigin>';
+        }
+        if ($links === '') {
+            return $html;
+        }
+        if (preg_match('/<head\b[^>]*>/i', $html, $hm, PREG_OFFSET_CAPTURE)) {
+            $pos = (int) $hm[0][1] + strlen($hm[0][0]);
+            return substr($html, 0, $pos) . "\n" . $links . substr($html, $pos);
+        }
+        return $html;
+    }
+
+
+    public static function wpc_rum_beacon_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '</body>') === false) { return $html; }
+        if (strpos($html, 'wpc-rum-beacon') !== false) { return $html; }
+        if (function_exists('is_user_logged_in') && is_user_logged_in()) { return $html; }
+        if (function_exists('is_customize_preview') && is_customize_preview()) { return $html; }
+        if (function_exists('apply_filters') && !apply_filters('wpc_rum_beacon', true)) { return $html; }
+        $wpc_rate775 = (int) (function_exists('apply_filters') ? apply_filters('wpc_rum_sample_rate', 50) : 50);
+        if ($wpc_rate775 < 1) { return $html; }
+        $wpc_ax775 = function_exists('admin_url') ? (string) admin_url('admin-ajax.php') : '';
+        if ($wpc_ax775 === '' || strpos($wpc_ax775, 'http') !== 0) { return $html; }
+        
+        
+        $wpc_js775 = <<<'WPCRUMJS'
+(function(){try{
+if(navigator.webdriver)return;
+if(Math.random()*__RATE__>=1)return;
+var LS;try{LS=localStorage}catch(e){}
+if(LS&&+(LS.getItem('wpcRumOff')||0)>Date.now())return;
+var atf=[],lcp=null,sent=0;
+requestAnimationFrame(function(){var vh=innerHeight,vw=innerWidth,xs=document.images,i,im,r;
+for(i=0;i<xs.length&&atf.length<20;i++){im=xs[i];r=im.getBoundingClientRect();
+if(r.width<24||r.height<24||r.bottom<=0||r.top>=vh||r.left>=vw)continue;
+atf.push({classes:String(im.className||'').split(/\s+/).slice(0,2),slot_w:Math.round(r.width),slot_h:Math.round(r.height),intrinsic_w:im.naturalWidth||0,current_src:String(im.currentSrc||im.src||'').slice(0,300),loading:im.getAttribute('loading')||''})}});
+try{new PerformanceObserver(function(l){var e=l.getEntries();if(!e.length)return;var x=e[e.length-1],el=x.element;
+var sel=el?el.tagName.toLowerCase()+(el.className?'.'+String(el.className).split(/\s+/).slice(0,2).join('.'):''):'';
+var rr=el&&el.getBoundingClientRect?el.getBoundingClientRect():{width:0,height:0,x:0,y:0};
+lcp={selector:sel.slice(0,120),url:x.url?String(x.url).slice(0,300):null,rect:{w:Math.round(rr.width),h:Math.round(rr.height),x:Math.round(rr.x),y:Math.round(rr.y)},t_ms:Math.round(x.startTime)}}).observe({type:'largest-contentful-paint',buffered:true})}catch(e){}
+var send=function(){if(sent||(!atf.length&&!lcp))return;sent=1;var b;
+try{b=JSON.stringify({v:1,url:location.href.split('#')[0].slice(0,500),viewport:{w:innerWidth,h:innerHeight,dpr:devicePixelRatio||1},lcp:lcp,atf_images:atf})}catch(e){return}
+if(b.length>30000)return;
+var ok=navigator.sendBeacon&&navigator.sendBeacon('__AX__?action=wpc_rum_census',new Blob([b],{type:'text/plain'}));
+if(!ok&&LS){try{LS.setItem('wpcRumOff',String(Date.now()+6048e5))}catch(e){}}};
+addEventListener('load',function(){('requestIdleCallback'in window?requestIdleCallback:function(f){setTimeout(f,2e3)})(function(){setTimeout(send,1200)})});
+addEventListener('pagehide',send);
+}catch(e){}})();
+WPCRUMJS;
+        $wpc_js775 = str_replace(['__RATE__', '__AX__'], [(string) $wpc_rate775, esc_url_raw($wpc_ax775)], $wpc_js775);
+        return wpc_body_inject809($html, '<script id="wpc-rum-beacon">' . $wpc_js775 . '</script>');
+    }
+
+    public static function wpc_embed_facade_pass($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<iframe') === false) {
+            return $html;
+        }
+        $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+        $on  = is_array($set) && !empty($set['embed-facade']) && $set['embed-facade'] == '1';
+        
+        
+        $wpc_off769 = is_array($set) && isset($set['embed-facade']) && $set['embed-facade'] == '0';
+        $wpc_vid769 = (bool) apply_filters('wpc_embed_facade_video_default', !$wpc_off769);
+        if (!apply_filters('wpc_embed_facade', $on) && !$wpc_vid769) {
+            return $html;
+        }
+        if (function_exists('is_user_logged_in') && is_user_logged_in()) {
+            return $html;
+        }
+        $wpc_full769 = (bool) apply_filters('wpc_embed_facade', $on);
+        $hosts = (array) apply_filters('wpc_embed_facade_hosts', [
+            'google.com/maps/embed', 'maps.google.com', 'youtube.com/embed', 'youtube-nocookie.com/embed',
+            'play.gumlet.io/embed',
+        ]);
+        $count = 0;
+        $out = preg_replace_callback('/<iframe\b[^>]*>(?:\s*<\/iframe>)?/is', function ($m) use ($hosts, $wpc_full769, &$count) {
+            $tag = $m[0];
+            $hit = '';
+            foreach ($hosts as $h) {
+                if (stripos($tag, $h) !== false) { $hit = $h; break; }
+            }
+            if ($hit === '') {
+                return $tag;
+            }
+            $isYt = (stripos($hit, 'youtube') !== false);
+            $isVid = $isYt || stripos($hit, 'gumlet') !== false;
+            if (!$wpc_full769) {
+                
+                
+                
+                
+                
+                if (stripos($hit, 'gumlet') === false
+                    || preg_match('/\b(?:autoplay|background)=(?:true|1)\b/i', $tag)
+                    || preg_match('/data-(?:cookieblock|cmplz|borlabs|cookieconsent|consent)|cookiebot/i', $tag)
+                    || !preg_match('/\ssrc=(["\'])[^"\']*' . preg_quote($hit, '/') . '/i', $tag)) {
+                    return $tag;
+                }
+            }
+            
+            $w = preg_match('/\bwidth=["\']?(\d{2,4})/i', $tag, $wm) ? (int) $wm[1] : 0;
+            $h = preg_match('/\bheight=["\']?(\d{2,4})/i', $tag, $hm) ? (int) $hm[1] : 0;
+            $ratio = ($w > 0 && $h > 0) ? ($w . ' / ' . $h) : '16 / 9';
+            $style = 'position:relative;display:block;width:100%;aspect-ratio:' . $ratio . ';'
+                   . 'background:#e8eaed;border-radius:8px;overflow:hidden;cursor:pointer;border:0;padding:0;';
+            $poster = '';
+            if ($isYt && preg_match('#/embed/([A-Za-z0-9_-]{6,})#', $tag, $vm)) {
+                $poster = '<img src="https://i.ytimg.com/vi/' . esc_attr($vm[1]) . '/hqdefault.jpg" alt="" loading="lazy" decoding="async"'
+                        . ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">';
+            }
+            $label = $isVid ? 'Play video' : 'Load map';
+            $badge = $isVid
+                ? '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:68px;height:48px;background:rgba(0,0,0,.72);border-radius:12px;display:flex;align-items:center;justify-content:center;">'
+                  . '<svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>'
+                : '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;color:#5f6368;font:600 14px/1 -apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">'
+                  . '<svg width="34" height="34" viewBox="0 0 24 24" fill="#ea4335" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>'
+                  . '<span style="background:#fff;border-radius:20px;padding:8px 16px;box-shadow:0 1px 3px rgba(0,0,0,.25);">Load map</span></span>';
+            $count++;
+            return '<button type="button" class="wpc-embed-facade" data-wpc-embed="' . base64_encode($tag) . '"'
+                 . ' aria-label="' . esc_attr($label) . '" style="' . $style . '">' . $poster . $badge . '</button>';
+        }, $html, -1, $n);
+        if ($out === null || $count === 0) {
+            return $html;
+        }
+
+
+        $js = '<script id="wpc-embed-facade-js">(function(){document.addEventListener("click",function(e){'
+            . 'var b=e.target&&e.target.closest?e.target.closest(".wpc-embed-facade"):null;if(!b)return;'
+            . 'e.preventDefault();var d=document.createElement("div");'
+            . 'try{d.innerHTML=atob(b.getAttribute("data-wpc-embed"));}catch(x){return;}'
+            . 'var f=d.querySelector("iframe");if(!f)return;'
+            . 'var s=f.getAttribute("src")||f.getAttribute("data-src")||f.getAttribute("data-wpc-src")||"";'
+            . 'if(s&&/youtube(-nocookie)?\\.com\\/embed\\//i.test(s)&&s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=1";}'
+            . 'if(s&&/play\\.gumlet\\.io\\/embed\\//i.test(s)){if(/autoplay=false/i.test(s)){s=s.replace(/autoplay=false/ig,"autoplay=true");}else if(s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=true";}}'
+            . 'if(s){f.setAttribute("src",s);}f.removeAttribute("loading");'
+            . 'f.style.width="100%";f.style.height="100%";f.style.position="absolute";f.style.inset="0";f.style.border="0";'
+            . 'b.style.cursor="default";b.innerHTML="";b.appendChild(f);},true);})();</script>';
+        return wpc_body_inject809($out, $js . "\n");
+    }
+
+
     public static function wpc_collapse_double_ext($html)
     {
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:wpc_collapse_double_ext') : null;
         if (!is_string($html) || $html === '') return $html;
         if (strpos($html, '.webp.webp') === false
             && strpos($html, '.avif.avif') === false
@@ -2173,12 +4631,11 @@ class wps_cdn_rewrite
 
     public function buffer_local_callback($html)
     {
-        // Negotiated delivery is a CDN-ON feature — its native .webp URLs are served by the
-        // CDN container, so it dispatches ONLY from cdnRewriter() (the CDN-on buffer), never
-        // here in the local/CDN-off path. See cdnRewriter() for the F.0 compose.
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:buffer_local_callback') : null;
 
-        // Heal mixed content (same-host http→https on https requests), mirroring cdnRewriter() — covers
-        // the CDN-off local-delivery buffer too.
+
+        
+        
         $html = wpc_heal_mixed_content($html);
 
         $isUserLoggedIn = is_user_logged_in();
@@ -2190,7 +4647,7 @@ class wps_cdn_rewrite
         if ((!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true') || !empty(wpcGetHeader('criticalCombine'))) {
             $this->criticalCombine = true;
         }
-        //Do something with the buffer (HTML)
+        
         if (isset($_GET['brizy-edit-iframe']) || isset($_GET['brizy-edit']) || isset($_GET['preview'])) {
             return $html;
         }
@@ -2208,19 +4665,20 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Edge-negotiate Mode-B: when the resolver has proven CDN_EDGE with redirect_target='origin'
-        // (the "Edge negotiate" radio: zone 302-negotiates, origin serves bytes), negotiated owns <img>
-        // in the CDN-off buffer too. is_active() is the full gate. Mirrors the cdnRewriter dispatch;
-        // cdnEnabled stays 0 so the CSS/JS/font passes run on origin — only images ride the zone.
+
+        
+        
+        $wpcLocalScriptMask = [];
+        $html = wps_rewriteLogic::maskMediaScripts($html, $wpcLocalScriptMask);
+
         $wpcnd_local_stash = [];
         if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) {
             $html = WPC_Negotiated_Delivery::rewrite_buffer($html);
             if (class_exists('wps_rewriteLogic')) {
-                wps_rewriteLogic::$pictureWebpEnabled = false; // path-A/local picture builder stands down
+                wps_rewriteLogic::$pictureWebpEnabled = false;
             }
-            // Stash the final negotiated tags so the LOCAL passes (local_image_tags, lazy,
-            // set_image_sizes, css-bg) can't re-touch them — mirrors the cdnRewriter stash.
-            // Keys deliberately NOT HTML comments (the comment-clear pass would strip them).
+
+
             $html = preg_replace_callback('/<img\b[^>]*\bdata-wpc-nd\b[^>]*>/i', function ($m) use (&$wpcnd_local_stash) {
                 $k = '___WPCND_IMG_' . count($wpcnd_local_stash) . '___';
                 $wpcnd_local_stash[$k] = $m[0];
@@ -2229,14 +4687,20 @@ class wps_cdn_rewrite
         }
 
 
-        // Layzload Iframe - sets load="lazy" to iframe tag
-        // TODO: Fix so that it checks does iframe already have load="lazy|auto"
-        if (!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1' && !$isUserLoggedIn) {
+        
+        
+        
+        
+        
+        
+        if ((!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1'
+                || self::wpc_facade_aggr_ok())
+            && !$isUserLoggedIn) {
             $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', [$this, 'replace_iframe_tags'], $html);
             $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
         }
 
-        // Add preload="none" to video tags — prevents browser from downloading video until play
+        
         if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
             $html = preg_replace_callback('/<video\b([^>]*)>/i', function ($matches) {
                 $attrs = $matches[1];
@@ -2255,6 +4719,9 @@ class wps_cdn_rewrite
             $html = self::$rewriteLogic->encodeIframe($html);
         }
 
+        $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcLocalScriptMask);
+        $wpcLocalScriptMask = [];
+
         if (self::$cdnEnabled == 0) {
             $htmlBefore = $html;
             $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$this, 'local_script_encode'], $html);
@@ -2263,7 +4730,7 @@ class wps_cdn_rewrite
                 $html = $htmlBefore;
             }
 
-            // Protect existing <picture> blocks from double-wrapping
+            
             $wpcLocalPictureBlocks = [];
             if (self::$rewriteLogic::$pictureWebpEnabled) {
                 $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$wpcLocalPictureBlocks) {
@@ -2273,9 +4740,12 @@ class wps_cdn_rewrite
                 }, $html);
             }
 
+            if (function_exists('wpc_device_hidden_image_set')) {
+                self::$deviceHiddenSet717 = wpc_device_hidden_image_set($html, function_exists('wpc_ua_is_mobile') ? (bool) wpc_ua_is_mobile() : false);
+            }
             $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [$this, 'local_image_tags'], $html);
 
-            // Restore protected <picture> blocks
+            
             foreach ($wpcLocalPictureBlocks as $i => $block) {
                 $html = str_replace('<!--WPC_LOCAL_PICTURE_' . $i . '-->', $block, $html);
             }
@@ -2288,7 +4758,7 @@ class wps_cdn_rewrite
 
             $html = preg_replace_callback('/<style\b[^>]*>(.*?)<\/style>?/is', [self::$rewriteLogic, 'replaceBackgroundImagesInCSSLocal'], $html);
 
-            //Combine JS
+            
             if ($this->doCacheCombine() && (isset(self::$settings['js_combine']) && self::$settings['js_combine'] == '1')) {
                 $combine_js = new wps_ic_combine_js();
                 $html = $combine_js->maybe_do_combine($html);
@@ -2299,8 +4769,12 @@ class wps_cdn_rewrite
             return $html;
         }
 
+        
+        $wpcLocalSizeMask = [];
+        $html = wps_rewriteLogic::maskMediaScripts($html, $wpcLocalSizeMask);
         $html = preg_replace_callback('/<img[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si', [$this, 'set_image_sizes'], $html);
         $html = preg_replace_callback('/<picture>.*?<\/picture>/is', [$this, 'set_image_sizes'], $html);
+        $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcLocalSizeMask);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'combine_css') {
             return $html;
@@ -2312,7 +4786,7 @@ class wps_cdn_rewrite
         }
 
 
-        $html = preg_replace_callback('/<head\b[^>]*>/si', [$this, 'injectPreloadImages'], $html, 1);
+        $html = preg_replace_callback('/<head\b[^>]*>(?:\s*<meta[^>]*\bcharset\b[^>]*>)?/si', [$this, 'injectPreloadImages'], $html, 1);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -2329,11 +4803,11 @@ class wps_cdn_rewrite
         }
 
         if (isset(self::$settings['fontawesome-lazy']) && self::$settings['fontawesome-lazy'] == '1') {
-            // TODO: Maybe add something?
+            
             $html = $combine_css->lazyFontawesome($html);
         }
 
-        // Critical CSS Remove from Header
+        
         $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1')) && (empty($settings['developer_mode']) || $settings['developer_mode'] == '0');
 
         $criticalCSS = new wps_criticalCss();
@@ -2363,23 +4837,16 @@ class wps_cdn_rewrite
         }
 
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-//            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-//                // TODO: Maybe add something?
-//                if ($criticalActive && !empty($criticalCSSExists)) {
-//                    //critical exists, dont inline
-//                } else {
-//                    $html = $combine_css->doInline($html);
-//                }
-//            } else {
 
-            //Combine CSS
+
+            
             if (($this->doCacheCombine() && (isset(self::$settings['css_combine']) && self::$settings['css_combine'] == '1')) || $this->criticalCombine) {
                 if (empty($_GET['stopCombineCSS'])) {
                     $html = $combine_css->maybe_do_combine($html);
                 }
             }
 
-            #}
+            
         }
 
         if ((empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
@@ -2390,18 +4857,18 @@ class wps_cdn_rewrite
 
 
                 if (!empty($_GET['debugCritical_replace'])) {
-                    #global $post;
+                    
                     $criticalCSS = new wps_criticalCss();
                     $criticalCSSExists = $criticalCSS->criticalExists();
                     $criticalCSSContent = file_get_contents($criticalCSSExists['file']);
 
-                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
+                    
                     $createPreloadLinks = function ($cssContent) {
                         $preloadLinks = '';
-                        $loadedFonts = []; // Array to track already added URLs
+                        $loadedFonts = []; 
                         $commentPos = strpos($cssContent, '/* Preload Fonts */');
 
-                        // Proceed only if the comment is found
+                        
                         if ($commentPos !== false) {
                             $relevantContent = substr($cssContent, 0, $commentPos);
                             $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
@@ -2411,11 +4878,11 @@ class wps_cdn_rewrite
                                     if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
                                         continue;
                                     }
-                                    // Check if the font URL is already in the array
+                                    
                                     if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
                                         if (!in_array($fontUrl, $loadedFonts)) {
                                             $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
-                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                            $loadedFonts[] = $fontUrl; 
                                         }
                                     }
                                 }
@@ -2424,7 +4891,7 @@ class wps_cdn_rewrite
                         return $preloadLinks;
                     };
 
-                    // Function to get the CSS content after the "/* Preload Fonts */" comment
+                    
                     $getCSSAfterPreloadComment = function ($cssContent) {
                         $commentPos = strpos($cssContent, '/* Preload Fonts */');
                         return $commentPos !== false ? substr($cssContent, $commentPos + strlen('/* Preload Fonts */')) : $cssContent;
@@ -2446,17 +4913,40 @@ class wps_cdn_rewrite
 
                     if (!self::isURLExcluded('critical_css')) {
 
-                        #global $post;
+                        
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
                         if (!empty($criticalCSSExists)) {
                             $html = self::$rewriteLogic->addCritical($html);
-                            if (strpos($html, 'wpc-critical-css') !== false) {
+                            
+                            
+                            
+                            
+                            
+                            
+                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\']/i', $html)) {
                                 $html = self::$rewriteLogic->lazyCSS($html);
                             }
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            if (class_exists('wps_rewriteLogic')
+                                && method_exists('wps_rewriteLogic', 'wpc_defer_wire_dropfaces680')) {
+                                $html = wps_rewriteLogic::wpc_defer_wire_dropfaces680($html);
+                            }
                         } else {
-                            //this way should be ok for multisite
+
+                            $html = self::$rewriteLogic->wpc_arm_sentinel_tag($html);
                         }
                     }
                 }
@@ -2467,32 +4957,35 @@ class wps_cdn_rewrite
             $html = self::$rewriteLogic->decodeIframe($html);
         }
 
-        // Theme Integrations
+        
         $html = self::$themeIntegrations->getIntegration($html);
 
-        //Delay JS
+        
         if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
 
 
-            #$delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
             $delayActive = true;
 
             if (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') {
-                // Disable
+                
                 $delayActive = false;
             }
 
             $delayV2Active = true;
             if (isset(self::$page_excludes['delay_js_v2']) && self::$page_excludes['delay_js_v2'] == '0') {
-                // Disable
+                
                 $delayV2Active = false;
             }
 
 
-            if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')) {
+            if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')
+                || (class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings))) {
                 if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-                    $js_delay = new wps_ic_js_delay_v2();
+
+
+                    $wpc_delay_v3 = (!isset(self::$settings['delay-js-v3']) || self::$settings['delay-js-v3'] != '0') && class_exists('wps_ic_js_delay_v3');
+                    $js_delay = $wpc_delay_v3 ? new wps_ic_js_delay_v3() : new wps_ic_js_delay_v2();
 
                     if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
                         $html = $js_delay->process_html($html);
@@ -2515,7 +5008,7 @@ class wps_cdn_rewrite
                 }
 
                 if (!empty($_GET['testGtag'])) {
-                    //$html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+                    
 
                     return print_r([$html], true);
                 }
@@ -2524,39 +5017,75 @@ class wps_cdn_rewrite
         }
 
 
-        // Cache
+        
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
 
-        //clean up all our placeholder comments if not used
+
         $html = preg_replace('/<!--WPC[\s\S]*?-->/', '', $html);
 
-        // Local Fonts / Bunny localization — mirror of the CDN-on path (cdnRewriter ~5045) for CDN-OFF mode,
-        // where this previously never ran, so Local Fonts didn't localize at all (faces stayed on gstatic).
-        // Runs after lazyCSS (the deferred <link> exists) and outside the crit gate (applies crit-on AND -off).
+
+        
+        
+        if (function_exists('wpc_yield_checkpoints707')) {
+            $wpc_dm707 = class_exists('wps_ic_js_delay_v3')
+                && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings)
+                && !self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['disableCritical'])
+                && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI;
+            $wpc_pre707 = strlen($html);
+            $html = wpc_yield_checkpoints707($html, $wpc_dm707);
+            if (strlen($html) !== $wpc_pre707 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('yield-inject', '', '', ['lane' => 'local']);
+            }
+            $wpc_fmv710l = 0;
+            $html = wpc_face_gate710($html, $wpc_dm707, $wpc_fmv710l);
+            if ($wpc_fmv710l > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv710l, 'lane' => 'local']);
+            }
+        }
+
+
+        $html = self::wpc_gfonts_display_pass($html);
+
+
         if (!empty(self::$settings['replace-fonts'])) {
             if (self::$settings['replace-fonts'] == 'local') {
                 $fonts = new wps_ic_fonts();
                 $html  = $fonts->replaceFrontend($html);
             } else if (self::$settings['replace-fonts'] == 'bunny') {
-                // Bunny Fonts — GDPR-compliant Google Fonts drop-in (mirror of cdnRewriter)
+                
                 $html = str_replace('fonts.googleapis.com', 'fonts.bunny.net', $html);
                 $html = preg_replace('/<link\b[^>]*\bhref=["\']https?:\/\/fonts\.gstatic\.com\/[^"\']+["\'][^>]*>\s*/i', '', $html);
                 $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
             }
         }
 
-        // 7.01.0 — Modern Image Delivery post-process (BETA, default OFF, self-gated)
-        // Mirrors the same call in cdnRewriter (line ~3834) for when CDN is disabled.
-        // Stands down when negotiated delivery is active (mutually exclusive); harmless no-op
-        // in CDN-off mode where negotiated is never active.
+
         if (class_exists('WPC_Modern_Delivery') && WPC_Modern_Delivery::is_active()
             && !(class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active())) {
+            $wpcLocalMdMask = [];
+            $html = wps_rewriteLogic::maskMediaScripts($html, $wpcLocalMdMask);
             $html = WPC_Modern_Delivery::rewrite_buffer($html);
+            $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcLocalMdMask);
         }
 
-        // Restore the Edge-negotiate (Mode-B) stashed <img data-wpc-nd> tags.
+        
         if (!empty($wpcnd_local_stash)) {
             $html = strtr($html, $wpcnd_local_stash);
+        }
+
+        if (function_exists('wpc_stack_splice732')) {
+            $html = wpc_stack_splice732($html);
+        }
+        
+        
+        
+        
+        if (function_exists('wpc_face_gate710') && isset($wpc_dm707) && $wpc_dm707) {
+            $wpc_fmv711l = 0;
+            $html = wpc_face_gate710($html, true, $wpc_fmv711l);
+            if ($wpc_fmv711l > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv711l, 'lane' => 'local-final']);
+            }
         }
 
         return $html;
@@ -2564,13 +5093,9 @@ class wps_cdn_rewrite
 
     public function doCacheCombine()
     {
-        //used to check if we should do cache or criticalCombine
+
 
         if (is_404()) {
-            return false;
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
             return false;
         }
 
@@ -2625,35 +5150,35 @@ class wps_cdn_rewrite
         return true;
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilder()
     {
-        $page_builders = ['run_compress', //wpc
-            'run_restore', //wpc
-            'elementor-preview', //elementor
-            'fl_builder', //beaver builder
-            'et_fb', //divi
-            'preview', //WP Preview
-            'builder', //builder
-            'brizy', //brizy
-            'fb-edit', //avada
-            'bricks', //bricks
-            'ct_template', //ct_template
-            'ct_builder', //ct_builder
-            'cs-render', //cornerstone
-            'tatsu', //tatsu
-            'trp-edit-translation', //thrive
-            'brizy-edit-iframe', //brizy
-            'ct_builder', //oxygen
-            'livecomposer_editor', //livecomposer
-            'tatsu', //tatsu
-            'tatsu-header', //tatsu-header
-            'tatsu-footer', //tatsu-footer
-            'is-editor-iframe', //tatsu-footer
-            'tve', //thrive
+        $page_builders = ['run_compress',
+            'run_restore',
+            'elementor-preview',
+            'fl_builder',
+            'et_fb',
+            'preview', 
+            'builder',
+            'brizy',
+            'fb-edit',
+            'bricks',
+            'ct_template',
+            'ct_builder',
+            'cs-render',
+            'tatsu',
+            'trp-edit-translation',
+            'brizy-edit-iframe',
+            'ct_builder',
+            'livecomposer_editor',
+            'tatsu',
+            'tatsu-header',
+            'tatsu-footer',
+            'is-editor-iframe',
+            'tve',
             'pagelayer-live'];
 
         if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], 'cornerstone') !== false) {
@@ -2661,12 +5186,12 @@ class wps_cdn_rewrite
         }
 
         if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
-            //brizyFrontend fix
+
             return true;
         }
 
         if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-            //optimizePress builder fix
+
             return true;
         }
 
@@ -2687,10 +5212,10 @@ class wps_cdn_rewrite
         return false;
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilderFE()
     {
         if (class_exists('BT_BB_Root')) {
@@ -2749,14 +5274,10 @@ class wps_cdn_rewrite
             return true;
         }
 
-        if (!empty($_GET['dbg_checkCache'])) {
-            die('Check cache');
-        }
-
         if (self::dontRunif()) {
-            /**
-             * Check for cache first
-             */
+            
+
+
 
             if (!empty($_GET['dontRunCache'])) {
                 die('Check cache 23');
@@ -2782,7 +5303,7 @@ class wps_cdn_rewrite
                 if ($cache->cacheExists($prefix)) {
                     $isCacheExpired = false;
 
-                    // Not required as get cache sorts this
+                    
                     $isCacheValid = true;
 
                     if (!$isCacheExpired && $isCacheValid) {
@@ -2797,11 +5318,17 @@ class wps_cdn_rewrite
 
     public function is_mobile()
     {
+        
+        
+        if (function_exists('wpc_ua_is_mobile')) {
+            return wpc_ua_is_mobile();
+        }
+
         if (!empty($_GET['simulate_mobile'])) {
             return true;
         }
 
-        if (isset($_SERVER['HTTP_USER_AGENT']) && (preg_match('#^.*(2.0\ MMP|240x320|400X240|AvantGo|BlackBerry|Blazer|Cellphone|Danger|DoCoMo|Elaine/3.0|EudoraWeb|Googlebot-Mobile|hiptop|IEMobile|KYOCERA/WX310K|LG/U990|MIDP-2.|MMEF20|MOT-V|NetFront|Newt|Nintendo\ Wii|Nitro|Nokia|Opera\ Mini|Palm|PlayStation\ Portable|portalmmm|Proxinet|ProxiNet|SHARP-TQ-GX10|SHG-i900|Small|SonyEricsson|Symbian\ OS|SymbianOS|TS21i-10|UP.Browser|UP.Link|webOS|Windows\ CE|WinWAP|YahooSeeker/M1A1-R2D2|iPhone|iPod|Android|BlackBerry9530|LG-TU915\ Obigo|LGE\ VX|webOS|Nokia5800).*#i', $_SERVER['HTTP_USER_AGENT']) || preg_match('#^(w3c\ |w3c-|acs-|alav|alca|amoi|audi|avan|benq|bird|blac|blaz|brew|cell|cldc|cmd-|dang|doco|eric|hipt|htc_|inno|ipaq|ipod|jigs|kddi|keji|leno|lg-c|lg-d|lg-g|lge-|lg/u|maui|maxo|midp|mits|mmef|mobi|mot-|moto|mwbp|nec-|newt|noki|palm|pana|pant|phil|play|port|prox|qwap|sage|sams|sany|sch-|sec-|send|seri|sgh-|shar|sie-|siem|smal|smar|sony|sph-|symb|t-mo|teli|tim-|tosh|tsm-|upg1|upsi|vk-v|voda|wap-|wapa|wapi|wapp|wapr|webc|winw|winw|xda\ |xda-).*#i', substr($_SERVER['HTTP_USER_AGENT'], 0, 4)))) {
+        if (isset($_SERVER['HTTP_USER_AGENT']) && (preg_match('#(ipad|tablet|windows\ phone|mobile)#i', (string) $_SERVER['HTTP_USER_AGENT']) || preg_match('#^.*(2.0\ MMP|240x320|400X240|AvantGo|BlackBerry|Blazer|Cellphone|Danger|DoCoMo|Elaine/3.0|EudoraWeb|Googlebot-Mobile|hiptop|IEMobile|KYOCERA/WX310K|LG/U990|MIDP-2.|MMEF20|MOT-V|NetFront|Newt|Nintendo\ Wii|Nitro|Nokia|Opera\ Mini|Palm|PlayStation\ Portable|portalmmm|Proxinet|ProxiNet|SHARP-TQ-GX10|SHG-i900|Small|SonyEricsson|Symbian\ OS|SymbianOS|TS21i-10|UP.Browser|UP.Link|webOS|Windows\ CE|WinWAP|YahooSeeker/M1A1-R2D2|iPhone|iPod|Android|BlackBerry9530|LG-TU915\ Obigo|LGE\ VX|webOS|Nokia5800).*#i', $_SERVER['HTTP_USER_AGENT']) || preg_match('#^(w3c\ |w3c-|acs-|alav|alca|amoi|audi|avan|benq|bird|blac|blaz|brew|cell|cldc|cmd-|dang|doco|eric|hipt|htc_|inno|ipaq|ipod|jigs|kddi|keji|leno|lg-c|lg-d|lg-g|lge-|lg/u|maui|maxo|midp|mits|mmef|mobi|mot-|moto|mwbp|nec-|newt|noki|palm|pana|pant|phil|play|port|prox|qwap|sage|sams|sany|sch-|sec-|send|seri|sgh-|shar|sie-|siem|smal|smar|sony|sph-|symb|t-mo|teli|tim-|tosh|tsm-|upg1|upsi|vk-v|voda|wap-|wapa|wapi|wapp|wapr|webc|winw|winw|xda\ |xda-).*#i', substr($_SERVER['HTTP_USER_AGENT'], 0, 4)))) {
             return true;
         }
 
@@ -2810,10 +5337,8 @@ class wps_cdn_rewrite
 
     public function checkCache_plugins_loaded()
     {
-        // Weglot rewrites $_SERVER['REQUEST_URI'] at plugins_loaded priority 10,
-        // stripping the language prefix (e.g. /en/ → /).  We capture the real URL
-        // here at priority 1 — before Weglot runs — so every subsequent cache key
-        // lookup in this request uses the correct, language-aware URL.
+
+
         if (defined('WEGLOT_VERSION')) {
             wps_ic_url_key::captureRequestUrl();
         }
@@ -2822,14 +5347,10 @@ class wps_cdn_rewrite
             return true;
         }
 
-        if (!empty($_GET['dbg_checkCache'])) {
-            die('Check cache');
-        }
-
         if (self::dontRunif()) {
-            /**
-             * Check for cache first
-             */
+            
+
+
 
             if (!empty($_GET['dontRunCache'])) {
                 die('Check cache 23');
@@ -2859,7 +5380,7 @@ class wps_cdn_rewrite
                 if ($cache->cacheExists($prefix)) {
                     $isCacheExpired = false;
 
-                    // Not required as get cache sorts this
+                    
                     $isCacheValid = true;
 
                     if (!$isCacheExpired && $isCacheValid) {
@@ -2868,7 +5389,9 @@ class wps_cdn_rewrite
 
                 } else {
                     if (!defined('WPS_IC_CACHE_BUFFER_STARTED')) {
-                        //fallback cache buffer start, if we were unable to start in advanced-cache
+                        if (function_exists('wpc_response_cache_guard')) {
+                            wpc_response_cache_guard();
+                        }
                         ob_start([$this, 'saveCache']);
                     }
                 }
@@ -2883,9 +5406,7 @@ class wps_cdn_rewrite
             return true;
         }
 
-        // URL exclusions (Exclude from Plugin) — bail BEFORE starting the output buffer
-        // so cdnRewriter / injectPreloadImages / dnsPrefetch / etc. never even fire.
-        // dontRunif() returns false when the URL is excluded.
+
         if (!self::dontRunif()) {
             return true;
         }
@@ -2903,10 +5424,10 @@ class wps_cdn_rewrite
             return true;
         }
 
-        // Is an ajax request?
+        
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
 
-        // TODO: Check this for wpadmin and frontend ajax
+        
         if (!self::$isAjax) {
             if (is_admin() || !empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['PageSpeed']) || !empty($_GET['et_fb']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['tve']) || !empty($_GET['tatsu']) || !empty($_GET['ct_builder']) || !empty($_GET['fb-edit']) || (!empty($_GET['builder']) && !empty($_GET['builder_id'])) || !empty($_GET['bricks']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") || (!empty($_GET['page']) && $_GET['page'] == 'livecomposer_editor') || !empty($_GET['pagelayer-live'])) {
                 return true;
@@ -2919,17 +5440,16 @@ class wps_cdn_rewrite
 
         $init = $this->mainInit();
 
+
+        
+        
+        if (isset($_GET['cdn']) && (string) $_GET['cdn'] === '0') {
+            self::$cdnEnabled = false;
+        }
+
         if (!self::$cdnEnabled && !in_array($_SERVER['PHP_SELF'], ['/wp-login.php', '/wp-register.php'])) {
-            // (v7.03.72) Determinism safety-net — never let a page-cache persist a TRANSIENT/internal CDN-off
-            // render. When the CDN is configured ON (live-cdn=1) but THIS render fell to the local/origin path
-            // only because of the crit-combine extraction pass (?criticalCombine / criticalCombine header) or
-            // the orch zone-suppression (provisioning / healthcheck hold), the HTML carries full-size ORIGIN
-            // images. If LiteSpeed/WP-cache/GridPane stores that render (the combine pass is keyed by a header a
-            // URL-keyed cache ignores, so it can overwrite the canonical page), every visitor gets the
-            // over-fetch markup until the next purge — the intermittent "flips back to the bad state" the field
-            // reported. Tell the page-caches not to store THIS one, so only a real CDN-on render is ever cached.
-            // Deliberate off-states (CDN genuinely off via live-cdn=0, per-page CDN exclude, CF-assets mode) are
-            // NOT flagged — they never set these signals. Idempotent + header-safe. Filterable kill-switch.
+
+
             if (!empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == 1
                 && apply_filters('wpc_nocache_degraded_cdn_render', true)
                 && (
@@ -2950,19 +5470,14 @@ class wps_cdn_rewrite
         }
 
         if (isset($post->post_type) && strpos($post->post_type, 'wfocu') !== false) {
-            // Ignore Post Types
+            
         } else {
 
-//            if (!empty($_GET['generateCritical'])) {
-//                if (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') {
-//                    self::$criticalCss->sendCriticalUrl();
-//                }
-//            }
 
-            // Generate Critical CSS if not exists
+            
             if (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') {
-                #self::$criticalCss->generateCriticalCSS();
-                //$html = self::$rewriteLogic->runCriticalAjax($html);
+                
+                
             }
 
 
@@ -2979,7 +5494,7 @@ class wps_cdn_rewrite
             return true;
         }
 
-        // Integrations
+        
         include_once WPS_IC_DIR . 'integrations/addon/integrations.php';
 
         $wpcAddonIntegrations = new wpc_addon_integrations();
@@ -2987,24 +5502,24 @@ class wps_cdn_rewrite
             return true;
         }
 
-        // Check if WP_CLI is being used
+        
         if (defined('WP_CLI') && WP_CLI) {
-            // WP_CLI detected, don't run the block
+            
             return true;
         }
 
-        // Check if WP REST API is being accessed
+        
         if (defined('REST_REQUEST') && REST_REQUEST) {
-            // WP REST API detected, don't run the block
+            
             return true;
         }
 
-        // Raise memory limit
+        
         if (ini_get('memory_limit') !== '-1' && wpc_convert_to_bytes(ini_get('memory_limit')) < 1024 * 1024 * 1024) {
             ini_set('memory_limit', '1024M');
         }
 
-        // Raise backtrack limit for regex
+        
         ini_set('pcre.backtrack_limit', '10000000');
 
         global $post;
@@ -3014,12 +5529,12 @@ class wps_cdn_rewrite
             return true;
         }
 
-        // Was only adding to home page
+        
         if ($this->is_home_url()) {
             if (!self::is_mobile()) {
-                #add_action('wp_head', [$this, 'preload_custom_assets'], 1);
+                
             } else {
-                #add_action('wp_head', [$this, 'preload_custom_assetsMobile'], 1);
+                
             }
         }
 
@@ -3106,7 +5621,7 @@ class wps_cdn_rewrite
         self::$criticalCss = new wps_criticalCss();
         self::$combineCss = new wps_ic_combine_css();
 
-        //Add files inline
+        
         if (self::dontRunif()) {
             $inline_scripts = get_option('wpc-inline');
             if (!empty($inline_scripts['inline_js'])) {
@@ -3128,28 +5643,21 @@ class wps_cdn_rewrite
             }
         }
 
-        //Perfmatters settings check
-        //$this->perfMattersOverride();
+        
+        
 
-        //Rocket settings check
-        //$this->rocketOverride();
+        
+        
 
-        // default excluded keywords
+
         self::$default_excluded_list = ['wp-admin', 'redditstatic', 'ai-uncode', 'gtm', 'instagram.com', 'fbcdn.net', 'twitter', 'google', 'coinbase', 'cookie', 'schema', 'recaptcha', 'data:image', 'stats.jpg'];
 
-        // (v7.10.04.11) Keep Elementor's GENERATED per-page CSS same-origin — never on the CDN.
-        // Elementor regenerates wp-content/uploads/elementor/css/{post-N,global,custom-*}.css on every
-        // content edit and cache clear. Served cross-origin through the CDN, a transient 404 during that
-        // regeneration returns the CDN's HTML error page; Chrome's ORB (cross-origin + nosniff) then BLOCKS
-        // the stylesheet, AND the CDN caches that 404 → a persistent UNSTYLED page for real visitors.
-        // Same-origin makes ORB impossible (it is cross-origin-only), stops the CDN caching a 404, and lets
-        // the file self-heal on the next request. The substring 'elementor/css/' matches ONLY the generated
-        // dir — Elementor's static plugin CSS ('elementor/assets/css/') is unaffected and stays on the CDN.
+
         if (apply_filters('wpc_elementor_css_same_origin', true)) {
             self::$default_excluded_list[] = 'elementor/css/';
         }
 
-        // Preload anything inside themes,elementor,wp-includes
+        
         self::$assets_to_preload = ['themes', 'elementor', 'wp-includes', 'google'];
         self::$assets_to_defer = ['themes', 'tracking', 'fontawesome'];
 
@@ -3204,11 +5712,8 @@ class wps_cdn_rewrite
             self::$settings['serve']['gif'] = 0;
             self::$settings['serve']['svg'] = 0;
         } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
-            // (v7.03.112) GUARD: a per-page CDN "include" (cdn=='1') must NOT resurrect the CDN when the
-            // GLOBAL CDN is OFF (live-cdn=='0'). Off means off. Without this, a stale per-page include
-            // forced cdnEnabled=1 + js/css/serve=1 IN MEMORY while the saved settings were all 0 — so
-            // assets kept routing through the zone after the CDN was switched off, and ONLY deactivating
-            // the plugin stopped it (the "off but still serving / safe-mode doesn't help" bug).
+
+
             self::$cdnEnabled = 1;
             self::$settings['css'] = 1;
             self::$settings['js'] = 1;
@@ -3219,9 +5724,6 @@ class wps_cdn_rewrite
         }
 
 
-        // "Nothing to deliver → disable the CDN rewrite" guard. Must include `fonts`, else
-        // Fonts-ON-alone (css/js/images all off) flips cdnEnabled=0 and the CDN rewrite path
-        // (incl. rewriteInlineFontFaces) never runs → @font-face stays on origin.
         if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
         }
@@ -3236,10 +5738,10 @@ class wps_cdn_rewrite
             self::$settings['serve']['svg'] = 0;
         }
 
-        // Is an ajax request?
+        
         self::$isAjax = (function_exists("wp_doing_ajax") && wp_doing_ajax()) || (defined('DOING_AJAX') && DOING_AJAX);
 
-        // Don't run in admin side!
+        
         if (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php") {
             return;
         }
@@ -3278,11 +5780,8 @@ class wps_cdn_rewrite
 
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $cf = get_option(WPS_IC_CF);
-        // VERIFIED-GATE: emit the CF cname ONLY once provision-verified, so the front-end never
-        // switches to a host that errors on every asset. Not-verified → fall back to
-        // ic_custom_cname → ic_cdn_zone_name (always a working host). FAIL-OPEN: a never-set flag
-        // (legacy zone / fresh connect) is treated as verified so the live fleet never degrades;
-        // only an EXPLICITLY-cleared flag ('0', in-flight cname change) blanks it.
+
+
         $cfVerified = wpc_cf_cname_verified_ok();
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && $cfVerified) ? $cfCname : get_option('ic_custom_cname');
 
@@ -3292,16 +5791,15 @@ class wps_cdn_rewrite
             self::$zone_name = $custom_cname;
         }
 
-        // orch cdn_disabled master kill: blank the runtime zone + force CDN off so this request
-        // emits ZERO CDN URLs. Empty zone_name trips the early-return below AND makes every
-        // zone-keyed emitter bail on its empty-zone guard. Inert by default.
+
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
             self::$zone_name = '';
             self::$cdnEnabled = 0;
         }
 
         if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
-            if (!empty($_GET['custom_server'])) {
+            if (!empty($_GET['custom_server'])
+                && function_exists('wpc_cdn_debug_allowed649') && wpc_cdn_debug_allowed649()) {
                 $custom_server = sanitize_text_field($_GET['custom_server']);
                 if (preg_match('/^[a-z0-9\-]+\.zapwp\.net$/i', $custom_server)) {
                     self::$zone_name = $custom_server . '/key:' . self::$options['api_key'];
@@ -3309,10 +5807,7 @@ class wps_cdn_rewrite
             }
         }
 
-        // (v7.03.49) A zone host accidentally equal to the ORIGIN host (a misconfigured custom cname, or a
-        // clone that stored its own domain as the zone) would make EVERY transform URL resolve back to the
-        // origin → 404. Treat it as no-zone so the whole rewrite stands down (origin served — never a
-        // transform→origin 404). Source-level guard covering all builders (fonts, external, same-site).
+
         if (!empty(self::$zone_name) && function_exists('home_url')) {
             $wpc_origin_h = (string) wp_parse_url(home_url(), PHP_URL_HOST);
             if ($wpc_origin_h !== '' && strcasecmp((string) self::$zone_name, $wpc_origin_h) === 0) {
@@ -3334,41 +5829,31 @@ class wps_cdn_rewrite
         self::$webp_enabled = self::$settings['generate_webp'];
         self::$retina_enabled = self::$settings['retina'];
 
-        // Picture tag WebP/AVIF delivery — BOTH gated on the RESOLVED Next-Gen ceiling.
-        // effective_ceiling() is the single source of truth: 'off' → no next-gen; 'webp' → webp
-        // only; 'avif' → both. Gate both because the legacy settings form / segmented "Off" can
-        // leave picture_webp/picture_avif=1 while the resolver tier is jpeg, and <picture> <source>
-        // selection is terminal (browsers don't fall through). Fall back to the raw legacy keys
-        // only if the resolver class is unavailable.
+
         $wpc_nextgen_ceiling = class_exists('WPC_Delivery_Resolver')
             ? WPC_Delivery_Resolver::effective_ceiling(self::$settings)
             : 'avif';
-        // Images-master: the <picture> webp/avif builder is image-CDN delivery, so it stands down
-        // when the "Images" tile is OFF (no image serve-type on). Path A then serves the origin
-        // <picture> instead. Mirrors the negotiated/path-A stand-downs.
+
+
         $wpc_cdn_images_on = !class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings);
-        // Gate the <picture> AVIF/WebP blocks on the resolved DELIVERY ceiling, NOT the raw
-        // picture_avif/picture_webp GENERATION flags: a CDN-on OTF zone synthesizes avif at the
-        // edge regardless of local generation, so coupling delivery to the local-generate flag
-        // would strand a Next-Gen-ON site at zero avif. The per-rung URL flavor (natural -WxH.avif
-        // vs never-404 wp:2 vs dropped) is still decided downstream by the per-zone proof/witness
-        // gate, so ceiling==='avif' here can never strand a 404ing source on an un-converged zone.
+
+
         self::$rewriteLogic::$pictureWebpEnabled = $wpc_nextgen_ceiling !== 'off'
             && !empty(self::$webp_enabled) && self::$webp_enabled == '1'
             && $wpc_cdn_images_on;
         self::$rewriteLogic::$pictureAvifEnabled = $wpc_nextgen_ceiling === 'avif' && $wpc_cdn_images_on;
 
-        // Skip picture wrapping for JSON responses
+        
         if (function_exists('wp_is_json_request') && wp_is_json_request()) {
             self::$rewriteLogic::$pictureWebpEnabled = false;
         }
 
         if (isset(self::$page_excludes['adaptive'])) {
-            //self::$lazy_enabled = self::$page_excludes['adaptive'];
-            //self::$native_lazy_enabled = self::$page_excludes['adaptive'];
+
+
             self::$adaptive_enabled = self::$page_excludes['adaptive'];
-            //self::$webp_enabled = self::$page_excludes['adaptive'];
-            //self::$retina_enabled = self::$page_excludes['adaptive'];
+
+
         }
 
         if (!empty(self::$settings['replace-all-link'])) {
@@ -3458,12 +5943,12 @@ class wps_cdn_rewrite
         self::$exif = self::$settings['preserve_exif'];
         self::$fonts = self::$settings['fonts'];
 
-        // If Optimization Quality is Not set...
+        
         if (empty(self::$settings['optimization']) || self::$settings['optimization'] == '' || self::$settings['optimization'] == '0') {
             self::$settings['optimization'] = 'i';
         }
 
-        // Optimization Switch from Legacy
+        
         switch (self::$settings['optimization']) {
             case 'intelligent':
                 self::$settings['optimization'] = 'i';
@@ -3487,26 +5972,18 @@ class wps_cdn_rewrite
         if (!empty(self::$webp_enabled) && self::$webp_enabled == '1') {
             self::$webp = '1';
 
-            if (!empty($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'Safari') && !strpos($_SERVER['HTTP_USER_AGENT'], 'Chrome')) {
+
+            if (!self::wpc_universal_picture_on()
+                && !empty($_SERVER['HTTP_USER_AGENT']) && strpos($_SERVER['HTTP_USER_AGENT'], 'Safari') && !strpos($_SERVER['HTTP_USER_AGENT'], 'Chrome')) {
                 self::$webp_enabled = false;
                 self::$webp = '0';
             }
         }
 
-        // (v7.10.04) SECURITY — CVE-2026-9066 (Reflected XSS; reported by Lubin Regnault via
-        // WPScan/Automattic). test_zone + server flow into self::$zone_name, which is emitted
-        // into asset URLs (<script src>, <link href>, dns-prefetch, the wpcScriptRegistry JSON).
-        // Unvalidated, an input like test_zone=attacker.example.com%23 turned the appended
-        // ".wpmediacompress.com/key:..." into a URL fragment, pointing asset loads at the
-        // attacker origin → the loader fetched + executed attacker JS in the visitor's session.
-        // Both params are zone SUBDOMAIN LABELS, so the fix is two layers:
-        //   (1) require an admin session — this is a debug/test knob, never a public query string;
-        //   (2) accept ONLY a strict single-label allowlist [a-z0-9-] (no . # / ? : % " < > space),
-        //       which makes the fragment/path/attribute-breakout injection impossible.
-        // Anything else is ignored and self::$zone_name keeps its provisioned value. Fails closed.
+
         if (!empty($_GET['test_zone'])
-            && function_exists('current_user_can') && current_user_can('manage_options')
-            && preg_match('/^[a-z0-9\-]+$/iD', (string) $_GET['test_zone'])) { // D: $ = absolute end (no trailing-newline bypass)
+            && function_exists('wpc_cdn_debug_allowed649') && wpc_cdn_debug_allowed649()
+            && preg_match('/^[a-z0-9\-]+$/iD', (string) $_GET['test_zone'])) { 
             if ($_GET['test_zone'] === 'cdn-rage4') {
                 $wpc_test_server = isset($_GET['server']) ? (string) $_GET['server'] : '';
                 if (preg_match('/^[a-z0-9\-]+$/iD', $wpc_test_server)) {
@@ -3538,7 +6015,7 @@ class wps_cdn_rewrite
             self::$retina_enabled = '0';
             self::$settings['remove-render-blocking'] = 0;
             $preloaded_pages = get_option('wpc-ic-preloaded-pages');
-            //check if page is preloaded, and add to list if not
+
             if (is_array($preloaded_pages) && !in_array($post->ID, $preloaded_pages)) {
                 array_push($preloaded_pages, $post->ID);
                 update_option('wpc-ic-preloaded-pages', $preloaded_pages);
@@ -3556,7 +6033,7 @@ class wps_cdn_rewrite
             add_filter('style_loader_tag', [$this, 'crittr_style_tag'], 10, 4);
         }
 
-        //todo: Why are we checking this again?
+
         if ((isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '0') || !$allowLive) {
             self::$cdnEnabled = 0;
             self::$settings['css'] = 0;
@@ -3566,11 +6043,8 @@ class wps_cdn_rewrite
             self::$settings['serve']['gif'] = 0;
             self::$settings['serve']['svg'] = 0;
         } else if (isset(self::$page_excludes['cdn']) && self::$page_excludes['cdn'] == '1' && isset(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1') {
-            // (v7.03.112) GUARD: a per-page CDN "include" (cdn=='1') must NOT resurrect the CDN when the
-            // GLOBAL CDN is OFF (live-cdn=='0'). Off means off. Without this, a stale per-page include
-            // forced cdnEnabled=1 + js/css/serve=1 IN MEMORY while the saved settings were all 0 — so
-            // assets kept routing through the zone after the CDN was switched off, and ONLY deactivating
-            // the plugin stopped it (the "off but still serving / safe-mode doesn't help" bug).
+
+
             self::$cdnEnabled = 1;
             self::$settings['css'] = 1;
             self::$settings['js'] = 1;
@@ -3580,17 +6054,22 @@ class wps_cdn_rewrite
             self::$settings['serve']['svg'] = 1;
         }
 
-        // "Nothing to deliver → disable the CDN rewrite" guard. Must include `fonts`, else
-        // Fonts-ON-alone (css/js/images all off) flips cdnEnabled=0 and the CDN rewrite path
-        // (incl. rewriteInlineFontFaces) never runs → @font-face stays on origin.
+
         if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && empty(self::$settings['fonts']) && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {
             self::$cdnEnabled = 0;
         }
 
 
-        // Default to swap if not explicitly set — fixes PageSpeed font-display warning
+        
         if (empty(self::$settings['font-display'])) {
-            self::$settings['font-display'] = 'swap';
+            self::$settings['font-display'] = 'smart';
+        }
+        
+        
+        
+        self::$fd_raw484 = (string) self::$settings['font-display'];
+        if (function_exists('wpc_font_display_effective')) {
+            self::$settings['font-display'] = wpc_font_display_effective(self::$settings['font-display']);
         }
         if (self::$settings['font-display'] != 'off') {
             add_filter('style_loader_src', [$this, 'add_font_display_swap_to_url'], 1, 2);
@@ -3600,34 +6079,30 @@ class wps_cdn_rewrite
         if (self::$cdnEnabled == 1) {
             if (self::dontRunif()) {
 
-//                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) || empty(wpcGetHeader('criticalCombine')))) {
-//                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
-//                } else {
+
                 if (self::$css == "1") {
                     add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
                     add_filter('style_loader_tag', [$this, 'adjust_style_tag'], 10, 4);
                     add_action('wp_head', [$this, 'cssOriginFallbackScript'], 0);
                 }
-                #}
+                
 
                 if (self::$js == "1") {
                     add_filter('script_loader_tag', [$this, 'rewrite_script_tag'], 10, 3);
                 }
 
-                #add_filter('script_loader_tag', [$this, 'deferJSAssets'], 10, 3);
+                
             }
 
             add_action("wp_head", [$this, 'dnsPrefetch'], 0);
 
-            // Rewrite WooCommerce variation image URLs so they match CDN-rewritten DOM URLs
+            
             add_filter('woocommerce_available_variation', [$this, 'rewrite_woo_variation_image_urls'], 10, 3);
         } else {
 
-            // Local Mode
+            
             if (self::dontRunif()) {
-//                if (self::$settings['inline-css'] == '1' && (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine')))) {
-//                    add_filter('style_loader_tag', [$this, 'inlineCSS'], 10, 4);
-//                }
+
 
                 if (self::$css == "1") {
                     add_filter('style_loader_src', [$this, 'adjust_src_url'], 10, 2);
@@ -3637,10 +6112,8 @@ class wps_cdn_rewrite
 
                 if (self::$js == "1") {
                     add_filter('script_loader_src', [$this, 'adjust_src_url'], 10, 3);
-                    // WP 6.5+ script MODULES (interactivity API, block-library views) load via the
-                    // import-map, which uses script_module_loader_src, NOT script_loader_src. The
-                    // buffer pass alone is timing-dependent (import-map can print after the buffer
-                    // flushes), so route modules through adjust_src_url to rewrite at the source.
+
+
                     add_filter('script_module_loader_src', [$this, 'adjust_src_url'], 10, 2);
                 }
             }
@@ -3651,23 +6124,7 @@ class wps_cdn_rewrite
         }
     }
 
-    /**
-     * (v7.10.04.12) ORB safety-belt for cross-origin CDN stylesheets.
-     *
-     * Chrome's ORB blocks a cross-origin <link rel="stylesheet"> when the CDN returns a non-CSS body
-     * (e.g. the CDN's HTML 404 page during a brief origin/regeneration window). The stylesheet is
-     * dropped (net::ERR_BLOCKED_BY_ORB) and — because the CDN can cache that 404 — the page can render
-     * unstyled for real visitors. This injects a tiny capture-phase 'error' listener that, when a CDN
-     * stylesheet fails, reloads the SAME resource from its same-origin URL so the page recovers.
-     *
-     * Failure-path only: on a normal 200 text/css load nothing runs (no extra request, no reflow).
-     * Verified in Chromium — onerror fires on ERR_BLOCKED_BY_ORB and the same-origin swap re-applies
-     * the styles. Reverse-map handles both CDN URL shapes: natural (https://ZONE/path.css -> host swap)
-     * and transform (https://ZONE/m:N/a:https://SITE/path.css -> the origin URL embedded after /a:).
-     * Complements the same-origin belt (.04.11) which keeps Elementor's volatile CSS off the CDN
-     * entirely; this covers any OTHER cross-origin CDN stylesheet that transiently 404s.
-     * Gated behind the wpc_css_origin_fallback filter (default on).
-     */
+
     public function cssOriginFallbackScript()
     {
         if (!apply_filters('wpc_css_origin_fallback', true)) {
@@ -3677,7 +6134,7 @@ class wps_cdn_rewrite
         if (empty($zone)) {
             return;
         }
-        // scheme+host of the origin only; the reverse-map rebuilds the path from the CDN URL itself
+
         $siteOrigin = preg_replace('#^(https?://[^/]+).*$#', '$1', rtrim((string) self::$site_url, '/'));
         if (empty($siteOrigin) || strpos($siteOrigin, 'http') !== 0) {
             return;
@@ -3689,22 +6146,88 @@ class wps_cdn_rewrite
             . 'window.addEventListener("error",function(e){var el=e.target;if(!el||el.tagName!=="LINK"||el.rel!=="stylesheet")return;var h=el.href||"";if(h.indexOf(Z)===-1||el.getAttribute("data-wpco"))return;var o=toOrigin(h);if(!o||o===h)return;el.setAttribute("data-wpco","1");var l=document.createElement("link");l.rel="stylesheet";if(el.media)l.media=el.media;l.href=o;el.parentNode.insertBefore(l,el.nextSibling);},true);})();</script>' . "\n";
     }
 
+
     public function add_font_display_swap_to_url($src, $handle)
     {
-        if (strpos($src, 'fonts.googleapis.com') !== false && !empty(self::$settings['font-display'])) {
-            $src = add_query_arg('display', self::$settings['font-display'], $src);
+        if (strpos($src, 'fonts.googleapis.com') === false || empty(self::$settings['font-display'])) {
+            return $src;
         }
-        return $src;
+        if (stripos($src, 'display=') !== false) {
+            return $src;
+        }
+        $sep = (strpos($src, '?') === false) ? '?' : '&';
+        return $src . $sep . 'display=' . rawurlencode((string) self::$settings['font-display']);
+    }
+
+
+    public static function wpc_gfonts_display_pass($html)
+    {
+        if (!is_string($html) || $html === '') {
+            return $html;
+        }
+        $wpc_fd = !empty(self::$settings['font-display']) ? (string) self::$settings['font-display'] : 'swap';
+        if ($wpc_fd === 'off') {
+            return $html;
+        }
+        if (stripos($html, 'fonts.googleapis.com/css') === false && stripos($html, 'fonts.bunny.net/css') === false) {
+            return $html;
+        }
+        return preg_replace_callback(
+            '/(<link\b[^>]*\bhref=)(["\'])(https?:\/\/fonts\.(?:googleapis\.com|bunny\.net)\/css[^"\']*)\2/i',
+            function ($m) use ($wpc_fd) {
+                $href = $m[3];
+                if (stripos($href, 'display=') !== false) {
+                    return $m[0];
+                }
+                if (strpos($href, '?') === false) {
+                    $sep = '?';
+                } elseif (strpos($href, '&#038;') !== false) {
+                    $sep = '&#038;';
+                } elseif (strpos($href, '&amp;') !== false) {
+                    $sep = '&amp;';
+                } else {
+                    $sep = '&';
+                }
+                return $m[1] . $m[2] . $href . $sep . 'display=' . rawurlencode($wpc_fd) . $m[2];
+            },
+            $html
+        );
+    }
+
+    
+
+
+
+
+
+    private static function wpc_font_display_excluded($src, $handle)
+    {
+        static $excludes = null;
+        if ($excludes === null) {
+            $opt = get_option('wpc-excludes');
+            $excludes = (!empty($opt['font_display']) && is_array($opt['font_display'])) ? $opt['font_display'] : [];
+        }
+        if (empty($excludes)) {
+            return false;
+        }
+        $haystack = strtolower($src . ' id="' . $handle . '-css"');
+        foreach ($excludes as $needle) {
+            $needle = strtolower(trim((string) $needle));
+            if ($needle !== '' && strpos($haystack, $needle) !== false) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function process_css_for_fonts($src, $handle)
     {
-        // Skip if not a CSS file
+        
         if (strpos($src, '.css') === false) {
             return $src;
         }
 
-        // Skip if not local
+        
         $clean_src = strtok($src, '?');
         if (strpos($clean_src, home_url()) === false) {
             return $src;
@@ -3714,85 +6237,79 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        // Serve external-CSS @font-face fonts from the CDN zone when CSS-combine is OFF. The
-        // combine path already CDN-rewrites @font-face when combine is ON, so gate to combine-OFF
-        // to avoid a double-rewrite (changeFontToCDN has no zone-skip guard). Requires the Fonts
-        // toggle + live CDN + zone; flag-gated behind site option `wpc_fonts_cdn_serve` (default
-        // ON — without it the Fonts tile drives nothing reachable on combine-OFF sites).
-        $wpc_fonts_cdn = apply_filters('wpc_fonts_cdn_serve', (bool) get_site_option('wpc_fonts_cdn_serve', true))
-            && !empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1' // no zone font URLs when CDN off
-            && !empty(self::$settings['fonts']) && self::$settings['fonts'] == '1'
-            && !empty(self::$zone_name)
-            && (empty(self::$settings['css_combine']) || self::$settings['css_combine'] != '1');
 
-        // v7.02.46 — Fonts naturalize in lockstep with every other asset surface. CSS/JS collapse
-        // m:0/a:→natural via the ungated wpc_asset_naturalize buffer pass, but natural_assets_on() reads
-        // false at this enqueue-time hook, so the icon-font url() was the single last m:0/a: request left
-        // on the page. m:0 is a pass-through and the natural zone font is byte-identical — verified live:
-        // 200 + font/woff2 + access-control-allow-origin:* + 1yr cache, identical to the m:0 form. Gate on
-        // natural_assets_on() OR the same wpc_asset_naturalize_enabled off-ramp so fonts move with the rest
-        // (one filter disables all asset naturalization). Only the m:0 passthrough is naturalized below —
-        // font:true subsetting is a REAL transform and must keep its transform URL.
+        if (self::wpc_font_display_excluded($src, $handle)) {
+            return $src;
+        }
+
+
+        $wpc_fonts_cdn = self::wpc_fonts_cdn_serve_on796();
+
+
         $wpc_font_nat = $wpc_fonts_cdn
             && ((class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && wps_rewriteLogic::natural_assets_on())
                 || apply_filters('wpc_asset_naturalize_enabled', true));
 
-        // Generate filename. When CDN font rewriting is active, fold the zone + subsetting into
-        // the cache key so the optimized file self-invalidates if those change (the WPS_IC_CSS
-        // cache has no settings-keyed purge); inactive → key unchanged → zero-risk. Basis is the
-        // PARAM-STRIPPED src so a rotating ?ver= can't mint a new file per change (which would
-        // grow wp-cio unbounded and leave dead filenames in still-cached HTML).
+
         $wpc_cache_basis = strtok($src, '?');
         if ($wpc_fonts_cdn) {
             $wpc_subset_key = (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') ? '1' : '0';
             $wpc_cache_basis .= '|wpccf|' . self::$zone_name . '|' . $wpc_subset_key;
-            // Fold the natural-font-URL state so an already-written cio file rebuilds ONCE when
-            // naturalization is active — without a key change the old m:0/a: proxy-font file is
-            // returned from the file_exists cache below and the naturalize-on-write never lands.
+
+
             if ($wpc_font_nat) {
                 $wpc_cache_basis .= '|wpcfontnat';
             }
         }
-        // CSS-file SVG zoneify. This writer ABSOLUTIZES every url() against home_url() (below),
-        // converting relative SVG refs into ORIGIN-absolute URLs — un-resolvable to the zone even
-        // when the CSS file itself is zone-served. So rewrite uploads-SVG url() to the natural zone
-        // host before save, and fold the zone into the cache key so the file self-rebuilds on zone
-        // change / CDN-off (key unchanged when inactive → zero-risk).
+
+
         $wpc_svg_cdn = self::wpc_svg_zoneify_active();
         if ($wpc_svg_cdn) {
-            // Marker folded into the key; bumping it forces every already-written cio file to
-            // rebuild under a new name on the next render.
+            
+            
             $wpc_cache_basis .= '|wpccss3|' . self::$zone_name;
-            // Fold the CSS-bg image-set state so an already-written cio file rebuilds ONCE when the
-            // feature flips. The wp-cio hash is keyed on $wpc_cache_basis (NOT produced bytes) and
-            // the fast-path returns by filename without re-reading content, so without this marker a
-            // flip would keep returning the OLD same-ext-only file. Absent when off → byte-identical.
+
+
             if (self::wpc_css_bg_imageset_active()) {
                 $wpc_cache_basis .= '|wpcbgis1';
             }
+        }
+        
+        
+        
+        
+        
+        $wpc_rrk387 = self::wpc_font_remote_ranges();
+        if (!empty($wpc_rrk387)) {
+            ksort($wpc_rrk387);
+            $wpc_cache_basis .= '|wpcrr2|' . md5(serialize($wpc_rrk387));
+            
+            
+            
+            
+            
+            
+            $wpc_sf479 = self::wpc_font_subset_families();
+            ksort($wpc_sf479);
+            $wpc_cache_basis .= '|wpcsf1|' . md5(implode(',', array_keys($wpc_sf479)));
         }
         $hash = substr(md5($wpc_cache_basis), 0, 10);
         $new_filename = sanitize_file_name($handle . '-' . $hash . '.css');
         $new_filepath = WPS_IC_CSS . '/' . $new_filename;
 
-        // If optimized file exists AND is non-empty, return its URL (the DOMINANT warm-serve path).
-        // A bare file_exists() would treat a 0-byte/partial file (failed/short write, or a purge
-        // unlink racing a writer) as a valid hit and bake its hashed href into cached HTML → durable
-        // 404. Require filesize>0 so a stub falls through to the atomic re-mint below, which lands the
-        // SAME hashed filename (hash is content/settings-derived) → self-heals next render, no
-        // rotation. clearstatcache() so we read the CURRENT inode, not a sibling's stale stat.
+
         clearstatcache(true, $new_filepath);
         if (file_exists($new_filepath) && @filesize($new_filepath) > 0) {
             $new_url = WPS_IC_CSS_URL . '/' . $new_filename;
             return $new_url;
         }
         if (file_exists($new_filepath)) {
-            // 0-byte residue (pre-fix incident file or foreign stub) — drop it so the
-            // atomic re-write below replaces it under the same name this render.
+            
+            
             @unlink($new_filepath);
         }
 
-        // Create optimized file
+        
         $css_path = str_replace(home_url(), ABSPATH, $clean_src);
         $css_path = str_replace('/', DIRECTORY_SEPARATOR, $css_path);
 
@@ -3806,48 +6323,46 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        // Don't hard-skip when there's no @font-face: some CSS (e.g. elementor post-*.css) carries
-        // absolute origin uploads URLs but no @font-face, and would otherwise stay on origin. Also
-        // process uploads-referencing CSS when the zone sweep is active; pure-no-asset CSS skips.
+
         $wpc_has_fontface = (stripos($css_content, '@font-face') !== false);
         if (!$wpc_has_fontface && !($wpc_svg_cdn && stripos($css_content, '/wp-content/uploads/') !== false)) {
             return $src;
         }
 
-        // Get the base URL for the original CSS file (directory containing the CSS)
+        
         $css_base_url = dirname($clean_src);
 
-        // Convert relative URLs to absolute URLs
+        
         $css_content = preg_replace_callback('/url\s*\(\s*(["\']?)([^"\')]+)\1\s*\)/i', function ($matches) use ($css_base_url) {
             $quote = $matches[1];
             $url = $matches[2];
 
-            // Skip if already absolute URL or data URI
+            
             if (preg_match('/^(https?:|data:|#)/i', $url)) {
                 return $matches[0];
             }
 
-            // Handle protocol-relative URLs
+            
             if (strpos($url, '//') === 0) {
-                $protocol = wpc_request_is_https() ? 'https:' : 'http:'; // proxy-aware (bare is_ssl() downgrades fonts behind Cloudflare)
+                $protocol = wpc_request_is_https() ? 'https:' : 'http:';
                 return 'url(' . $quote . $protocol . $url . $quote . ')';
             }
 
-            // Handle root-relative URLs
+            
             if (strpos($url, '/') === 0) {
                 return 'url(' . $quote . home_url($url) . $quote . ')';
             }
 
-            // Handle relative URLs (including ./ and ../)
-            // Remove ./ prefix if present
+            
+            
             if (strpos($url, './') === 0) {
                 $url = substr($url, 2);
             }
 
-            // Build absolute URL from base
+            
             $absolute_url = $css_base_url . '/' . $url;
 
-            // Resolve ../ in the path
+            
             while (strpos($absolute_url, '/../') !== false) {
                 $absolute_url = preg_replace('/\/[^\/]+\/\.\.\//', '/', $absolute_url);
             }
@@ -3855,24 +6370,18 @@ class wps_cdn_rewrite
             return 'url(' . $quote . $absolute_url . $quote . ')';
         }, $css_content);
 
-        // Now that every font url() is absolute, route @font-face fonts through the CDN zone using
-        // the SAME form as changeFontToCDN (m:0 passthrough; font:true when subsetting + non-icon)
-        // so it inherits the zone's working font CORS. Scope to @font-face blocks (so the FAMILY is
-        // in context) and detect icon fonts by BOTH family AND URL — icon fonts must never be
-        // subsetted or their PUA glyphs mangle. Idempotent + same-site only.
+
         if ($wpc_fonts_cdn) {
             $wpc_subsetting = (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1');
             $wpc_site_host = wp_parse_url(home_url(), PHP_URL_HOST);
             $wpc_zone = (string) self::$zone_name;
-            // Strip CSS comments first (same regex as combine_css::removeCommentsFromCSS) so a
-            // stray '}' inside a comment can't truncate the @font-face block matcher below. Only
-            // runs under this flag, so the optimized CSS is byte-identical when the feature is OFF.
-            $css_content = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\//', '', $css_content);
+
+
+            $css_content = preg_replace('#/\*.*?\*/#s', '', $css_content);
             $css_content = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($block) use ($wpc_subsetting, $wpc_site_host, $wpc_zone, $wpc_font_nat) {
                 $rule = $block[0];
-                // Family-based icon detection (same list as findFontFace / the font-display
-                // pass below) — catches fa-, material, dashicon, icomoon, etc. that the
-                // URL alone would miss.
+
+
                 $family_is_icon = false;
                 if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $rule, $fam)) {
                     if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', strtolower(trim($fam[1])))) {
@@ -3881,47 +6390,43 @@ class wps_cdn_rewrite
                 }
                 return preg_replace_callback('/url\s*\(\s*(["\']?)(https?:[^"\')]+\.(?:woff2|woff|eot|ttf)(?:[?#][^"\')]*)?)\1\s*\)/i', function ($m) use ($wpc_subsetting, $wpc_site_host, $wpc_zone, $family_is_icon, $wpc_font_nat) {
                     $url = $m[2];
-                    // Already on the zone? leave untouched (idempotent / no double-rewrite).
+                    
                     if ($wpc_zone !== '' && strpos($url, $wpc_zone) !== false) {
                         return $m[0];
                     }
-                    // HOST GUARD (v7.03.48) — never build a transform on an empty/origin zone host: an empty
-                    // zone yields "https:///…" → resolves to the ORIGIN → 404 (and a zone equal to the origin
-                    // host 404s the same; also the suppressed-zone state). Mirrors the guard now in
-                    // replaceFonts / cdn_rewrite_url / cdnExternalUrls. Stay on the natural URL otherwise.
+
+
                     if ($wpc_zone === '' || ($wpc_site_host !== '' && strcasecmp((string) $wpc_zone, (string) $wpc_site_host) === 0)) {
                         return $m[0];
                     }
-                    // Same-site only — leave third-party fonts (gstatic, typekit, fontawesome
-                    // CDN, etc.) untouched.
+
+
                     $host = wp_parse_url($url, PHP_URL_HOST);
                     if (empty($host) || empty($wpc_site_host) || strcasecmp($host, $wpc_site_host) !== 0) {
                         return $m[0];
                     }
-                    // PATH SCOPE: only zoneify fonts under /wp-content/ — the paths the CDN serves
-                    // with correct CORS. A custom store path (e.g. /storage/) is 302'd cross-origin
-                    // back to the ORIGIN, and a redirected cross-origin font fetch is CORS-blocked →
-                    // the font fails to load. Leaving such fonts on the same-origin URL is always safe.
+
+
                     $u_path = (string) wp_parse_url($url, PHP_URL_PATH);
                     if (stripos($u_path, '/wp-content/') === false) {
                         return $m[0];
                     }
-                    // URL-based icon detection (the combine-path list: changeFontToCDN:1740 /
-                    // replaceFonts:594) as a second signal alongside the family check.
+                    
+                    
                     $lower = strtolower($url);
                     $url_is_icon = (strpos($lower, 'icon') !== false || strpos($lower, 'awesome') !== false || strpos($lower, 'lightgallery') !== false || strpos($lower, 'gallery') !== false || strpos($lower, 'side-cart-woocommerce') !== false);
                     if ($wpc_subsetting && !$family_is_icon && !$url_is_icon) {
-                        // font:true = a REAL subsetting transform (NOT a pass-through) → never naturalized.
+
                         $cdn_url = 'https://' . $wpc_zone . '/font:true/a:' . wps_cdn_rewrite::reformat_url($url);
                     } elseif ($wpc_font_nat) {
-                        // m:0 is a pass-through → emit the clean natural zone URL (byte-identical delivery,
-                        // CORS + font/woff2 verified live). Keeps the icon font in lockstep with CSS/JS/images.
+                        
+                        
                         $wpc_fnt_abs = wps_cdn_rewrite::reformat_url($url);
                         $wpc_fnt_pp = wp_parse_url($wpc_fnt_abs);
                         if (is_array($wpc_fnt_pp) && !empty($wpc_fnt_pp['path'])) {
                             $cdn_url = 'https://' . $wpc_zone . $wpc_fnt_pp['path'] . (isset($wpc_fnt_pp['query']) ? '?' . $wpc_fnt_pp['query'] : '');
                         } else {
-                            $cdn_url = 'https://' . $wpc_zone . '/m:0/a:' . $wpc_fnt_abs; // unparsable → safe transform
+                            $cdn_url = 'https://' . $wpc_zone . '/m:0/a:' . $wpc_fnt_abs;
                         }
                     } else {
                         $cdn_url = 'https://' . $wpc_zone . '/m:0/a:' . wps_cdn_rewrite::reformat_url($url);
@@ -3931,95 +6436,151 @@ class wps_cdn_rewrite
             }, $css_content);
         }
 
-        // Add or replace font-display (icon fonts get separate setting)
+        
         $iconFontDisplay = !empty(self::$settings['icon-font-display']) ? self::$settings['icon-font-display'] : 'block';
         $css_content = preg_replace_callback('/(@font-face\s*\{)([^}]*)(})/is', function ($matches) use ($iconFontDisplay) {
             $content = $matches[2];
 
-            // Remove existing font-display if present
+            
             $content = preg_replace('/font-display\s*:\s*[^;]+;?/i', '', $content);
 
-            // Detect icon fonts by font-family name — use block to prevent garbled characters
+            
             $fontDisplayValue = self::$settings['font-display'] ?? 'swap';
             if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $content, $familyMatch)) {
                 $family = strtolower(trim($familyMatch[1]));
-                if (preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $family)) {
+                
+                
+                if (function_exists('wpc_css_is_icon_font')
+                    ? wpc_css_is_icon_font($family)
+                    : preg_match('/icon|awesome|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line/i', $family)) {
                     $fontDisplayValue = $iconFontDisplay;
+                } elseif (self::$fd_raw484 !== '' && function_exists('wpc_font_display_effective')) {
+                    
+                    
+                    
+                    
+                    $wpc_fdf484 = wpc_font_display_effective(self::$fd_raw484, $family);
+                    if (in_array($wpc_fdf484, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
+                        $fontDisplayValue = $wpc_fdf484;
+                    }
                 }
             }
 
-            // Leading ';' — minified CSS drops the last semicolon before '}', and fusing
-            // onto the prior declaration (src:url(x)font-display:swap) invalidates it,
-            // silently killing the font. A doubled ';;' is valid CSS (empty declaration).
+
+            
+            
+            
+            
+            
+            if (!preg_match('/unicode-range\s*:/i', $content)) {
+                $wpc_rrm = self::wpc_font_remote_ranges();
+                if (!empty($wpc_rrm) && !empty($familyMatch[1])) {
+                    $wpc_fw = 400; $wpc_fs = 'normal';
+                    if (preg_match('/font-weight\s*:\s*(\d{2,4})/i', $content, $wm)) { $wpc_fw = (int) $wm[1]; }
+                    if (preg_match('/font-style\s*:\s*italic/i', $content)) { $wpc_fs = 'italic'; }
+                    $wpc_famk478 = strtolower(trim($familyMatch[1], " \t\"'"));
+                    $wpc_rk = $wpc_famk478 . '|' . $wpc_fw . '|' . $wpc_fs;
+                    if (!empty($wpc_rrm[$wpc_rk])) {
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        if (function_exists('wpc_css_is_icon_font') && wpc_css_is_icon_font($wpc_famk478)) {
+                            if (function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('font-gate-iconfont', '', '', [
+                                    'family' => substr($wpc_famk478, 0, 28), 'src' => 'css-file',
+                                ]);
+                            }
+                            return $matches[1] . $content . ';font-display:' . $fontDisplayValue . ';' . $matches[3];
+                        }
+                        $wpc_subf478 = self::wpc_font_subset_families();
+                        if (!empty($wpc_subf478[$wpc_famk478])) {
+                            $content .= ';unicode-range:' . $wpc_rrm[$wpc_rk];
+                        } elseif (function_exists('wpc_cache_first_log')) {
+                            wpc_cache_first_log('font-gate-unpaired', '', '', [
+                                'family' => substr($wpc_famk478, 0, 28),
+                                'why'    => 'remote_range present but NO inline subset face — gate withheld',
+                            ]);
+                        }
+                    }
+                }
+            }
             return $matches[1] . $content . ';font-display:' . $fontDisplayValue . ';' . $matches[3];
         }, $css_content);
 
-        // Save optimized file
+        
         if (!file_exists(WPS_IC_CSS)) {
             wp_mkdir_p(WPS_IC_CSS);
         }
 
-        // Host-swap origin uploads-SVG url() to the natural zone URL (gates re-checked inside).
+        
         if ($wpc_svg_cdn) {
             $css_content = self::wpc_svg_zoneify($css_content);
-            // Rasters too: (1) zone TRANSFORM urls inside CSS (adaptive/combine-era w:N forms)
-            // collapse via the same sweep the HTML passes use; (2) plain ORIGIN uploads rasters
-            // host-swap SAME-EXT (alpha-safe — CSS has no onerror fallback).
+
+
             $css_content = self::wpc_raster_naturalize($css_content);
             $wpc_css_origin = wp_parse_url(home_url(), PHP_URL_HOST);
-            if ($wpc_css_origin && strcasecmp((string) self::$zone_name, $wpc_css_origin) !== 0) { // zone must differ from origin
-                // CSS-background raster: host-swap to the zone, SAME-EXT (NEVER-404 floor).
-                // CSS url() has no <picture>/onerror fallback, so fabricating a .webp that 404s
-                // (when only the avif is on disk) = a broken background. Same-ext host-swap always
-                // points at a real file → always 200. Format upgrade returns via the image-set()
-                // pass below. Scope: png/jpg/jpeg/gif uploads, same-site; svg via zoneify; webp/avif left.
+            if ($wpc_css_origin && strcasecmp((string) self::$zone_name, $wpc_css_origin) !== 0) {
+
+
                 $o = preg_quote($wpc_css_origin, '#');
-                // FORMAT-UPGRADE PASS (scoped to background[-image] raster url() only): offer the
-                // two-declaration image-set() upgrade (on-disk avif/webp siblings, never-404,
-                // type()-self-selected → CF vary-blind-safe). On any miss (no/corrupt sibling, flag
-                // off, idempotent hit) it returns the SAME-EXT host-swap. gif/non-bg url() untouched.
+
+
                 $css_content = preg_replace_callback(
-                    '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?)\.(png|jpe?g)((?:\?[^"\'()\s<>]*)?)\2(\s*\))#i',
+                    '#(background(?:-image)?\s*:\s*[^;{}]*?url\(\s*)([\'"]?)https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?)\.(png|jpe?g)((?:\?[^"\'()\s<>]*)?)\2(\s*\))(?=\s*(?:[;}\\\\]|[\'"]|$))(?!\s*;\s*background-image\s*:\s*[^;{}]*?(?:-webkit-)?image-set)#i',
                     function ($m) use ($wpc_css_origin) {
-                        // IDEMPOTENCY (layer 1): never re-wrap a declaration we already image-set'd.
+                        
                         if (stripos($m[0], 'image-set(') !== false) return $m[0];
-                        $origin_url   = 'https://' . $wpc_css_origin . $m[3] . '.' . $m[4] . $m[5];
                         $sameext_zone = 'https://' . self::$zone_name . $m[3] . '.' . $m[4] . $m[5];
+                        
+                        
+                        $wpc_pl822 = self::wpc_css_bg_prior_layers($m[1]);
+                        if (!empty($wpc_pl822['skip'])) return $m[0];
+                        $origin_url   = 'https://' . $wpc_css_origin . $m[3] . '.' . $m[4] . $m[5];
                         $iset = self::wpc_css_bg_imageset_build($origin_url, $sameext_zone, $m[2]);
                         if ($iset !== '') {
-                            return $iset; // the matched 'background[-image]:...url(...)' is fully replaced
+                            if ($wpc_pl822['layers'] !== '') {
+                                $iset = str_replace('background-image:', 'background-image:' . $wpc_pl822['layers'], $iset);
+                            }
+                            return $iset;
                         }
-                        // Fall through: same-ext host-swap, preserving the matched prefix/quote/suffix.
+                        
                         return $m[1] . $m[2] . $sameext_zone . $m[2] . $m[6];
                     },
                     $css_content
                 );
-                // EXISTING same-ext sweep (UNCHANGED) — host-swaps any remaining raster the upgrade pass
-                // did not touch: gif backgrounds, non-background url() (content:, mask, etc.), and any
-                // png/jpg the scoped regex missed. Idempotent on already-zoned urls (origin-anchored).
+
+
                 $css_bg_edge_webp = (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active());
                 $css_content = preg_replace_callback(
                     '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?)\.(png|jpe?g|gif)((?:\?[^"\'()\s<>]*)?)#i',
                     function ($m) use ($css_bg_edge_webp) {
-                        // VERIFIED CDN-edge (Bunny+Vary): emit the negotiable .webp base for any raster
-                        // CSS url() the image-set pass above missed (2nd+ url() of a multi-background,
-                        // mask-image, content:, cursor, etc.). The edge Vary-negotiates AVIF/WebP/JPEG, so
-                        // .webp is the one base; gif stays gif. Non-edge keeps the origin ext (never-404).
+
+
                         $ext = strtolower($m[2]);
-                        // GIF to the zone ONLY on a CF-direct zone (no Bunny egress for an
-                        // un-optimizable CSS-background GIF); on a Bunny zone leave it on origin.
+                        
+                        
                         if ($ext === 'gif' && !(class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery())) {
                             return $m[0];
                         }
                         if ($css_bg_edge_webp && $ext !== 'gif') {
                             return 'https://' . self::$zone_name . $m[1] . '.webp' . $m[3];
                         }
-                        // host-swap to zone, KEEP the original extension (real file → 200).
+
                         return 'https://' . self::$zone_name . $m[1] . '.' . $m[2] . $m[3];
                     },
                     $css_content
                 );
-                // Already-next-gen (webp/avif) uploads refs → same-ext natural (optimal).
+                
                 $css_content = preg_replace(
                     '#https?://' . $o . '(/wp-content/uploads/[^"\'()\s<>]+?\.(?:webp|avif)(?:\?[^"\'()\s<>]*)?)#i',
                     'https://' . self::$zone_name . '$1',
@@ -4028,12 +6589,7 @@ class wps_cdn_rewrite
             }
         }
 
-        // Naturalize the zone URLs in this written CSS file so a standalone stylesheet emits the
-        // SAME clean font URL as the inline/preload @font-face in the page HTML. The buffer-level
-        // naturalize only runs over HTML, never a separately-fetched CSS file's bytes — so without
-        // this the file ships the m:0/a: proxy form while the buffer ships natural, and the SAME
-        // woff2 downloads twice. Same natural_assets_on() gate as the buffer (and the |wpcfontnat
-        // cache-key marker above) so both surfaces stay in one mode and content/key changes coincide.
+
         if ($wpc_fonts_cdn
             && class_exists('wps_rewriteLogic')
             && method_exists('wps_rewriteLogic', 'natural_assets_on')
@@ -4041,14 +6597,7 @@ class wps_cdn_rewrite
             $css_content = wps_rewriteLogic::naturalize_asset_urls($css_content);
         }
 
-        // ATOMIC, CHECKED, VERIFIED write. The hashed <link href> returned below is baked into the
-        // page-HTML cache and re-validated NOTHING at serve time, so a failed/partial/raced write
-        // would freeze a permanent 404 into cached HTML. Fix: write to a unique temp sibling (same
-        // dir → atomic rename, no torn file ever visible to a reader), CHECK real bytes landed,
-        // rename into the stable name (last-writer-wins), then EMIT-GUARD re-stat and only return
-        // the hashed URL when present & non-empty — else fall back to $src (always-200 original).
-        // The PUBLIC filename stays stable (<handle>-<hash>.css); only the .tmp rotates and is
-        // never referenced by HTML → no double-fetch, nothing re-minted per render.
+
         $wpc_pid = function_exists('getmypid') ? getmypid() : 0;
         $wpc_tmp_path = $new_filepath . '.' . $wpc_pid . '.' . substr(md5(uniqid('', true)), 0, 8) . '.tmp';
         $wpc_bytes = @file_put_contents($wpc_tmp_path, $css_content);
@@ -4056,7 +6605,7 @@ class wps_cdn_rewrite
             if (file_exists($wpc_tmp_path)) {
                 @unlink($wpc_tmp_path);
             }
-            // A racing writer may have already landed the real file — honor it.
+            
             if (file_exists($new_filepath) && @filesize($new_filepath) > 0) {
                 return WPS_IC_CSS_URL . '/' . $new_filename;
             }
@@ -4070,8 +6619,8 @@ class wps_cdn_rewrite
             return $src;
         }
 
-        // Final emit-time guard: the backing file MUST be present & non-empty right now
-        // or we refuse to bake its hash into the (about-to-be-cached) HTML.
+        
+        
         clearstatcache(true, $new_filepath);
         if (!file_exists($new_filepath) || @filesize($new_filepath) <= 0) {
             return $src;
@@ -4081,21 +6630,44 @@ class wps_cdn_rewrite
         return $new_url;
     }
 
-    /**
-     * Shared @font-face → CDN-zone rewriter. Rewrites SAME-SITE @font-face
-     * font url() (woff2/woff/eot/ttf) to the zone using the same form as the combine path
-     * (m:0/a: passthrough; font:true/a: when $subsetting + non-icon). Scoped to @font-face blocks;
-     * icon-safe (family + URL); idempotent (skips URLs already on the zone); comments stripped so a
-     * stray '}' can't truncate the block matcher. Operates on ABSOLUTE url() only (callers resolve
-     * relatives first; relative inline url() is left untouched = safe). Returns $css unchanged when
-     * $zone is empty. Used by rewriteInlineFontFaces() (inline <style> @font-face — block themes);
-     * process_css_for_fonts() (external <link> CSS) keeps its own proven inline copy.
-     */
+
+    
+    
+    
+    public static function wpc_fonts_cdn_serve_on796()
+    {
+        return apply_filters('wpc_fonts_cdn_serve', (bool) get_site_option('wpc_fonts_cdn_serve', true))
+            && !empty(self::$settings['live-cdn']) && self::$settings['live-cdn'] == '1'
+            && !empty(self::$settings['fonts']) && self::$settings['fonts'] == '1'
+            && !empty(self::$zone_name)
+            && (empty(self::$settings['css_combine']) || self::$settings['css_combine'] != '1');
+    }
+
+    
+    
+    
+    public static function wpc_font_preload_url_form796($url)
+    {
+        if (!is_string($url) || $url === '' || strpos($url, '/a:') === false) {
+            return $url;
+        }
+        if (!apply_filters('wpc_font_preload_naturalize', true)
+            || !self::wpc_fonts_cdn_serve_on796()
+            || !class_exists('wps_rewriteLogic')
+            || !method_exists('wps_rewriteLogic', 'natural_assets_on')
+            || !method_exists('wps_rewriteLogic', 'naturalize_asset_urls')
+            || !wps_rewriteLogic::natural_assets_on()) {
+            return $url;
+        }
+        $wpc_n796 = wps_rewriteLogic::naturalize_asset_urls($url);
+        return (is_string($wpc_n796) && $wpc_n796 !== '') ? $wpc_n796 : $url;
+    }
+
     public static function rewrite_fontface_css($css, $zone, $subsetting, $site_host)
     {
         $zone = (string) $zone;
         if ($zone === '' || strpos($css, '@font-face') === false) return $css;
-        $css = preg_replace('/\/\*[^*]*\*+([^\/][^*]*\*+)*\//', '', $css);
+        $css = preg_replace('#/\*.*?\*/#s', '', $css);
         return preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($block) use ($subsetting, $site_host, $zone) {
             $rule = $block[0];
             $family_is_icon = false;
@@ -4109,14 +6681,11 @@ class wps_cdn_rewrite
                 if (strpos($url, $zone) !== false) return $m[0];
                 $host = wp_parse_url($url, PHP_URL_HOST);
                 if (empty($host) || empty($site_host) || strcasecmp($host, $site_host) !== 0) return $m[0];
-                // PATH SCOPE: only zoneify fonts under /wp-content/. A same-site custom store path
-                // (e.g. /storage/) the CDN 302s cross-origin → CORS-blocked → font fails; same-origin
-                // under /wp-content/ is always safe (no redirect, no CORS net for fonts).
+
+
                 if (stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) return $m[0];
-                // Local-Fonts cache (self-host): leave on origin. The localized stylesheet is served as a
-                // static file with origin woff2 URLs, so zoneifying the inline copy would diverge — inline +
-                // preload land on the zone while the deferred .css stays origin → the browser binds the
-                // (origin) deferred face, double-fetches, and the zone preload is wasted (FOUT).
+
+
                 if (stripos($url, '/cache/wp-cio-fonts/') !== false) return $m[0];
                 $lower = strtolower($url);
                 $url_is_icon = (strpos($lower, 'icon') !== false || strpos($lower, 'awesome') !== false || strpos($lower, 'lightgallery') !== false || strpos($lower, 'gallery') !== false || strpos($lower, 'side-cart-woocommerce') !== false);
@@ -4137,14 +6706,10 @@ class wps_cdn_rewrite
         $preloadOutput = '';
         $preloadOutputArray = [];
 
-        if (!empty($_GET['dbgPreload'])) {
-            echo print_r($preloads, true);
-        }
-
         if (!empty($preloads) && is_array($preloads)) {
             $allPreloadUrls = [];
 
-            // Collect all URLs from both lcp and custom arrays
+            
             if (!empty($preloads['lcp']) && is_array($preloads['lcp'])) {
                 $allPreloadUrls = array_merge($allPreloadUrls, $preloads['lcp']);
             }
@@ -4153,11 +6718,11 @@ class wps_cdn_rewrite
                 $allPreloadUrls = array_merge($allPreloadUrls, $preloads['custom']);
             }
 
-            // Process each URL
+            
             foreach ($allPreloadUrls as $preloadItem) {
-                if (empty($preloadItem)) continue; // Skip empty URLs
+                if (empty($preloadItem)) continue; 
 
-                // Extract full URL from HTML if possible
+                
                 $fullUrl = $this->extractUrlFromHtml($preloadItem, $html);
                 if (empty($fullUrl)) {
                     continue;
@@ -4166,7 +6731,7 @@ class wps_cdn_rewrite
                 $extra = '';
                 $type = '';
 
-                // Parse URL to get extension without query parameters
+                
                 $parsedUrl = parse_url($fullUrl);
                 $path = isset($parsedUrl['path']) ? $parsedUrl['path'] : $fullUrl;
                 $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
@@ -4252,20 +6817,20 @@ class wps_cdn_rewrite
         }
     }
 
-    /**
-     * Helper function to extract full URL from HTML for a given resource
-     */
+    
+
+
     private function extractUrlFromHtml($resource, $html)
     {
         if (empty($resource) || empty($html)) {
             return $resource;
         }
 
-        // Escape special regex characters in the resource name
+        
         $escapedResource = preg_quote($resource, '/');
 
-        // Pattern to match URLs containing the resource between quotes
-        // Matches: href="...resource..." or src="...resource..." or content="...resource..."
+        
+        
         $patterns = ['/(?:href|src|content)=["\']([^"\']*' . $escapedResource . '[^"\']*)["\']/i', '/url\(["\']?([^"\')]*' . $escapedResource . '[^"\')]*)["\']?\)/i'];
 
         foreach ($patterns as $pattern) {
@@ -4284,14 +6849,10 @@ class wps_cdn_rewrite
         $preloadOutput = '';
         $preloadOutputArray = [];
 
-        if (!empty($_GET['dbgPreload'])) {
-            echo print_r($preloads, true);
-        }
-
         if (!empty($preloads) && is_array($preloads)) {
             $allPreloadUrls = [];
 
-            // Collect all URLs from both lcp and custom arrays
+            
             if (!empty($preloads['lcp']) && is_array($preloads['lcp'])) {
                 $allPreloadUrls = array_merge($allPreloadUrls, $preloads['lcp']);
             }
@@ -4300,11 +6861,11 @@ class wps_cdn_rewrite
                 $allPreloadUrls = array_merge($allPreloadUrls, $preloads['custom']);
             }
 
-            // Process each URL
+            
             foreach ($allPreloadUrls as $preloadItem) {
-                if (empty($preloadItem)) continue; // Skip empty URLs
+                if (empty($preloadItem)) continue; 
 
-                // Extract full URL from HTML if possible
+                
                 $fullUrl = $this->extractUrlFromHtml($preloadItem, $html);
                 if (empty($fullUrl)) {
                     continue;
@@ -4313,7 +6874,7 @@ class wps_cdn_rewrite
                 $extra = '';
                 $type = '';
 
-                // Parse URL to get extension without query parameters
+                
                 $parsedUrl = parse_url($fullUrl);
                 $path = isset($parsedUrl['path']) ? $parsedUrl['path'] : $fullUrl;
                 $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
@@ -4441,36 +7002,12 @@ class wps_cdn_rewrite
     {
         $html = base64_encode($html[0]);
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_encode') {
-            return print_r([$html], true);
-        }
-
         return '[script-wpc]' . $html . '[/script-wpc]';
     }
 
     public function script_decode($html)
     {
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode') {
-            return print_r([$html], true);
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'no_decode') {
-            return $html[1];
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'after_base64_replace') {
-            return $html[1];
-        }
-
         $html = base64_decode($html[1]);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'after_base64_decode') {
-            return $html;
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode_after') {
-            return print_r([str_replace('<iframe', 'framea', $html)], true);
-        }
 
         return $html;
     }
@@ -4485,23 +7022,23 @@ class wps_cdn_rewrite
     {
         $html = base64_decode($html[1]);
 
-        // Optional: Safety check for valid decoded HTML
+        
         if ($html === false) {
-            return ''; // Or return $matches[0] to leave it unchanged
+            return ''; 
         }
 
-        return $html; // Return decoded HTML, without the tags
+        return $html; 
     }
 
     public function jetsmart_ajax_rewrite($args)
     {
         $html = $args['content'];
 
-        //Prep Site URL
+        
         $escapedSiteURL = quotemeta(self::$home_url);
         $regExURL = '(https?:|)' . substr($escapedSiteURL, strpos($escapedSiteURL, '//'));
 
-        //Prep Included Directories
+        
         $directories = 'wp\-content|wp\-includes';
         if (!empty($cdn['cdn_directories'])) {
             $directoriesArray = array_map('trim', explode(',', $cdn['cdn_directories']));
@@ -4532,7 +7069,7 @@ class wps_cdn_rewrite
     {
 
         if (empty(self::$cacheHtml)) {
-            //mainInit() didnt run, we dont have to save cache, return the buffer.
+
             return $html;
         }
 
@@ -4542,7 +7079,7 @@ class wps_cdn_rewrite
             if ((!self::isExcludedFromCache($html) && $this->doCacheCombine())) {
                 $prefix = '';
                 if (self::is_mobile()) $prefix .= 'mobile';
-                if (self::is_webp_request()) $prefix .= ($prefix ? '-' : '') . 'webp';
+                if (self::is_webp_request() && apply_filters('wpc_webp_cache_variant', false)) { $prefix .= ($prefix ? '-' : '') . 'webp'; }
 
                 return self::$cacheHtml->saveCache($html, $prefix);
             }
@@ -4578,7 +7115,7 @@ class wps_cdn_rewrite
             }
         }
 
-        // Is Woo commerce Cart
+        
         if (class_exists('WooCommerce')) {
             if (is_cart() || is_checkout()) {
                 return true;
@@ -4593,48 +7130,51 @@ class wps_cdn_rewrite
         return isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false;
     }
 
+
+    public static function wpc_universal_picture_on()
+    {
+        static $on = null;
+        if ($on !== null) return $on;
+        if (defined('WPC_UNIVERSAL_PICTURE_OFF') && WPC_UNIVERSAL_PICTURE_OFF) return $on = false;
+        $opt = function_exists('get_option') ? get_option('wpc_universal_picture', '1') : '1';
+        return $on = (bool) apply_filters('wpc_universal_picture', ($opt === '1' || $opt === 1 || $opt === true));
+    }
+
     public function cdnRewriter($html)
     {
+        $wpc_ps531 = class_exists('Wpc_Prof_Span530') ? new Wpc_Prof_Span530('pass:cdnRewriter') : null;
 
-        // (v7.10.04) SECURITY: admin-gate this debug branch. Ungated, ?forceCritical=1 replaced the
-        // whole page with a print_r dump (url-key/permalink disclosure) and fired an API call for ANY
-        // visitor. Debug only — never a public query string.
+
         if (!empty($_GET['forceCritical']) && function_exists('current_user_can') && current_user_can('manage_options')) {
             $urlKey = new wps_ic_url_key();
             $requests = new wps_ic_requests();
             $postID = get_queried_object_id();
             $url = get_permalink($postID);
             $url_key = $urlKey->setup($url);
-            $args = ['url' => $url . '?criticalCombine=true&testCompliant=true', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
-            #$args = ['url' => $url.'?disableWPC=true', 'async' => 'false', 'dbg' => 'false', 'hash' => time().mt_rand(100,9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            $args = ['url' => (function_exists('wpc_canon_url609') ? wpc_canon_url609($url) : $url) . '?criticalCombine=true&testCompliant=true', 'source' => 'rewrite', 'version' => '6.60.60', 'async' => 'false', 'dbg' => 'true', 'hash' => time() . mt_rand(100, 9999), 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']];
+            if (function_exists('wpc_sanity_escalate622')) {
+                $args = wpc_sanity_escalate622($args, $url);
+            }
 
-            // (v7.03.121) FATAL FIX: was self::$API_URL — an UNDECLARED static (the property is lowercase
-            // self::$apiUrl, line 77; PHP static-prop names are case-sensitive) → "Access to undeclared
-            // static property wps_cdn_rewrite::$API_URL" white-screen, reachable via ?forceCritical=1 on a CDN-on render.
-            $call = $requests->POST(self::$apiUrl, $args, ['timeout' => 0.1, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
+
+            
+            $call = $requests->POST(self::$apiUrl, $args, ['timeout' => 2, 'blocking' => false, 'headers' => array('Content-Type' => 'application/json')]);
 
             return print_r(['key' => $url_key, 'url' => $url, 'call' => $call], true);
         }
 
-        // Heal mixed content: upgrade same-host http://→https:// on an https request before any
-        // rewriter runs, so a proxy-misdetected core enqueue (is_ssl() false at the origin behind
-        // Cloudflare/WP Engine) can't leave blocked CSS/JS on the page. No-op when nothing to heal.
+
         $html = wpc_heal_mixed_content($html);
 
-        // Negotiated delivery (COMPOSE, not bypass). When active, emit native .webp <img> tags here
-        // (each marked data-wpc-nd) and CONTINUE the pipeline so the CSS-bg / font / JS / critical /
-        // preload rewriters all still run. The legacy <img> rewriters skip data-wpc-nd tags, so each
-        // image is delivered exactly once. is_active_jpeg() is the Next-Gen-OFF clean-URL sibling:
-        // same gate, but emits natural .jpg URLs (no transforms/optimizer) instead of .webp. Either
-        // mode owns image delivery for the request; rewrite_buffer() picks the URL flavour internally.
+
         if (class_exists('WPC_Negotiated_Delivery')
             && (WPC_Negotiated_Delivery::is_active() || WPC_Negotiated_Delivery::is_active_jpeg())) {
+            $wpcNdMask = [];
+            $html = wps_rewriteLogic::maskMediaScripts($html, $wpcNdMask);
             $html = WPC_Negotiated_Delivery::rewrite_buffer($html);
-            // Negotiated owns image delivery this request → stand down the legacy <picture>
-            // builder (picture_webp). Negotiated <img> are marked data-wpc-nd and the
-            // replaceImageTagsDo path already skips them, but forcing pictureWebpEnabled off
-            // guarantees no <picture> wrap slips through. (WPC_Modern_Delivery is gated at its
-            // own dispatch near the return — both <picture> builders must defer to negotiated.)
+            $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcNdMask);
+
+
             if (class_exists('wps_rewriteLogic')) {
                 wps_rewriteLogic::$pictureWebpEnabled = false;
             }
@@ -4661,16 +7201,16 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        /**
-         * Woocommerce fix - store stops working
-         */
+        
+
+
         if (isset($_GET['wc-ajax']) || isset($_GET['product_sku']) || !empty($_POST['product_sku'])) {
             return $html;
         }
 
-        /**
-         * WP Datatables Fix
-         */
+        
+
+
         if (!empty($_GET['action']) && $_GET['action'] == 'get_wdtable') {
             return $html;
         }
@@ -4701,7 +7241,7 @@ class wps_cdn_rewrite
             self::$retina_enabled = '0';
             self::$settings['delay-js'] = '0';
             self::$settings['inline-js'] = '0';
-            self::$rewriteLogic::$pictureWebpEnabled = false; // AMP doesn't allow <picture>
+            self::$rewriteLogic::$pictureWebpEnabled = false; 
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'action') {
@@ -4709,15 +7249,16 @@ class wps_cdn_rewrite
         }
 
 
-        // This is for AJAX Replace, works on Jet Engine and some others - might need integration
-        // TODO: Integration for other ajax loaders
+        
+        
         if (!empty($_POST['action'])) {
-            // Find all URLs on page that have not been replaced
-            // Images-master gate: replaceImageTagsDoSlash has no per-format gate and this branch
-            // early-returns BEFORE the master image gate below, so without this an Images-OFF site
-            // still transforms <img> on front-end POST/AJAX renders. CSS/JS/fonts unaffected.
+
+
             if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
+                $wpcAjaxMask = [];
+                $html = wps_rewriteLogic::maskMediaScripts($html, $wpcAjaxMask);
                 $html = preg_replace_callback('/(?<![\"|\'])<img[^>]*>/i', [self::$rewriteLogic, 'replaceImageTagsDoSlash'], $html);
+                $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcAjaxMask);
             }
 
             return $html;
@@ -4728,11 +7269,11 @@ class wps_cdn_rewrite
         }
 
         if (empty($_GET['wpc_disableCommentClear'])) {
-            //clear html comments (so combine doesn't pick them up)
+
             $html = preg_replace("/<!--->/ms", '', $html);
             $html = preg_replace_callback("/<!--(.*?)-->/ms", function ($matches) {
                 if (strpos($matches[1], 'sc_project') !== false || strpos($matches[1], 'et-ajax') !== false) {
-                    // important stuff inside comments
+
                     return $matches[0];
                 } else {
                     return '';
@@ -4745,7 +7286,7 @@ class wps_cdn_rewrite
         }
 
 
-        //Prep Site URL
+        
         $this->getRegexp();
 
         if (empty($_GET['wpc_disableStrip'])) {
@@ -4756,14 +7297,24 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Layzload Iframe - sets load="lazy" to iframe tag
-        // TODO: Fix so that it checks does iframe already have load="lazy|auto"
-        if (!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1' && !$isUserLoggedIn) {
+        
+        $wpcScriptMask = [];
+        $html = wps_rewriteLogic::maskMediaScripts($html, $wpcScriptMask);
+
+        
+        
+        
+        
+        
+        
+        if ((!empty(self::$settings['iframe-lazy']) && self::$settings['iframe-lazy'] == '1'
+                || self::wpc_facade_aggr_ok())
+            && !$isUserLoggedIn) {
             $html = preg_replace_callback('/<iframe[^>]*>(.*?)<\/iframe>/si', [$this, 'replace_iframe_tags'], $html);
             $html = preg_replace_callback('/<source([^>]*)\ssrc=["\']([^"\']+)["\']/i', [$this, 'replace_source_tags'], $html);
         }
 
-        // Add preload="none" to video tags — prevents browser from downloading video until play
+        
         if (!empty(self::$settings['video-preload-none']) && self::$settings['video-preload-none'] == '1' && !$isUserLoggedIn) {
             $html = preg_replace_callback('/<video\b([^>]*)>/i', function ($matches) {
                 $attrs = $matches[1];
@@ -4797,14 +7348,12 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Replace Background
+        
         if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == '1') {
             $html = self::$rewriteLogic->backgroundSizing($html);
         } else {
-            // Elementor slideshow background images must reach the CDN even when Background-Sizing is
-            // OFF. The data-settings slideshow rewrite lives inside backgroundSizing() (gated above),
-            // so run ONLY the slideshow data-settings pass here (clean same-ext CDN URL = always 200)
-            // without the broader inline-CSS background:url() rewrite the operator left off.
+
+
             $html = self::$rewriteLogic->backgroundSlideshowOnly($html);
         }
 
@@ -4818,7 +7367,8 @@ class wps_cdn_rewrite
             $dbg .= $html;
         }
 
-        $html = preg_replace_callback('/<head\b[^>]*>/is', [$this, 'injectPreloadImages'], $html, 1);
+
+        $html = preg_replace_callback('/<head\b[^>]*>(?:\s*<meta[^>]*\bcharset\b[^>]*>)?/is', [$this, 'injectPreloadImages'], $html, 1);
 
         if (!empty($_GET['debug_preload_inject'])) {
             $dbg .= 'After:';
@@ -4861,7 +7411,7 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Protect existing <picture> blocks from double-wrapping by picture_webp feature
+        
         $wpcPictureBlocks = [];
         if (self::$rewriteLogic::$pictureWebpEnabled) {
             $html = preg_replace_callback('/<picture\b[^>]*>.*?<\/picture>/is', function ($m) use (&$wpcPictureBlocks) {
@@ -4871,15 +7421,12 @@ class wps_cdn_rewrite
             }, $html);
         }
 
-        // Replace <img> tags
-        // Images-master gate. Images tile OFF ⇒ content-image CDN rewriting (<img> transforms +
-        // srcset + the <picture> webp/avif builder) stands down so images serve from origin (path
-        // A emits the origin <picture>). CSS/JS/font rewriting is a separate, unaffected pass.
+
         if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
             $html = self::$rewriteLogic->replaceImageTags($html);
         }
 
-        // Restore protected <picture> blocks
+        
         foreach ($wpcPictureBlocks as $i => $block) {
             $html = str_replace('<!--WPC_PICTURE_' . $i . '-->', $block, $html);
         }
@@ -4888,42 +7435,39 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Inline @font-face rewrite: applies font-display:swap (or the user setting) to inline
-        // <style> @font-face rules, which block themes emit and the external-CSS 'font-display'
-        // path silently missed. Uses the same findFontFace() icon-font detection. (The LCP-image
-        // and font preload passes that also fed the <head> placeholder are disabled just below.)
+
         $html = $combine_css->rewriteInlineFontFaces($html);
 
-        // LCP <link rel=preload as=image> DISABLED: the hero is already eager via
-        // fetchpriority="high", so the preload is redundant; and its imagesrcset doesn't byte-match
-        // the <picture> source, so the browser can DOUBLE-FETCH the hero. Re-enable only after
-        // guaranteeing the preload imagesrcset is byte-identical to the source.
-        $preloadLCP = '';  // was: implode('', $combine_css->preloadLCP($html))
 
-        // Font preloading REVERTED: on throttled connections it saturates the pipe ahead of the LCP
-        // element (an LCP anti-pattern), and font-display:swap above already lets text paint with a
-        // fallback so fonts never need to block. Re-enable only behind an explicit fast-connection opt-in.
-        // $fontPreloadLinks = $combine_css->extractFontPreloadLinks($html);  // disabled
+        $html = self::wpc_gfonts_display_pass($html);
+
+
+        $preloadLCP = '';
+
+
         $preloadFonts = '';
 
         $html = str_replace('<!--WPC_INSERT_PRELOAD_MAIN-->', $preloadLCP . $preloadFonts, $html);
 
-        // Replace <picture> tags (both original restored ones and new wpc-picture ones)
-        // Images-master gate: replaceSourceTags (inside) strips theme <source>/<img> srcset before
-        // the per-URL isImage gate, degrading a theme's own responsive <picture> when Images is OFF.
-        // Stand down entirely then (path A owns the origin <picture>).
+
         if (!class_exists('WPC_Negotiated_Delivery') || WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
             $html = self::$rewriteLogic->replacePictureTags($html);
         }
 
-        // Lazy cache-buster, applied ONCE here AFTER replacePictureTags (which rebuilds <source>
-        // srcsets, stripping any buster the picture builders added). ONLY when CDN lazy (smart) is
-        // on. Appends a per-request rotating "?v=" to NOT-YET-LANDED transform urls (those with
-        // "/q:i/") so the CDN re-checks origin until the native variant lands; landed/native urls
-        // (no "/q:i/") cache normally and the buster self-removes once @file_exists flips to the
-        // clean native url. Bunny keys its cache on the query string for these urls, so "?v=" busts.
+        
+        
+        $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcScriptMask);
+        $wpcScriptMask = [];
+
+
         if (function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled()) {
-            $lazy_v = substr(md5(microtime(true) . wp_rand(1, 9999999)), 0, 10);
+            
+            
+            
+            
+            $lazy_v = !empty(self::$options['lazy_hash'])
+                ? (string) self::$options['lazy_hash']
+                : (defined('WPS_IC_HASH') ? (string) WPS_IC_HASH : '5021');
             $html = preg_replace_callback(
                 '#https?://[^\s"\',]*?/q:i/[^\s"\',]*#i',
                 function ($m) use ($lazy_v) {
@@ -4938,21 +7482,21 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // Find revSlider Data-thumb
+        
         $html = self::$rewriteLogic->revSliderReplace($html);
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cdn_rewrite_url') {
             return $html;
         }
 
-        // Critical CSS Remove from Header
+        
         $criticalActive = !(isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '0') && ((isset(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') || (isset(self::$page_excludes['critical_css']) && self::$page_excludes['critical_css'] == '1')) && (empty($settings['developer_mode']) || $settings['developer_mode'] == '0');
 
         $criticalCSS = new wps_criticalCss();
         $criticalCSSExists = $criticalCSS->criticalExists();
 
 
-        //Combine CSS
+        
         if ($criticalCombine || (!empty(self::$settings['css_combine']) && self::$settings['css_combine'] == '1')) {
             if (empty($_GET['stopCombineCSS'])) {
                 $html = $combine_css->maybe_do_combine($html);
@@ -4960,14 +7504,8 @@ class wps_cdn_rewrite
         }
 
         if (!$criticalCombine) {
-//            if (isset(self::$settings['inline-css']) && self::$settings['inline-css'] == '1') {
-//                // TODO: Maybe add something?
-//                if ($criticalActive && !empty($criticalCSSExists)) {
-//                    //critical exists, dont inline
-//                } else {
-//                    $html = $combine_css->doInline($html);
-//                }
-//            }
+
+
         }
 
         $addslashes = false;
@@ -4981,13 +7519,13 @@ class wps_cdn_rewrite
         }
 
         if (isset(self::$settings['fontawesome-lazy']) && self::$settings['fontawesome-lazy'] == '1') {
-            // TODO: Maybe add something?
+            
             $html = $combine_css->lazyFontawesome($html);
         }
 
         if (isset(self::$settings['gtag-lazy']) && self::$settings['gtag-lazy'] == '1') {
-            // TODO: Maybe add something?
-            //$html = preg_replace_callback('/<script\b[^>]*(src="[^"]*gtag[^"]*")[^>]*>.*?<\/script>/si', [$this, 'gtagDelay'], $html);
+            
+            
         }
 
         if (!self::$isAmp->isAmp() && (empty($_GET['disableCritical']) && empty($_GET['generateCriticalAPI'])) && !$this->criticalCombine) {
@@ -5021,18 +7559,18 @@ class wps_cdn_rewrite
 
 
                 if (!empty($_GET['debugCritical_replace'])) {
-                    #global $post;
+                    
                     $criticalCSS = new wps_criticalCss();
                     $criticalCSSExists = $criticalCSS->criticalExists();
                     $criticalCSSContent = file_get_contents($criticalCSSExists['file']);
 
-                    // Adjusted function to create preload links only if the "/* Preload Fonts */" comment is found
+                    
                     $createPreloadLinks = function ($cssContent) {
                         $preloadLinks = '';
-                        $loadedFonts = []; // Array to track already added URLs
+                        $loadedFonts = []; 
                         $commentPos = strpos($cssContent, '/* Preload Fonts */');
 
-                        // Proceed only if the comment is found
+                        
                         if ($commentPos !== false) {
                             $relevantContent = substr($cssContent, 0, $commentPos);
                             $fontPattern = '/url\((\'|")?(.+?\.(woff2?|ttf|otf|eot))\1?\)/i';
@@ -5042,11 +7580,11 @@ class wps_cdn_rewrite
                                     if (strpos($fontUrl, 'icon') !== false || strpos($fontUrl, 'fa-') !== false || strpos($fontUrl, 'la-') !== false) {
                                         continue;
                                     }
-                                    // Check if the font URL is already in the array
+                                    
                                     if ((!empty(self::$settings['preload-crit-fonts'])) && self::$settings['preload-crit-fonts'] == '1') {
                                         if (!in_array($fontUrl, $loadedFonts)) {
                                             $preloadLinks .= "<link rel=\"preload\" href=\"$fontUrl\" as=\"font\" type=\"font/woff2\" crossorigin=\"anonymous\">\n";
-                                            $loadedFonts[] = $fontUrl; // Add the URL to the tracking array
+                                            $loadedFonts[] = $fontUrl; 
                                         }
                                     }
                                 }
@@ -5070,17 +7608,40 @@ class wps_cdn_rewrite
                 if ($criticalActive && !self::$preloaderAPI) {
                     if (!self::isURLExcluded('critical_css')) {
 
-                        #global $post;
+                        
                         $criticalCSS = new wps_criticalCss();
                         $criticalCSSExists = $criticalCSS->criticalExists();
 
                         if (!empty($criticalCSSExists)) {
                             $html = self::$rewriteLogic->addCritical($html);
-                            if (strpos($html, 'wpc-critical-css') !== false) {
+                            
+                            
+                            
+                            
+                            
+                            
+                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\']/i', $html)) {
                                 $html = self::$rewriteLogic->lazyCSS($html);
                             }
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            if (class_exists('wps_rewriteLogic')
+                                && method_exists('wps_rewriteLogic', 'wpc_defer_wire_dropfaces680')) {
+                                $html = wps_rewriteLogic::wpc_defer_wire_dropfaces680($html);
+                            }
                         } else {
-                            //this way should be ok for multisite
+
+                            $html = self::$rewriteLogic->wpc_arm_sentinel_tag($html);
                         }
                     }
                 }
@@ -5091,17 +7652,13 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        // encode meta and json tags so we dont replace urls
+
         if (empty(self::$settings['optimize_meta_images']) || self::$settings['optimize_meta_images'] == '0') {
             $metaData = $this->encodeMeta($html);
             $html = $metaData['html'];
         }
 
-        // Protect negotiated <img data-wpc-nd> from the page-wide cdn_rewrite_url passes below.
-        // Their src/srcset are already final zone-natural URLs, but the onerror fallback
-        // (data-wpc-fb) is an ORIGIN url that cdn_rewrite_url would rewrite into a transform —
-        // defeating the fallback's whole point (a non-edge origin file for when the edge fails).
-        // Stash now, restore after the URL passes.
+
         $wpcnd_stash = [];
         if (class_exists('WPC_Negotiated_Delivery')
             && (WPC_Negotiated_Delivery::is_active() || WPC_Negotiated_Delivery::is_active_jpeg())) {
@@ -5113,11 +7670,15 @@ class wps_cdn_rewrite
         }
 
 
-        // Find all URLs on page that have not been replaced
+        
         $regEx = '#(?<=url\(|[\"\']|&quot;)(?:' . self::$regExURL . ')?/(?:((?:' . self::$regExDir . ')[^\"\')]+)|([^/\"\']+\.[^/\"\')]+))(?=[\"\')]|&quot;)#';
+        
+        
+        
+        
         $html = preg_replace_callback($regEx, [$this, 'cdn_rewrite_url'], $html);
 
-        //Find background images inlined in html, and pass only the url to cdn_rewrite_url (above regex does not capture relative urls)
+        
         if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == 1) {
             $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
             $html = preg_replace_callback($regEx, function ($matches) {
@@ -5127,7 +7688,7 @@ class wps_cdn_rewrite
             }, $html);
         }
 
-        // process base64 encoded chunks and put images on cdn
+
         $html = preg_replace_callback('/data-code="([^"]+)"/', function ($m) use ($regEx) {
             $decoded = base64_decode($m[1]);
             if ($decoded === false) {
@@ -5145,7 +7706,7 @@ class wps_cdn_rewrite
             return 'data-code="' . base64_encode($decoded) . '"';
         }, $html);
 
-        // Restore the stashed negotiated imgs (their data-wpc-fb origin fallback intact).
+        
         if (!empty($wpcnd_stash)) {
             $html = strtr($html, $wpcnd_stash);
         }
@@ -5163,18 +7724,18 @@ class wps_cdn_rewrite
         }
 
         if (empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-            // Find and Preload Fonts!!
+            
             self::$wpcPreloadLinks = $combine_css->preparePreloads($html);
 
             if (!empty(self::$wpcPreloadLinks)) {
-                // Extract href values from preload links
+                
                 preg_match_all('/href=["\']([^"\']+)["\']/', self::$wpcPreloadLinks, $matches);
 
                 $html = str_replace('<!--WPC_INSERT_PRELOAD-->', self::$wpcPreloadLinks, $html);
             }
         }
 
-        // decode meta and json tags
+
         if (!empty($metaData)) {
             $html = $this->decodeMeta($html, $metaData['store']);
         }
@@ -5199,13 +7760,13 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        # $html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/si', [$this, 'noscript_decode'], $html);
-        #return print_r([$html],true);
-        #$html = preg_replace_callback('/\[noscript\-wpc\](.*?)\[\/noscript\-wpc\]/i', [$this, 'noscript_decode'], $html);
+        
+        
+        
 
         $html = preg_replace_callback('/\[noscript-wpc\](.*?)\[\/noscript-wpc\]/is', [$this, 'noscript_decode'], $html);
 
-        #return print_r([$html],true);
+        
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'Inline') {
             return $html;
@@ -5220,26 +7781,30 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        //Delay JS
-        #$delayActive = !(isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') && ((isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1'));
+        
+
         $delayActive = true;
 
         if (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '0') {
-            // Disable
+            
             $delayActive = false;
         }
 
         $delayV2Active = true;
         if (isset(self::$page_excludes['delay_js_v2']) && self::$page_excludes['delay_js_v2'] == '0') {
-            // Disable
+            
             $delayV2Active = false;
         }
 
         $html = self::$themeIntegrations->getIntegration($html);
 
-        if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')) {
+        if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')
+                || (class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings))) {
             if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
-                $js_delay = new wps_ic_js_delay_v2();
+
+
+                $wpc_delay_v3 = (!isset(self::$settings['delay-js-v3']) || self::$settings['delay-js-v3'] != '0') && class_exists('wps_ic_js_delay_v3');
+                $js_delay = $wpc_delay_v3 ? new wps_ic_js_delay_v3() : new wps_ic_js_delay_v2();
 
                 if (!empty($_GET['stop_before']) && $_GET['stop_before'] == '3463') {
                     return $html;
@@ -5270,7 +7835,7 @@ class wps_cdn_rewrite
             }
 
             if (!empty($_GET['testGtag'])) {
-                //$html = preg_replace_callback('/<script\s+src="([^"]+)"[^>]*>/si', [$this, 'gtagDelay'], $html);
+                
 
                 return print_r([$html], true);
             }
@@ -5285,6 +7850,27 @@ class wps_cdn_rewrite
             $js_delay = new wps_ic_js_delay();
             $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'scriptsToFooter'], $html);
             $html = preg_replace_callback('/<\/body>/si', [$js_delay, 'printFooterScripts'], $html);
+        }
+
+        
+        
+        
+        
+        if (function_exists('wpc_yield_checkpoints707')) {
+            $wpc_dm708 = class_exists('wps_ic_js_delay_v3')
+                && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings)
+                && !self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['disableCritical'])
+                && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI;
+            $wpc_pre708 = strlen($html);
+            $html = wpc_yield_checkpoints707($html, $wpc_dm708);
+            if (strlen($html) !== $wpc_pre708 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('yield-inject', '', '', ['lane' => 'cdn']);
+            }
+            $wpc_fmv710 = 0;
+            $html = wpc_face_gate710($html, $wpc_dm708, $wpc_fmv710);
+            if ($wpc_fmv710 > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv710, 'lane' => 'cdn']);
+            }
         }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cache_minify') {
@@ -5307,16 +7893,12 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'cache_settings') {
-            return print_r(['settings' => self::$settings, 'advanced' => self::$settings['cache']['advanced'], 'html' => self::$settings['cache']['html'], 'mobile' => self::$settings['cache']['mobile'], 'is_mobile' => self::is_mobile(), 'url_excluded_simple' => self::isURLExcluded('simple_caching'), 'url_excluded_advanced' => self::isURLExcluded('cache'), 'exclude_per_page' => isset(self::$page_excludes['advanced_cache']) ? self::$page_excludes['advanced_cache'] : ''], true);
-        }
-
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'cache_advanced') {
             return $html;
         }
 
 
-        // Cache
+        
         $cacheActive = !(isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '0') && ((isset(self::$settings['cache']['advanced']) && self::$settings['cache']['advanced'] == '1') || (isset(self::$page_excludes['advanced_cache']) && self::$page_excludes['advanced_cache'] == '1'));
 
 
@@ -5324,77 +7906,132 @@ class wps_cdn_rewrite
             return $html;
         }
 
-        //clean up all our placeholder comments if not used
+
         $html = preg_replace('/<!--WPC[\s\S]*?-->/', '', $html);
 
 
-        #if (!empty($_GET['replaceFonts'])) {
-        #return print_r(self::$settings['replace-fonts'],true);
+        
+        
         if (!empty(self::$settings['replace-fonts'])) {
             if (self::$settings['replace-fonts'] == 'local') {
                 $fonts = new wps_ic_fonts();
                 $html = $fonts->replaceFrontend($html);
             } else if (self::$settings['replace-fonts'] == 'bunny') {
-                // Bunny serves font files at different paths than gstatic — a bare domain swap of
-                // font-file URLs (fonts.gstatic.com/s/...) produces 404s. Remove those <link> tags
-                // first, then swap the bare hostname on any remaining preconnect-only references.
+
+
                 $html = preg_replace('/<link\b[^>]*\bhref=["\']https?:\/\/fonts\.gstatic\.com\/[^"\']+["\'][^>]*>\s*/i', '', $html);
                 $html = str_replace('fonts.gstatic.com', 'fonts.bunny.net', $html);
             }
         }
-        #}
+        
 
-        // 7.01.0 — Modern Image Delivery post-process (BETA <picture> builder). Stands down when
-        // negotiated delivery is active for this request — they are mutually exclusive delivery
-        // strategies; negotiated (clean <img> + edge Accept-negotiation) wins and the <picture>
-        // builder must not re-wrap the negotiated tags back into <picture>.
+
         if (class_exists('WPC_Modern_Delivery') && WPC_Modern_Delivery::is_active()
             && !(class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active())) {
+            $wpcMdMask = [];
+            $html = wps_rewriteLogic::maskMediaScripts($html, $wpcMdMask);
             $html = WPC_Modern_Delivery::rewrite_buffer($html);
+            $html = wps_rewriteLogic::unmaskMediaScripts($html, $wpcMdMask);
         }
 
-        // Natural-URL assets: convert css/js/font m:/font: passthrough transform URLs
-        // to clean natural URLs on the cname (CDN-served + cached, no redirect hop). Image
-        // transforms untouched. Gated + inert by default (negotiated GA + filter).
+
         if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::natural_assets_on()) {
             $html = wps_rewriteLogic::naturalize_asset_urls($html);
-            // onerror->origin self-heal on the now-natural css/js (transport-failure floor:
-            // DNS/connection/TLS/5xx/abort, which <link>/<script> onerror DOES fire on; wrong-MIME-200
-            // is covered by the origin floor, not here). Inert on the origin floor.
+
+
             $fb = self::add_asset_failover($html);
             if (is_string($fb) && $fb !== '') $html = $fb;
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        if (function_exists('wpc_unzone_url')
+            && (!function_exists('apply_filters') || apply_filters('wpc_scripts_same_origin', true))) {
+            $html = preg_replace_callback('#(<script\b[^>]*\ssrc=")(https?://[^"]+)(")#i', function ($m) {
+                return $m[1] . wpc_unzone_url($m[2]) . $m[3];
+            }, $html);
+        }
+        if (class_exists('wps_rewriteLogic')) {
+            $html = wps_rewriteLogic::wpc_logo_rightsize($html);
+        }
+
+        
+        
+        
+        
+        
+        if (function_exists('wpc_svg_inline_data718')) {
+            $html = preg_replace_callback('#(<img\b(?![^>]*loading="lazy")[^>]*\ssrc=")(https?://[^"]+\.svg[^"]*)(")#i', function ($m) {
+                $wpc_d719 = wpc_svg_inline_data718($m[2]);
+                return $wpc_d719 !== '' ? $m[1] . $wpc_d719 . $m[3] : $m[0];
+            }, $html);
+        }
+
+        if (function_exists('wpc_stack_splice732')) {
+            $html = wpc_stack_splice732($html);
+        }
+        
+        
+        
+        if (function_exists('wpc_face_gate710') && isset($wpc_dm708) && $wpc_dm708) {
+            $wpc_fmv711 = 0;
+            $html = wpc_face_gate710($html, true, $wpc_fmv711);
+            if ($wpc_fmv711 > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv711, 'lane' => 'cdn-final']);
+            }
         }
 
         return $html;
     }
 
-    /**
-     * Regime-C onerror->origin self-heal. Decorates ONLY proven-natural css/js zone tags
-     * (no /a: transform marker) with a one-shot onerror that reverts the failed asset to the customer
-     * ORIGIN URL (different host → bypasses the CDN edge + any CF rule; the page already works from
-     * origin so it is always-valid). Catches the TRANSPORT-FAILURE class only (DNS/connection/TLS/5xx/
-     * abort) — the one class <link>/<script> onerror fires on; a wrong-MIME-200 does NOT fire onerror
-     * and is structurally covered by the origin floor (we never emit an unproven CDN css/js URL).
-     * One-shot + idempotent via data-wpc-fb (mirrors the image onerror pattern). Self-gated on
-     * natural_assets_on() so it is inert under KILL/CDN-off/unproven and on the origin floor.
-     */
+
     public static function add_asset_failover($html)
     {
         if (!is_string($html) || $html === '' || empty(self::$zone_name)) return $html;
         if (!class_exists('wps_rewriteLogic') || !wps_rewriteLogic::natural_assets_on()) return $html;
         $zoneHost = preg_replace('#/.*$#', '', (string) self::$zone_name);
         $origin   = function_exists('home_url') ? wp_parse_url(home_url(), PHP_URL_HOST) : '';
-        if ($origin === '' || strcasecmp((string) $zoneHost, (string) $origin) === 0) return $html; // never-loop
+        if ($origin === '' || strcasecmp((string) $zoneHost, (string) $origin) === 0) return $html;
         $zq = preg_quote((string) $zoneHost, '#');
-        // \s (whitespace) before href=/src=, NOT \b: a \b word boundary also matches
-        // data-href=/data-src= (hyphen is a boundary), which would wrongly decorate third-party
-        // lazy-deferral tags. \s requires a real attribute.
-        $css = preg_replace_callback('#<link\b(?=[^>]*\srel=["\']?stylesheet)(?![^>]*\sdata-wpc-fb)[^>]*\shref=["\']https://' . $zq . '(/[^"\']+?\.css[^"\']*)["\'][^>]*>#i', function ($m) use ($origin) {
-            if (strpos($m[0], '/a:') !== false) return $m[0]; // transform form (not natural) — skip
-            $o = 'https://' . $origin . $m[1];
-            return str_replace('<link', '<link data-wpc-fb="0" onerror="if(!this.dataset.wpcFb||this.dataset.wpcFb===\'0\'){this.dataset.wpcFb=1;this.href=\'' . esc_attr($o) . '\';}"', $m[0]);
+        $wpc_fbjs735 = function ($origin_url) {
+            return ' data-wpc-fb="0" onerror="if(!this.dataset.wpcFb||this.dataset.wpcFb===\'0\'){this.dataset.wpcFb=1;this.href=\'' . esc_attr($origin_url) . '\';}"';
+        };
+
+
+        $css = preg_replace_callback('#<link\b(?=[^>]*\srel=["\']?stylesheet)(?![^>]*\sdata-wpc-fb)[^>]*\shref=["\']https://' . $zq . '(/[^"\']+?\.css[^"\']*)["\'][^>]*>#i', function ($m) use ($origin, $wpc_fbjs735) {
+            if (strpos($m[0], '/a:') !== false) return $m[0];
+            return str_replace('<link', '<link' . $wpc_fbjs735('https://' . $origin . $m[1]), $m[0]);
         }, $html);
-        if (is_string($css) && $css !== '') $html = $css; // preg failure → keep prior $html (never blank)
+        if (is_string($css) && $css !== '') $html = $css;
+        $wpc_dfr735 = preg_replace_callback('#<link\b(?=[^>]*\s(?:rel|type)=["\']?wpc-(?:mobile-)?stylesheet)(?![^>]*\sdata-wpc-fb)[^>]*\shref=["\']https://' . $zq . '(/[^"\']+?\.css[^"\']*)["\'][^>]*>#i', function ($m) use ($origin, $wpc_fbjs735) {
+            if (strpos($m[0], '/a:') !== false) return $m[0];
+            return str_replace('<link', '<link' . $wpc_fbjs735('https://' . $origin . $m[1]), $m[0]);
+        }, $html);
+        if (is_string($wpc_dfr735) && $wpc_dfr735 !== '') $html = $wpc_dfr735;
+        $wpc_rst735 = preg_replace_callback('#<link\b(?![^>]*\sdata-wpc-fb)[^>]*\sdata-wpc-(?:rest|lf-href)=["\']https://' . $zq . '(/[^"\']+?\.css[^"\']*)["\'][^>]*>#i', function ($m) use ($origin, $wpc_fbjs735) {
+            if (strpos($m[0], '/a:') !== false) return $m[0];
+            return str_replace('<link', '<link' . $wpc_fbjs735('https://' . $origin . $m[1]), $m[0]);
+        }, $html);
+        if (is_string($wpc_rst735) && $wpc_rst735 !== '') $html = $wpc_rst735;
+        $wpc_img735 = preg_replace_callback('#<img\b(?![^>]*\sdata-wpc-fb)[^>]*\ssrc=["\']https://' . $zq . '(/[^"\']+?)["\'][^>]*>#i', function ($m) use ($origin) {
+            if (strpos($m[0], '/a:') !== false || strpos($m[0], '/u:') !== false) return $m[0];
+            $wpc_o735 = 'https://' . $origin . preg_replace('/\?.*$/', '', $m[1]);
+            $wpc_h735 = "this.onerror=null;var p=this.parentNode;if(p&&p.tagName==='PICTURE'){var s;while(s=p.getElementsByTagName('source')[0])s.parentNode.removeChild(s);}this.removeAttribute('srcset');this.src=this.getAttribute('data-wpc-fb');";
+            return str_replace('<img', '<img data-wpc-fb="' . esc_attr($wpc_o735) . '" onerror="' . $wpc_h735 . '"', $m[0]);
+        }, $html);
+        if (is_string($wpc_img735) && $wpc_img735 !== '') $html = $wpc_img735;
+        $wpc_lzy735 = preg_replace_callback('#<img\b(?![^>]*\sdata-wpc-fb)[^>]*\sdata-wpc-qw-src=["\']https://' . $zq . '(/[^"\']+?)["\'][^>]*>#i', function ($m) use ($origin) {
+            if (strpos($m[1], '/a:') !== false || strpos($m[1], '/u:') !== false) return $m[0];
+            $wpc_o735 = 'https://' . $origin . preg_replace('/\?.*$/', '', $m[1]);
+            $wpc_h735 = "this.onerror=null;var p=this.parentNode;if(p&&p.tagName==='PICTURE'){var s;while(s=p.getElementsByTagName('source')[0])s.parentNode.removeChild(s);}this.removeAttribute('srcset');this.src=this.getAttribute('data-wpc-fb');";
+            return str_replace('<img', '<img data-wpc-fb="' . esc_attr($wpc_o735) . '" onerror="' . $wpc_h735 . '"', $m[0]);
+        }, $html);
+        if (is_string($wpc_lzy735) && $wpc_lzy735 !== '') $html = $wpc_lzy735;
         $js = preg_replace_callback('#<script\b(?![^>]*\sdata-wpc-fb)[^>]*\ssrc=["\']https://' . $zq . '(/[^"\']+?\.js[^"\']*)["\'][^>]*></script>#i', function ($m) use ($origin) {
             if (strpos($m[0], '/a:') !== false) return $m[0];
             $o = 'https://' . $origin . $m[1];
@@ -5410,7 +8047,7 @@ class wps_cdn_rewrite
             $escapedSiteURL = quotemeta(self::$home_url);
             self::$options['regExUrl'] = $regExURL = '(https?:|)' . substr($escapedSiteURL, strpos($escapedSiteURL, '//'));
 
-            //Prep Included Directories
+            
             $directories = 'wp\-content|wp\-includes';
             if (!empty($cdn['cdn_directories'])) {
                 $directoriesArray = array_map('trim', explode(',', $cdn['cdn_directories']));
@@ -5435,54 +8072,54 @@ class wps_cdn_rewrite
     public function removeDuplicatedFontawesome($html)
     {
         if (preg_match('#<link[^>]+href=["\'][^"\']*font-awesome/css/all\.min\.css[^"\']*["\'][^>]*>#i', $html)) {
-            // If it does, remove the first fontawesome.css link
+            
             $html = preg_replace('#<link[^>]+href=["\'][^"\']*fontawesome\.css[^"\']*["\'][^>]*>\s*#i', '', $html, 1);
         }
 
         return $html;
     }
 
-    /**
-     * Cleans up script templates from HTML, adds IDs
-     *
-     * @param string $html The original HTML content
-     * @return array Associative array containing modified HTML and saved templates
-     */
+    
+
+
+
+
+
     function removeTemplates($html)
     {
         $templates = [];
         $templateIdPrefix = 'template_';
         $templateCounter = 0;
 
-        // First, find all script tags with their content
+        
         preg_match_all('/<script\b[^>]*>(.*?)<\/script>/is', $html, $matches, PREG_SET_ORDER);
 
-        // Process each script tag
+        
         foreach ($matches as $match) {
             $fullTag = $match[0];
             $content = $match[1];
 
-            // Check if this is a template script
+            
             if (preg_match('/type\s*=\s*["\']text\/template["\']/i', $fullTag)) {
-                // Generate a unique ID
+                
                 $templateId = $templateIdPrefix . $templateCounter++;
 
-                // Save the content
+                
                 $templates[$templateId] = $content;
 
-                // Check if there's already an id attribute
+                
                 if (preg_match('/\swpc_id\s*=\s*["\'][^"\']*["\']/i', $fullTag)) {
-                    // Replace existing id
+                    
                     $newTag = preg_replace('/(\swpc_id\s*=\s*["\'])[^"\']*(["\'])/i', '$1' . $templateId . '$2', $fullTag);
                 } else {
-                    // Add id attribute before the closing >
+                    
                     $newTag = preg_replace('/(<script\b[^>]*)>/i', '$1 wpc_id="' . $templateId . '">', $fullTag);
                 }
 
-                // Remove the content
+                
                 $newTag = preg_replace('/(<script\b[^>]*>).*(<\/script>)/is', '$1$2', $newTag);
 
-                // Replace in the original HTML
+                
                 $html = str_replace($fullTag, $newTag, $html);
             }
         }
@@ -5490,17 +8127,17 @@ class wps_cdn_rewrite
         return ['html' => $html, 'templates' => $templates];
     }
 
-    /**
-     * Encode meta tags to protect them from URL rewriting
-     * @param string $html
-     * @return array ['html' => modified_html, 'store' => meta_tags_store]
-     */
+    
+
+
+
+
     public function encodeMeta($html)
     {
         $metaTagsStore = [];
         $metaCounter = 0;
 
-        // Find and encode all meta tags with image content
+        
         $html = preg_replace_callback('#<meta\s+(?:property=["\'](?:og:image|twitter:image)["\']|name=["\']twitter:image["\'])[^>]*>#i', function ($matches) use (&$metaTagsStore, &$metaCounter) {
             $placeholder = '<!--META_PLACEHOLDER_' . $metaCounter . '-->';
             $metaTagsStore[$metaCounter] = $matches[0];
@@ -5508,7 +8145,7 @@ class wps_cdn_rewrite
             return $placeholder;
         }, $html);
 
-        // Also handle JSON-LD scripts
+        
         $html = preg_replace_callback('#<script\s+type=["\']application/ld\+json["\'][^>]*>.*?</script>#si', function ($matches) use (&$metaTagsStore, &$metaCounter) {
             $placeholder = '<!--JSONLD_PLACEHOLDER_' . $metaCounter . '-->';
             $metaTagsStore[$metaCounter] = $matches[0];
@@ -5519,11 +8156,7 @@ class wps_cdn_rewrite
         return ['html' => $html, 'store' => $metaTagsStore];
     }
 
-    // CF-DIRECT zone = the emit host IS the customer's configured Cloudflare CNAME (not a Bunny
-    // zone). A CF-direct edge is a plain cache: no OTF resize, no Accept negotiation. So a .webp
-    // source is delivered as its clean natural URL (the source file itself, never 404) instead of a
-    // /q:i/wp:N/ transform. Distinct from zone_is_cf(), which trips on the CF-RAY header and
-    // false-positives a CF-fronted Bunny origin.
+
     public static function wpc_zone_is_cf_direct()
     {
         if (!function_exists('get_option') || !defined('WPS_IC_CF_CNAME')) {
@@ -5533,11 +8166,7 @@ class wps_cdn_rewrite
         return ($cname !== '' && stripos((string) self::$zone_name, $cname) !== false);
     }
 
-    // WEBP-ORIGIN NATURAL PASS-THROUGH for the dimensionless paths (plain <img>/srcset + CSS
-    // backgrounds) that carry no per-image W×H. A .webp SOURCE's natural zone URL is the source file
-    // itself → never-404, no /q: transform, CF-cacheable static (a Bunny edge negotiates it up to
-    // avif). It's full-size (the edge OTF-resizes only by -WxH suffix, and these tags have no dims),
-    // a clean-URL-over-resize choice → opt-in, default OFF. Raster keeps /q: (full original too large).
+
     public static function wpc_webp_origin_natural()
     {
         $opt = function_exists('get_option') ? get_option('wpc_webp_origin_natural', 0) : 0;
@@ -5572,10 +8201,7 @@ class wps_cdn_rewrite
             return $this->maybe_slash($url, $addslashes);
         }
 
-        // GIF never rides the Bunny zone — it gains nothing from a /q:i/wp:N/ transform, so serving it
-        // off the zone is pure WPC egress. This is the central img-src + srcset transform chokepoint.
-        // Allowed only on a true CF-direct zone (customer's own bandwidth) via cf_is_delivery() — NOT
-        // zone_is_cf(), which trips on the CF-RAY header even when delivery is actually Bunny.
+
         if (preg_match('/\.gif(\?|#|\s|$)/i', $url)
             && !(class_exists('wps_rewriteLogic') && wps_rewriteLogic::cf_is_delivery())) {
             return $this->maybe_slash($url, $addslashes);
@@ -5584,20 +8210,15 @@ class wps_cdn_rewrite
         $siteUrl = self::$home_url;
         $newUrl = str_replace($siteUrl, '', $url);
 
-        // Check if site url is staging url? Anything after .com/something?
+        
         preg_match('/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\/([a-zA-Z0-9]+)/', $siteUrl, $isStaging);
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'isstaging') {
-            return print_r([$isStaging, $siteUrl], true);
-        }
-
-        // TODO: This is required for STAGING TO WORK!!! Don't remove SiteURL!!! LOOK for next TODO!!!
+        
 
         $originalUrl = $url;
         $newSrcSet = '';
 
 
-        // TODO: Hrvoje fix for sites having bad srcset like https... 525w, https... without XYw
         if (!empty($srcset_links[0])) {
             if (!empty(self::$settings['remove-srcset'])) {
                 return '';
@@ -5622,8 +8243,8 @@ class wps_cdn_rewrite
                 if (self::is_excluded_link($srcset_url) || self::is_excluded($srcset_url, $srcset_url)) {
                     $newSrcSet .= $srcset_url . ' ' . $srcset_width . ',';
                 } elseif (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
-                    // Images-master gate: Images tile OFF ⇒ leave srcset entries at origin (no
-                    // /q:i/wp:N/ transform). Mirrors the single-URL serve gates.
+                    
+                    
                     $newSrcSet .= $srcset_url . ' ' . $srcset_width . ',';
                 } else {
                     if (strpos($srcset_width, 'x') !== false) {
@@ -5640,14 +8261,20 @@ class wps_cdn_rewrite
                         continue;
                     }
 
+
+                    if ((empty(self::$externalUrlEnabled) || self::$externalUrlEnabled == '0')
+                        && !self::image_url_matching_site_url($srcset_url)) {
+                        $newSrcSet .= $srcset_url . ' ' . $srcset_width . $extension . ',';
+                        continue;
+                    }
+
                     if ($srcset_width == '1') {
                         $srcsetWidthExtension = '';
                     } else {
                         $srcsetWidthExtension = $srcset_width . $extension;
                     }
 
-                    // webp-origin natural pass-through: a webp srcset entry becomes its clean natural
-                    // URL (-WxH stripped to the full source). See the single-src .webp branch below.
+
                     if (strpos($srcset_url, '.webp') !== false && self::wpc_webp_origin_natural()) {
                         $webp_nat_ss = preg_replace('/-\d+x\d+(\.webp)$/i', '$1', $srcset_url);
                         $webp_nat_ss = preg_replace('#^https?://[^/]+#', 'https://' . self::$zone_name, $webp_nat_ss);
@@ -5678,13 +8305,13 @@ class wps_cdn_rewrite
                 return $this->maybe_slash($url, $addslashes);
             }
 
-            // External is disabled?
+            
             if (empty(self::$externalUrlEnabled) || self::$externalUrlEnabled == '0') {
                 if (!self::image_url_matching_site_url($url)) {
                     return $this->maybe_slash($url, $addslashes);
                 }
             } else {
-                // Check if the URL is an image, then check if it's instagram etc...
+                
                 if (strpos($url, '.jpg') !== false || strpos($url, '.png') !== false || strpos($url, '.gif') !== false || strpos($url, '.svg') !== false || strpos($url, '.jpeg') !== false) {
                     foreach (self::$default_excluded_list as $i => $excluded_string) {
                         if (strpos($url, $excluded_string) !== false) {
@@ -5695,15 +8322,14 @@ class wps_cdn_rewrite
             }
 
             if (!empty($url)) {
-                // Todo: Quick fix for Password Protected Pages
+                
                 if (strpos($url, 'login') !== false) {
                     return $this->maybe_slash($url, $addslashes);
                 }
 
                 if (strpos($url, '.css') !== false && self::$css == '1') {
-                    // Local-Fonts cache stylesheet (wp-cio-fonts/{hash}.css): keep on natural origin so its
-                    // @font-face URLs match the inline/preload set. Latent today (replaceFrontend injects it
-                    // after this sweep) but guarded so a future reorder can't split font URLs across hosts.
+
+
                     if (stripos($url, '/cache/wp-cio-fonts/') !== false) {
                         return $this->maybe_slash($url, $addslashes);
                     }
@@ -5714,24 +8340,34 @@ class wps_cdn_rewrite
                     }
 
 
-                    if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1') {
+                    if (!empty(self::$settings['font-subsetting']) && self::$settings['font-subsetting'] == '1'
+                        && apply_filters('wpc_font_subset_forces_css_minify', false, $url)) {
                         $fileMinify = '1';
                     }
-                    /**
-                     * CSS File
-                     */
+                    
+
+
                     $newUrl = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($url);
 
                     return $newUrl;
                 } elseif (preg_match('/\.js(?:[?#]|$)/i', $url) && self::$js == '1') {
+                    
+                    
+                    
+                    
+                    
+                    
+                    if (apply_filters('wpc_scripts_same_origin', true)) {
+                        return $this->maybe_slash($url, $addslashes);
+                    }
                     $fileMinify = self::$js_minify;
                     if (self::isExcluded('js_minify', $url)) {
                         $fileMinify = '0';
                     }
 
-                    /**
-                     * JS File
-                     */
+                    
+
+
                     if (strpos($url, 'wp-content') !== false || strpos($url, 'wp-includes') !== false) {
                         if (empty(self::$js_minify) || self::$js_minify == 'false') {
                             $newUrl = 'https://' . self::$zone_name . '/m:' . $fileMinify . '/a:' . self::reformat_url($url, false);
@@ -5745,9 +8381,9 @@ class wps_cdn_rewrite
                     return $newUrl;
                 } elseif (strpos($url, '.svg') !== false) {
                     if (!empty(self::$settings['serve']['svg'])) {
-                        /**
-                         * SVG File
-                         */
+                        
+
+
                         if (!self::is_excluded($url, $url)) {
                             if (self::$zone_test == 0 && (strpos($url, 'wp-content') !== false || strpos($url, 'wp-includes') !== false)) {
                                 $newUrl = 'https://' . self::$zone_name . '/m:0/a:' . self::reformat_url($url);
@@ -5761,26 +8397,21 @@ class wps_cdn_rewrite
 
                     return $newUrl;
                 } elseif (self::$fonts == 1 && (strpos($url, '.woff') !== false || strpos($url, '.woff2') !== false || strpos($url, '.eot') !== false || strpos($url, '.ttf') !== false)) {
-                    /**
-                     * Font file
-                     */
-                    // Local-Fonts cache (wp-cio-fonts): NEVER zoneify — keep the natural origin URL. The crit
-                    // inline @font-face + preload are injected by addCritical AFTER rewrite_fontface_css runs,
-                    // so THIS generic sweep is the only pass that can keep them natural. They must match the
-                    // deferred localized .css (origin) so each font is declared at one URL → fetched once,
-                    // preloaded once, no double-load, no FOUT (crit-on === crit-off).
+                    
+
+
+
+
                     if (stripos($url, '/cache/wp-cio-fonts/') !== false) {
                         return $this->maybe_slash($url, $addslashes);
                     }
-                    // PATH SCOPE: leave same-site custom-path (e.g. /storage/) fonts on origin — the
-                    // CDN 302s them cross-origin → CORS-blocked. This branch is already same-site-gated,
-                    // so only the /wp-content/ check is needed (latent path, guarded anyway).
+
+
                     if (stripos((string) wp_parse_url($url, PHP_URL_PATH), '/wp-content/') === false) {
                         return $this->maybe_slash($url, $addslashes);
                     }
-                    // HOST GUARD (v7.03.47) — never build a transform on an empty/origin zone host: an empty
-                    // zone yields "https:///…" which resolves against the ORIGIN → 404 (also the suppressed-zone
-                    // state). Stay on the natural origin URL when the zone host isn't safely available.
+
+
                     $wpc_zn = (string) self::$zone_name;
                     $wpc_oh = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
                     if ($wpc_zn === '' || ($wpc_oh !== '' && strcasecmp($wpc_zn, $wpc_oh) === 0)) {
@@ -5802,7 +8433,7 @@ class wps_cdn_rewrite
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
 
-                // Skip CDN MC for locally-optimized images — they're served via <picture> tags instead
+                
                 if (function_exists('wpc_url_to_attachment_id') && function_exists('wpc_get_local_optimized_ids')) {
                     $local_att_id = wpc_url_to_attachment_id($url);
                     if ($local_att_id) {
@@ -5840,16 +8471,14 @@ class wps_cdn_rewrite
                 }
 
                 if (strpos($url, '.webp') !== false) {
-                    // Images-master gate: Images tile OFF ⇒ serve the origin .webp, never a
-                    // /q:i/wp:N/ transform.
+                    
+                    
                     if (class_exists('WPC_Negotiated_Delivery') && !WPC_Negotiated_Delivery::cdn_images_enabled(self::$settings)) {
                         return self::reformat_url($url, false);
                     }
                     if (!self::is_excluded($url, $url)) {
-                        // webp-ORIGIN natural pass-through (dimensionless path): the source file itself
-                        // → never-404, clean, CF-cacheable (Bunny negotiates avif). Strip any -WxH to the
-                        // always-present full original (a sub-size may not exist on offloaded /storage).
-                        // Opt-in (default OFF). Raster (jpg/png branch above) keeps /q: — too big natural.
+
+
                         if (self::wpc_webp_origin_natural()) {
                             $webp_nat = preg_replace('/-\d+x\d+(\.webp)$/i', '$1', $url);
                             $webp_nat = preg_replace('#^https?://[^/]+#', 'https://' . self::$zone_name, $webp_nat);
@@ -5866,22 +8495,15 @@ class wps_cdn_rewrite
 
                 return $url;
 
-                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'rewrite_url_to_file') {
-                    $fp = fopen(WPS_IC_LOG . 'rewrite_url_file.txt', 'a+');
-                    fwrite($fp, 'URL: ' . $url . "\r\n");
-                    fwrite($fp, 'URL: ' . $newUrl . "\r\n");
-                    fwrite($fp, '---' . "\r\n");
-                    fclose($fp);
-                }
 
-                // TODO: This is required for STAGING TO WORK!!! Don't remove SiteURL!!! LOOK for next TODO!!!
+                
                 if (self::$is_multisite) {
                     return $this->maybe_slash($newUrl, $addslashes);
                 } elseif (empty($isStaging) || empty($isStaging[0])) {
-                    // Not a staging site
+                    
                     return $this->maybe_slash($newUrl, $addslashes);
                 } else {
-                    // It's a staging site
+                    
                     return $this->maybe_slash($originalUrl, $addslashes);
                 }
             }
@@ -5916,20 +8538,20 @@ class wps_cdn_rewrite
             $basename_original = basename($image_link);
         }
 
-        preg_match("/([0-9]+)x([0-9]+)\.[a-zA-Z0-9]+/", $basename_original, $matches); //the filename suffix way
+        preg_match("/([0-9]+)x([0-9]+)\.[a-zA-Z0-9]+/", $basename_original, $matches);
         if (empty($matches)) {
-            // Full Image
+            
             $basename = $basename_original;
         } else {
-            // Some thumbnail
+            
             $basename = str_replace('-' . $matches[1] . 'x' . $matches[2], '', $basename_original);
         }
 
-        /**
-         * Is this image lazy excluded?
-         */
+        
+
+
         if (!empty(self::$lazy_excluded_list) && !empty(self::$lazy_enabled) && self::$lazy_enabled == '1') {
-            //return 'asd';
+
             foreach (self::$lazy_excluded_list as $i => $lazy_excluded) {
                 if (strpos($basename, $lazy_excluded) !== false) {
                     return true;
@@ -5954,12 +8576,12 @@ class wps_cdn_rewrite
         return false;
     }
 
-    /**
-     * Decode meta tags back to their original form
-     * @param string $html
-     * @param array $metaTagsStore
-     * @return string
-     */
+    
+
+
+
+
+
     public function decodeMeta($html, $metaTagsStore)
     {
         if (empty($metaTagsStore)) {
@@ -5970,7 +8592,7 @@ class wps_cdn_rewrite
             $metaPlaceholder = '<!--META_PLACEHOLDER_' . $index . '-->';
             $jsonldPlaceholder = '<!--JSONLD_PLACEHOLDER_' . $index . '-->';
 
-            // Try meta placeholder first, then JSON-LD placeholder
+            
             if (strpos($html, $metaPlaceholder) !== false) {
                 $html = str_replace($metaPlaceholder, $originalTag, $html);
             } elseif (strpos($html, $jsonldPlaceholder) !== false) {
@@ -5981,33 +8603,27 @@ class wps_cdn_rewrite
         return $html;
     }
 
-    /**
-     * Restores script template content by ID from the saved templates array
-     *
-     * @param string $html The HTML with empty script templates
-     * @param array $templates The array of saved template content indexed by ID
-     * @return string The HTML with restored script template content
-     */
+
     function restoreTemplates($html, $templates)
     {
-        // Find all script tags
+        
         preg_match_all('/<script\b[^>]*><\/script>/is', $html, $matches, PREG_SET_ORDER);
 
-        // Process each empty script tag
+        
         foreach ($matches as $match) {
             $fullTag = $match[0];
 
-            // Check if this is a template script with an id
+            
             if (preg_match('/type\s*=\s*["\']text\/template["\']/i', $fullTag) && preg_match('/wpc_id\s*=\s*["\']([^"\']+)["\']/i', $fullTag, $idMatch)) {
 
                 $templateId = $idMatch[1];
 
-                // Check if we have content for this ID
+                
                 if (isset($templates[$templateId])) {
-                    // Restore the content
+                    
                     $newTag = str_replace('></script>', '>' . $templates[$templateId] . '</script>', $fullTag);
 
-                    // Replace in the HTML
+                    
                     $html = str_replace($fullTag, $newTag, $html);
                 }
             }
@@ -6019,12 +8635,12 @@ class wps_cdn_rewrite
     public function set_image_sizes($matches)
     {
 
-        // Skip images that have wpc-size="preserve"
+        
         if (preg_match('/wpc-size=(["\'])preserve\1/', $matches[0])) {
             return $matches[0];
         }
 
-        //Don't change existing size attributes
+        
         if (preg_match('/\s(width|height)\s*=\s*["\']?\d+/i', $matches[0])) {
             return $matches[0];
         }
@@ -6033,50 +8649,50 @@ class wps_cdn_rewrite
             return $matches[0];
         }
 
-        // Check if the image is within a <picture> tag
+        
         if (strpos($matches[0], '<picture>') !== false) {
-            // Extract the <img> tag src from the <picture>
+            
             preg_match('/<img[^>]*src=[\'"]([^\'"]+)[\'"][^>]*>/si', $matches[0], $imgMatches);
             if (!$imgMatches) {
-                return $matches[0]; // No <img> tag found within <picture>, return original
+                return $matches[0]; 
             }
             $imageUrl = $imgMatches[1];
         } else {
-            // Direct <img> tag
+            
             $imageUrl = $matches[1];
         }
 
-        // Convert URL to local path for local images, or keep as URL for external images
+        
         $localPath = $this->url_to_path($imageUrl);
 
         if (!$localPath) {
-            // If the image is external and external image handling is disabled, return the tag unchanged
+            
             return $matches[0];
         }
 
-        // Get image dimensions
+        
         $dimensions = $this->get_image_dimensions($localPath);
         if ($dimensions === false) {
-            // Couldn't get dimensions, return the tag unchanged
+            
             return $matches[0];
         }
 
-        // Construct the width and height string
+        
         $widthHeightStr = 'width="' . round($dimensions[0], 0) . '" height="' . round($dimensions[1], 0) . '"';
 
         if ($dimensions[0] <= 5 || $dimensions[1] <= 5) {
             $widthHeightStr = '';
         }
 
-        // Insert width and height into the <img> tag
+        
         if (isset($imgMatches)) {
-            // For <picture>, reconstruct the <img> tag with dimensions added
+            
             $newImgTag = preg_replace('/<img([^>]+)>/', '<img$1 ' . $widthHeightStr . '>', $imgMatches[0]);
 
-            // Replace the old <img> tag with the new one within <picture>
+            
             return str_replace($imgMatches[0], $newImgTag, $matches[0]);
         } else {
-            // For direct <img> tags, add dimensions directly
+            
             return preg_replace('/<img/', '<img ' . $widthHeightStr, $matches[0]);
         }
     }
@@ -6086,48 +8702,48 @@ class wps_cdn_rewrite
         $parsedUrl = parse_url($url);
         $siteUrl = parse_url(get_site_url());
 
-        // Check if URL is external
+        
         if (!isset($parsedUrl['host']) || !isset($siteUrl['host']) || $parsedUrl['host'] !== $siteUrl['host']) {
-            return false; // URL is external, can't convert to local path
+            return false; 
         }
 
-        // Construct the path relative to WordPress root
+        
         $relPath = isset($parsedUrl['path']) ? $parsedUrl['path'] : '';
 
-        // Get WordPress base directory path
+        
         $wpBasePath = ABSPATH;
 
-        // Sometimes, WordPress is installed in a subdirectory, adjust for that
+        
         if (!empty($siteUrl['path']) && $siteUrl['path'] !== '/') {
             $wpBasePath = str_replace(trim($siteUrl['path'], '/'), '', $wpBasePath);
         }
 
-        // Combine the base path with the relative path
+        
         $localPath = realpath($wpBasePath . $relPath);
 
-        // Check if the file exists and return the path, or false if it doesn't
+        
         return file_exists($localPath) ? $localPath : false;
     }
 
     public function get_image_dimensions($filename)
     {
         if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) === 'svg') {
-            // Handle SVG files
+            
             $svgfile = @simplexml_load_file(rawurlencode($filename), 'SimpleXMLElement', LIBXML_NOERROR | LIBXML_NOWARNING);
             if ($svgfile) {
                 $attributes = $svgfile->attributes();
                 $width = isset($attributes->width) ? (string)$attributes->width : null;
                 $height = isset($attributes->height) ? (string)$attributes->height : null;
 
-                // Clean and format width and height.
+                
                 $width = $this->format_svg_value($width);
                 $height = $this->format_svg_value($height);
 
                 if ($width && $height) {
-                    // Return dimensions if directly available
+                    
                     return [$width, $height];
                 } elseif (isset($attributes->viewBox)) {
-                    // Parse viewBox for dimensions if width/height not available
+                    
                     $viewBox = explode(' ', $attributes->viewBox);
                     if (count($viewBox) === 4) {
                         $width = $viewBox[2];
@@ -6136,10 +8752,10 @@ class wps_cdn_rewrite
                     }
                 }
             }
-            // Return false if dimensions could not be determined
+            
             return false;
         } else {
-            // Handle other image types (JPG, PNG, etc.)
+            
             $sizes = @getimagesize($filename);
             return $sizes ? [$sizes[0], $sizes[1]] : false;
         }
@@ -6147,20 +8763,20 @@ class wps_cdn_rewrite
 
     public function format_svg_value($value)
     {
-        // No unit or empty, return the value directly.
+        
         if (empty($value) || is_numeric($value)) {
             return $value;
         }
 
-        // Pattern to find numbers possibly followed by 'px'
+        
         $px_pattern = '/([0-9]+)\s*px/i';
 
-        // If pixel unit or numeric, extract and return the numeric value.
+        
         if (preg_match($px_pattern, $value, $matches)) {
             return $matches[1];
         }
 
-        // Return an empty string for unsupported units.
+        
         return '';
     }
 
@@ -6173,9 +8789,9 @@ class wps_cdn_rewrite
         $inject .= '<!--WPC_INSERT_PRELOAD_MAIN-->';
         $inject .= '<!--WPC_INSERT_PRELOAD-->';
 
-        // Picture tag CSS safety net — makes <picture> transparent to CSS layout
+        
         if (self::$rewriteLogic::$pictureWebpEnabled) {
-            $inject .= '<style id="wpc-picture-css">picture.wpc-picture{display:contents}</style>';
+            $inject .= '<style id="wpc-picture-css">picture.wpc-picture:not([data-wpc-mir]){display:contents}picture.wpc-picture source{display:none}</style>';
         }
 
         $inject .= $this->get_ga_script();
@@ -6211,16 +8827,13 @@ class wps_cdn_rewrite
        Bot detection
        =============================== */
 
-    var isAutomation = false;
-    try { isAutomation = (navigator.webdriver === true); } catch (e) {}
-
     var isKnownBot =
       ua.includes("petalbot") ||
       ua.includes("sogou") ||
       ua.includes("baiduspider") ||
       ua.includes("yandexbot");
 
-    if (!(forceBot || isAutomation || isKnownBot)) return;
+    if (!(forceBot || isKnownBot)) return;
 
     // Debug flag for support / QA
     window.__WPC_GA_BLOCKED__ = true;
@@ -6322,8 +8935,8 @@ JS;
     {
         $animationData = $matches[1];
         if (strpos($animationData, '_animation')) {
-            #$matches[0] = str_replace('elementor-invisible', '', $matches[0]);
-            #$matches[0] = preg_replace('/(<div[^>]*\sclass="[^"]*)(")/si', "$1 " . "animated fadeInLeft" . " $2", $matches[0]);
+            
+            
             return $matches[0];
         }
         return $matches[0];
@@ -6336,11 +8949,11 @@ JS;
 
     public function gtagDelay($src)
     {
-        // TODO: We have already delayed things, but speed tests don't recognize it
+
         $tag = trim($src[0]);
         $srcToLower = strtolower($tag);
 
-        //This is now done in delayJS class
+        
         return $tag;
 
         if (self::$isAmp->isAmp()) {
@@ -6351,12 +8964,13 @@ JS;
             return $tag;
         }
 
-        // Optimizer Exclude
+        
         if (strpos($srcToLower, 'optimizer.pixel') !== false || strpos($srcToLower, 'optimizer.adaptive') !== false || strpos($srcToLower, 'optimizer.local') !== false) {
             return $tag;
         }
 
-        if (strpos($srcToLower, 'googletag') !== false || strpos($srcToLower, 'gtag') !== false || strpos($srcToLower, 'facebook') !== false || strpos($srcToLower, 'recaptcha') !== false || strpos($srcToLower, 'tween') !== false || strpos($srcToLower, 'fontawesome') !== false) {
+
+        if (strpos($srcToLower, 'googletag') !== false || strpos($srcToLower, 'gtag') !== false || strpos($srcToLower, 'facebook') !== false || strpos($srcToLower, 'tween') !== false || strpos($srcToLower, 'fontawesome') !== false) {
 
             if (strpos($srcToLower, 'src=') === false) {
                 if (strpos($srcToLower, 'type=') === false) {
@@ -6379,38 +8993,16 @@ JS;
 
     public function local_script_encode($html)
     {
-        $found = strlen($html[0]);
-
-        $encoded = base64_encode($html[0]);
-        $decode = base64_decode($encoded);
-        $replaced = strlen($decode);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'script') {
-            return print_r([$html], true);
-        }
-
         $slashed = addslashes($html[0]);
         $encoded = base64_encode($slashed);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_encode') {
-            return print_r($encoded, true);
-        }
 
         return '[script-wpc]' . $encoded . '[/script-wpc]';
     }
 
     public function local_script_decode($html)
     {
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode') {
-            return print_r([$html], true);
-        }
-
         $decode = str_replace('[script-wpc]', '', $html[0]);
         $decode = str_replace('[/script-wpc]', '', $decode);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'bas64_decode_end') {
-            return print_r([$decode], true);
-        }
 
         $decode = base64_decode($decode);
         $decode = stripslashes($decode);
@@ -6421,14 +9013,6 @@ JS;
     public function crittr_replace_css($links)
     {
         preg_match_all('/([a-zA-Z\-\_]*)\s*\=["|\'](.*?)["|\']/is', $links[0], $linkAtts);
-
-        if (!empty($_GET['dbg_links'])) {
-            return print_r([$links], true);
-        }
-
-        if (!empty($_GET['dbg_links_atts'])) {
-            return print_r([$linkAtts], true);
-        }
 
         if (!empty($linkAtts[1])) {
             $linkHtml = '<link';
@@ -6441,10 +9025,6 @@ JS;
                 if ($attName == 'rel' && $attValues[$i] == 'dns-prefetch') {
                     $linkRel = $attValues[$i];
                 } elseif ($attName == 'href') {
-                    if (!empty($_GET['dbg_link_href'])) {
-                        return print_r([$attValues[$i], substr($attValues[$i], 0, 11)], true);
-                    }
-
                     if (strpos($attValues[$i], self::$site_url) === false) {
 
                     } else {
@@ -6457,10 +9037,6 @@ JS;
                 }
 
                 $linkHtml .= ' ' . $attName . '="' . $attValues[$i] . '"';
-            }
-
-            if (!empty($_GET['dbg_links_output'])) {
-                return print_r([$linkHtml], true);
             }
 
             $linkHtml .= '/>';
@@ -6479,7 +9055,7 @@ JS;
 
     public function replace_source_tags($source)
     {
-        //if any problems with escaping characters, see replace_iframe_tags() and implement the same
+
         preg_match_all('/([a-zA-Z0-9\-\_]*)\s*\=["\']([^"]*)["\']?/is', $source[0], $sourceAtts);
         if (!empty($sourceAtts[1])) {
             $iFrame = '<source';
@@ -6517,28 +9093,76 @@ JS;
         }
     }
 
+    
+    
+    
+    
+    
+    
+    public static function wpc_facade_aggr_ok()
+    {
+        static $wpc_ok366 = null;
+        if ($wpc_ok366 !== null) {
+            return $wpc_ok366;
+        }
+        $wpc_ok366 = false;
+        try {
+            if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+                return $wpc_ok366;
+            }
+            if (!empty($_GET['disableDelay']) || !empty($_GET['criticalCombine']) || !empty($_GET['disableCritical'])) {
+                return $wpc_ok366;
+            }
+            if (function_exists('wpcGetHeader') && !empty(wpcGetHeader('criticalCombine'))) {
+                return $wpc_ok366;
+            }
+            if (is_object(self::$isAmp) && method_exists(self::$isAmp, 'isAmp') && self::$isAmp->isAmp()) {
+                return $wpc_ok366;
+            }
+            if (isset(self::$page_excludes['delay_js_v2']) && self::$page_excludes['delay_js_v2'] == '0') {
+                return $wpc_ok366;
+            }
+            if (!empty(self::$delay_js_override) || !empty(self::$preloaderAPI)) {
+                return $wpc_ok366;
+            }
+            if (isset(self::$settings['delay-js-v3']) && self::$settings['delay-js-v3'] == '0') {
+                return $wpc_ok366; 
+            }
+            if (!class_exists('wps_ic_js_delay_v3')
+                || !wps_ic_js_delay_v3::wpc_aggr_live()
+                || !wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings)) {
+                return $wpc_ok366;
+            }
+            $wpc_ok366 = true;
+        } catch (\Throwable $e) {
+            $wpc_ok366 = false;
+        }
+        return $wpc_ok366;
+    }
+
     public function replace_iframe_tags($iframe)
     {
         if (strpos($iframe[0], 'gform') !== false || strpos($iframe[0], 'data-src-cmplz') !== false) {
             return $iframe[0];
         }
 
-        // (v7.03.47) Do NOT lazy a HIDDEN / off-screen / JS-MANAGED iframe. Many embeds ship the iframe
-        // hidden + parked off-screen and reveal it with their own JS once it loads + posts its height
-        // (GoHighLevel/LeadConnector, HubSpot, chat/booking widgets). Moving its src→data-wpc-src hands
-        // loading to our IntersectionObserver, which never fires for an off-screen element → the iframe
-        // never loads → the widget's reveal JS has nothing to show → invisible form. Leave these untouched.
-        // Detect via the embed's own hidden flag, hidden/off-screen inline styles, or a known widget host.
+
         $wpc_if    = $iframe[0];
-        $wpc_if_ns = str_replace(' ', '', strtolower($wpc_if)); // normalize so CSS values match regardless of spacing
+        $wpc_if_ns = str_replace(' ', '', strtolower($wpc_if));
         if (stripos($wpc_if, 'data-initial-iframe-hidden') !== false
             || strpos($wpc_if_ns, 'visibility:hidden') !== false
             || strpos($wpc_if_ns, 'opacity:0') !== false
             || strpos($wpc_if_ns, 'display:none') !== false
             || strpos($wpc_if_ns, 'left:-9999') !== false
-            || strpos($wpc_if_ns, 'left:-99999') !== false
-            || stripos($wpc_if, 'leadconnectorhq.com') !== false
-            || stripos($wpc_if, 'msgsndr') !== false) {
+            || strpos($wpc_if_ns, 'left:-99999') !== false) {
+            return $iframe[0];
+        }
+        
+        
+        
+        
+        if ((stripos($wpc_if, 'leadconnectorhq.com') !== false || stripos($wpc_if, 'msgsndr') !== false)
+            && !self::wpc_facade_aggr_ok()) {
             return $iframe[0];
         }
 
@@ -6559,7 +9183,7 @@ JS;
                 $srcValue = $iframeAtts[3][$srcIndex];
 
                 if (strpos($srcValue, 'data:') === 0) {
-                    // Probably already delayed with a placeholder in src
+                    
                     return $iframe[0];
                 }
             }
@@ -6598,39 +9222,39 @@ JS;
 
             return $iFrame;
         } else {
-            return $iframe[0]; // Return original if no attributes found
+            return $iframe[0]; 
         }
     }
 
     private function conditionallyEscapeUrl($url)
     {
-        // Common patterns that indicate the URL is already encoded
-        $encodedPatterns = ['&amp;',     // & encoded
-            '&#038;',    // WordPress-style & encoding
-            '%20',       // Space encoded
-            '%2C',       // Comma encoded
-            '&quot;',    // Quote encoded
-            '&lt;',      // < encoded
-            '&gt;'       // > encoded
+        
+        $encodedPatterns = ['&amp;',     
+            '&#038;',    
+            '%20',       
+            '%2C',       
+            '&quot;',    
+            '&lt;',      
+            '&gt;'       
         ];
 
         foreach ($encodedPatterns as $pattern) {
             if (strpos($url, $pattern) !== false) {
-                return $url; // Already encoded
+                return $url; 
             }
         }
 
-        // Check for any HTML entity pattern
+        
         if (preg_match('/&[a-zA-Z0-9#]+;/', $url)) {
-            return $url; // Already encoded
+            return $url; 
         }
 
-        // Not encoded, apply escaping only if needed
+        
         if (strpos($url, '&') !== false || strpos($url, '"') !== false || strpos($url, '<') !== false || strpos($url, '>') !== false) {
             return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
         }
 
-        return $url; // Safe as-is
+        return $url;
     }
 
     public function maybe_addslashes($image, $addslashes = false)
@@ -6659,21 +9283,17 @@ JS;
         $webP = false;
         $isLazy = false;
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'local_start') {
-            return print_r($image, true);
-        }
-
-        // File has already been replaced
+        
         if ($this->defaultExcluded($image[0])) {
             return $image[0];
         }
 
-        // File is not an image
+        
         if (strpos($image[0], '.webp') === false && strpos($image[0], '.jpg') === false && strpos($image[0], '.jpeg') === false && strpos($image[0], '.png') === false && strpos($image[0], '.ico') === false && strpos($image[0], '.svg') === false && strpos($image[0], '.gif') === false) {
             return $image[0];
         }
 
-        // File is excluded
+        
         if (self::is_excluded($image[0])) {
             $image_source = $image[0];
             $image_source = preg_replace('/class=["|\'](.*?)["|\']/is', 'class="$1 wps-ic-loaded"', $image_source);
@@ -6685,20 +9305,32 @@ JS;
             return $image[0];
         }
 
-        // Count images that were lazy loaded
-        self::$lazyLoadedImages++;
+        
+        
+        $wpcHidden717 = false;
+        if (!empty(self::$deviceHiddenSet717) && function_exists('wpc_device_hidden_has')) {
+            foreach (['src', 'data-src', 'data-cp-src'] as $wpc_att717) {
+                if (preg_match('/\b' . $wpc_att717 . '="([^"]+)"/i', $image[0], $wpc_m717)
+                    && wpc_device_hidden_has(self::$deviceHiddenSet717, $wpc_m717[1])) {
+                    $wpcHidden717 = true;
+                    break;
+                }
+            }
+        }
+        if (!$wpcHidden717 && class_exists('wps_rewriteLogic')
+            && method_exists('wps_rewriteLogic', 'wpc_census_below_fold793')
+            && wps_rewriteLogic::wpc_census_below_fold793($image[0])) {
+            $wpcHidden717 = true;
+        }
 
-        // Original URL was
+        
+        if (!$wpcHidden717) {
+            self::$lazyLoadedImages++;
+        }
+
+
         $original_img_tag = [];
         $original_img_tag['original_tags'] = $this->getAllTags($image[0], []);
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'searchImage') {
-            return print_r([$image[0], $original_img_tag['original_tags']], true);
-        }
-
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'local_original_tags') {
-            return print_r($original_img_tag['original_tags'], true);
-        }
 
         if (!empty($original_img_tag['original_tags']['src']) && empty($original_img_tag['original_tags']['data-src'])) {
             $image_source = $original_img_tag['original_tags']['src'];
@@ -6708,9 +9340,9 @@ JS;
 
         $original_img_tag['original_src'] = $image_source;
 
-        // Old Code Below
+        
 
-        // Figure out image class
+        
         preg_match('/srcset=["|\']([^"]+)["|\']/', $image_tag, $image_srcset);
         if (!empty($image_srcset[1])) {
             $original_img_tag['srcset'] = $image_srcset[1];
@@ -6720,41 +9352,34 @@ JS;
 
         $svgAPI = $source_svg = 'data:image/svg+xml;base64,' . base64_encode('<svg xmlns="http://www.w3.org/2000/svg" width="' . $size[0] . '" height="' . $size[1] . '"><path d="M2 2h' . $size[0] . 'v' . $size[1] . 'H2z" fill="#fff" opacity="0"/></svg>');
 
-        // OriginalImageSource
+        
         $original_img_src = $image_source;
 
-        // Path to CSS File
+        
         $site_url = str_replace(['https://', 'http://'], '', self::$site_url);
         $image_path = str_replace(['https://' . $site_url . '/', 'http://' . $site_url . '/'], '', $image_source);
         $image_path = explode('?', $image_path);
         $image_path = ABSPATH . $image_path[0];
 
-        if (!empty($_GET['dbg']) && $_GET['dbg'] == 'local_settings') {
-            $webP = wps_rewriteLogic::swap_ext_to($image_path, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
+        
 
-            return print_r([self::$webp, $image_path, $webP, file_exists($webP)], true);
-        }
 
-        /**
-         * Local File does not exists?
-         */
         if (!file_exists($image_path)) {
             return $image[0];
         } else {
-            // The bare webp src-swap must respect the Next-Gen ceiling: when Next-Gen=Off the
-            // visitor gets plain jpg/png even if a .webp is on disk, else "Next-Gen Off" would
-            // silently keep serving webp via <img src>. (The <picture> path is gated separately.)
+
+
             $wpc_ng_ceiling = class_exists('WPC_Delivery_Resolver')
                 ? WPC_Delivery_Resolver::effective_ceiling(self::$settings) : 'avif';
             if ($wpc_ng_ceiling !== 'off' && (self::$webp == 'true' || self::$webp == '1')) {
-                // Check if WebP Exists in PATH?
-                $webP = wps_rewriteLogic::swap_ext_to($image_path, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
+                
+                $webP = wps_rewriteLogic::swap_ext_to($image_path, 'webp');
 
                 if (!file_exists($webP)) {
                     $webP = false;
                     $image_source = $original_img_src;
                 } else {
-                    $original_img_src = wps_rewriteLogic::swap_ext_to($original_img_src, 'webp'); // (v7.10.04.2) anchored
+                    $original_img_src = wps_rewriteLogic::swap_ext_to($original_img_src, 'webp');
                     $image_source = $original_img_src;
                 }
             } else {
@@ -6763,13 +9388,13 @@ JS;
         }
 
 
-        // Is LazyLoading enabled in the plugin?
+        
         if (!empty(self::$lazy_enabled) && self::$lazy_enabled == '1' && !self::$lazy_override) {
 
-            if (self::$lazyLoadedImages >= self::$lazyLoadSkipFirstImages) {
+            if ($wpcHidden717 || self::$lazyLoadedImages >= self::$lazyLoadSkipFirstImages) {
                 $isLazy = true;
 
-                // If Logo remove wps-ic-lazy-image
+                
                 if (strpos($image_source, 'logo') !== false) {
                     $image_tag = 'src="' . $image_source . '"';
                 } else {
@@ -6784,12 +9409,12 @@ JS;
                     $lazyClass = 'wps-ic-lazy-image';
                 }
 
-                // If Logo remove wps-ic-lazy-image
+                
                 if (strpos($image_source, 'logo') !== false) {
-                    // Image is for logo
+                    
                     $class_Addon .= $lazyClass . ' wps-ic-logo';
                 } else {
-                    // Image is not for logo
+                    
                     $class_Addon .= $lazyClass . ' ';
                 }
 
@@ -6800,10 +9425,10 @@ JS;
         } else if ((!empty(self::$native_lazy_enabled) && self::$native_lazy_enabled == '1' && !self::$lazy_override)) {
             $image_tag = 'src="' . $image_source . '"';
 
-            if (self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
-                // Don't lazy load
+            if (!$wpcHidden717 && self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
+                
             } else {
-                // If Logo remove wps-ic-lazy-image
+                
                 if (!strpos($image_source, 'logo')) {
                     $image_tag .= ' loading="lazy"';
                 }
@@ -6825,15 +9450,15 @@ JS;
         $image_tag .= ' data-count-lazy="' . self::$lazyLoadedImages . '"';
 
         if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
-            if (self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
+            if (!$wpcHidden717 && self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
                 $image_tag .= ' fetchpriority="high" decoding="async"';
             }
         }
 
 
-        /**
-         * Srcset to WebP
-         */
+        
+
+
         $srcset_att = '';
 
         if (self::$webp == 'true' || self::$webp == '1') {
@@ -6846,16 +9471,16 @@ JS;
 
                         if (!empty($src_w)) {
                             $real_src = $src_w[0];
-                            // Guard against malformed srcset entries missing the width descriptor
-                            // (we don't control upstream srcset formatting, e.g. from theme/plugins)
+                            
+                            
                             $real_src_width = $src_w[1] ?? '';
                             if ($real_src_width === '') continue;
 
                             $image_path = str_replace(self::$site_url . '/', '', $real_src);
                             $image_path_webP = ABSPATH . $image_path;
 
-                            $webP = wps_rewriteLogic::swap_ext_to($real_src, 'webp'); // (v7.10.04.2) anchored — was str_replace mid-name
-                            $image_path_webP = wps_rewriteLogic::swap_ext_to($image_path_webP, 'webp'); // (v7.10.04.2) anchored
+                            $webP = wps_rewriteLogic::swap_ext_to($real_src, 'webp');
+                            $image_path_webP = wps_rewriteLogic::swap_ext_to($image_path_webP, 'webp');
 
                             if (!file_exists($image_path_webP)) {
                                 $srcset_att .= $real_src . ' ' . $real_src_width . ',';
@@ -6904,12 +9529,7 @@ JS;
 
         $finalTag = '<img ' . $image_tag . ' />';
 
-        // Wrap in <picture> for bulletproof WebP delivery (local mode)
-        // Gate the WHOLE local (CDN-OFF) <picture> (webp + avif sources) on the Next-Gen ceiling.
-        // The bare <img src> swap above was already gated, but this <picture> builder was NOT, so a
-        // Next-Gen=OFF site still emitted <source type="image/webp"> and the browser picked WebP
-        // over the jpg <img>. pictureWebpEnabled is only ceiling-gated in the CDN-buffer setup,
-        // which doesn't run on the CDN-OFF render path, so it is stale-true here — hence this gate.
+
         $wpc_pic_ceiling = class_exists('WPC_Delivery_Resolver')
             ? WPC_Delivery_Resolver::effective_ceiling(self::$settings) : 'avif';
         if (self::$rewriteLogic::$pictureWebpEnabled && $webP !== false && $wpc_pic_ceiling !== 'off') {
@@ -6917,17 +9537,17 @@ JS;
             $skipFormats = (strpos($lowerSrc, '.svg') !== false || strpos($lowerSrc, '.gif') !== false || strpos($lowerSrc, '.ico') !== false || strpos($lowerSrc, '.webp') !== false);
 
             if (!$skipFormats) {
-                // Build fallback tag with original (non-webp) URLs
-                // Replace srcset FIRST (before src), otherwise src replacement corrupts the srcset match
+                
+                
                 $fallbackTag = $finalTag;
                 if (!empty($srcset_att) && !empty($original_img_tag['srcset'])) {
-                    // When lazy, attribute is data-srcset — match that
+                    
                     $srcsetAttrInTag = $isLazy ? 'data-srcset' : 'srcset';
                     $fallbackTag = str_replace($srcsetAttrInTag . '="' . $srcset_att . '"', $srcsetAttrInTag . '="' . $original_img_tag['srcset'] . '"', $fallbackTag);
                 }
                 $fallbackTag = str_replace($image_source, $original_img_tag['original_src'], $fallbackTag);
 
-                // WebP source — use data-srcset when lazy loading to prevent immediate load
+                
                 $srcsetKey = $isLazy ? 'data-srcset' : 'srcset';
                 $sourceSrcset = !empty($srcset_att) ? ' ' . $srcsetKey . '="' . $srcset_att . '"' : ' ' . $srcsetKey . '="' . $image_source . '"';
                 $sourceSizes = '';
@@ -6935,26 +9555,17 @@ JS;
                     $sourceSizes = ' sizes="' . $szMatch[1] . '"';
                 }
 
-                // AVIF source — LOCAL (CDN-off) path: emit ONLY when the .avif exists on disk. No
-                // optimistic emission here: with CDN delivery OFF there is NO edge to intercept the
-                // 404, and <picture> <source> selection is terminal — an AVIF-capable browser does
-                // NOT fall back to the webp <source>, it renders a BROKEN image (and lazy_cdn can
-                // never land the variant). Only offer AVIF the browser can actually load; the webp
-                // <source> and the <img> jpeg are the safe fallbacks.
+
                 $avifSource = '';
                 if (self::$rewriteLogic::$pictureAvifEnabled) {
-                    // Derive the .avif disk path from a STABLE absolute base (the original src), NOT
-                    // the loop-mutated $image_path: the srcset loop above reassigns $image_path to a
-                    // RELATIVE last-entry path, so a fixed `ABSPATH .` prepend DOUBLED ABSPATH for the
-                    // no-srcset branch → file_exists() always false → AVIF <source> silently dropped.
+
+
                     $avifBaseUrl  = preg_replace('/\?.*$/', '', (string) $original_img_tag['original_src']);
-                    $avifBaseRel  = preg_replace('#^(?:https?:)?//[^/]+#', '', $avifBaseUrl); // strip scheme+host if present
+                    $avifBaseRel  = preg_replace('#^(?:https?:)?//[^/]+#', '', $avifBaseUrl);
                     $avifMainPath = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', ABSPATH . ltrim($avifBaseRel, '/'));
                     if (@file_exists($avifMainPath)) {
-                        // Build the AVIF srcset PER-ENTRY from the ORIGINAL (jpg) srcset, swapping each
-                        // to .avif ONLY where the .avif sibling exists on disk — NOT str_replace(
-                        // '.webp','.avif',$sourceSrcset), which leaves .jpg gap-fill entries (widths
-                        // where .webp was missing) unswapped → malformed avif <source>.
+
+
                         $avifEntries = [];
                         if (!empty($original_img_tag['srcset'])) {
                             foreach (explode(',', (string) $original_img_tag['srcset']) as $ent) {
@@ -6968,7 +9579,7 @@ JS;
                             }
                         }
                         if (empty($avifEntries)) {
-                            // No srcset (single image) — emit just the main .avif URL.
+                            
                             $avifEntries[] = preg_replace('/\.(jpe?g|png|webp)$/i', '.avif', $avifBaseUrl);
                         }
                         $avifSource = '<source ' . $srcsetKey . '="' . implode(', ', $avifEntries) . '"' . $sourceSizes . ' type="image/avif">';
@@ -6979,6 +9590,15 @@ JS;
             }
         }
 
+
+        if ($webP !== false && strncmp($finalTag, '<picture', 8) !== 0 && self::wpc_universal_picture_on()) {
+            if (!empty($srcset_att) && !empty($original_img_tag['srcset'])) {
+                $wpc_ss_attr72 = $isLazy ? 'data-srcset' : 'srcset';
+                $finalTag = str_replace($wpc_ss_attr72 . '="' . $srcset_att . '"', $wpc_ss_attr72 . '="' . $original_img_tag['srcset'] . '"', $finalTag);
+            }
+            $finalTag = str_replace($image_source, $original_img_tag['original_src'], $finalTag);
+        }
+
         return $finalTag;
     }
 
@@ -6986,12 +9606,8 @@ JS;
     {
         $found_tags = [];
 
-        // This pattern accounts for HTML entities like &quot; within attribute values
+        
         preg_match_all('/([a-zA-Z_-]+(?:--[a-zA-Z_-]+)*)(?:\s*=\s*(?:"((?:[^"\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)"|\'((?:[^\'\\\\]|\\\\.|&[a-zA-Z0-9#]+;)*)\'|([^>\s]+)))?/', $image, $matches, PREG_SET_ORDER);
-
-        if (!empty($_GET['dbg_img1'])) {
-            return [$image, $matches];
-        }
 
         $attributes = [];
         unset($matches[0]);
@@ -7000,7 +9616,7 @@ JS;
             $attrName = $match[1];
             $attrValue = null;
 
-            // Determine the attribute value based on the capturing group that caught it
+
             foreach ([2, 3, 4] as $index) {
                 if (!empty($match[$index])) {
                     $attrValue = $match[$index];
@@ -7008,23 +9624,19 @@ JS;
                 }
             }
 
-            // Only decode HTML entities for non-JSON attributes
-            // Check if this looks like JSON data (starts with [ or { and contains &quot;)
+            
+            
             if ($attrValue !== null && (strpos($attrName, 'data-') === 0) && (strpos($attrValue, '[{') !== false || strpos($attrValue, '{') !== false) && strpos($attrValue, '&quot;') !== false) {
-                // This looks like JSON data - keep HTML entities encoded
-                // but clean up any potential corruption from the original regex
+                
+                
                 $attributes[$attrName] = $attrValue;
             } else {
-                // For regular attributes, decode HTML entities as before
+                
                 $attributes[$attrName] = $attrValue ? html_entity_decode($attrValue) : $attrValue;
             }
         }
 
-        if (!empty($_GET['dbg_img2'])) {
-            return [$image, $attributes];
-        }
-
-        // Process the attributes
+        
         foreach ($attributes as $tag => $value) {
             if (!empty($ignore_tags) && in_array($tag, $ignore_tags)) {
                 continue;
@@ -7046,11 +9658,11 @@ JS;
 
     public static function get_image_size($url)
     {
-        preg_match("/([0-9]+)x([0-9]+)\.[a-zA-Z0-9]+/", $url, $matches); //the filename suffix way
+        preg_match("/([0-9]+)x([0-9]+)\.[a-zA-Z0-9]+/", $url, $matches);
         if (isset($matches[1]) && isset($matches[2])) {
             return [$matches[1], $matches[2]];
             $sizes = [$matches[1], $matches[2]];
-        } else { //the file
+        } else {
             return [1024, 1024];
         }
 

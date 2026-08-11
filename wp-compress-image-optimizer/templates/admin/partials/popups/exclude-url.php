@@ -33,7 +33,7 @@ if ($option = 'exclude-url-from-all'){
 
             <?php
             if ($configure == 'exclude-url-from-all'){
-                //If I don't do this, then there is no form below... I don't know...
+                
                 echo '<form></form>';
             }
             ?>

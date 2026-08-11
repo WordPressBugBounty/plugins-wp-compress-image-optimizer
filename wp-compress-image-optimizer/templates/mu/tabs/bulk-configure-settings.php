@@ -70,8 +70,6 @@ $delayEnabled = $gui::isFeatureEnabled('delay-js');
                                   echo $gui::checkboxDescription_v4('Delay JavaScript', 'Speed up initial response times by delaying unnecessary JS.', false, 'delay-js', 'delay-js', $delayLocked, 'right', 'exclude-js-delay', false, '', $delayEnabled); ?>
 
 
-
-
                               </div>
                           </div>
                       </div>
@@ -138,7 +136,6 @@ $delayEnabled = $gui::isFeatureEnabled('delay-js');
       </div>
 
   </div>
-
 
 
 </form>

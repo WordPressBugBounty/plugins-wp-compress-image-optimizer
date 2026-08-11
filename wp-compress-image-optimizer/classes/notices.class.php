@@ -1,8 +1,8 @@
 <?php
 
-/**
- * Class - Notices
- */
+
+
+
 class wps_ic_notices extends wps_ic {
 
   public static $slug;
@@ -14,13 +14,7 @@ class wps_ic_notices extends wps_ic {
     $this::$slug = parent::$slug;
     $this->templates = new wps_ic_templates();
 
-    // v7.02 — Static guard against duplicate hook registration. Every
-    // plugin-check class (wps_ic_rocket, wps_ic_breeze, ~45 of them) extends
-    // wps_ic_integrations, whose parent ctor creates a NEW wps_ic_notices()
-    // instance. Without this guard, admin_enqueue_scripts was registered 80+
-    // times — each firing wp_enqueue_script/wp_enqueue_style for the same
-    // assets. QM made it visible. Static + class-level callable: one hook,
-    // one fire, identical asset enqueue.
+
     static $hook_registered = false;
     if (!$hook_registered) {
       $hook_registered = true;
@@ -77,10 +71,10 @@ class wps_ic_notices extends wps_ic {
     }
   }
 
-  /**
-   * @return void
-   * Render all notices, can use wherever we want
-   */
+  
+
+
+
   public function render_plugin_notices() {
     foreach (self::$custom_notices as $notice) {
       if ($notice['dismiss_tag'] != '') {
@@ -127,13 +121,14 @@ class wps_ic_admin_notice {
       }
     }
 
-    //Uncomment this to show default wp notices, if you do that, check render_notice() to not show double notices on our page
-    //add_action('admin_notices', [$this, 'render_notice']);
+    
+    
   }
 
   public function render_notice() {
     $screen = get_current_screen();
-    if (!$this->global && $screen->id != 'settings_page_wpcompress') {
+
+    if (!$this->global && $screen->id != 'settings_page_wpcompress' && $screen->id != 'toplevel_page_wpcompress') {
       return true;
     }
 

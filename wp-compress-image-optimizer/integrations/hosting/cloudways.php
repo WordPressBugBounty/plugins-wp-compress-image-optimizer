@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_cloudways extends wps_ic_integrations {
@@ -10,18 +10,14 @@ class wps_ic_cloudways extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
-    /**
-     * Detect Cloudways hosting via filesystem path.
-     * The old HTTP_X_VARNISH header check only worked in frontend requests,
-     * not during admin/AJAX where integration scanning runs.
-     */
+
     private function is_cloudways_server() {
         if (defined('ABSPATH') && strpos(ABSPATH, 'cloudwaysapps.com') !== false) {
             return true;
@@ -33,12 +29,7 @@ class wps_ic_cloudways extends wps_ic_integrations {
         return false;
     }
 
-    /**
-     * Per-request check: is Varnish actually proxying THIS request?
-     * Used by add_varnish_ip() and enable_varnish_purge() to guard against
-     * adding varnish IPs / purges on Cloudways accounts where Varnish is disabled
-     * or for non-frontend requests (admin, cron, CLI) that don't go through Varnish.
-     */
+
     private function is_varnish_running() {
         if (!isset($_SERVER['HTTP_X_VARNISH'])) {
             return false;

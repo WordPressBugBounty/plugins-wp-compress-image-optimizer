@@ -1,9 +1,9 @@
 <?php
 
 
-/**
- * Class - Options
- */
+
+
+
 class wps_ic_options
 {
 
@@ -20,7 +20,7 @@ class wps_ic_options
     public function __construct()
     {
 
-        //Format of this list is the same as settings list, just instead of setting value, put ['critical' , 'combine'] to set what files will be purged. Cache is always purged
+
         $this->purgeList = [
             'live-cdn' => ['critical', 'html'],
             'serve' => [
@@ -37,13 +37,13 @@ class wps_ic_options
             'js_combine' => ['combine'],
             'js_minify' => ['combine'],
             'delay-js' => ['combine'],
+            'delay-js-v3' => ['html'],
+            'used-css' => ['html'],
             'font-subsetting' => ['cdn','critical'],
             'imagesPreset' => ['cdn','critical', 'html'],
             'cdnAll' => ['cdn','critical', 'html'],
-            // Image-delivery settings that change HTML output.
-            // When any of these toggle, cached pages contain stale picture
-            // wraps / srcset / fetchpriority / lazy attributes, so we must purge
-            // HTML cache so the next render rebuilds with the new rules.
+
+
             'fetchpriority-high' => ['html'],
             'lazySkipCount'      => ['html'],
             'lazy-load'          => ['html'],
@@ -52,8 +52,10 @@ class wps_ic_options
             'picture_avif'       => ['html'],
             'retina-in-srcset'   => ['html'],
             'avif-natural-source' => ['html'],
-            'force-natural'      => ['html'], // (v7.10.04.4) flipping it swaps every image href transform<->natural
-            'single-url-image-format' => ['html'], // Regime B: flipping it rewrites every single-URL image href
+            'force-natural'      => ['html'],
+            'static-serve'       => ['html'],
+            'fold-split'         => ['html'], 
+            'single-url-image-format' => ['html'], 
             'optimize-lcp'       => ['html'],
             'lazy-auto-sizes'    => ['html'],
             'adaptive'           => ['html'],
@@ -81,20 +83,16 @@ class wps_ic_options
             'picture_avif' => 1,
             'retina' => 1,
             'retina-in-srcset' => 1,
-            // Natural-AVIF picture sources (default ON). When on, the avif
-            // <source> emits natural -WxH.avif URLs (edge serves avif / self-heals)
-            // instead of wp:2 transforms that serve webp. Safe everywhere: Bunny
-            // auto-upgrades; Cloudflare is gated on wpc_v2_cf_avif_live (set when the
-            // edge's .avif live-transform is live) so it can't pin a webp interim.
+
+
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', // Regime B default
+            'single-url-image-format' => 'auto', 
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 0,
-            // Pixel-optimal delivery is the default experience in
-            // Recommended/Aggressive (user direction, final testing): the LCP
-            // sizes ladder feeds demand-width targeting end to end.
+
+
             'optimize-lcp' => '1',
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
@@ -108,8 +106,8 @@ class wps_ic_options
             'disable-cart-fragments' => 0,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
-            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
-            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
+            'emit-src-hints' => '1',
+            'emit-src-hints-always' => '0',
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -138,6 +136,7 @@ class wps_ic_options
             'status' => [
                 'hide_in_admin_bar' => '0',
                 'show_admin_bar_title' => '0',
+                'top_level_menu' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -151,7 +150,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            // Local optimization defaults (Smart Optimization preset)
+            
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -177,20 +176,17 @@ class wps_ic_options
             'picture_avif' => '1',
             'retina' => '0',
             'retina-in-srcset' => '0',
-            // Safe mode is the CONSERVATIVE preset: both HTML-output-altering image
-            // toggles ship OFF. 'avif-natural-source' => 0 keeps AVIF <source>s on the never-404
-            // wp:2 transform form (not natural -WxH URLs) in Safe mode; 'fetchpriority-high' => 0
-            // was ABSENT from this preset, so the toggle kept its prior ON value on a Safe switch.
-            // Both were reported staying ON after switching to Safe.
+
+
             'avif-natural-source' => '0',
-            'single-url-image-format' => 'same-ext', // Safe forces the single-URL floor (consistent with avif-natural-source off)
+            'single-url-image-format' => 'same-ext', 
             'fetchpriority-high' => '0',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
-            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
-            'modern_delivery_prefer_local' => '0', // when 1, srcset uses origin URL for variants confirmed local on disk; otherwise CDN. Off by default.
+            'optimize-lcp' => '0', 
+            'modern_image_delivery' => '0', 
+            'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => '1',
@@ -234,6 +230,7 @@ class wps_ic_options
             'status' => [
                 'hide_in_admin_bar' => '0',
                 'show_admin_bar_title' => '0',
+                'top_level_menu' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -243,7 +240,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            // Local optimization defaults (Smart Optimization preset)
+            
             'backup' => 'local',
             'maxWidth' => '2560',
             'local_qualityLevel' => '0',
@@ -269,14 +266,14 @@ class wps_ic_options
             'retina' => '1',
             'retina-in-srcset' => '0',
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', // Regime B default
+            'single-url-image-format' => 'auto', 
             'nativeLazy' => '1',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
-            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
-            'modern_delivery_prefer_local' => '0', // when 1, srcset uses origin URL for variants confirmed local on disk; otherwise CDN. Off by default.
+            'optimize-lcp' => '0', 
+            'modern_image_delivery' => '0', 
+            'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
             'on-upload' => 1,
@@ -289,8 +286,8 @@ class wps_ic_options
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
-            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
-            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
+            'emit-src-hints' => '1',
+            'emit-src-hints-always' => '0',
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -319,6 +316,7 @@ class wps_ic_options
             'status' => [
                 'hide_in_admin_bar' => '0',
                 'show_admin_bar_title' => '0',
+                'top_level_menu' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -332,7 +330,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            // Local optimization defaults (Smart Optimization preset)
+            
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -362,12 +360,12 @@ class wps_ic_options
             'retina' => 1,
             'retina-in-srcset' => 1,
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', // Regime B default
+            'single-url-image-format' => 'auto', 
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 1,
-            'optimize-lcp' => '1', // see recommended preset note
+            'optimize-lcp' => '1',
             'qualityLevel' => 2,
             'optimization' => 'intelligent',
             'on-upload' => 1,
@@ -380,8 +378,8 @@ class wps_ic_options
             'disable-cart-fragments' => 1,
             'iframe-lazy' => 1,
             'video-preload-none' => 0,
-            'emit-src-hints' => '1', // Source Hints baked ON: edge skips the origin format-probe (no storm). Opt-out via the toggle.
-            'emit-src-hints-always' => '0', // (v7.03.61) ?src mode: 0=until-landed (self-healing, default), 1=always (keep hint after on-disk).
+            'emit-src-hints' => '1',
+            'emit-src-hints-always' => '0',
             'gtag-lazy' => 1,
             'fontawesome-lazy' => 1,
             'icon-font-display' => 'block',
@@ -413,6 +411,7 @@ class wps_ic_options
             'status' => [
                 'hide_in_admin_bar' => '0',
                 'show_admin_bar_title' => '0',
+                'top_level_menu' => '0',
                 'hide_cache_status' => '0',
                 'hide_critical_css_status' => '0',
                 'hide_preload_status' => '0'
@@ -424,7 +423,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            // Local optimization defaults (Smart Optimization preset)
+            
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -526,9 +525,6 @@ class wps_ic_options
         $preloadSettings['delay-js-v2'] = 0;
         $preloadSettings['inline-js'] = 0;
 
-        // (v7.03.31) Removed the wpc-connectivity-status == 'failed' -> critical['css'] = 0 gate. It disabled
-        // critical CSS based on the WARMUP box's reachability, but crit now runs on crit-push.zapwp.net (a
-        // different host that self-checks). Wrong-vantage + unreliable (the probe had no timeout) -> keep crit on.
 
         return $preloadSettings;
     }
@@ -560,16 +556,16 @@ class wps_ic_options
         foreach ($settings as $option_key => $option_value) {
             if (is_array($option_value)) {
                 foreach ($option_value as $sub_key => $sub_value) {
-                    // Check if the current setting exists and has changed
+                    
                     if (isset($currentSettings[$option_key][$sub_key]) && $currentSettings[$option_key][$sub_key] != $sub_value) {
-                        // Check if the change is relevant for purging
+                        
                         if (isset($this->purgeList[$option_key][$sub_key])) {
                             $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key][$sub_key]);
                         }
                     }
                 }
             } else {
-                // For non-array options, check if the setting has changed and is relevant for purging
+                
                 if (isset($currentSettings[$option_key]) && $currentSettings[$option_key] != $option_value && isset($this->purgeList[$option_key])) {
                     $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key]);
                 }
@@ -579,9 +575,9 @@ class wps_ic_options
     }
 
 
-    /**
-     * Save settings
-     */
+    
+
+
     public function save_settings()
     {
         if (!empty($_POST)) {
@@ -654,7 +650,7 @@ class wps_ic_options
                 }
             }
 
-            // Sanitize
+            
             foreach ($_POST['wp-ic-setting'] as $key => $value) {
                 $_POST['wp-ic-setting'][$key] = $value;
             }
@@ -664,10 +660,10 @@ class wps_ic_options
     }
 
 
-    /**
-     * Get compress stats (total images, total saved)
-     * @return mixed|void
-     */
+    
+
+
+
     public function get_stats()
     {
         global $wpdb;
@@ -679,9 +675,9 @@ class wps_ic_options
     }
 
 
-    /**
-     * Update stats
-     */
+    
+
+
     public function update_stats($attachment_ID = 1, $saved = '', $action = 'add')
     {
         global $wpdb;
@@ -693,15 +689,15 @@ class wps_ic_options
             $query = $wpdb->prepare("INSERT INTO " . $wpdb->prefix . "ic_compressed (created, attachment_ID, saved, count) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE created=%s, count=count+1, restored=0", current_time('mysql'), $attachment_ID, $saved, current_time('mysql'), '1');
             $wpdb->query($query);
         } else {
-            //
+            
         }
     }
 
 
-    /**
-     * Get various settings for WP Compress
-     * @return mixed|void
-     */
+    
+
+
+
     public function get_settings()
     {
         $settings = get_option(WPS_IC_SETTINGS);
@@ -715,22 +711,18 @@ class wps_ic_options
     }
 
 
-    /**
-     * Set recommended options
-     */
+    
+
+
     public function set_recommended_options()
     {
         update_option(WPS_IC_SETTINGS, self::$recommendedSettings);
+
+
+        update_option('wpc_settings_initialized', '1', false);
     }
 
 
-    /**
-     * Fetch specific option or all options if key is empty
-     *
-     * @param null $key
-     *
-     * @return bool|mixed|void
-     */
     public function get_option($key = null)
     {
         $options = get_option(WPS_IC_OPTIONS);
@@ -751,12 +743,12 @@ class wps_ic_options
     }
 
 
-    /**
-     * Set option with key and value
-     *
-     * @param $key
-     * @param $value
-     */
+    
+
+
+
+
+
     public function set_option($key, $value)
     {
         $options = get_option(WPS_IC_OPTIONS);
@@ -764,9 +756,9 @@ class wps_ic_options
         update_option(WPS_IC_OPTIONS, $options);
     }
 
-    /**
-     * Setup default settings
-     */
+    
+
+
     public function set_defaults()
     {
         $this->set_recommended_options();

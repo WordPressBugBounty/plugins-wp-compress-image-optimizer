@@ -1,8 +1,8 @@
 jQuery(document).ready(function ($) {
 
-    /**
-     * Hide After
-     */
+    
+
+
     $('.wps-ic-hide').each(function (i, item) {
         var after = $(item).data('after');
         setTimeout(function () {
@@ -10,9 +10,9 @@ jQuery(document).ready(function ($) {
         }, after * 1000);
     });
 
-    /**
-     * Activate Form
-     */
+    
+
+
     $('form#wps_ic_mu_activate_form').submit(function (e) {
         e.preventDefault();
 

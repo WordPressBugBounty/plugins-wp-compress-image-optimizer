@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wpc_avada {
@@ -12,11 +12,17 @@ class wpc_avada {
 
   public function runIntegration($html) {
 
-    $html = $this->hideSections($html);
-    #$html = $this->delayBackgrounds($html);
-	  #$html = $this->insertJS($html);
-
-      return str_replace('optimize.js', 'avada/optimize.js', $html);
+    
+    
+    
+    
+    if (!(function_exists('is_user_logged_in') && is_user_logged_in())) {
+      $html = $this->hideSections($html);
+    }
+    
+    
+    
+    return $html;
   }
 
 
@@ -28,15 +34,17 @@ class wpc_avada {
 			  return str_replace($matches[1], $matches[1] . ' wpc-delay-avada', $matches[0]);
 	  }, $html);
 
-		
-	  $html = str_replace('</head>', '<style>.wpc-delay-avada{display:none!important;}</style></head>', $html);
+
+	  
+	  
+	  $html = str_replace('</head>', '<style>.wpc-delay-avada{content-visibility:auto;contain-intrinsic-size:auto 900px;}</style></head>', $html);
 
 	  return $html;
   }
 
 
   public function delayBackgrounds($html) {
-    // Define the class you want to find and the class you want to replace it with
+
     return $html;
   }
 
@@ -51,8 +59,6 @@ class wpc_avada {
 		}
 		return $html;
 	}
-
-
 
 
 }

@@ -1,10 +1,10 @@
 <?php
 
 
-/**
- * Class - Cache
- * Handles CSS Caching
- */
+
+
+
+
 class wps_ic_cache
 {
 
@@ -32,26 +32,26 @@ class wps_ic_cache
     }
 
 
-    /**
-     * Purge OPCache and other caches
-     */
+    
+
+
     public function purgeObjectCache() {
-        // (1) PHP OPcache reset — invalidates all cached scripts for this PHP-FPM pool
-        if (function_exists('opcache_reset')) {
-            @opcache_reset();
+        
+        if (function_exists('wpc_opcache_refresh')) {
+            wpc_opcache_refresh('purge-object');
         }
 
-        // (2) APCu (if used)
+        
         if (function_exists('apcu_clear_cache')) {
             @apcu_clear_cache();
         }
 
-        // (3) WordPress object cache (e.g., Redis or Memcached)
+        
         if (function_exists('wp_cache_flush')) {
-            @wp_cache_flush();
+            if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('purge-object'); } else { @wp_cache_flush(); }
         }
 
-        // (4) Transients
+        
         if (function_exists('delete_expired_transients')) {
             @delete_expired_transients();
         }
@@ -78,13 +78,16 @@ class wps_ic_cache
 
                 $options['css_hash'] = $CSSHash;
                 $options['js_hash'] = $JSHash;
+                $options['lazy_hash'] = substr(md5($CSSHash . 'lz'), 0, 10);
 
                 if (!class_exists('wps_ic_log')) {
                     include_once WPS_IC_DIR . 'classes/log.class.php';
                 }
 
-                $log = new wps_ic_log();
-                $log->logCachePurging($oldOptions, $options, 'purge_actions');
+                if (class_exists('wps_ic_log')) {
+                    $log = new wps_ic_log();
+                    $log->logCachePurging($oldOptions, $options, 'purge_actions');
+                }
 
                 update_option(WPS_IC_OPTIONS, $options);
 
@@ -96,25 +99,25 @@ class wps_ic_cache
     public static function purgeOtherCache($json = true)
     {
 
-        // Rocket - Clear cache
+        
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
         }
 
-        // Lite Speed
+        
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
 
-        // HummingBird
+        
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
 
-        // Breeze
+        
         self::purgeBreeze();
 
-        // Others
+        
         self::purgeSuperCache();
         self::purgeFastestCache();
         self::purge_cache_files();
@@ -136,7 +139,7 @@ class wps_ic_cache
             $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
 
             if (function_exists('wp_cache_flush')) {
-                wp_cache_flush();
+                if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
             }
         }
     }
@@ -187,7 +190,7 @@ class wps_ic_cache
 
                 if (!empty(self::$purge_rules) && !empty(self::$purge_rules['hooks'])) {
 
-                    // List of hooks to also clear crit, combine, new cdn hashes
+                    
                     $full_param_hooks = ['switch_theme',
                         'wp_update_nav_menu',
                         'update_option_theme_mods_' . get_option('stylesheet'),
@@ -198,15 +201,15 @@ class wps_ic_cache
                         if (in_array($hook, $full_param_hooks)) {
                             self::purgeHook($hook, 1, 1, 1, 1);
                         } else {
-                            // For other hooks only clear cache
+                            
                             self::purgeHook($hook);
                         }
                     }
 
-                    //Post publish hooks
-                    add_action('save_post', ['wps_ic_cache', 'removeCriticalFiles'], 10, 1); //always purge crit
-                    add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1); //always reset hashes
-                    add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1); //always purge cache
+                    
+                    add_action('save_post', ['wps_ic_cache', 'removeCriticalFiles'], 10, 1);
+                    add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1);
+                    add_action('save_post', ['wps_ic_cache', 'removeHtmlCacheFiles'], 10, 1);
 
                     if (!empty(self::$purge_rules['post-publish'])) {
                         if (!empty(self::$purge_rules['post-publish']['all-pages']) || !empty(self::$purge_rules['post-publish']['home-page']) || !empty(self::$purge_rules['post-publish']['recent-posts-widget']) || !empty(self::$purge_rules['post-publish']['archive-pages'])) {
@@ -218,7 +221,7 @@ class wps_ic_cache
             }
         }
 
-        //per page purge hooks from smart-opt screen scheckboxes
+
         add_action('publish_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('wp_trash_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
         add_action('delete_post', ['wps_ic_cache', 'purgeCachePerPage'], 10, 1);
@@ -235,7 +238,7 @@ class wps_ic_cache
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
     {
-        //accepted_args 0 to force clearing all cache
+
         if ($hash) {
             add_action($hook, ['wps_ic_cache', 'resetHashes'], 10, 0);
         }
@@ -255,21 +258,42 @@ class wps_ic_cache
 
     public static function purgeCachePerPage()
     {
-        // Get the excludes option
+        
         $wpc_excludes = get_option('wpc-excludes', []);
 
-        // Check if per_page_settings exists
+        
         if (!isset($wpc_excludes['per_page_settings']) || empty($wpc_excludes['per_page_settings'])) {
             return;
         }
 
-        // Loop through each page settings
+        
         foreach ($wpc_excludes['per_page_settings'] as $page_id => $settings) {
-            // Check if purge_on_new_post is enabled
+            
             if (isset($settings['purge_on_new_post']) && $settings['purge_on_new_post'] !== 'false') {
                 self::removeHtmlCacheFiles($page_id);
             }
         }
+    }
+
+    
+    public static function wpc_purge_src()
+    {
+        $src = '';
+        try {
+            foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10) as $f) {
+                $fl = isset($f['file']) ? basename((string) $f['file']) : '';
+                if ($fl === 'cache.class.php' || $fl === '') {
+                    continue;
+                }
+                $src = (isset($f['class']) ? $f['class'] . '::' : '') . ($f['function'] ?? '') . '@' . $fl;
+                break;
+            }
+            if (function_exists('current_action') && current_action()) {
+                $src .= '|hook:' . current_action();
+            }
+        } catch (\Throwable $e) {
+        }
+        return $src;
     }
 
     public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
@@ -279,81 +303,69 @@ class wps_ic_cache
         }
 
         if (self::is_cache_cleared()) {
-            //if we cleared all, ignore subsequent clears in the same request
+
             return;
+        }
+
+        if ($post_id === 'all' && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('purge-local-all', '', '', [
+                'src' => self::wpc_purge_src(),
+                'uri' => isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 60) : '',
+            ]);
         }
 
         $cacheHtml = new wps_cacheHtml();
         $cacheHtml->removeCacheFiles($post_id);
 
         $cache_integrations = new wps_ic_cache_integrations();
-        // (v7.03.92) Match the Varnish scope to the clear scope: per-post → that URL; 'home' → homepage;
-        // 'all' → FULL-SITE (regex). Before this, 'all' purged only the homepage path, so interior pages
-        // kept serving stale markup from host Varnish until TTL — the same homepage-only gap crit had. Most
-        // site-wide events (settings/delivery/CDN changes, bulk-end) route through here, so this upgrades
-        // them all to full-site at once.
+
+
         if (is_int($post_id)) {
-            $cache_integrations->purgeVarnish($post_id);           // per-URL
+            $cache_integrations->purgeVarnish($post_id);
         } elseif ($post_id === 'home') {
-            $cache_integrations->purgeVarnish(0);                  // homepage only
+            $cache_integrations->purgeVarnish(0);
         } else {
-            $cache_integrations->purgeVarnish(0, true);            // 'all' → full-site
+            $cache_integrations->purgeVarnish(0, true);            
         }
 
-        // Fire integration hook once per request (Breeze, LiteSpeed, SG, etc.)
+        
         static $integrations_fired = false;
         if (!$integrations_fired) {
             $integrations_fired = true;
-            do_action('wps_ic_purge_all_cache', is_int($post_id) ? get_permalink($post_id) : false);
+            if (is_int($post_id)) {
+                
+                
+                $wpc_tp120 = (int) get_option('wpc_tp_purge_at');
+                if (time() - $wpc_tp120 >= 120 && update_option('wpc_tp_purge_at', time(), false)) {
+                    wpc_foreign_purge610(get_permalink($post_id), 'post-purge');
+                }
+            } else {
+                wpc_foreign_purge610(false, 'purge-all');
+            }
         }
 
-        // Was causing problems with save_post function? because we call there wpc_purgecf?
-//        if (!self::is_cf_cache_cleared()) {
-//            //since it clears all cache, we dont have to call it multiple times in a request
-//            //can add other cache clears here
-//            self::wpc_purgeCF(true);
-//            self::mark_cf_cache_cleared();
-//        }
 
         if ($post_id === 'all') {
             self::mark_cache_cleared();
         }
 
-        // v7.02.47 — Warm the homepage after a homepage-affecting purge so the FIRST visitor gets a cache
-        // HIT instead of the full cold render. Non-blocking, debounced, jittered, fail-safe (see method).
-        // Scope: whole-cache / home / front-page purges only — a single non-front post purge doesn't warm.
+
+        
+        
         if ($post_id === 'all' || $post_id === 'home' || $post_id === 0
             || (is_int($post_id) && $post_id > 0 && $post_id === (int) get_option('page_on_front'))) {
             self::maybeWarmHomepageAfterPurge();
         }
     }
 
-    /**
-     * v7.02.47 — Warm the homepage cache after a homepage-affecting purge, so the FIRST visitor after a
-     * purge gets a static cache HIT instead of eating the full cold render (the "purge → 4-7s" gap).
-     *
-     * Safe by construction:
-     *   - Non-blocking: schedules a fire-and-forget local-vhost loopback GET at shutdown, AFTER
-     *     fastcgi_finish_request() — the triggering request's response is already sent. Reuses the proven
-     *     wpc_loopback_open_socket transport (hits the LOCAL vhost, not the public/CF host).
-     *   - Single render: the homepage only — a page guaranteed to get traffic, so the warm render is one
-     *     that would have happened on the next visit anyway (it MOVES load earlier, doesn't add it).
-     *   - Debounced: a transient lock coalesces a burst of purges into ONE warm per window.
-     *   - Jittered: a small random pre-fire delay so a fleet-wide purge (thousands of sites at once)
-     *     spreads the re-renders across a window instead of a synchronized spike on shared infra.
-     *   - Loop-proof: the warm request carries X-WPC-Cache-Warm; this no-ops on such a request.
-     *   - Fail-safe: every failure is swallowed — the page just stays cold until a visitor warms it
-     *     (today's behaviour), never worse.
-     *   - Gated: HTML caching must be ON; opt out via the wpc_warm_homepage_on_purge option/filter or the
-     *     WPC_WARM_HOMEPAGE_DISABLE constant; skipped on Basic-Auth (the loopback can't land there).
-     */
+
     public static function maybeWarmHomepageAfterPurge()
     {
         static $registered = false;
         if ($registered) {
             return;
         }
-        // Loop-guard: a warm render must never schedule another warm.
+        
         if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
             return;
         }
@@ -363,7 +375,7 @@ class wps_ic_cache
         if (!apply_filters('wpc_warm_homepage_on_purge', (bool) get_option('wpc_warm_homepage_on_purge', true))) {
             return;
         }
-        // Only meaningful when WPC HTML caching is actually ON (else the warm render won't be cached).
+        
         if (!class_exists('wps_cacheHtml')) {
             return;
         }
@@ -371,38 +383,56 @@ class wps_ic_cache
         if (method_exists($ch, 'cacheEnabled') && !$ch->cacheEnabled()) {
             return;
         }
-        // The loopback can't land on a Basic-Auth site; the cron/visitor backstop still warms it.
+        
         if (function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth()) {
             return;
         }
-        // Debounce: coalesce a purge burst into one warm per window. Set BEFORE registering (race-safe).
+        
+        
+        
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            return;
+        }
+        
+        
+        $wpc_cc521 = strtolower((string) ($_SERVER['HTTP_CACHE_CONTROL'] ?? ''));
+        if ($wpc_cc521 !== '' && (strpos($wpc_cc521, 'no-cache') !== false
+            || strpos($wpc_cc521, 'no-store') !== false)) {
+            return;
+        }
+        
         $debounce = (int) apply_filters('wpc_warm_homepage_debounce_seconds', 30);
         if ($debounce < 1) {
             $debounce = 1;
         }
+        
+        
+        
+        if (function_exists('wpc_worker_lock') && !wpc_worker_lock('warm_home_gate')) {
+            return;
+        }
         if (get_transient('wpc_warm_homepage_lock')) {
+            if (function_exists('wpc_worker_unlock')) { wpc_worker_unlock('warm_home_gate'); }
             return;
         }
         set_transient('wpc_warm_homepage_lock', 1, $debounce);
+        if (function_exists('wpc_worker_unlock')) {
+            wpc_worker_unlock('warm_home_gate');
+        }
 
         $registered = true;
         register_shutdown_function(['wps_ic_cache', 'fireHomepageWarm']);
     }
 
-    /**
-     * Shutdown handler for maybeWarmHomepageAfterPurge(): flush the triggering request's response, jitter
-     * (fleet-spread), then fire the non-blocking local-vhost loopback GET that renders + caches the
-     * homepage. The receiver survives this client-close via the X-WPC-Cache-Warm guard in wp-compress.php
-     * (ignore_user_abort). Never throws.
-     */
+
     public static function fireHomepageWarm()
     {
         try {
             if (function_exists('fastcgi_finish_request')) {
                 @fastcgi_finish_request();
             }
-            // Fleet jitter: spread re-renders when many sites purge at once. Post-flush, so the already-
-            // finished triggering request's user is unaffected.
+
+
             $jitter_ms = (int) apply_filters('wpc_warm_homepage_jitter_ms', 2000);
             if ($jitter_ms > 0) {
                 @usleep(mt_rand(0, $jitter_ms) * 1000);
@@ -418,8 +448,8 @@ class wps_ic_cache
             if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) {
                 return;
             }
-            // Browser-like UA (no bot token) so the request caches exactly like a visitor; the
-            // X-WPC-Cache-Warm header is what identifies it (loop-guard + disconnect-survival).
+            
+            
             $req = "GET {$path} HTTP/1.1\r\n"
                  . "Host: {$host}\r\n"
                  . "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0\r\n"
@@ -433,7 +463,7 @@ class wps_ic_cache
                 @fclose($fp);
             }
         } catch (\Throwable $e) {
-            // Fail-safe: warming is best-effort. A failure just leaves the page to warm on first visit.
+            
         }
     }
 
@@ -451,6 +481,8 @@ class wps_ic_cache
 
     public static function wpc_purgeCF($return = false)
     {
+        return false; 
+
 
         $cfSettings = get_option(WPS_IC_CF);
 
@@ -478,7 +510,7 @@ class wps_ic_cache
 
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => self::$options['api_key'], 'callback' => site_url(), 'hash' => md5(microtime())]);
 
-        // Purge Cached Files
+        
         $cache_dir = WPS_IC_CACHE;
         if (file_exists($cache_dir)) {
             self::removeDirectory($cache_dir);
@@ -505,14 +537,8 @@ class wps_ic_cache
 
     public static function purgeElementorCache($document)
     {
-        // (v7.10.04) Elementor's editor "Update" fires elementor/document/after_save, which
-        // lands here. Previously this purged the page's HTML cache ONLY — so the page
-        // re-rendered but re-inlined the OLD critical CSS, leaving stale above-the-fold /
-        // layout (the reported "the save didn't take"). Now we also purge that page's CRIT
-        // (file + per-URL transients, via removeCriticalFiles) so the next visit regenerates
-        // crit for the new layout. This handler is the RELIABLE path (it already fired — it's
-        // what was purging the HTML); all work here is local file/option deletes = NON-BLOCKING;
-        // crit regeneration happens lazily on the next front-end visit, never on this save.
+
+
         $post_id = 0;
         if (is_object($document) && method_exists($document, 'get_post')) {
             $p = $document->get_post();
@@ -523,81 +549,428 @@ class wps_ic_cache
 
         $cacheHtml = new wps_cacheHtml();
 
-        // A Theme-Builder template / global widget / library item (post_type elementor_library
-        // — headers, footers, single/archive layouts, popups, global widgets) affects MANY
-        // front-end pages, not just itself: a header change must invalidate every page's HTML
-        // + crit. Full purge in that case (still LOCAL/non-blocking — the site-wide regen is
-        // lazy, per visit). A normal page/post is scoped to itself below.
+
         if ($post_id !== 0 && function_exists('get_post_type') && get_post_type($post_id) === 'elementor_library') {
             $cacheHtml->removeCacheFiles('all');
             $cacheHtml->removeCriticalFiles('all');
-            // Edge: a global template change makes every page's edge HTML stale; home is the
-            // highest-value HTML-only eviction we can name cheaply (no zone-wide purge → assets
-            // stay cached). Non-blocking.
+
+
             self::purgeEdgeHtmlUrls([home_url('/')]);
             return;
         }
 
-        // Normal page/post: scope to THIS page — its HTML cache AND its critical CSS.
+
+        if ($post_id === 0) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('elementor-save-noid', '', '', []);
+            }
+            return;
+        }
+
+        
         $cacheHtml->removeCacheFiles($post_id);
         $cacheHtml->removeCriticalFiles($post_id);
 
-        // Edge: the page's crit is inlined INTO its HTML, so a CF-fronted site keeps serving
-        // the stale above-the-fold from the edge until the edge copy is dropped. Evict just
-        // THIS page's HTML URL at the edge (HTML only — never the image/CSS/JS assets), async.
+
         $page_url = ($post_id !== 0) ? get_permalink($post_id) : home_url('/');
         if (!empty($page_url)) {
             self::purgeEdgeHtmlUrls([$page_url]);
         }
     }
 
-    /**
-     * (v7.10.04) NON-BLOCKING, HTML-ONLY Cloudflare edge purge of specific page URL(s).
-     *
-     * Used by the Elementor save path: the page's critical CSS is inlined into its HTML, so
-     * clearing the LOCAL crit alone leaves a CF-fronted site serving the stale above-the-fold
-     * from the edge. We purge ONLY the given URL(s) via purgeFilesAsync — NEVER a zone-wide
-     * purge_everything — so edge-cached IMAGES / CSS / JS are left intact (a full purge would
-     * cold-miss every asset → origin image storm, the documented failure this avoids). The
-     * call is fire-and-forget (blocking=false, 0.01s timeout) so the editor save stays instant,
-     * and is a no-op when Cloudflare isn't connected. Best-effort: any error is swallowed.
-     */
-    public static function purgeEdgeHtmlUrls($urls)
+
+    public static function purgeEdgeHtmlUrls($urls, $inline = false)
     {
         if (empty($urls) || !is_array($urls)) {
             return;
         }
+        if (function_exists('wpc_purge_request_allowed') && !wpc_purge_request_allowed('edge-html')) {
+            if (function_exists('wpc_purge_gate_log604')) { wpc_purge_gate_log604('edge-html'); }
+            return;
+        }
         $urls = array_values(array_unique(array_filter(array_map('strval', $urls))));
-        $urls = apply_filters('wpc_cf_html_purge_urls', $urls); // mirror the upgrade-path filter
+        $urls = apply_filters('wpc_cf_html_purge_urls', $urls);
         if (empty($urls)) {
             return;
         }
 
+
+        static $wpc_cf_queued = [];
+        $urls = array_values(array_diff($urls, $wpc_cf_queued));
+        if (empty($urls)) {
+            return true;
+        }
+        foreach ($urls as $wpc_qu) {
+            $wpc_cf_queued[] = $wpc_qu;
+        }
+
+        
+        
+        
+        
+        
+        $wpc_co604 = (int) apply_filters('wpc_cf_purge_coalesce_s', 60);
+        if ($wpc_co604 > 0 && function_exists('get_transient')) {
+            $wpc_keep604 = [];
+            $wpc_drop604 = 0;
+            foreach ($urls as $wpc_cu604) {
+                $wpc_ck604 = 'wpc_cfp_' . md5((string) $wpc_cu604);
+                if (get_transient($wpc_ck604)) {
+                    $wpc_drop604++;
+                    continue;
+                }
+                set_transient($wpc_ck604, 1, $wpc_co604);
+                $wpc_keep604[] = $wpc_cu604;
+            }
+            if ($wpc_drop604 > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('cf-purge-coalesced', '', '', ['dropped' => $wpc_drop604, 'win' => $wpc_co604]);
+            }
+            if (empty($wpc_keep604)) {
+                return true;
+            }
+            $urls = $wpc_keep604;
+        }
+
         $cf = get_option(WPS_IC_CF);
         if (empty($cf['token']) || empty($cf['zone'])) {
-            return; // Cloudflare not connected → nothing to evict at the edge
+            return; 
         }
 
-        if (!class_exists('WPC_CloudflareAPI')) {
-            @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
-        }
-        if (!class_exists('WPC_CloudflareAPI')) {
-            return;
-        }
+        $send = function () use ($cf, $urls) {
+            try {
+                if (!class_exists('WPC_CloudflareAPI')) {
+                    @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                }
+                if (!class_exists('WPC_CloudflareAPI')) {
+                    return;
+                }
+                $sdk = new WPC_CloudflareAPI($cf['token']);
+                $ok  = true;
 
-        try {
-            $sdk = new WPC_CloudflareAPI($cf['token']);
-            if (method_exists($sdk, 'purgeFilesAsync')) {
-                $sdk->purgeFilesAsync($cf['zone'], $urls);
+
+                $wpc_reset105 = self::cfTagResetOnce($sdk, $cf['zone']);
+                $wpc_tags105 = [];
+                $wpc_prefixes105 = [];
+                $wpc_root_hosts105 = [];
+                foreach ($urls as $wpc_u105) {
+                    if (function_exists('wpc_cf_url_tag')) {
+                        $wpc_tags105[wpc_cf_url_tag($wpc_u105)] = 1;
+                    }
+                    $wpc_pu105 = parse_url((string) $wpc_u105);
+                    $wpc_ph105 = strtolower((string) (isset($wpc_pu105['host']) ? $wpc_pu105['host'] : ''));
+                    $wpc_pp105 = trim((string) (isset($wpc_pu105['path']) ? $wpc_pu105['path'] : ''), '/');
+                    if ($wpc_ph105 !== '' && $wpc_pp105 !== '') {
+                        $wpc_alt105 = (strpos($wpc_ph105, 'www.') === 0) ? substr($wpc_ph105, 4) : ('www.' . $wpc_ph105);
+                        $wpc_prefixes105[$wpc_ph105 . '/' . $wpc_pp105]  = 1;
+                        $wpc_prefixes105[$wpc_alt105 . '/' . $wpc_pp105] = 1;
+                    } elseif ($wpc_ph105 !== '') {
+                        $wpc_root_hosts105[$wpc_ph105] = 1;
+                    }
+                }
+                
+                
+                
+                
+                
+                
+                {
+                    foreach (array_chunk(array_keys($wpc_tags105), 100) as $chunk) {
+                        $res = $sdk->purgeByTags($cf['zone'], $chunk);
+                        $hit = !is_wp_error($res) && !empty($res['success']);
+                        
+                        
+                        if (!$hit && !(is_wp_error($res) && $res->get_error_code() === 'cloudflare_rate_limited')) {
+                            $res = $sdk->purgeByTags($cf['zone'], $chunk);
+                            $hit = !is_wp_error($res) && !empty($res['success']);
+                        }
+                        if (!$hit) {
+                            $ok  = false;
+                            $err = is_wp_error($res) ? $res->get_error_message()
+                                : (is_array($res) && !empty($res['errors'][0]['message']) ? $res['errors'][0]['message'] : 'unknown');
+                            $plog   = get_option('wpc_purge_debug_log', []);
+                            $plog[] = date('Y-m-d H:i:s') . ' | CF tag-purge FAIL (' . count($chunk) . ' tags): ' . substr((string) $err, 0, 120);
+                            update_option('wpc_purge_debug_log', array_slice($plog, -20), false);
+                        }
+                    }
+
+                    foreach (array_chunk(array_keys($wpc_prefixes105), 30) as $chunk) { 
+                        $res = $sdk->purgeByPrefixes($cf['zone'], $chunk);
+                        if (is_wp_error($res) || empty($res['success'])) {
+                            $wpc_perr105 = is_wp_error($res) ? $res->get_error_message()
+                                : (is_array($res) && !empty($res['errors'][0]['message']) ? $res['errors'][0]['message'] : 'unknown');
+                            $plog   = get_option('wpc_purge_debug_log', []);
+                            $plog[] = date('Y-m-d H:i:s') . ' | CF prefix-belt skip: ' . substr((string) $wpc_perr105, 0, 100);
+                            update_option('wpc_purge_debug_log', array_slice($plog, -20), false);
+                            break;
+                        }
+                    }
+
+
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_esc604 = (!$ok || $wpc_reset105 !== '');
+                    if (!$wpc_esc604 && function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('cf-roothost-skipped', '', '', ['n' => count($wpc_root_hosts105)]);
+                    }
+                    if (!empty($wpc_root_hosts105) && $wpc_esc604
+                        && apply_filters('wpc_cf_roothost_escalate', true)
+                        && self::cfUntaggedServesPossible()
+                        && method_exists($sdk, 'purgeByHosts') && !get_transient('wpc_cf_roothost_lock')) {
+                        set_transient('wpc_cf_roothost_lock', 1, 10 * MINUTE_IN_SECONDS);
+                        $wpc_rh105 = [];
+                        foreach (array_keys($wpc_root_hosts105) as $wpc_rhh105) {
+                            $wpc_rh105[$wpc_rhh105] = 1;
+                            $wpc_rh105[(strpos($wpc_rhh105, 'www.') === 0) ? substr($wpc_rhh105, 4) : ('www.' . $wpc_rhh105)] = 1;
+                        }
+                        $sdk->purgeByHosts($cf['zone'], array_keys($wpc_rh105));
+                    }
+                }
+                if ($wpc_reset105 !== '') {
+                    $plog   = get_option('wpc_purge_debug_log', []);
+                    $plog[] = date('Y-m-d H:i:s') . ' | CF tag-transition ' . $wpc_reset105;
+                    update_option('wpc_purge_debug_log', array_slice($plog, -20), false);
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('cf-purge', '', (string) $urls[0], ['n' => count($urls), 'ok' => $ok ? 1 : 0]);
+                }
+                return $ok;
+            } catch (\Throwable $e) {
+                
+                return false;
             }
-        } catch (\Throwable $e) {
-            // Edge purge is best-effort; a CF/SDK hiccup must never break the save.
+        };
+
+        if ($inline) {
+            return $send();
         }
+        register_shutdown_function(function () use ($send) {
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            }
+            $send();
+        });
+    }
+
+
+    public static function cfTagResetOnce($sdk, $zone)
+    {
+        if (get_option('wpc_cf_tagpurge_reset') === 'v1' || get_transient('wpc_cf_tagreset_backoff')) {
+            return '';
+        }
+        
+        
+        $wpc_trf = (int) get_option('wpc_cf_tagreset_fail_at');
+        if ($wpc_trf && (time() - $wpc_trf) < DAY_IN_SECONDS) {
+            return '';
+        }
+        $h = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+        if ($h === '' || !method_exists($sdk, 'purgeByHosts')) {
+            return '';
+        }
+        
+        
+        
+        
+        
+        
+        
+        $wpc_imgh523 = strtolower(trim((string) get_option('ic_custom_cname')));
+        if ($wpc_imgh523 === '') {
+            $wpc_imgh523 = strtolower(trim((string) get_option('ic_cdn_zone_name')));
+        }
+        $wpc_offhost523 = ($wpc_imgh523 !== '' && strpos($wpc_imgh523, $h) === false);
+        if (!$wpc_offhost523 && !apply_filters('wpc_cf_host_purge_when_images_local', false)) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('cf-host-purge-skipped', '', '', ['why' => 'images-on-page-host', 'host' => $h]);
+            }
+            return 'host-reset-skipped';
+        }
+        if (get_transient('wpc_cf_hostpurge_rl523')) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('cf-host-purge-ratelimited', '', '', ['host' => $h]);
+            }
+            return 'host-reset-ratelimited';
+        }
+        set_transient('wpc_cf_hostpurge_rl523', 1, (int) apply_filters('wpc_cf_host_purge_min_interval', HOUR_IN_SECONDS));
+        $alt = (strpos($h, 'www.') === 0) ? substr($h, 4) : ('www.' . $h);
+        $res = $sdk->purgeByHosts($zone, [$h, $alt]);
+        if (!is_wp_error($res) && !empty($res['success'])) {
+            update_option('wpc_cf_tagpurge_reset', 'v1', false);
+            delete_option('wpc_cf_tagreset_fail_at');
+            return 'host-reset';
+        }
+        update_option('wpc_cf_tagreset_fail_at', time(), false);
+        set_transient('wpc_cf_tagreset_backoff', 1, HOUR_IN_SECONDS);
+        return 'host-reset-fail';
+    }
+
+
+    public static function cfUntaggedServesPossible()
+    {
+        
+
+        
+        $risk = defined('WP_ROCKET_VERSION') || defined('W3TC') || defined('WPCACHEHOME')
+            || defined('WPFC_MAIN_PATH') || defined('BREEZE_VERSION') || defined('CE_VERSION')
+            
+            
+            || defined('WPHB_VERSION');
+        if (!$risk) {
+            $settings = get_option(WPS_IC_SETTINGS);
+            
+            
+            
+            $risk = (is_array($settings) && !empty($settings['static-serve']) && (string) $settings['static-serve'] === '1')
+                || get_option('wpc_ttfb_ss_auto') === '1';
+        }
+        return (bool) apply_filters('wpc_cf_untagged_serves_possible', $risk);
+    }
+
+
+    public static function cfPurgeAllHtml($inline = false, $forceHosts = false)
+    {
+        if (function_exists('wpc_purge_request_allowed') && !wpc_purge_request_allowed('all-html')) {
+            if (function_exists('wpc_purge_gate_log604')) { wpc_purge_gate_log604('all-html'); }
+            return null;
+        }
+        $cf = get_option(WPS_IC_CF);
+        if (empty($cf['token']) || empty($cf['zone'])) {
+            return null;
+        }
+        
+        
+
+
+        static $wpc_state105 = ''; 
+        
+        
+        
+        
+        static $wpc_fh105 = false;
+        if ($forceHosts) { $wpc_fh105 = true; }
+        if ($inline && $wpc_state105 === 'sent') {
+            return 'deduped';
+        }
+        if (!$inline && $wpc_state105 !== '') {
+            return true;
+        }
+        $wpc_src105 = self::wpc_purge_src();
+        $wpc_uri105 = isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 60) : '';
+        $send = function () use ($cf, &$wpc_fh105, $wpc_src105, $wpc_uri105) {
+            try {
+                if (!class_exists('WPC_CloudflareAPI')) {
+                    @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                }
+                if (!class_exists('WPC_CloudflareAPI')) {
+                    return false;
+                }
+                $sdk   = new WPC_CloudflareAPI($cf['token']);
+                $reset = self::cfTagResetOnce($sdk, $cf['zone']);
+                $res   = method_exists($sdk, 'purgeByTags') ? $sdk->purgeByTags($cf['zone'], ['wpc-html']) : null;
+                $ok    = !is_wp_error($res) && !empty($res['success']);
+                
+                if (!$ok && $res !== null && !(is_wp_error($res) && $res->get_error_code() === 'cloudflare_rate_limited')) {
+                    $res = $sdk->purgeByTags($cf['zone'], ['wpc-html']);
+                    $ok  = !is_wp_error($res) && !empty($res['success']);
+                }
+                $method  = 'tag';
+                $wpc_h   = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+                $wpc_alt = (strpos($wpc_h, 'www.') === 0) ? substr($wpc_h, 4) : ('www.' . $wpc_h);
+                if (!$ok && method_exists($sdk, 'purgeByHosts')) {
+                    $r2  = $sdk->purgeByHosts($cf['zone'], [$wpc_h, $wpc_alt]);
+                    $ok  = !is_wp_error($r2) && !empty($r2['success']);
+                    $method = 'hosts-fallback';
+                } elseif ($ok && ($wpc_fh105 || self::cfUntaggedServesPossible()) && method_exists($sdk, 'purgeByHosts')) {
+
+
+                    $r3 = $sdk->purgeByHosts($cf['zone'], [$wpc_h, $wpc_alt]);
+                    if (!is_wp_error($r3) && !empty($r3['success'])) {
+                        $method .= '+hosts';
+                    } else {
+                        $method .= '+hosts-FAIL';
+                    }
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('cf-purge-allhtml', '', '', ['ok' => $ok ? 1 : 0, 'method' => $method, 'reset' => $reset, 'src' => $wpc_src105, 'uri' => $wpc_uri105]);
+                }
+                
+                
+                if ($ok) {
+                    update_option('wpc_cf_purge_verified', ['t' => time(), 'm' => $method], false);
+                }
+                return $ok ? ($method . ($reset !== '' ? '+' . $reset : '')) : false;
+            } catch (\Throwable $e) {
+                return false;
+            }
+        };
+        if ($inline) {
+            $wpc_state105 = 'sent';
+            return $send();
+        }
+        $wpc_state105 = 'deferred';
+        $wpc_state_ref = &$wpc_state105;
+        register_shutdown_function(function () use ($send, &$wpc_state_ref) {
+            if ($wpc_state_ref === 'sent') {
+                return;
+            }
+            $wpc_state_ref = 'sent';
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            }
+            $send();
+        });
+        return true;
+    }
+
+
+    public static function wpcHtmlUrlList($cap = 0)
+    {
+        $cap  = $cap > 0 ? (int) $cap : (int) apply_filters('wpc_cf_html_purge_max', 300);
+        $urls = [];
+        $home = rtrim((string) home_url('/'), '/');
+        if ($home !== '') {
+            $urls[$home . '/'] = 1;
+            $urls[$home]       = 1;
+        }
+        $trees = [];
+        if (defined('WPS_IC_CACHE'))    { $trees[] = rtrim(WPS_IC_CACHE, '/') . '/'; }
+        if (defined('WPS_IC_CRITICAL')) { $trees[] = rtrim(WPS_IC_CRITICAL, '/') . '/'; }
+        $canSanitize = class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl');
+        $dropped = 0;
+        foreach ($trees as $tree) {
+            foreach ((array) @glob($tree . '*/url.txt') as $f) {
+                if (count($urls) >= $cap) { $dropped++; continue; }
+                $raw = trim((string) @file_get_contents($f));
+                if ($raw === '') { continue; }
+                $clean = $canSanitize ? (string) wps_ic_url_key::sanitizeSameHostUrl($raw) : '';
+                if ($clean !== '') {
+                    $urls[$clean] = 1;
+                }
+            }
+        }
+        if ($dropped > 0 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cf-scope-capped', '', '', ['kept' => count($urls), 'dropped' => $dropped]);
+        }
+        return array_keys($urls);
     }
 
     public static function purgeCDNUpdate()
     {
-        // Add User Capabilities
+
+
+        if (function_exists('wpc_update_window_open')) {
+            wpc_update_window_open();
+        }
+
+        
         $users = new wps_ic_users();
         $cacheLogic = new wps_ic_cache();
         $cache = new wps_ic_cache_integrations();
@@ -607,25 +980,39 @@ class wps_ic_cache
 
         $cacheLogic->purgeObjectCache();
 
-        $cache::purgeAll(false, true, false, false, false, true); // preserve wp-cio/css on update (cached HTML still references it)
-        $cache::purgeCombinedFiles();
 
-        // Purge HTML Cache
-        $cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-        $cacheLogic::preloadPage(0); // Purge & Preload
+        
+        
+        
+        if (function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_v2_postupdate_purge')) {
+            wp_schedule_single_event(time() + 5, 'wpc_v2_postupdate_purge');
+        }
+        if (function_exists('spawn_cron')) {
+            wpc_spawn_cron();
+        }
+        
+        if (function_exists('wpc_v2_postupdate_purge_shutdown')) {
+            add_action('shutdown', 'wpc_v2_postupdate_purge_shutdown', PHP_INT_MAX);
+        }
+
+
+        $cacheLogic::preloadPage(0); 
 
         $CSSHash = substr(md5(microtime(true)), 0, 6);
         $JSHash = strrev($CSSHash);
 
         $options['css_hash'] = $CSSHash;
         $options['js_hash'] = $JSHash;
+        $options['lazy_hash'] = substr(md5($CSSHash . 'lz'), 0, 10);
 
         if (!class_exists('wps_ic_log')) {
             include_once WPS_IC_DIR . 'classes/log.class.php';
         }
 
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'purgeCdnUpdate');
+        if (class_exists('wps_ic_log')) {
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'purgeCdnUpdate');
+        }
 
         $options['updated_hash'] = time();
         update_option(WPS_IC_OPTIONS, $options);
@@ -634,27 +1021,15 @@ class wps_ic_cache
         delete_option('wps_ic_modified_css_cache');
         delete_option('wps_ic_css_combined_cache');
 
-        // (v7.03.50) NO CDN purge on plugin update/activation. This runs on upgrader_process_complete +
-        // activated_plugin; the old full `action=cdn_purge` here wiped EVERY edge-cached image on every
-        // update — a fleet-wide cold-miss storm (the edge re-probes the slow origin for each image →
-        // PHP-worker saturation → 40-60s pages), the exact failure cf-sdk::purgeFilesAsync documents avoiding.
-        // It's also redundant: the css_hash/js_hash bump above re-stamps every CSS/JS CDN URL with a fresh
-        // ?icv=/?js_icv= (cdn-rewrite.php:575/579) → new cache key → the edge refetches CSS/JS on its own.
-        // Images don't change on a plugin update, so they MUST stay cached. The HTML/object/local caches are
-        // purged above (+ the page-cache fan-out below) — that's all an update needs. Genuine zone changes
-        // still purge the CDN (cname add/remove, the manual purge button) — those are separate paths.
 
-        // Clear cache.
-        if (function_exists('rocket_clean_domain')) {
-            rocket_clean_domain();
-        }
+        
+        
 
-        // Lite Speed
+        
+        
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
-
-        // HummingBird
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
@@ -671,14 +1046,14 @@ class wps_ic_cache
             $url = home_url();
         }
 
-        #$call = wp_remote_post(WPS_IC_PRELOADER_API_URL, ['body' => ['single_url' => $url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']]]);
+        
         $warmup_class = new wps_ic_preload_warmup();
         $warmup_class->cacheLocally($post_id);
     }
 
     public static function updateCSSHash($post_id = 0)
     {
-        // TODO: Sometimes $post_id is ObjectClass, does this fix it? (occurs on plugin manual zip update)
+        
         if (!is_int($post_id) && !is_string($post_id)) {
             $post_id = 0;
         }
@@ -695,7 +1070,7 @@ class wps_ic_cache
             switch_to_blog($current_blog_id);
             $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
-            // Update CSS / JS Hash
+            
             $options['css_hash'] = $CSSHash;
             $options['js_hash'] = $JSHash;
 
@@ -704,24 +1079,26 @@ class wps_ic_cache
                 include_once WPS_IC_DIR . 'classes/log.class.php';
             }
 
-            $log = new wps_ic_log();
-            $log->logCachePurging($oldOptions, $options, 'updateCSSHash-MU');
+            if (class_exists('wps_ic_log')) {
+                $log = new wps_ic_log();
+                $log->logCachePurging($oldOptions, $options, 'updateCSSHash-MU');
+            }
 
             update_option(WPS_IC_OPTIONS, $options);
         } else {
-            // Reset Cache
+            
             $cacheLogic = new wps_ic_cache();
-            $cacheLogic::removeHtmlCacheFiles($post_id); // Purge & Preload
+            $cacheLogic::removeHtmlCacheFiles($post_id); 
 
-            // Preload on plugin update, just 1 time in 3 minutes
+            
             if (!get_transient('wpc_update_css_preload')) {
                 set_transient('wpc_update_css_preload', 'true', 60 * 3);
-                $cacheLogic::preloadPage($post_id); // Purge & Preload => Causing Issue with memory
+                $cacheLogic::preloadPage($post_id); 
             }
 
             $oldOptions = $options = get_option(WPS_IC_OPTIONS);
 
-            // Update CSS / JS Hash
+            
             $options['css_hash'] = $CSSHash;
             $options['js_hash'] = $JSHash;
 
@@ -729,8 +1106,10 @@ class wps_ic_cache
                 include_once WPS_IC_DIR . 'classes/log.class.php';
             }
 
-            $log = new wps_ic_log();
-            $log->logCachePurging($oldOptions, $options, 'updateCSSHash');
+            if (class_exists('wps_ic_log')) {
+                $log = new wps_ic_log();
+                $log->logCachePurging($oldOptions, $options, 'updateCSSHash');
+            }
 
             update_option(WPS_IC_OPTIONS, $options);
         }
@@ -745,18 +1124,18 @@ class wps_ic_cache
                 if ($item != "." && $item != "..") {
                     $itemPath = $folderPath . DIRECTORY_SEPARATOR . $item;
                     if (is_dir($itemPath)) {
-                        // Recursively delete subdirectories and their contents
+                        
                         self::deleteFolder($itemPath);
                     } else {
-                        // Delete files
+                        
                         unlink($itemPath);
                     }
                 }
             }
 
-            // Delete the empty folder
+            
             if (is_dir($folderPath)) {
-                rmdir($folderPath);
+                @rmdir($folderPath);
             }
 
         }
@@ -765,11 +1144,11 @@ class wps_ic_cache
     }
 
 
-    // Store cached file
+    
 
     public static function purge_cache_on_post_changes($new_status, $old_status, $post)
     {
-        // Skip conditions - no purging needed
+        
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
             return;
         }
@@ -781,17 +1160,17 @@ class wps_ic_cache
         }
 
         if ($new_status == 'publish' || ($old_status == 'publish' && $new_status != 'publish')) {
-            // If configured to clear all pages
+            
             if (!empty(self::$purge_rules['post-publish']['all-pages']) && self::$purge_rules['post-publish']['all-pages'] == '1') {
                 self::removeHtmlCacheFiles('all');
-            } // Otherwise, selectively clear based on settings
+            } 
             else {
-                // Clear home page if enabled
+                
                 if (!empty(self::$purge_rules['post-publish']['home-page']) && self::$purge_rules['post-publish']['home-page'] == '1') {
                     self::removeHtmlCacheFiles('home');
                 }
 
-                // Clear archive pages if enabled
+                
                 $cacheHtml = new wps_cacheHtml();
 
                 if (!empty(self::$purge_rules['post-publish']['archive-pages']) && self::$purge_rules['post-publish']['archive-pages'] == '1') {
@@ -803,7 +1182,7 @@ class wps_ic_cache
                     }
                 }
 
-                // Clear archive pages if enabled
+                
                 if (!empty(self::$purge_rules['post-publish']['recent-posts-widget']) && self::$purge_rules['post-publish']['recent-posts-widget'] == '1') {
                     if (!empty(self::$purge_rules['type-lists']['recent-posts-widget'])) {
                         foreach (self::$purge_rules['type-lists']['recent-posts-widget'] as $urlKey) {
@@ -812,7 +1191,7 @@ class wps_ic_cache
                         }
                     }
                 }
-                update_option('wps_ic_purge_rules', self::$purge_rules);
+                update_option('wps_ic_purge_rules', self::$purge_rules, false);
             }
         }
 
@@ -847,8 +1226,10 @@ class wps_ic_cache
                 include_once WPS_IC_DIR . 'classes/log.class.php';
             }
 
-            $log = new wps_ic_log();
-            $log->logCachePurging($oldOptions, $options, 'resetHashes');
+            if (class_exists('wps_ic_log')) {
+                $log = new wps_ic_log();
+                $log->logCachePurging($oldOptions, $options, 'resetHashes');
+            }
 
             update_option(WPS_IC_OPTIONS, $options);
             restore_current_blog();
@@ -862,14 +1243,16 @@ class wps_ic_cache
                 include_once WPS_IC_DIR . 'classes/log.class.php';
             }
 
-            $log = new wps_ic_log();
-            $log->logCachePurging($oldOptions, $options, 'resetHashes');
+            if (class_exists('wps_ic_log')) {
+                $log = new wps_ic_log();
+                $log->logCachePurging($oldOptions, $options, 'resetHashes');
+            }
 
             update_option(WPS_IC_OPTIONS, $options);
         }
     }
 
-    // Check if cache was cleared already
+    
 
     public static function removeCombinedFiles($post_id = 'all', $post = '', $update = '')
     {
@@ -880,7 +1263,7 @@ class wps_ic_cache
         $cacheHtml->removeCombinedFiles($post_id);
     }
 
-    // Mark cache as cleared for this request
+    
 
     public static function removeCriticalFiles($post_id = 'all', $post = '', $update = '')
     {
@@ -891,7 +1274,7 @@ class wps_ic_cache
         $cacheHtml->removeCriticalFiles($post_id);
     }
 
-    // Check if cf cache was cleared already
+    
 
     public function purgeCDN($purgeJS = true)
     {
@@ -914,8 +1297,10 @@ class wps_ic_cache
             include_once WPS_IC_DIR . 'classes/log.class.php';
         }
 
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'purgeCDN');
+        if (class_exists('wps_ic_log')) {
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'purgeCDN');
+        }
 
         $options['updated_hash'] = time();
         update_option(WPS_IC_OPTIONS, $options);
@@ -928,17 +1313,17 @@ class wps_ic_cache
 
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $options['api_key']], ['timeout' => 10]);
 
-        // Clear cache.
+        
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
         }
 
-        // Lite Speed
+        
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
 
-        // HummingBird
+        
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
@@ -946,7 +1331,7 @@ class wps_ic_cache
         delete_transient('wps_ic_purging_cdn');
     }
 
-    // Mark cf cache as cleared for this request
+    
 
     public function is_page_cached($pageID)
     {
@@ -975,9 +1360,9 @@ class wps_ic_cache
         }
     }
 
-    /**
-     * Purge cache when comment is posted (only if approved)
-     */
+    
+
+
     public static function purgeOnCommentPost($comment_id, $approved)
     {
       if ($approved === 1 || $approved === 'approve') {
@@ -988,10 +1373,10 @@ class wps_ic_cache
       }
     }
 
-    /**
-     * Purge cache for any comment action (edit, delete, trash, spam, etc.)
-     * Only purges if comment is/was approved
-     */
+    
+
+
+
     public static function purgeOnCommentAction($comment_id)
     {
       $comment = get_comment($comment_id);
@@ -1000,9 +1385,9 @@ class wps_ic_cache
       }
     }
 
-    /**
-     * Purge cache when comment status changes
-     */
+    
+
+
     public static function purgeOnCommentStatusChange($new_status, $old_status, $comment)
     {
       if ($new_status !== $old_status) {

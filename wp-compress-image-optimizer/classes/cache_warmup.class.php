@@ -1,7 +1,7 @@
 <?php
 
 class wps_ic_cache_warmup{
-//not used
+
 
 	public function run_precache_cron_job() {
 		error_reporting(E_ERROR);
@@ -13,7 +13,7 @@ class wps_ic_cache_warmup{
 		$url_key_class = new wps_ic_url_key();
 		$this->log_precache_action("Starting cache warmup...");
 
-		$failed_pages = 0; // Counter for pages that do not return a 200 status code
+		$failed_pages = 0; 
 
 		if (empty($ids)) {
 			$this->log_precache_action("No pages selected for cache warmup.");
@@ -39,8 +39,10 @@ class wps_ic_cache_warmup{
 				unlink(WPS_IC_CACHE . $urlKey . '/index.html_gzip');
 			}
 
-			// "Call" the site by making an HTTP request
-			$response = wp_remote_get($url, ['timeout' => 0.01]); // set a reasonable timeout
+			
+
+
+			$response = wp_remote_get($url, ['timeout' => 10]);
 
 			if (is_wp_error($response)) {
 				$failed_pages++;
@@ -57,37 +59,35 @@ class wps_ic_cache_warmup{
 	}
 
 	public function add_hooks() {
-		//add_action('init', [$this, 'schedule_precache_cron_job']);
-		//add_action('run_precache_cron_job', [$this, 'run_precache_cron_job']);
-		//add_filter('cron_schedules', [$this, 'add_custom_cron_interval']);
+
+
 	}
 
 	public function schedule_precache_cron_job() {
 		$timestamp = wp_next_scheduled('run_precache_cron_job');
 
-		// Get the current interval in seconds from the option
+		
 		$interval = get_option('wps_ic_cache_interval', 360);
 		$interval_seconds = $interval * 60;
 
 		if ($timestamp) {
 			$crons = _get_cron_array();
 			if (isset($crons[$timestamp]['run_precache_cron_job'])) {
-				$current_cron = reset($crons[$timestamp]['run_precache_cron_job']); // Get the first (and probably only) item
+				$current_cron = reset($crons[$timestamp]['run_precache_cron_job']); 
 				if ($current_cron['interval'] !== $interval_seconds) {
-					// Unschedule the current job
+					
 					wp_unschedule_event($timestamp, 'run_precache_cron_job');
 
-					// Schedule a new job with the correct interval
+					
 					wp_schedule_event(time(), 'wps_ic_cache_cron_interval', 'run_precache_cron_job');
 					$this->log_precache_action("reschedule");
 				}
 			}
 		} else {
-			// If the job isn't scheduled, schedule it
+
 			wp_schedule_event(time(), 'wps_ic_cache_cron_interval', 'run_precache_cron_job');
 		}
 	}
-
 
 
 	public function add_custom_cron_interval($schedules) {

@@ -17,13 +17,13 @@
     $labels_dates = [];
     $limit = 10;
 
-    // Calculate offset
+    
     $item = 0;
     $is_sample_data = false;
 
-    // Live CDN is OFF
+    
     if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
-        // Get Local Data
+        
         if (empty($stats_local)) {
           $statsclass = new wps_ic_stats();
             $stats = $statsclass->fetch_sample_stats();
@@ -34,9 +34,9 @@
             unset($stats->total);
         }
     } else {
-        // Get Live Data
+        
         if (empty($stats_live) || ! $stats_live) {
-            // Sample data
+            
           $statsclass = new wps_ic_stats();
             $stats = $statsclass->fetch_sample_stats();
             $stats = $stats->data;
@@ -81,7 +81,7 @@
         $catpercentage = 0.55;
     }
 
-    // Parse to javascript
+    
     $labels_js = '';
     $biggestY = 0;
     if ($labels) {
@@ -106,7 +106,7 @@
         }
     }
 
-    // Calculate Max
+    
     $biggestY = ceil($biggestY);
     $fig = (int)str_pad('1', 2, '0');
     $maxY = ceil((ceil($biggestY * $fig) / $fig));

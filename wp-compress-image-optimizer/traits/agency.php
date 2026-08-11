@@ -41,7 +41,7 @@ trait wps_ic_agency_trait
         $remoteSiteUrl  = $remoteSettings['site_url']     ?? '';
         $remoteHomeUrl  = $remoteSettings['home_url']     ?? $remoteSiteUrl;
 
-        // Override the static already populated at init time (before filters apply)
+        
         wps_ic::$settings = $settings;
 
         add_filter('pre_option_' . WPS_IC_SETTINGS,   function() use ($settings)    { return $settings; });
@@ -57,8 +57,8 @@ trait wps_ic_agency_trait
         add_filter('pre_option_' . WPS_IC_CF_CNAME,      function() use ($cfCname)       { return $cfCname; });
         add_filter('pre_option_wpc_remote_site_url',     function() use ($remoteSiteUrl) { return $remoteSiteUrl; });
         add_filter('pre_option_wpc_remote_home_url',     function() use ($remoteHomeUrl) { return $remoteHomeUrl; });
-        // Inject remote plan version so templates can gate features correctly (e.g. Woohoo footer)
-        // Read local options now (before the filter is registered) to avoid recursive pre_option trigger
+        
+        
         $localOpts = get_option(WPS_IC_OPTIONS) ?: [];
         add_filter('pre_option_' . WPS_IC_OPTIONS,    function() use ($localOpts, $planVersion) {
             $opts = $localOpts;

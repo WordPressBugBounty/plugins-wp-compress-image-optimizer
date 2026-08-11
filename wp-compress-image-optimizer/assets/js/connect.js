@@ -38,7 +38,7 @@ jQuery(document).ready(function ($) {
                 saveMode(modes_popup);
             },
             onClose: function () {
-                //openConfigurePopup(popup_modal);
+                
             }
         });
     }
@@ -63,7 +63,7 @@ jQuery(document).ready(function ($) {
                 if (response.success) {
                     window.location.reload();
                 } else {
-                    //error?
+                    
                 }
             });
 
@@ -72,9 +72,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Single Checkbox
-     */
+    
+
+
     function hookCheckbox() {
         $('label', '.swal2-content').on('click', function () {
             var parent = $(this).parent();
@@ -87,11 +87,11 @@ jQuery(document).ready(function ($) {
             var beforeValue = $(checkbox).attr('checked');
 
             if (beforeValue == 'checked') {
-                // It was already active, remove checked
+                
                 $(this).removeAttr('checked').prop('checked', false);
                 $(parent).removeClass('active');
             } else {
-                // It's not active, activate
+                
                 $(this).attr('checked', 'checked').prop('checked', true);
                 $(parent).addClass('active');
             }
@@ -117,7 +117,7 @@ jQuery(document).ready(function ($) {
             var checked = $('.form-check-input', '.wpc-popup-option-checkbox').is(':checked');
 
             if (modeSelect == 'safe') {
-                // Safe mode - turn off CDN
+                
                 $('.form-check-input', '.wpc-popup-option-checkbox').removeAttr('checked').prop('checked', false);
             } else {
                 if (!checked) {
@@ -129,6 +129,13 @@ jQuery(document).ready(function ($) {
         });
     }
 
+
+    var wpcConnT0 = 0;
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && wpcConnT0 && (Date.now() - wpcConnT0) > 15000) {
+            window.location.reload();
+        }
+    });
 
     function liteConnectPopup() {
         WPCSwal.fire({
@@ -154,10 +161,10 @@ jQuery(document).ready(function ($) {
                 jQuery('.wps-ic-connect-retry').on('click', function (e) {
                     e.preventDefault();
                     var swal = jQuery('.swal2-container');
-                    // Hide ALL error + loading states
+                    
                     var allStates = jQuery('.wps-ic-site-already-connected, .wps-ic-invalid-apikey, .wps-ic-apikey-in-use, .wps-ic-unable-to-communicate, .wps-ic-loading-container', swal);
                     var form = jQuery('.wps-lite-form-container', swal);
-                    // Hide everything first, then show form once
+                    
                     allStates.hide();
                     form.css('display', 'none').fadeIn(250, function() {
                         jQuery('input[name="apikey"]', swal).val('').focus();
@@ -205,24 +212,35 @@ jQuery(document).ready(function ($) {
                     $(loaderLite).show();
 
 
-                    $.post(ajaxurl, {
-                        action: 'wps_lite_connect',
-                        nonce: nonce,
-                        timeout: 20000
-                    }, function (response) {
-                        if (response.success) {
-                            // Connect
+                    wpcConnT0 = Date.now();
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        timeout: 30000,
+                        data: {
+                            action: 'wps_lite_connect',
+                            nonce: nonce
+                        }
+                    }).done(function (response) {
+                        wpcConnT0 = 0;
+                        if (response && response.success) {
+                            
+                            wpcConnT0 = Date.now() - 16000;
                             $('.wps-ic-connect-inner').addClass('padded');
                             WPCSwal.close();
                             window.location.reload();
                         } else {
-                            if (response.data.msg == 'api-issue') {
-                                $(loader).hide();
-                                $(loaderLite).hide();
-                                $(form_container).hide();
-                                $(unableToCommunicate).show();
-                            }
+                            $(loader).hide();
+                            $(loaderLite).hide();
+                            $(form_container).hide();
+                            $(unableToCommunicate).show();
                         }
+                    }).fail(function () {
+                        wpcConnT0 = 0;
+                        $(loader).hide();
+                        $(loaderLite).hide();
+                        $(form_container).hide();
+                        $(unableToCommunicate).show();
                     });
 
                     return false;
@@ -236,7 +254,7 @@ jQuery(document).ready(function ($) {
 
                     if (apikey == '' || typeof apikey == "undefined") {
                         $('.wps-ic-lite-input-container', swal_container).addClass('wpc-error');
-                        //$('.wps-ic-lite-input-field-error', swal_container).show();
+                        
                         return false;
                     }
 
@@ -251,14 +269,22 @@ jQuery(document).ready(function ($) {
                     $(loaderLite).hide();
                     $(tests).hide();
 
-                    $.post(ajaxurl, {
-                        action: 'wps_ic_live_connect',
-                        apikey: apikey,
-                        nonce: nonce,
-                        timeout: 60000
-                    }, function (response) {
-                        if (response.success) {
-                            // Inject full-page overlay so Lite dashboard never shows during reload
+                    wpcConnT0 = Date.now();
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        timeout: 90000,
+                        data: {
+                            action: 'wps_ic_live_connect',
+                            apikey: apikey,
+                            nonce: nonce
+                        }
+                    }).done(function (response) {
+                        wpcConnT0 = 0;
+                        var wpcMsg = (response && response.data && response.data.msg) ? response.data.msg : '';
+                        if (response && response.success) {
+                            wpcConnT0 = Date.now() - 16000;
+                            
                             $('body').append(
                                 '<div id="wpc-activation-overlay" style="position:fixed;inset:0;z-index:999999;background:#fff;display:flex;align-items:center;justify-content:center;text-align:center;">' +
                                 '<div>' +
@@ -272,25 +298,32 @@ jQuery(document).ready(function ($) {
                             window.location.reload();
                         } else {
 
-                            // Hide loading + form, keep left illustration visible
+                            
                             $(loader).hide();
                             $(loaderLite).hide();
                             $(form_container).hide();
                             $(tests).hide();
 
-                            if (response.data.msg == 'site-already-connected') {
+                            if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
-                            } else if (response.data.msg == 'api-issue') {
+                            } else if (wpcMsg == 'api-issue' || wpcMsg == '') {
                                 $(unableToCommunicate).show();
-                            } else if (response.data.msg == 'apikey-in-use') {
+                            } else if (wpcMsg == 'apikey-in-use') {
                                 $(apikeyInUse).show();
                             } else {
                                 $(error_message_text).show();
                             }
 
-                            // $('.wps-ic-connect-retry', swal_container).bind('click');
+                            
 
                         }
+                    }).fail(function () {
+                        wpcConnT0 = 0;
+                        $(loader).hide();
+                        $(loaderLite).hide();
+                        $(form_container).hide();
+                        $(tests).hide();
+                        $(unableToCommunicate).show();
                     });
 
                     return false;

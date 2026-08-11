@@ -1,10 +1,10 @@
 <?php
 
 
-/**
- * Class - Config
- * Handles Configuration Files
- */
+
+
+
+
 class wps_ic_config
 {
 
@@ -80,7 +80,6 @@ class wps_ic_config
 
     return false;
   }
-
 
 
 }

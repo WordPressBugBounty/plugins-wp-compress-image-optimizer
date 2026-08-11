@@ -2,7 +2,7 @@
 
 global $wps_ic, $wpdb;
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -29,7 +29,7 @@ if (!empty($_GET['stopBulk'])) {
         delete_option('wps_ic_bulk_process');
         set_transient('wps_ic_bulk_done', true, 60);
 
-        // Delete all transients
+        
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('wps_ic_compress_') . '%'));
         wp_send_json_success();
     }
@@ -66,11 +66,11 @@ if (!empty($_GET['selectModes'])) {
     $hideSidebar = 'style="display:none;"';
     $modes = new wps_ic_modes();
     $modes->showPopup();
-    #$modes->triggerPopup();
-    #echo '<a href="#" class="wpc-select-modes">Select modes</a>';
+    
+    
 }
 
-// Generate Critical CSS
+
 if (!empty($_GET['generate_crit'])) {
     $page = sanitize_text_field($_GET['generate_crit']);
 
@@ -111,9 +111,9 @@ if (!empty($_GET['show_hidden_menus']) && !(defined('WPS_IC_AGENCY') && WPS_IC_A
     update_option('wpc_show_hidden_menus', sanitize_text_field($_GET['show_hidden_menus']));
 }
 
-// Save Settings
+
 if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
-    // Debug tool font-display save (standalone form with name="fonts" submit button)
+    
     $options = get_option(WPS_IC_SETTINGS);
     $options['font-display'] = sanitize_text_field($_POST['options']['font-display']);
     update_option(WPS_IC_SETTINGS, $options);
@@ -129,7 +129,7 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
     $submittedOptions = $_POST['options'];
     $optimizatonQuality = 'lossless';
 
-    // EU Routing — call API when changed
+    
     $options = get_option(WPS_IC_SETTINGS);
     if (isset($submittedOptions['eu-routing']) && ($options['eu-routing'] ?? '0') !== $submittedOptions['eu-routing']) {
         $region = 'all';
@@ -144,7 +144,7 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
             $submittedOptions['eu-routing'] = $options['eu-routing'] ?? '0';
         }
     }
-    // Ensure eu-routing defaults to '0' if checkbox unchecked (not submitted)
+    
     if (!isset($submittedOptions['eu-routing'])) {
         $submittedOptions['eu-routing'] = '0';
     }
@@ -168,7 +168,7 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
     $options = $options_class->setMissingSettings($submittedOptions);
 
 
-    $wpc_livecdn_old = (string) (get_option(WPS_IC_SETTINGS)['live-cdn'] ?? ''); // v7.01.86 — Fix C: detect a live-cdn flip on the general settings save
+    $wpc_livecdn_old = (string) (get_option(WPS_IC_SETTINGS)['live-cdn'] ?? '');
 
     if (isset($options['serve'])) {
         $cdnEnabled = '0';
@@ -182,15 +182,15 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
         $options['live-cdn'] = $cdnEnabled;
     }
 
-    // Get Purge List
+    
     $purgeList = $options_class->getPurgeList($options);
 
-    // For Lite Settings
+    
     if (!empty($options['generate_adaptive']) && !empty($options['retina']) && !empty($options['generate_webp'])) {
         $options['imagesPreset'] = '1';
     }
 
-    // For Lite Settings
+    
     if (!empty($options['css']) || !empty($options['js']) || !empty($options['fonts']) || !empty($options['serve']['jpg']) && !empty($options['serve']['gif']) || !empty($options['serve']['png']) || !empty($options['serve']['svg'])) {
         $options['cdnAll'] = '1';
     }
@@ -198,33 +198,34 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
     update_option(WPS_IC_SETTINGS, $options);
     $cache::purgeAll(false, false, false, false, true);
 
-    // v7.01.86 — Fix C: a live-cdn flip re-routes every image URL. purgeAll above clears WPC HTML +
-    // Varnish but NOT the CF edge directly (the fan-out lags a just-changed state). Fire the full
-    // fleet purge (incl. direct CF + WPE) on a transition so no manual ?v= is ever needed.
+
+    
+
     if ($wpc_livecdn_old !== (string) ($options['live-cdn'] ?? '') && class_exists('wps_ic_ajax')) {
         wps_ic_ajax::wpc_fleet_frontend_purge('settings save');
     }
 
-    //To edit what setting purges what, go to wps_ic_options->__construct()
+    
     if (in_array('combine', $purgeList)) {
         $cache::purgeCombinedFiles();
     }
 
     if (in_array('critical', $purgeList)) {
+        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
         $cache::purgeCriticalFiles();
+    }
     }
 
     if (in_array('cdn', $purgeList)) {
         $cacheLogic = new wps_ic_cache();
         $cacheLogic->purgeCDN(false);
+        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead('all')) {
         $cache::purgeCriticalFiles();
-        //$cache::purgePreloads();
+    }
+        
     }
 
-    // v7.08.2 — Image-delivery settings altered HTML output (fetchpriority,
-    // srcset, lazy attributes, picture wrap shape). Cached pages are stale —
-    // purge WPC's own HTML cache + Breeze/Varnish/Cloudflare via the
-    // canonical purger so the next render rebuilds with new rules.
+
     if (in_array('html', $purgeList)) {
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all');
@@ -240,24 +241,24 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
-            // Modify HTAccess
-            #$htacces->checkHtaccess();
+            
+            
         } else {
             $htacces->removeHtaccessRules();
         }
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(true);
         $htacces->setAdvancedCache();
 
         $this->cacheLogic = new wps_ic_cache();
-        $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-        $this->cacheLogic::preloadPage(0); // Purge & Preload
+        $this->cacheLogic::removeHtmlCacheFiles(0); 
+        $this->cacheLogic::preloadPage(0); 
     } else {
-        // Modify HTAccess
+        
         $htacces->removeHtaccessRules();
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(false);
         $htacces->removeAdvancedCache();
     }
@@ -266,7 +267,7 @@ if (!empty($_POST['options']['font-display']) && isset($_POST['fonts'])) {
     if (!empty($options['live-cdn']) && $options['live-cdn'] == 1) {
         $htacces->removeWebpReplace();
     } else if (!empty($options['htaccess-webp-replace']) && $options['htaccess-webp-replace'] == '1') {
-        $htacces->addWebpReplace(); // Should be add webp
+        $htacces->addWebpReplace(); 
     } else {
         $htacces->removeWebpReplace();
     }
@@ -337,16 +338,16 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 
-///CF integration
+
 $cf = get_option(WPS_IC_CF);
 if (!empty($_GET['debugCF'])) {
-    #var_dump($cf);
+    
 }
 
 if (!empty($cf)) {
     $cfsdk = new WPC_CloudflareAPI($cf['token']);
 
-    // Initialize settings with defaults if not set
+    
     if (!isset($cf['settings'])) {
         $cf['settings'] = ['assets' => '1', 'edge-cache' => 'all', 'cdn' => '1'];
         update_option(WPS_IC_CF, $cf);
@@ -355,7 +356,7 @@ if (!empty($cf)) {
     if ($cf['settings']['assets'] == '1' && $cf['settings']['cdn'] == '0') {
         $allowLive = false;
 
-        // Save CDN state before disabling (only if not already saved)
+        
         if (!get_transient('wpc_cdn_backup')) {
             $cdnBackup = [
                 'serve' => $settings['serve'],
@@ -378,7 +379,7 @@ if (!empty($cf)) {
 
         update_option(WPS_IC_SETTINGS, $settings);
     } else {
-        // CF Static Assets off or CF CDN on — restore saved CDN state if available
+        
         $cdnBackup = get_transient('wpc_cdn_backup');
         if (!empty($cdnBackup)) {
             if (isset($cdnBackup['serve'])) $settings['serve'] = $cdnBackup['serve'];
@@ -392,26 +393,26 @@ if (!empty($cf)) {
     }
 
 
-    // Check if this is a form submission and CF settings changed
+    
     if (!empty($_POST['options'])) {
         $submittedOptions = $_POST['options'];
 
-        // Get new CF settings from submitted options
+        
         $new_assets = isset($submittedOptions['cf']['assets']) && $submittedOptions['cf']['assets'] == '1' ? '1' : '0';
         $new_edge_cache = isset($submittedOptions['cf']['edge-cache']) ? $submittedOptions['cf']['edge-cache'] : 'home';
         $new_cdn = isset($submittedOptions['cf']['cdn']) && $submittedOptions['cf']['cdn'] == '1' ? '1' : '0';
 
-        // Check if settings changed
+        
         $cf_settings_changed = ($cf['settings']['assets'] != $new_assets || $cf['settings']['edge-cache'] != $new_edge_cache || $cf['settings']['cdn'] != $new_cdn);
 
         if ($cf_settings_changed) {
-            // Initialize error collection
+            
             $error_messages = [];
             $new_cf_settings = $cf['settings'];
 
-            // Handle CDN DNS record first
+            
             if ($new_cdn == '1' && $cf['settings']['cdn'] != '1') {
-                //DNS nameserver check
+                
                 $url = add_query_arg(['cfDNSCheck' => 'true', 'host' => $cf['zoneName'],], 'https://frankfurt.zapwp.net/');
 
                 $response = wp_remote_get($url, ['timeout' => 15]);
@@ -439,23 +440,32 @@ if (!empty($cf)) {
                 $new_cf_settings['cdn'] = $new_cdn;
             }
 
-            // Test the cache config update
+            
             $staticAssetsEnabled = $new_assets == '1';
             $htmlCacheMode = $new_edge_cache;
 
             $result = $cfsdk->configureCF($htmlCacheMode, $staticAssetsEnabled);
 
-            // Ensure CDN bypass rule exists on settings save
+            
             $cfBypassSettings = get_option(WPS_IC_CF);
             if (!empty($cfBypassSettings['zone'])) {
                 $cfsdk->addCdnBypassRule($cfBypassSettings['zone']);
-                // v7.01.71 — re-assert respect-origin on the static-assets rule AFTER the
-                // configureCF relay (which re-creates it backend-side, possibly with the old
-                // 30d override). PATCH runs last → respect-origin wins on every save.
+
+
                 $cfsdk->patchStaticAssetsRespectOrigin($cfBypassSettings['zone']);
+
+                if (method_exists($cfsdk, 'patchHtmlRulesRespectOrigin')) {
+                    $cfsdk->patchHtmlRulesRespectOrigin($cfBypassSettings['zone']);
+                }
+
+
+                if (!get_option('wpc_cf_purge_verified') && function_exists('wp_schedule_single_event')
+                    && !wp_next_scheduled('wpc_cf_selftest')) {
+                    wp_schedule_single_event(time() + 45, 'wpc_cf_selftest');
+                }
             }
 
-            // Check for errors in the result
+            
             if (isset($result['static']) && is_wp_error($result['static'])) {
                 $formatted_error = $cfsdk->formatError($result['static'], 'Static Assets', 'Zone - Cache Rules - Edit');
                 if ($formatted_error) {
@@ -490,29 +500,21 @@ if (!empty($cf)) {
                 }
             }
 
-            // Combine all errors with line breaks
+            
             if (!empty($error_messages)) {
                 $cf_error_message = implode('<br><br>', $error_messages);
                 $cf_has_error = true;
             }
 
-            // Update settings with successful changes
+            
             $cf = get_option(WPS_IC_CF);
             $cf['settings'] = $new_cf_settings;
             update_option(WPS_IC_CF, $cf);
 
-            // v7.01.85 — forcePurge=true + Varnish: a CF toggle changes front-end delivery, so
-            // bypass the dev-mode/purge-hooks-off bail (the old conditional purgeAll(false,false,
-            // false,false) silently no-op'd on many sites). Deduped per-request if a forced
-            // purgeAll already ran this request (e.g. the general save) — no double work.
+
             $cache::purgeAll(false, true, false, false, true);
 
-            // v7.01.85 — a CF Real-Time/CDN toggle re-routes emitted image URLs but writes only
-            // WPS_IC_CF, so neither the WPS_IC_SETTINGS delivery-change hook nor the purge fan-out
-            // reliably reaches the CF EDGE (registration lags a just-changed CF state). Fire the
-            // CF edge purge DIRECTLY (BLOCKING, mirrors the canonical idiom in ajax.class.php) —
-            // this was the classicpoolandspa staleness root cause ("needed ?v="). $cf is the value
-            // just written above; gated by $cf_settings_changed so it fires only on a real change.
+
             if (!empty($cf['token']) && !empty($cf['zone'])) {
                 if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR')) {
                     @include_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php';
@@ -602,7 +604,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                         </div>
                         <?php
                         if (!$showAdvanced) {
-                            // Preset Modes
+                            
                             $preset_config = get_option(WPS_IC_PRESET);
                             $preset = ['recommended' => __('Recommended Mode', WPS_IC_TEXTDOMAIN), 'safe' => __('Safe Mode', WPS_IC_TEXTDOMAIN), 'aggressive' => __('Aggressive Mode', WPS_IC_TEXTDOMAIN), 'custom' => __('Custom', WPS_IC_TEXTDOMAIN)];
 
@@ -711,25 +713,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                     </a>
 
                                     <?php
-                                    /*
-                                    $preload_class = new wps_ic_preload_warmup();
-                                    $pagesToPreload = $preload_class->getPagesToOptimize();
-                                    if (!empty($preload_class->get_optimization_status())) { ?>
-                                        <script>
-                                            jQuery('.wpc-page-optimizations-running').show();
-                                        </script>
-                                    <?php
-                                    } else if ($pagesToPreload['unoptimized'] > 0) { ?>
-                                        <script>
-                                            jQuery('.wpc-start-optimizations').show();
-                                        </script>
-                                    <?php
-                                    } else { ?>
-                                        <script>
-                                            jQuery('.wpc-optimization-complete').show();
-                                        </script>
-                                      <?php
-                                    } */ ?>
+                                     ?>
                                 </div>
                                 <?php
                                 $localOptimizationStatus = '';
@@ -990,8 +974,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                             </ul>
                         </div>
                         <!-- Tab List End -->
-                        <?php // (v7.03.60) Dev easter egg: 5 clicks on the Export/Import ICON BOX toggles the hidden
-                        // debug menus (?show_hidden_menus). Non-agency only, mirroring the server-side gate at the top. ?>
+                        <?php
+                        ?>
                         <?php if (!(defined('WPS_IC_AGENCY') && WPS_IC_AGENCY)) { ?>
                         <script type="text/javascript">
                         (function () {
@@ -1028,9 +1012,15 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             </div>
 
                                             <div class="wpc-settings-content-inner">
+                                                <?php include WPS_IC_DIR . 'templates/admin/partials/v4/optimize-advisory.php'; ?>
+                                            </div>
+
+                                            <div class="wpc-settings-content-inner">
                                                 <div class="wpc-rounded-box wpc-rounded-box-full">
                                                     <?php
-                                                    if ($cf) {
+                                                    if ($gui::vitalsHasData()) {
+                                                        echo $gui::vitalsGraph();
+                                                    } elseif ($cf) {
                                                         echo $gui::CFGraph();
                                                     } else {
                                                         echo $gui::usageGraph();
@@ -1072,10 +1062,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         <div class="wpc-items-list-row real-time-optimization">
 
                                             <?php
-                                            // v7.01.21 — Consolidated 7 → 4 tiles (Images / CSS / JS / Fonts). The single
-                                            // "Images" tile binds to serve[jpg] but drives ALL image formats — png/gif/svg
-                                            // are mirrored from it in the batch save (ajax.class.php). Cleaner + maps to how
-                                            // users actually reason ("images", not "jpg vs png vs gif vs svg").
+
+
                                             echo $gui::iconCheckBox(__('Images', WPS_IC_TEXTDOMAIN), 'cdn-delivery/images.svg', ['serve', 'jpg'], $cdnLocked); ?>
                                             <?php
                                             echo $gui::iconCheckBox(__('CSS', WPS_IC_TEXTDOMAIN), 'cdn-delivery/css.svg', 'css', $cdnLocked); ?>
@@ -1091,7 +1079,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         </div>
 
                                         <?php
-                                        #echo $gui::iconCheckBox('JPG', 'cdn-delivery/jpg.svg', 'jpg'); ?>
+                                        ?>
 
                                     </div>
 
@@ -1139,8 +1127,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Resize by Incoming Device', WPS_IC_TEXTDOMAIN), __('Serve the ideal image based on the visitor\'s device to reduce file sizes, improve load times, and offer a better experience.', WPS_IC_TEXTDOMAIN), false, '0', 'generate_adaptive', $adaptiveLocked, 'right', 'exclude-adaptive-popup'); ?>
 
-                                            <?php // WebP / Use-Picture-Tags / Smart-AVIF / Modern-Image-Delivery consolidated into the
-                                            // single auto-verified "Next-Gen Images" card below (WPC_Delivery_Resolver). ?>
+                                            <?php 
+                                            ?>
 
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Serve Retina Images', WPS_IC_TEXTDOMAIN), __('Deliver higher-resolution retina images so that your images look great on larger screens.', WPS_IC_TEXTDOMAIN), false, '0', 'retina', $adaptiveLocked, 'right'); ?>
@@ -1151,13 +1139,13 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <?php
                                             echo $gui::checkboxDescription_v4(__('Optimize LCP Images', WPS_IC_TEXTDOMAIN), __('Serve a responsive srcset for above-the-fold images so phones download mobile-sized variants instead of the full-size original. Improves LCP and "Properly size images" PageSpeed audits.', WPS_IC_TEXTDOMAIN), false, '0', 'optimize-lcp', false, 'right', false, false, 'left', 'BETA'); ?>
 
-                                            <?php // 'Modern Image Delivery' folded into the auto-verified resolver (Next-Gen Images card). ?>
+                                            <?php ?>
 
                                         </div>
 
                                     </div>
 
-                                    <?php // ─── Next-Gen Images — one control + auto-verified delivery status ─────── ?>
+                                    <?php ?>
                                     <div class="wpc-tab-content-box wpc-card-rows wpc-perf-section" id="nextgen-images">
                                         <?php echo $gui::checkboxTabTitle(
                                             __('Next-Gen Images', WPS_IC_TEXTDOMAIN),
@@ -1232,7 +1220,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         </div>
 
                                         <?php
-                                        // Local Image Optimization — preset detection
+                                        
                                         $webpActive = (!empty($gui::$options['generate_webp']) && $gui::$options['generate_webp'] == '1');
                                         $avifActive = (!empty($gui::$options['picture_avif']) && $gui::$options['picture_avif'] == '1');
 
@@ -1315,7 +1303,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                         </div>
                                                         <?php
                                                         $backupVal = isset($gui::$options['backup']) ? $gui::$options['backup'] : 'full';
-                                                        // Map legacy values
+                                                        
                                                         if ($backupVal === 'local' || $backupVal === 'local-cloud') $backupVal = 'full';
                                                         $backupOptions = [
                                                             'full' => [
@@ -1414,9 +1402,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                     </div>
 
                                                     <?php
-                                                    // v7.02 — Optimization mode dropdown. Matches the Backup Originals
-                                                    // pattern: per-option label + chip + tooltip-style description
-                                                    // INSIDE the dropdown menu (not next to the trigger).
+
+
                                                     $opt_mode = function_exists('wpc_get_optimization_mode')
                                                         ? wpc_get_optimization_mode()
                                                         : 'legacy';
@@ -1433,8 +1420,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             'chipClass' => 'wpc-chip--success',
                                                             'tip'   => __('Compresses all variants when an image is uploaded. Best when most uploaded images get used on the site.', WPS_IC_TEXTDOMAIN),
                                                         ],
-                                                        // v7.08.33 — lazy_full + lazy_smart hidden from the picker (kept in
-                                                        // the map so an install already on one still renders a sane label).
+
+
                                                         'lazy_full' => [
                                                             'label' => __('Lazy on First View', WPS_IC_TEXTDOMAIN),
                                                             'chip'  => 'Saves Storage',
@@ -1449,7 +1436,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             'tip'   => __('Per-variant on-demand. Only the exact widths/formats real visitors request get encoded. Smallest storage footprint.', WPS_IC_TEXTDOMAIN),
                                                             'hidden' => true,
                                                         ],
-                                                        // v7.08.33 — "CDN Lazy" surfaced as the headline "Smart" mode.
+
                                                         'lazy_cdn' => [
                                                             'label' => __('Smart Delivery', WPS_IC_TEXTDOMAIN),
                                                             'chip'  => 'Beta',
@@ -1474,9 +1461,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             <div class="wpc-custom-dropdown-menu">
                                                                 <?php foreach ($opt_mode_options as $val => $opt) : ?>
                                                                     <?php
-                                                                    // v7.08.33 — Skip hidden modes (lazy_full / lazy_smart) unless the
-                                                                    // install is currently ON that mode (then still show it so the user
-                                                                    // isn't stranded with a blank selection + can switch away).
+
+
                                                                     if (!empty($opt['hidden']) && $opt_mode !== $val) continue;
                                                                     ?>
                                                                     <div class="wpc-custom-dropdown-item<?php echo $opt_mode === $val ? ' wpc-active' : ''; ?>" data-value="<?php echo esc_attr($val); ?>">
@@ -1495,11 +1481,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                     </div>
 
                                                     <?php
-                                                    // v7.01.94 — REGIME B: Single-URL Image Format. Controls the format for
-                                                    // NON-<picture> single-URL image delivery (Elementor slideshow CSS-bg, CSS
-                                                    // background:url(), JS/lazy data-src, bare <img>). Auto = same-ext safe floor
-                                                    // that auto-upgrades to negotiated WebP only where the edge is proven to
-                                                    // Accept-negotiate (Bunny / witnessed CF). <picture> AVIF/WebP is unaffected.
+
+
                                                     $single_url_fmt = (isset($gui::$options['single-url-image-format']) && $gui::$options['single-url-image-format'] !== '') ? (string) $gui::$options['single-url-image-format'] : 'auto';
                                                     if (!in_array($single_url_fmt, ['auto', 'same-ext', 'webp', 'avif'], true)) $single_url_fmt = 'auto';
                                                     $fmt_options = [
@@ -1540,13 +1523,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                     </div>
 
                                                     <?php
-                                                    // v7.08.33 — The separate "Auto-Optimize on Upload" toggle is REMOVED.
-                                                    // The "Optimization Strategy" dropdown is now the single source of truth:
-                                                    // selecting "On Upload" (mode 'legacy') IS auto-optimize-on-upload. Having
-                                                    // both a strategy dropdown AND a redundant toggle was confusing (the OR-gate
-                                                    // meant the dropdown already controlled it). We still emit the legacy
-                                                    // `on-upload` option as a hidden field MIRRORED to the dropdown, so any
-                                                    // legacy consumer of that flag stays consistent with the chosen strategy.
+
+
                                                     $on_upload_mirror = ($opt_mode === 'legacy') ? '1' : '0';
                                                     echo '<input type="hidden" name="options[on-upload]" value="' . esc_attr($on_upload_mirror) . '">';
                                                     ?>
@@ -1661,6 +1639,9 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             echo $gui::checkboxDescription_v4(__('Show Title in Admin Bar', WPS_IC_TEXTDOMAIN), __('Display the plugin name next to the icon in the WordPress admin toolbar.', WPS_IC_TEXTDOMAIN), false, '0', ['status', 'show_admin_bar_title'], false, 'right'); ?>
 
                                             <?php
+                                            echo $gui::checkboxDescription_v4(__('Show in Main Sidebar', WPS_IC_TEXTDOMAIN), __('Show the plugin as its own item in the WordPress sidebar instead of under Settings.', WPS_IC_TEXTDOMAIN), false, '0', ['status', 'top_level_menu'], false, 'right'); ?>
+
+                                            <?php
                                             echo $gui::checkboxDescription_v4(__('Hide Cache Status', WPS_IC_TEXTDOMAIN), __('Hide the cache status indicator from the admin bar on each page.', WPS_IC_TEXTDOMAIN), false, '0', ['status', 'hide_cache_status'], false, 'right'); ?>
 
                                             <?php
@@ -1687,7 +1668,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         $users = new wps_ic_users();
                                         $roles = $users->getRoles(['skip_admin' => true]);
 
-                                        // Permission definitions
+                                        
                                         $permissions = [
                                             'purge' => [
                                                 'label' => __('Purge', WPS_IC_TEXTDOMAIN),
@@ -1703,7 +1684,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             ],
                                         ];
 
-                                        // Role avatar colors
+                                        
                                         $roleColors = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b'];
 
                                         if (!empty($roles)) {
@@ -1811,7 +1792,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         <div class="wpc-perf-grid wpc-perf-grid-single">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4(__('Optimize CSS', WPS_IC_TEXTDOMAIN), __('Automatically extracts critical styles and removes render-blocking CSS for instant page rendering.', WPS_IC_TEXTDOMAIN), '', '', ['critical', 'css'], $cssLocked, '1', 'exclude-critical-css', false, '', $cssEnabled); ?>
+                                            echo $gui::checkboxDescription_v4(__('Optimize CSS', WPS_IC_TEXTDOMAIN), __('Extracts critical styles, removes render-blocking CSS, and serves a render-measured Used-CSS stylesheet per template — the full original stylesheets load quietly after boot as a safety net. Self-tuning: any part that does not measurably help a site steps back automatically.', WPS_IC_TEXTDOMAIN), '', '', ['critical', 'css'], $cssLocked, '1', 'exclude-critical-css', false, '', $cssEnabled); ?>
 
                                         </div>
 
@@ -1838,7 +1819,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                         <div class="wpc-perf-grid wpc-perf-grid-single">
 
                                             <?php
-                                            echo $gui::checkboxDescription_v4(__('Optimize JavaScript', WPS_IC_TEXTDOMAIN), __('Automatically delays non-essential scripts so your pages load and respond faster.', WPS_IC_TEXTDOMAIN), false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
+                                            echo $gui::checkboxDescription_v4(__('Optimize JavaScript', WPS_IC_TEXTDOMAIN), __('Delays non-essential scripts and replays them in exact page order on first interaction, so pages load faster and scripts can never run out of sync. Uses a plugin-managed loader with built-in error reporting.', WPS_IC_TEXTDOMAIN), false, 'delay-js', 'delay-js-v2', $delayLocked, 'right', 'exclude-js-delay-v2', false, '', $delayEnabled); ?>
 
                                         </div>
 
@@ -1875,32 +1856,65 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <div class="wpc-other-opt-grid">
                                                 <?php
                                                 echo $gui::checkboxDescription_v4(__('Lazy Load iFrames', WPS_IC_TEXTDOMAIN), '', false, '0', 'iframe-lazy', false, 'right', '');
-                                                echo $gui::checkboxDescription_v4(__('Remove srcset', WPS_IC_TEXTDOMAIN), '', false, '0', 'remove-srcset', false, 'right');
-                                                echo $gui::checkboxDescription_v4(__('Add Image Sizes', WPS_IC_TEXTDOMAIN), '', false, false, 'add-image-sizes', false, 'right', false, false, '', true);
-                                                // Right-size lazy images: adds sizes="auto" to lazy <img>s so the browser downloads the
-                                                // size that actually fits the layout (kills the gallery/grid over-fetch). Aspect-guarded
-                                                // (never distorts a mismatched-attr image) + lazy-only (sliders/LCP untouched). Default OFF,
-                                                // BETA — verify in a browser before relying on it. See AUTO-SIZES-STATUS.md.
-                                                echo $gui::checkboxDescription_v4(__('Right-size Lazy Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'lazy-auto-sizes', false, 'right', false, false, '', 'BETA');
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('remove-srcset'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Remove srcset', WPS_IC_TEXTDOMAIN), '', false, '0', 'remove-srcset', false, 'right');
+                                                }
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('add-image-sizes'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Add Image Sizes', WPS_IC_TEXTDOMAIN), '', false, false, 'add-image-sizes', false, 'right', false, false, '', true);
+                                                }
+
+
+                                                echo $gui::checkboxDescription_v4(__('Right-size Lazy Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'lazy-auto-sizes', false, 'right', false, false, '');
                                                 echo $gui::checkboxDescription_v4(__('Retina in srcset', WPS_IC_TEXTDOMAIN), '', false, false, 'retina-in-srcset', false, 'right', false, false, '');
                                                 echo $gui::checkboxDescription_v4(__('Natural AVIF Sources', WPS_IC_TEXTDOMAIN), '', false, '0', 'avif-natural-source', false, 'right', '');
-                                                // (v7.10.04.4) Force Natural URLs — emit clean natural CDN URLs instead of the /q:i/
-                                                // transform form even where the auto-witness stays conservative (e.g. a vary-blind
-                                                // Cloudflare zone). Wired into wpc_force_natural() alongside the WPC_FORCE_NATURAL
-                                                // constant + filter. Only safe when the CDN serves the requested format deterministically.
-                                                echo $gui::checkboxDescription_v4(__('Force Natural URLs', WPS_IC_TEXTDOMAIN), __('Emit clean natural CDN URLs instead of the /q:i/ transform form, even where the auto-detection stays conservative. Only enable when your CDN serves the requested format deterministically (e.g. a Cloudflare zone that returns webp for a .webp URL).', WPS_IC_TEXTDOMAIN), false, '0', 'force-natural', false, 'right', false, false, '', 'BETA');
+
+
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('force-natural'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Force Natural URLs', WPS_IC_TEXTDOMAIN), __('Emit clean natural CDN URLs instead of the /q:i/ transform form, even where the auto-detection stays conservative. Only enable when your CDN serves the requested format deterministically (e.g. a Cloudflare zone that returns webp for a .webp URL).', WPS_IC_TEXTDOMAIN), false, '0', 'force-natural', false, 'right', false, false, '', 'BETA');
+                                                }
+
+
+                                                $wpc_ss_row = $gui::checkboxDescription_v4(__('Advanced Cache', WPS_IC_TEXTDOMAIN), __('Serve cached pages straight from Apache/LiteSpeed with ZERO PHP for the fastest possible TTFB. On enable it writes .htaccess rules and self-tests them — if your host can\'t serve static (e.g. nginx), it automatically reverts to the normal cache. Requires page caching to be on.', WPS_IC_TEXTDOMAIN), false, '0', 'static-serve', false, 'right', false, false, '');
+                                            $wpc_ss_fail = get_option('wpc_static_serve_failed');
+                                            if (!empty($wpc_ss_fail)) {
+                                                $wpc_ss_labels = [
+                                                    'not-apache'               => __('This server is nginx (no .htaccess support), so zero-PHP static serve is not available here — the standard PHP cache serve stays active.', WPS_IC_TEXTDOMAIN),
+                                                    'not-writeable'            => __('The site .htaccess is not writeable by WordPress. Make it writeable, then flip the toggle on again.', WPS_IC_TEXTDOMAIN),
+                                                    'write-failed'             => __('The .htaccess rules could not be written — check file permissions on the site root, then re-enable.', WPS_IC_TEXTDOMAIN),
+                                                    'selftest-failed-reverted' => __('The live self-test could not verify a real zero-PHP static serve on this host, so the rules were safely reverted. The site keeps serving from the standard cache — nothing broken. Re-enabling retries the test.', WPS_IC_TEXTDOMAIN),
+                                                    'docroot-mismatch'         => __('The server document root does not resolve onto the WordPress install path (symlinked vhost) — the .htaccess rules would look in the wrong directory. Ask your host about the real document root.', WPS_IC_TEXTDOMAIN),
+                                                    'no-htaccess'              => __('No .htaccess path could be resolved for this install.', WPS_IC_TEXTDOMAIN),
+                                                ];
+                                                $wpc_ss_why  = isset($wpc_ss_labels[$wpc_ss_fail]) ? $wpc_ss_labels[$wpc_ss_fail] . ' (' . $wpc_ss_fail . ')' : __('Reason code: ', WPS_IC_TEXTDOMAIN) . $wpc_ss_fail;
+                                                $wpc_ss_icon = '<span style="display:inline-flex;width:16px;height:16px;margin-left:6px;border-radius:50%;background:#fbae40;color:#fff;align-items:center;justify-content:center;font-size:11px;font-weight:bold;cursor:help;vertical-align:middle;" title="' . esc_attr($wpc_ss_why) . '">!</span>';
+
+                                                $wpc_ss_new = preg_replace('/(BETA<\/[a-z]+>)/', '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $wpc_ss_icon), $wpc_ss_row, 1);
+                                                if (is_string($wpc_ss_new) && strpos($wpc_ss_new, '#fbae40') !== false) {
+                                                    $wpc_ss_row = $wpc_ss_new;
+                                                } else {
+                                                    $wpc_ss_row = preg_replace('/(Advanced Cache)/', '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $wpc_ss_icon), $wpc_ss_row, 1);
+                                                }
+                                            }
+                                            echo $wpc_ss_row;
+
+
+                                                echo $gui::checkboxDescription_v4(__('Browser Cache & Compression', WPS_IC_TEXTDOMAIN), __('Add gzip/deflate compression and far-future browser-cache headers for static assets (CSS, JS, images, fonts) via .htaccess. HTML is never cached, so dynamic pages are unaffected. Most useful when the WPC CDN is off. Apache/LiteSpeed only — the rules are validated live and auto-reverted if your host rejects them.', WPS_IC_TEXTDOMAIN), false, '0', 'browser-cache-headers', false, 'right', false, false, '');
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('fold-split'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Fold Split', WPS_IC_TEXTDOMAIN), __('Defers the below-the-fold part of the page into inert &lt;template&gt; tags so the browser paints the visible area first, then restores the rest on scroll or idle — one document, no second request, no layout shift. It acts ONLY on pages the WP Compress service has planned and render-verified; every other page is served whole and unchanged. Mobile-focused; desktop is left as-is.', WPS_IC_TEXTDOMAIN), false, '0', 'fold-split', false, 'right', false, false, '', 'BETA');
+                                                }
                                                 echo $gui::checkboxDescription_v4(__('Optimize Metadata Images', WPS_IC_TEXTDOMAIN), '', false, '0', 'optimize_meta_images', false, 'right', '');
-                                                // '.htaccess WebP Rewrite' removed — it was a dead toggle (read nowhere; real .htaccess
-                                                // gate keys off generate_webp). Server-level delivery is now resolver-chosen + verified.
+                                                
+                                                
                                                 echo $gui::checkboxDescription_v4(__('Defer Video Preload', WPS_IC_TEXTDOMAIN), '', false, '0', 'video-preload-none', false, 'right', '');
-                                                // v7.02.51 — Source Hints (?src=). Binary toggle so it matches the grid cards: ON
-                                                // (default — the baked-on baseline) emits the CDN source-format hint; OFF is the
-                                                // self-service escape hatch (the wpc_src_hint_enabled filter applies it last → OFF beats the orch).
+
+
                                                 echo $gui::checkboxDescription_v4(__('Source Hints', WPS_IC_TEXTDOMAIN), '', false, '0', 'emit-src-hints', false, 'right', '');
-                                                // (v7.03.61) "Always" sub-toggle → makes Source Hints effectively 3-state: OFF (master off) /
-                                                // UNTIL-LANDED (master on, this off — self-healing default) / ALWAYS (both on — keep ?src even
-                                                // after the variant is cached on disk). Two binary checkboxes = the proven, reliable save path.
-                                                echo $gui::checkboxDescription_v4(__('Always Emit Source Hints', WPS_IC_TEXTDOMAIN), __('Keep the ?src hint even after the variant lands on disk (default: only until it lands).', WPS_IC_TEXTDOMAIN), false, '0', 'emit-src-hints-always', false, 'right', '');
+
+                                                
+                                                
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('emit-src-hints-always'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Always Emit Source Hints', WPS_IC_TEXTDOMAIN), __('Keep the ?src hint even after the variant lands on disk (default: only until it lands).', WPS_IC_TEXTDOMAIN), false, '0', 'emit-src-hints-always', false, 'right', '');
+                                                }
                                                 ?>
                                             </div>
                                         </div>
@@ -1926,10 +1940,40 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             <div class="wpc-other-opt-grid">
                                                 <?php
                                                 echo $gui::checkboxDescription_v4(__('Lazy Load Google Tag Manager', WPS_IC_TEXTDOMAIN), '', false, '0', 'gtag-lazy', false, 'right', '');
-                                                echo $gui::checkboxDescription_v4(__('Disable onLoad Event', WPS_IC_TEXTDOMAIN), '', false, false, 'disable-trigger-dom-event', false, 'right', false, false, '', true);
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('disable-trigger-dom-event'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Disable onLoad Event', WPS_IC_TEXTDOMAIN), '', false, false, 'disable-trigger-dom-event', false, 'right', false, false, '', true);
+                                                }
                                                 echo $gui::checkboxDescription_v4(__('Optimize External URLs', WPS_IC_TEXTDOMAIN), '', false, '0', 'external-url', false, 'right', '');
                                                 echo $gui::checkboxDescription_v4(__('Filter Bot Traffic', WPS_IC_TEXTDOMAIN), '', false, '0', 'ga-bot-shield', false, 'right', '');
                                                 echo $gui::checkboxDescription_v4(__('Set Fetch Priority', WPS_IC_TEXTDOMAIN), '', false, false, 'fetchpriority-high', false, 'right', false, false, '');
+
+
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('force-delay-captcha'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Force Delay reCAPTCHA (test)', WPS_IC_TEXTDOMAIN), __('Delays reCAPTCHA/captcha until interaction. May lower v3 form scores — verify your forms still submit.', WPS_IC_TEXTDOMAIN), false, '0', 'force-delay-captcha', false, 'right', '');
+                                                }
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('force-delay-jquery'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Force Delay jQuery (test)', WPS_IC_TEXTDOMAIN), __('Delays jQuery + its chain until interaction. May break scripts/animations that expect jQuery at load — verify the site works.', WPS_IC_TEXTDOMAIN), false, '0', 'force-delay-jquery', false, 'right', '');
+                                                }
+                                                echo $gui::checkboxDescription_v4(__('Optimize FontAwesome', WPS_IC_TEXTDOMAIN), __('Reserves the icon space in critical CSS so FontAwesome can be deferred off the critical path without any layout shift. Icons appear a moment after load. Best paired with icon subsetting.', WPS_IC_TEXTDOMAIN), false, '0', 'fontawesome-optimize', false, 'right', '');
+
+
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('minimal-mobile-css'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Minimal Mobile CSS (Beta)', WPS_IC_TEXTDOMAIN), __('Defers Used CSS off the mobile first-paint window so only critical CSS + the hero load initially — maximum LCP on slow mobile. Below-fold styles arrive on interaction. Also serves per-device HTML: mobile receives the smaller mobile critical CSS instead of the combined blob, and Cloudflare stores one copy per device. Changing this purges the cache automatically. Verify scrolling looks right before/after.', WPS_IC_TEXTDOMAIN), false, '0', 'minimal-mobile-css', false, 'right', '');
+                                                }
+
+
+                                                if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('maximum-mobile'))) { 
+                                                    echo $gui::checkboxDescription_v4(__('Maximum Optimization — Interaction-Only (Beta)', WPS_IC_TEXTDOMAIN), __('Waits for the first interaction (mousemove / scroll / tap) to load ALL non-critical CSS and delayed JS — only critical CSS loads up front, for the absolute smallest initial page and top lab scores. Below-fold styling & delayed features stay inert until interaction; best paired with Used CSS Delivery. Verify the page looks and works right before/after enabling.', WPS_IC_TEXTDOMAIN), false, '0', 'maximum-mobile', false, 'right', '');
+                                                }
+
+
+                                                echo $gui::checkboxDescription_v4(__('Embed Facades — Maps & YouTube', WPS_IC_TEXTDOMAIN), __('Replaces Google Maps and YouTube embeds with a lightweight static preview that loads the real embed on click. The embed\'s scripts never load until the visitor asks for them — fastest possible page — and visitors see a video poster or map placeholder instead of an empty box. Logged-in users always see live embeds.', WPS_IC_TEXTDOMAIN), false, '0', 'embed-facade', false, 'right', '');
+
+
+                                                echo $gui::checkboxDescription_v4(__('Load Slider Immediately (Feel Preference)', WPS_IC_TEXTDOMAIN), __('Exempts Revolution Slider from the interaction-gate so it boots automatically instead of waiting for a click/scroll — feels more alive on first paint. Loads deferred (never render-blocking), just not interaction-gated. Off by default for the best possible score.', WPS_IC_TEXTDOMAIN), false, '0', 'revslider-instant', false, 'right', '');
+
+
+                                                echo $gui::checkboxDescription_v4(__('Device-Universal Pages', WPS_IC_TEXTDOMAIN), __('Serves one identical page to every device (both mobile and desktop critical CSS, media-scoped) so edge and page caches hold a single purgeable copy — enables long-lived Cloudflare HTML caching with instant purging, and makes device-mismatch issues impossible in any cache. Enabled automatically when Cloudflare is connected; check to force it on without Cloudflare.', WPS_IC_TEXTDOMAIN), false, '0', 'combined-crit', false, 'right', '');
                                                 ?>
                                             </div>
                                         </div>
@@ -2177,12 +2221,263 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 echo $gui::cf_checkboxDescription(__('On The Fly Optimization', WPS_IC_TEXTDOMAIN), __('Resize images on the fly, auto-convert to WebP, and optimize scripts (based on your plugin settings).', WPS_IC_TEXTDOMAIN), ['cf', 'cdn'], 'cf-cdn');
                                                 ?>
                                             </div>
-                                            <details class="setup-accordion" id="cloudflare-permissions-accordion" open>
-                                                <summary><?php echo esc_html__('Please make sure your permissions are updated to use the latest integration:', WPS_IC_TEXTDOMAIN); ?></summary>
+                                            <?php
+
+
+                                            $wpc_cfp88 = get_option('wpc_cf_privileges');
+                                            $wpc_cfp_tests = (is_array($wpc_cfp88) && !empty($wpc_cfp88['privs']['tests'])) ? $wpc_cfp88['privs']['tests'] : [];
+                                            
+                                            
+                                            
+                                            
+                                            if (!function_exists('wpc_cf_permission_rows')) {
+                                                @include_once WPS_IC_DIR . 'addons/cf-sdk/cf-sdk.php';
+                                            }
+                                            $wpc_cfp_rows = function_exists('wpc_cf_permission_rows') ? wpc_cf_permission_rows() : [];
+                                            $wpc_cfp_req_miss = 0; $wpc_cfp_opt_miss = 0; $wpc_cfp_checked = !empty($wpc_cfp_tests);
+                                            foreach ($wpc_cfp_rows as $wpc_r88) {
+                                                $wpc_res88 = isset($wpc_cfp_tests[$wpc_r88['key']]) ? (string) $wpc_cfp_tests[$wpc_r88['key']] : '';
+                                                if ($wpc_res88 !== '' && strpos($wpc_res88, 'OK') !== 0) {
+                                                    if ($wpc_r88['tier'] === 'req') { $wpc_cfp_req_miss++; } else { $wpc_cfp_opt_miss++; }
+                                                }
+                                            }
+                                            if (!$wpc_cfp_checked)      { $wpc_cfp_pill = ['is-unknown', __('Not verified yet', WPS_IC_TEXTDOMAIN)]; }
+                                            elseif ($wpc_cfp_req_miss)  { $wpc_cfp_pill = ['is-fail', sprintf(__('%d required permission(s) missing', WPS_IC_TEXTDOMAIN), $wpc_cfp_req_miss)]; }
+                                            elseif ($wpc_cfp_opt_miss)  { $wpc_cfp_pill = ['is-warn', sprintf(__('Required granted · %d optional missing', WPS_IC_TEXTDOMAIN), $wpc_cfp_opt_miss)]; }
+                                            else                        { $wpc_cfp_pill = ['is-ok', __('Valid', WPS_IC_TEXTDOMAIN)]; }
+                                            ?>
+                                            <?php
+                                            $wpc_cfp_allgood = ($wpc_cfp_checked && !$wpc_cfp_req_miss && !$wpc_cfp_opt_miss);
+                                            $wpc_cfp_state   = $wpc_cfp_allgood ? ' is-allgood' : (($wpc_cfp_checked && ($wpc_cfp_req_miss || $wpc_cfp_opt_miss)) ? ' has-issues' : '');
+                                            ?>
+                                            <details class="setup-accordion<?php echo $wpc_cfp_state; ?>" id="wpc-cfperm-accordion" data-checked="<?php echo (is_array($wpc_cfp88) && !empty($wpc_cfp88['t'])) ? (int) $wpc_cfp88['t'] : 0; ?>"<?php echo $wpc_cfp_req_miss ? ' open' : ''; ?>><?php ?>
+                                                <summary>
+                                                    <span class="wpc-cfperm-summary">
+                                                        <?php echo esc_html__('API Token Permissions', WPS_IC_TEXTDOMAIN); ?>
+                                                        <span class="wpc-cfperm-pill <?php echo esc_attr($wpc_cfp_pill[0]); ?>" id="wpc-cfperm-pill"><?php echo esc_html($wpc_cfp_pill[1]); ?></span>
+                                                        <button type="button" class="wpc-cfperm-recheck" id="wpc-cfperm-recheck"><?php echo esc_html__('Re-check now', WPS_IC_TEXTDOMAIN); ?></button>
+                                                    </span>
+                                                </summary>
                                                 <div class="accordion-body">
-                                                    <img src="<?php echo WPS_IC_URI; ?>assets/v4/images/configure-api-token.png" alt="<?php echo esc_attr__('Configure API Token', WPS_IC_TEXTDOMAIN); ?>" style="max-width:100%;"/>
+                                                    <div class="wpc-cfperm-allgood" id="wpc-cfperm-allgood">
+                                                        <span class="wpc-cfperm-allgood-check"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
+                                                        <div>
+                                                            <p class="wpc-cfperm-allgood-title"><?php echo esc_html__('All permissions verified', WPS_IC_TEXTDOMAIN); ?></p>
+                                                            <p class="wpc-cfperm-allgood-sub"><?php echo esc_html__('Your API token has everything WP Compress needs.', WPS_IC_TEXTDOMAIN); ?>
+                                                                <button type="button" class="wpc-cfperm-linkbtn wpc-cfperm-showall" id="wpc-cfperm-showall"><?php echo esc_html__('Show details', WPS_IC_TEXTDOMAIN); ?> <span class="wpc-cfperm-chev">▾</span></button>
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wpc-cfperm-card" id="wpc-cfperm-grid">
+                                                        <?php foreach ($wpc_cfp_rows as $wpc_r88) :
+                                                            $wpc_key88  = $wpc_r88['key'];
+                                                            $wpc_act88  = $wpc_r88['action'];
+                                                            $wpc_path88 = $wpc_r88['path'];
+                                                            $wpc_full88 = $wpc_r88['recipe'];
+                                                            $wpc_req88  = ($wpc_r88['tier'] === 'req');
+                                                            $wpc_feat88 = $wpc_r88['feature'];
+                                                            $wpc_why88  = $wpc_r88['why'];
+                                                            $wpc_res88 = isset($wpc_cfp_tests[$wpc_key88]) ? (string) $wpc_cfp_tests[$wpc_key88] : '';
+                                                            if (strpos($wpc_res88, 'OK') === 0) { $wpc_cls88 = 'is-ok'; $wpc_txt88 = '✓ ' . __('Granted', WPS_IC_TEXTDOMAIN); $wpc_rowc88 = ' is-granted'; }
+                                                            elseif ($wpc_res88 !== '')          { $wpc_cls88 = 'is-fail'; $wpc_txt88 = '✕ ' . __('Missing', WPS_IC_TEXTDOMAIN); $wpc_rowc88 = $wpc_req88 ? ' is-missing' : ''; }
+                                                            else                                 { $wpc_cls88 = 'is-unknown'; $wpc_txt88 = __('Not checked', WPS_IC_TEXTDOMAIN); $wpc_rowc88 = ''; }
+                                                        ?>
+                                                        <div class="wpc-cfperm-row<?php echo $wpc_rowc88; ?>" title="<?php echo esc_attr($wpc_why88); ?>">
+                                                            <div class="wpc-cfperm-info">
+                                                                <span class="wpc-cfperm-action"><?php echo esc_html($wpc_act88); ?></span>
+                                                                <span class="wpc-cfperm-path"><?php echo esc_html($wpc_path88); ?><?php if ($wpc_feat88) : ?> · <?php echo esc_html(sprintf(__('enables %s', WPS_IC_TEXTDOMAIN), $wpc_feat88)); ?><?php endif; ?></span>
+                                                                <small class="wpc-cfperm-fix"><?php echo esc_html__('Add this to your token in Cloudflare:', WPS_IC_TEXTDOMAIN); ?> <code><?php echo esc_html($wpc_full88); ?></code> <?php echo esc_html__('— then Re-check.', WPS_IC_TEXTDOMAIN); ?></small>
+                                                            </div>
+                                                            <div class="wpc-cfperm-side">
+                                                                <span class="wpc-cfperm-tag <?php echo $wpc_req88 ? 'is-required' : 'is-optional'; ?>"><?php echo $wpc_req88 ? esc_html__('Required', WPS_IC_TEXTDOMAIN) : esc_html__('Optional', WPS_IC_TEXTDOMAIN); ?></span>
+                                                                <span class="wpc-cfperm-status <?php echo $wpc_cls88; ?>" data-perm="<?php echo esc_attr($wpc_key88); ?>" data-required="<?php echo $wpc_req88 ? '1' : '0'; ?>"><?php echo esc_html($wpc_txt88); ?></span>
+                                                            </div>
+                                                        </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                    <button type="button" class="wpc-cfperm-linkbtn wpc-cfperm-grantedtoggle" id="wpc-cfperm-showgranted"></button>
+                                                    <p class="wpc-cfperm-foot">
+                                                        <span id="wpc-cfperm-foot-text"><?php
+                                                            if (is_array($wpc_cfp88) && !empty($wpc_cfp88['t'])) {
+                                                                echo esc_html(sprintf(__('Last verified %s ago via live Cloudflare API checks.', WPS_IC_TEXTDOMAIN), human_time_diff((int) $wpc_cfp88['t'])));
+                                                            } else {
+                                                                echo esc_html__('Each permission is verified against the live Cloudflare API.', WPS_IC_TEXTDOMAIN);
+                                                            }
+                                                        ?></span>
+                                                    </p>
+                                                    <div class="wpc-cfperm-guide">
+                                                        <span class="wpc-cfperm-guide-icon">i</span>
+                                                        <div>
+                                                            <p class="wpc-cfperm-guide-title"><?php echo esc_html__('Creating your API token', WPS_IC_TEXTDOMAIN); ?></p>
+                                                            <ul>
+                                                                <li><strong><?php echo esc_html__('Template:', WPS_IC_TEXTDOMAIN); ?></strong> <?php echo esc_html__('select', WPS_IC_TEXTDOMAIN); ?> <code><?php echo esc_html__('Custom Token', WPS_IC_TEXTDOMAIN); ?></code> <?php echo esc_html__('(not the built-in "WordPress" template — it lacks Cache Rules).', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                <li><strong><?php echo esc_html__('Permissions:', WPS_IC_TEXTDOMAIN); ?></strong> <?php echo esc_html__('add the zone rows shown above — that is everything WP Compress calls use.', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                <li><strong><?php echo esc_html__('Resources:', WPS_IC_TEXTDOMAIN); ?></strong> <?php echo esc_html__('Zone Resources →', WPS_IC_TEXTDOMAIN); ?> <code><?php echo esc_html__('All zones', WPS_IC_TEXTDOMAIN); ?></code> <span title="<?php echo esc_attr__('Prefer tighter scope? "Specific zone → this site" also works — but then the token only links this one site.', WPS_IC_TEXTDOMAIN); ?>" style="cursor:help;">ⓘ</span> <?php echo esc_html__('— one token can then connect every site on the account.', WPS_IC_TEXTDOMAIN); ?></li>
+                                                                <li><strong><?php echo esc_html__('If Edit Cache Rules still shows Missing', WPS_IC_TEXTDOMAIN); ?></strong> <?php echo esc_html__('after granting it: some Cloudflare accounts also enforce', WPS_IC_TEXTDOMAIN); ?> <code><?php echo esc_html__('Account → Account Rulesets → Edit', WPS_IC_TEXTDOMAIN); ?></code> <?php echo esc_html__('and', WPS_IC_TEXTDOMAIN); ?> <code><?php echo esc_html__('Account → Account Filter Lists → Edit', WPS_IC_TEXTDOMAIN); ?></code> <?php echo esc_html__('(per Cloudflare\'s Cache Rules API docs) — add both, set Account Resources to the account that owns this zone, then Re-check.', WPS_IC_TEXTDOMAIN); ?></li>
+                                                            </ul>
+                                                            <p class="wpc-cfperm-guide-note"><?php echo esc_html__('Leave "Client IP Address Filtering" empty (the token is used by your web server, not your browser) · set TTL to Forever · account-owned tokens (cfat_) are supported.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                        </div>
+                                                    </div>
+                                                    <img src="<?php echo WPS_IC_URI; ?>assets/v4/images/configure-api-token.png" alt="<?php echo esc_attr__('Configure API Token', WPS_IC_TEXTDOMAIN); ?>" style="max-width:100%;margin-top:12px;border-radius:8px;"/>
                                                 </div>
                                             </details>
+                                            <?php
+                                            $wpc_nat836_forced = (string) get_option('wpc_natural_force', '') === '1';
+                                            $wpc_nat836_proven = (string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1';
+                                            $wpc_nat836_pill   = $wpc_nat836_forced ? ['is-warn', __('Forced on', WPS_IC_TEXTDOMAIN)]
+                                                : ($wpc_nat836_proven ? ['is-ok', __('Active', WPS_IC_TEXTDOMAIN)] : ['is-unknown', __('Not active yet', WPS_IC_TEXTDOMAIN)]);
+                                            if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || $wpc_nat836_forced) : 
+                                            ?>
+                                            <details class="setup-accordion" id="wpc-natdiag-accordion">
+                                                <summary>
+                                                    <span class="wpc-cfperm-summary">
+                                                        <?php echo esc_html__('Natural Asset URLs', WPS_IC_TEXTDOMAIN); ?>
+                                                        <span class="wpc-cfperm-pill <?php echo esc_attr($wpc_nat836_pill[0]); ?>" id="wpc-natdiag-pill"><?php echo esc_html($wpc_nat836_pill[1]); ?></span>
+                                                        <button type="button" class="wpc-cfperm-recheck" id="wpc-natdiag-run"><?php echo esc_html__('Verify now', WPS_IC_TEXTDOMAIN); ?></button>
+                                                    </span>
+                                                </summary>
+                                                <div class="accordion-body">
+                                                    <style>
+                                                    #wpc-natdiag-accordion .wpc-natd-intro{font-size:12.5px;color:#8a95ab;margin:0 0 12px}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum{display:flex;gap:11px;align-items:flex-start;background:#f2faf4;border:1px solid #d9efdf;border-radius:10px;padding:12px 14px;margin:0 0 4px}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum.is-warn{background:#fdf9ee;border-color:#f0e5c2}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum.is-fail{background:#fdf2f2;border-color:#f2d6d7}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum-ic{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:#22b73a;margin-top:1px}
+                                                    #wpc-natdiag-accordion .is-warn .wpc-natd-sum-ic{background:#e5a50a}
+                                                    #wpc-natdiag-accordion .is-fail .wpc-natd-sum-ic{background:#d63638}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum b{display:block;font-size:13.5px;color:#16223a;line-height:1.35;font-weight:700}
+                                                    #wpc-natdiag-accordion .wpc-natd-sum span{font-size:12.5px;color:#5e6b85;line-height:1.5}
+                                                    #wpc-natdiag-accordion .wpc-natd-rows{margin:6px 0 0}
+                                                    #wpc-natdiag-accordion .wpc-natd-row{display:flex;align-items:baseline;gap:10px;padding:7px 2px;border-bottom:1px solid #f0f3f8;font-size:13px}
+                                                    #wpc-natdiag-accordion .wpc-natd-row:last-child{border-bottom:0}
+                                                    #wpc-natdiag-accordion .wpc-natd-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#c9d3e2;align-self:center}
+                                                    #wpc-natdiag-accordion .wpc-natd-dot.is-ok{background:#22b73a}
+                                                    #wpc-natdiag-accordion .wpc-natd-dot.is-fail{background:#d63638}
+                                                    #wpc-natdiag-accordion .wpc-natd-lab{font-weight:600;color:#16223a}
+                                                    #wpc-natdiag-accordion .wpc-natd-det{margin-left:auto;color:#8a95ab;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+                                                    #wpc-natdiag-accordion .wpc-natd-actions{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+                                                    #wpc-natdiag-accordion .wpc-cf-button[hidden]{display:none !important}
+                                                    #wpc-natdiag-accordion .wpc-cfperm-linkbtn[hidden]{display:none}
+                                                    </style>
+                                                    <p class="wpc-natd-intro"><?php echo esc_html__('When active, CSS and font files use clean cache-friendly URLs on your CDN hostname. Verification checks the exact conditions and names anything blocking it.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                    <div id="wpc-natdiag-sum" style="display:none"></div>
+                                                    <div id="wpc-natdiag-out" class="wpc-natd-rows" style="display:none"></div>
+                                                    <button type="button" class="wpc-cfperm-linkbtn" id="wpc-natdiag-toggle" hidden><?php echo esc_html__('Show checks', WPS_IC_TEXTDOMAIN); ?> <span class="wpc-cfperm-chev">▾</span></button>
+                                                    <div class="wpc-natd-actions">
+                                                        <button type="button" class="wpc-cf-button" id="wpc-natdiag-force" hidden><?php echo esc_html__('Force natural delivery', WPS_IC_TEXTDOMAIN); ?></button>
+                                                        <button type="button" class="wpc-cf-button" id="wpc-natdiag-unforce"<?php echo $wpc_nat836_forced ? '' : ' hidden'; ?>><?php echo esc_html__('Remove override', WPS_IC_TEXTDOMAIN); ?></button>
+                                                        <span id="wpc-natdiag-note" class="wpc-cfperm-foot"></span>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                            <script type="text/javascript">
+                                            (function () {
+                                                var acc = document.getElementById('wpc-natdiag-accordion');
+                                                if (!acc || !window.jQuery) { return; }
+                                                var running = false;
+                                                function line(ok, label, detail) {
+                                                    return '<div class="wpc-natd-row"><i class="wpc-natd-dot ' + (ok ? 'is-ok' : 'is-fail') + '"></i><span class="wpc-natd-lab">' + label + '</span>'
+                                                        + (detail ? '<span class="wpc-natd-det">' + detail + '</span>' : '') + '</div>';
+                                                }
+                                                function summary(cls, title, sub) {
+                                                    var el = document.getElementById('wpc-natdiag-sum');
+                                                    el.style.display = '';
+                                                    el.innerHTML = '<div class="wpc-natd-sum ' + cls + '"><span class="wpc-natd-sum-ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><div><b>' + title + '</b><span>' + sub + '</span></div></div>';
+                                                }
+                                                function collapse(allOk) {
+                                                    var out = document.getElementById('wpc-natdiag-out');
+                                                    var tog = document.getElementById('wpc-natdiag-toggle');
+                                                    tog.hidden = !allOk;
+                                                    out.style.display = allOk ? 'none' : '';
+                                                }
+                                                function esc(t) { var d = document.createElement('span'); d.textContent = String(t == null ? '' : t); return d.innerHTML; }
+                                                function run() {
+                                                    if (running) { return; }
+                                                    running = true;
+                                                    var out = document.getElementById('wpc-natdiag-out');
+                                                    var sum = document.getElementById('wpc-natdiag-sum');
+                                                    sum.style.display = 'none';
+                                                    document.getElementById('wpc-natdiag-toggle').hidden = true;
+                                                    out.style.display = '';
+                                                    out.innerHTML = '<p class="wpc-natd-intro"><?php echo esc_js(__('Verifying from your server and from this browser…', WPS_IC_TEXTDOMAIN)); ?></p>';
+                                                    jQuery.post(ajaxurl, { action: 'wpc_natural_diag', wps_ic_nonce: wpc_ajaxVar.nonce }, function (res) {
+                                                        running = false;
+                                                        if (!res || !res.success || !res.data) {
+                                                            out.innerHTML = '<p class="wpc-natd-intro"><?php echo esc_js(__('Verification request failed — try again in a minute.', WPS_IC_TEXTDOMAIN)); ?></p>';
+                                                            return;
+                                                        }
+                                                        var d = res.data, g = d.gates || {}, last = d.last || {};
+                                                        var html = '';
+                                                        html += line(!!g.live_cdn, '<?php echo esc_js(__('CDN delivery enabled', WPS_IC_TEXTDOMAIN)); ?>', '');
+                                                        html += line(!!g.zone, '<?php echo esc_js(__('CDN hostname configured', WPS_IC_TEXTDOMAIN)); ?>', esc(d.zone || ''));
+                                                        html += line(!g.suppressed, '<?php echo esc_js(__('Delivery not paused', WPS_IC_TEXTDOMAIN)); ?>', '');
+                                                        var srvDetail = last && last.at ? ('HTTP ' + esc(last.code) + ' · ' + esc(last.ct || last.err || '-')) : '';
+                                                        html += line(!!g.proven, '<?php echo esc_js(__('Server verification', WPS_IC_TEXTDOMAIN)); ?>', srvDetail);
+                                                        out.innerHTML = html + '<div id="wpc-natdiag-browser">' + line(false, '<?php echo esc_js(__('Browser verification — checking…', WPS_IC_TEXTDOMAIN)); ?>', '') + '</div>';
+                                                        var browserOk = false;
+                                                        function finish() {
+                                                            var note = document.getElementById('wpc-natdiag-note');
+                                                            var fbtn = document.getElementById('wpc-natdiag-force');
+                                                            var ubtn = document.getElementById('wpc-natdiag-unforce');
+                                                            var allOk = !!g.live_cdn && !!g.zone && !g.suppressed && (!!g.proven || !!g.forced);
+                                                            note.textContent = '';
+                                                            if (g.forced) {
+                                                                fbtn.hidden = true; ubtn.hidden = false;
+                                                                summary('is-warn', '<?php echo esc_js(__('Clean URLs forced on', WPS_IC_TEXTDOMAIN)); ?>',
+                                                                    g.proven ? '<?php echo esc_js(__('Server verification now passes too — you can remove the override.', WPS_IC_TEXTDOMAIN)); ?>'
+                                                                             : '<?php echo esc_js(__('Serving clean URLs on your word — verification keeps re-checking hourly in the background.', WPS_IC_TEXTDOMAIN)); ?>');
+                                                                collapse(allOk);
+                                                            } else if (g.proven) {
+                                                                fbtn.hidden = true; ubtn.hidden = true;
+                                                                summary('', '<?php echo esc_js(__('Natural delivery verified end-to-end', WPS_IC_TEXTDOMAIN)); ?>',
+                                                                    '<?php echo esc_js(__('Your server and this browser both fetched a clean stylesheet from the CDN hostname. New pages pick this up as the cache refreshes.', WPS_IC_TEXTDOMAIN)); ?>');
+                                                                collapse(allOk);
+                                                            } else if (browserOk) {
+                                                                fbtn.hidden = false; ubtn.hidden = true;
+                                                                summary('is-warn', '<?php echo esc_js(__('Your browser reaches the CDN — your server cannot', WPS_IC_TEXTDOMAIN)); ?>',
+                                                                    '<?php echo esc_js(__('Usually the host blocking outbound requests or a firewall challenging the server IP. Forcing it on is safe — this browser just proved the CDN serves correctly.', WPS_IC_TEXTDOMAIN)); ?>');
+                                                                collapse(false);
+                                                            } else {
+                                                                fbtn.hidden = true; ubtn.hidden = true;
+                                                                summary('is-fail', '<?php echo esc_js(__('Not serving clean URLs yet', WPS_IC_TEXTDOMAIN)); ?>',
+                                                                    '<?php echo esc_js(__('Re-checked hourly and applied automatically once the CDN hostname answers correctly.', WPS_IC_TEXTDOMAIN)); ?>');
+                                                                collapse(false);
+                                                            }
+                                                        }
+                                                        if (d.canary) {
+                                                            fetch(d.canary, { cache: 'no-store' }).then(function (r) {
+                                                                var ct = (r.headers.get('content-type') || '').toLowerCase();
+                                                                browserOk = r.status === 200 && ct.indexOf('text/css') === 0;
+                                                                document.getElementById('wpc-natdiag-browser').innerHTML =
+                                                                    line(browserOk, '<?php echo esc_js(__('Browser verification', WPS_IC_TEXTDOMAIN)); ?>', 'HTTP ' + esc(r.status) + ' · ' + esc(ct || '-'));
+                                                                finish();
+                                                            }).catch(function () {
+                                                                document.getElementById('wpc-natdiag-browser').innerHTML =
+                                                                    line(false, '<?php echo esc_js(__('Browser verification', WPS_IC_TEXTDOMAIN)); ?>', '<?php echo esc_js(__('request blocked', WPS_IC_TEXTDOMAIN)); ?>');
+                                                                finish();
+                                                            });
+                                                        } else { finish(); }
+                                                        var pill = document.getElementById('wpc-natdiag-pill');
+                                                        if (pill) {
+                                                            pill.className = 'wpc-cfperm-pill ' + (g.forced ? 'is-warn' : (g.proven ? 'is-ok' : 'is-unknown'));
+                                                            pill.textContent = g.forced ? '<?php echo esc_js(__('Forced on', WPS_IC_TEXTDOMAIN)); ?>' : (g.proven ? '<?php echo esc_js(__('Active', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Not active yet', WPS_IC_TEXTDOMAIN)); ?>');
+                                                        }
+                                                    }).fail(function () {
+                                                        running = false;
+                                                        out.innerHTML = '<p class="wpc-cfperm-foot"><?php echo esc_js(__('Verification request failed — try again in a minute.', WPS_IC_TEXTDOMAIN)); ?></p>';
+                                                    });
+                                                }
+                                                function setForce(on) {
+                                                    jQuery.post(ajaxurl, { action: 'wpc_natural_force', wps_ic_nonce: wpc_ajaxVar.nonce, on: on ? '1' : '0' }, function () { run(); });
+                                                }
+                                                acc.addEventListener('toggle', function () { if (acc.open) { run(); } });
+                                                document.getElementById('wpc-natdiag-run').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); if (!acc.open) { acc.open = true; } run(); });
+                                                document.getElementById('wpc-natdiag-toggle').addEventListener('click', function () { var o = document.getElementById('wpc-natdiag-out'); o.style.display = o.style.display === 'none' ? '' : 'none'; });
+                                                document.getElementById('wpc-natdiag-force').addEventListener('click', function () { setForce(true); });
+                                                document.getElementById('wpc-natdiag-unforce').addEventListener('click', function () { setForce(false); });
+                                            })();
+                                            </script>
+                                            <?php endif; ?>
                                             <details class="setup-accordion" id="cloudflare-setup-accordion">
                                                 <summary><?php echo esc_html__('How To Get Your Cloudflare API Key', WPS_IC_TEXTDOMAIN); ?></summary>
                                                 <div class="accordion-body">
@@ -2216,6 +2511,63 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
 
                                     </div>
 
+                                    <?php
+                                            $wpc_leg846 = function_exists('wpc_legacy_lever_states') ? wpc_legacy_lever_states() : [];
+                                            $wpc_leg846_lab = (defined('WPC_LAB_UI') && WPC_LAB_UI);
+                                            $wpc_leg846_any = false;
+                                            foreach ($wpc_leg846 as $wpc_lv846) { if (!empty($wpc_lv846['on'])) { $wpc_leg846_any = true; break; } }
+                                            if ($wpc_leg846_lab || $wpc_leg846_any) :
+                                            ?>
+                                    <div class="wpc-tab-content-box wpc-card-rows">
+                                            <details class="setup-accordion" id="wpc-legacy-accordion">
+                                                <summary>
+                                                    <span class="wpc-cfperm-summary">
+                                                        <?php echo esc_html__('Legacy & Experimental Features', WPS_IC_TEXTDOMAIN); ?>
+                                                        <span class="wpc-cfperm-pill <?php echo $wpc_leg846_any ? 'is-warn' : 'is-unknown'; ?>"><?php echo $wpc_leg846_any ? esc_html__('Active', WPS_IC_TEXTDOMAIN) : esc_html__('All default', WPS_IC_TEXTDOMAIN); ?></span>
+                                                    </span>
+                                                </summary>
+                                                <div class="accordion-body">
+                                                    <style>
+                                                    #wpc-legacy-accordion .wpc-leg-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid #f0f3f8;font-size:13px}
+                                                    #wpc-legacy-accordion .wpc-leg-row:last-child{border-bottom:0}
+                                                    #wpc-legacy-accordion .wpc-leg-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#c9d3e2}
+                                                    #wpc-legacy-accordion .wpc-leg-dot.is-on{background:#e5a50a}
+                                                    #wpc-legacy-accordion .wpc-leg-lab{font-weight:600;color:#16223a}
+                                                    #wpc-legacy-accordion .wpc-leg-state{color:#8a95ab;font-size:12px}
+                                                    #wpc-legacy-accordion .wpc-leg-btn{margin-left:auto}
+                                                    #wpc-legacy-accordion .wpc-leg-intro{font-size:12.5px;color:#8a95ab;margin:0 0 10px}
+                                                    </style>
+                                                    <p class="wpc-leg-intro"><?php echo esc_html__('Hidden-by-default features. A feature listed here is only in effect when marked active; turning one off returns it to the shipped default and re-caches affected pages.', WPS_IC_TEXTDOMAIN); ?></p>
+                                                    <?php foreach ($wpc_leg846 as $wpc_lk846 => $wpc_lv846) :
+                                                        if (empty($wpc_lv846['on']) && !$wpc_leg846_lab) { continue; } ?>
+                                                    <div class="wpc-leg-row">
+                                                        <i class="wpc-leg-dot<?php echo !empty($wpc_lv846['on']) ? ' is-on' : ''; ?>"></i>
+                                                        <span class="wpc-leg-lab"><?php echo esc_html($wpc_lv846['label']); ?></span>
+                                                        <span class="wpc-leg-state"><?php echo !empty($wpc_lv846['on']) ? esc_html__('Active', WPS_IC_TEXTDOMAIN) : esc_html__('Default (off)', WPS_IC_TEXTDOMAIN); ?></span>
+                                                        <?php if (!empty($wpc_lv846['on'])) : ?>
+                                                        <button type="button" class="wpc-cf-button wpc-leg-btn" data-wpc-leg="<?php echo esc_attr($wpc_lk846); ?>" data-wpc-leg-on="0"><?php echo esc_html__('Turn off', WPS_IC_TEXTDOMAIN); ?></button>
+                                                        <?php elseif ($wpc_leg846_lab) : ?>
+                                                        <button type="button" class="wpc-cf-button wpc-leg-btn" data-wpc-leg="<?php echo esc_attr($wpc_lk846); ?>" data-wpc-leg-on="1"><?php echo esc_html__('Turn on', WPS_IC_TEXTDOMAIN); ?></button>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </details>
+                                            <script type="text/javascript">
+                                            (function () {
+                                                var acc = document.getElementById('wpc-legacy-accordion');
+                                                if (!acc || !window.jQuery) { return; }
+                                                acc.addEventListener('click', function (e) {
+                                                    var b = e.target && e.target.closest ? e.target.closest('[data-wpc-leg]') : null;
+                                                    if (!b) { return; }
+                                                    e.preventDefault();
+                                                    b.disabled = true;
+                                                    jQuery.post(ajaxurl, { action: 'wpc_legacy_lever', wps_ic_nonce: wpc_ajaxVar.nonce, lever: b.getAttribute('data-wpc-leg'), on: b.getAttribute('data-wpc-leg-on') }, function () { window.location.reload(); });
+                                                });
+                                            })();
+                                            </script>
+                                    </div>
+                                    <?php endif; ?>
 
                                     <?php if (get_option('wpc_show_hidden_menus') == 'true') { ?>
                                         <div class="wpc-tab-content-box wpc-card-rows wpc-perf-section">
@@ -2483,10 +2835,10 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
     </div>
 
 <?php
-// Tooltips
+
 include WPS_IC_DIR . 'templates/admin/partials/tooltips/all.php';
 
-//
+
 include WPS_IC_DIR . 'templates/admin/partials/popups/compatibility-popups.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/cname.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-cdn.php';
@@ -2496,10 +2848,10 @@ include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-adaptive.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-critical-css.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-inline-css.php';
 
-// HTML Optimizations
+
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-minify-html.php';
 
-// JS Optimizations
+
 include WPS_IC_DIR . 'templates/admin/partials/popups/js/delay-js-configuration.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-minify.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-combine.php';
@@ -2509,13 +2861,16 @@ include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-delay.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/js/exclude-js-delay-v2.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/js/inline-js.php';
 
-// CSS Optimizations
+
 include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-combine.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-minify.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/css/exclude-css-render-blocking.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/css/inline-css.php';
 
-//Cache
+
+include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-font-display.php';
+
+
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-simple-caching.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/exclude-advanced-caching.php';
 include WPS_IC_DIR . 'templates/admin/partials/popups/purge-settings.php';

@@ -1,34 +1,16 @@
 <?php
-/**
- * WP Compress — CF Piece 2 scaffold (v7.08.60): signed `x-wpc-config` header injection wiring.
- *
- * INERT BY DESIGN. Nothing here touches the network or a Cloudflare zone on a default install. It
- * activates only when BOTH are true:
- *   (a) orch ships `POST {orchestrator_url}/v2/signed-header` (returns { value, ttl }), and
- *   (b) the `wpc_v2_cf_header_injection` option is set (or the same-named filter returns true).
- * Until then every entry point below short-circuits to a no-op and leaves any CF rules untouched.
- *
- * Flow once live (Option A — orch SIGNS, the plugin INJECTS via a CF Transform Rule):
- *   1. wpc_v2_fetch_signed_header() POSTs the SAME HMAC envelope used by /v2/config to /v2/signed-header;
- *      orch returns { "value": "<signed x-wpc-config>", "ttl": <seconds> }.
- *   2. wpc_v2_apply_signed_header() caches the value + expiry and calls
- *      WPC_CloudflareAPI::ensureWpcConfigInjection($zoneId, $value) — ONE http_request_late_transform
- *      rewrite rule that strips inbound apikey and sets the trusted signed x-wpc-config on CDN requests.
- *   3. A daily WP-Cron event re-fetches before the signature expires (orch rotates ~24h).
- *
- * @since 7.08.60
- */
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('wpc_v2_cf_header_injection_enabled')) {
-    /**
-     * Master flag for the whole feature. Default OFF (scaffold). Option is the primary control;
-     * the filter lets ops/QA force it without a DB write.
-     *
-     * @return bool
-     */
+    
+
+
+
+
+
     function wpc_v2_cf_header_injection_enabled()
     {
         $opt = get_option('wpc_v2_cf_header_injection', false);
@@ -37,15 +19,7 @@ if (!function_exists('wpc_v2_cf_header_injection_enabled')) {
 }
 
 if (!function_exists('wpc_v2_fetch_signed_header')) {
-    /**
-     * Fetch the orch-signed x-wpc-config value. Returns ['value' => string, 'ttl' => int] or false.
-     *
-     * Fails SAFE: if the endpoint is absent (pre-ship orch → 404), times out, or returns anything
-     * unexpected, this returns false and the caller leaves any existing CF rule exactly as-is. The
-     * plugin NEVER constructs the signed value itself — only orch holds the signing material.
-     *
-     * @return array|false
-     */
+
     function wpc_v2_fetch_signed_header()
     {
         if (!wpc_v2_cf_header_injection_enabled()) {
@@ -60,7 +34,7 @@ if (!function_exists('wpc_v2_fetch_signed_header')) {
             return false;
         }
 
-        // Canonical body. Sign the EXACT bytes we send (same scheme as wpc_v2_config_sync_zones()).
+
         $body = wp_json_encode([
             'apikey'   => $apikey,
             'zone_id'  => $zone_id,
@@ -85,7 +59,7 @@ if (!function_exists('wpc_v2_fetch_signed_header')) {
             return false;
         }
         if ((int) wp_remote_retrieve_response_code($resp) !== 200) {
-            // 404 (orch not shipped yet) / 5xx → silent no-op; existing CF rule (if any) stays valid.
+
             return false;
         }
 
@@ -96,7 +70,7 @@ if (!function_exists('wpc_v2_fetch_signed_header')) {
 
         $ttl = isset($json['ttl']) ? (int) $json['ttl'] : DAY_IN_SECONDS;
         if ($ttl < 300) {
-            $ttl = DAY_IN_SECONDS; // guard against a bogus/short ttl forcing a fetch storm
+            $ttl = DAY_IN_SECONDS;
         }
 
         return ['value' => $json['value'], 'ttl' => $ttl];
@@ -104,23 +78,14 @@ if (!function_exists('wpc_v2_fetch_signed_header')) {
 }
 
 if (!function_exists('wpc_v2_apply_signed_header')) {
-    /**
-     * Push a fresh signed value into the connected Cloudflare zone's Transform Rules.
-     *
-     * No-op unless: the flag is on, a CF zone + token are connected, and a value was fetched. Uses an
-     * expiry gate so admin loads don't re-hit orch on every page — only re-fetches when forced, when
-     * nothing is cached, or within 1h of expiry.
-     *
-     * @param bool $force Bypass the freshness gate (used by the daily cron).
-     * @return bool True if a valid rule is in place, false otherwise.
-     */
+
     function wpc_v2_apply_signed_header($force = false)
     {
         if (!wpc_v2_cf_header_injection_enabled()) {
             return false;
         }
 
-        // Need a connected CF zone + token (same option the cache integration uses) and the SDK class.
+        
         $cf = get_option(WPS_IC_CF);
         if (empty($cf['zone']) || empty($cf['token']) || !class_exists('WPC_CloudflareAPI')) {
             return false;
@@ -129,12 +94,12 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
         $cached_val = (string) get_option('wpc_v2_signed_header_value', '');
         $expires_at = (int) get_option('wpc_v2_signed_header_expires', 0);
         if (!$force && $cached_val !== '' && $expires_at > (time() + HOUR_IN_SECONDS)) {
-            return true; // still fresh; the CF rule is already in place
+            return true;
         }
 
         $fetched = wpc_v2_fetch_signed_header();
         if (!$fetched) {
-            return false; // orch not ready / transient error → leave the existing rule untouched
+            return false;
         }
 
         $api = new WPC_CloudflareAPI($cf['token']);
@@ -151,9 +116,9 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
 }
 
 if (!function_exists('wpc_v2_signed_header_cron')) {
-    /**
-     * Daily refresh — force a re-fetch ahead of signature rotation. Self-disarms when the flag is off.
-     */
+    
+
+
     function wpc_v2_signed_header_cron()
     {
         if (!wpc_v2_cf_header_injection_enabled()) {
@@ -165,11 +130,11 @@ if (!function_exists('wpc_v2_signed_header_cron')) {
 add_action('wpc_v2_signed_header_refresh', 'wpc_v2_signed_header_cron');
 
 if (!function_exists('wpc_v2_signed_header_boot')) {
-    /**
-     * Arm/disarm the feature on admin load. Flag OFF → ensure the cron is unscheduled and stop (no
-     * network, no CF calls). Flag ON → ensure the daily cron exists and opportunistically top up
-     * (rate-limited by the expiry gate inside wpc_v2_apply_signed_header()).
-     */
+    
+
+
+
+
     function wpc_v2_signed_header_boot()
     {
         $scheduled = wp_next_scheduled('wpc_v2_signed_header_refresh');
@@ -184,9 +149,8 @@ if (!function_exists('wpc_v2_signed_header_boot')) {
         if (!$scheduled) {
             wp_schedule_event(time() + 300, 'daily', 'wpc_v2_signed_header_refresh');
         }
-        // v7.08.62 — the inline apply is a blocking up-to-15s POST to /v2/signed-header. Never run it on
-        // an admin-ajax request (would hang save/restore). The daily cron + a regular admin page load keep
-        // the cached header fresh; steady-state is cached, so this rarely fetches anyway.
+
+
         if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
         wpc_v2_apply_signed_header(false);
     }

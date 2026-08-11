@@ -2,9 +2,9 @@
 
 include_once WPS_IC_DIR . 'traits/agency.php';
 
-/**
- * Class - Stats
- */
+
+
+
 class wps_ic_stats
 {
     use wps_ic_agency_trait;
@@ -38,7 +38,7 @@ class wps_ic_stats
 					return $status;
 				}
 
-        // Check privileges
+        
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
         $call = wp_remote_get($url, [
             'timeout' => 30,
@@ -173,19 +173,19 @@ class wps_ic_stats
         $stats['ttfbLess'] = 0;
         $stats['pageSizeSavingsPercentage'] = 0;
 
-        // Cache
+        
         $cacheDir = WPS_IC_CACHE;
         if (file_exists($cacheDir)) {
             $stats['cachedPages'] = $this->countFiles($cacheDir);
         }
 
-        // return empty stats if test is running
+
         $initialTestRunning = get_transient('wpc_initial_test');
         if (!empty($initialTestRunning)) {
             return $stats;
         }
 
-        // pageSizeSavings
+
         $tests = get_option(WPS_IC_TESTS);
         if (!empty($tests['home'])) {
             $tests = $tests['home'];
@@ -212,7 +212,7 @@ class wps_ic_stats
             $stats['totalPageSizeAfter'] = wps_ic_format_bytes($stats['totalPageSizeAfter'], null, '%01.1f %s');
             $stats['totalPageSizeBefore'] = wps_ic_format_bytes($stats['totalPageSizeBefore'], null, '%01.1f %s');
 
-            // Requests
+            
             $before = $tests['desktop']['before']['requests'];
             $after = $tests['desktop']['after']['requests'];
 
@@ -224,7 +224,7 @@ class wps_ic_stats
             $stats['totalRequestsAfter'] += $after;
             $stats['totalRequestsSavings'] += $before - $after;
 
-            // TTFB
+            
             $beforeTtfb = $tests['desktop']['before']['ttfb'];
             $afterTtfb = $tests['desktop']['after']['ttfb'];
 
@@ -240,13 +240,13 @@ class wps_ic_stats
                 $ratio = $stats['totalTtfbBefore'] / $stats['totalTtfbAfter'];
 
                 if ($ratio < 1) {
-                    // Under 1x faster, show as a percentage
+                    
                     $stats['ttfbLess'] = round($ratio * 100, 2) . '%';
                 } elseif ($ratio < 10) {
-                    // Under 10x faster, show 1 decimal point
+                    
                     $stats['ttfbLess'] = round($ratio, 1) . 'x';
                 } else {
-                    // 10x or more, show as integer
+                    
                     $stats['ttfbLess'] = floor($ratio) . 'x';
                 }
             }
@@ -270,51 +270,68 @@ class wps_ic_stats
     public
     function countFiles($dir)
     {
+        $wpc_cfk = 'wpc_countfiles_' . md5((string) $dir);
+        $wpc_cfc = get_transient($wpc_cfk);
+        if ($wpc_cfc !== false) {
+            return (int) $wpc_cfc;
+        }
         $fileCount = 0;
 
-        // Ensure the directory exists
+        
         if (is_dir($dir)) {
-            // Create a recursive directory iterator
-            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir), RecursiveIteratorIterator::LEAVES_ONLY);
+            try {
+                $wpc_rdi887 = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
+                $wpc_flt887 = new RecursiveCallbackFilterIterator($wpc_rdi887, function ($file) {
+                    return strpos($file->getFilename(), '.purging-') !== 0;
+                });
+                $iterator = new RecursiveIteratorIterator($wpc_flt887, RecursiveIteratorIterator::LEAVES_ONLY);
 
-            // Iterate through the directory and count files
-            foreach ($iterator as $file) {
-                // Skip directories (RecursiveDirectoryIterator includes directories by default)
-                if ($file->isFile()) {
-                    $fileName = $file->getFilename();
-                    if (strtolower($file->getExtension()) === 'html' && stripos($fileName, 'mobile') === false) {
-                        $fileCount++;
+                foreach ($iterator as $file) {
+                    if ($file->isFile()) {
+                        $fileName = $file->getFilename();
+                        if (strtolower($file->getExtension()) === 'html' && stripos($fileName, 'mobile') === false) {
+                            $fileCount++;
+                        }
                     }
                 }
+            } catch (Throwable $wpc_ste887) {
+                
             }
         } else {
             return 0;
         }
 
+        set_transient($wpc_cfk, (int) $fileCount, 900);
         return $fileCount;
     }
 
     public
     function fetch_local_sum_stats()
     {
-        delete_transient('wps_ic_live_stats_v2');
-        $transient = get_transient('wps_ic_live_stats_v2');
+        
+        
+        $transient = get_transient('wps_ic_local_sum_stats');
+        if (!empty($transient)) {
+            return $transient;
+        }
 
-        if (!$transient || empty($transient)) {
-            if (!empty(self::$api_key)) {
-                $uri = WPS_IC_KEYSURL . '?action=get_chart_local_stats_sum_v6&apikey=' . self::$api_key;
-                $call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => '50']);
-                $body = wp_remote_retrieve_body($call);
-                if (wp_remote_retrieve_response_code($call) == 200) {
+        if (!empty(self::$api_key)) {
+            $wpc_lss60 = (int) get_option('wpc_local_sum_stats_at');
+            if (time() - $wpc_lss60 < 60) {
+                return false;
+            }
+            update_option('wpc_local_sum_stats_at', time(), false);
+            $uri = WPS_IC_KEYSURL . '?action=get_chart_local_stats_sum_v6&apikey=' . self::$api_key;
+            $call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => 10]);
+            $body = wp_remote_retrieve_body($call);
+            if (wp_remote_retrieve_response_code($call) == 200) {
 
-                    $body = json_decode($body);
+                $body = json_decode($body);
 
-                    if (!empty($body) && $body->success == 'true') {
-                        set_transient('wps_ic_local_sum_stats', $body, 60);
-                        return $body;
-                    }
+                if (!empty($body) && $body->success == 'true') {
+                    set_transient('wps_ic_local_sum_stats', $body, 60);
+                    return $body;
                 }
-
             }
 
         }
@@ -324,24 +341,29 @@ class wps_ic_stats
     public
     function fetch_local_stats()
     {
-        delete_transient('wps_ic_live_stats_v2');
-        $transient = get_transient('wps_ic_live_stats_v2');
+        
+        $transient = get_transient('wps_ic_local_stats');
+        if (!empty($transient)) {
+            return $transient;
+        }
 
-        if (!$transient || empty($transient)) {
-            if (!empty(self::$api_key)) {
-                $uri = WPS_IC_KEYSURL . '?action=get_chart_local_stats_v6&apikey=' . self::$api_key;
-                $call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => '50']);
-                $body = wp_remote_retrieve_body($call);
-                if (wp_remote_retrieve_response_code($call) == 200) {
+        if (!empty(self::$api_key)) {
+            $wpc_lst60 = (int) get_option('wpc_local_stats_at');
+            if (time() - $wpc_lst60 < 60) {
+                return false;
+            }
+            update_option('wpc_local_stats_at', time(), false);
+            $uri = WPS_IC_KEYSURL . '?action=get_chart_local_stats_v6&apikey=' . self::$api_key;
+            $call = wp_remote_get($uri, ['sslverify' => false, 'timeout' => 10]);
+            $body = wp_remote_retrieve_body($call);
+            if (wp_remote_retrieve_response_code($call) == 200) {
 
-                    $body = json_decode($body);
+                $body = json_decode($body);
 
-                    if (!empty($body) && $body->success == 'true') {
-                        set_transient('wps_ic_local_stats', $body, 60);
-                        return $body;
-                    }
+                if (!empty($body) && $body->success == 'true') {
+                    set_transient('wps_ic_local_stats', $body, 60);
+                    return $body;
                 }
-
             }
 
         }
@@ -355,7 +377,7 @@ class wps_ic_stats
         $sample = file_get_contents(WPS_IC_DIR . 'sample-data-live.json');
         $sample = json_decode($sample);
 
-        // Map sample values onto the past 7 days (today → 6 days ago)
+        
         $values = array_values((array)$sample->data);
         $updated = new stdClass();
         $updated->data = [];
@@ -371,7 +393,7 @@ class wps_ic_stats
     public
     function fetch_live_stats()
     {
-		// stats updates every hour, so we can cache this
+
         $transient = get_transient('wps_ic_live_stats');
 
         if (!$transient || empty($transient)) {
@@ -493,12 +515,12 @@ class wps_ic_stats
         update_option('wpc_warmup_stats', $stats);
     }
 
-	/**
-	 * Fetch Cloudflare stats for chart display
-	 *
-	 * @param int $days Number of days to fetch (default 7)
-	 * @return object|false Formatted stats or false on failure
-	 */
+	
+
+
+
+
+
 	public function fetch_cloudflare_stats($days = 7) {
 		$transient = get_transient('wps_ic_cf_stats');
 
@@ -509,32 +531,40 @@ class wps_ic_stats
 				return false;
 			}
 
-			// Initialize Cloudflare API
+			
+			
+			$wpc_cfs60 = (int) get_option('wpc_cf_stats_at');
+			if (time() - $wpc_cfs60 < 300) {
+				return false;
+			}
+			update_option('wpc_cf_stats_at', time(), false);
+
+			
 			$cloudflare = new WPC_CloudflareAPI($cf['token']);
 
-			// Calculate date range
+			
 			$to = date('Y-m-d');
 			$from = date('Y-m-d', strtotime("-{$days} days"));
 
-			// Get unfiltered zone analytics
+			
 			$stats = $cloudflare->getZoneAnalyticsUnfiltered($from, $to);
 
 			if (is_wp_error($stats)) {
 				return false;
 			}
 
-			// Format data to match the existing structure
+			
 			$formatted = new stdClass();
 			foreach ($stats as $date => $data) {
 				$formatted->$date = (object)[
-					'original' => $data['bytes'],              // Extract the integer value
-					'compressed' => $data['cached_bytes'],     // Extract the integer value
-					'requests' => $data['requests'],           // Extract the integer value
-					'cached_requests' => $data['cached_requests'] // Extract the integer value
+					'original' => $data['bytes'],              
+					'compressed' => $data['cached_bytes'],     
+					'requests' => $data['requests'],           
+					'cached_requests' => $data['cached_requests'] 
 				];
 			}
 
-			// Cache for 5 minutes
+			
 			set_transient('wps_ic_cf_stats', $formatted, 300);
 			return $formatted;
 		}

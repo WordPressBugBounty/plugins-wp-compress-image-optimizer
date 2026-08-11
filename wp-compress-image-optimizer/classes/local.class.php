@@ -1,7 +1,5 @@
 <?php
-/*
- * Local Compression
- */
+
 
 class wps_ic_local
 {
@@ -61,15 +59,15 @@ class wps_ic_local
             self::$apiUrl = 'https://' . $local_server . '/local/' . $apiVersion . '/';
         }
 
-        // Define default parameters and their values
+        
         self::$defaultParameters = ['webp' => '0', 'quality' => '2', 'retina' => '0', 'exif' => '0'];
 
-        // Get All Image Sizes
+        
         self::$imageSizes = $this->getAllThumbSizes();
 
-        /**
-         * Is it a multisite?
-         */
+        
+
+
         if (is_multisite()) {
             $current_blog_id = get_current_blog_id();
             switch_to_blog($current_blog_id);
@@ -82,9 +80,9 @@ class wps_ic_local
             self::$parameters = get_option(WPS_IC_SETTINGS);
         }
 
-        /**
-         * Tranlate Parameters to Latest API
-         */
+        
+
+
         self::$parameters = $this->translateParameters(self::$parameters);
 
     }
@@ -157,16 +155,10 @@ class wps_ic_local
         return $image_sizes;
     }
 
-    /**
-     * Used to translate parameters from old version to new version of API
-     * Example: generate_webp gets translated to webp, preserve_exif gets translated to
-     * exif...
-     * @param $parameters
-     * @return void
-     */
+
     public function translateParameters($parameters)
     {
-        // Get defaults
+        
         $translatedParameters = $this->getDefaultParameters();
 
         if (isset($parameters['generate_webp'])) {
@@ -217,20 +209,20 @@ class wps_ic_local
 
     public function sendBulkRestoreToApi()
     {
-        // Build full API URL
+        
         $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RESTORE_START);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
             $body = wp_remote_retrieve_body($response);
 
             if ($body == 'queue-prepared') {
-                // all ok! call to run!
+
                 $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RESTORE_RUN);
 
-                // Make the GET request
+                
                 $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
                 if (!is_wp_error($response)) {
@@ -251,23 +243,23 @@ class wps_ic_local
 
     public function sendBulkToApi()
     {
-        // Build params with all local optimization settings
+        
         $params = wps_local_compress::buildOptimizeParams(null, self::$siteUrl);
 
-        // Build full API URL
+        
         $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_START);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 80, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
             $body = wp_remote_retrieve_body($response);
 
             if ($body == 'queue-prepared') {
-                // all ok! call to run!
+
                 $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_RUN);
 
-                // Make the GET request
+                
                 $response = wp_remote_get($request_url, array('timeout' => 60, 'sslverify' => false));
 
                 if (!is_wp_error($response)) {
@@ -286,18 +278,18 @@ class wps_ic_local
     }
 
 
-    /**
-     * Send a stream to API
-     * @param $imageArray Array of images
-     * @param $parameters Array of parameters from Settings
-     * @return void
-     */
+    
+
+
+
+
+
     public function sendToAPI($action = '')
     {
-        // Build full API URL
+        
         $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_STOP);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
@@ -308,10 +300,10 @@ class wps_ic_local
         return ['status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($response)];
     }
 
-    /**
-     * Preparing images for restore to send to API
-     * @return Array Array of images
-     */
+    
+
+
+
     public function prepareRestoreImages()
     {
         global $wpdb;
@@ -325,28 +317,22 @@ class wps_ic_local
         $bulkStatus = get_option('wps_ic_BulkStatus');
         if (!$bulkStatus) $bulkStatus = [];
 
-        // Values to prepare
+        
         $post_type = 'attachment';
-        $mime1 = 'image/jpeg';
-        $mime2 = 'image/png';
-        $mime3 = 'image/gif';
+        $wpc_mimes_pi = function_exists('wpc_optimizable_mimes')
+            ? array_values(wpc_optimizable_mimes())
+            : ['image/jpeg', 'image/png', 'image/gif'];
+        $wpc_mimes_ph = implode(', ', array_fill(0, count($wpc_mimes_pi), '%s'));
 
-        // Match BOTH legacy v1 (`ic_stats` post_meta) AND v2
-        // (`ic_status` = 'compressed'). v2's run_v2_optimize writes
-        // ic_local_variants + ic_status but NOT ic_stats, so the legacy
-        // single-meta-key query missed every v2-compressed image entirely:
-        // bulk restore showed "0 images" even when the DB had compressed
-        // attachments. Both v1 and v2 set ic_status='compressed' on success,
-        // so the new condition catches everything.
 
-        // UNCOMPRESSED (exclude excluded images)
+        
         $queryUncompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
-        SELECT *
+        SELECT posts.ID
         FROM {$wpdb->posts} posts
         WHERE posts.post_type = %s
-        AND posts.post_mime_type IN (%s, %s, %s)
+        AND posts.post_mime_type IN (" . $wpc_mimes_ph . ")
         AND NOT EXISTS (
             SELECT 1
             FROM {$wpdb->postmeta} meta
@@ -362,18 +348,18 @@ class wps_ic_local
         )
         ",
                 $post_type,
-                $mime1, $mime2, $mime3
+                ...$wpc_mimes_pi
             )
         );
 
-        // COMPRESSED (exclude excluded images)
+        
         $queryCompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
-        SELECT *
+        SELECT posts.ID
         FROM {$wpdb->posts} posts
         WHERE posts.post_type = %s
-        AND posts.post_mime_type IN (%s, %s, %s)
+        AND posts.post_mime_type IN (" . $wpc_mimes_ph . ")
         AND EXISTS (
             SELECT 1
             FROM {$wpdb->postmeta} meta
@@ -389,7 +375,7 @@ class wps_ic_local
         )
         ",
                 $post_type,
-                $mime1, $mime2, $mime3
+                ...$wpc_mimes_pi
             )
         );
 
@@ -418,29 +404,39 @@ class wps_ic_local
     }
 
 
+    
 
-    /**
-     * Preparing images to send to API
-     * @return Array Array of images
-     */
-    /**
-     * Cheap COUNT-only path for the bulk dashboard's "ready / restore"
-     * tiles. Mirrors the duplicate-dedup + exclude-live filter used by the heavy
-     * prepareImages() path, but returns just totals (wrapped in array_fill so the
-     * caller's count() calls keep working without changing the contract). Cached
-     * for 60 s, since a single page reload while bulk is queued otherwise pays
-     * for two full table aggregations every time.
-     */
-    public static function countLibraryImages()
+
+
+
+    public static function countLibraryImages($fresh = false)
     {
-        $cached = get_transient('wpc_bulk_library_counts');
-        if (is_array($cached) && isset($cached['uncompressed'], $cached['compressed'])) {
-            $u = (int) $cached['uncompressed'];
-            $c = (int) $cached['compressed'];
+        
+        
+        
+        
+        
+        $wpc_blc = get_option('wpc_bulk_library_counts_d');
+        $wpc_has_snap = is_array($wpc_blc) && isset($wpc_blc['uncompressed'], $wpc_blc['compressed']);
+        if (!$fresh && $wpc_has_snap) {
+            if ((time() - (int) ($wpc_blc['t'] ?? 0)) >= 300) {
+                self::scheduleCountsRefresh();
+            }
+            $u = (int) $wpc_blc['uncompressed'];
+            $c = (int) $wpc_blc['compressed'];
             return [
                 'compressed'   => $c > 0 ? array_fill(0, $c, 1) : [],
                 'uncompressed' => $u > 0 ? array_fill(0, $u, 1) : [],
             ];
+        }
+        if (!$fresh && !$wpc_has_snap) {
+            
+            
+            $wpc_pend = is_array($wpc_blc) && !empty($wpc_blc['pending']);
+            if ($wpc_pend && (time() - (int) ($wpc_blc['t'] ?? 0)) < 120) {
+                return ['compressed' => [], 'uncompressed' => []];
+            }
+            update_option('wpc_bulk_library_counts_d', ['t' => time(), 'pending' => 1, 'uncompressed' => 0, 'compressed' => 0], false);
         }
 
         global $wpdb;
@@ -456,7 +452,7 @@ class wps_ic_local
                 LEFT JOIN {$wpdb->postmeta} v
                     ON v.post_id = p.ID AND v.meta_key = 'ic_status' AND v.meta_value = 'compressed'
                 WHERE p.post_type = 'attachment'
-                  AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+                  AND p.post_mime_type IN ('" . implode("','", array_map('esc_sql', function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg','image/png','image/gif'])) . "')
                   AND NOT EXISTS (
                       SELECT 1 FROM {$wpdb->postmeta} ex
                       WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
@@ -469,7 +465,7 @@ class wps_ic_local
         $compressed = (int) $wpdb->get_var("
             SELECT COUNT(*) FROM {$wpdb->posts} p
             WHERE p.post_type = 'attachment'
-              AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+              AND p.post_mime_type IN ('" . implode("','", array_map('esc_sql', function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg','image/png','image/gif'])) . "')
               AND EXISTS (
                   SELECT 1 FROM {$wpdb->postmeta} meta
                   WHERE meta.post_id = p.ID
@@ -488,6 +484,11 @@ class wps_ic_local
             'uncompressed' => $uncompressed,
             'compressed'   => $compressed,
         ], 60);
+        update_option('wpc_bulk_library_counts_d', [
+            't'            => time(),
+            'uncompressed' => $uncompressed,
+            'compressed'   => $compressed,
+        ], false);
 
         return [
             'compressed'   => $compressed > 0 ? array_fill(0, $compressed, 1) : [],
@@ -495,20 +496,41 @@ class wps_ic_local
         ];
     }
 
+    
+    
+    public static function scheduleCountsRefresh()
+    {
+        static $armed = false;
+        if ($armed) { return; }
+        $armed = true;
+        add_action('shutdown', function () {
+            $fin = false;
+            if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $fin = true; }
+            elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); $fin = true; }
+            if (!$fin) { return; }   
+            if (function_exists('ignore_user_abort')) { ignore_user_abort(true); }
+            @set_time_limit(120);
+            
+            
+            $snap = get_option('wpc_bulk_library_counts_d');
+            if (is_array($snap)) {
+                $snap['t'] = time();
+                update_option('wpc_bulk_library_counts_d', $snap, false);
+            }
+            self::countLibraryImages(true);
+        }, PHP_INT_MAX);
+    }
+
 
     public function prepareImages($action = 'compressing', $process = 'count', $limit = '-1')
     {
-        // Count-only fast path. The bulk view (templates/admin/bulk.php:59)
-        // only uses count($result['uncompressed']) and count($result['compressed']).
-        // The full path materializes per-image per-size 'unknown' placeholders, doing
-        // tens of thousands of array writes on real libraries — that was the ~4.5 s
-        // of pure PHP burning on the bulk dashboard page. Two cheap COUNT() queries
-        // plus a 60 s transient give the same numbers for ~0 ms on cache hit.
+
+
         if ($process === 'count' && $action !== 'compressing') {
             return self::countLibraryImages();
         }
 
-        // Raise resource limits
+        
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '300');
 
@@ -521,12 +543,19 @@ class wps_ic_local
         $offset = 0;
         $bulkStatus = ['foundImageCount' => 0, 'foundThumbCount' => 0,];
 
+        
+        
+        
+        
+        
+        
+        $wpc_pi514_t0  = microtime(true);
+        $wpc_pi514_bud = (float) apply_filters('wpc_prepare_images_budget_s', 20.0);
+        $wpc_pi514_cut = false;
+
         while (true) {
-            // Group by file path (handles duplicate uploads), count as
-            // uncompressed only if NEITHER legacy ic_stats NOR v2 ic_status=compressed
-            // exists. Without the v2 branch, every v2-compressed image was reported
-            // as uncompressed (since v2 doesn't write ic_stats), so the bulk page
-            // showed inflated "ready to optimize" counts.
+
+
             $uncompressed_ids = $wpdb->get_col($wpdb->prepare("
         SELECT MIN(p.ID) AS id
         FROM {$wpdb->posts} p
@@ -541,7 +570,7 @@ class wps_ic_local
            AND v.meta_key = 'ic_status'
            AND v.meta_value = 'compressed'
         WHERE p.post_type = 'attachment'
-          AND p.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+          AND p.post_mime_type IN ('" . implode("','", array_map('esc_sql', function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg','image/png','image/gif'])) . "')
           AND NOT EXISTS (
               SELECT 1 FROM {$wpdb->postmeta} ex
               WHERE ex.post_id = p.ID AND ex.meta_key = 'wps_ic_exclude_live'
@@ -567,19 +596,20 @@ class wps_ic_local
             if ($limit !== '-1' && $offset >= intval($limit)) {
                 break;
             }
+            if ($wpc_pi514_bud > 0 && (microtime(true) - $wpc_pi514_t0) >= $wpc_pi514_bud) {
+                $wpc_pi514_cut = 'uncompressed@' . $offset;
+                break;
+            }
         }
 
-        // --- Process COMPRESSED images in a single pass (still batched if needed)
-        // Match legacy ic_stats OR v2 ic_status='compressed'. The v2 path
-        // doesn't write ic_stats, so the legacy single-key check missed all v2
-        // images — bulk page showed "0 to restore" even with v2-compressed images.
+
         $offset = 0;
         while (true) {
             $compressed_ids = $wpdb->get_col($wpdb->prepare("
             SELECT posts.ID
             FROM {$wpdb->posts} posts
             WHERE posts.post_type = 'attachment'
-              AND posts.post_mime_type IN ('image/jpeg', 'image/png', 'image/gif')
+              AND posts.post_mime_type IN ('" . implode("','", array_map('esc_sql', function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg','image/png','image/gif'])) . "')
               AND EXISTS (
                   SELECT 1 FROM {$wpdb->postmeta} meta
                   WHERE meta.post_id = posts.ID
@@ -606,9 +636,21 @@ class wps_ic_local
             if ($limit !== '-1' && $offset >= intval($limit)) {
                 break;
             }
+            if ($wpc_pi514_bud > 0 && (microtime(true) - $wpc_pi514_t0) >= $wpc_pi514_bud) {
+                $wpc_pi514_cut = 'compressed@' . $offset;
+                break;
+            }
         }
 
-        // Save to option if requested
+        if ($wpc_pi514_cut !== false && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('prepare-images-budget', '', '', [
+                'cut'   => $wpc_pi514_cut,
+                'ms'    => (int) round((microtime(true) - $wpc_pi514_t0) * 1000),
+                'found' => (int) $bulkStatus['foundImageCount'],
+            ]);
+        }
+
+        
         if ($action === 'compressing' && $process !== 'count') {
             update_option('wps_ic_BulkStatus', $bulkStatus);
         }

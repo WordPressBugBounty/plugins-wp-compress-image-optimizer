@@ -1,5 +1,97 @@
 <?php
 
+if (!function_exists('wpc_response_cache_guard')) {
+    
+    
+    function wpc_response_cache_guard()
+    {
+        try {
+            if (!empty($GLOBALS['wpc_cc_guarded']) || isset($GLOBALS['wpc_cc_skip'])) {
+                return;
+            }
+            
+            if (is_admin()) { $GLOBALS['wpc_cc_skip'] = 'admin'; return; }
+            if (function_exists('is_user_logged_in') && is_user_logged_in()) { $GLOBALS['wpc_cc_skip'] = 'logged-in'; return; }
+            if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] !== 'GET') { $GLOBALS['wpc_cc_skip'] = 'method'; return; }
+            if (function_exists('wp_doing_ajax') && wp_doing_ajax()) { $GLOBALS['wpc_cc_skip'] = 'ajax'; return; }
+            if (defined('REST_REQUEST') && REST_REQUEST) { $GLOBALS['wpc_cc_skip'] = 'rest'; return; }
+            
+            
+            
+            $wpc_cc_set = (defined('WPS_IC_SETTINGS') && function_exists('get_option')) ? get_option(WPS_IC_SETTINGS) : false;
+            if (!is_array($wpc_cc_set) || empty($wpc_cc_set['cache']['advanced']) || $wpc_cc_set['cache']['advanced'] == '0') {
+                $GLOBALS['wpc_cc_skip'] = 'cache-off';
+                return;
+            }
+            if (headers_sent($wpc_hsf, $wpc_hsl)) {
+                $GLOBALS['wpc_cc_skip'] = 'headers-sent@' . basename((string) $wpc_hsf) . ':' . (int) $wpc_hsl;
+                return;
+            }
+            if (!apply_filters('wpc_response_cache_guard', true)) { $GLOBALS['wpc_cc_skip'] = 'filter'; return; }
+            header('Cache-Control: no-store, max-age=0');
+            $GLOBALS['wpc_cc_guarded'] = true;
+        } catch (\Throwable $e) {
+        }
+    }
+    
+    
+    
+    add_action('send_headers', 'wpc_response_cache_guard', 1);
+}
+
+if (!function_exists('wpc_edge_smaxage')) {
+    
+    
+    
+    
+    
+    
+    
+    function wpc_edge_smaxage()
+    {
+        try {
+            if (!apply_filters('wpc_edge_smaxage_on', true)) {
+                return 0;
+            }
+            $cf = function_exists('get_option') ? get_option(defined('WPS_IC_CF') ? WPS_IC_CF : 'wps-ic-cf') : null;
+            if (!is_array($cf) || empty($cf['token']) || empty($cf['zone'])) {
+                return 0;
+            }
+            return max(0, (int) apply_filters('wpc_cf_html_edge_ttl', 86400));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+}
+
+if (!function_exists('wpc_edge_swr')) {
+    
+    
+    
+    
+    function wpc_edge_swr()
+    {
+        try {
+            return max(0, (int) apply_filters('wpc_html_swr', 86400));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+}
+
+if (!function_exists('wpc_cc_freshness')) {
+    
+    
+    function wpc_cc_freshness($maxAge, $sMaxAge, $swr)
+    {
+        $cc = 'public, max-age=' . (int) $maxAge;
+        if ((int) $sMaxAge > 0) {
+            return $cc . ', s-maxage=' . (int) $sMaxAge . ', stale-while-revalidate=86400';
+        }
+        return $cc . ((int) $swr > 0 ? ', stale-while-revalidate=' . (int) $swr : ', must-revalidate');
+    }
+}
+
 class wps_cacheHtml
 {
 
@@ -15,7 +107,7 @@ class wps_cacheHtml
 
     public function __construct()
     {
-        //options[cache][advanced]
+
         $this->options = get_option(WPS_IC_SETTINGS);
 
         if (!file_exists(WPS_IC_CACHE)) {
@@ -25,7 +117,7 @@ class wps_cacheHtml
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-        // Append user cookie hash to the cache path if user is logged in
+        
         $user_hash = '';
         if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN) {
             foreach ($_COOKIE as $key => $value) {
@@ -37,29 +129,29 @@ class wps_cacheHtml
 
         }
 
-        // Add cookie variation to cache path
+        
         $cookie_string = '';
         if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
             $cookie_values = [];
             $cache_cookies = WPC_CACHE_COOKIES;
 
             foreach ($cache_cookies as $cookie_name) {
-                // Check if this is a prefix cookie (ends with _)
+                
                 if (substr($cookie_name, -1) === '_') {
-                    // This is a prefix - find all cookies that start with this prefix
-                    $prefix = $cookie_name; // Keep the underscore for matching
+                    
+                    $prefix = $cookie_name; 
                     foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
                         if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-                            // Get the suffix (part after the prefix)
+                            
                             $suffix = substr($actual_cookie_name, strlen($prefix));
 
-                            // Create a 7-character hash of the suffix and append to cookie value
+                            
                             $suffix_hash = substr(hash('md5', $suffix), 0, 7);
                             $cookie_values[] = $cookie_value . '_' . $suffix_hash;
                         }
                     }
                 } else {
-                    // Regular cookie - exact match
+                    
                     if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
                         $cookie_values[] = $_COOKIE[$cookie_name];
                     }
@@ -74,44 +166,44 @@ class wps_cacheHtml
         $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilder()
     {
-        $page_builders = ['run_compress', //wpc
-            'run_restore', //wpc
-            'elementor-preview', //elementor
-            'fl_builder', //beaver builder
-            'et_fb', //divi
-            'preview', //WP Preview
-            'builder', //builder
-            'brizy', //brizy
-            'fb-edit', //avada
-            'bricks', //bricks
-            'ct_template', //ct_template
-            'ct_builder', //ct_builder
-            'cs-render', //cornerstone
-            'tatsu', //tatsu
-            'trp-edit-translation', //thrive
-            'brizy-edit-iframe', //brizy
-            'ct_builder', //oxygen
-            'livecomposer_editor', //livecomposer
-            'tatsu', //tatsu
-            'tatsu-header', //tatsu-header
-            'tatsu-footer', //tatsu-footer
-            'is-editor-iframe', //tatsu-footer
-            'tve' //thrive
+        $page_builders = ['run_compress',
+            'run_restore',
+            'elementor-preview',
+            'fl_builder',
+            'et_fb',
+            'preview', 
+            'builder',
+            'brizy',
+            'fb-edit',
+            'bricks',
+            'ct_template',
+            'ct_builder',
+            'cs-render',
+            'tatsu',
+            'trp-edit-translation',
+            'brizy-edit-iframe',
+            'ct_builder',
+            'livecomposer_editor',
+            'tatsu',
+            'tatsu-header',
+            'tatsu-footer',
+            'is-editor-iframe',
+            'tve'
         ];
 
         if ((!empty($_GET['action']) && $_GET['action'] == 'in-front-editor')) {
-            //brizyFrontend fix
+
             return true;
         }
 
         if ((!empty($_GET['action']) && sanitize_text_field($_GET['action']) == 'edit#op-builder') || !empty($_GET['op3editor'])) {
-            //optimizePress builder fix
+
             return true;
         }
 
@@ -136,10 +228,10 @@ class wps_cacheHtml
         return false;
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilderFE()
     {
         if (class_exists('BT_BB_Root')) {
@@ -206,7 +298,7 @@ class wps_cacheHtml
 
     public function cacheExpired($prefix = '')
     {
-        // Does not work on nginx, kill it
+
         return false;
 
         if (!empty($prefix)) {
@@ -219,7 +311,7 @@ class wps_cacheHtml
             return true;
         }
 
-        // Hours into minutes into seconds
+        
         $expireInterval = $this->options['cache']['expire'] * 60 * 60;
         $fileModifiedTime = filemtime($cacheFile);
 
@@ -256,31 +348,604 @@ class wps_cacheHtml
     }
 
 
-    /**
-     * Just verify it's not some page test as we don't want those to cache HTML
-     * @return void
-     */
+    
+
+
+
     public function pageTest()
     {
         return false;
     }
 
+    
+    
+    
+    
+    public static function critBgPreload($buffer)
+    {
+        if (!is_string($buffer) || strpos($buffer, 'wpc-lcp-bg-preload') !== false
+            || strpos($buffer, 'id="wpc-crit-bg-preload"') !== false
+            || !apply_filters('wpc_crit_bg_preload', true)
+            || !preg_match('/<style[^>]*id="wpc-critical-css"[^>]*>(.*?)<\/style>/s', $buffer, $wpc_pm)) {
+            return $buffer;
+        }
+        if (!preg_match('/background(?:-image)?\s*:\s*[^;{}]*url\(\s*([\'"]?)((?:https?:)?\/[^)\'"]{8,500}\.(?:jpe?g|png|webp|avif|svg)(?:\?[^)\'"]{0,120})?)\1/i', $wpc_pm[1], $wpc_pu)) {
+            return $buffer;
+        }
+        $wpc_ph = html_entity_decode($wpc_pu[2], ENT_QUOTES);
+        if (strpos($wpc_ph, '//') === 0) {
+            $wpc_ph = 'https:' . $wpc_ph;
+        } elseif ($wpc_ph[0] === '/' && !empty($_SERVER['HTTP_HOST'])) {
+            $wpc_ph = 'https://' . $_SERVER['HTTP_HOST'] . $wpc_ph;
+        }
+        
+        
+        
+        $wpc_stem840 = preg_replace('/\.[a-z0-9]+$/i', '', basename((string) parse_url($wpc_ph, PHP_URL_PATH)));
+        if ($wpc_stem840 !== '' && preg_match('/<link\b[^>]*id="wpc-atf-bg-preload"[^>]*>\s*/i', $buffer, $wpc_atfm840)
+            && strpos($wpc_atfm840[0], $wpc_stem840 . '.') !== false) {
+            $buffer = str_replace($wpc_atfm840[0], '', $buffer);
+        }
+        $wpc_pt = '<link id="wpc-crit-bg-preload" rel="preload" as="image" fetchpriority="high" href="' . esc_url($wpc_ph) . '">';
+        return str_replace($wpc_pm[0], $wpc_pt . $wpc_pm[0], $buffer);
+    }
+
+    
+    
+    
+    
+    
+    public static function bricksAtfUnveil($buffer)
+    {
+        if (!is_string($buffer) || strpos($buffer, 'bricks-lazy-hidden') === false
+            || strpos($buffer, 'id="wpc-bricks-unveil"') !== false || !apply_filters('wpc_bricks_unveil', true)) {
+            return $buffer;
+        }
+        if (!preg_match('/<style[^>]*id="wpc-critical-css"[^>]*>(.*?)<\/style>/s', $buffer, $wpc_bm)) {
+            
+            
+            
+            $wpc_st = preg_replace_callback('/<[a-z][a-z0-9-]*\b[^>]*\bclass=["\'][^"\']*bricks-lazy-hidden[^"\']*["\'][^>]*>/i', function ($m) {
+                return preg_replace('/\s*\bbricks-lazy-hidden\b/', '', $m[0]);
+            }, $buffer);
+            return is_string($wpc_st) ? $wpc_st : $buffer;
+        }
+        $wpc_out = '';
+        if (preg_match_all('/([^{}]+)\{([^{}]*)\}/', $wpc_bm[1], $wpc_br, PREG_SET_ORDER)) {
+            foreach ($wpc_br as $wpc_r) {
+                if (strlen($wpc_out) > 8192 || strpos($wpc_r[1], 'bricks-lazy-hidden') !== false) {
+                    continue;
+                }
+                if (!preg_match_all('/(?:^|;)\s*(background(?:-image)?)\s*:\s*([^;]+)/i', $wpc_r[2], $wpc_bd, PREG_SET_ORDER)) {
+                    continue;
+                }
+                $wpc_sels = [];
+                foreach (explode(',', $wpc_r[1]) as $wpc_s) {
+                    $wpc_s = trim($wpc_s);
+                    if ($wpc_s === '' || $wpc_s[0] === '@') {
+                        continue;
+                    }
+                    
+                    
+                    $wpc_lz = '.bricks-lazy-hidden.bricks-lazy-hidden.bricks-lazy-hidden';
+                    if (preg_match('/^(.*?)((?:::?[a-zA-Z-]+(?:\([^()]*\))?)+)$/', $wpc_s, $wpc_pm) && $wpc_pm[1] !== '') {
+                        $wpc_sels[] = $wpc_pm[1] . $wpc_lz . $wpc_pm[2];
+                    } else {
+                        $wpc_sels[] = $wpc_s . $wpc_lz;
+                    }
+                }
+                if (!$wpc_sels) {
+                    continue;
+                }
+                $wpc_decl = '';
+                foreach ($wpc_bd as $wpc_d) {
+                    $wpc_v = trim(preg_replace('/\s*!important\s*/i', '', $wpc_d[2]));
+                    if ($wpc_v === '' || stripos($wpc_v, 'none') === 0) {
+                        continue;
+                    }
+                    $wpc_decl .= strtolower($wpc_d[1]) . ':' . $wpc_v . ' !important;';
+                }
+                if ($wpc_decl !== '') {
+                    $wpc_out .= implode(',', $wpc_sels) . '{' . $wpc_decl . '}';
+                }
+            }
+        }
+        if ($wpc_out !== '') {
+            
+            
+            
+            $buffer = str_replace($wpc_bm[0], $wpc_bm[0] . '<style id="wpc-bricks-unveil">@layer wpc-unveil{' . $wpc_out . '}</style>', $buffer);
+        }
+        return $buffer;
+    }
+
+    
+    
+    
+    public static function varsGuard($buffer)
+    {
+        if (!is_string($buffer)
+            || (strpos($buffer, 'id="wpc-critical-css"') === false && strpos($buffer, "id='wpc-critical-css'") === false)
+            || strpos($buffer, 'wpc-vars-guard') !== false || !apply_filters('wpc_vars_guard', true)) {
+            return $buffer;
+        }
+        $wpc_vg = '';
+        $wpc_vgn = 0;
+        if (preg_match_all('/<link\b[^>]*rel=["\']wpc-[a-z-]*stylesheet["\'][^>]*href=["\']([^"\']+)["\']/i', $buffer, $wpc_vgm)) {
+            foreach (array_unique($wpc_vgm[1]) as $wpc_vgh) {
+                if ($wpc_vgn >= 12 || strlen($wpc_vg) > 24576) {
+                    break;
+                }
+                $wpc_vgu = html_entity_decode($wpc_vgh, ENT_QUOTES);
+                $wpc_vgc = strrpos($wpc_vgu, 'wp-content/');
+                if ($wpc_vgc === false || !preg_match('/\.css(\?|$)/', $wpc_vgu)) {
+                    continue;
+                }
+                $wpc_vgr = (string) preg_replace('/[?#].*$/', '', substr($wpc_vgu, $wpc_vgc));
+                if (strpos($wpc_vgr, '..') !== false) {
+                    continue;
+                }
+                $wpc_vgp = trailingslashit(ABSPATH) . $wpc_vgr;
+                if (!@is_readable($wpc_vgp)) {
+                    continue;
+                }
+                $wpc_vgmt = (int) @filemtime($wpc_vgp);
+                
+                
+                $wpc_vgs = $wpc_vgp . '.vars2.css';
+                if (!@is_readable($wpc_vgs) || (int) @filemtime($wpc_vgs) < $wpc_vgmt) {
+                    $wpc_vgcss = (string) @file_get_contents($wpc_vgp);
+                    $wpc_vgout = '';
+                    if ($wpc_vgcss !== '' && strpos($wpc_vgcss, '--') !== false) {
+                        $wpc_vgemit = function ($chunk, $media) use (&$wpc_vgout) {
+                            if (strlen($wpc_vgout) > 16384 || strpos($chunk, '--') === false) {
+                                return;
+                            }
+                            if (preg_match_all('/[^{}@]+\{[^{}]*--[\w-]+\s*:[^{}]*\}/', $chunk, $wpc_vgb2)) {
+                                $wpc_blob = '';
+                                foreach ($wpc_vgb2[0] as $wpc_vgblk) {
+                                    if (strlen($wpc_vgout) + strlen($wpc_blob) > 16384) {
+                                        break;
+                                    }
+                                    $wpc_blob .= trim($wpc_vgblk);
+                                }
+                                if ($wpc_blob !== '') {
+                                    $wpc_vgout .= $media !== '' ? '@media ' . $media . '{' . $wpc_blob . '}' : $wpc_blob;
+                                }
+                            }
+                        };
+                        $wpc_off = 0;
+                        $wpc_len = strlen($wpc_vgcss);
+                        while (preg_match('/@media([^{]+)\{/i', $wpc_vgcss, $wpc_vm, PREG_OFFSET_CAPTURE, $wpc_off)) {
+                            $wpc_mstart = (int) $wpc_vm[0][1];
+                            $wpc_vgemit(substr($wpc_vgcss, $wpc_off, $wpc_mstart - $wpc_off), '');
+                            $wpc_i = $wpc_mstart + strlen($wpc_vm[0][0]);
+                            $wpc_d = 1;
+                            while ($wpc_i < $wpc_len && $wpc_d > 0) {
+                                $wpc_ch = $wpc_vgcss[$wpc_i];
+                                if ($wpc_ch === '{') { $wpc_d++; } elseif ($wpc_ch === '}') { $wpc_d--; }
+                                $wpc_i++;
+                            }
+                            $wpc_vgemit(substr($wpc_vgcss, $wpc_mstart + strlen($wpc_vm[0][0]), $wpc_i - $wpc_mstart - strlen($wpc_vm[0][0]) - 1), trim((string) $wpc_vm[1][0]));
+                            $wpc_off = $wpc_i;
+                        }
+                        $wpc_vgemit(substr($wpc_vgcss, $wpc_off), '');
+                    }
+                    @file_put_contents($wpc_vgs, $wpc_vgout, LOCK_EX);
+                    @touch($wpc_vgs, $wpc_vgmt);
+                }
+                $wpc_vgtxt = (string) @file_get_contents($wpc_vgs);
+                if ($wpc_vgtxt !== '') {
+                    $wpc_vg .= $wpc_vgtxt;
+                    $wpc_vgn++;
+                }
+            }
+        }
+        if ($wpc_vg !== '') {
+            
+            
+            
+            
+            
+            $wpc_vgtag = '<style id="wpc-vars-guard">' . $wpc_vg . '</style>';
+            
+            
+            
+            $wpc_vgat = -1;
+            if (preg_match('/<style\b[^>]*id=["\']wpc-critical-css["\']/i', $buffer, $wpc_vgcm, PREG_OFFSET_CAPTURE)) {
+                $wpc_vgat = (int) $wpc_vgcm[0][1];
+            }
+            if (preg_match('/<link\b[^>]*rel=["\']wpc-[a-z-]*stylesheet["\']/i', $buffer, $wpc_vgfm, PREG_OFFSET_CAPTURE)
+                && ($wpc_vgat < 0 || (int) $wpc_vgfm[0][1] < $wpc_vgat)) {
+                $wpc_vgat = (int) $wpc_vgfm[0][1];
+            }
+            if ($wpc_vgat >= 0) {
+                $buffer = substr_replace($buffer, $wpc_vgtag, $wpc_vgat, 0);
+            } else {
+                $buffer = str_ireplace('</head>', $wpc_vgtag . '</head>', $buffer);
+            }
+        }
+        return $buffer;
+    }
+
+    
+    
+    
+    
+    
+    
+    public static function critlessUndefer($buffer, $ctx = 'render')
+    {
+        if (!is_string($buffer)
+            || strpos($buffer, 'id="wpc-critical-css"') !== false || strpos($buffer, "id='wpc-critical-css'") !== false
+            || !preg_match('/<link\b[^>]*(?:rel|type)=["\']wpc-(?:late-|mobile-)?stylesheet["\']/i', $buffer)) {
+            return $buffer;
+        }
+        
+        
+        $buffer = preg_replace_callback('/<link\b[^>]*>/i', function ($lm) {
+            return str_replace(
+                ['rel="wpc-late-stylesheet"', "rel='wpc-late-stylesheet'",
+                 'rel="wpc-stylesheet"', "rel='wpc-stylesheet'",
+                 'rel="wpc-mobile-stylesheet"', "rel='wpc-mobile-stylesheet'",
+                 'type="wpc-stylesheet"', "type='wpc-stylesheet'",
+                 'type="wpc-mobile-stylesheet"', "type='wpc-mobile-stylesheet'"],
+                ['rel="stylesheet"', "rel='stylesheet'",
+                 'rel="stylesheet"', "rel='stylesheet'",
+                 'rel="stylesheet"', "rel='stylesheet'",
+                 'type="text/css"', "type='text/css'",
+                 'type="text/css"', "type='text/css'"],
+                $lm[0]
+            );
+        }, $buffer);
+        if (function_exists('wpc_cache_first_log') && !get_transient('wpc_undefer_log')) {
+            set_transient('wpc_undefer_log', 1, 300);
+            wpc_cache_first_log('critless-undefer', '', '', ['variant' => $ctx]);
+        }
+        return $buffer;
+    }
+
     public function saveCache($buffer, $prefix = '')
     {
+        
+        
+        
+        
+        
+        
+        
+        $wpc_qs284 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        if ($wpc_qs284 !== '') {
+            if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'queryIsCacheable')) {
+                if (!wps_ic_url_key::queryIsCacheable($wpc_qs284, 'write')) {
+                    return $buffer;
+                }
+            } else {
+                parse_str($wpc_qs284, $wpc_qp284);
+                foreach (array_keys((array) $wpc_qp284) as $wpc_qk284) {
+                    $wpc_qk284 = strtolower((string) $wpc_qk284);
+                    if (strpos($wpc_qk284, 'utm_') !== 0
+                        && !in_array($wpc_qk284, ['fbclid', 'gclid', 'gclsrc', 'dclid', 'msclkid', 'mc_cid', 'mc_eid', 'ref', '_ga', 'igshid', 'ttclid'], true)) {
+                        return $buffer;
+                    }
+                }
+            }
+        }
+
+
+        
+        
+        $wpc_is_warm66 = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log');
+        $wpc_wgate = function ($g, $x = []) use ($wpc_is_warm66, $prefix) {
+
+
+            if (!empty($_SERVER['HTTP_X_WPC_DEBUG']) && !headers_sent()) {
+                header('X-WPC-Cache-Save: skip-' . $g, false);
+            }
+            if ($wpc_is_warm66) {
+                wpc_cache_first_log('warm-drop-' . $g, (string) $this->urlKey, '', array_merge(['variant' => (string) $prefix], $x));
+            }
+        };
+        if ($wpc_is_warm66) {
+            wpc_cache_first_log('warm-rx', (string) $this->urlKey, '', ['variant' => (string) $prefix]);
+        }
 
         if (!empty($_GET['disable_cache'])) {
+            $wpc_wgate('disable-param');
+            return $buffer;
+        }
+
+        
+        if (!is_string($buffer) || strlen($buffer) < 1024 || stripos($buffer, '</html>') === false) {
+            $wpc_wgate('body-floor', ['len' => is_string($buffer) ? strlen($buffer) : -1]);
+            return $buffer;
+        }
+
+        
+        
+        
+        
+        if (function_exists('wpc_copy_admissible')) {
+            $wpc_adm700 = wpc_copy_admissible($buffer, (string) $this->urlKey, (string) $prefix);
+            if ($wpc_adm700 !== '') {
+                if (!headers_sent()) {
+                    header('Cache-Control: private, no-store, max-age=0', true);
+                }
+                $wpc_wgate('admission-' . $wpc_adm700);
+                return $buffer;
+            }
+        }
+
+        
+        
+        if (function_exists('wpc_lane_split_detect613')) {
+            wpc_lane_split_detect613($buffer);
+        }
+
+        $buffer = self::critlessUndefer($buffer, (string) $prefix);
+
+        $buffer = self::varsGuard($buffer);
+
+        
+        if (is_string($buffer)
+            && strpos($buffer, 'id="wpc-critical-css"') !== false
+            && apply_filters('wpc_late_faces', true)
+            && ($wpc_ss210 = (int) get_option('wpc_subsets_seen', 0)) && (time() - $wpc_ss210) < 7 * DAY_IN_SECONDS) {
+            $wpc_lfl210 = '';
+            $wpc_n210 = 0;
+            
+            
+            $wpc_pin210 = [];
+            
+            
+            if (preg_match_all('/@font-face\s*\{[^{}]*font-family\s*:\s*[\'"]?([^;\'"}]+?) Fallback[\'"]?\s*[;}]/i', $buffer, $wpc_pfm210)) {
+                foreach ($wpc_pfm210[1] as $wpc_pf210) {
+                    $wpc_pin210[strtolower(trim($wpc_pf210))] = 1;
+                }
+            }
+            if (preg_match_all('/font-family\s*:\s*[\'"]?([^;\'"}]+)[\'"]?\s*;[^}]{0,400}data:font\/woff2/i', $buffer, $wpc_sfm210)) {
+                foreach ($wpc_sfm210[1] as $wpc_sf210) {
+                    $wpc_pin210[strtolower(trim($wpc_sf210))] = 1;
+                }
+            }
+            $buffer = preg_replace_callback(
+                '/<link\b[^>]*rel=["\'](?:wpc-(?:mobile-|late-)?)?stylesheet["\'][^>]*>/i',
+                function ($lm) use (&$wpc_lfl210, &$wpc_n210, $wpc_pin210) {
+                    if ($wpc_n210 >= 8 || !preg_match('/href=["\']([^"\']+)["\']/', $lm[0], $hm)) {
+                        return $lm[0];
+                    }
+                    if (stripos($lm[0], 'wpc-used-css') !== false) {
+                        return $lm[0];
+                    }
+                    $href = html_entity_decode($hm[1], ENT_QUOTES);
+                    $cp = strrpos($href, 'wp-content/');
+                    if ($cp === false || !preg_match('/\.css(\?|$)/', $href)) {
+                        return $lm[0];
+                    }
+                    $rel = (string) preg_replace('/[?#].*$/', '', substr($href, $cp));
+                    if (strpos($rel, '..') !== false || substr($rel, -12) === '.nofaces.css') {
+                        return $lm[0];
+                    }
+                    $path = trailingslashit(ABSPATH) . $rel;
+                    if (!@is_readable($path)) {
+                        return $lm[0];
+                    }
+                    $mt = (int) @filemtime($path);
+                    $sib = preg_replace('/\.css$/', '.nofaces.css', $path);
+                    $fsib = preg_replace('/\.css$/', '.faces.css', $path);
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_rr210 = get_option('wpc_font_remote_ranges', []);
+                    if (!is_array($wpc_rr210)) { $wpc_rr210 = []; }
+                    if (!empty($wpc_rr210)) { ksort($wpc_rr210); }
+                    $wpc_pfh210 = substr(md5(
+                        implode(',', array_keys($wpc_pin210))
+                        . (empty($wpc_rr210) ? '' : '|rr2:' . md5(serialize($wpc_rr210)))
+                    ), 0, 8);
+                    if (!@is_readable($sib) || (int) @filemtime($sib) < $mt
+                        || strpos((string) @file_get_contents($sib, false, null, 0, 24), $wpc_pfh210) === false) {
+                        
+                        
+                        if (!((function_exists('wp_doing_ajax') && wp_doing_ajax())
+                            || (defined('DOING_CRON') && DOING_CRON)
+                            || !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']))) {
+                            return $lm[0];
+                        }
+                        $css = (string) @file_get_contents($path);
+                        if ($css === '' || stripos($css, '@font-face') === false || stripos($css, 'url(') === false) {
+                            return $lm[0];
+                        }
+                        $faces = '';
+                        $stripped = preg_replace_callback('/@font-face\s*\{[^{}]*\}/is', function ($fm) use (&$faces, $wpc_pin210) {
+                            if (stripos($fm[0], 'url(') !== false && stripos($fm[0], 'data:') === false) {
+                                if (preg_match('/font-family\s*:\s*[\'"]?([^;\'"}]+)/i', $fm[0], $wpc_ffm210)
+                                    && empty($wpc_pin210[strtolower(trim($wpc_ffm210[1]))])) {
+                                    return $fm[0];
+                                }
+                                $faces .= $fm[0];
+                                return '';
+                            }
+                            return $fm[0];
+                        }, $css);
+                        if (!is_string($stripped) || $faces === '') {
+                            return $lm[0];
+                        }
+                        if (class_exists('wps_ic_combine_css')) {
+                            try {
+                                $wpc_min210 = (new wps_ic_combine_css())->minifyCSS($stripped);
+                                if (is_string($wpc_min210) && $wpc_min210 !== '') {
+                                    $stripped = $wpc_min210;
+                                }
+                            } catch (\Throwable $e) {
+                            }
+                        }
+                        @file_put_contents($sib, '/*pf:' . $wpc_pfh210 . '*/' . $stripped, LOCK_EX);
+                        @file_put_contents($fsib, $faces, LOCK_EX);
+                        @touch($sib, $mt);
+                        @touch($fsib, $mt);
+                    }
+                    if (!@is_readable($fsib) || (int) @filesize($fsib) < 1) {
+                        return $lm[0];
+                    }
+                    $wpc_n210++;
+                    $base = substr($href, 0, $cp);
+                    $newHref = $base . preg_replace('/\.css$/', '.nofaces.css', $rel) . '?nf=' . $mt;
+                    $faceHref = $base . preg_replace('/\.css$/', '.faces.css', $rel) . '?nf=' . $mt;
+                    
+                    
+                    
+                    $wpc_lfl210 .= '<link rel="stylesheet" data-wpc-lf-href="' . esc_url($faceHref) . '" media="not all" data-wpc-lf="1" />';
+                    return str_replace($hm[1], esc_url($newHref), $lm[0]);
+                },
+                $buffer
+            );
+            if ($wpc_lfl210 !== '') {
+                $buffer = str_ireplace('</head>', $wpc_lfl210 . '</head>', $buffer);
+            }
+        }
+
+        
+        
+        
+        
+        
+        if (empty($GLOBALS['wpc_cc_guarded'])) {
+            if (!headers_sent() && !is_admin() && !(function_exists('is_user_logged_in') && is_user_logged_in())) {
+                header('X-WPC-CC: unguarded-' . (isset($GLOBALS['wpc_cc_skip']) ? (string) $GLOBALS['wpc_cc_skip'] : 'never-ran'));
+            }
+        } elseif (headers_sent($wpc_hsf195, $wpc_hsl195)) {
+            if (function_exists('wpc_cache_first_log') && !get_transient('wpc_cc_hs_log')) {
+                set_transient('wpc_cc_hs_log', 1, 60);
+                wpc_cache_first_log('cc-headers-sent', (string) $this->urlKey, '', ['variant' => (string) $prefix,
+                    'at' => basename((string) $wpc_hsf195) . ':' . (int) $wpc_hsl195]);
+            }
+            unset($GLOBALS['wpc_cc_guarded']);
+        }
+        if (!empty($GLOBALS['wpc_cc_guarded']) && !headers_sent()) {
+            if (function_exists('wpc_update_window_active') && wpc_update_window_active()
+                && function_exists('wpc_render_armed_for_cache') && !wpc_render_armed_for_cache($buffer)) {
+                $wpc_why195 = 'crit-missing';
+                if (!is_string($buffer) || $buffer === '') { $wpc_why195 = 'empty-buffer'; }
+                elseif (!empty($_GET['criticalCombine'])) { $wpc_why195 = 'combine-param'; }
+                elseif (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) { $wpc_why195 = 'cdn-suppressed'; }
+                header('X-WPC-Update-Window: degraded');
+                header('X-WPC-CC: window-unarmed-' . $wpc_why195);
+                unset($GLOBALS['wpc_cc_guarded']);
+            } else {
+                
+                
+                
+                
+                
+                if (function_exists('header_remove') && apply_filters('wpc_strip_setcookie_on_public', true)) {
+                    @header_remove('Set-Cookie');
+                }
+                $wpc_hma174 = max(0, (int) apply_filters('wpc_html_max_age', 300));
+                $wpc_sm178  = function_exists('wpc_edge_smaxage') ? wpc_edge_smaxage() : 0;
+                
+                
+                
+                if (function_exists('header_remove')) {
+                    @header_remove('Pragma');
+                }
+                header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $wpc_hma174) . ' GMT');
+                header('Cache-Control: ' . wpc_cc_freshness($wpc_hma174, $wpc_sm178,
+                    function_exists('wpc_edge_swr') ? wpc_edge_swr() : 0));
+                
+                
+                
+                
+                
+                
+                
+                header('Server-Timing: wpc-mint;desc=' . time(), false);
+                
+                
+                
+                if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_nat_why808')) {
+                    header('Server-Timing: wpc-nat;desc=' . wps_rewriteLogic::wpc_nat_why808(), false);
+                }
+                unset($GLOBALS['wpc_cc_guarded']);
+            }
+        }
+
+
+        
+        
+        
+        if (function_exists('wpc_update_window_active') && wpc_update_window_active()
+            && function_exists('wpc_render_armed_for_cache') && !wpc_render_armed_for_cache($buffer)) {
+            $wpc_wgate('update-window');
             return $buffer;
         }
 
         if (empty($buffer) || strlen($buffer) < 100 || strpos($buffer, '</body>') === false) {
+            $wpc_wgate('thin-buffer', ['len' => strlen((string) $buffer)]);
+            return $buffer;
+        }
+
+        
+        
+        
+        if (!empty($GLOBALS['wpc_shed520'])) {
+            $wpc_wgate('rewrite-shed', []);
             return $buffer;
         }
 
         if (empty($this->options['cache']['ignore-server-control']) || $this->options['cache']['ignore-server-control'] == '0') {
             $cacheControl = strtolower($_SERVER['HTTP_CACHE_CONTROL'] ?? '');
             if (strpos($cacheControl, 'no-cache') !== false || strpos($cacheControl, 'no-store') !== false || strpos($cacheControl, 'private') !== false) {
+                $wpc_wgate('server-control', ['cc' => substr($cacheControl, 0, 40)]);
                 return $buffer;
             }
+        }
+
+
+        try {
+            $wpc_set45 = get_option(WPS_IC_SETTINGS);
+            if (is_array($wpc_set45) && !empty($wpc_set45['critical']['css']) && $wpc_set45['critical']['css'] == '1'
+                && $this->urlKey && defined('WPS_IC_CRITICAL')
+                && strpos($buffer, 'id="wpc-critical-css"') === false
+                && apply_filters('wpc_cache_require_crit', true)) {
+                $wpc_cd45 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $this->urlKey . '/';
+                
+                if (@filesize($wpc_cd45 . 'critical_desktop.css') > 5 && @filesize($wpc_cd45 . 'critical_mobile.css') > 5
+                    && !(function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($this->urlKey))) {
+                    $wpc_wgate('crit-guard-45');
+                    return $buffer;
+                }
+            }
+
+
+            if (is_array($wpc_set45 ?? null) && !empty($wpc_set45['critical']['css']) && $wpc_set45['critical']['css'] == '1'
+                && $this->urlKey && defined('WPS_IC_CRITICAL')
+                && strpos($buffer, 'wpc-lcp-bg-preload') === false
+                && apply_filters('wpc_lcp_bg_responder', true)
+                && apply_filters('wpc_cache_require_crit', true)) {
+                $wpc_lj48 = @file_get_contents(rtrim(WPS_IC_CRITICAL, '/') . '/' . $this->urlKey . '/lcp.json');
+                if (is_string($wpc_lj48) && $wpc_lj48 !== '' && strpos($wpc_lj48, '"lcp_element"') !== false) {
+                    $wpc_ld48 = json_decode($wpc_lj48, true);
+                    $wpc_le48 = is_array($wpc_ld48) && isset($wpc_ld48['lcp_element']) && is_array($wpc_ld48['lcp_element'])
+                        ? $wpc_ld48['lcp_element'] : [];
+                    foreach (['mobile', 'desktop'] as $wpc_dv48) {
+                        if (!empty($wpc_le48[$wpc_dv48]['type']) && $wpc_le48[$wpc_dv48]['type'] === 'bg') {
+
+
+                            $wpc_bgp48 = (string) parse_url(strtolower((string) ($wpc_le48[$wpc_dv48]['url'] ?? '')), PHP_URL_PATH);
+                            if ($wpc_bgp48 !== '' && preg_match('/\.(jpe?g|png|webp|avif|gif|bmp|tiff?)$/', $wpc_bgp48)) {
+                                $wpc_wgate('lcp-bg-transition-48', ['dev' => $wpc_dv48]);
+                                return $buffer;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+
         }
 
         $excludes = get_option('wpc-excludes');
@@ -314,21 +979,21 @@ class wps_cacheHtml
             }
         }
 
-        // Check for excluded cookies
+        
         if (defined('WPC_EXCLUDE_COOKIES')) {
             if (WPC_EXCLUDE_COOKIES !== false && is_array(WPC_EXCLUDE_COOKIES)) {
                 foreach ($_COOKIE as $cookieName => $cookieValue) {
                     foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
 
-                        // Trailing "_" means: treat as wildcard prefix (e.g. "wp-postpass_")
+                        
                         if (substr($excludedCookie, -1) === '_') {
                             if (stripos($cookieName, $excludedCookie) === 0) {
-                                return $buffer; // Don't cache if excluded cookie prefix is detected
+                                return $buffer; 
                             }
                         } else {
-                            // Exact match (case-insensitive)
+                            
                             if (strcasecmp($cookieName, $excludedCookie) === 0) {
-                                return $buffer; // Don't cache if exact excluded cookie is detected
+                                return $buffer; 
                             }
                         }
                     }
@@ -336,7 +1001,7 @@ class wps_cacheHtml
             }
         }
 
-        // Check mandatory cookies - don't save cache if any required cookie is missing
+        
         if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
             foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
                 if (substr($mandatoryCookie, -1) === '_') {
@@ -348,17 +1013,17 @@ class wps_cacheHtml
                         }
                     }
                     if (!$found) {
-                        return $buffer; // Don't save cache if mandatory cookie prefix not present
+                        return $buffer; 
                     }
                 } else {
                     if (empty($_COOKIE[$mandatoryCookie])) {
-                        return $buffer; // Don't save cache if mandatory cookie not set
+                        return $buffer; 
                     }
                 }
             }
         }
 
-        //page type checks for cache
+
         $purge_rules = get_option('wps_ic_purge_rules');
         if (!isset($purge_rules['post-publish'])) {
             $options = new wps_ic_options();
@@ -387,12 +1052,18 @@ class wps_cacheHtml
             }
         }
 
-        // Build the cache-file prefix IDENTICALLY to the drop-in reader (advancedCacheSample.php:179-181):
-        // mobile-webp / mobile / webp / ''. The old code collapsed the prefix to 'mobile' for ANY mobile
-        // request, so a mobile+webp page (every modern mobile browser sends Accept: image/webp) was WRITTEN as
-        // 'mobile' while the pre-WP drop-in LOOKS UP 'mobile-webp' → guaranteed cache MISS → full WordPress boot
-        // + the slow plugins_loaded fallback serve (~1.5s) instead of the <300ms drop-in serve.
-        $wpc_req_webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false);
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_req_webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false)
+            && apply_filters('wpc_webp_cache_variant', false);
         $prefix = $this->is_mobile() ? ($wpc_req_webp ? 'mobile-webp' : 'mobile') : ($wpc_req_webp ? 'webp' : '');
 
         if (!empty($prefix)) {
@@ -401,6 +1072,30 @@ class wps_cacheHtml
 
         if (!file_exists($this->cachePath)) {
             mkdir(rtrim($this->cachePath, '/'), 0777, true);
+        }
+
+
+        $wpc_map_file = $this->cachePath . 'url.txt';
+        if (!@file_exists($wpc_map_file) && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'sanitizeSameHostUrl')) {
+            $wpc_map_url = wps_ic_url_key::sanitizeSameHostUrl(
+                (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
+                . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?')
+            );
+            if ($wpc_map_url !== '') {
+                @file_put_contents($wpc_map_file, $wpc_map_url);
+            }
+        }
+
+        if (function_exists('wpc_compute_tpl_key') && class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
+            $wpc_tk = wpc_compute_tpl_key();
+            if ($wpc_tk !== '' && $this->urlKey) {
+                $wpc_td = rtrim(WPS_IC_CRITICAL, '/') . '/' . $this->urlKey . '/';
+                if (is_dir($wpc_td) || (function_exists('wp_mkdir_p') && wp_mkdir_p($wpc_td))) {
+                    if (!@file_exists($wpc_td . 'tpl.txt') || trim((string) @file_get_contents($wpc_td . 'tpl.txt')) !== $wpc_tk) {
+                        @file_put_contents($wpc_td . 'tpl.txt', $wpc_tk);
+                    }
+                }
+            }
         }
 
         if (!empty($this->options['cache']['headers']) && $this->options['cache']['headers'] == '1') {
@@ -421,15 +1116,11 @@ class wps_cacheHtml
             $this->saveGzCache($buffer, $prefix);
         }
 
-        // v7.02 — Universal lazy trigger: hand the just-cached HTML to any
-        // listeners. The v2 trigger scanner (addons/v2/v2-trigger-scanner.php)
-        // listens here and queues lazy compression for any uncompressed images
-        // on the page. This is the bulletproof trigger for lazy mode — works
-        // even when this same cached page is later served without PHP running.
+
         do_action('wpc_cache_buffer_ready', $buffer, $url ?? '', $prefix);
 
         $purge_rules['type-lists'] = $type_lists;
-        update_option('wps_ic_purge_rules', $purge_rules);
+        update_option('wps_ic_purge_rules', $purge_rules, false);
 
         return $buffer;
     }
@@ -450,17 +1141,17 @@ class wps_cacheHtml
             return false;
         }
 
-        // Primary WordPress recent posts widget identifiers
+        
         $primary_markers = ['widget_recent_entries', 'wp-block-latest-posts', 'class="recent-posts'];
 
-        // Check for definitive recent posts markers first
+        
         foreach ($primary_markers as $marker) {
             if (strpos($buffer, $marker) !== false) {
                 return true;
             }
         }
 
-        // Check for specific shortcodes that display recent posts
+        
         if (strpos($buffer, '[recent_posts') !== false || strpos($buffer, '[display-posts') !== false) {
             return true;
         }
@@ -470,12 +1161,22 @@ class wps_cacheHtml
 
     public function is_mobile()
     {
+        
+        
+        if (function_exists('wpc_ua_is_mobile')) {
+            return wpc_ua_is_mobile();
+        }
+
         if (!empty($_GET['simulate_mobile'])) {
             return true;
         }
 
         if (isset($_SERVER['HTTP_USER_AGENT'])) {
             $agent = strtolower($_SERVER['HTTP_USER_AGENT']);
+            if (strpos($agent, 'ipad') !== false || strpos($agent, 'tablet') !== false
+                || strpos($agent, 'windows phone') !== false || strpos($agent, 'mobile') !== false) {
+                return true;
+            }
             if (preg_match('#^.*(2.0\ MMP|240x320|400X240|mobile|AvantGo|BlackBerry|Blazer|Cellphone|Danger|DoCoMo|Elaine/3.0|EudoraWeb|Googlebot-Mobile|hiptop|IEMobile|KYOCERA/WX310K|LG/U990|MIDP-2.|MMEF20|MOT-V|NetFront|Newt|Nintendo\ Wii|Nitro|Nokia|Opera\ Mini|Palm|PlayStation\ Portable|portalmmm|Proxinet|ProxiNet|SHARP-TQ-GX10|SHG-i900|Small|SonyEricsson|Symbian\ OS|SymbianOS|TS21i-10|UP.Browser|UP.Link|webOS|Windows\ CE|WinWAP|YahooSeeker/M1A1-R2D2|iPhone|iPod|Android|BlackBerry9530|LG-TU915\ Obigo|LGE\ VX|webOS|Nokia5800).*#i', $agent) || preg_match('#^(w3c\ |w3c-|acs-|alav|alca|amoi|audi|avan|benq|bird|blac|blaz|brew|cell|cldc|cmd-|dang|doco|eric|hipt|htc_|inno|ipaq|ipod|jigs|kddi|keji|leno|lg-c|lg-d|lg-g|lge-|lg/u|maui|maxo|midp|mits|mmef|mobi|mot-|moto|mwbp|nec-|newt|noki|palm|pana|pant|phil|play|port|prox|qwap|sage|sams|sany|sch-|sec-|send|seri|sgh-|shar|sie-|siem|smal|smar|sony|sph-|symb|t-mo|teli|tim-|tosh|tsm-|upg1|upsi|vk-v|voda|wap-|wapa|wapi|wapp|wapr|webc|winw|winw|xda\ |xda-).*#i', substr($agent, 0, 4))) {
                 return true;
             }
@@ -489,25 +1190,220 @@ class wps_cacheHtml
         if (!empty($_GET['disable_cache'])) {
             return true;
         }
+        
+        
+        
+        
+        
+        if (!function_exists('wpc_fs_maybe_wrap660')) {
+            @include_once __DIR__ . '/fold-split.php';
+        }
+        if (function_exists('wpc_fs_maybe_wrap660')) {
+            $buffer = wpc_fs_maybe_wrap660($buffer);
+        }
+        if (!is_string($buffer) || strlen($buffer) < 1024 || stripos($buffer, '</html>') === false) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('gz-drop-body-floor', '', '', ['variant' => (string) $prefix, 'len' => is_string($buffer) ? strlen($buffer) : -1]);
+            }
+            return $buffer;
+        }
 
-        // (v7.10.06) ATOMIC write. Build the gzip in a unique temp file, then rename() onto the live
-        // path. rename() is atomic on the same filesystem, so a concurrent reader (the drop-in's
-        // readgzfile) only ever sees a COMPLETE file — never the half-written gzip that a direct
-        // fopen('w+')+fwrite exposed (w+ truncates to 0 immediately, so a reader in that window got a
-        // truncated stream → decode error / broken page). Same fix in advancedCache.php + preload_warmup.
+
         $final = $this->cachePath . $prefix . 'index.html' . '_gzip';
+        
+        
+        
+        @unlink($this->cachePath . $prefix . 'index.html_br');
         $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
         $fp = @fopen($tmp, 'w+');
         if ($fp === false) {
+            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('warm-drop-fopen', '', '', ['variant' => (string) $prefix, 'path' => substr($final, -60)]);
+            }
             return $buffer;
         }
         fwrite($fp, gzencode($buffer, 8));
         fclose($fp);
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
+            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('warm-drop-rename', '', '', ['variant' => (string) $prefix, 'path' => substr($final, -60)]);
+            }
+        } else {
+            @file_put_contents($this->cachePath . $prefix . 'index.html_md5', md5($buffer));
+            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('warm-wrote', '', '', ['variant' => (string) $prefix, 'bytes' => (int) @filesize($final)]);
+            }
         }
 
+
+        $this->writeStaticMirror($buffer, $prefix);
+
         return $buffer;
+    }
+
+
+    private function writeStaticMirror($buffer, $prefix)
+    {
+        if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE)) {
+            return;
+        }
+        
+        
+        
+        if (stripos((string) ($_SERVER['SERVER_SOFTWARE'] ?? ''), 'nginx') !== false
+            && !apply_filters('wpc_mirror_on_nginx', false)) {
+            $wpc_mh186 = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
+            $wpc_mu186 = rtrim(strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?'), '/');
+            if ($wpc_mh186 !== '' && strpos($wpc_mu186, '..') === false && strpos($wpc_mu186, "\0") === false) {
+                foreach (['index.html_gzip', 'mobile_index.html_gzip', 'index.html', 'mobile_index.html'] as $wpc_mf186) {
+                    $wpc_mp186 = WPS_IC_CACHE . $wpc_mh186 . $wpc_mu186 . '/' . $wpc_mf186;
+                    if (@file_exists($wpc_mp186)) {
+                        @unlink($wpc_mp186);
+                    }
+                }
+            }
+            return;
+        }
+        
+        
+        $host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : (string) ($_SERVER['HTTP_HOST'] ?? '');
+        if ($host === '') {
+            return;
+        }
+        $uri  = strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
+        $uri  = rtrim($uri, '/');
+        
+        
+        if (strpos($uri, '..') !== false || strpos($uri, "\0") !== false || strpos($host, '/') !== false) {
+            return;
+        }
+        
+        $htPrefix = (strpos((string) $prefix, 'mobile') !== false) ? 'mobile_' : '';
+        $dir = WPS_IC_CACHE . $host . $uri . '/';
+        if (!file_exists($dir)) {
+            @mkdir(rtrim($dir, '/'), 0777, true);
+        }
+        if (!is_dir($dir)) {
+            return;
+        }
+        $final = $dir . $htPrefix . 'index.html' . '_gzip';
+        if (!is_string($buffer) || strlen($buffer) < 1024 || stripos($buffer, '</html>') === false) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('mirror-drop-body-floor', '', '', ['len' => is_string($buffer) ? strlen($buffer) : -1]);
+            }
+            return;
+        }
+        $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
+        $fp = @fopen($tmp, 'w+');
+        if ($fp === false) {
+            return;
+        }
+        fwrite($fp, gzencode($buffer, 8));
+        fclose($fp);
+        if (!@rename($tmp, $final)) {
+            @unlink($tmp);
+        }
+        
+        
+        
+        self::ensureStaticMirrorHeaderHtaccess($dir, 'https://' . $host . ($uri === '' ? '/' : $uri . '/'));
+    }
+
+
+    public static function wpc_mirror_url_tag($url)
+    {
+        
+        
+        
+        if (function_exists('wpc_cf_url_tag')) {
+            return wpc_cf_url_tag($url);
+        }
+        $p    = parse_url((string) $url);
+        $host = strtolower((string) (isset($p['host']) ? $p['host'] : ''));
+        $host = preg_replace('/:\d+$/', '', $host);
+        if (strpos($host, 'www.') === 0) { $host = substr($host, 4); }
+        $path = (isset($p['path']) && $p['path'] !== '') ? (string) $p['path'] : '/';
+        $path = '/' . trim($path, '/');
+        if ($path !== '/') { $path .= '/'; }
+        return 'wpc-u-' . substr(md5($host . $path), 0, 20);
+    }
+
+    public static function ensureStaticMirrorHeaderHtaccess($dirOverride = null, $urlOverride = null)
+    {
+        if (!defined('WPS_IC_CACHE') || !function_exists('home_url')) {
+            return false;
+        }
+        $host = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+        if ($host === '' || strpos($host, '/') !== false) {
+            return false;
+        }
+        
+        
+        
+        $wpc_murl673 = ($urlOverride !== null && $urlOverride !== '') ? (string) $urlOverride : home_url('/');
+        $dir  = ($dirOverride !== null && $dirOverride !== '')
+            ? rtrim((string) $dirOverride, '/') . '/'
+            : rtrim(WPS_IC_CACHE, '/') . '/' . $host . '/';
+        $file = $dir . '.htaccess';
+        $wpc_utag673 = self::wpc_mirror_url_tag($wpc_murl673);
+
+        
+        
+
+
+        
+        
+
+
+        
+        
+        
+        
+        
+        $wpc_sm569 = function_exists('wpc_edge_smaxage') ? (int) wpc_edge_smaxage() : 0;
+        
+        
+        
+        
+        $wpc_marker = '# wpc-mirror-headers-v9-s' . $wpc_sm569 . '-' . $wpc_utag673;
+        if (@file_exists($file) && strpos((string) @file_get_contents($file), $wpc_marker) !== false) {
+            return true;
+        }
+        if (!is_dir($dir)) {
+            if (!function_exists('wp_mkdir_p') || !wp_mkdir_p($dir)) {
+                return false;
+            }
+        }
+
+
+        $wpc_hma = max(0, (int) apply_filters('wpc_html_max_age', 300));
+        
+        
+        
+        
+        
+        
+        $wpc_swr = function_exists('wpc_edge_swr') ? (int) wpc_edge_swr() : 0;
+        $wpc_cc  = function_exists('wpc_cc_freshness')
+            ? wpc_cc_freshness($wpc_hma, $wpc_sm569, $wpc_swr)
+            : 'public, max-age=' . $wpc_hma
+                . ($wpc_sm569 > 0 ? ', s-maxage=' . $wpc_sm569 . ', stale-while-revalidate=86400'
+                    : ($wpc_swr > 0 ? ', stale-while-revalidate=' . $wpc_swr : ', must-revalidate'));
+        
+        
+        
+        
+        
+        
+        $c = $wpc_marker . ' — marks + governs responses served straight from this static mirror (zero PHP).' . PHP_EOL
+           . '<IfModule mod_headers.c>' . PHP_EOL
+           . 'Header set X-Cache-By "Advanced Cache - Static"' . PHP_EOL
+           . 'Header set Cache-Tag "wpc-html,' . $wpc_utag673 . '"' . PHP_EOL
+           . 'Header set Cache-Control "' . $wpc_cc . '"' . PHP_EOL
+           . 'Header set Server-Timing "wpc-cache;desc=hit"' . PHP_EOL
+           . '</IfModule>' . PHP_EOL;
+        return (bool) @file_put_contents($file, $c);
     }
 
     public function getCacheFilePath($prefix = '')
@@ -521,14 +1417,31 @@ class wps_cacheHtml
 
     public function getCache($prefix = '')
     {
+
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            return;
+        }
         if (!empty($prefix)) {
             $prefix = $prefix . '_';
+        }
+
+        
+        
+        
+        foreach (['index.html_gzip', 'index.html'] as $wpc_cf178) {
+            $wpc_cfp178 = $this->cachePath . $prefix . $wpc_cf178;
+            if (@file_exists($wpc_cfp178) && (int) @filesize($wpc_cfp178) < 1024) {
+                @unlink($wpc_cfp178);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('serve-drop-body-floor', '', '', ['f' => $prefix . $wpc_cf178]);
+                }
+            }
         }
 
         if (function_exists('readgzfile')) {
             if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && is_readable($this->cachePath . $prefix . 'index.html' . '_gzip')) {
                 $this->setupCacheHeaders($this->cachePath . $prefix . 'index.html' . '_gzip');
-                // Nginx instantly echoes readgzfile instead of saving it to variable.
+                
                 readgzfile($this->cachePath . $prefix . 'index.html' . '_gzip');
                 die();
             }
@@ -543,17 +1456,35 @@ class wps_cacheHtml
 
     public function setupCacheHeaders($cache_filepath)
     {
+        
+        
+        
+        if (function_exists('header_remove') && apply_filters('wpc_strip_setcookie_on_public', true)) {
+            @header_remove('Set-Cookie');
+            @header_remove('Pragma');
+        }
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($cache_filepath)) . ' GMT');
 
-        if (!empty($this->settings['cache_refresh_time']) && $this->settings['cache_refresh_time'] > 0) {
-            $cacheSeconds = $this->settings['cache_refresh_time'] * 60; // Convert minutes to seconds
-            header('Cache-Control: max-age=' . $cacheSeconds . ', public');
-            $expiresTime = time() + $cacheSeconds;
-            header('Expires: ' . gmdate('D, d M Y H:i:s', $expiresTime) . ' GMT');
-        } else {
-            header('Cache-Control: public, max-age=' . 60 * 60); // Ensures that the file is not cached
-            header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+
+        $wpc_hma49 = max(0, (int) apply_filters('wpc_html_max_age', 300));
+        $wpc_sm178 = function_exists('wpc_edge_smaxage') ? wpc_edge_smaxage() : 0;
+        header('Cache-Control: ' . wpc_cc_freshness($wpc_hma49, $wpc_sm178,
+            function_exists('wpc_edge_swr') ? wpc_edge_swr() : 0));
+        header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $wpc_hma49) . ' GMT');
+
+
+        $wpc_th105 = strtolower((string) preg_replace('/:\d+$/', '', isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : ''));
+        if (strpos($wpc_th105, 'www.') === 0) { $wpc_th105 = substr($wpc_th105, 4); }
+        $wpc_tp105 = (string) (parse_url(isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH) ?: '/');
+        $wpc_tp105 = '/' . trim($wpc_tp105, '/');
+        if ($wpc_tp105 !== '/') { $wpc_tp105 .= '/'; }
+        if ($wpc_th105 !== '') {
+            header('Cache-Tag: wpc-html,wpc-u-' . substr(md5($wpc_th105 . $wpc_tp105), 0, 20), false);
         }
+
+
+        
+        header('Server-Timing: wpc-cache;desc=hit', false);
 
         header('X-Cache-By: Advanced Cache - Gzip');
     }
@@ -565,8 +1496,118 @@ class wps_cacheHtml
         }
 
         if ($post_id == 'all') {
-            self::removeDirectory(WPS_IC_CACHE);
+            
+            
+            $wpc_jf179 = rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl';
+            $wpc_jl179 = '';
+            if (@is_readable($wpc_jf179)) {
+                $wpc_js179 = (int) @filesize($wpc_jf179);
+                $wpc_jl179 = (string) @file_get_contents($wpc_jf179, false, null, max(0, $wpc_js179 - 65536));
+            }
+            
+            
+            
+            
+            
+            $wpc_keep179 = ['css', 'js', 'wpc-cflog.jsonl'];
+            $wpc_root179 = rtrim(WPS_IC_CACHE, '/');
+            
+            
+            
+            
+            
+            
+            $wpc_tomb530 = '';
+            if (apply_filters('wpc_purge_rename_first', true)) {
+                foreach ((array) @scandir($wpc_root179) as $wpc_pk530) {
+                    if ($wpc_pk530 === '.' || $wpc_pk530 === '..' || in_array($wpc_pk530, $wpc_keep179, true)
+                        || strpos($wpc_pk530, '.purging-') === 0) {
+                        continue;
+                    }
+                    $wpc_src530 = $wpc_root179 . '/' . $wpc_pk530;
+                    if (!@is_dir($wpc_src530)) {
+                        continue;
+                    }
+                    if ($wpc_tomb530 === '') {
+                        $wpc_tomb530 = $wpc_root179 . '/.purging-' . substr(md5(uniqid('', true)), 0, 10);
+                        if (!@mkdir($wpc_tomb530, 0777, true)) {
+                            $wpc_tomb530 = '';
+                            break;
+                        }
+                    }
+                    
+                    @rename($wpc_src530, $wpc_tomb530 . '/' . $wpc_pk530);
+                }
+            }
+            foreach ((array) @scandir($wpc_root179) as $wpc_it179) {
+                if ($wpc_it179 === '.' || $wpc_it179 === '..' || in_array($wpc_it179, $wpc_keep179, true)) {
+                    continue;
+                }
+                if (strpos($wpc_it179, '.purging-') === 0) {
+                    continue; 
+                }
+                $wpc_ip179 = $wpc_root179 . '/' . $wpc_it179;
+                is_dir($wpc_ip179) ? self::removeDirectory($wpc_ip179) : @unlink($wpc_ip179);
+            }
+            
+            
+            if (function_exists('register_shutdown_function')) {
+                register_shutdown_function(function () use ($wpc_root179) {
+                    if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+                    if (function_exists('set_time_limit')) { @set_time_limit(120); }
+                    $wpc_n530 = 0;
+                    $wpc_seen530 = [];
+                    $GLOBALS['wpc_rmdl530'] = microtime(true) + 10.0;
+                    while (microtime(true) <= $GLOBALS['wpc_rmdl530']) {
+                        $wpc_any530 = false;
+                        foreach ((array) @scandir($wpc_root179) as $wpc_t530) {
+                            if (strpos((string) $wpc_t530, '.purging-') !== 0 || isset($wpc_seen530[$wpc_t530])) {
+                                continue;
+                            }
+                            $wpc_seen530[$wpc_t530] = 1;
+                            if (microtime(true) > $GLOBALS['wpc_rmdl530']) {
+                                break 2;
+                            }
+                            $wpc_any530 = true;
+                            $wpc_tp530 = $wpc_root179 . '/' . $wpc_t530;
+                            foreach ((array) @scandir($wpc_tp530) as $wpc_c530) {
+                                if (strpos((string) $wpc_c530, '.purging-') === 0) {
+                                    @rename($wpc_tp530 . '/' . $wpc_c530, $wpc_root179 . '/.purging-' . substr(md5(uniqid('', true)), 0, 10));
+                                }
+                            }
+                            self::removeDirectory($wpc_tp530);
+                            $wpc_n530++;
+                        }
+                        if (!$wpc_any530) {
+                            break;
+                        }
+                    }
+                    unset($GLOBALS['wpc_rmdl530']);
+                    if ($wpc_n530 && function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('purge-tombstone-drained', '', '', ['n' => $wpc_n530]);
+                    }
+                });
+            }
             self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/');
+            
+            
+            
+            
+            
+            if (defined('WPS_IC_CRITICAL')) {
+                $wpc_ut179 = (array) @glob(rtrim(WPS_IC_CRITICAL, '/') . '/*/used_tpl.txt');
+                $wpc_utn179 = 0;
+                foreach ($wpc_ut179 as $wpc_utf179) {
+                    if ($wpc_utn179 >= 200) { break; }
+                    if (@unlink($wpc_utf179)) { $wpc_utn179++; }
+                }
+            }
+            if ($wpc_jl179 !== '') {
+                @mkdir(rtrim(WPS_IC_CACHE, '/'), 0777, true);
+                if (!@is_file($wpc_jf179)) {
+                    @file_put_contents($wpc_jf179, $wpc_jl179);
+                }
+            }
 
         } else {
             if ($post_id != 0) {
@@ -578,6 +1619,30 @@ class wps_cacheHtml
             $urlKey = $this->url_key_class->setup($url);
             self::removeDirectory(WPS_IC_CACHE . $urlKey);
             self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/' . $urlKey);
+            self::removeStaticMirror($url);
+        }
+    }
+
+
+    public static function removeStaticMirror($url)
+    {
+        if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE)) {
+            return;
+        }
+        $parts = function_exists('wp_parse_url') ? wp_parse_url((string) $url) : parse_url((string) $url);
+        $host  = isset($parts['host']) ? (string) $parts['host'] : '';
+        if ($host === '' || strpos($host, '/') !== false) {
+            return;
+        }
+        $path = rtrim(isset($parts['path']) ? (string) $parts['path'] : '', '/');
+        if (strpos($path, '..') !== false || strpos($path, "\0") !== false) {
+            return;
+        }
+        if ($path === '') {
+            @unlink(WPS_IC_CACHE . $host . '/index.html' . '_gzip');
+            @unlink(WPS_IC_CACHE . $host . '/mobile_index.html' . '_gzip');
+        } else {
+            self::removeDirectory(WPS_IC_CACHE . $host . $path);
         }
     }
 
@@ -589,6 +1654,13 @@ class wps_cacheHtml
 
         if (!empty($files)) {
             foreach ($files as $file) {
+                
+                
+                
+                
+                if (!empty($GLOBALS['wpc_rmdl530']) && microtime(true) > $GLOBALS['wpc_rmdl530']) {
+                    return;
+                }
                 is_dir($file) ? self::removeDirectory($file) : unlink($file);
             }
         }
@@ -596,7 +1668,7 @@ class wps_cacheHtml
         $files = glob($path . '/*');
 
         if (is_dir($path) && empty($files)) {
-            rmdir($path);
+            @rmdir($path);
         }
     }
 
@@ -608,8 +1680,16 @@ class wps_cacheHtml
 
     public function removeCombinedFiles($post_id)
     {
+        
+        
+        
+        
+        
+        
+        
+        
         if ($post_id == 'all') {
-            self::removeDirectory(WPS_IC_COMBINE);
+            update_option('wpc_combine_stale_epoch', time(), false);
             return;
         }
 
@@ -620,13 +1700,31 @@ class wps_cacheHtml
         }
 
         $urlKey = $this->url_key_class->setup($url);
-        self::removeDirectory(WPS_IC_COMBINE . $urlKey);
+        @file_put_contents(WPS_IC_COMBINE . $urlKey . '/.wpc-stale', (string) time());
     }
 
     public function removeCriticalFiles($post_id)
     {
+
+
+        if (function_exists('wpc_cache_first_log')) {
+            $wpc_tw_via = [];
+            foreach (array_slice(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 9), 1, 7) as $wpc_tw_f) {
+                $wpc_tw_via[] = (isset($wpc_tw_f['class']) ? $wpc_tw_f['class'] . '::' : '') . ($wpc_tw_f['function'] ?? '?');
+            }
+            wpc_cache_first_log('crit-wipe', is_scalar($post_id) ? (string) $post_id : gettype($post_id), '', [
+                'hook' => function_exists('current_action') ? (string) current_action() : '',
+                'via'  => implode('<', $wpc_tw_via),
+            ]);
+        }
         if ($post_id == 'all') {
-            self::removeDirectory(WPS_IC_CRITICAL);
+
+
+            if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'wipeCriticalPreservingStores')) {
+                wps_ic_cache_integrations::wipeCriticalPreservingStores(WPS_IC_CRITICAL);
+            } else {
+                self::removeDirectory(WPS_IC_CRITICAL);
+            }
             global $wpdb;
             $options_table = $wpdb->options;
 
@@ -642,6 +1740,9 @@ class wps_cacheHtml
              OR option_name LIKE '_transient_wpc_push_domain_%'
              OR option_name LIKE '_transient_timeout_wpc_push_domain_%'");
 
+
+            if (function_exists('wpc_land_cooldown_clear')) { wpc_land_cooldown_clear('all'); }
+
             return;
         }
 
@@ -652,26 +1753,25 @@ class wps_cacheHtml
         }
 
         $urlKey = $this->url_key_class->setup($url);
-        self::removeDirectory(WPS_IC_CRITICAL . $urlKey);
 
-        // (v7.10.04) Per-page crit purge MUST also clear the per-URL transients, not just
-        // the file dir. wpc_critical_key_<urlKey> is a 5-min "crit already generated /
-        // request in flight" gate (see criticalRunning() + criticalCss-v2 "Die, already
-        // running!"): if we delete the file but leave this transient, the page is told crit
-        // still exists and WON'T regenerate for up to 5 min → it re-inlines nothing / serves
-        // STALE above-the-fold. The 'all' branch already deletes these; the per-page branch
-        // silently didn't — which is why a single-page purge (e.g. an Elementor save) left
-        // the layout stale. wpc_critical_uuid_<urlKey> is the paired generation token; drop
-        // it too so any in-flight stale gen is abandoned in favour of a fresh one. Both are
-        // local option deletes — fast, NON-BLOCKING; the regen itself happens lazily on the
-        // next front-end visit.
+
+        if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'removeFiles')) {
+            wps_ic_cache_integrations::removeFiles(WPS_IC_CRITICAL . $urlKey);
+        } else {
+            self::removeDirectory(WPS_IC_CRITICAL . $urlKey);
+        }
+
+
+        if (function_exists('wpc_land_cooldown_clear')) { wpc_land_cooldown_clear($urlKey); }
+
+
         delete_transient('wpc_critical_key_' . $urlKey);
         delete_transient('wpc_critical_uuid_' . $urlKey);
     }
 
     public function recursiveDelete($folder)
     {
-        // Delete all the files in the folder
+        
         $files = glob($folder . '/*');
         foreach ($files as $file) {
             if (is_file($file)) {
@@ -681,7 +1781,7 @@ class wps_cacheHtml
             }
         }
 
-        // Delete the folder itself
+        
         if (is_dir($folder)) rmdir($folder);
     }
 

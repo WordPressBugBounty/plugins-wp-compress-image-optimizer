@@ -1,5 +1,36 @@
 <?php
 
+
+
+
+
+
+
+
+
+if (!function_exists('str_contains')) {
+    function str_contains($haystack, $needle)
+    {
+        $needle = (string) $needle;
+        return $needle === '' || strpos((string) $haystack, $needle) !== false;
+    }
+}
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle)
+    {
+        $needle = (string) $needle;
+        return $needle === '' || strncmp((string) $haystack, $needle, strlen($needle)) === 0;
+    }
+}
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle)
+    {
+        $needle = (string) $needle;
+        return $needle === '' || substr((string) $haystack, -strlen($needle)) === $needle;
+    }
+}
+
+
 class wps_ic_url_key
 {
     public $urlKey;
@@ -8,19 +39,19 @@ class wps_ic_url_key
     public $trp_settings;
 	private static $url_mappings = [];
 
-    /**
-     * Captured host+URI from before translation plugins (e.g. Weglot) rewrite
-     * $_SERVER['REQUEST_URI'] to strip the language prefix.  Set once, early,
-     * via captureRequestUrl() and reused by every subsequent setup() call that
-     * has no explicit $url argument.
-     */
+    
+
+
+
+
+
     private static $captured_request_url = null;
 
-    /**
-     * Lock in the current host + REQUEST_URI.  Call this as early as possible
-     * (e.g. at plugins_loaded priority 1) before any translation plugin has a
-     * chance to modify $_SERVER['REQUEST_URI'].
-     */
+    
+
+
+
+
     public static function captureRequestUrl()
     {
         if (self::$captured_request_url === null) {
@@ -43,8 +74,8 @@ class wps_ic_url_key
     public function setup($url = '')
     {
       if (empty($url)) {
-          // Use the pre-captured URL if available (prevents translation plugins
-          // that rewrite $_SERVER['REQUEST_URI'] from corrupting the cache key).
+          
+          
           if (self::$captured_request_url !== null) {
               $url = self::$captured_request_url;
           } else {
@@ -77,22 +108,200 @@ class wps_ic_url_key
 
         $this->urlKey = $this->createUrlKey($url);
 
-	    // Store the mapping
+	    
 	    self::$url_mappings[$this->urlKey] = $original_url;
 
         return $this->urlKey;
+    }
+
+    
+
+
+
+
+
+
+    public static function trackingParams()
+    {
+        return ['disable_cache', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id', 'wpc_key'];
+    }
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public static function controlParams()
+    {
+        return ['disable_cache', 'ao_noptimize', 'age-verified', 'cn-reloaded', 'usqp',
+            'disablewpc', 'wpc_visitor_mode', 'remote_generate_critical', 'dbgcache',
+            'forcecritical', 'removecritical', 'forcerecombine', 'crit', 'cdn', 'nocache',
+            'wpc_no_buffer', 'wpc_smoke', 'wpcdoc', 'wpc_perf_debug', 'wpc_img_debug',
+            'wpc_tier', 'wpc_key'];
+    }
+
+    public static function tierNames()
+    {
+        return ['control', 'free', 'local', 'edge'];
+    }
+
+    
+
+
+
+
+
+
+
+
+    public static function tierKey($wpc_mint743 = true)
+    {
+        if (defined('WPC_TIER_KEY') && (string) WPC_TIER_KEY !== '') {
+            return (string) WPC_TIER_KEY;
+        }
+        if (!function_exists('get_option')) {
+            return '';
+        }
+        $wpc_k743 = (string) get_option('wpc_tier_key', '');
+        if ($wpc_k743 !== '' || !$wpc_mint743) {
+            return $wpc_k743;
+        }
+        if (function_exists('random_bytes')) {
+            try { $wpc_k743 = bin2hex(random_bytes(16)); } catch (\Throwable $e) { $wpc_k743 = ''; }
+        }
+        if ($wpc_k743 === '' && function_exists('wp_generate_password')) {
+            $wpc_k743 = (string) wp_generate_password(32, false, false);
+        }
+        if ($wpc_k743 !== '' && function_exists('update_option')) {
+            update_option('wpc_tier_key', $wpc_k743, false);
+        }
+        return $wpc_k743;
+    }
+
+    
+
+
+
+
+
+    public static function tierCacheOn()
+    {
+        
+        
+        
+        return defined('WPC_TIER_CACHE') && WPC_TIER_CACHE;
+    }
+
+    
+
+
+
+
+
+
+    public static function tierWriteBlocked()
+    {
+        $wpc_qs739 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
+        if ($wpc_qs739 === '' || stripos($wpc_qs739, 'wpc_tier') === false) {
+            return false;
+        }
+        return !(defined('WPC_TIER_ACTIVE') && WPC_TIER_ACTIVE);
+    }
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+    public static function queryIsCacheable($queryString, $wpc_ctx739 = 'read')
+    {
+        $queryString = (string) $queryString;
+        if (trim($queryString) === '') {
+            return true;
+        }
+        $wpc_ctrl598 = array_flip(self::controlParams());
+        $wpc_ok598 = array_flip(array_map('strtolower', self::trackingParams()));
+        
+        
+        foreach (['dclid', 'ref', 'igshid', 'ttclid'] as $wpc_lg598) {
+            $wpc_ok598[$wpc_lg598] = 1;
+        }
+        $wpc_q598 = [];
+        parse_str($queryString, $wpc_q598);
+        
+        
+        
+        
+        
+        
+        if (self::tierCacheOn()) {
+            $wpc_tk739 = '';
+            foreach ((array) $wpc_q598 as $wpc_qk739 => $wpc_qv739) {
+                if (strtolower((string) $wpc_qk739) === 'wpc_tier') { $wpc_tk739 = (string) $wpc_qv739; }
+            }
+            if ($wpc_tk739 !== '') {
+                $wpc_tn739 = strtolower(preg_replace('/[^A-Za-z]/', '', $wpc_tk739));
+                if (!in_array($wpc_tn739, self::tierNames(), true)) {
+                    return false;
+                }
+                if ($wpc_ctx739 === 'write' && !(defined('WPC_TIER_ACTIVE') && WPC_TIER_ACTIVE)) {
+                    return false;
+                }
+                foreach (array_keys((array) $wpc_q598) as $wpc_qk739) {
+                    if (in_array(strtolower((string) $wpc_qk739), ['wpc_tier', 'wpc_key'], true)) {
+                        unset($wpc_q598[$wpc_qk739]);
+                    }
+                }
+            }
+        }
+        foreach (array_keys((array) $wpc_q598) as $wpc_k598) {
+            $wpc_k598 = strtolower((string) $wpc_k598);
+            if (isset($wpc_ctrl598[$wpc_k598])) {
+                return false;
+            }
+            
+            
+            if (strpos($wpc_k598, 'utm_') === 0 || strpos($wpc_k598, 'mtm_') === 0
+                || strpos($wpc_k598, 'pk_') === 0) {
+                continue;
+            }
+            if (!isset($wpc_ok598[$wpc_k598])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public function removeTrackingParams($url)
     {
         if (empty($url) || !$url) return;
 
-        $trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id'];
+
+        $trackingParams = self::trackingParams();
 
         $parts = parse_url($url);
 
         if (!isset($parts['query'])) {
-            return $url; // No query, nothing to remove
+            return $url; 
         }
 
         parse_str($parts['query'], $query);
@@ -103,7 +312,7 @@ class wps_ic_url_key
 
         $queryString = http_build_query($query);
 
-        // Rebuild URL safely
+        
         $cleanUrl = '';
 
         if (isset($parts['scheme'])) {
@@ -186,7 +395,7 @@ class wps_ic_url_key
         if ($this->seems_utf8($string)) {
             return strtr($string, $this->utf8_char_map());
         } else {
-            return $string; // Basic fallback; your original map can be reused here if needed.
+            return $string; 
         }
     }
 
@@ -253,7 +462,7 @@ class wps_ic_url_key
 
     private function utf8_char_map()
     {
-        return ['À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Æ' => 'AE', 'Ç' => 'C', 'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I', 'Ð' => 'D', 'Ñ' => 'N', 'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O', 'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U', 'Ý' => 'Y', 'Þ' => 'TH', 'ß' => 's', 'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a', 'æ' => 'ae', 'ç' => 'c', 'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e', 'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i', 'ð' => 'd', 'ñ' => 'n', 'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o', 'ø' => 'o', 'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u', 'ý' => 'y', 'þ' => 'th', 'ÿ' => 'y'// Extend with more mappings if needed
+        return ['À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Æ' => 'AE', 'Ç' => 'C', 'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I', 'Ð' => 'D', 'Ñ' => 'N', 'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O', 'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U', 'Ý' => 'Y', 'Þ' => 'TH', 'ß' => 's', 'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a', 'æ' => 'ae', 'ç' => 'c', 'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e', 'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i', 'ð' => 'd', 'ñ' => 'n', 'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o', 'ø' => 'o', 'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u', 'ý' => 'y', 'þ' => 'th', 'ÿ' => 'y'
         ];
     }
 
@@ -356,7 +565,7 @@ class wps_ic_url_key
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
-            // Absolute
+            
             return false;
         } elseif (strpos($url, $site_url) === false || strpos($url, '//') === 0) {
             return true;
@@ -401,6 +610,119 @@ class wps_ic_url_key
 
 	public static function getUrlFromKey($url_key)
 	{
-		return isset(self::$url_mappings[$url_key]) ? self::$url_mappings[$url_key] : '';
+		if (isset(self::$url_mappings[$url_key])) {
+			return self::$url_mappings[$url_key];
+		}
+
+
+		if (!empty($url_key) && is_string($url_key) && strpos($url_key, '/') === false && strpos($url_key, '..') === false) {
+			$candidates = [];
+			if (defined('WPS_IC_CRITICAL')) {
+				$candidates[] = rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/url.txt';
+			}
+			if (defined('WPS_IC_CACHE')) {
+				$candidates[] = rtrim(WPS_IC_CACHE, '/') . '/' . $url_key . '/url.txt';
+			}
+			foreach ($candidates as $file) {
+				if (@is_readable($file)) {
+					$clean = self::sanitizeSameHostUrl((string) @file_get_contents($file));
+					if ($clean !== '') {
+						self::$url_mappings[$url_key] = $clean;
+						return $clean;
+					}
+				}
+			}
+		}
+		return '';
+	}
+
+
+	
+
+
+
+
+
+
+
+	public static function isPageUrl($url)
+	{
+		$path = (string) parse_url((string) $url, PHP_URL_PATH);
+		if ($path === '') {
+			return true;
+		}
+		return !preg_match(
+			'#(?:^|/)(?:wp-admin(?:/|$)|wp-json(?:/|$)|wp-login\.php|wp-cron\.php|xmlrpc\.php'
+			. '|admin-ajax\.php|wp-comments-post\.php|wp-signup\.php|wp-activate\.php'
+			. '|wp-trackback\.php|wp-mail\.php|wp-links-opml\.php)#i',
+			$path
+		);
+	}
+
+	public static function persistKeyUrl($url_key, $url)
+	{
+		if (empty($url_key) || !is_string($url_key) || empty($url) || !defined('WPS_IC_CRITICAL')
+			|| strpos($url_key, '/') !== false || strpos($url_key, '..') !== false) {
+			return false;
+		}
+		$clean = self::sanitizeSameHostUrl($url);
+		if ($clean === '' || !self::isPageUrl($clean)) {
+			return false;
+		}
+		$dir  = rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/';
+		$file = $dir . 'url.txt';
+		if (@is_readable($file) && trim((string) @file_get_contents($file)) === $clean) {
+			return true;
+		}
+		if (!is_dir($dir)) {
+			if (!function_exists('wp_mkdir_p') || !wp_mkdir_p($dir)) {
+				return false;
+			}
+		}
+		$tmp = $file . '.' . uniqid('tmp', true);
+		if (@file_put_contents($tmp, $clean) === false) {
+			return false;
+		}
+		if (!@rename($tmp, $file)) {
+			@unlink($tmp);
+			return false;
+		}
+		return true;
+	}
+
+	
+
+
+
+
+
+	public static function sanitizeSameHostUrl($url)
+	{
+		$url = trim((string) $url);
+		if ($url === '' || !function_exists('home_url')) {
+			return '';
+		}
+		if (strpos($url, 'http://') !== 0 && strpos($url, 'https://') !== 0) {
+			$url = 'https://' . ltrim($url, '/');
+		}
+		if (!filter_var($url, FILTER_VALIDATE_URL)) {
+			return '';
+		}
+		$parts = parse_url($url);
+		if (empty($parts['host'])) {
+			return '';
+		}
+		$homeHost = strtolower((string) parse_url(home_url(), PHP_URL_HOST));
+		$urlHost  = strtolower($parts['host']);
+		$stripWww = function ($h) {
+			return (strpos($h, 'www.') === 0) ? substr($h, 4) : $h;
+		};
+		if ($homeHost === '' || $stripWww($homeHost) !== $stripWww($urlHost)) {
+			return '';
+		}
+		$homeScheme = (string) parse_url(home_url(), PHP_URL_SCHEME);
+		$scheme     = ($homeScheme === 'http') ? 'http' : 'https';
+		$path       = isset($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
+		return $scheme . '://' . $urlHost . $path;
 	}
 }

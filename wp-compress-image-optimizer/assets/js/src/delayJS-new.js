@@ -1,4 +1,4 @@
-// Delay JS Script
+
 var wpcEvents = ['keydown', 'mousemove', 'touchmove', 'touchstart', 'touchend', 'wheel', 'visibilitychange', 'resize'];
 wpcEvents.forEach(function (eventName) {
     window.addEventListener(eventName, preload);
@@ -12,25 +12,25 @@ window.addEventListener('load', function () {
 });
 
 function loadDelayScripts(done) {
-    const delayScripts = /** @type {NodeListOf<HTMLScriptElement>}*/ (
+    const delayScripts =  (
         document.querySelectorAll('script[type="wpc-delay-script"]')
     );
 
-    /**
-     * replace delayScript with actual script
-     * @param {HTMLScriptElement} delayScript
-     * @param {boolean} hasSrc
-     * @param {boolean} isLast
-     * @returns
-     */
+    
+
+
+
+
+
+
     function replaceScript(delayScript, hasSrc, isLast) {
         delayScript.removeAttribute('type');
 
-        /**
-         * New script needs to be created because FireFox
-         * does not allow executing existing delay script tag
-         * just by removing the type attribute and appending to body
-         */
+        
+
+
+
+
         const script = document.createElement('script');
 
         if (hasSrc) {
@@ -39,15 +39,15 @@ function loadDelayScripts(done) {
             script.textContent = delayScript.textContent;
         }
 
-        // copy all attributes from delayed script to newly created script tag
+        
         for (const attribute of delayScript.attributes) {
             script.setAttribute(attribute.name, attribute.value);
         }
 
-        // must not load asynchronously, load them now!
+        
         script.async = false;
 
-        // replace the script with newly created script
+        
         delayScript.replaceWith(script);
 
         if (isLast && done) {
@@ -70,11 +70,11 @@ function loadDelayScripts(done) {
         if (hasSrc) {
             prevSrcScript = replaceScript(delayScript, hasSrc, isLast);
         } else if (prevSrcScript) {
-            // execute the inline delay-script after the delay-script before it has loaded and executed
+            
             prevSrcScript.addEventListener('load', () => replaceScript(delayScript, hasSrc, isLast));
         } else {
-            // if no script with src before it
-            // load it right now
+            
+            
             replaceScript(delayScript, hasSrc, isLast);
         }
     });
@@ -162,7 +162,7 @@ function preload() {
     Promise.all(customPromiseFlag).then(function () {
         var criticalCss = document.querySelector('#wpc-critical-css');
         if (criticalCss) {
-            //criticalCss.remove();
+            
         }
     }).catch(function () {
         styles.forEach(function (element, index) {

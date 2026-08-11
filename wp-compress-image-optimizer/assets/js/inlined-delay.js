@@ -1,6 +1,6 @@
-// setTimeout(function () {
-//     //mouseMoveFun();
-// }, 10);
+
+
+
 
 window.addEventListener('load', function() {
     mouseMoveFun();
@@ -16,12 +16,28 @@ function preload() {
     }
 
     var iframes = [].slice.call(document.querySelectorAll("iframe.wpc-iframe-delay"));
-    var styles = [].slice.call(document.querySelectorAll('[rel="wpc-stylesheet"],[type="wpc-stylesheet"]'));
+    var styles = [].slice.call(document.querySelectorAll('[rel="wpc-stylesheet"]:not([data-wpc-dormant]),[type="wpc-stylesheet"]:not([data-wpc-dormant])'));
     var mobileStyles = [].slice.call(document.querySelectorAll('[rel="wpc-mobile-stylesheet"],[type="wpc-mobile-stylesheet"]'));
 
     var customPromiseFlag = [];
 
     styles.forEach(function (element, index) {
+        
+        if (element.id && element.id.indexOf('wpc-used-css') === 0 && element.media
+            && window.matchMedia && !window.matchMedia(element.media).matches) {
+            try {
+                var mqI = window.matchMedia(element.media);
+                var actI = function () {
+                    if (mqI.matches && element.getAttribute('rel') !== 'stylesheet') {
+                        element.setAttribute('rel', 'stylesheet');
+                        element.setAttribute('type', 'text/css');
+                    }
+                };
+                mqI.addEventListener ? mqI.addEventListener('change', actI) : mqI.addListener(actI);
+            } catch (e) { }
+            element.setAttribute('data-wpc-dormant', '1'); 
+            return;
+        }
         var promise = new Promise(function (resolve, reject) {
             if (element.tagName.toLowerCase() === 'link') {
                 element.setAttribute('rel', 'stylesheet');
@@ -79,7 +95,7 @@ function preload() {
     Promise.all(customPromiseFlag).then(function () {
         preloading = false;
         iframes = [].slice.call(document.querySelectorAll("iframe.wpc-iframe-delay"));
-        styles = [].slice.call(document.querySelectorAll('[rel="wpc-stylesheet"],[type="wpc-stylesheet"]'));
+        styles = [].slice.call(document.querySelectorAll('[rel="wpc-stylesheet"]:not([data-wpc-dormant]),[type="wpc-stylesheet"]:not([data-wpc-dormant])'));
         mobileStyles = [].slice.call(document.querySelectorAll('[rel="wpc-mobile-stylesheet"],[type="wpc-mobile-stylesheet"]'));
 
         if (iframes.length !== 0 || styles.length !== 0 || mobileStyles.length !== 0) {
@@ -109,14 +125,14 @@ function mouseMoveFun() {
         return !(/-before$|-after$|-extra$/).test(script.id);
     });
 
-    //elementor sticky error fix
+    
     let stickyScriptsExist = allScripts.some(script => script.src && script.src.includes('jquery.sticky'));
     if (stickyScriptsExist) {
-        // Adjust the detection of jQuery script to account for URLs with query parameters
+        
         let jQueryIndex = -1;
         allScripts.forEach((script, index) => {
             if (script.src && (script.src.includes('jquery.min.js') || script.src.includes('jquery.js'))) {
-                // Check if 'jquery.min.js' or 'jquery.js' occurs before any query parameters
+                
                 const queryParamsIndex = script.src.indexOf('?');
                 const scriptBaseURL = queryParamsIndex !== -1 ? script.src.substring(0, queryParamsIndex) : script.src;
                 if (scriptBaseURL.endsWith('jquery.min.js') || scriptBaseURL.endsWith('jquery.js')) {
@@ -125,7 +141,7 @@ function mouseMoveFun() {
             }
         });
         if (jQueryIndex !== -1) {
-            // Filter and reinsert "jquery.sticky" scripts as before
+            
             let stickyScripts = allScripts.filter(script => script.src && script.src.includes('jquery.sticky'));
             allScripts = allScripts.filter(script => !(script.src && script.src.includes('jquery.sticky')));
 
@@ -136,7 +152,7 @@ function mouseMoveFun() {
     }
 
 
-    // Remove Preloader
+    
     const aFPreloader = document.getElementById('af-preloader');
     if (aFPreloader) {
         aFPreloader.remove();
@@ -144,14 +160,14 @@ function mouseMoveFun() {
 
     if (allScripts.length > 0) {
         allScripts
-        //preloadJS();
+        
         loadJs();
     }
 
     preload();
 }
 
-//window.addEventListener('mousemove', mouseMoveFun);
+
 
 if (isTouchDevice) {
     window.addEventListener('touchstart', mouseMoveFun);
@@ -181,7 +197,7 @@ function loadJsNext() {
             return !(/-before$|-after$|-extra$/).test(script.id);
         });
 
-        // Remove Preloader
+        
         const aFPreloader = document.getElementById('af-preloader');
         if (aFPreloader) {
             aFPreloader.remove();
@@ -213,18 +229,18 @@ function loadJsNext() {
         setTimeout(function () {
             var slider = document.getElementsByClassName('banner-image');
             if (slider !== null && slider.length !== 0 && slider !== undefined) {
-                // Iterate through each element using a for loop
+                
                 for (var i = 0; i < slider.length; i++) {
-                    // Apply changes to each element
+                    
                     slider[i].style.display = 'block';
                 }
             }
 
             var gForm = document.getElementsByClassName('gform_wrapper');
             if (gForm !== null && gForm.length !== 0 && gForm !== undefined) {
-                // Iterate through each element using a for loop
+                
                 for (var i = 0; i < gForm.length; i++) {
-                    // Apply changes to each element
+                    
                     gForm[i].style.display = 'block';
                 }
             }
@@ -250,7 +266,7 @@ function loadJs() {
                 function loadElement(scriptElement, id) {
                     console.log(id)
                     if (!scriptElement) {
-                        return Promise.resolve(); // Immediately resolve if there's no element
+                        return Promise.resolve(); 
                     }
 
                     const newElement = createScript(scriptElement);
@@ -274,7 +290,7 @@ function loadJs() {
                         scriptElement.remove();
 
                         if (!scriptSrc) {
-                            resolveLoad(); // Immediately resolve if the script is inline
+                            resolveLoad(); 
                         }
                     });
                 }
@@ -283,36 +299,36 @@ function loadJs() {
 
                 if (scriptSrc && loadSequentially.some(part => scriptSrc.includes(part))) {
 
-                    // Chain loading of elements to ensure they load in sequence
+                    
                     loadElement(jsBefore, elementID + '-before')
                         .then(() => loadElement(jsExtra, elementID + '-extra'))
                         .then(() => loadElement(element, elementID))
                         .then(() => loadElement(jsAfter, elementID + '-after'))
-                        .then(resolveScript) // Resolve the outer promise once all scripts have loaded
+                        .then(resolveScript) 
                         .catch(error => {
                             console.error('Script loading sequence failed:', error);
-                            resolveScript(); // Resolve to continue with the script loading sequence, replace with rejectScript(error) if you want to halt on failure.
+                            resolveScript(); 
                         });
                 } else {
-                    // Loading all at the same time
+                    
                     loadElement(jsBefore, elementID + '-before')
                         .then(() => loadElement(jsExtra, elementID + '-extra'))
                         .then(() => loadElement(element, elementID))
                         .then(() => loadElement(jsAfter, elementID + '-after'))
-                        .then(resolveScript) // Resolve the outer promise once all scripts have loaded
+                        .then(resolveScript) 
                         .catch(error => {
                             console.error('Script loading sequence failed:', error);
-                            resolveScript(); // Resolve to continue with the script loading sequence, replace with rejectScript(error) if you want to halt on failure.
+                            resolveScript(); 
                         });
-                    // loadElement(jsBefore, elementID + '-before')
-                    // loadElement(jsExtra, elementID + '-extra')
-                    // loadElement(element, elementID)
-                    // loadElement(jsAfter, elementID + '-after')
-                    //     .then(resolveScript) // Resolve the outer promise once all scripts have loaded
-                    //     .catch(error => {
-                    //         console.error('Script loading sequence failed:', error);
-                    //         resolveScript(); // Resolve to continue with the script loading sequence, replace with rejectScript(error) if you want to halt on failure.
-                    //     });
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                 }
             });
         }

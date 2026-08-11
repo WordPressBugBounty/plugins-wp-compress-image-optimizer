@@ -11,7 +11,7 @@ class wps_ic_logger
 
 	public function __construct($folder = '')
 	{
-		// Get user IP and user agent
+		
 		$this->userIP = $this->get_client_ip();
 		$this->userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown';
 		$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
@@ -28,10 +28,10 @@ class wps_ic_logger
 			$this->logFile = WPS_IC_LOG . $this->folderSanitized . '/' . $datetime . '.log';
 		}
 
-		// Create Dir
+		
 		$this->createDir();
 
-		// Log the initial request information
+		
 		$this->log_request_info();
 	}
 
@@ -54,10 +54,10 @@ class wps_ic_logger
 		return $this;
 	}
 
-	/**
-	 * Get the client IP address
-	 * @return string
-	 */
+	
+
+
+
 	public function get_client_ip() {
 		$ip = 'Unknown';
 
@@ -72,16 +72,16 @@ class wps_ic_logger
 		return $ip;
 	}
 
-	/**
-	 * Log request information at initialization
-	 */
+	
+
+
 	private function log_request_info() {
 		$time = date('Y-m-d H:i:s') . sprintf('.%03d', round(microtime(true) * 1000) % 1000);
 
 		$logEntry = $time . " | INIT | IP: " . $this->userIP . " | UA: " . $this->userAgent . PHP_EOL;
 		$logEntry .= 'URL: ' . $this->full_url . PHP_EOL;
 
-		// Add PHP backtrace below the full URL
+		
 		$backtrace = debug_backtrace();
 		$logEntry .= 'BACKTRACE: ' . PHP_EOL;
 		foreach ($backtrace as $index => $trace) {
@@ -99,7 +99,7 @@ class wps_ic_logger
 		}
 		$logEntry .= PHP_EOL;
 
-		// Append log entry to file
+		
 		file_put_contents($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
 	}
 
@@ -113,7 +113,7 @@ class wps_ic_logger
 			$logEntry = $time . " | SUCCESS | Message: " . $message . PHP_EOL;
 		}
 
-		// Append log entry to log.txt
+		
 		file_put_contents($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
 	}
 }

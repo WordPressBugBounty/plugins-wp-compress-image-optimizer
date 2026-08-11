@@ -8,37 +8,138 @@ class wps_ic_upgrader extends wps_ic
     public function __construct()
     {
         if (!$this->is_latest() || !empty($_GET['force_update'])) {
-            self::$options = get_option(WPS_IC_OPTIONS);
 
-            if (file_exists(WPS_IC_LOG . 'local_script_decode.txt')) {
-                unlink(WPS_IC_LOG . 'local_script_decode.txt');
+
+            
+            if (empty($_GET['force_update'])) {
+                if (get_transient('wpc_legacy_upgrade_lock')) {
+                    return;
+                }
+                set_transient('wpc_legacy_upgrade_lock', 1, 5 * MINUTE_IN_SECONDS);
+
+                $wpc_tries_key = 'wpc_legacy_upgrade_tries_' . md5((string) parent::$version);
+                $wpc_tries = (int) get_option($wpc_tries_key, 0);
+                if ($wpc_tries >= 3) {
+                    
+                    
+                    
+                    
+                    foreach (['wpc_purge_allow_foreign_ajax', 'wpc_purge_allow_heartbeat', 'wpc_purge_allow_low_value'] as $wpc_g717b) {
+                        add_filter($wpc_g717b, '__return_true');
+                    }
+                    try {
+                        if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+                            wps_ic_cache::cfPurgeAllHtml(true, true);
+                        }
+                    } catch (\Throwable $e) {
+                    } finally {
+                        foreach (['wpc_purge_allow_foreign_ajax', 'wpc_purge_allow_heartbeat', 'wpc_purge_allow_low_value'] as $wpc_g717b) {
+                            remove_filter($wpc_g717b, '__return_true');
+                        }
+                    }
+                    update_option('wpc_version', parent::$version);
+                    delete_option($wpc_tries_key);
+                    return;
+                }
+                update_option($wpc_tries_key, $wpc_tries + 1, false);
             }
 
-            if (file_exists(WPS_IC_LOG . 'local_script_encode_2.txt')) {
-                unlink(WPS_IC_LOG . 'local_script_encode_2.txt');
+            
+            
+            
+            
+            if (!empty($_GET['force_update'])) {
+                if ((function_exists('current_user_can') && current_user_can('manage_options'))
+                    || (defined('WPC_PERF_DEBUG_TOKEN') && isset($_GET['t'])
+                        && hash_equals((string) WPC_PERF_DEBUG_TOKEN, (string) $_GET['t']))) {
+                    $this->run_upgrade_work334(); 
+                }
+                return;
             }
-
-            // Purge CDN
-            $this->purge_cdn();
-
-            // Upgrade CDN
-            $this->update_to_latest();
-
-            // Notify API
-            $this->api_notify();
+            
+            
+            
+            
+            
+            
+            if (function_exists('fastcgi_finish_request')) {
+                register_shutdown_function(function () {
+                    @fastcgi_finish_request();
+                    @set_time_limit(180);
+                    try {
+                        $this->run_upgrade_work334();
+                    } catch (\Throwable $e) {
+                    }
+                });
+            } else {
+                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_legacy_upgrade_lane')) {
+                    wp_schedule_single_event(time(), 'wpc_legacy_upgrade_lane');
+                    if (function_exists('spawn_cron')) {
+                        register_shutdown_function('spawn_cron');
+                    }
+                }
+            }
         }
+    }
+
+    public function run_upgrade_work334()
+    {
+        
+        
+        
+        
+        
+        
+        
+        $wpc_allow717 = '__return_true';
+        foreach (['wpc_purge_allow_foreign_ajax', 'wpc_purge_allow_heartbeat', 'wpc_purge_allow_low_value'] as $wpc_g717) {
+            add_filter($wpc_g717, $wpc_allow717);
+        }
+        try {
+            $this->run_upgrade_work334_inner717();
+        } finally {
+            foreach (['wpc_purge_allow_foreign_ajax', 'wpc_purge_allow_heartbeat', 'wpc_purge_allow_low_value'] as $wpc_g717) {
+                remove_filter($wpc_g717, $wpc_allow717);
+            }
+        }
+    }
+
+    public function run_upgrade_work334_inner717()
+    {
+        
+        
+        
+        wpc_opcache_refresh('upgrade');
+
+        self::$options = get_option(WPS_IC_OPTIONS);
+
+        if (file_exists(WPS_IC_LOG . 'local_script_decode.txt')) {
+            unlink(WPS_IC_LOG . 'local_script_decode.txt');
+        }
+
+        if (file_exists(WPS_IC_LOG . 'local_script_encode_2.txt')) {
+            unlink(WPS_IC_LOG . 'local_script_encode_2.txt');
+        }
+
+        
+        $this->purge_cdn();
+
+        
+        $this->update_to_latest();
+
+        
+        $this->api_notify();
+
+
+        delete_option('wpc_legacy_upgrade_tries_' . md5((string) parent::$version));
     }
 
 
     public function api_notify()
     {
-        // v7.02 — Transient gate. Without this, api_notify fires on EVERY
-        // page load + AJAX call where is_latest() returns false (which is
-        // common when wpc_version option drift exists). Each fire is a
-        // 200-500 ms blocking remote GET to keys.wpmediacompress.com — was
-        // adding ~300 ms to every admin page + every AJAX response (incl.
-        // the Details popup). 4 h TTL is plenty for an upgrade-notify ping
-        // that conceptually should fire once per version-upgrade event.
+
+
         if (get_transient('wpc_api_notify_done')) {
             return;
         }
@@ -49,12 +150,10 @@ class wps_ic_upgrader extends wps_ic
         $zone_name = get_option('ic_cdn_zone_name');
         $site_type = is_multisite() ? 'multisite' : 'single';
 
-        // Setup URI
+        
         $uri = WPS_IC_KEYSURL . '?action=upgrade_notify&apikey=' . $apikey . '&site_type=' . $site_type . '&domain=' . $siteurl . '&zone_name=' . $zone_name . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        // Also cap the timeout — 60s was insane for a non-critical ping.
-        // 3s is more than enough; if the endpoint is down, we don't want
-        // every admin request to potentially block for a minute.
+
         $get = wp_remote_get($uri, ['timeout' => 3, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($get) == 200) {
@@ -64,7 +163,7 @@ class wps_ic_upgrader extends wps_ic
 
             if ($body->success) {
                 if (!empty($zonename) && $zonename != '') {
-                    #update_option('ic_cdn_zone_name', $zonename);
+                    
                 }
             }
         }
@@ -108,7 +207,6 @@ class wps_ic_upgrader extends wps_ic
     }
 
 
-
     public function update_to_latest()
     {
         $oldOptions = $options = get_option(WPS_IC_OPTIONS);
@@ -118,15 +216,61 @@ class wps_ic_upgrader extends wps_ic
 
         $options['css_hash'] = $CSSHash;
         $options['js_hash'] = $JSHash;
+        $options['lazy_hash'] = substr(md5($CSSHash . 'lz'), 0, 10);
 
         if (!class_exists('wps_ic_log')) {
             include_once WPS_IC_DIR . 'classes/log.class.php';
         }
 
-        $log = new wps_ic_log();
-        $log->logCachePurging($oldOptions, $options, 'update_to_latest');
+        if (class_exists('wps_ic_log')) {
+            $log = new wps_ic_log();
+            $log->logCachePurging($oldOptions, $options, 'update_to_latest');
+        }
 
         update_option(WPS_IC_OPTIONS, $options);
+
+
+        if (class_exists('wps_ic_cache_integrations')) {
+            wps_ic_cache_integrations::purgeAll(false, true, false, true, true, true);
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_purge_cf_on_upgrade', true)
+            && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+            try {
+                wps_ic_cache::cfPurgeAllHtml(true, true);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_purge_cf_on_upgrade', true)
+            && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
+            try {
+                wps_ic_cache::cfPurgeAllHtml(true, true);
+            } catch (\Throwable $e) {
+            }
+        }
+
+
+        if (get_option('wpc_settings_initialized') !== '1') {
+            $wpc_s = get_option(WPS_IC_SETTINGS);
+            if (is_array($wpc_s) && count($wpc_s) > 3) {
+                update_option('wpc_settings_initialized', '1', false);
+            }
+        }
 
         update_option('wpc_version', parent::$version);
     }
@@ -134,10 +278,17 @@ class wps_ic_upgrader extends wps_ic
 
     public function is_latest()
     {
+
+
+        $running = (string) parent::$version;
+        if (!preg_match('/^\d+\.\d+/', $running)) {
+            return true;
+        }
+
         $plugin_version = get_option('wpc_version');
 
-        if (empty($plugin_version) || version_compare($plugin_version, parent::$version, '<')) {
-            // Must Upgrade
+        if (empty($plugin_version) || version_compare($plugin_version, $running, '<')) {
+            
             return false;
         } else {
             return true;
@@ -151,17 +302,17 @@ class wps_ic_upgrader extends wps_ic
         self::purge_cache_files();
 
 
-        // Clear cache.
+        
         if (function_exists('rocket_clean_domain')) {
             rocket_clean_domain();
         }
 
-        // Lite Speed
+        
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
 
-        // HummingBird
+        
         if (defined('WPHB_VERSION')) {
             do_action('wphb_clear_page_cache');
         }
@@ -180,7 +331,7 @@ class wps_ic_upgrader extends wps_ic
             $wp_filesystem->rmdir(untrailingslashit($cache_path), true);
 
             if (function_exists('wp_cache_flush')) {
-                wp_cache_flush();
+                if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('breeze'); } else { @wp_cache_flush(); }
             }
         }
     }
@@ -190,7 +341,12 @@ class wps_ic_upgrader extends wps_ic
     {
         $cache_dir = WPS_IC_CACHE;
 
-        self::removeDirectory($cache_dir);
+
+        if (class_exists('wps_ic_cache_integrations')) {
+            wps_ic_cache_integrations::removeDirectoryExcept($cache_dir, ['css', 'js']);
+        } else {
+            self::removeDirectory($cache_dir);
+        }
 
         return true;
     }
@@ -219,3 +375,20 @@ class wps_ic_upgrader extends wps_ic
 
 
 }
+
+
+
+add_action('wpc_legacy_upgrade_lane', function () {
+    try {
+        @set_time_limit(180);
+        if (!class_exists('wps_ic_upgrader')) {
+            return;
+        }
+        $wpc_u334 = new wps_ic_upgrader();
+        if ($wpc_u334->is_latest() && empty($_GET['force_update'])) {
+            return; 
+        }
+        $wpc_u334->run_upgrade_work334();
+    } catch (\Throwable $e) {
+    }
+});

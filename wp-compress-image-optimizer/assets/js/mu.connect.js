@@ -11,16 +11,16 @@ jQuery(document).ready(function ($) {
     var bulkConnectSites = 0;
     var selectedSites = [];
 
-    // Question tooltips
+    
     $('.ic-tooltip').tooltipster({
         maxWidth:'300',
         delay:50,
     });
 
-    /**
-     * @since 3.3.0
-     * Status: Required 5.00.00
-     */
+    
+
+
+
     $('.setting-value.ic-custom-tooltip').tooltipster({
         maxWidth: '235',
         position: 'left'
@@ -41,7 +41,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Live CDN Toggle - Default Settings
+    
     $('body').on('click', '.label-live-cdn-toggle', function(e){
        var label = $(this);
        var parent = $(this).parent().parent();
@@ -50,15 +50,15 @@ jQuery(document).ready(function ($) {
        var serving_checkboxes = $('input[type="checkbox"]', serving_cdn);
 
        if ($(input).is(':checked')) {
-           // Then it's turned off
+           
            $(serving_checkboxes).addClass('disabled-checkbox').removeAttr('checked');
        } else {
-           // On
+           
            $(serving_checkboxes).removeClass('disabled-checkbox').prop('checked', 'checked');
        }
     });
 
-    // Select ALL checkbox in Bulk List Sites
+    
     $('body').on('change', 'input[name="wpc-ic-mu-select-all"]', function (e) {
         var select_all = $(this);
         var table = $(this).parents('table');
@@ -67,7 +67,7 @@ jQuery(document).ready(function ($) {
 
         $(checkboxes).each(function (index, item) {
             if ($(item).attr('disabled') == 'disabled') {
-                // Nothing, for now
+                
             }
             else {
                 if ($(select_all).is(':checked')) {
@@ -84,7 +84,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Bulk Configure
+    
     $('body').on('click', '.wps-ic-mu-bulk-configure', function (e) {
         var checkboxes = $('.wpc-ic-mu-sites-checkbox', listTable);
         var selectedSites = [];
@@ -111,7 +111,7 @@ jQuery(document).ready(function ($) {
             return false;
         }
         else {
-            // wps-ic-mu-bulk-reconfigure-settings
+            
             $('input[name="apply_to_sites"]').val(selectedSites);
             $('.wpc-ic-mu-bulk-site-list-container').hide();
             $('.wps-ic-mu-bulk-reconfigure-settings').show();
@@ -119,7 +119,7 @@ jQuery(document).ready(function ($) {
 
     });
 
-    // Disconnect All
+    
     $('body').on('click', '.wps-ic-mu-bulk-disconnect-all', function (e) {
         var checkboxes = $('.wpc-ic-mu-sites-checkbox', listTable);
         var selectedSites = [];
@@ -156,7 +156,7 @@ jQuery(document).ready(function ($) {
                 if (result.value) {
 
                     $(selectedSites).each(function (i, item) {
-                        // Bulk Disconnect
+                        
                         var tableRow = $('tr.wpc-ic-mu-row-site-' + item, '.wpc-ic-mu-list-table');
 
                         $('.wps-ic-mu-status-actions', tableRow).hide();
@@ -177,7 +177,7 @@ jQuery(document).ready(function ($) {
                                 $('.wps-ic-mu-status-loading', tableRow).hide();
                             }
                             else {
-                                // Error
+                                
                             }
                         });
 
@@ -195,7 +195,7 @@ jQuery(document).ready(function ($) {
 
     });
 
-    // Connect All
+    
     $('body').on('click', '.wps-ic-mu-bulk-connect-all', function (e) {
         var checkboxes = $('.wpc-ic-mu-sites-checkbox', listTable);
 
@@ -226,7 +226,7 @@ jQuery(document).ready(function ($) {
 
     });
 
-    // Bulk Reconfigure
+    
     $('body').on('click', '.wpc-mu-bulk-reconfigure', function(e){
         e.preventDefault();
 
@@ -243,14 +243,14 @@ jQuery(document).ready(function ($) {
                 $('.wpc-ic-mu-bulk-site-list-container').show();
             }
             else {
-                // Error
+                
             }
         });
 
         return false;
     });
 
-    // Apply & Bulk Connect
+    
     $('body').on('click', '.wpc-mu-bulk-connect', function (e) {
         e.preventDefault();
 
@@ -276,7 +276,7 @@ jQuery(document).ready(function ($) {
                 connectSingleSite(response.data, doneSites, totalSites);
             }
             else {
-                // Error
+                
             }
         });
 
@@ -428,7 +428,7 @@ jQuery(document).ready(function ($) {
 
         var form_serialize = $('.wpc-ic-mu-default-settting-form').serialize();
 
-        //$(siteContainer).hide();
+        
         $(overlay).show();
         $(overlayForm).hide();
 
@@ -442,7 +442,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Popup
+    
     $('body').on('click', '.wps-ic-configure-popup', function (e) {
         e.preventDefault();
 
@@ -493,14 +493,14 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // Configure from table list
+    
     $('body').on('click', '.wps-ic-mu-configure', function (e) {
         var link = $(this);
         var siteID = $(link).data('site-id');
         $('.wp-compress-mu-site-list li a.wpc-ic-mu-site-list-item-' + siteID).trigger('click');
     });
 
-    // Select a site from list menu in sidebar
+    
     $('body').on('click', '.wp-compress-mu-site-list li a', function (e) {
 
         return true;
@@ -521,7 +521,7 @@ jQuery(document).ready(function ($) {
         $(overlayForm).show();
         $(content).hide();
         $(siteContainer).hide();
-        //$(loadingContainer).show();
+        
 
         $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_get_site_settings', siteID: siteID,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
             window.location.hash = '#mu-' + siteID;
@@ -532,11 +532,11 @@ jQuery(document).ready(function ($) {
                 $(overlayForm).hide();
                 $(siteContainer).show();
                 $(content).show();
-                // Question tooltips
+                
                 $('.ic-tooltip').tooltipster({
                     maxWidth:'300'
                 });
-                // Tooltip Custom
+                
                 $('.setting-value.ic-custom-tooltip').tooltipster({
                     maxWidth: '235',
                     position: 'left'
@@ -550,7 +550,7 @@ jQuery(document).ready(function ($) {
                     var parent = $(this).parent();
                     $('.setting-value.ic-custom-tooltip', parent).tooltipster('hide');
                 });
-                //$(loadingContainer).hide();
+                
             }, 500);
         });
 
@@ -639,7 +639,7 @@ jQuery(document).ready(function ($) {
         $.post(wpc_ajaxVar.ajaxurl, {action: 'mu_connect', token: token,wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
 
             if (response.success) {
-                // Popup
+                
                 window.location.reload();
             }
             else {
@@ -648,7 +648,7 @@ jQuery(document).ready(function ($) {
 
                 $('.wpc-mu-api-connect-form>input[type="submit"]').show();
                 $('.wpc-mu-api-connect-form>input[type="text"]').show();
-                //alert('Failure to conenct');
+                
 
                 WPCSwal.fire({
                     title: '', position: 'top', html: jQuery('.wpc-mu-connect-failure').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: false, customClass: {
@@ -696,7 +696,7 @@ jQuery(document).ready(function ($) {
                         window.location.reload();
                     }
                     else {
-                        // Error
+                        
                     }
                 });
 
@@ -748,7 +748,7 @@ jQuery(document).ready(function ($) {
                             delay: 50,
                         });
                     } else {
-                        // Error
+                        
                     }
                 });
             }
@@ -780,13 +780,13 @@ jQuery(document).ready(function ($) {
                 $('.wps-ic-mu-status-actions', tableRow).html(response.data.html_status).show();
                 $('.wps-ic-mu-status-loading', tableRow).hide();
 
-                // Question tooltips
+                
                 $('.ic-tooltip').tooltipster({
                     maxWidth:'300'
                 });
             }
             else {
-                // Error
+                
                 alert('Your token is invalid!');
             }
         });
@@ -804,7 +804,7 @@ jQuery(document).ready(function ($) {
 
         $(table).hide();
         $(this).hide();
-        //$(loadingContainer).show();
+        
         $('.wps-ic-mu-single-site-connecting-loading').show();
         $('.wps-ic-mu-single-site-not-connected').hide();
 
@@ -818,13 +818,13 @@ jQuery(document).ready(function ($) {
                 $('.wps-ic-mu-single-site-connecting-loading').hide();
                 $(content).html(response.data).show();
 
-                // Question tooltips
+                
                 $('.ic-tooltip').tooltipster({
                     maxWidth:'300'
                 });
             }
             else {
-                // Error
+                
                 alert('Your token is invalid!');
             }
         });
@@ -881,7 +881,7 @@ jQuery(document).ready(function ($) {
             var cname_field = $('[name="custom-cdn"]', popupData).val();
 
             if (cname_field == '') {
-                //wps-ic-mu-popup-empty-cname
+                
                 WPCSwal.fire({
                     title: '', position: 'center', html: jQuery('.wps-ic-mu-popup-empty-cname').html(), width: 600, showCloseButton: true, showCancelButton: false, showConfirmButton: false, allowOutsideClick: true, customClass: {
                         container: 'no-padding-popup-bottom-bg switch-legacy-popup',
@@ -1117,11 +1117,11 @@ jQuery(document).ready(function ($) {
                             $(overlayForm).hide();
                             $(siteContainer).show();
                             $(content).show();
-                            // Question tooltips
+                            
                             $('.ic-tooltip').tooltipster({
                                 maxWidth:'300'
                             });
-                            // Tooltip Custom
+                            
                             $('.setting-value.ic-custom-tooltip').tooltipster({
                                 maxWidth: '235',
                                 position: 'left'
@@ -1135,20 +1135,20 @@ jQuery(document).ready(function ($) {
                                 var parent = $(this).parent();
                                 $('.setting-value.ic-custom-tooltip', parent).tooltipster('hide');
                             });
-                            //$(loadingContainer).hide();
+                            
                         }, 500);
                     });
 
-                    // OK
+                    
                     $(top).hide();
-                    //$(content).show();
+                    
                     $(loading).hide();
                     WPCSwal.close();
 
-                    //window.location.reload();
+                    
                 }
                 else {
-                    // Error Popup
+                    
                 }
             });
 
@@ -1172,13 +1172,13 @@ jQuery(document).ready(function ($) {
 
                     $('.wpc-dynamic-text', popup).html('We have detected that your server is located in ' + country_name + ' (' + continent + '), if that\'s not correct, please select the nearest region below.');
 
-                    // OK
+                    
                     $(top).show();
                     $(content).show();
                     $(loading).hide();
                 }
                 else {
-                    // Error Popup
+                    
                 }
             });
 
@@ -1187,7 +1187,7 @@ jQuery(document).ready(function ($) {
     }
 
 
-    // On page load get hash
+    
     function hashLoad() {
         var hash = window.location.hash;
         if (hash !== '') {

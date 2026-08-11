@@ -17,9 +17,9 @@ class wps_ic_preload
 
     }
 
-    /**
-     * Finds all CSS and JS files in plugins and theme folder, saves to options, returns json response (true/false)
-     */
+    
+
+
     public function find_files()
     {
 
@@ -29,7 +29,6 @@ class wps_ic_preload
         $styles = [];
 
 
-        //scan plugins folder
         $plugins = new RecursiveDirectoryIterator(WP_CONTENT_DIR . '/plugins');
         foreach (new RecursiveIteratorIterator($plugins) as $filename => $file) {
             if ($file->isDir()) {
@@ -52,7 +51,7 @@ class wps_ic_preload
 
         }
 
-        //scan theme folder
+
         $plugins = new RecursiveDirectoryIterator(get_template_directory());
         foreach (new RecursiveIteratorIterator($plugins) as $filename => $file) {
             if ($file->isDir()) {
@@ -75,7 +74,7 @@ class wps_ic_preload
 
         }
 
-        //ALL scripts
+        
         update_option('wps_ic_found_scripts', ['files' => $scripts, 'size' => $js_size, 'count' => count($scripts)]);
         update_option('wps_ic_found_styles', ['files' => $styles, 'size' => $css_size, 'count' => count($styles)]);
 
@@ -84,9 +83,9 @@ class wps_ic_preload
 
     }
 
-    /**
-     * Get all registered scripts for the homepage (all pages probably)
-     */
+    
+
+
     public function get_registered()
     {
 
@@ -97,12 +96,12 @@ class wps_ic_preload
             foreach ($wp_scripts->registered as $script) {
                 $src = (string) $script->src;
 
-                // Absolute URL?
+                
                 if (filter_var($src, FILTER_VALIDATE_URL)) {
                     $url = $src;
                     $path = '';
                 } else {
-                    // Local / relative path
+                    
                     $url = trailingslashit(get_home_url()) . ltrim($src, '/');
                     $path = $src;
                 }
@@ -126,12 +125,12 @@ class wps_ic_preload
             foreach ($wp_styles->registered as $style) {
                 $src = (string) $style->src;
 
-                // Absolute URL?
+                
                 if (filter_var($src, FILTER_VALIDATE_URL)) {
                     $url = $src;
                     $path = '';
                 } else {
-                    // Local / relative path
+                    
                     $url = trailingslashit(get_home_url()) . ltrim($src, '/');
                     $path = $src;
                 }
@@ -149,9 +148,9 @@ class wps_ic_preload
         }, PHP_INT_MAX);
     }
 
-    /**
-     * Get enqueued scripts for the homepage head
-     */
+    
+
+
     public function get_enqueued()
     {
 
@@ -165,7 +164,7 @@ class wps_ic_preload
                         continue;
                     }
 
-                    //check if is url
+
                     $check = wp_http_validate_url($wp_scripts->registered[$handle]->src);
                     if ($check || strpos($wp_scripts->registered[$handle]->src, '//') === 0) {
                         $url = $wp_scripts->registered[$handle]->src;
@@ -197,7 +196,7 @@ class wps_ic_preload
                         continue;
                     }
 
-                    //check if is url
+
                     $check = wp_http_validate_url($wp_scripts->registered[$handle]->src);
                     if ($check || strpos($wp_scripts->registered[$handle]->src, '//') === 0) {
                         $url = $wp_scripts->registered[$handle]->src;
@@ -229,13 +228,13 @@ class wps_ic_preload
                         continue;
                     }
 
-                    //check if is url
+
                     $check = wp_http_validate_url($wp_styles->registered[$handle]->src);
                     if ($check || strpos($wp_styles->registered[$handle]->src, '//') === 0) {
                         $url = $wp_styles->registered[$handle]->src;
                         $path = '';
                     } else {
-                        //else is local
+
                         $url = get_home_url()  . $wp_styles->registered[$handle]->src;
                         $path = $wp_styles->registered[$handle]->src;
                     }

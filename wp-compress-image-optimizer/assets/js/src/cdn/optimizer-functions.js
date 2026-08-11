@@ -63,7 +63,7 @@ function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
 
     return newApiURL;
 }
-// OK
+
 function srcSetUpdateWidth(srcSetUrl, imageWidth, imageElement) {
 
     if (imageElement.classList.contains('wpc-excluded-adaptive')) {
@@ -72,7 +72,7 @@ function srcSetUpdateWidth(srcSetUrl, imageWidth, imageElement) {
 
     var srcSetWidth = srcSetUrl.split(' ').pop();
     if (srcSetWidth.endsWith('w')) {
-        // Remove w from width string
+        
         var Width = srcSetWidth.slice(0, -1);
         if (parseInt(Width) <= 5) {
             Width = 1;
@@ -87,7 +87,7 @@ function srcSetUpdateWidth(srcSetUrl, imageWidth, imageElement) {
     }
     return srcSetUrl;
 }
-// OK
+
 function getSrcset(sourceArray, imageWidth, imageElement) {
     var changedSrcset = '';
 
@@ -102,14 +102,14 @@ function getSrcset(sourceArray, imageWidth, imageElement) {
         changedSrcset += newApiURL + ",";
     });
 
-    return changedSrcset.slice(0, -1); // Remove last comma
+    return changedSrcset.slice(0, -1); 
 }
-// OK
+
 function listHas(list, keyword) {
     var found = false;
-    // (v7.10.04) old-browser safe: classList is a DOMTokenList whose .forEach is unsupported on
-    // some engines (the "a.forEach is not a function" crash that halted lazy/adaptive + the
-    // WooCommerce gallery + Elementor). Iterate a real array with a for-loop + indexOf instead.
+    
+    
+    
     var _wpcArr = Array.prototype.slice.call(list || []);
     for (var _i = 0; _i < _wpcArr.length; _i++) {
         if (String(_wpcArr[_i]).indexOf(keyword) !== -1) {

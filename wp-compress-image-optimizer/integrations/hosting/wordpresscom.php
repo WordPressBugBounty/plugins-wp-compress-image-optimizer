@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_wordpresscom extends wps_ic_integrations {
@@ -13,11 +13,11 @@ class wps_ic_wordpresscom extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
     public function add_admin_hooks() {
@@ -32,7 +32,7 @@ class wps_ic_wordpresscom extends wps_ic_integrations {
 
     public function purge_cache($url_key = false) {
         if (function_exists('wp_cache_flush')) {
-            wp_cache_flush();
+            if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('wpcom'); } else { @wp_cache_flush(); }
         }
     }
 

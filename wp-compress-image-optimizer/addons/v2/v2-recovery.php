@@ -1,62 +1,30 @@
 <?php
-/**
- * v2-recovery.php — Phase-B drain recovery + diagnostics (v7.03.100)
- *
- * Recovers the Phase-B pull/drain path when a site's local WPC state has been
- * wiped or has drifted out of sync with the orchestrator (e.g. a DB-cleanup
- * plugin cleared the ic_* meta, or the pull cursor advanced past the manifest
- * so the drain pulls nothing — the welliathome "only Phase A lands / drain=null"
- * signature). No reconnect required: the API key + WP attachments are the only
- * things that must survive — everything below is rebuildable from them.
- *
- * Two recovery modes:
- *
- *   'fresh'  (recovery B): SKIP the orch backlog. Advances the pull cursor to ~now
- *            and clears local pull-state (journal, pending transients, on-upload
- *            queue), so the site re-optimizes clean instead of downloading a large
- *            STALE backlog. Pair with the orch flushing its manifest. Then run a
- *            normal Bulk Optimize to rebuild.
- *
- *   'resync' (recovery A): RE-PULL everything the orch still has. Resets the cursor
- *            to 0 and fires the drain, recovering already-encoded variants WITHOUT
- *            re-encoding (dedups against on-disk ic_local_variants).
- *
- * Triggers (no WP-CLI required):
- *   - Admin URL (admin-gated): just visit /wp-admin/?wpc_v2_pull_recover=status — it
- *     prints the pull-state AND one-click "Run Fresh" / "Run Resync" buttons with the
- *     nonce baked in. 'status' is read-only/nonce-free; 'fresh'+'resync' mutate and use
- *     the button's nonce.
- *   - WP-CLI (if available): wp wpc-v2-recover <fresh|resync|status>
- *
- * Read-only diagnostic ('status') dumps the local pull-state so the first failing
- * step is obvious without a separate debug build: cursor, journal file count,
- * pending-transient count, on-upload queue depth, and curl_multi availability.
- */
+
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
 if (!function_exists('wpc_v2_pull_recover')) {
-    /**
-     * Clear local pull-state and re-point the cursor.
-     *
-     * @param string $mode 'fresh' (skip backlog) | 'resync' (re-pull all)
-     * @return array Summary of what was cleared/changed.
-     */
+    
+
+
+
+
+
     function wpc_v2_pull_recover($mode = 'resync')
     {
         $mode = ($mode === 'fresh') ? 'fresh' : 'resync';
         $out  = ['mode' => $mode];
 
-        // (v7.03.106) Re-enable the pull flag — the welliathome root cause: the tick bails
-        // 'flag_off' when wpc_v2_pull_enabled() is false (DB wipe cleared the site option /
-        // its zone+cdn inputs). Without this the drain never runs no matter the cursor.
+
+        
+        
         update_site_option('wpc_v2_pull_enabled', 1);
         $out['pull_flag'] = 'enabled (wpc_v2_pull_enabled=1)';
 
-        // 1) File-based drain journal (queued-for-drain entries). Stale entries
-        //    here would try to place bytes the orch has flushed — clear them.
+        
+
         if (function_exists('wpc_v2_journal_list_files')) {
             $deleted = 0;
             foreach ((array) wpc_v2_journal_list_files(100000) as $f) {
@@ -67,11 +35,11 @@ if (!function_exists('wpc_v2_pull_recover')) {
             $out['journal_files_deleted'] = $deleted;
         }
 
-        // 2) On-upload compress queue (wpc_compress_queue).
+        
         delete_option('wpc_compress_queue');
 
-        // 3) Pending-variant transients (best effort — they also TTL out, and on
-        //    an external object cache they aren't in the options table).
+        
+        
         global $wpdb;
         $out['pending_transients_deleted'] = (int) $wpdb->query(
             "DELETE FROM {$wpdb->options}
@@ -79,20 +47,19 @@ if (!function_exists('wpc_v2_pull_recover')) {
                  OR option_name LIKE '\\_transient\\_timeout\\_wpc\\_v2\\_pending\\_%'"
         );
 
-        // 4) The cursor — the gate that decides what the NEXT drain pulls.
+        
         if ($mode === 'fresh') {
-            // Jump forward so GET /optimize-v2/manifest?since=<now> returns only
-            // entries created AFTER this reset → the stale backlog is skipped even
-            // if the orch flush is partial/in-flight.
+            
+            
+
             $now_ms = (int) round(microtime(true) * 1000);
             update_option('wpc_v2_pull_cursor_ms', $now_ms, false);
             $out['cursor'] = 'advanced_to_now';
             $out['cursor_ms'] = $now_ms;
             $out['next'] = 'run Bulk Optimize to re-optimize the library clean';
         } else {
-            // Back to 0 → re-pull the full manifest (wpc_v2_pull_get_cursor()
-            // defaults to 0 when the option is absent). set_cursor() bails on <=0,
-            // so we delete the option rather than set it.
+
+
             delete_option('wpc_v2_pull_cursor_ms');
             $out['cursor'] = 'reset_to_0';
             if (function_exists('wpc_v2_pull_drain_fire')) {
@@ -107,10 +74,10 @@ if (!function_exists('wpc_v2_pull_recover')) {
 }
 
 if (!function_exists('wpc_v2_pull_status')) {
-    /**
-     * Read-only snapshot of the local pull-state (diagnostic).
-     * @return array
-     */
+    
+
+
+
     function wpc_v2_pull_status()
     {
         global $wpdb;
@@ -134,12 +101,7 @@ if (!function_exists('wpc_v2_pull_status')) {
 }
 
 if (!function_exists('wpc_v2_pull_draintest')) {
-    /**
-     * (v7.03.103) Verbose one-shot drain diagnostic — runs the live manifest GET
-     * (since=cursor) + an egress HEAD on the first returned variant, reporting each
-     * step. Read-only: no placement, no cursor change. Surfaces the exact failing
-     * step in a joint debug session with no WP_DEBUG_LOG / file access needed.
-     */
+
     function wpc_v2_pull_draintest()
     {
         $cursor = (int) get_option('wpc_v2_pull_cursor_ms', 0);
@@ -163,7 +125,7 @@ if (!function_exists('wpc_v2_pull_draintest')) {
             return $out;
         }
 
-        // Step 1 — the live manifest GET (since=cursor). Most likely failure point.
+        
         $fetch = wpc_v2_pull_manifest_fetch($cursor, 50, 0);
         $out['manifest_GET'] = [
             'ok'            => !empty($fetch['ok']),
@@ -173,12 +135,10 @@ if (!function_exists('wpc_v2_pull_draintest')) {
             'high_water_ms' => isset($fetch['cursor_high_water_ms']) ? (int) $fetch['cursor_high_water_ms'] : 0,
         ];
 
-        // Step 2 — dump the first entry's FULL shape + run the SAME 6-field validation
-        // the drain uses (v2-pull-manifest.php:413-420), so the exact skip reason is
-        // on-page. A failing field here = every entry skipped = drain=null.
+
         if (!empty($fetch['variants'][0]) && is_array($fetch['variants'][0])) {
             $v0 = $fetch['variants'][0];
-            $out['first_entry_raw'] = $v0; // full shape — see the orch's ACTUAL field names
+            $out['first_entry_raw'] = $v0;
 
             $check = [
                 'imageID>0' => isset($v0['imageID'])   && (int) $v0['imageID'] > 0,
@@ -195,7 +155,7 @@ if (!function_exists('wpc_v2_pull_draintest')) {
                 'failing'         => !empty($failing) ? $failing : '(none — entry is valid; the break is downstream at placement)',
             ];
 
-            // Egress test, now with the CORRECT key.
+            
             $url = isset($v0['fetchUrl']) ? (string) $v0['fetchUrl'] : '';
             if ($url !== '') {
                 $head = wp_remote_head($url, ['timeout' => 8]);
@@ -213,21 +173,12 @@ if (!function_exists('wpc_v2_pull_draintest')) {
 }
 
 if (!function_exists('wpc_v2_pull_drainrun')) {
-    /**
-     * (v7.03.105) Run the REAL drain pipeline INLINE (synchronous) and report whether
-     * bytes land — bypasses the loopback/dispatch guards so a blocked loopback or a
-     * stuck dispatch transient can't hide the result. Mutating: places variants +
-     * advances the cursor. Both the definitive placement test AND a recovery when the
-     * pipeline is healthy (the case the draintest now points to on welliathome).
-     */
+
     function wpc_v2_pull_drainrun()
     {
         $out = ['ran' => 'inline pipeline (tick + journal drain, no loopback)'];
 
-        // (v7.03.106) ROOT CAUSE: the tick bails 'flag_off' when wpc_v2_pull_enabled() is
-        // false. On welliathome the DB wipe cleared the `wpc_v2_pull_enabled` site option
-        // (and/or its zone+cdn default inputs), so the drain never ran. Re-enable it
-        // explicitly so the pipeline actually executes (and stays on for the live triggers).
+
         $out['pull_flag_before'] = (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled()) ? 'on' : 'OFF (this was the bug)';
         update_site_option('wpc_v2_pull_enabled', 1);
         $out['pull_flag_now'] = 'enabled (wpc_v2_pull_enabled=1)';
@@ -235,7 +186,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
         $out['drain_running_transient'] = get_transient('wpc_v2_drain_running') ?: 'none';
         $out['cursor_before'] = (int) get_option('wpc_v2_pull_cursor_ms', 0);
 
-        // Resolve the first entry's on-disk target BEFORE, to confirm placement after.
+        
         $target = '';
         if (function_exists('wpc_v2_pull_manifest_fetch')) {
             $f = wpc_v2_pull_manifest_fetch($out['cursor_before'], 5, 0);
@@ -247,12 +198,12 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
         $out['sample_target']        = $target !== '' ? $target : '(could not resolve imageID -> path)';
         $out['sample_target_before'] = ($target !== '' && file_exists($target)) ? 'exists' : 'missing';
 
-        // 1) Tick — GET + queue + journal write (also fires a loopback; harmless here).
+        
         $out['tick_result'] = function_exists('wpc_v2_pull_manifest_tick')
             ? wpc_v2_pull_manifest_tick(50, 0)
             : '(wpc_v2_pull_manifest_tick missing)';
 
-        // 2) Journal drain INLINE — the actual fetch + write, bypassing the loopback.
+        
         if (function_exists('wpc_v2_journal_drain_run')) {
             wpc_v2_journal_drain_run();
             $out['journal_drain'] = 'ran inline';
@@ -260,7 +211,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
             $out['journal_drain'] = '(wpc_v2_journal_drain_run missing)';
         }
 
-        // 3) Did the sample file land?
+        
         $out['sample_target_after'] = $target !== ''
             ? (file_exists($target) ? 'PLACED OK' : 'STILL MISSING')
             : '(n/a)';
@@ -271,7 +222,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
     }
 }
 
-// ── Admin URL trigger (manage_options + nonce) ──────────────────────────────
+
 add_action('admin_init', function () {
     if (empty($_GET['wpc_v2_pull_recover'])) {
         return;
@@ -283,9 +234,8 @@ add_action('admin_init', function () {
     if (!in_array($mode, ['fresh', 'resync', 'status', 'draintest', 'drainrun'], true)) {
         return;
     }
-    // (v7.03.101/103) 'status' + 'draintest' are read-only → no nonce (just visit
-    // the URL, admin-gated) so they're usable on hosts without WP-CLI. 'fresh'/
-    // 'resync' mutate → require the nonce, which the page's own buttons supply.
+
+
     if ($mode === 'status') {
         $res   = wpc_v2_pull_status();
         $title = 'status';
@@ -306,7 +256,7 @@ add_action('admin_init', function () {
         }
     }
 
-    // Render status/result + one-click action buttons (the nonce is baked in).
+    
     $base    = admin_url('index.php');
     $nonce   = wp_create_nonce('wpc_v2_pull_recover');
     $u_fresh  = esc_url(add_query_arg(['wpc_v2_pull_recover' => 'fresh',  '_wpcnonce' => $nonce], $base));
@@ -332,7 +282,7 @@ add_action('admin_init', function () {
     wp_die($html, 'WPC Phase-B Recovery', ['response' => 200]);
 });
 
-// ── WP-CLI: wp wpc-v2-recover <fresh|resync|status> ─────────────────────────
+
 if (defined('WP_CLI') && WP_CLI) {
     WP_CLI::add_command('wpc-v2-recover', function ($args) {
         $mode = isset($args[0]) ? (string) $args[0] : 'status';
@@ -356,21 +306,12 @@ if (defined('WP_CLI') && WP_CLI) {
     });
 }
 
-// ── (v7.03.111) CDN STATE DEBUG — front-end, admin-gated ──────────────────────────────────────────
-// Visit (logged in as admin):  https://SITE/?wpc_cdn_debug=1
-// Answers "why is WPC rewriting assets to the zone when the CDN is OFF?" The DECISIVE test compares the
-// CACHED settings (object cache) against the RAW DB row, so we can tell apart three very different causes:
-//   (a) CACHE STALE      — cached != DB  → object cache serving old settings (.110/.111 fix territory)
-//   (b) SAVE NEVER STUCK — DB itself = on → the OFF toggle never persisted (NOT a cache issue)
-//   (c) OVERRIDE         — DB = off but an override (wpc_force_natural / WPC_FORCE_NATURAL) forces it
-// Runs on the FRONT END so it reflects the rewriter's ACTUAL resolved state for a real visitor request.
+
 add_action('template_redirect', function () {
     if (empty($_GET['wpc_cdn_debug'])) { return; }
     if (!function_exists('current_user_can') || !current_user_can('manage_options')) { return; }
 
-    // (v7.03.113) CLEAR action — strip ALL per-page CDN overrides (the stale cdn='1' includes that
-    // forced the CDN back on, and any cdn='0' excludes). Mutating → nonce-protected. Pages then follow
-    // the GLOBAL CDN setting. The .112 guard already neutralizes a stale include; this cleans the data.
+
     if ($_GET['wpc_cdn_debug'] === 'clear') {
         if (empty($_GET['_wpcnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpcnonce'])), 'wpc_cdn_clear_overrides')) {
             wp_die('WPC: that link expired — reload the debug page and click the button again.');
@@ -383,7 +324,7 @@ add_action('template_redirect', function () {
             }
             update_option('wpc-excludes', $ex);
         }
-        // Take effect immediately: drop the autoloaded option bucket + the excludes key, purge HTML cache.
+        
         if (function_exists('wp_cache_delete')) { wp_cache_delete('alloptions', 'options'); wp_cache_delete('wpc-excludes', 'options'); }
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) { wps_ic_cache::removeHtmlCacheFiles('all'); }
         $back = esc_url(add_query_arg(array('wpc_cdn_debug' => '1'), home_url('/')));
@@ -400,7 +341,7 @@ add_action('template_redirect', function () {
     $g  = function ($a, $k) { return (is_array($a) && array_key_exists($k, $a)) ? var_export($a[$k], true) : '(unset)'; };
     $on = function ($v) { return in_array($v, array("'1'", '1', 'true', "'on'"), true); };
 
-    // Rewriter's RESOLVED state this request (public statics; may be unset if it didn't init this request).
+    
     $rw_cdn  = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$cdnEnabled)) ? var_export(wps_cdn_rewrite::$cdnEnabled, true) : '(not initialized this request)';
     $rw_set  = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$settings) && is_array(wps_cdn_rewrite::$settings)) ? wps_cdn_rewrite::$settings : null;
     $rw_zone = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$zone_name)) ? (wps_cdn_rewrite::$zone_name === '' ? '(empty/blanked)' : (string) wps_cdn_rewrite::$zone_name) : '(n/a)';

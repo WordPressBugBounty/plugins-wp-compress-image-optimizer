@@ -1,9 +1,9 @@
 <?php
 
 
-/**
- * Class - Compress
- */
+
+
+
 class wps_ic_compress
 {
 
@@ -14,9 +14,9 @@ class wps_ic_compress
     }
 
 
-    /**
-     * @since 3.3.0
-     */
+    
+
+
     public static function get_queue()
     {
         global $wpdb;
@@ -28,32 +28,32 @@ class wps_ic_compress
 
             $done = $wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) as files FROM " . $wpdb->prefix . "ic_queue WHERE type=%s AND (status=%s)", 'hidden_regenerate', 'regenerated'));
         } else if ($queue_transient['action'] == 'Compressing') {
-            // Get files in compress queue
+            
             $compress_queue = $wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) as files FROM " . $wpdb->prefix . "ic_queue WHERE type=%s", 'hidden_compress_bulk'));
 
             $done = $wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) as files FROM " . $wpdb->prefix . "ic_queue WHERE type=%s AND (status=%s OR status=%s)", 'hidden_compress_bulk', 'done', 'compressed'));
         } else {
-            // Get files in compress queue
+            
             $compress_queue = $wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) as files FROM " . $wpdb->prefix . "ic_queue WHERE type=%s", 'hidden_restore_bulk'));
 
             $done = $wpdb->get_var($wpdb->prepare("SELECT COUNT(ID) as files FROM " . $wpdb->prefix . "ic_queue WHERE type=%s AND (status=%s OR status=%s)", 'hidden_restore_bulk', 'done', 'restored'));
         }
 
-        // Get files done
+        
 
         return ['queue' => $compress_queue, 'done' => $done, 'total' => $queue_transient['total'], 'action' => $queue_transient['action']];
     }
 
 
-    /**
-     * @since 3.3.0
-     */
+    
+
+
     public function hidden_restore($attachment_id)
     {
         global $wps_ic, $wpdb;
         $attachment_id = (int)$attachment_id;
 
-        // Remove Queue
+        
         $wps_ic->queue->change_queue_status($attachment_id, 'restoring', ['code' => 'restoring']);
         delete_option('wps_ic_restore_queue_status');
 
@@ -74,7 +74,7 @@ class wps_ic_compress
             require_once(ABSPATH . "wp-includes" . '/option.php');
         }
 
-        // Find image source on site
+        
         $image = wp_get_attachment_image_src($attachment_id, 'full');
         $file_name = basename($image[0]);
 
@@ -89,7 +89,7 @@ class wps_ic_compress
 
         if ($compress_data == 'not_able') {
 
-            // Delete compress data
+            
             delete_post_meta($attachment_id, 'wps_ic_compressed_size');
             delete_post_meta($attachment_id, 'wps_ic_reset');
             delete_post_meta($attachment_id, 'wps_ic_times');
@@ -103,20 +103,20 @@ class wps_ic_compress
 
             $this->restore_wpml_image($attachment_id);
 
-            // Remove Queue
+            
             $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'not_able']);
         } else if (!empty($file_data) && !empty($original_image)) {
 
-            // Fix for old API
+            
 
-            // Verify we can get to the original Image
+            
             $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
-                // Original Image is accessible
+                
             } else {
                 if (empty($original_image) || $original_image == '') {
-                    // Setup URL
+                    
                     $original_image = WPS_IC_APIURL . '?find_restore=true&site=' . site_url('/') . '&filename=' . $file_name;
 
                     $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
@@ -129,34 +129,34 @@ class wps_ic_compress
                 }
             }
 
-            // File path
+            
             $file_name = basename($file_data);
             $file_path = str_replace($file_name, '', $file_data);
 
             clearstatcache();
 
-            // Copy backup file to dest
+            
             $tempfile = download_url($original_image, 60);
 
             if ($tempfile) {
-                // Delete the old file
+                
                 unlink($file_path . $file_name);
 
-                // Copy file from Amazon
+                
                 copy($tempfile, $file_path . $file_name);
                 unlink($tempfile);
             } else {
 
-                // Remove from Bulk Compress Background
+                
                 $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'remote_404']);
             }
 
             $this->restore_wpml_image($attachment_id);
 
-            /// Delete file from compressed table for stats
+            
             $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
-            // Delete compress data
+            
             delete_post_meta($attachment_id, 'wps_ic_started');
             delete_post_meta($attachment_id, 'wps_ic_reset');
             delete_post_meta($attachment_id, 'wps_ic_times');
@@ -176,13 +176,13 @@ class wps_ic_compress
             update_post_meta($attachment_id, '_wp_attachment_metadata', $metadata);
             update_post_meta($attachment_id, 'wps_ic_dimmensions', $metadata);
 
-            // Remove Queue
+            
             $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'restored']);
             $wps_ic->queue->add_queue($attachment_id, 'regenerate_thumbnail');
 
         } else {
 
-            // Delete compress data
+            
             delete_post_meta($attachment_id, 'wps_ic_started');
             delete_post_meta($attachment_id, 'wps_ic_reset');
             delete_post_meta($attachment_id, 'wps_ic_times');
@@ -204,22 +204,22 @@ class wps_ic_compress
 
             $this->restore_wpml_image($attachment_id);
 
-            // Remove Queue
+            
             $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'backup_empty']);
         }
     }
 
 
-    /**
-     * @since 3.3.0
-     */
+    
+
+
     public function reset($attachment_id, $response = 'json')
     {
         global $wps_ic;
 
         $logo_uncompressed = WPS_IC_URI . 'assets/images/not-compressed.png';
 
-        // Delete compress data
+        
         delete_post_meta($attachment_id, 'wps_ic_compressed_size');
         delete_post_meta($attachment_id, 'wps_ic_started');
         delete_post_meta($attachment_id, 'wps_ic_reset');
@@ -232,7 +232,7 @@ class wps_ic_compress
         delete_post_meta($attachment_id, 'wps_ic_restoring');
         delete_post_meta($attachment_id, 'wps_ic_dimmensions');
 
-        // Add generate thumbnail to queue
+        
         $uploadfile = get_attached_file($attachment_id);
         $metadata = get_post_meta($attachment_id, '_wp_attachment_metadata', true);
         $imagesize = getimagesize($uploadfile);
@@ -240,7 +240,7 @@ class wps_ic_compress
         $metadata['height'] = $imagesize[1];
         update_post_meta($attachment_id, '_wp_attachment_metadata', $metadata);
 
-        // Remove Queue
+        
         $wps_ic->queue->change_queue_status($attachment_id, 'reset', ['code' => 'reset']);
 
         if ($response == 'json') {
@@ -251,7 +251,7 @@ class wps_ic_compress
                 $image = wp_get_attachment_image_src($attachment_id, 'full');
                 $file_name = basename($image[0]);
 
-                // Not compressed
+                
                 $file_data = get_attached_file($attachment_id);
                 $uncompressed_value = filesize($file_data);
 
@@ -295,14 +295,14 @@ class wps_ic_compress
                 $last_image = wp_get_attachment_image_src($attachment_id, 'full');
 
                 $html = '<div class="wps-ic-sample-data" id="wps-ic-sample-data-' . $attachment_id . '">';
-                //
+                
                 $html .= '<h3>Restore Complete</h3>';
                 $html .= '<p>As long as you keep the backup original images setting on, you can restore your images back to original at any point if you want to recompress on different settings.</p>';
 
-                // Image
+                
                 $html .= '<img src="' . $last_image[0] . '" id="wps-ic-sample-image" />';
 
-                // wps_ic_sample_data
+
                 $html .= '<a href="#"></a>';
                 $html .= '</div>';
 
@@ -326,7 +326,7 @@ class wps_ic_compress
         WHERE posts.ID = %d
         ", $attachmentID));
 
-        // Find Children
+        
         $children = $wpdb->get_results($wpdb->prepare("
         SELECT posts.ID, posts.guid
         FROM {$wpdb->posts} posts
@@ -334,9 +334,9 @@ class wps_ic_compress
           AND posts.post_status = %s
           AND posts.post_mime_type IN (%s, %s, %s, %s)
         ORDER BY posts.post_date DESC
-        ", $guid,          // posts.guid
-            'inherit',      // posts.post_status
-            'image/jpeg',   // allowed MIME types
+        ", $guid,
+            'inherit',
+            'image/jpeg',
             'image/png', 'image/gif', 'image/jpg'));
 
         if ($children) {
@@ -345,8 +345,8 @@ class wps_ic_compress
                     continue;
                 }
 
-                // Child
-                // Delete compress data
+                
+                
                 delete_post_meta($child->ID, 'wps_ic_started');
                 delete_post_meta($child->ID, 'wps_ic_reset');
                 delete_post_meta($child->ID, 'wps_ic_times');
@@ -374,9 +374,9 @@ class wps_ic_compress
         }
     }
 
-    /**
-     * @since 4.0.0
-     */
+    
+
+
     public function bulk_restore($attachments, $apikey = '')
     {
         global $wps_ic, $wpdb;
@@ -400,20 +400,20 @@ class wps_ic_compress
         }
 
         foreach ($attachments['attachments'] as $key => $attachment_ID) {
-            // Get attachment ID
+            
             $attach_id = sanitize_text_field($attachment_ID);
             $attachment_id = (int)$attach_id;
 
-            // Remove Queue
-            #$wps_ic->queue->change_queue_status($attachment_id, 'restoring', array('code' => 'restoring'));
+            
+            
 
             $reset = get_post_meta($attachment_id, 'wps_ic_reset', true);
 
-            // Find image source on site
+            
             $image = wp_get_attachment_image_src($attachment_id, 'full');
             $file_name = basename($image[0]);
 
-            // Call Parameters
+            
             $request_params = [];
             $request_params['apiv3'] = 'true';
             $request_params['action'] = 'restore';
@@ -422,7 +422,7 @@ class wps_ic_compress
             $request_params['attachment_id'] = $attachment_id;
             $request_params['site'] = site_url();
 
-            $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+            $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, 
                 'headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
             $call = wp_remote_post(WPS_IC_APIURL, $params);
@@ -432,40 +432,38 @@ class wps_ic_compress
             $original_image = $body['data'];
 
             if ($original_image == 'no-backup') {
-                //return false;
+
             }
 
             $file_data = get_attached_file($attachment_id);
 
             if ($body['success'] == 'true') {
 
-                // Verify we can get to the original Image
+                
                 $call = wp_remote_get($original_image, ['timeout' => 60, 'sslverify' => false]);
 
                 if (wp_remote_retrieve_response_code($call) != 200) {
                     return false;
                 }
 
-                // File path
+                
                 $file_name = basename($file_data);
                 $file_path = str_replace($file_name, '', $file_data);
 
-                // Update Compressed Table
+                
                 $query = $wpdb->prepare("UPDATE " . $wpdb->prefix . "ic_compressed SET restored='1' WHERE attachment_ID=%s", $attachment_id);
                 $wpdb->query($query);
 
                 clearstatcache();
 
-                // Copy backup file to dest
+                
                 $tempfile = download_url($original_image, 60);
                 if ($tempfile) {
-//	        $file_info = finfo_open( FILEINFO_MIME_TYPE );
-//	        $mime_type = finfo_file( $file_info, $tempfile );
-//	        finfo_close( $file_info );
 
-                    //$mime_type = mime_content_type($tempfile);
 
-                    // Verify if the downloaded file is an image
+                    
+
+                    
                     if (function_exists('mime_content_type')) {
                         $mime_type = mime_content_type($tempfile);
                     } else if (function_exists('finfo_open')) {
@@ -476,17 +474,17 @@ class wps_ic_compress
                         $mime_type = wp_get_image_mime($tempfile);
                     }
 
-                    if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif'])) {
+                    if (in_array($mime_type, function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg', 'image/png', 'image/gif'])) {
                         $imageSize = getimagesize($tempfile);
                         if ($imageSize !== false) {
-                            // Copy file from Amazon
+                            
                             if (copy($tempfile, $file_path . $file_name)) {
                                 unlink($tempfile);
 
-                                /// Delete file from compressed table for stats
+                                
                                 $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
-                                // Delete compress data
+                                
                                 delete_post_meta($attachment_id, 'wps_ic_started');
                                 delete_post_meta($attachment_id, 'wps_ic_reset');
                                 delete_post_meta($attachment_id, 'wps_ic_times');
@@ -513,14 +511,14 @@ class wps_ic_compress
                                 $this->restore_wpml_image($attachment_id);
                                 $this->restore_thumbnails($attachment_id);
 
-                                // Remove Queue
+                                
                                 $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'restored']);
                             }
                         }
                     }
                 } else {
-                    // Set compressing
-                    // Delete compress data
+                    
+                    
                     delete_post_meta($attachment_id, 'wps_ic_started');
                     delete_post_meta($attachment_id, 'wps_ic_reset');
                     delete_post_meta($attachment_id, 'wps_ic_times');
@@ -535,14 +533,13 @@ class wps_ic_compress
                     $this->restore_wpml_image($attachment_id);
                     $this->restore_thumbnails($attachment_id);
 
-                    // Remove from Bulk Compress Background
+                    
                     $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'remote_404']);
                 }
 
             } else {
-                //if ($original_image == 'no-backup') {
-                // Set compressing
-                // Delete compress data
+
+
                 delete_post_meta($attachment_id, 'wps_ic_started');
                 delete_post_meta($attachment_id, 'wps_ic_reset');
                 delete_post_meta($attachment_id, 'wps_ic_times');
@@ -557,9 +554,9 @@ class wps_ic_compress
                 $this->restore_wpml_image($attachment_id);
                 $this->restore_thumbnails($attachment_id);
 
-                // Remove Queue
+                
                 $wps_ic->queue->change_queue_status($attachment_id, 'restored', ['code' => 'no_backup']);
-                //}
+                
             }
         }
     }
@@ -578,7 +575,7 @@ class wps_ic_compress
         $run = get_option('ic_log_run');
         if (!$run) {
             $run = 1;
-        } #else $run++;
+        } 
 
         $log_file = WPS_IC_LOG . 'run_' . $run . '.txt';
 
@@ -591,9 +588,9 @@ class wps_ic_compress
         file_put_contents($log_file, $log);
     }
 
-    /**
-     * @since 4.0.0
-     */
+    
+
+
     public function bulk($attachments, $apikey = '', $return = false, $params = '', $debug_tool = false)
     {
         global $wps_ic;
@@ -629,7 +626,7 @@ class wps_ic_compress
                 $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'not_able']);
                 $wps_ic->queue->remove_queue($attachment_ID);
 
-                // Delete in Queue Meta
+                
                 delete_post_meta($attachment_ID, 'wps_ic_started');
                 delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
                 delete_post_meta($attachment_ID, 'wps_ic_compressing');
@@ -638,18 +635,18 @@ class wps_ic_compress
 
             $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', ['code' => 'compressing']);
 
-            // Create local backup if selected
+            
             if (!empty($settings['backup-location']) && $settings['backup-location'] == 'local') {
-                // Do Local Backup Before Anything
+                
                 $this->create_local_backup($attachment_ID);
             } else {
             }
 
-            // Get attachment ID
+            
             $attach_id = sanitize_text_field($attachment_ID);
             $attach_id = (int)$attach_id;
 
-            // Get all image sizes
+            
             $thumbs = [];
             $thumbs['full'] = wp_get_attachment_image_src($attach_id, 'full');
             $uri = explode('?', $thumbs['full'][0]);
@@ -660,14 +657,14 @@ class wps_ic_compress
             if (is_array($sizesa)) {
                 foreach ($sizesa as $size => $value) {
 
-                    // Is thumbnail size set to active in settings
+                    
                     if (!isset($settings['thumbnails'][$value])) {
                         continue;
                     }
 
                     $thumbs[$value] = wp_get_attachment_image_src($attach_id, $value);
                     $uri = explode('?', $thumbs[$value][0]);
-                    #$uri[0] = str_replace($site_url, '', $uri[0]);
+                    
 
                     if ($uri[0] == $thumbs['full']) {
                         unset($thumbs[$value]);
@@ -720,12 +717,12 @@ class wps_ic_compress
             $request_params['resize_max'] = $params['size'];
         }
 
-        $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+        $params = ['method' => 'POST', 'timeout' => 120, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, 
             'headers' => [], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
         $start = microtime(true);
 
-        // Send call to API
+        
         $call = wp_remote_post(WPS_IC_APIURL, $params);
         $response = wp_remote_retrieve_body($call);
 
@@ -742,7 +739,7 @@ class wps_ic_compress
 
             if (is_array($images)) {
                 foreach ($images as $attachment_ID => $image_data) {
-                    // Update Image
+                    
 
                     if (!empty($image_data['compressed']['full']['no-credits']) && $image_data['compressed']['full']['no-credits'] == 'true') {
                         $this->not_enough_credits($attachment_ID);
@@ -797,7 +794,7 @@ class wps_ic_compress
 
     public function not_enough_credits($attachment_ID)
     {
-        // Update compress data
+        
         update_post_meta($attachment_ID, 'wps_ic_data', 'no_credits');
 
         delete_post_meta($attachment_ID, 'wps_ic_cdn');
@@ -810,7 +807,7 @@ class wps_ic_compress
         delete_post_meta($attachment_ID, 'wps_ic_webp_path');
         delete_post_meta($attachment_ID, 'wps_ic_webp_uri');
 
-        // Delete in Queue Meta
+        
         delete_post_meta($attachment_ID, 'wps_ic_started');
         delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
         delete_post_meta($attachment_ID, 'wps_ic_compressing');
@@ -832,11 +829,11 @@ class wps_ic_compress
         $uncompressed_file_size = $original_image_size;
         $uncompressed_dimensions = getimagesize($file_data);
 
-        // Update Compressed Table
+        
         $query = $wpdb->prepare("INSERT INTO " . $wpdb->prefix . "ic_compressed (created, attachment_ID, saved, original, percent_saved, count) VALUES (%s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE saved=saved, count=count+1, restored=0", current_time('mysql'), $attachment_ID, ($original_image_size - $compressed_image_size), $original_image_size, round((($original_image_size - $compressed_image_size) / $original_image_size) * 100, 2), '1');
         $wpdb->query($query);
 
-        // First delete the current file
+        
         clearstatcache();
 
         $dimensions = [];
@@ -846,11 +843,11 @@ class wps_ic_compress
         update_post_meta($attachment_ID, 'wps_ic_noncompressed_size', $uncompressed_file_size);
         $child_metadata['wps_ic_noncompressed_size'] = $uncompressed_file_size;
 
-        // Change Queue to Compressing
+        
         $wps_ic->queue->change_queue_status($attachment_ID, 'compressing', ['code' => 'compressing']);
 
         if (empty($image_url)) {
-            // Update compress data
+            
             update_post_meta($attachment_ID, 'wps_ic_data', 'not_able');
             $child_metadata['wps_ic_data'] = 'not_able';
 
@@ -864,35 +861,35 @@ class wps_ic_compress
             delete_post_meta($attachment_ID, 'wps_ic_webp_path');
             delete_post_meta($attachment_ID, 'wps_ic_webp_uri');
 
-            // Delete in Queue Meta
+            
             delete_post_meta($attachment_ID, 'wps_ic_started');
             delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
             delete_post_meta($attachment_ID, 'wps_ic_compressing');
 
-            // Remove From Queue
+            
             $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'not_able']);
             $this->delete_local_backup($attachment_ID);
         } else {
 
-            // First delete the current file
+            
             clearstatcache();
 
             $start = microtime(true);
-            // Download remote file to temp
+            
             $temp_file = download_url($image_data['uri'], 120);
             $end = microtime(true);
 
             if ($temp_file) {
 
-                // First delete the current file
+                
                 clearstatcache();
 
-                #$compressed_file_size  = filesize($file_data . '_tmp');
+                
                 $compressed_file_size = $compressed_image_size;
 
                 $start = microtime(true);
-                /*if ($compressed_file_size < $uncompressed_file_size) {*/
-                #unlink($file_data);
+                
+                
 
                 if (copy($temp_file, $file_data)) {
                     unlink($temp_file);
@@ -920,7 +917,7 @@ class wps_ic_compress
                         $compress_data['quality'] = $quality;
                     }
 
-                    // Update compress data
+                    
                     update_post_meta($attachment_ID, 'wps_ic_compressed', 'true');
                     update_post_meta($attachment_ID, 'wps_ic_data', $compress_data);
                     update_post_meta($attachment_ID, 'wps_ic_cdn', 'true');
@@ -929,7 +926,7 @@ class wps_ic_compress
                     $child_metadata['wps_ic_data'] = $compress_data;
                     $child_metadata['wps_ic_cdn'] = true;
 
-                    // Delete in queue meta
+                    
                     delete_post_meta($attachment_ID, 'wps_ic_started');
                     delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
                     delete_post_meta($attachment_ID, 'wps_ic_compressing');
@@ -937,25 +934,21 @@ class wps_ic_compress
                     $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'compressed']);
                     if (!empty($image_data['webp'])) {
 
-                        // First delete the current file
+                        
                         clearstatcache();
 
                         $temp_file = download_url($image_data['webp'], 60);
 
-                        // Is image downloaded into temporary file and is larger than 0?
+                        
                         if (!is_wp_error($temp_file) && $temp_file) {
 
-                            // First delete the current file
+                            
                             clearstatcache();
 
-                            // Rename image into webp — (v7.10.04.3) anchor to the TRUE trailing
-                            // extension. The old str_replace replaced ".png"/".jpg" ANYWHERE, mangling
-                            // valid mid-name tokens (e.g. "Layout-1-B.png-4.webp" -> ".webp-4.webp",
-                            // "Layout-1-B.png.webp" -> ".webp.webp") and writing the variant under a
-                            // bad on-disk name that then 404s on delivery.
+
                             $permfile = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $file_data);
 
-                            // Copy image from temporary file into real file
+                            
                             if (file_exists($permfile)) {
                                 unlink($permfile);
                             }
@@ -965,7 +958,7 @@ class wps_ic_compress
                                 $uri = explode('wp-content', $permfile);
                                 $uri = site_url('wp-content') . $uri[1];
 
-                                // Update backup URI
+                                
                                 update_post_meta($attachment_ID, 'wps_ic_webp_path', $permfile);
                                 update_post_meta($attachment_ID, 'wps_ic_webp_uri', $uri);
 
@@ -976,7 +969,7 @@ class wps_ic_compress
 
                     }
                 } else {
-                    // Update compress data
+                    
                     update_post_meta($attachment_ID, 'wps_ic_data', 'not_able');
                     $child_metadata['wps_ic_data'] = 'not_able';
 
@@ -990,12 +983,12 @@ class wps_ic_compress
                     delete_post_meta($attachment_ID, 'wps_ic_webp_path');
                     delete_post_meta($attachment_ID, 'wps_ic_webp_uri');
 
-                    // Delete in Queue Meta
+                    
                     delete_post_meta($attachment_ID, 'wps_ic_started');
                     delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
                     delete_post_meta($attachment_ID, 'wps_ic_compressing');
 
-                    // Remove From Queue
+                    
                     $wps_ic->queue->change_queue_status($attachment_ID, 'compressed', ['code' => 'unable to copy']);
                     $this->delete_local_backup($attachment_ID);
                 }
@@ -1035,7 +1028,7 @@ class wps_ic_compress
 
         $guid = $wpdb->get_var("SELECT posts.guid FROM {$wpdb->posts} posts WHERE posts.ID=%d", $attachmentID);
 
-        // Find Children
+        
         $children = $wpdb->get_results($wpdb->prepare("
         SELECT posts.ID, posts.guid
         FROM {$wpdb->posts} posts
@@ -1043,9 +1036,9 @@ class wps_ic_compress
           AND posts.post_status = %s
           AND posts.post_mime_type IN (%s, %s, %s, %s)
         ORDER BY posts.post_date DESC
-        ", $guid,          // posts.guid
-            'inherit',      // posts.post_status
-            'image/jpeg',   // mime list
+        ", $guid,
+            'inherit',
+            'image/jpeg',
             'image/png', 'image/gif', 'image/jpg'));
 
         if ($children) {
@@ -1054,7 +1047,7 @@ class wps_ic_compress
                     continue;
                 }
 
-                // Child
+                
                 foreach ($metadata as $meta_key => $meta_value) {
                     update_post_meta($child->ID, $meta_key, $meta_value);
                 }
@@ -1065,7 +1058,7 @@ class wps_ic_compress
 
     public function not_able_to_optimize($attachment_ID)
     {
-        // Update compress data
+        
         update_post_meta($attachment_ID, 'wps_ic_data', 'not_able');
 
         delete_post_meta($attachment_ID, 'wps_ic_cdn');
@@ -1078,7 +1071,7 @@ class wps_ic_compress
         delete_post_meta($attachment_ID, 'wps_ic_webp_path');
         delete_post_meta($attachment_ID, 'wps_ic_webp_uri');
 
-        // Delete in Queue Meta
+        
         delete_post_meta($attachment_ID, 'wps_ic_started');
         delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
         delete_post_meta($attachment_ID, 'wps_ic_compressing');
@@ -1095,21 +1088,21 @@ class wps_ic_compress
         $request_params['action'] = 'fetch_thumbnails';
         $request_params['attachments'] = json_encode($attachments);
 
-        $params = ['method' => 'POST', 'timeout' => 60, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+        $params = ['method' => 'POST', 'timeout' => 60, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, 
             'headers' => ['user-agent' => WPS_IC_API_USERAGENT], 'body' => $request_params, 'cookies' => [], 'user-agent' => WPS_IC_API_USERAGENT];
 
-        // Send call to API
+        
         $call = wp_remote_post(WPS_IC_APIURL, $params);
         $code = wp_remote_retrieve_response_code($call);
         $response = wp_remote_retrieve_body($call);
     }
 
-    /**
-     * Update Thumbnails for specified image
-     *
-     * @param $attachment_ID
-     * @param $images_array
-     */
+    
+
+
+
+
+
     public function update_thumbnail($attachment_ID, $images_array)
     {
         $fullsizepath = get_attached_file($attachment_ID);
@@ -1132,7 +1125,7 @@ class wps_ic_compress
                 continue;
             }
 
-            // Thumbnails
+            
             $temp_file = download_url($image_data['uri'], 60);
 
             if ($temp_file) {
@@ -1140,7 +1133,7 @@ class wps_ic_compress
             }
 
             if (!empty($image_data['webp'])) {
-                // (v7.10.04.3) anchor to the TRUE trailing extension (see note above) — was str_replace mid-name
+
                 $current_thumbnail_path = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $current_thumbnail_path);
                 $temp_file = download_url($image_data['webp'], 60);
 
@@ -1159,15 +1152,15 @@ class wps_ic_compress
 
     public function update_image_meta($attachment_ID)
     {
-        // Get upload directory path
+        
         $file_data = get_attached_file($attachment_ID);
         $filesize = filesize($file_data);
         $imagesize = getimagesize($file_data);
 
-        // Update size
+        
         update_post_meta($attachment_ID, 'wps_ic_compressed_size', $filesize);
 
-        // Delete in queue meta
+        
         delete_post_meta($attachment_ID, 'wps_ic_started');
         delete_post_meta($attachment_ID, 'wps_ic_compressing');
         delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
@@ -1182,26 +1175,18 @@ class wps_ic_compress
         $compress_data['new']['data']['width'] = $imagesize[0];
         $compress_data['new']['data']['height'] = $imagesize[1];
 
-        // Update compress data
+        
         update_post_meta($attachment_ID, 'wps_ic_compressed', 'true');
         update_post_meta($attachment_ID, 'wps_ic_data', $compress_data);
         update_post_meta($attachment_ID, 'wps_ic_cdn', 'true');
 
-        // Delete in queue meta
+        
         delete_post_meta($attachment_ID, 'wps_ic_started');
         delete_post_meta($attachment_ID, 'wps_ic_in_bulk');
         delete_post_meta($attachment_ID, 'wps_ic_compressing');
     }
 
 
-    /**
-     * Is the image excluded?
-     *
-     * @param $attachment_id
-     *
-     * @return bool
-     * @since 3.3.0
-     */
     public function is_excluded($attachment_id)
     {
         $excluded = get_post_meta($attachment_id, 'wps_ic_exclude', true);
@@ -1213,14 +1198,6 @@ class wps_ic_compress
     }
 
 
-    /**
-     * Is image allowed type?
-     *
-     * @param $attachment_id
-     *
-     * @return bool
-     * @since 3.3.0
-     */
     public function is_allowed_type($attachment_id)
     {
         $file_data = get_attached_file($attachment_id);
@@ -1260,7 +1237,7 @@ class wps_ic_compress
 
             $excluded_list = get_option('wps_ic_excluded_list');
             $excluded_list[$file_name] = $file_name;
-            update_option('wps_ic_excluded_list', $excluded_list);
+            update_option('wps_ic_excluded_list', $excluded_list, false);
 
             $output = '<div class="wps-ic-excluded">';
             $output .= '<img src="' . $logo_excluded . '" />';
@@ -1279,7 +1256,7 @@ class wps_ic_compress
             delete_post_meta($attachment_id, 'wps_ic_exclude');
             delete_post_meta($attachment_id, 'wps_ic_data');
 
-            // Not compressed
+            
             $file_data = get_attached_file($attachment_id);
             $uncompressed_value = filesize($file_data);
             $uncompressed_value = size_format($uncompressed_value, 2);
@@ -1290,7 +1267,7 @@ class wps_ic_compress
 
             $excluded_list = get_option('wps_ic_excluded_list');
             unset($excluded_list[$file_name]);
-            update_option('wps_ic_excluded_list', $excluded_list);
+            update_option('wps_ic_excluded_list', $excluded_list, false);
 
             $output = '<div class="wps-ic-uncompressed">';
             $output .= '<img src="' . $logo_uncompressed . '" />';
@@ -1338,7 +1315,7 @@ class wps_ic_compress
 
             $excluded_list = get_option('wps_ic_excluded_list');
             $excluded_list[$file_name] = $file_name;
-            update_option('wps_ic_excluded_list', $excluded_list);
+            update_option('wps_ic_excluded_list', $excluded_list, false);
 
             $output = '<div class="wps-ic-excluded">';
             $output .= '<img src="' . $logo_excluded . '" />';
@@ -1357,7 +1334,7 @@ class wps_ic_compress
             delete_post_meta($attachment_id, 'wps_ic_exclude');
             delete_post_meta($attachment_id, 'wps_ic_data');
 
-            // Not compressed
+            
             $file_data = get_attached_file($attachment_id);
             $uncompressed_value = filesize($file_data);
             $uncompressed_value = size_format($uncompressed_value, 2);
@@ -1368,7 +1345,7 @@ class wps_ic_compress
 
             $excluded_list = get_option('wps_ic_excluded_list');
             unset($excluded_list[$file_name]);
-            update_option('wps_ic_excluded_list', $excluded_list);
+            update_option('wps_ic_excluded_list', $excluded_list, false);
 
             $output = '<div class="wps-ic-uncompressed">';
             $output .= '<img src="' . $logo_uncompressed . '" />';

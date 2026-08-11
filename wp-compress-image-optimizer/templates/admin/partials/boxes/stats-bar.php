@@ -1,11 +1,10 @@
 <?php
-/**
- * Is Live OFF?
- */
+
+
+
 if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
 $donut_size = 1;
 $savings    = false;
-
 
 
 if (isset ($user_credits->bytes->local_compressed) && $user_credits->bytes->local_compressed > 0 &&
@@ -45,9 +44,9 @@ if (empty($user_savings) || $user_savings == '') {
 <div class="right-side-box">
     <div class="youve-saved">
         <?php
-        /**
-         * Live Stats Exist OR  Stats Local Exists
-         */
+        
+
+
         if ( ! empty($stats_live) || ! empty($stats_local)) { ?>
             <?php
             if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
@@ -212,7 +211,7 @@ if (empty($user_savings) || $user_savings == '') {
     <?php
     }
 else {
-        // Live is ON
+
         if ( ! empty($stats_live)) {
             if ($user_credits->bytes->bandwidth_savings > 0) {
                 $savings    = true;

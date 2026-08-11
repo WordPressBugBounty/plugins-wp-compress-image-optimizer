@@ -1706,12 +1706,12 @@ p.important {
   letter-spacing: 0.04em;
 }
 
-/* (v7.03.102) Pin the Optimization column. With no width set, the card's content —
+/* Pin the Optimization column. With no width set, the card's content —
    especially the long "Regenerating Thumbnails…" line — balloons the column and
    starves WP's primary "File" column, which then wraps its row-actions into a tall
    vertical stack (the "mangled layout"). A fixed width on WPC's OWN column (plus
    letting the card text wrap) contains it without touching any other column.
-   (v7.10.04) Widened 200px → 260px: at 200px the cell's usable body (cell − 42px icon
+   Widened 200px → 260px: at 200px the cell's usable body (cell − 42px icon
    − 10px gap − ~20px td padding ≈ 128px) was too narrow for the "Smart Delivery /
    Exclude" action row (~185px), forcing it to wrap onto a second line. 260px gives the
    body ~188px so the actions sit on ONE line, while staying a BOUNDED fixed width — the
@@ -1730,7 +1730,7 @@ p.important {
 .wp-list-table td.column-wps_ic_actions .wpc-ml-subtitle {
   white-space: normal;
 }
-/* (v7.10.04) Keep each action LABEL intact — "Smart Delivery" must never break to
+/* Keep each action LABEL intact — "Smart Delivery" must never break to
    "Smart / Delivery" mid-word. The subtitle row above is still flex-wrap:wrap, so if a
    future state is too long for the (now wider) column the actions wrap as WHOLE chips
    rather than mid-label. This is why the title/subtitle keep white-space:normal (long
@@ -1739,7 +1739,7 @@ p.important {
   white-space: nowrap;
 }
 
-/* (v7.03.108) Compact-card + stop-hijacking. The 200px cell cap (above) hard-limits OUR
+/* Compact-card + stop-hijacking. The 200px cell cap (above) hard-limits OUR
    column under table-layout:fixed, but the card's flex internals (.wpc-ml-body flex:1,
    .wpc-ml-title fit-content) could still push content past the cell edge. Make the whole
    card + its text shrink/wrap to the cell so we occupy the LEAST width — freeing space for
@@ -1764,4 +1764,35 @@ p.important {
 }
 .wp-list-table td.column-wps_ic_actions .wpc-variant-count-chip-row {
   max-width: 100%;
+}
+
+/* ── Table survival under column crowding (chemsol receipt: LS + AIOSEO + WPC
+   columns starved WP's File column to ~1ch → one-letter-per-line row-actions →
+   skyscraper rows with our card floating mid-cell). Three belts, all scoped: ── */
+/* 1. WP's primary File column gets a protected floor — the table is useless without it. */
+.upload-php .wp-list-table th.column-title {
+  width: 30%;
+  min-width: 200px;
+}
+/* 2. Our column yields before anyone else on crowded/narrow tables. */
+@media screen and (max-width: 1750px) {
+  .wp-list-table th.column-wps_ic_actions,
+  .wp-list-table td.column-wps_ic_actions {
+    width: 200px;
+    max-width: 200px;
+  }
+}
+@media screen and (max-width: 1500px) {
+  .wp-list-table th.column-wps_ic_actions,
+  .wp-list-table td.column-wps_ic_actions {
+    width: 160px;
+    max-width: 160px;
+  }
+}
+/* 3. Tall rows (other columns' content) must not float our card mid-air. */
+.wp-list-table td.column-wps_ic_actions {
+  vertical-align: top;
+}
+.wp-list-table td.column-wps_ic_actions .wpc-ml-card {
+  align-items: flex-start;
 }

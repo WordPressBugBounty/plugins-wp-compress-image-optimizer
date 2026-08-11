@@ -7,16 +7,16 @@ $stats_live = self::$stats_live;
 $stats_local = self::$stats_local;
 $stats_local_sum = self::$stats_local_sum;
 
-/**
- * Quick fix for PHP undefined notices
- */
+
+
+
 $wps_ic_active_settings['optimization']['lossless'] = '';
 $wps_ic_active_settings['optimization']['intelligent'] = '';
 $wps_ic_active_settings['optimization']['ultra'] = '';
 
-/**
- * Decides which setting is active
- */
+
+
+
 if (!empty($wps_ic::$settings['optimization'])) {
   if ($wps_ic::$settings['optimization'] == 'lossless') {
     $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
@@ -39,9 +39,9 @@ if (!empty($wps_ic::$settings['optimization'])) {
             <div class="pre-inner">
                 <div class="inner inner-flex">
                   <?php
-                  /**
-                   * Is Live OFF?
-                   */
+                  
+
+
                   if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
                     $donut_size = 1;
                     $savings = false;
@@ -82,10 +82,10 @@ if (!empty($wps_ic::$settings['optimization'])) {
 
                           <div class="youve-saved">
                             <?php
-                            /**
-                             * Live Stats Exist OR  Stats Local Exists
-                             */
-                            // Do we have any stats or we need to show sample stats?
+                            
+
+
+                            
                             if (!empty($stats_live) || !empty($stats_local)) {
 
                               if (isset ($stats_local_sum->bytes->compressed) && $stats_local_sum->bytes->compressed > 0 && isset ($stats_local_sum->bytes->original) && $stats_local_sum->bytes->original > 0) {
@@ -194,7 +194,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
                       </div>
                     <?php
                   } else {
-                    // Live is ON
+
                     if (!empty($stats_live)) {
                       if ($user_credits->bytes->bandwidth_savings > 0) {
                         $savings = true;

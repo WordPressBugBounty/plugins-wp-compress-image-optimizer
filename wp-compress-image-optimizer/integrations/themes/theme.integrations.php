@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class ThemeIntegrations extends wps_cdn_rewrite
@@ -37,7 +37,7 @@ class ThemeIntegrations extends wps_cdn_rewrite
       }
 
     } else if (defined('ELEMENTOR_VERSION')) {
-      //todo: elementor class is used in multiple places, can't inherit settings from this class
+
 	    $elementor = new wps_ic_elementor();
 			return $elementor->runIntegration($html);
     } else {

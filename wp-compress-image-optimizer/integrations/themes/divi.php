@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wpc_divi {
@@ -11,11 +11,17 @@ class wpc_divi {
 
 
   public function runIntegration($html) {
-    $html = $this->hideSections($html);
-    $html = $this->delayBackgrounds($html);
-		#$html = $this->insertJS($html);
-
-	  $html = str_replace('optimize.js', 'divi/optimize.js', $html);
+    
+    
+    
+    
+    
+    if (!(function_exists('is_user_logged_in') && is_user_logged_in())) {
+      $html = $this->hideSections($html);
+      $html = $this->delayBackgrounds($html);
+    }
+    
+    
     return $html;
   }
 
@@ -38,7 +44,10 @@ class wpc_divi {
     );
 
 
-	  $html = str_replace('</head>', '<style>.wpc-delay-divi{display:none!important;}</style></head>', $html);
+	  
+	  
+	  
+	  $html = str_replace('</head>', '<style>.wpc-delay-divi{content-visibility:auto;contain-intrinsic-size:auto 900px;}</style></head>', $html);
 
     return $html;
   }
@@ -61,8 +70,6 @@ class wpc_divi {
     $html = preg_replace($pattern, 'class="wpc-delay-divi $1et_pb_with_background$2"', $html);
     return $html;
   }
-
-
 
 
 }

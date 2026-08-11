@@ -25,7 +25,7 @@ class wps_ic_excludes extends wps_ic
     private static $userDeferScript;
 
 
-    // New
+    
     private static $excludesCriticalCSSOption;
     private static $excludesInlineCSSOption;
     private static $excludesOption;
@@ -84,27 +84,36 @@ class wps_ic_excludes extends wps_ic
 
         ];
 
-        self::$defaultDelayJSExcludes = ['gtranslate', 'gformRedirect()', 'wpgb_settings', 'latepoint_helper', 'wc-order-attribution-js-extra', 'mailchimp_public_data', 'porto-theme-js-extra', 'porto-live-search-js-extra', 'yith-wcan-shortcodes-js-extra', 'jqueryParams', '/plugins/elementor-pro/assets/js/page-transitions', 'hbspt.forms', 'js.hsforms', 'var directorist', 'g5plus_variable', 'mhcookie', 'must-have-cookie/assets/js/script.js', 'application/ld+json', 'wpforms_settings', 'var jnewsoption', 'var VPData'];
+        self::$defaultDelayJSExcludes = ['gtranslate', 'gformRedirect()', 'wpgb_settings', 'latepoint_helper', 'wc-order-attribution-js-extra', 'mailchimp_public_data', 'porto-theme-js-extra', 'porto-live-search-js-extra', 'yith-wcan-shortcodes-js-extra', 'jqueryParams', '/plugins/elementor-pro/assets/js/page-transitions', 'hbspt.forms', 'js.hsforms', 'var directorist', 'g5plus_variable', 'mhcookie', 'must-have-cookie/assets/js/script.js', 'application/ld+json', 'wpforms_settings', 'var jnewsoption', 'var VPData', 'onecdn.static.microsoft'];
 
         self::$defaultDelayJSExcludesV2 = [];
 
         self::$defaultCombineJSExcludes = ['visitor_mode.min.js', 'jquery.min.js', 'jquery.js', 'jquery-migrate', 'lazy.min.js', 'wp-i18', 'wp.i18', 'dashicon', 'i18', 'hooks', 'lazy', 'all', 'optimizer', 'delay-js', 'application/ld+json'];
 
-        self::$defaultCombineCSSExcludes = [#'responsive', //responsive stuff
-            'dashicons', 'wps-inline', //our inline CSS option
-            'wpc-critical-css', //our critical
-            'wpc-critical-css-mobile', //our mobile critical
-            'rs-plugin', // revolution slider causing JS errors if inline is missing
-            'rs-plugin-settings-inline-css', // revolution slider causing JS errors if inline is missing
-            'media="print"', 'media=\'print\'' //styles only for printing
+        self::$defaultCombineCSSExcludes = [
+            'dashicons', 'wps-inline',
+            'wpc-critical-css',
+            'wpc-critical-css-mobile',
+            'rs-plugin',
+            'rs-plugin-settings-inline-css',
+            'media="print"', 'media=\'print\''
         ];
 
-        self::$defaultCriticalCSSExcludes = ['frontend-layer', 'xlink=css' //oxygen theme css
+
+        
+
+
+        self::$defaultCriticalCSSExcludes = ['frontend-layer', 'xlink=css'
         ];
+
+
+        if (apply_filters('wpc_defer_frontend_layer', get_option('wpc_defer_frontend_layer', '1') === '1')) {
+            self::$defaultCriticalCSSExcludes = ['xlink=css'];
+        }
 
         self::$defaultInlineCSSExcludes = [];
 
-        //Check if default excludes are disabled
+        
         if (!empty(self::$excludesOption['delay_js_default_excludes_disabled']) && self::$excludesOption['delay_js_default_excludes_disabled'] == '1') {
             self::$defaultDelayJSExcludes = [];
         }
@@ -129,7 +138,7 @@ class wps_ic_excludes extends wps_ic
     {
 
         if (!empty(self::$excludesToFooterOption) && is_array(self::$excludesToFooterOption)) {
-            //something is excluded, so exclude jquery too
+
             self::$excludesToFooterOption[] = 'jquery';
             return self::$excludesToFooterOption;
         }
@@ -188,8 +197,18 @@ class wps_ic_excludes extends wps_ic
         }
 
         if (!empty(self::$settings['critical']['css']) && self::$settings['critical']['css'] == '1') {
-            //if excluded from crit, it should not be delayed, so it should not be combined either
+
             self::$defaultCombineCSSExcludes = array_merge(self::$defaultCombineCSSExcludes, $this->criticalCSSExcludes());
+        }
+
+        if (function_exists('wpc_font_localizer_present') && wpc_font_localizer_present() !== false) {
+            $wpc_tk789 = apply_filters('wpc_font_localizer_sheet_tokens',
+                ['omgf', 'local-google-fonts', 'embed-google-fonts']);
+            foreach ((array) $wpc_tk789 as $wpc_t789) {
+                if ($wpc_t789 !== '' && !in_array($wpc_t789, self::$defaultCombineCSSExcludes, true)) {
+                    self::$defaultCombineCSSExcludes[] = $wpc_t789;
+                }
+            }
         }
 
         return self::$defaultCombineCSSExcludes;
@@ -254,24 +273,24 @@ class wps_ic_excludes extends wps_ic
     {
 
         if ($this->strInArray($image_src, self::$excludesAdaptiveOption)) {
-            //user exclude for url
+
             return true;
         }
 
 
         if ($this->strInArray($class, self::$defaultAdaptiveExcludes)) {
-            //our default exclude for class
+
             return true;
         }
 
 
         if ($this->strInArray($class, self::$defaultAdaptiveExcludes)) {
-            //our default exclude for class
+
             return true;
         }
 
         if (isset(self::$pageExcludesFiles['adaptive']) && $this->strInArray($class, self::$pageExcludesFiles['adaptive'])) {
-            //per page excludes
+
             return true;
         }
 
@@ -279,7 +298,7 @@ class wps_ic_excludes extends wps_ic
         if (!empty(self::$excludesAdaptiveOption)) {
             foreach (self::$excludesAdaptiveOption as $exclude) {
                 if (strpos($exclude, '#') === 0 && strpos($class, str_replace('#', '', $exclude)) !== false) {
-                    //user exclude for class
+
                     return true;
                 }
             }
@@ -314,20 +333,20 @@ class wps_ic_excludes extends wps_ic
     {
 
         if ($this->strInArray($image_src, self::$excludesWebpOption)) {
-            //user exclude for url
+
             return true;
         }
 
 
         if ($this->strInArray($class, self::$defaultWebpExcludes)) {
-            //our default exclude for class
+
             return true;
         }
 
         if (!empty(self::$excludesWebpOption)) {
             foreach (self::$excludesWebpOption as $exclude) {
                 if (strpos($exclude, '#') === 0 && strpos($class, str_replace('#', '', $exclude)) !== false) {
-                    //user exclude for class
+
                     return true;
                 }
             }
@@ -341,13 +360,13 @@ class wps_ic_excludes extends wps_ic
     {
 
         if ($this->strInArray($image_src, self::$excludesLazyOption)) {
-            //user exclude for url
+
             return true;
         }
 
 
         if ($this->strInArray($class, self::$defaultLazyExcludes)) {
-            //our default exclude for class
+
             return true;
         }
 
@@ -355,7 +374,7 @@ class wps_ic_excludes extends wps_ic
         if (!empty(self::$excludesLazyOption)) {
             foreach (self::$excludesLazyOption as $exclude) {
                 if (strpos($exclude, '#') === 0 && strpos($class, str_replace('#', '', $exclude)) !== false) {
-                    //user exclude for class
+
                     return true;
                 }
             }
@@ -413,13 +432,13 @@ class wps_ic_excludes extends wps_ic
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
-            // Image on site
+            
             return false;
         } else if ((strpos($url, $site_url) === false || strpos($url, '//') === 0) || (strpos($url, $site_url) !== false && strpos($url, $site_url) >= strpos($url, '?'))) {
-            // Image not on site
+            
             return true;
         } else {
-            // Image on site
+            
             return false;
         }
     }
@@ -430,11 +449,6 @@ class wps_ic_excludes extends wps_ic
             return true;
         }
 
-        /* We should be able to delay everything
-        if (!empty(self::$excludesOption['delay_js_exclude_third']) && self::$excludesOption['delay_js_exclude_third'] == '1' && $this->is_external($tag) === true) {
-            return true;
-        }
-        */
 
         return false;
     }
@@ -443,22 +457,6 @@ class wps_ic_excludes extends wps_ic
     {
         self::$defaultDelayJSExcludesV2 = array_merge(isset(self::$excludesDelayJSOptionV2) ? self::$excludesDelayJSOptionV2 : [], isset(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []);
 
-        /* Not used
-        if (!empty(self::$excludesOption['delay_js_exclude_themes']) &&
-            self::$excludesOption['delay_js_exclude_themes'] == '1') {
-            self::$defaultDelayJSExcludes[] = 'wp-content/themes';
-        }
-
-        if (!empty(self::$excludesOption['delay_js_exclude_plugins']) &&
-            self::$excludesOption['delay_js_exclude_plugins'] == '1') {
-            self::$defaultDelayJSExcludes[] = 'wp-content/plugins';
-        }
-
-        if (!empty(self::$excludesOption['delay_js_exclude_wp']) &&
-            self::$excludesOption['delay_js_exclude_wp'] == '1') {
-            self::$defaultDelayJSExcludes[] = 'wp-includes';
-        }
-        */
 
         return self::$defaultDelayJSExcludesV2;
     }

@@ -1,10 +1,12 @@
-// IsMobile
 var mobileWidth = 1;
+
 var wpcIsMobile = false;
+
 var jsDebug = false;
+
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-if (ngf298gh738qwbdh0s87v_vars.js_debug == 'true') {
+if (ngf298gh738qwbdh0s87v_vars.js_debug == "true") {
     jsDebug = true;
 }
 
@@ -16,211 +18,213 @@ function checkMobile() {
 }
 
 checkMobile();
+
 var preloadRunned = false;
+
 var wpcWindowWidth = window.innerWidth;
 
-
-if (n489D_vars.linkPreload === 'true') {
-    document.addEventListener('DOMContentLoaded', function () {
-        const preloadedLinks = new Set(); // To avoid duplicate preloads
-
-        document.body.addEventListener('mouseover', function () {
-            // Check if the hovered element is a link
-            const link = event.target.closest('a');
-            if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
-
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
-            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
-                return link.href.indexOf(excludeStr) !== -1;
-            });
-
-            // Only preload if link is not excluded and is same origin
-            if (!isExcluded && link.origin === location.origin) {
-                preloadLink(link.href);
-            }
-        });
-
-        document.body.addEventListener('touchstart', function () {
-            const link = event.target.closest('a');
+if (n489D_vars.linkPreload === "true") {
+    document.addEventListener("DOMContentLoaded", (function() {
+        const preloadedLinks = new Set;
+        document.body.addEventListener("mouseover", (function() {
+            const link = event.target.closest("a");
             if (!link || preloadedLinks.has(link.href)) return;
-
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
-            const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
+            const isExcluded = n489D_vars.excludeLink.some((function(excludeStr) {
                 return link.href.indexOf(excludeStr) !== -1;
-            });
-
-            // Only preload if link is not excluded and is same origin
+            }));
             if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
-        });
-
+        }));
+        document.body.addEventListener("touchstart", (function() {
+            const link = event.target.closest("a");
+            if (!link || preloadedLinks.has(link.href)) return;
+            const isExcluded = n489D_vars.excludeLink.some((function(excludeStr) {
+                return link.href.indexOf(excludeStr) !== -1;
+            }));
+            if (!isExcluded && link.origin === location.origin) {
+                preloadLink(link.href);
+            }
+        }));
         function preloadLink(url) {
-            preloadedLinks.add(url); // Mark this URL as preloaded
+            preloadedLinks.add(url);
             fetch(url, {
-                method: 'GET',
-                mode: 'no-cors'
-            })
-                .then(function () { // Use traditional function syntax
-                    //console.log('Preloaded: ' + url);
-                })
-                .catch(function (err) { // Use traditional function syntax
-                    //console.error('Preload failed for: ' + url, err);
-                });
+                method: "GET",
+                mode: "no-cors"
+            }).then((function() {})).catch((function(err) {}));
         }
-    });
+    }));
 }
+
 function SetupNewApiURL(newApiURL, imgWidth, imageElement) {
-    if (imgWidth > 0 && !imageElement.classList.contains('wpc-excluded-adaptive')) {
+    if (imgWidth > 0 && !imageElement.classList.contains("wpc-excluded-adaptive")) {
         if (imgWidth > 2560) {
             imgWidth = 2560;
         }
-        newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:' + imgWidth);
+        newApiURL = newApiURL.replace(/w:(\d{1,5})/g, "w:" + imgWidth);
     }
-
     if (jsDebug) {
-        console.log('Set new Width');
+        console.log("Set new Width");
         console.log(imageElement);
         console.log(imageElement.width);
         console.log(imageElement.parentElement);
         console.log(imageElement.parentElement.offsetWidth);
         console.log(imgWidth);
     }
-
-    if ((window.devicePixelRatio >= 2 && ngf298gh738qwbdh0s87v_vars.retina_enabled == 'true') || ngf298gh738qwbdh0s87v_vars.force_retina == 'true') {
-        newApiURL = newApiURL.replace(/r:0/g, 'r:1');
-
+    if (window.devicePixelRatio >= 2 && ngf298gh738qwbdh0s87v_vars.retina_enabled == "true" || ngf298gh738qwbdh0s87v_vars.force_retina == "true") {
+        newApiURL = newApiURL.replace(/r:0/g, "r:1");
         if (jsDebug) {
-            console.log('Retina set to True');
-            console.log('DevicePixelRation ' + window.devicePixelRatio);
+            console.log("Retina set to True");
+            console.log("DevicePixelRation " + window.devicePixelRatio);
         }
-
     } else {
-        newApiURL = newApiURL.replace(/r:1/g, 'r:0');
-
+        newApiURL = newApiURL.replace(/r:1/g, "r:0");
         if (jsDebug) {
-            console.log('Retina set to False');
-            console.log('DevicePixelRation ' + window.devicePixelRatio);
+            console.log("Retina set to False");
+            console.log("DevicePixelRation " + window.devicePixelRatio);
         }
     }
-
-    if (ngf298gh738qwbdh0s87v_vars.webp_enabled == 'true' && isSafari == false) {
-        if (!imageElement.classList.contains('wpc-excluded-webp')) {
-            newApiURL = newApiURL.replace(/wp:0/g, 'wp:1');
+    if (ngf298gh738qwbdh0s87v_vars.webp_enabled == "true" && isSafari == false) {
+        if (!imageElement.classList.contains("wpc-excluded-webp")) {
+            newApiURL = newApiURL.replace(/wp:0/g, "wp:1");
         }
-
         if (jsDebug) {
-            console.log('WebP set to True');
+            console.log("WebP set to True");
         }
-
     } else {
-        newApiURL = newApiURL.replace(/wp:1/g, 'wp:0');
-
+        newApiURL = newApiURL.replace(/wp:1/g, "wp:0");
         if (jsDebug) {
-            console.log('WebP set to False');
+            console.log("WebP set to False");
         }
-
     }
-
-    if (ngf298gh738qwbdh0s87v_vars.exif_enabled == 'true') {
-        newApiURL = newApiURL.replace(/e:0/g, 'e:1');
+    if (ngf298gh738qwbdh0s87v_vars.exif_enabled == "true") {
+        newApiURL = newApiURL.replace(/e:0/g, "e:1");
     } else {
-        newApiURL = newApiURL.replace(/\/e:1/g, '');
-        newApiURL = newApiURL.replace(/\/e:0/g, '');
+        newApiURL = newApiURL.replace(/\/e:1/g, "");
+        newApiURL = newApiURL.replace(/\/e:0/g, "");
     }
-
     if (wpcIsMobile) {
         newApiURL = getSrcset(newApiURL.split(","), mobileWidth, imageElement);
     }
-
     return newApiURL;
 }
-// OK
-function srcSetUpdateWidth(srcSetUrl, imageWidth, imageElement) {
 
-    if (imageElement.classList.contains('wpc-excluded-adaptive')) {
+function srcSetUpdateWidth(srcSetUrl, imageWidth, imageElement) {
+    if (imageElement.classList.contains("wpc-excluded-adaptive")) {
         imageWidth = 1;
     }
-
-    var srcSetWidth = srcSetUrl.split(' ').pop();
-    if (srcSetWidth.endsWith('w')) {
-        // Remove w from width string
+    var srcSetWidth = srcSetUrl.split(" ").pop();
+    if (srcSetWidth.endsWith("w")) {
         var Width = srcSetWidth.slice(0, -1);
         if (parseInt(Width) <= 5) {
             Width = 1;
         }
-        srcSetUrl = srcSetUrl.replace(/w:(\d{1,5})/g, 'w:' + Width);
-    } else if (srcSetWidth.endsWith('x')) {
+        srcSetUrl = srcSetUrl.replace(/w:(\d{1,5})/g, "w:" + Width);
+    } else if (srcSetWidth.endsWith("x")) {
         var Width = srcSetWidth.slice(0, -1);
         if (parseInt(Width) <= 3) {
             Width = 1;
         }
-        srcSetUrl = srcSetUrl.replace(/w:(\d{1,5})/g, 'w:' + Width);
+        srcSetUrl = srcSetUrl.replace(/w:(\d{1,5})/g, "w:" + Width);
     }
     return srcSetUrl;
 }
-// OK
+
 function getSrcset(sourceArray, imageWidth, imageElement) {
-    var changedSrcset = '';
-
-    sourceArray.forEach(function (imageSource) {
-
+    var changedSrcset = "";
+    sourceArray.forEach((function(imageSource) {
         if (jsDebug) {
-            console.log('Image src part from array');
+            console.log("Image src part from array");
             console.log(imageSource);
         }
-
         newApiURL = srcSetUpdateWidth(imageSource.trimStart(), imageWidth, imageElement);
         changedSrcset += newApiURL + ",";
-    });
-
-    return changedSrcset.slice(0, -1); // Remove last comma
+    }));
+    return changedSrcset.slice(0, -1);
 }
-// OK
+
 function listHas(list, keyword) {
     var found = false;
-    // (v7.10.04) old-browser safe: classList is a DOMTokenList whose .forEach is unsupported on
-    // some engines (the "a.forEach is not a function" crash that halted lazy/adaptive + the
-    // WooCommerce gallery + Elementor). Iterate a real array with a for-loop + indexOf instead.
     var _wpcArr = Array.prototype.slice.call(list || []);
     for (var _i = 0; _i < _wpcArr.length; _i++) {
         if (String(_wpcArr[_i]).indexOf(keyword) !== -1) {
             found = true;
         }
     }
-
-
     if (found) {
         return true;
     } else {
         return false;
     }
+}
 
+function wpcLateCssPending() {
+    return !!document.querySelector("link[rel='wpc-late-stylesheet'],[type='wpc-late-stylesheet']");
+}
+
+var wpcAdaptiveDeferred = false;
+
+function runAdaptiveWhenStyled() {
+    if (!wpcLateCssPending()) {
+        runAdaptive();
+        return;
+    }
+    if (wpcAdaptiveDeferred) {
+        return;
+    }
+    wpcAdaptiveDeferred = true;
+    var fired = false;
+    var fire = function() {
+        if (fired) {
+            return;
+        }
+        fired = true;
+        wpcAdaptiveDeferred = false;
+        runAdaptive();
+    };
+    window.addEventListener("wpc-latecss-applied", fire, {
+        once: true
+    });
+    var wpcT0 = (new Date).getTime();
+    (function wpcPoll() {
+        if (fired) {
+            return;
+        }
+        if (!wpcLateCssPending() || (new Date).getTime() - wpcT0 > 12e3) {
+            fire();
+            return;
+        }
+        setTimeout(wpcPoll, 250);
+    })();
 }
 
 function runAdaptive() {
     var adaptiveImages = [].slice.call(document.querySelectorAll("img[data-wpc-loaded='true']"));
-
-    adaptiveImages.forEach(function (entry) {
-        var adaptiveImage = entry;
-
-        if (adaptiveImage.hasAttribute("data-excluded-adaptive")) {
-            return; // skip this image
+    if (adaptiveImages.length === 0) {
+        return;
+    }
+    var wpcWinW116 = window.innerWidth || 1;
+    var wpcMeasured116 = adaptiveImages.map((function(img) {
+        try {
+            return Math.round(parseInt(window.getComputedStyle(img).width)) || 0;
+        } catch (e) {
+            return 0;
         }
-
-        // Integrations
+    }));
+    adaptiveImages.forEach((function(entry, wpcIdx116) {
+        var adaptiveImage = entry;
+        if (adaptiveImage.hasAttribute("data-excluded-adaptive")) {
+            return;
+        }
+        if (adaptiveImage.classList.contains("wpc-lcp-optimized") || adaptiveImage.getAttribute("fetchpriority") === "high") {
+            adaptiveImage.removeAttribute("data-wpc-loaded");
+            return;
+        }
         wpc_masonry = adaptiveImage.closest(".masonry");
         wpc_owlSlider = adaptiveImage.closest(".owl-carousel");
         wpc_SlickSlider = adaptiveImage.closest(".slick-slider");
         wpc_SlickList = adaptiveImage.closest(".slick-list");
         wpc_slides = adaptiveImage.closest(".slides");
-
         if (jsDebug) {
             console.log(wpc_masonry);
             console.log(wpc_owlSlider);
@@ -228,240 +232,168 @@ function runAdaptive() {
             console.log(wpc_SlickList);
             console.log(wpc_slides);
         }
-
-        /**
-         * Is SlickSlider/List?
-         */
         if (wpc_SlickSlider || wpc_SlickList || wpc_slides || wpc_owlSlider || wpc_masonry) {
-            if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
+            if (typeof adaptiveImage.dataset.src !== "undefined" && adaptiveImage.dataset.src != "") {
                 newApiURL = adaptiveImage.dataset.src;
             } else {
                 newApiURL = adaptiveImage.src;
             }
-
-            // Check and update the srcset attribute if data-srcset exists
-            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+            if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.srcset != "") {
                 newApiURLSrcset = adaptiveImage.dataset.srcset;
                 adaptiveImage.srcset = newApiURLSrcset;
             }
-
-            newApiURL = newApiURL.replace(/w:(\d{1,5})/g, 'w:1');
+            newApiURL = newApiURL.replace(/w:(\d{1,5})/g, "w:1");
             adaptiveImage.src = newApiURL;
             adaptiveImage.classList.add("ic-fade-in");
             adaptiveImage.classList.add("wpc-remove-lazy");
             adaptiveImage.classList.remove("wps-ic-lazy-image");
-            adaptiveImage.removeAttribute('data-wpc-loaded');
-
-            // Remove Dataset
-            if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
-                adaptiveImage.removeAttribute('data-src'); // Remove dataset.src
+            adaptiveImage.removeAttribute("data-wpc-loaded");
+            if (typeof adaptiveImage.dataset.src !== "undefined" && adaptiveImage.dataset.src != "") {
+                adaptiveImage.removeAttribute("data-src");
             }
-
-            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
-                adaptiveImage.removeAttribute('data-srcset');
+            if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.srcset != "") {
+                adaptiveImage.removeAttribute("data-srcset");
             }
-
             return;
         }
-
-        if (ngf298gh738qwbdh0s87v_vars.adaptive_enabled == 'false' || adaptiveImage.classList.toString().includes('logo')) {
+        if (ngf298gh738qwbdh0s87v_vars.adaptive_enabled == "false" || adaptiveImage.classList.toString().includes("logo")) {
             imgWidth = 1;
         } else {
-            imageStyle = window.getComputedStyle(adaptiveImage);
-            imgWidth = Math.round(parseInt(imageStyle.width));
-
-            if (typeof imgWidth == 'undefined' || !imgWidth || imgWidth == 0 || isNaN(imgWidth)) {
-                imgWidth = window.innerWidth || 1;
+            imgWidth = wpcMeasured116[wpcIdx116];
+            if (typeof imgWidth == "undefined" || !imgWidth || imgWidth == 0 || isNaN(imgWidth)) {
+                imgWidth = wpcWinW116;
             }
-
-            if (listHas(adaptiveImage.classList, 'slide')) {
+            if (listHas(adaptiveImage.classList, "slide")) {
                 imgWidth = 1;
             }
         }
-
         if (jsDebug) {
-            console.log('Image Stuff 2');
+            console.log("Image Stuff 2");
             console.log(adaptiveImage.parentElement.offsetWidth);
             console.log(adaptiveImage.offsetWidth);
             console.log(imgWidth);
-            console.log('Image Stuff END');
+            console.log("Image Stuff END");
         }
-
-        // if (isMobile) {
-        //     imgWidth = mobileWidth;
-        // }
-
-        /**
-         * Setup Image SRC only if srcset is empty
-         */
-        if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
+        if (typeof adaptiveImage.dataset.src !== "undefined" && adaptiveImage.dataset.src != "") {
             newApiURL = adaptiveImage.dataset.src;
-
             newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
             adaptiveImage.src = newApiURL;
-            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
+            if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.src != "") {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
             }
-
-            // Handle <picture> <source> lazy loading — promote lazy AVIF/WebP <source data-srcset>
-            // so the browser self-selects once (no eager pre-fetch + runLazy re-fetch). Mirrors local/lazy.js.
-            var parentPicture = adaptiveImage.closest('picture');
+            var parentPicture = adaptiveImage.closest("picture");
             if (parentPicture) {
-                parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
+                parentPicture.querySelectorAll("source[data-srcset]").forEach((function(s) {
                     s.srcset = s.dataset.srcset;
-                    s.removeAttribute('data-srcset');
-                });
+                    s.removeAttribute("data-srcset");
+                }));
             }
-        } else if (typeof adaptiveImage.src !== 'undefined' && adaptiveImage.src != '') {
+        } else if (typeof adaptiveImage.src !== "undefined" && adaptiveImage.src != "") {
             newApiURL = adaptiveImage.src;
-
             newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
             adaptiveImage.src = newApiURL;
-            if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
+            if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.src != "") {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
             }
         }
-
-        // (v7.03.54) Wire box-measurement to NATURAL srcsets. SetupNewApiURL only rewrites /w: TRANSFORM
-        // URLs — a no-op now that srcsets are natural (-WxH) — so the natural ladder kept the theme's stale
-        // sizes (e.g. "620px") and the browser over-fetched the biggest rung. Set sizes from the REAL
-        // measured box so the browser picks the right -WxH (DPR-aware → retina still gets 2x). Use a FRESH
-        // measurement (NOT imgWidth — it falls back to window.innerWidth for a 0-width/hidden image, which
-        // would over-fetch); skip unless it's a genuine laid-out width + a width-descriptor srcset is present.
-        var wpcBoxW = Math.round(parseInt(window.getComputedStyle(adaptiveImage).width)) || 0;
-        if (wpcBoxW > 1
-            && !adaptiveImage.classList.contains('wpc-excluded-adaptive')
-            && typeof adaptiveImage.srcset === 'string'
-            && /\d+w(\s|,|$)/.test(adaptiveImage.srcset)) {
-            adaptiveImage.sizes = wpcBoxW + 'px';
+        var wpcBoxW = wpcMeasured116[wpcIdx116];
+        if (wpcBoxW > 1 && !adaptiveImage.classList.contains("wpc-excluded-adaptive") && typeof adaptiveImage.srcset === "string" && /\d+w(\s|,|$)/.test(adaptiveImage.srcset)) {
+            adaptiveImage.sizes = wpcBoxW + "px";
         }
-
         adaptiveImage.classList.add("ic-fade-in");
         adaptiveImage.classList.remove("wps-ic-lazy-image");
-        adaptiveImage.removeAttribute('data-wpc-loaded');
-        adaptiveImage.removeAttribute('data-srcset');
-
-        srcSetAPI = '';
-        if (typeof adaptiveImage.srcset !== 'undefined' && adaptiveImage.srcset != '') {
+        adaptiveImage.removeAttribute("data-wpc-loaded");
+        adaptiveImage.removeAttribute("data-srcset");
+        srcSetAPI = "";
+        if (typeof adaptiveImage.srcset !== "undefined" && adaptiveImage.srcset != "") {
             srcSetAPI = newApiURL = adaptiveImage.srcset;
-
             if (jsDebug) {
-                console.log('Image has srcset');
+                console.log("Image has srcset");
                 console.log(adaptiveImage.srcset);
                 console.log(newApiURL);
             }
-
             newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
             adaptiveImage.srcset = newApiURL;
-        } else if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+        } else if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.srcset != "") {
             srcSetAPI = newApiURL = adaptiveImage.dataset.srcset;
             if (jsDebug) {
-                console.log('Image does not have srcset');
+                console.log("Image does not have srcset");
                 console.log(newApiURL);
             }
-
             newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
             adaptiveImage.srcset = newApiURL;
         }
-
-
-    });
-
+    }));
 }
 
-document.addEventListener("WPCContentLoaded", function () {
-    runAdaptive();
-});
+document.addEventListener("WPCContentLoaded", (function() {
+    runAdaptiveWhenStyled();
+}));
 
-const wpcObserver = new MutationObserver(function (mutationsList) {
-    // Iterate over each mutation
+const wpcObserver = new MutationObserver((function(mutationsList) {
     for (var i = 0; i < mutationsList.length; i++) {
-        console.log('running observer');
+        console.log("running observer");
         var mutation = mutationsList[i];
-
-        // Check if nodes were added
-        if (
-            mutation.type === 'childList' &&
-            mutation.addedNodes.length > 0 &&
-            mutation.addedNodes[0].tagName &&
-            mutation.addedNodes[0].tagName.toLowerCase() === 'img'
-        ) {
-            // Process the added nodes
+        if (mutation.type === "childList" && mutation.addedNodes.length > 0 && mutation.addedNodes[0].tagName && mutation.addedNodes[0].tagName.toLowerCase() === "img") {
             for (var j = 0; j < mutation.addedNodes.length; j++) {
                 var node = mutation.addedNodes[j];
-
-                // if (isMobile) {
-                //     imgWidth = mobileWidth;
-                // }
-
-                // Check if the added node is an image
-                if (node.tagName && node.tagName.toLowerCase() === 'img') {
+                if (node.tagName && node.tagName.toLowerCase() === "img") {
                     adaptiveImage = node;
-                    /**
-                     * Setup Image SRC only if srcset is empty
-                     */
-                    if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
+                    if (typeof adaptiveImage.dataset.src !== "undefined" && adaptiveImage.dataset.src != "") {
                         newApiURL = adaptiveImage.dataset.src;
-
                         newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
                         adaptiveImage.src = newApiURL;
-                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
+                        if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.src != "") {
                             adaptiveImage.srcset = adaptiveImage.dataset.srcset;
                         }
-                    } else if (typeof adaptiveImage.src !== 'undefined' && adaptiveImage.src != '') {
+                    } else if (typeof adaptiveImage.src !== "undefined" && adaptiveImage.src != "") {
                         newApiURL = adaptiveImage.src;
-
                         newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
                         adaptiveImage.src = newApiURL;
-                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
+                        if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.src != "") {
                             adaptiveImage.srcset = adaptiveImage.dataset.srcset;
                         }
                     }
-
                     adaptiveImage.classList.add("ic-fade-in");
                     adaptiveImage.classList.remove("wps-ic-lazy-image");
-                    adaptiveImage.removeAttribute('data-wpc-loaded');
-                    adaptiveImage.removeAttribute('data-srcset');
-
-                    srcSetAPI = '';
-                    if (typeof adaptiveImage.srcset !== 'undefined' && adaptiveImage.srcset != '') {
+                    adaptiveImage.removeAttribute("data-wpc-loaded");
+                    adaptiveImage.removeAttribute("data-srcset");
+                    srcSetAPI = "";
+                    if (typeof adaptiveImage.srcset !== "undefined" && adaptiveImage.srcset != "") {
                         srcSetAPI = newApiURL = adaptiveImage.srcset;
-
                         if (jsDebug) {
-                            console.log('Image has srcset');
+                            console.log("Image has srcset");
                             console.log(adaptiveImage.srcset);
                             console.log(newApiURL);
                         }
-
                         newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
                         adaptiveImage.srcset = newApiURL;
-                    } else if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
+                    } else if (typeof adaptiveImage.dataset.srcset !== "undefined" && adaptiveImage.dataset.srcset != "") {
                         srcSetAPI = newApiURL = adaptiveImage.dataset.srcset;
                         if (jsDebug) {
-                            console.log('Image does not have srcset');
+                            console.log("Image does not have srcset");
                             console.log(newApiURL);
                         }
-
                         newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
                         adaptiveImage.srcset = newApiURL;
                     }
                 }
             }
         }
     }
-});
+}));
+
+var wpcScrollQueued116 = false;
 
 function onScroll() {
-    runAdaptive();
+    if (wpcScrollQueued116) {
+        return;
+    }
+    wpcScrollQueued116 = true;
+    requestAnimationFrame((function() {
+        wpcScrollQueued116 = false;
+        runAdaptiveWhenStyled();
+    }));
 }
 
-// Attach the scroll event listener
-window.addEventListener('scroll', onScroll);
+window.addEventListener("scroll", onScroll);

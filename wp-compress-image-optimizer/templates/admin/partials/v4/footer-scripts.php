@@ -6,7 +6,7 @@
     $in_traffic = '';
     $out_traffic = '';
     $images_charts = '';
-    $date_format = 'm/d/Y';  //Date format in dashboard chart
+    $date_format = 'm/d/Y';
 
     function format_KB($value)
     {
@@ -19,28 +19,28 @@
     $labels_dates = [];
     $limit = 10;
 
-    // Calculate offset
+    
     $item = 0;
 
-    // Initialize
+    
     $statsclass = new wps_ic_stats();
     $stats = false;
     $use_cloudflare = false;
-    $data_source = 'none'; // For debugging/logging
+    $data_source = 'none'; 
     $is_sample_data = false;
 
-    // Check if Cloudflare is connected
+    
     $cf = get_option(WPS_IC_CF);
     $use_cloudflare = !empty($cf) && !empty($cf['token']);
 
     if ($use_cloudflare) {
 
-        // Try to get Cloudflare stats
+        
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_cloudflare_stats(7);
 
         if (!$stats) {
-            // CF fetch failed, fallback to regular stats
+            
             $use_cloudflare = false;
             if (empty($gui::$stats_live)) {
                 $stats = $statsclass->fetch_sample_stats();
@@ -50,21 +50,21 @@
             }
         }
     } elseif (empty($gui::$stats_live)) {
-        // No CF, use sample data
+        
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
         $is_sample_data = true;
     } else {
-        // Use live stats
+        
         $stats = $gui::$stats_live;
     }
 
-    // Normalize: API returns {success, data: {...}} but sample returns just the data object
+    
     if ($stats && isset($stats->data) && is_object($stats->data)) {
         $stats = $stats->data;
     }
 
-    // If stats is still empty or has no date entries, fall back to sample data
+    
     if (empty($stats) || (is_object($stats) && count((array)$stats) === 0)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
@@ -90,13 +90,13 @@
             }
         }
 
-        // All values are zero — show sample data instead of empty chart
+        
         if (!$has_nonzero) {
             $labels = [];
         }
     }
 
-    // Final safety net — if labels is still empty, always show sample data
+    
     if (empty($labels)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
@@ -129,7 +129,7 @@
         $catpercentage = 0.55;
     }
 
-    // Parse to javascript
+    
     $labels_js = '';
     $biggestY = 0;
     if ($labels) {
@@ -154,7 +154,7 @@
         }
     }
 
-    // Calculate Max
+    
     $biggestY = ceil($biggestY);
     $fig = (int)str_pad('1', 2, '0');
     $maxY = ceil((ceil($biggestY * $fig) / $fig));
@@ -216,7 +216,7 @@
 
     if ($stats) {
         foreach ($stats as $date => $value) {
-            // Remove year from date format
+            
             $formatted_date = date('m/d', strtotime($date));
             $chart_labels[] = $formatted_date;
 
@@ -596,7 +596,6 @@
 
     <?php } ?>
 </script>
-
 
 
 <script type="text/javascript">

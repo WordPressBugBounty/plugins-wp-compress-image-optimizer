@@ -1,9 +1,9 @@
 jQuery(document).ready(function ($) {
 
     function fetchRestoreData() {
-        // v7.02 — Resume case (user reloaded page mid-restore). WPCRestore
-        // takes over with the polished view-switcher; no need to inject
-        // legacy HTML or peek-and-render before the heartbeat loop starts.
+        
+        
+        
         $('.bulk-area-inner').show();
         $('.wps-ic-stop-bulk-restore').show();
         $('#bulk-start-container').hide();
@@ -23,21 +23,21 @@ jQuery(document).ready(function ($) {
         $('.wps-ic-stop-bulk-compress').show();
         $('.bulk-area-inner').show();
         $('#bulk-start-container').hide();
-        // v7.03 — On page-load resume mid-bulk, KEEP the prep visible until the
-        // first heartbeat data arrives (renderTally's firstDataArrived gate
-        // hides it then). And DON'T show the legacy `.bulk-status` empty div
-        // (was rendering as an empty white card during the waiting window).
-        // The v2 surface is the sole running-state visual.
+        
+        
+        
+        
+        
 
-        // v7.03.2 — Driver routing:
-        //   'sequential' — JS-driven per-image loop. On resume we have the
-        //     remaining queue in response.queue (from wps_ic_isBulkRunning).
-        //     Restart the loop AND start heartbeat polling for the tally.
-        //   'v2' — old drain chain.
-        //   '<anything else>' — legacy V1.
+        
+        
+        
+        
+        
+        
         if (driver === 'sequential') {
             bulkCompressV2Poll(driver);
-            // Continue the loop with whatever queue is left server-side.
+            
             var resumeQueue = (typeof response !== 'undefined' && response && response.queue)
                 ? response.queue : (window.__wpcSeqQueue || []);
             if (window.WPCBulkSeq && typeof window.WPCBulkSeq.run === 'function' && resumeQueue.length > 0) {
@@ -51,11 +51,11 @@ jQuery(document).ready(function ($) {
     }
 
     function resetToStartView() {
-        // Defensive reset: PHP usually renders this correctly, but stale
-        // browser state (back/forward, sw cache, etc.) can leave the prep
-        // markup visible. Forcing the start container and hiding every
-        // bulk-running view guarantees the user lands on the start screen
-        // whenever the server says no bulk is running.
+        
+        
+        
+        
+        
         $('.bulk-area-inner').hide();
         $('.bulk-preparing-optimize').hide();
         $('.bulk-preparing-restore').hide();
@@ -70,19 +70,30 @@ jQuery(document).ready(function ($) {
         $('#bulk-start-container').show();
     }
 
-    function fetchingBulkData() {
+    function fetchingBulkData(attempt) {
+        attempt = attempt || 0;
         $.ajax({
             url: ajaxurl,
             type: 'POST',
+            
+            
+            timeout: 15000,
             data: {
                 action: 'wps_ic_isBulkRunning'
             },
-            // success fires on 200 even when wp_send_json_error sets success:false
-            // in the body — handle both with a single complete callback.
+            
+            
             complete: function (xhr) {
+                
+                
+                
+                if ((!xhr || !xhr.status) && attempt < 2) {
+                    setTimeout(function () { fetchingBulkData(attempt + 1); }, 3000);
+                    return;
+                }
                 var response = {};
                 try { response = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
-                // The bare-string contract: response.data === 'compressing'/'restoring'/'not-running'
+                
                 var status = response && response.data;
                 var driver = (response && response.driver) || 'v1';
 
@@ -102,9 +113,9 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // v7.02 — V2 bulk progress poller (resume case). Mirrors the new poller
-    // in media-library-bulk.js. Polls every 1 s for state until terminal
-    // (queue_empty + no Phase B drain in flight) for 2 consecutive ticks.
+    
+    
+    
     function bulkCompressV2Poll(driver) {
         if (typeof WPCBulk !== 'undefined') WPCBulk.resetCompletionList();
 
@@ -112,57 +123,66 @@ jQuery(document).ready(function ($) {
         $('.bulk-preparing-placholders').hide();
         $('.wps-ic-stop-bulk-restore').hide();
         $('.wps-ic-stop-bulk-compress').show();
-        // Defense: force-hide the legacy bars in case prior page state
-        // (back/forward cache) left them visible.
+        
+        
         $('.bulk-status').hide();
         $('.bulk-status-progress-bar').hide();
         $('.bulk-compress-status-progress-prepare').hide();
 
-        // v7.03.2 (2026-05-25 #4) — Skip the skeleton entirely. Show the v2
-        // surface immediately + hide the prep. The surface's own empty-state
-        // ("Encoding variants — first results in ~5 seconds…") is the
-        // loading UI. Removes every blank-screen failure mode that came
-        // from the skeleton-→-surface transition (opacity fades stacking,
-        // gate timing, prep-hide / surface-show race).
+        
+        
+        
+        
+        
+        
         $('.bulk-preparing-optimize').hide();
         $('.wpc-bulk-v2-surface').show();
 
         var terminalCount = 0;
         var _wpcResumeDrainTick = 0;
+        var _wpcHbBusy = false;
+        var _wpcHbErr = 0;
 
         function _tick() {
-            // v7.04.70 — Audit hardening (P0-5): pause polling when tab
-            // hidden. Same rationale as the main bulk poll (see media-
-            // library-bulk.js for full comment). Revert: delete this if.
+            
+            
+            
             if (typeof document !== 'undefined' && document.hidden) return;
 
-            // v7.01.95 LAYER 2 — guaranteed tab-open drain kick (compress-RESUME path; was the lone
-            // drain-chain poller missing it — restore-resume + compress fresh-start already have it).
-            // The tab HAS a live admin cookie → the PRIV wpc_bulk_v2_drain passes current_user_can;
-            // cannot 403, cannot be edge-cookie-stripped. Fire-and-forget; the server slice's
-            // GET_LOCK('wpc_bulk_v2_chain',0) no-ops if a peer slice is alive. ~1/4s (poll is 1000ms).
-            // DRIVER-GATED to 'v2': under the DEFAULT 'sequential' driver the JS per-image loop
-            // (WPCBulkSeq.run → wps_ic_compress_live) owns dispatch and the wps_ic_compress_queue
-            // transient is intentionally left fully populated (no start loopback). Firing the server
-            // drain there spins a chain that dequeues + re-dispatches the SAME IDs the JS loop is
-            // walking — and since no peer drain slice exists in sequential mode, GET_LOCK does NOT
-            // no-op → wasted encodes + redundant Phase-A POSTs + FPM contention. Only the 'v2' driver
-            // relies on the server drain chain, so only it gets the kick.
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             if (driver === 'v2' && (_wpcResumeDrainTick++ % 4) === 0) {
                 $.ajax({ url: ajaxurl, type: 'POST', timeout: 30000, data: { action: 'wpc_bulk_v2_drain' } });
             }
 
+            
+            
+            if (_wpcHbBusy) return;
+            _wpcHbBusy = true;
             var sinceMs = (typeof WPCBulk !== 'undefined' && WPCBulk.getLastVariantMs)
                 ? WPCBulk.getLastVariantMs() : 0;
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
+                timeout: 10000,
                 data: {action: 'wps_ic_bulkCompressHeartbeat', nonce: ajaxVar.nonce, since_ms: sinceMs},
+                complete: function () { _wpcHbBusy = false; },
                 success: function (response) {
                     if (response.success === false) {
                         clearInterval(pollInterval);
                         return;
                     }
+                    _wpcHbErr = 0;
                     var d = response.data || {};
 
                     var hint = '';
@@ -194,25 +214,30 @@ jQuery(document).ready(function ($) {
                     } else {
                         terminalCount = 0;
                     }
+                },
+                error: function (xhr) {
+                    var s = (xhr && xhr.status) || 0;
+                    if (s === 400 || s === 401 || s === 403 || s === 404 || s === 410) { clearInterval(pollInterval); return; }
+                    if (++_wpcHbErr >= 10) { clearInterval(pollInterval); }
                 }
             });
         }
 
-        // v7.03 — Fire the FIRST tick immediately. setInterval-only meant
-        // the user waited 1 full second for the first heartbeat after
-        // page-load resume, with nothing to look at but the forced prep
-        // skeleton. Tick once now, then schedule the recurring poll.
+        
+        
+        
+        
         _tick();
         var pollInterval = setInterval(_tick, 1000);
     }
 
-    //bulkCompressHeartbeat();
+    
     fetchingBulkData();
 
     var lastProgress = 0;
     function bulkRestoreHeartbeat() {
         if (typeof WPCBulk !== 'undefined' && WPCBulk.restoreReset) WPCBulk.restoreReset();
-        // Hide all legacy preparing/status markup so WPCRestore's polished view-switcher takes over.
+        
         $('.bulk-preparing-optimize').hide();
         $('.bulk-preparing-restore').hide();
         $('.bulk-compress-status-progress-prepare').hide();
@@ -221,19 +246,26 @@ jQuery(document).ready(function ($) {
         $('.bulk-status-progress-bar').hide();
 
         var _wpcRestoreDrainTick = 0;
+        var _wpcRestHbBusy = false;
+        var _wpcRestErr = 0;
         var heartbeatBulkRestore = setInterval(function(){
-            // LAYER 2 — guaranteed tab-open drain kick. The tab HAS a live admin cookie → the PRIV
-            // action passes current_user_can; cannot 403, cannot be edge-cookie-stripped. GET_LOCK(...,0)
-            // no-ops if a slice is alive. Fire-and-forget. ~1/4s (poll is 1s).
+            
+            
+            
             if ((_wpcRestoreDrainTick++ % 4) === 0) {
                 $.ajax({ url: ajaxurl, type: 'POST', timeout: 30000, data: { action: 'wpc_bulk_v2_restore_drain' } });
             }
+            if (_wpcRestHbBusy) return;
+            _wpcRestHbBusy = true;
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
+                timeout: 10000,
                 data: {action: 'wps_ic_bulkRestoreHeartbeat', lastProgress: lastProgress},
+                complete: function () { _wpcRestHbBusy = false; },
                 success: function (response) {
                     var d = response.data || {};
+                    _wpcRestErr = 0;
 
                     if (d.status === 'parsing') {
                         if (typeof WPCBulk !== 'undefined' && WPCBulk.restorePreparing) WPCBulk.restorePreparing(d.message || '');
@@ -250,6 +282,11 @@ jQuery(document).ready(function ($) {
 
                     if (typeof WPCBulk !== 'undefined' && WPCBulk.restoreProcessing) WPCBulk.restoreProcessing(d);
                     lastProgress = d.progress || 0;
+                },
+                error: function (xhr) {
+                    var s = (xhr && xhr.status) || 0;
+                    if (s === 400 || s === 401 || s === 403 || s === 404 || s === 410) { clearInterval(heartbeatBulkRestore); return; }
+                    if (++_wpcRestErr >= 10) { clearInterval(heartbeatBulkRestore); }
                 }
             });
         }, 1000);
@@ -257,6 +294,7 @@ jQuery(document).ready(function ($) {
 
 
 
+    var _wpcBchErr = 0;
     function bulkCompressHeartbeat() {
         $.ajax({
             url: ajaxurl,
@@ -265,6 +303,7 @@ jQuery(document).ready(function ($) {
             data: {action: 'wps_ic_doBulkCompress', nonce: ajaxVar.nonce},
             success: function (response) {
                 if (response.success == false) return;
+                _wpcBchErr = 0;
 
                 if (response.data.finished === true) {
                     var bulkFinished = $('.bulk-finished');
@@ -288,7 +327,10 @@ jQuery(document).ready(function ($) {
                 $('.bulk-status').show();
                 setTimeout(bulkCompressHeartbeat, 200);
             },
-            error: function () {
+            error: function (xhr) {
+                var s = (xhr && xhr.status) || 0;
+                if (s === 400 || s === 401 || s === 403 || s === 404 || s === 410) return;
+                if (++_wpcBchErr >= 10) return;
                 setTimeout(bulkCompressHeartbeat, 3000);
             }
         });
@@ -305,7 +347,7 @@ jQuery(document).ready(function ($) {
         $(compressedImages).html(data.progressCompressedImages);
         $(compressedThumbs).html(data.progressCompressedThumbs);
         $(totalSavings).html(data.progressTotalSavings);
-        //$(thumbSavings).html(data.progressThumbsSavings);
+        
         $(avgReduction).html(data.progressAvgReduction);
         $(progress).show();
     }

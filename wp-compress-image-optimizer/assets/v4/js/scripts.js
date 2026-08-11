@@ -5,7 +5,7 @@ jQuery(document).ready(function ($) {
     var searchPending = false;
     var searchTerm = '';
 
-    // Tooltip hover intent — enable tooltips after 300ms on card
+    
     $('.wpc-perf-grid').on('mouseenter', '.wpc-box-for-checkbox, .wpc-box-for-input, .wpc-box-for-dropdown', function () {
         var $card = $(this);
         $card.data('tooltip-timer', setTimeout(function () {
@@ -16,9 +16,9 @@ jQuery(document).ready(function ($) {
         $(this).removeClass('wpc-tooltip-ready');
     });
 
-    /**
-     * Scan Fonts (AJAX)
-     */
+    
+
+
     $('#wpc-scan-trigger').on('click', function (e) {
         e.preventDefault();
         var $btn = $(this);
@@ -37,7 +37,7 @@ jQuery(document).ready(function ($) {
             success: function (response) {
                 var found = response.data && response.data.found;
                 if (found) {
-                    // Reload and scroll to scanner to see results
+                    
                     var newUrl = window.location.pathname + window.location.search.replace(/&fontScanResult=[^&]*/g, '') + '&fontScanResult=found#scan-fonts';
                     if (window.location.href === newUrl || window.location.href.indexOf('fontScanResult=found') !== -1) {
                         window.location.href = newUrl;
@@ -46,7 +46,7 @@ jQuery(document).ready(function ($) {
                         window.location.href = newUrl;
                     }
                 } else {
-                    // Show inline "not found" message
+                    
                     $btn.prop('disabled', false).html(originalHtml);
                     $input.prop('disabled', false);
                     var $msg = $('<div class="wpc-scan-result wpc-scan-result-empty"><svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor" style="opacity:.5"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM176 384l160 0 0-48-160 0 0 48zm-16-128a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm192-32a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg> ' + (wpc_ajaxVar.noFontsDetected || 'No Google Fonts detected on this page.') + '</div>');
@@ -66,9 +66,9 @@ jQuery(document).ready(function ($) {
         });
     });
 
-    /**
-     * Remove Scanned Fonts
-     */
+    
+
+
     $('.wpc-remove-fonts').on('click', function (e) {
         e.preventDefault();
 
@@ -86,7 +86,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Fancy Dropdown
+    
     $('.wpc-cf-zone-list').on('click', function () {
         $('.wpc-cf-zone-list-items').toggle();
     });
@@ -104,9 +104,9 @@ jQuery(document).ready(function ($) {
 
     function doSearch() {
         var raw = $('#live-search').val().trim();
-        // Strip URL prefixes to extract the slug for smarter matching
+        
         searchTerm = raw.replace(/^https?:\/\/[^\/]+\/?/, '').replace(/\/$/, '').replace(/\//g, ' ');
-        // If stripping yielded nothing, fall back to original input
+        
         if (!searchTerm && raw) searchTerm = raw;
         currentPage = 1;
         if (fetchRunning === false) {
@@ -116,7 +116,7 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    // Icon style toggle: gradient → tint → brand → brand A → brand B → default
+    
     var iconStyles = ['', 'wpc-icon-tint', 'wpc-icon-brand', 'wpc-icon-brand wpc-brand-a', 'wpc-icon-brand wpc-brand-b'];
     var iconStyleIndex = 0;
     var iconStyleLabels = ['Gradient', 'Soft Tint', 'Brand', 'Brand A', 'Brand B'];
@@ -143,16 +143,16 @@ jQuery(document).ready(function ($) {
     });
 
 
-    // v7.08.23 — Rogue stop-bulk handler REMOVED.
-    // This used to bind .wps-ic-stop-bulk-* and fire wps_ic_StopBulk DIRECTLY on
-    // click with no confirmation. The canonical handler in
-    // assets/js/admin/media-library-bulk.js (_wpcConfirmStop popup → _doStopBulk
-    // → StopBulk, for BOTH compress and restore) is bound to the same buttons, so
-    // both fired on every click — this one ran first and stopped immediately,
-    // making the confirmation popup "totally ignored." media-library-bulk.js is
-    // enqueued on every page that shows the Stop buttons (bulk + dashboard), so it
-    // now solely owns Stop. Backend (v7.08.23) makes StopBulk actually halt the v2
-    // drain/tick/BGRetry, so confirming the popup fully stops processing.
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     function initTooltipster() {
         $('.OptimizationPageTooltip:not(.tooltipstered)').tooltipster({
@@ -168,7 +168,7 @@ jQuery(document).ready(function ($) {
                 instance.content(content);
             },
             functionBefore: function (instance, helper) {
-                // Close other tooltips before opening a new one
+                
                 $.tooltipster.instances().forEach(function (item) {
                     if (item !== instance) {
                         item.close();
@@ -177,10 +177,10 @@ jQuery(document).ready(function ($) {
 
                 var settingState = $(helper.origin).data('setting_state');
 
-                // find the HTML of the tooltip
+                
                 var html = $(instance.__Content);
 
-                // Change HTML of Tooltip
+                
                 if (settingState == '1') {
                     html.find('span.status').addClass('active').html(wpc_ajaxVar.active || 'Active');
                 } else {
@@ -201,30 +201,30 @@ jQuery(document).ready(function ($) {
             position: 'top',
             contentAsHTML: true,
             functionInit: function (instance, helper) {
-                var content = $('#wpc-tooltip-error').html(); // Assuming 'wpc-tooltip-error' is your default tooltip content ID
+                var content = $('#wpc-tooltip-error').html(); 
                 instance.content(content);
             },
             functionBefore: function (instance, helper) {
-                // Close other tooltips before opening a new one
+                
                 $.tooltipster.instances().forEach(function (item) {
                     if (item !== instance) {
                         item.close();
                     }
                 });
 
-                // Get data attributes
+                
                 var errorCode = $(helper.origin).data('code');
                 var errorText = $(helper.origin).data('text');
 
 
-                // Clone the HTML of the default tooltip content
+                
                 var html = $(instance.__Content);
 
-                // Update HTML based on data-code and data-text
+                
                 html.find('span.errorCode').html(errorCode);
                 html.find('span.errorText').html(errorText);
 
-                // Set the updated content for the tooltip
+                
                 instance.content(html);
 
                 return true;
@@ -248,23 +248,23 @@ jQuery(document).ready(function ($) {
 
                 },
                 functionBefore: function (instance, helper) {
-                    // Close other tooltips before opening a new one
+                    
                     $.tooltipster.instances().forEach(function (item) {
                         if (item !== instance) {
                             item.close();
                         }
                     });
 
-                    // Get data attributes
+                    
                     var popText = $(helper.origin).data('pop-text');
 
-                    // Clone the HTML of the default tooltip content
+                    
                     var html = $(instance.__Content);
 
-                    // Update HTML based on data-code and data-text
+                    
                     html.find('span.pop-text').html(popText);
 
-                    // Set the updated content for the tooltip
+                    
                     instance.content(html);
 
                     return true;
@@ -303,7 +303,7 @@ jQuery(document).ready(function ($) {
     $('#optimizationTable').on('click', '.wpc-dropdown-row-header', function (e) {
         return;
         if (local === false) {
-            // Check if the clicked element or any of its parents has the class .dropdown-item
+            
             if ($(e.target).closest('.dropdown-item').length === 0 && $(e.target).closest('.wpc-test-redo').length === 0 && $(e.target).closest('.per-page-settings-cog').length === 0) {
                 var parent = $(this).parent();
                 var box = $('.wpc-dropdown-row-data', parent);
@@ -410,7 +410,7 @@ jQuery(document).ready(function ($) {
     });
 
 
-    var links = $('.ajax-run-critical'); //We can add data-status to links to know which ones need to be run?
+    var links = $('.ajax-run-critical'); 
     var processed_links = 0;
     var process_all = 0;
 
@@ -435,7 +435,7 @@ jQuery(document).ready(function ($) {
 
 
         document.addEventListener("DOMContentLoaded", setValue);
-        //rangeImg.addEventListener('input', setValueImg);
+        
         range.addEventListener('input', setValue);
     }
 
@@ -530,13 +530,13 @@ jQuery(document).ready(function ($) {
 
         var isNowChecked = $(this).attr('checked') === 'checked';
 
-        // Emit change event for AJAX save tracking
+        
         $(document).trigger('wpc-setting-changed', [optionName, isNowChecked]);
 
-        // Check if anything actually changed
+        
         if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
 
-        // Set preset to custom
+        
         $('input[name="wpc_preset_mode"]').val('custom');
         $('a', '.wpc-dropdown-menu').removeClass('active');
         $('button', '.wpc-dropdown').html('Custom');
@@ -559,11 +559,11 @@ jQuery(document).ready(function ($) {
         var newValue = 1;
 
         if (beforeValue == 'checked') {
-            // It was already active, remove checked
+            
             $(this).removeAttr('checked');
             newValue = 0;
         } else {
-            // It's not active, activate
+            
             $(this).attr('checked', 'checked');
         }
 
@@ -683,7 +683,7 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    //END PAGE EXCLUDES
+    
     var globalSettings;
     var locked;
 
@@ -714,12 +714,12 @@ jQuery(document).ready(function ($) {
                                                         ${item.title}    
                                                         ${createPreloadStatus(item)}`;
                     if (local === false) {
-                        /*
-                        pagesHtml += `<div class="wpc-dropdown-row-arrow">
-                                                            <i class="icon-down-open"></i>
-                                                    </div>`;
-                        pagesHtml += `${createRetestButton(item)}`;
-                        */
+                        
+
+
+
+
+
                     }
                     pagesHtml += `</div>
                                                     <div class="wpc-dropdown-row-right-side">
@@ -746,14 +746,14 @@ jQuery(document).ready(function ($) {
                     }
 
                     if (local === false) {
-                        //pagesHtml += insertResultsRow(item)
+                        
                     }
                     pagesHtml += '</div></div>';
                 });
 
                 $('#optimizationTable').html(pagesHtml);
 
-                // Circle Progress Bar
+                
                 setTimeout(function () {
                     $('.circle-progress-bar').circleProgress({
                         animation: 'false',
@@ -766,23 +766,23 @@ jQuery(document).ready(function ($) {
                         },
                         emptyFill: 'rgba(176,224,176,0.5)'
                     });
-                }, 200); // 200ms timeout
+                }, 200); 
 
                 var totalPages = response.data.total_pages;
                 $('#pagination').html(createPaginationHtml(currentPage, totalPages));
 
                 initTooltipster();
 
-                // $('.OptimizationPageTooltip').tooltipster({
-                //     maxWidth: '300',
-                //     delay: 50,
-                //     theme: 'tooltipster-shadow',
-                //     trigger:'click',
-                //     position: 'top-left',
-                // });
+                
+                
+                
+                
+                
+                
+                
 
                 if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses) {
-                    //something was clikcked before call finished, call again
+                    
                     updateOptimizationStatus();
                 }
                 fetchRunning = false;
@@ -796,33 +796,33 @@ jQuery(document).ready(function ($) {
 
     function createPaginationHtml(currentPage, totalPages) {
         var paginationHtml = '';
-        var maxPagesToShow = 5; // maximum number of pagination links to show
+        var maxPagesToShow = 5; 
         var startPage, endPage;
 
         if (totalPages <= maxPagesToShow) {
-            // total pages less than max so show all pages
+            
             startPage = 1;
             endPage = totalPages;
         } else {
-            // more pages than max so calculate start and end pages
+            
             var maxPagesBeforeCurrentPage = Math.floor(maxPagesToShow / 2);
             var maxPagesAfterCurrentPage = Math.ceil(maxPagesToShow / 2) - 1;
             if (currentPage <= maxPagesBeforeCurrentPage) {
-                // current page near the start
+                
                 startPage = 1;
                 endPage = maxPagesToShow;
             } else if (currentPage + maxPagesAfterCurrentPage >= totalPages) {
-                // current page near the end
+                
                 startPage = totalPages - maxPagesToShow + 1;
                 endPage = totalPages;
             } else {
-                // current page somewhere in the middle
+                
                 startPage = currentPage - maxPagesBeforeCurrentPage;
                 endPage = currentPage + maxPagesAfterCurrentPage;
             }
         }
 
-        // Add 'First' and 'Previous' buttons
+        
         if (currentPage > 1) {
             paginationHtml += '<a href="#" class="optimization-status-pagination-link" data-page="1">First</a>';
             paginationHtml += '<a href="#" class="optimization-status-pagination-link" data-page="' + (currentPage - 1) + '">Previous</a>';
@@ -843,7 +843,7 @@ jQuery(document).ready(function ($) {
             paginationHtml += ' ... '
         }
 
-        // Add 'Next' and 'Last' buttons
+        
         if (currentPage < totalPages) {
             paginationHtml += '<a href="#" class="optimization-status-pagination-link" data-page="' + (currentPage + 1) + '">Next</a>';
             paginationHtml += '<a href="#" class="optimization-status-pagination-link" data-page="' + totalPages + '">Last</a>';
@@ -855,39 +855,39 @@ jQuery(document).ready(function ($) {
     function insertResultsRow(item) {
         var html = '';
 
-        // console.log(response);
-// Determine if a test has been run
+        
+
         var testRun = item.test && (item.test.desktop || item.test.mobile);
 
-// Retest Button and Results
+
         if (testRun && item.running !== '1' && (item.cacheGenerated === '1' && item.critGenerated === '1')) {
-            //html += `<button class="wpc-run-test wpc-test-redo" data-retest="true">Retest</button>`;
+            
             html += displayResults(item.test);
         } else if (testRun && item.runningOther === '1' && (item.cacheGenerated === '1' && item.critGenerated === '1')) {
             html += displayResults(item.test);
         } else {
-            //html += '<button class="wpc-run-test wpc-test-redo" style="display: none;" data-retest="true">Retest</button>';
+            
         }
 
-// Test is Running
+
         var isRunningDisplay = ((item.running === '1' || item.runningOther === '1') && !testRun) ? 'block' : 'none';
         html += `<div class="test-is-running" style="display: ${isRunningDisplay};"><p>We are running optimizations, please wait...</p></div>`;
 
-        // if (response.data && response.data.optimizationStatus && response.data.optimizationStatus.status) {
-        //     html += `<div class="current-status" style="display: ${isRunningDisplay};">
-        //         <p>Current Status: ${response.data.optimizationStatus.status}</p>
-        //      </div>`;
-        // }
+        
+        
+        
+        
+        
 
 
-// Test Not Run - Optimize and Run Performance Test button
+
         if ((item.running === '0' && item.runningOther === '0') && (item.cacheGenerated !== '1' || item.critGenerated !== '1')) {
             html += '<div class="test-not-runned"><p>Compare page performance before and after optimization</p><button class="wpc-run-test" data-optimize="1">Optimize and Run Performance Test</button></div>';
         } else {
             html += '<div class="test-not-runned" style="display: none;"><p>Compare page performance before and after optimization</p><button class="wpc-run-test" data-optimize="1">Optimize and Run Performance Test</button></div>';
         }
 
-// Test Not Run - Run Performance Test button
+
         if (!testRun && (item.running === '0' && item.runningOther === '0') && (item.cacheGenerated === '1' && item.critGenerated === '1')) {
             html += '<div class="test-not-runned"><p>Compare page performance before and after optimization</p><button class="wpc-run-test">Run Performance Test</button></div>';
         } else {
@@ -912,14 +912,14 @@ jQuery(document).ready(function ($) {
     }
 
     function createPreloadStatus(item) {
-        /*
-        if (Array.isArray(item.errors) && item.errors[0].length === 3) {
-            return `<div class="wpc-page-status-gray OptimizationErrorTooltip" title="wpc-tooltip-error" data-code="`+item.errors[0]+`" data-text="`+httpErrorCodes[item.errors[0]]+`">
-               <i class="icon-gray"></i>
-               Skipped
-               </div>`;
-        }
-        */
+        
+
+
+
+
+
+
+
         if (typeof item.errors === 'object' && item.errors !== null && 'skip' in item.errors) {
             return `<div class="wpc-page-status-gray">
                 <i class="icon-gray"></i>
@@ -927,7 +927,7 @@ jQuery(document).ready(function ($) {
                 </div>`;
         }
 
-        //if (item.preloaded === '1') {
+        
         if (true) {
             return `<div class="wpc-page-status">
                 <i class="wpc-icon-check"></i>
@@ -948,10 +948,10 @@ jQuery(document).ready(function ($) {
                 </div>`;
         } else {
             return '<div class="wpc-page-status" style="display:none"></div>';
-            // return `<div class="wpc-page-status pending">
-            //     <i class="icon-check"></i>
-            //     Pending Optimizations
-            //     </div>`;
+            
+            
+            
+            
         }
     }
 
@@ -971,7 +971,7 @@ jQuery(document).ready(function ($) {
                 return '<div class="wpc-circle-status"><div class="lds-ring"><div></div><div></div><div></div><div></div></div></div>';
             }
         }
-        //if (preloaded === '1') {
+        
         if (true) {
             return '<div class="wpc-circle-status"><div class="wpc-critical-circle wpc-done"></div></div>';
         }
@@ -988,7 +988,7 @@ jQuery(document).ready(function ($) {
         var classStatus = getClassStatus(pageSetting, globalSetting, pageItem, settingName);
 
         if (typeof pageSetting == 'undefined' || pageSetting === 'undefined') {
-            // Check global first
+            
             if (globalSetting == '0') {
                 pageSetting = '0';
             } else {
@@ -1095,14 +1095,14 @@ jQuery(document).ready(function ($) {
                     if (shouldUpdate && local === false) {
                         $testResultsElement.html(newTestResultsHtml);
 
-                        // Circle Progress Bar
+                        
                         setTimeout(function () {
                             $('.circle-progress-bar', $testResultsElement).circleProgress({
                                 size: 50, startAngle: -Math.PI / 6 * 3, lineCap: 'round', thickness: '5', fill: {
                                     gradient: ["#61CB70", "#61CB70"], gradientAngle: Math.PI / 7
                                 }, emptyFill: 'rgba(176,224,176,0.5)'
                             });
-                        }, 200); // 200ms timeout
+                        }, 200); 
                     }
                 });
                 initTooltipster()
@@ -1117,7 +1117,7 @@ jQuery(document).ready(function ($) {
                 }
 
                 if (selectedTypesOnThisCall !== selectedTypes || selectedStatusesOnThisCall !== selectedStatuses) {
-                    //something was clikcked before call finished, call again
+                    
                     updateOptimizationStatus();
                 }
                 fetchRunning = false;
@@ -1135,25 +1135,25 @@ jQuery(document).ready(function ($) {
     var currentDropdownAnchor = null;
 
     $('#optimizationTable').on('click', '.exclude_dropdown_anchor', function (e) {
-        e.stopPropagation(); // Prevent event bubbling
+        e.stopPropagation(); 
 
         if ($(this).hasClass('LockedTooltip')) {
             return;
         }
 
-        // Check if the dropdown is already open for this anchor
+        
         if (currentDropdownAnchor && currentDropdownAnchor.is($(this)) && $(this).next('.dropdown-menu').length) {
             return;
         }
 
-        // Remove any existing dropdowns and clear timeouts
+        
         $('.dropdown-menu').slideUp(200);
         clearTimeout(dropdownTimeout);
 
-        // Set current anchor
+        
         currentDropdownAnchor = $(this);
 
-        // Create dropdown menu HTML
+        
         var dropdownHtml = `
             <div class="dropdown-menu" style="display: none;">`;
 
@@ -1175,24 +1175,27 @@ jQuery(document).ready(function ($) {
             } else if ($(this).data('setting_name') === 'critical_css' && $(this).hasClass('page_not_generated')) {
                 dropdownHtml += `<a href="#" class="dropdown-item" data-action="generate"><span class="icon purge-icon"></span>Generate</a>`;
             } else {
-                dropdownHtml += `<a href="#" class="dropdown-item" data-action="purge"><span class="icon purge-icon"></span>Purge</a>`;
+                
+                
+                
+                dropdownHtml += `<a href="#" class="dropdown-item" data-action="purge"><span class="icon purge-icon"></span>Regenerate</a>`;
             }
         }
 
         dropdownHtml += `</div>`;
 
-        // Append and position the dropdown
+        
         $(this).after(dropdownHtml);
         var dropdownMenu = $(this).next('.dropdown-menu');
         dropdownMenu.css({
             top: $(this).position().top + $(this).outerHeight(), left: $(this).position().left
         }).slideDown(200);
 
-        // Setup mouseleave event for the anchor and dropdown
+        
         setupDropdownEvents($(this), dropdownMenu);
     });
 
-    // Close the dropdown when clicking outside
+    
     $(document).on('click', function () {
         $('.dropdown-menu').slideUp(200);
         currentDropdownAnchor = null;
@@ -1203,7 +1206,7 @@ jQuery(document).ready(function ($) {
             dropdownTimeout = setTimeout(function () {
                 dropdownMenu.slideUp(200);
                 currentDropdownAnchor = null;
-            }, 500); // Delay for moving between anchor and dropdown
+            }, 500); 
         });
 
         dropdownMenu.on('mouseenter', function () {
@@ -1212,16 +1215,16 @@ jQuery(document).ready(function ($) {
             dropdownTimeout = setTimeout(function () {
                 dropdownMenu.slideUp(200);
                 currentDropdownAnchor = null;
-            }, 500); // Delay before hiding the dropdown
+            }, 500); 
         });
     }
 
-    // Prevent the dropdown from closing when clicking on it
+    
     $(document).on('click', '.dropdown-menu', function (e) {
         e.stopPropagation();
     });
 
-    // Handle dropdown item clicks for AJAX
+    
     $(document).on('click', '.dropdown-item', function (e) {
         e.preventDefault();
         var action = $(this).data('action');
@@ -1229,7 +1232,7 @@ jQuery(document).ready(function ($) {
         var settingName = $(this).parent().parent().find('.exclude_dropdown_anchor').data('setting_name');
 
         if (action != 'excludes') {
-            // Perform AJAX call
+            
             $.ajax({
                 url: ajaxurl, type: 'POST', data: {
                     action: 'wps_ic_save_optimization_status',
@@ -1241,7 +1244,7 @@ jQuery(document).ready(function ($) {
                     updateOptimizationStatus();
                     updatePosts(selectedTypes, currentPage);
                 }, error: function (xhr, status, error) {
-                    // Handle error
+                    
                 }
             });
         }
@@ -1282,9 +1285,9 @@ jQuery(document).ready(function ($) {
                     clearInterval(optimizationCheckInterval);
                     updateOptimizationStatus();
                     updatePosts(selectedTypes, currentPage);
-                    //var htmlContent = displayResults(response.data)
-                    //testResultsRow.html(htmlContent);
-                    // Circle Progress Bar
+                    
+                    
+                    
                     setTimeout(function () {
                         $('.circle-progress-bar', testResultsRow).circleProgress({
                             animation: 'false',
@@ -1297,7 +1300,7 @@ jQuery(document).ready(function ($) {
                             },
                             emptyFill: 'rgba(176,224,176,0.8)'
                         });
-                    }, 200); // 200ms timeout
+                    }, 200); 
                 }, error: function (xhr, status, error) {
                     testResultsRow.html('<p>' + (wpc_ajaxVar.errorLoadingResults || 'Error loading test results.') + '</p>');
                 }
@@ -1315,7 +1318,7 @@ jQuery(document).ready(function ($) {
                 case 'requests':
                     let difference = beforeOptimization - afterOptimization;
                     return difference;
-                default: // 'ttfb' and other cases
+                default: 
                     let result = beforeOptimization / afterOptimization;
                     return (result < 10) ? result.toFixed(1) : Math.round(result);
             }
@@ -1459,12 +1462,12 @@ jQuery(document).ready(function ($) {
 
     $(document).on('click', '.optimization-status-pagination-link', function (e) {
         e.preventDefault();
-        currentPage = $(this).data('page'); // Keep track of the current page
+        currentPage = $(this).data('page'); 
         fetchPosts(selectedTypes, currentPage);
     });
 
     $('#optimization-status-posts-filter').on('change', function () {
-        currentPage = 1; // Reset to the first page when the filter changes
+        currentPage = 1; 
         fetchPosts($(this).val(), currentPage);
     });
 
@@ -1497,7 +1500,7 @@ jQuery(document).ready(function ($) {
             currentMessageIndex = 0;
             lastOptimizationId = newOptimizationId;
 
-            // Update and animate the page title only if not preparing
+            
             if (!isPreparing) {
                 pageTitleContainer.addClass('wpc-message-exit');
                 setTimeout(function () {
@@ -1560,11 +1563,11 @@ jQuery(document).ready(function ($) {
     var callInProgress = false
 
     function updateOptimizationStatus() {
-        // Make an AJAX call to check the optimization status
+        
         if (!callInProgress) {
             callInProgress = true;
             if (typeof selectedOptimizes === "undefined" || selectedOptimizes === null) {
-                //We are not on our settings page
+                
                 selectedOptimizes = false;
             } else if (selectedOptimizes.length === 0) {
                 selectedOptimizes = 'do-not-optimize';
@@ -1588,15 +1591,15 @@ jQuery(document).ready(function ($) {
                     var optimized;
                     var total;
                     if ($('#optimizationTable').find('div').length === 0 && $('.wpc-optimization-status').find('div').length > 0) {
-                        //if table not populatd - first load
+                        
                         fetchPosts(selectedTypes, currentPage, response);
-                        //Optimization bar update
+                        
                         optimized = response.data.optimized || 0;
                         total = response.data.total || 0;
                         $('.optimized-pages-text').each(function () {
                             var $this = $(this);
                             var countTo = total;
-                            $this.text('0'); // Ensure it starts from 0
+                            $this.text('0'); 
                             $({countNum: $this.text()}).animate({
                                 countNum: countTo
                             }, {
@@ -1610,12 +1613,12 @@ jQuery(document).ready(function ($) {
                         $('.optimized-pages-bottom-text').text('Pages Optimized');
 
                     } else if (lastResponse && lastResponse.data && lastResponse.data.optimizationStatus.id !== response.data.optimizationStatus.id) {
-                        //optimizatin running and another page was optimized
+                        
                         updatePosts(selectedTypes, currentPage);
 
                         optimized = response.data.optimized || 0;
                         total = response.data.total || 0;
-                        //$('.optimized-pages-text').text(optimized);
+                        
                         $('.optimized-pages-text').text(total);
                         $('.optimized-pages-bottom-text').text('Pages Optimized');
                         $('.wpc-smart-optimization-title').text('Smart Optimization in Progress...');
@@ -1634,7 +1637,7 @@ jQuery(document).ready(function ($) {
                             optimizationCheckInterval = setInterval(updateOptimizationStatus, 5000);
                         }
                     } else if ($('.wpc-optimization-status').find('div').length === 0) {
-                        //Not our settings page
+                        
                     } else {
 
                         stopBarAnimation();
@@ -1642,7 +1645,7 @@ jQuery(document).ready(function ($) {
                         fetchPosts(selectedTypes, currentPage);
                         optimized = response.data.optimized || 0;
                         total = response.data.total || 0;
-                        //$('.optimized-pages-text').text(optimized);
+                        
                         $('.optimized-pages-text').text(total);
                         $('.optimized-pages-bottom-text').text('Pages Optimized');
                         $('.wpc-smart-optimization-title').text('Smart Optimization + Performance');
@@ -1661,7 +1664,7 @@ jQuery(document).ready(function ($) {
 
                     lastResponse = response;
                     if (selectedOptimizesOnThisCall !== selectedOptimizes) {
-                        //something was clikcked before call finished, call again
+                        
                         updateOptimizationStatus();
                     }
 
@@ -1674,12 +1677,12 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    // Start the heartbeat when the optimization button is clicked
+    
     $('.wpc-optimization-page-button').on('click', '.wpc-start-optimizations', function () {
-        // Set active tab
+        
         $('a[data-tab="smart-optimization"]').trigger('click');
 
-        //change button
+        
         $('.wpc-start-optimizations').hide()
         $('.wpc-preparing-optimization').show()
 
@@ -1710,7 +1713,7 @@ jQuery(document).ready(function ($) {
         if (timeInMs < 1000) {
             return `${timeInMs.toFixed(0)}ms`;
         } else {
-            // Convert to seconds and round to two decimal places
+            
             let timeInSeconds = (timeInMs / 1000).toFixed(1);
             return `${timeInSeconds}s`;
         }
@@ -1727,11 +1730,11 @@ jQuery(document).ready(function ($) {
 
     function formatBytes(bytes) {
         if (bytes < 1024) {
-            return bytes + 'B'; // Bytes
+            return bytes + 'B'; 
         } else if (bytes < 1024 * 1024) {
-            return (bytes / 1024).toFixed(1) + 'KB'; // Kilobytes
+            return (bytes / 1024).toFixed(1) + 'KB'; 
         } else {
-            return (bytes / (1024 * 1024)).toFixed(1) + 'MB'; // Megabytes
+            return (bytes / (1024 * 1024)).toFixed(1) + 'MB'; 
         }
     }
 
@@ -1743,19 +1746,19 @@ jQuery(document).ready(function ($) {
     }
 
     var progressBar = $('#optimizations-progress-bar');
-    var marginLeft = 0; // Margin left for moving the bar
-    var movingRight = true; // Direction of movement
+    var marginLeft = 0; 
+    var movingRight = true; 
     var animationFrameId = null;
 
     function step() {
         if (movingRight) {
-            marginLeft += 0.5; // Adjust speed as needed
+            marginLeft += 0.5; 
             if (marginLeft >= 85) {
                 marginLeft = 85;
                 movingRight = false;
             }
         } else {
-            marginLeft -= 0.5; // Adjust speed as needed
+            marginLeft -= 0.5; 
             if (marginLeft <= 0) {
                 marginLeft = 0;
                 movingRight = true;
@@ -1792,9 +1795,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    //DROPDOWN SELECTORS
+    
     $('.selector-dropdown').on('click', '.dropdown-header', function (e) {
-        e.stopPropagation(); // Prevent event bubbling
+        e.stopPropagation(); 
         var $dropdownMenu = $(this).next('.dropdown-menu');
 
         $('.selector-dropdown .dropdown-menu').not($dropdownMenu).slideUp(200);
@@ -1811,7 +1814,7 @@ jQuery(document).ready(function ($) {
         var value = $this.data('value');
         var filterType = $this.data('filter');
 
-        // Update the appropriate selection array
+        
         if ($this.hasClass('selected')) {
             if (filterType === 'type') {
                 selectedTypes.push(value);
@@ -1830,7 +1833,7 @@ jQuery(document).ready(function ($) {
             }
         }
 
-        // Update filter count badge
+        
         var count = selectedTypes.length + selectedStatuses.length;
         $('.wpc-filter-count').text(count > 0 ? '(' + count + ')' : '');
 
@@ -1860,11 +1863,11 @@ jQuery(document).ready(function ($) {
         $('.selector-dropdown .dropdown-menu').slideUp(200);
     });
 
-    // $(document).on('click', function() {
-    //     console.log('Selected Types:', selectedTypes);
-    //     console.log('Selected Statuses:', selectedStatuses);
-    //     console.log('Selected Optimizes:', selectedOptimizes);
-    // });
+    
+    
+    
+    
+    
 
     $('.textareaChange').blur(function () {
         $('.action-buttons').fadeOut(500, function () {
@@ -1900,7 +1903,7 @@ jQuery(document).ready(function ($) {
         415: 'Unsupported Media Type',
         416: 'Range Not Satisfiable',
         417: 'Expectation Failed',
-        418: 'I\'m a teapot', // April Fools' joke in RFC 2324
+        418: 'I\'m a teapot', 
         421: 'Misdirected Request',
         422: 'Unprocessable Entity',
         423: 'Locked',
@@ -1926,25 +1929,25 @@ jQuery(document).ready(function ($) {
 
 });
 
-// Function to trigger the pop effect on the new div
+
 function triggerPopEffect(newDiv, parentId) {
     if (!window.popped.includes(parentId)) {
         window.popped.push(parentId);
         newDiv.classList.add('pop');
-        // Remove the pop class after the animation is complete
+        
         setTimeout(() => {
             newDiv.classList.remove('pop');
-        }, 500); // Match the duration of the animation
+        }, 500); 
     }
 }
 
 jQuery(document).ready(function ($) {
-    // Sidebar nav tooltips — disabled (full text labels always visible)
-    // Tooltipster was used for icon-only collapsed sidebar; no longer needed.
+    
+    
 
-    /**
-     * Contextual Purge Buttons
-     */
+    
+
+
     function handlePurge(el, action, successText) {
         var $el = $(el);
         if ($el.hasClass('wpc-purging')) return false;
@@ -1993,17 +1996,50 @@ jQuery(document).ready(function ($) {
         e.preventDefault();
         e.stopPropagation();
         handlePurge(this, 'wps_ic_purge_critical_css', 'CSS Purged');
+        wpcLandWatch(this);
         return false;
     });
 
-    // ── Mobile hamburger menu ─────────────────────────────
-    // Scoped to .wpc-advanced-settings-container-v4 — no WP core changes
+    
+    
+    function wpcLandWatch(btn) {
+        var $b = $(btn);
+        var $s = $b.next('.wpc-land-status');
+        if (!$s.length) {
+            $s = $('<span class="wpc-land-status" style="margin-left:8px;font-size:12px;opacity:.75"></span>').insertAfter($b);
+        }
+        var t0 = Date.now(), n = 0, wait = 8000;
+        $s.text('Regenerating\u2026');
+        var tick = function () {
+            if (++n > 8) {
+                $s.text('Still generating \u2014 lands automatically');
+                setTimeout(function () { $s.text(''); }, 8000);
+                return;
+            }
+            $.post(wpc_ajaxVar.ajaxurl || ajaxurl, { action: 'wps_ic_crit_land_check', wps_ic_nonce: wpc_ajaxVar.nonce }, function (r) {
+                if (r && r.success && r.data && r.data.landed) {
+                    $s.text('Landed in ' + Math.round((Date.now() - t0) / 1000) + 's \u2713');
+                    setTimeout(function () { $s.text(''); }, 8000);
+                    return;
+                }
+                wait = Math.min(60000, wait * 1.5);
+                setTimeout(tick, wait);
+            }).fail(function () {
+                wait = Math.min(60000, wait * 1.5);
+                setTimeout(tick, wait);
+            });
+        };
+        setTimeout(tick, wait);
+    }
+
+    
+    
     (function initMobileMenu() {
-        // Always inject elements — CSS handles visibility via min-width:769px hide rule
+        
         var $wrapper = $('.wpc-advanced-settings-container-v4');
         if (!$wrapper.length) return;
 
-        // Inject hamburger button at far right of header
+        
         var $header = $('.wpc-header').first();
         if (!$header.length) $header = $wrapper.find('.wpc-advanced-settings-header').first();
         if ($header.length && !$('#wpc-mobile-menu-toggle').length) {
@@ -2013,23 +2049,23 @@ jQuery(document).ready(function ($) {
             );
         }
 
-        // Inject backdrop
+        
         if (!$('#wpc-mobile-backdrop').length) {
             $wrapper.append('<div id="wpc-mobile-backdrop"></div>');
         }
 
-        // Inject drawer header (logo + close) at top of sidebar
+        
         var $tabList = $wrapper.find('.wpc-settings-tab-list');
         if ($tabList.length && !$('#wpc-drawer-header').length) {
             var logoSrc = $tabList.closest('[data-plugin-url]').attr('data-plugin-url');
             if (!logoSrc) {
-                // Fallback: grab from the main header logo
+                
                 var $mainLogo = $('.wpc-header-logo img').first();
                 logoSrc = $mainLogo.length ? $mainLogo.attr('src') : '';
             } else {
                 logoSrc += 'assets/v4/images/main-logo.svg';
             }
-            // Use header logo alt text for whitelabel support
+            
             var brandName = $('.wpc-header-logo img').first().attr('alt') || 'WP Compress';
             $tabList.prepend(
                 '<div id="wpc-drawer-header">' +
@@ -2045,7 +2081,7 @@ jQuery(document).ready(function ($) {
             );
         }
 
-        // Inject divider + Simple Settings link at bottom of drawer
+        
         if (!$tabList.find('#wpc-drawer-footer').length) {
             var simpleBtn = $('.wpc-change-ui-to-simple').first();
             var footerLabel = simpleBtn.length ? simpleBtn.text().trim() : 'Simple Settings';
@@ -2076,34 +2112,34 @@ jQuery(document).ready(function ($) {
             document.body.style.overflow = '';
         }
 
-        // Toggle drawer
+        
         $(document).on('click', '#wpc-mobile-menu-toggle', function () {
             $wrapper.hasClass('wpc-mobile-menu-open') ? closeDrawer() : openDrawer();
         });
 
-        // Close on drawer header close button
+        
         $(document).on('click', '#wpc-drawer-close', function () {
             closeDrawer();
         });
 
-        // Close on backdrop click
+        
         $(document).on('click', '#wpc-mobile-backdrop', function () {
             closeDrawer();
         });
 
-        // Close on Escape
+        
         $(document).on('keydown', function (e) {
             if (e.key === 'Escape' && $wrapper.hasClass('wpc-mobile-menu-open')) {
                 closeDrawer();
             }
         });
 
-        // Close when a tab link is clicked
+        
         $(document).on('click', '.wpc-settings-tab-list ul li a', function () {
             closeDrawer();
         });
 
-        // Swipe-left to close drawer
+        
         (function () {
             var tabList = document.querySelector('.wpc-settings-tab-list');
             if (!tabList) return;
@@ -2117,7 +2153,7 @@ jQuery(document).ready(function ($) {
             tabList.addEventListener('touchend', function (e) {
                 var dx = e.changedTouches[0].clientX - startX;
                 var dy = e.changedTouches[0].clientY - startY;
-                // Swipe left: negative dx, more horizontal than vertical
+                
                 if (dx < -60 && Math.abs(dy) < Math.abs(dx)) {
                     closeDrawer();
                 }
@@ -2125,13 +2161,13 @@ jQuery(document).ready(function ($) {
         })();
     })();
 
-    // Safety net: ensure body scroll is restored after any SweetAlert2 popup closes.
-    // On this page SA2 hides the container (display:none) but doesn't remove
-    // swal2-shown from body, leaving overflow:hidden permanently.
+    
+    
+    
     function cleanupSwalBodyLock() {
         if (!document.body.classList.contains('swal2-shown')) return;
         var container = document.querySelector('.swal2-container');
-        // SA2 hides via CSS class (computed none) not inline style
+        
         var isVisible = container && getComputedStyle(container).display !== 'none';
         if (!isVisible) {
             document.body.classList.remove('swal2-shown', 'swal2-height-auto');
@@ -2140,7 +2176,7 @@ jQuery(document).ready(function ($) {
         }
     }
 
-    // Catch all popup close paths: close button, escape, backdrop, action buttons
+    
     $(document).on('click', '.swal2-close, .swal2-container, .btn-close, .btn-cdn-config, .cdn-popup-save-btn, .btn-exclude-save', function () {
         setTimeout(cleanupSwalBodyLock, 300);
         setTimeout(cleanupSwalBodyLock, 800);
@@ -2154,7 +2190,7 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    // Also hook into WPCSwal.close if available
+    
     if (typeof WPCSwal !== 'undefined' && WPCSwal.close) {
         var origClose = WPCSwal.close.bind(WPCSwal);
         WPCSwal.close = function () {
@@ -2164,7 +2200,7 @@ jQuery(document).ready(function ($) {
         };
     }
 
-    // Click-to-copy for CNAME domain values
+    
     $(document).on('click', '.wpc-copy-on-click', function () {
         var text = $(this).text().trim();
         var $el = $(this);
@@ -2177,7 +2213,7 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    // Export/Import: clicking anywhere on the card toggles the checkbox
+    
     function updateExportCardStates() {
         $('#export_settings .cdn-popup-inner').each(function () {
             var isChecked = $(this).find('input[type="checkbox"]').prop('checked');
@@ -2187,7 +2223,7 @@ jQuery(document).ready(function ($) {
 
     $('#export_settings .cdn-popup-inner').on('click', function (e) {
         if ($(e.target).is('input[type="checkbox"]')) {
-            // Checkbox was clicked directly — just update card states
+            
             updateExportCardStates();
             return;
         }
@@ -2196,15 +2232,15 @@ jQuery(document).ready(function ($) {
         updateExportCardStates();
     }).css('cursor', 'pointer');
 
-    // Also handle direct checkbox clicks
+    
     $('#export_settings input[type="checkbox"]').on('change', function () {
         updateExportCardStates();
     });
 
-    // Set initial states
+    
     updateExportCardStates();
 
-    // ─── V3 Circle Progress Bars — 260px retina, thinner BEFORE, thicker AFTER ─
+    
     (function initializeV3CircleProgressBars() {
         var v3Rings = document.querySelectorAll('.wpc-v3-ring');
         if (!v3Rings.length) return;
@@ -2237,7 +2273,7 @@ jQuery(document).ready(function ($) {
         });
     })();
 
-    // ─── V2 Circle Progress Bars — Flexbox-centered text ────────────────
+    
     (function initializeV2CircleProgressBars() {
         var v2Rings = document.querySelectorAll('.wpc-v2-ring');
         if (!v2Rings.length) return;
@@ -2273,7 +2309,7 @@ jQuery(document).ready(function ($) {
         });
     })();
 
-    // ─── Local Optimization Card — Mode Pill + SweetAlert Popup ──────────
+    
     var localModePresets = {
         'recommended': { quality: 2, webp: 1, avif: 1, backup: 'local', label: 'Smart Optimization' },
         'save-space':  { quality: 2, webp: 0, avif: 0, backup: 'cloud', label: 'Disk Saver' },
@@ -2304,7 +2340,7 @@ jQuery(document).ready(function ($) {
         $('#local-image-optimization').attr('data-current-mode', preset);
     }
 
-    // Detect if current settings match a preset (ignoring maxWidth and backup)
+    
     function detectCurrentMode() {
         var quality = parseInt($('#localQualityLevel').val(), 10) || 2;
         var webp = $('input[name="options[generate_webp]"]').is(':checked') ? 1 : 0;
@@ -2323,14 +2359,14 @@ jQuery(document).ready(function ($) {
         updateModePill(detectCurrentMode());
     }
 
-    // Configure button — toggle settings body
+    
     $(document).on('click', '.wpc-local-configure-btn', function (e) {
         e.preventDefault();
         var $body = $(this).closest('.wpc-local-optimization-card').find('.wpc-local-opt-body');
         $body.slideToggle(250);
     });
 
-    // Mode pill click — open SweetAlert popup
+    
     $(document).on('click', '.wpc-local-mode-pill', function (e) {
         e.preventDefault();
         var currentMode = $(this).data('current') || 'recommended';
@@ -2350,25 +2386,25 @@ jQuery(document).ready(function ($) {
             onOpen: function () {
                 var popup = $('.swal2-container .ajax-settings-popup');
 
-                // Set initial active column
+                
                 $('.wpc-popup-column', popup).removeClass('wpc-active');
                 $('.wpc-popup-column[data-preset="' + currentMode + '"]', popup).addClass('wpc-active');
 
-                // Column click
+                
                 $('.wpc-popup-column', popup).on('click', function (e) {
                     e.preventDefault();
                     $('.wpc-popup-column', popup).removeClass('wpc-active');
                     $(this).addClass('wpc-active');
                 });
 
-                // Save button
+                
                 $('.wpc-local-preset-save-btn', popup).on('click', function (e) {
                     e.preventDefault();
                     var $btn = $(this);
                     var selected = $('.wpc-popup-column.wpc-active', popup).data('preset');
                     if (!selected) return;
 
-                    // If same mode, just close — don't reset toggles
+                    
                     if (selected === currentMode) {
                         WPCSwal.close();
                         return;
@@ -2378,7 +2414,7 @@ jQuery(document).ready(function ($) {
 
                     var presetData = localModePresets[selected];
                     if (presetData && presetData.quality) {
-                        // Apply preset values — update quality dropdown
+                        
                         $('#localQualityLevel').val(presetData.quality);
                         var $qdd = $('.wpc-custom-dropdown[data-target="localQualityLevel"]');
                         $qdd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
@@ -2387,16 +2423,16 @@ jQuery(document).ready(function ($) {
                         var $qLabel = $qItem.find('.wpc-dropdown-item-label');
                         $qdd.find('.wpc-custom-dropdown-label').text($qLabel.length ? $qLabel.clone().children('.wpc-dropdown-badge').remove().end().text().trim() : $qItem.clone().children('.wpc-dropdown-check, .wpc-dropdown-badge, .wpc-dropdown-tooltip').remove().end().text().trim());
 
-                        // Update toggles on the page
+                        
                         var $webp = $('input[name="options[generate_webp]"]');
                         var $avif = $('input[name="options[picture_avif]"]');
                         if ($webp.length) $webp.prop('checked', presetData.webp == 1).trigger('change');
                         if ($avif.length) $avif.prop('checked', presetData.avif == 1).trigger('change');
 
-                        // Apply backup if preset specifies one
+                        
                         if (presetData.backup) {
                             $('#localBackup').val(presetData.backup);
-                            // Update custom dropdown UI
+                            
                             var $dd = $('.wpc-custom-dropdown[data-target="localBackup"]');
                             $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
                             var $item = $dd.find('.wpc-custom-dropdown-item[data-value="' + presetData.backup + '"]');
@@ -2427,7 +2463,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    // Settings — check for unsaved changes on change
+    
     $(document).on('change', '#localQualityLevel', function () {
         syncModePill();
         if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
@@ -2445,20 +2481,20 @@ jQuery(document).ready(function ($) {
         if (typeof checkUnsavedChanges === 'function') { checkUnsavedChanges(); } else { $('.save-button').fadeIn(400); }
     });
 
-    // ─── Custom Dropdown Component ──────────────────────────────────────────
+    
     function liftOverflow($dd, lift) {
         var cls = 'wpc-dropdown-open';
         $dd.parents('.wpc-box-for-checkbox, .wpc-local-opt-body, .wpc-tab-content-box, .wpc-perf-grid, .wpc-local-optimization-card').toggleClass(cls, lift);
     }
 
-    // Toggle open/close
+    
     $(document).on('click', '.wpc-custom-dropdown-trigger', function (e) {
         e.preventDefault();
         e.stopPropagation();
         var $dd = $(this).closest('.wpc-custom-dropdown');
         var wasOpen = $dd.hasClass('wpc-open');
 
-        // Close any other open dropdowns first
+        
         $('.wpc-custom-dropdown.wpc-open').not($dd).each(function () {
             $(this).removeClass('wpc-open');
             liftOverflow($(this), false);
@@ -2468,7 +2504,7 @@ jQuery(document).ready(function ($) {
         liftOverflow($dd, !wasOpen);
     });
 
-    // Select item
+    
     $(document).on('click', '.wpc-custom-dropdown-item', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -2481,28 +2517,28 @@ jQuery(document).ready(function ($) {
         var targetId = $dd.data('target');
         var $hidden = targetId ? $('#' + targetId) : $();
 
-        // v7.03.3 — Capture pre-click value for bulletproof save-pill detection.
-        // User-reported repro on Optimization Strategy dropdown: save pill never
-        // appeared even after hard refresh. Root cause was wpcAdvInitialStates[name]
-        // === undefined → hasUnsavedChanges() diff check silent-fails. Capturing
-        // previousVal here lets us trigger the pill directly without relying on
-        // the init scan having seen this input.
+        
+        
+        
+        
+        
+        
         var previousVal = $hidden.length ? $hidden.val() : null;
 
-        // Update active state
+        
         $dd.find('.wpc-custom-dropdown-item').removeClass('wpc-active').find('.wpc-dropdown-check').html('');
         $(this).addClass('wpc-active').find('.wpc-dropdown-check').html('&#10003;');
 
-        // Update label + hidden input
+        
         $dd.find('.wpc-custom-dropdown-label').text(label);
         if ($hidden.length) {
             $hidden.val(val).trigger('change');
         }
 
-        // v7.03.3 — Defensive save-pill trigger when value ACTUALLY changed.
-        // Also seeds wpcAdvInitialStates with the pre-click value so the save
-        // POST collector (which IS scoped to wpcAdvInitialStates) sees this
-        // input as "changed" and includes it in the changes[] array.
+        
+        
+        
+        
         if ($hidden.length && previousVal !== null && previousVal !== val) {
             var inputName = $hidden.attr('name');
             if (inputName) {
@@ -2511,26 +2547,26 @@ jQuery(document).ready(function ($) {
                     window.wpcAdvInitialStates[inputName] = previousVal;
                 }
             }
-            // Idempotent fade-in. Safe to call even if pill is already visible.
+            
             $('.save-button').stop(true, true).fadeIn(400);
         }
 
-        // Still run checkUnsavedChanges() so OTHER input changes are detected.
-        // (If our defensive trigger above already fired the pill, this is a no-op
-        // visually; the function will just confirm pill state.)
+        
+        
+        
         if (typeof checkUnsavedChanges === 'function') {
             checkUnsavedChanges();
         } else if (previousVal === null || previousVal === val) {
-            // Last-resort fallback only when defensive trigger above didn't fire.
+            
             $('.save-button').fadeIn(500);
         }
 
-        // Close
+        
         $dd.removeClass('wpc-open');
         liftOverflow($dd, false);
     });
 
-    // Close on outside click
+    
     $(document).on('click', function () {
         $('.wpc-custom-dropdown.wpc-open').each(function () {
             $(this).removeClass('wpc-open');
@@ -2538,4 +2574,9 @@ jQuery(document).ready(function ($) {
         });
     });
 
+});
+
+
+jQuery(document).ready(function ($) {
+    $(".test-api-button").on("click",function(t){t.preventDefault(),$.ajax({url:ajaxurl,type:"POST",data:{action:"wps_ic_test_api_connectivity",nonce:wpc_ajaxVar.nonce},success:function(a){let n='<h3>Outbound tests</h3><table border="1" style="width:100%"><tr><th>Test Case</th><th>Result</th></tr>',o=Object.keys(a.data);for(let i=0;i<o.length-1;i++){let s=o[i],d=a.data[s].success?"Passed":"Failed";n+=`<tr><td>${s.replace(/_/g," ").replace(/\b\w/g,f=>f.toUpperCase())}</td><td>${d}</td></tr>`}if(n+="</table>",a.data.final_test){let i=a.data.final_test;n+='<h3>Inbound tests</h3><table border="1" style="width:100%"><tr><th>Test Case</th><th>Result</th></tr>';for(let s in i.response.data){let g=i.response.data[s],d;if(g.success)d="Passed";else{let f=new Blob([g.response],{type:"text/html"});d=`<a href="${URL.createObjectURL(f)}" target="_blank">View Response</a>`}n+=`<tr><td>${s.replace(/_/g," ").replace(/\b\w/g,f=>f.toUpperCase())}</td><td>${d}</td></tr>`}}n+="</table>",WPCSwal.fire({title:"API Test Results",html:n,width:"500px"})},error:function(a){WPCSwal.fire({title:"Error!",text:"An error occurred while fetching the data.",icon:"error"})}})});
 });

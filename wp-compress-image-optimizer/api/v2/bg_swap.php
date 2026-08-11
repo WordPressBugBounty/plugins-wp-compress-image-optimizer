@@ -1,18 +1,5 @@
 <?php
-/**
- * WP Compress v7.02 — Direct PHP entry for /wpc/v2/bg_swap (legacy single-variant).
- *
- * Same single-variant shape as the original REST endpoint (one callback per
- * sizeLabel/format tuple). Kept alive for:
- *   - Pre-batching encoder pods that may still be in rotation
- *   - On-demand lazy backfill (single-variant POST per the spec)
- *   - Any orch fallback path that doesn't batch
- *
- * Internally, this writes a 1-entry journal file with the same shape the
- * batch handler uses, so drain consolidates them identically.
- *
- * @see SPEC-direct_entry.md
- */
+
 
 define('WPC_V2_DIRECT_ENTRY', true);
 require __DIR__ . '/_shared.php';
@@ -38,9 +25,8 @@ if (!is_array($body)) {
 $imageID    = isset($body['imageID']) ? (int) $body['imageID'] : 0;
 $size_label = isset($body['sizeLabel']) ? preg_replace('/[^a-z0-9_\-]/i', '', (string) $body['sizeLabel']) : '';
 $format     = isset($body['format']) ? strtolower(preg_replace('/[^a-z]/i', '', (string) $body['format'])) : '';
-// v7.02.03 — SECURITY: an orch-supplied filename is written to uploads; validate
-// it (basename + image-ext + no executable interior segment). Supplied-but-hostile
-// → reject; not supplied → derive below.
+
+
 $filename   = '';
 if (isset($body['filename']) && (string) $body['filename'] !== '') {
     $filename = wpc_v2_direct_safe_filename((string) $body['filename']);
@@ -75,7 +61,7 @@ if ($filename === '') {
     }
 }
 
-// No-improvement signal
+
 if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body['bumped'] === 'source_already_optimal')) {
     $reason = !empty($body['noImprovement'])
         ? (isset($body['reason']) ? (string) $body['reason'] : 'no_improvement')
@@ -104,15 +90,14 @@ if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body[
     wpc_v2_direct_respond(200, ['ok' => true, 'kind' => $reason, 'direct_entry' => true]);
 }
 
-// Resolve bytes
+
 $raw = null;
 if ($b64 !== '') {
     $raw = base64_decode($b64, true);
     if ($raw === false) wpc_v2_direct_respond(400, ['error' => 'invalid_base64']);
 } elseif ($fetch_url !== '') {
-    // v7.02.03 — SECURITY (SSRF): validate the orch-supplied URL (http/https +
-    // public IP only) and disable redirects so a public host can't 30x into an
-    // internal target (cloud metadata, loopback, private ranges).
+
+
     if (!wpc_v2_direct_safe_fetch_url($fetch_url)) {
         wpc_v2_direct_respond(400, ['error' => 'unsafe_fetch_url']);
     }
@@ -123,7 +108,7 @@ if ($b64 !== '') {
     wpc_v2_direct_respond(400, ['error' => 'missing_bytes_or_fetchUrl']);
 }
 
-// Atomic disk write
+
 $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
 if (!$persist['ok']) {
     wpc_v2_direct_respond(500, ['error' => $persist['error']]);
@@ -158,7 +143,7 @@ error_log(sprintf(
     (microtime(true) - $entry_t) * 1000
 ));
 
-// Trigger drain on threshold (less likely with single-variant, but consistent)
+
 $threshold = defined('WPC_V2_JOURNAL_DRAIN_THRESHOLD') ? (int) WPC_V2_JOURNAL_DRAIN_THRESHOLD : 5;
 if (wpc_v2_journal_count() >= $threshold) {
     register_shutdown_function('wpc_v2_journal_fire_loopback');

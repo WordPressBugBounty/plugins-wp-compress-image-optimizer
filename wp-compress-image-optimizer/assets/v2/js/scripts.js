@@ -1,7 +1,7 @@
 jQuery(document).ready(function ($) {
     check_settings();
 
-    var links = $('.ajax-run-critical'); //We can add data-status to links to know which ones need to be run?
+    var links = $('.ajax-run-critical'); 
     var processed_links = 0;
     var process_all = 0;
 
@@ -46,7 +46,7 @@ jQuery(document).ready(function ($) {
                     pageID: pageID,
                     wps_ic_nonce: wpc_ajaxVar.nonce
                 },
-                timeout: 0, //ms
+                timeout: 0, 
                 error: function (jqXHR, textStatus, errorThrown) {
                     link.text = 'Error';
                 },
@@ -59,7 +59,7 @@ jQuery(document).ready(function ($) {
                 if ( process_all === 1 ){
                     process_next_link();
                 }
-            //});
+            
 
         });
 
@@ -89,11 +89,11 @@ jQuery(document).ready(function ($) {
         var newValue = 1;
 
         if (beforeValue == 'checked') {
-            // It was already active, remove checked
+            
             $(this).removeAttr('checked');
             $('.circle-check', parent).removeClass('active');
         } else {
-            // It's not active, activate
+            
             $(this).attr('checked', 'checked');
             $('.circle-check', parent).addClass('active');
         }
@@ -116,11 +116,11 @@ jQuery(document).ready(function ($) {
         var newValue = 1;
 
         if (beforeValue == 'checked') {
-            // It was already active, remove checked
+            
             $(this).removeAttr('checked');
             newValue = 0;
         } else {
-            // It's not active, activate
+            
             $(this).attr('checked', 'checked');
         }
 
@@ -140,7 +140,7 @@ jQuery(document).ready(function ($) {
         return false;
     });
 
-    //Setting modes change
+    
     $('.dropdown-item').on('click', function(e){
         e.preventDefault();
         var mode = $(this).data('mode');
@@ -167,7 +167,7 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    //goes trough all settings to see if current selection is custom/recommended/safe
+    
     function check_settings() {
         var safe = true;
         var recommended = true;

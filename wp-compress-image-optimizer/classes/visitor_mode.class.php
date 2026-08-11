@@ -10,12 +10,11 @@ class wps_ic_visitor_mode {
 			return $headers;
 		} );
 
-		//wp_enqueue_script('wpc_visitor_mode_js', WPS_IC_URI . 'assets/js/admin/visitor_mode.min.js', array('jquery'));
 
 	}
 }
 
-//override the default WP function to simulate a logged-out user
+
 if ( ! function_exists( 'wp_set_current_user' ) ) {
 	function wp_set_current_user( $id, $name = '' ) {
 		global $current_user;

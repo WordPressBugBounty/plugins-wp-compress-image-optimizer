@@ -48,13 +48,13 @@ class wps_ic_htaccess extends wps_ic
             return;
         }
 
-        // Is the file writeable?
+        
         if ($this->exists($this->htaccessPath) && !$this->isWriteable($this->htaccessPath)) {
             $error = true;
             $this->notice('not-writeable-htaccess');
         }
 
-        // Is the file readable?
+        
         if ($this->exists($this->htaccessPath) && !$this->isReadble($this->htaccessPath)) {
             $error = true;
             $this->notice('not-readable-htaccess');
@@ -62,21 +62,21 @@ class wps_ic_htaccess extends wps_ic
 
         if ($error) return;
 
-        // Get Contents
+        
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-        // Did we retrieve the correct htaccess content?
+        
         if (!empty($this->htaccessContent)) {
 
-            // Check if gzip rules already exist
+            
             if (strpos($this->htaccessContent, 'mod_deflate') === false) {
 
                 $rules = $this->modifyModDeflate();
 
-                // Prepare new content (append)
+                
                 $newHtaccessContent = rtrim($this->htaccessContent) . "\n\n" . $rules;
 
-                // Only write if content actually changed
+                
                 if (!empty($newHtaccessContent) && $newHtaccessContent !== $this->htaccessContent) {
                     file_put_contents($this->htaccessPath, $newHtaccessContent);
                 }
@@ -153,13 +153,13 @@ class wps_ic_htaccess extends wps_ic
             return;
         }
 
-        // Is the file writeable?
+        
         if ($this->exists($this->htaccessPath) && !$this->isWriteable($this->htaccessPath)) {
             $error = true;
             $this->notice('not-writeable-htaccess');
         }
 
-        // Is the file readable?
+        
         if ($this->exists($this->htaccessPath) && !$this->isReadble($this->htaccessPath)) {
             $error = true;
             $this->notice('not-readable-htaccess');
@@ -167,20 +167,20 @@ class wps_ic_htaccess extends wps_ic
 
         if ($error) return;
 
-        // Get Contents
+        
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-        // Did we retrieve the correct htaccess content?
+        
         if (!empty($this->htaccessContent)) {
-            // Does it already have modifications?
+            
 
             if (!$this->hasRewriteMods() || !empty($_GET['rebuildHtaccess'])) {
                 $this->modifyHtaccess();
             }
 
-            // Remove Mods Fix
+            
             if ($this->hasRewriteMods() && !empty($_GET['removeHtaccess'])) {
-                // Remove HtAccess Rules
+                
                 $this->removeHtaccessRules();
             }
         }
@@ -213,6 +213,143 @@ class wps_ic_htaccess extends wps_ic
             }
 
             $this->fileSystem()->put_contents($this->getHtaccessPath(), $newHtaccessContent);
+        }
+    }
+
+
+    const WPC_BC_START = '#StartWPC-BrowserCache';
+    const WPC_BC_END   = '#EndWPC-BrowserCache';
+
+    public function wpcBrowserCacheEnabled()
+    {
+        if (defined('WPC_BROWSER_CACHE_DISABLE') && WPC_BROWSER_CACHE_DISABLE) {
+            return false;
+        }
+        $s  = get_option(WPS_IC_SETTINGS);
+        $on = is_array($s) && !empty($s['browser-cache-headers']) && $s['browser-cache-headers'] == '1';
+        return (bool) apply_filters('wpc_browser_cache_headers', $on);
+    }
+
+    public function wpcBrowserCacheRules()
+    {
+        $s  = self::WPC_BC_START . PHP_EOL;
+        $s .= '# WP Compress — compression + browser caching for static assets (HTML is never cached).' . PHP_EOL;
+        $s .= '<IfModule mod_deflate.c>' . PHP_EOL;
+        $s .= '  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json application/xml application/rss+xml application/vnd.ms-fontobject image/svg+xml font/ttf font/otf font/opentype' . PHP_EOL;
+        $s .= '</IfModule>' . PHP_EOL;
+        $s .= '<IfModule mod_expires.c>' . PHP_EOL;
+        $s .= '  ExpiresActive On' . PHP_EOL;
+        $s .= '  ExpiresByType text/html "access plus 0 seconds"' . PHP_EOL;
+        foreach ([
+            'text/css', 'application/javascript', 'application/x-javascript', 'text/javascript',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/svg+xml', 'image/x-icon',
+            'font/woff2', 'font/woff', 'application/font-woff2', 'application/vnd.ms-fontobject', 'application/x-font-ttf', 'font/otf',
+        ] as $mime) {
+            $s .= '  ExpiresByType ' . $mime . ' "access plus 1 year"' . PHP_EOL;
+        }
+        $s .= '</IfModule>' . PHP_EOL;
+        $s .= '<IfModule mod_headers.c>' . PHP_EOL;
+        $s .= '  <FilesMatch "\.(css|js|jpe?g|png|gif|webp|avif|svgz?|ico|woff2?|ttf|otf|eot)$">' . PHP_EOL;
+        $s .= '    Header set Cache-Control "public, max-age=31536000"' . PHP_EOL;
+        $s .= '  </FilesMatch>' . PHP_EOL;
+        $s .= '</IfModule>' . PHP_EOL;
+        $s .= self::WPC_BC_END . PHP_EOL;
+        return (string) apply_filters('wpc_browser_cache_rules', $s);
+    }
+
+    private function wpcStripBcBlock($content)
+    {
+        return preg_replace(
+            '/\s*' . preg_quote(self::WPC_BC_START, '/') . '.*?' . preg_quote(self::WPC_BC_END, '/') . '\s*/is',
+            PHP_EOL,
+            (string) $content
+        );
+    }
+
+    public function wpcApplyBrowserCache($force = false)
+    {
+        try {
+            if (!$force && !$this->wpcBrowserCacheEnabled()) {
+                return false;
+            }
+            if (!$this->isApache()) {
+                return false;
+            }
+            $path = $this->getHtaccessPath();
+            if (empty($path) || !$this->isWriteable($path)) {
+                $this->notice('not-writeable-htaccess');
+                return false;
+            }
+            $content = (string) $this->getContents($path);
+            if ($content === '') {
+                return false;
+            }
+            
+            
+            $desired = rtrim($this->wpcStripBcBlock($content)) . PHP_EOL . PHP_EOL . $this->wpcBrowserCacheRules();
+            if (trim($desired) === trim($content)) {
+                return true;
+            }
+
+            @file_put_contents($path . '.wpc-bcbak', $content);
+            if (@file_put_contents($path, $desired) === false) {
+                return false;
+            }
+
+
+            $wpc_probes = [
+                add_query_arg('wpc_bc_probe', (string) time(), home_url('/')),
+                site_url('wp-login.php'),
+            ];
+            $wpc_bad = false; $wpc_any_ok = false; $wpc_last = 0;
+            foreach ($wpc_probes as $wpc_pu) {
+                $r = wp_remote_get($wpc_pu, [
+                    'timeout'     => (int) apply_filters('wpc_browser_cache_probe_timeout', 8),
+                    'redirection' => 0,
+                    'sslverify'   => false,
+                    'headers'     => ['Cache-Control' => 'no-cache', 'Pragma' => 'no-cache'],
+                ]);
+                $wpc_last = is_wp_error($r) ? 0 : (int) wp_remote_retrieve_response_code($r);
+                if ($wpc_last >= 500) { $wpc_bad = true; break; }
+                if ($wpc_last >= 200 && $wpc_last < 500) { $wpc_any_ok = true; } 
+            }
+            if ($wpc_bad || !$wpc_any_ok) {
+                @file_put_contents($path, $content);
+                $s = get_option(WPS_IC_SETTINGS);
+                if (is_array($s)) { $s['browser-cache-headers'] = '0'; update_option(WPS_IC_SETTINGS, $s); }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('browser-cache-rollback', '', '', ['code' => $wpc_last]);
+                }
+                $this->notice('browser-cache-failed');
+                return false;
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('browser-cache-applied', '', '', ['code' => $wpc_last]);
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public function wpcRemoveBrowserCache()
+    {
+        try {
+            if (!$this->isApache()) {
+                return false;
+            }
+            $path = $this->getHtaccessPath();
+            if (empty($path) || !$this->isWriteable($path)) {
+                return false;
+            }
+            $content = (string) $this->getContents($path);
+            if (strpos($content, self::WPC_BC_START) === false) {
+                return true;
+            }
+            @file_put_contents($path, rtrim($this->wpcStripBcBlock($content)) . PHP_EOL);
+            return true;
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 
@@ -406,17 +543,17 @@ HTACCESS;
 
     public function modifyForCaching()
     {
-        // Multisite does not require rewrite rules
+        
         if (is_multisite()) {
             return;
         }
 
-        // Korean is having problems, does not require rules
+        
         if ('ko_KR' === get_locale() || (defined('WPLANG') && 'ko_KR' === WPLANG)) {
             return;
         }
 
-        // Get root base.
+        
         $homeRoot = $this->extractUrlComponent(home_url(), PHP_URL_PATH);
         $homeRoot = isset($homeRoot) ? trailingslashit($homeRoot) : '/';
 
@@ -430,13 +567,21 @@ HTACCESS;
         }
 
 
+        $wpc_abs_cache = @realpath(WPS_IC_CACHE);
+        $wpc_abs_dr    = isset($_SERVER['DOCUMENT_ROOT']) ? @realpath($_SERVER['DOCUMENT_ROOT']) : '';
+        if ($wpc_abs_cache && $wpc_abs_dr && strpos($wpc_abs_cache, $wpc_abs_dr) === 0) {
+            $cacheRoot = '/' . trim(str_replace('\\', '/', substr($wpc_abs_cache, strlen($wpc_abs_dr))), '/') . '/';
+        }
+
+
         $http_host = $this->removeUrlProtocol(home_url());
 
         $rules = '';
         $gzip_rules = '';
         $enc = '';
 
-        $cache_dir_path = '%{DOCUMENT_ROOT}/' . ltrim($cacheRoot, '/') . $http_host . '%{REQUEST_URI}';
+        $cache_dir_path = ($wpc_abs_cache ? rtrim($wpc_abs_cache, '/') . '/' : '%{DOCUMENT_ROOT}/' . ltrim($cacheRoot, '/')) . $http_host . '%{REQUEST_URI}';
+        update_option('wpc_static_serve_cond', $cache_dir_path . ' | target=' . $cacheRoot . $http_host, false);
 
         if (function_exists('gzencode')) {
             $rules = '<IfModule mod_mime.c>' . PHP_EOL;
@@ -458,13 +603,16 @@ HTACCESS;
         $rules .= $this->webpRewrite($cache_dir_path);
         $rules .= $gzip_rules;
 
-        // TODO: Exclude Mobile?
+        
         $mobileCacheEnabled = false;
-        #if (!$mobileCacheEnabled) {
+        
         $rules .= 'RewriteCond %{HTTP_USER_AGENT} "android|blackberry|iphone|ipod|iemobile|opera mobile|palmos|webos|googlebot-mobile" [NC]' . PHP_EOL;
         $rules .= 'RewriteRule .* - [E=WPC_MOBILE:mobile_]' . PHP_EOL;
 
         $rules .= 'RewriteCond %{REQUEST_METHOD} GET' . PHP_EOL;
+
+
+        $rules .= 'RewriteCond %{HTTP:X-WPC-Cache-Warm} ^$' . PHP_EOL;
         $rules .= 'RewriteCond %{QUERY_STRING} ^$' . PHP_EOL;
 
         $cookies = $this->rejectCookies();
@@ -472,34 +620,220 @@ HTACCESS;
             $rules .= 'RewriteCond %{HTTP:Cookie} !(' . $cookies . ') [NC]' . PHP_EOL;
         }
 
-        $rules .= 'RewriteCond "' . $cache_dir_path . '/%{ENV:WPC_MOBILE}index.html' . $enc . '" -f' . PHP_EOL;
+        $rules .= 'RewriteCond "' . $cache_dir_path . '/%{ENV:WPC_MOBILE}index.html' . $enc . '" -s' . PHP_EOL;
         $rules .= 'RewriteRule .* "' . $cacheRoot . $http_host . '%{REQUEST_URI}/%{ENV:WPC_MOBILE}index.html' . $enc . '" [L]' . PHP_EOL;
-        #}
+        
 
         $rules .= 'RewriteCond %{REQUEST_METHOD} GET' . PHP_EOL;
+
+
+        $rules .= 'RewriteCond %{HTTP:X-WPC-Cache-Warm} ^$' . PHP_EOL;
         $rules .= 'RewriteCond %{QUERY_STRING} ^$' . PHP_EOL;
 
-        #$cookies = $this->rejectCookies();
+        
+        
+        
+        
+        
+        $rules .= 'RewriteCond %{ENV:WPC_MOBILE} ^$' . PHP_EOL;
+
+        
         if ($cookies) {
             $rules .= 'RewriteCond %{HTTP:Cookie} !(' . $cookies . ') [NC]' . PHP_EOL;
         }
 
-        // TODO: Excluded URLs from Cache?
+        
         $excludedCacheUrls = false;
         if ($excludedCacheUrls) {
             $rules .= 'RewriteCond %{REQUEST_URI} !^(' . $excludedCacheUrls . ')$ [NC]' . PHP_EOL;
         }
 
-        // Todo: Exclude User Agents (bots) from cache
-        $excludeBots = false;
-        if ($excludeBots) {
-            $rules .= 'RewriteCond %{HTTP_USER_AGENT} !^(' . $excludeBots . ').* [NC]' . PHP_EOL;
-        }
-
-        $rules .= 'RewriteCond "' . $cache_dir_path . '/index.html' . $enc . '" -f' . PHP_EOL;
+        $rules .= 'RewriteCond "' . $cache_dir_path . '/index.html' . $enc . '" -s' . PHP_EOL;
         $rules .= 'RewriteRule .* "' . $cacheRoot . $http_host . '%{REQUEST_URI}/index.html' . $enc . '" [L]' . PHP_EOL;
         $rules .= '</IfModule>' . PHP_EOL;
         return $rules;
+    }
+
+
+    
+    private function writeStaticServeBlock()
+    {
+        $rules = $this->modifyForCaching();
+        if (empty($rules)) {
+            return false;
+        }
+        $content = (string) $this->getContents($this->htaccessPath);
+        $content = ltrim((string) preg_replace('/\s*#StartWPC-StaticServe.*#EndWPC-StaticServe\s*?/isU', PHP_EOL, $content));
+        $block   = '#StartWPC-StaticServe' . PHP_EOL . $rules . '#EndWPC-StaticServe' . PHP_EOL . PHP_EOL;
+        return $this->fileSystem()->put_contents($this->htaccessPath, $block . $content);
+    }
+
+    
+    public function applyStaticServe()
+    {
+        $wpc_was_active530  = (int) get_option('wpc_static_serve_active', 0) === 1;
+        $this->htaccessPath = $this->getHtaccessPath();
+        if (empty($this->htaccessPath)) {
+            return ['ok' => false, 'reason' => 'no-htaccess'];
+        }
+        if (!$this->isApache) {
+            return ['ok' => false, 'reason' => 'not-apache'];
+        }
+        if (!$this->isWriteable($this->htaccessPath)) {
+            $this->notice('not-writeable-htaccess');
+            return ['ok' => false, 'reason' => 'not-writeable'];
+        }
+
+
+        $wpc_dr = !empty($_SERVER['DOCUMENT_ROOT']) ? @realpath($_SERVER['DOCUMENT_ROOT']) : '';
+        $wpc_ap = @realpath(ABSPATH);
+        if ($wpc_dr && $wpc_ap && strpos($wpc_ap, $wpc_dr) !== 0 && strpos($wpc_dr, $wpc_ap) !== 0) {
+            update_option('wpc_static_serve_failed', 'docroot-mismatch', false);
+            return ['ok' => false, 'reason' => 'docroot-mismatch'];
+        }
+        if ($this->writeStaticServeBlock() === false) {
+            return ['ok' => false, 'reason' => 'write-failed'];
+        }
+
+
+        if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'ensureStaticMirrorHeaderHtaccess')) {
+            wps_cacheHtml::ensureStaticMirrorHeaderHtaccess();
+        }
+        
+        if (!$this->staticServeSelfTest()) {
+            $this->removeStaticServe(); 
+            $wpc_probe = get_option('wpc_static_serve_probe');
+            return ['ok' => false, 'reason' => $wpc_probe ? 'selftest failed — ' . $wpc_probe : 'selftest-failed-reverted'];
+        }
+        update_option('wpc_static_serve_active', 1, false);
+        delete_option('wpc_static_serve_failed');
+
+
+        
+        
+        
+        
+        if (empty($wpc_was_active530)) {
+            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                try {
+                    wps_ic_cache::removeHtmlCacheFiles('all');
+                } catch (\Throwable $e) {
+                }
+            }
+            if (function_exists('wpc_warm_url_queue')) {
+                wpc_warm_url_queue(home_url('/'), 'static-serve-enable');
+            }
+        }
+        return ['ok' => true];
+    }
+
+    
+    public function removeStaticServe()
+    {
+        $this->htaccessPath = $this->getHtaccessPath();
+        delete_option('wpc_static_serve_active');
+        
+        
+        
+        
+        delete_option('wpc_ttfb_ss_auto');
+        if (empty($this->htaccessPath) || !$this->isWriteable($this->htaccessPath)) {
+            return;
+        }
+        $content = (string) $this->getContents($this->htaccessPath);
+        if (strpos($content, '#StartWPC-StaticServe') === false) {
+            return;
+        }
+        $content = ltrim((string) preg_replace('/\s*#StartWPC-StaticServe.*#EndWPC-StaticServe\s*?/isU', PHP_EOL, $content));
+        $this->fileSystem()->put_contents($this->htaccessPath, $content);
+    }
+
+    
+
+
+
+
+
+    public function staticServeSelfTest()
+    {
+        if (!$this->isApache || !defined('WPS_IC_CACHE') || !function_exists('home_url')) {
+            return false;
+        }
+        $host = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+        if ($host === '') {
+            return false;
+        }
+        $nonce  = 'wpc-static-selftest-' . substr(md5(uniqid('', true)), 0, 12);
+        $marker = 'WPCSTATICOK' . $nonce;
+        $dir    = WPS_IC_CACHE . $host . '/' . $nonce . '/';
+        if (!file_exists($dir)) {
+            @mkdir(rtrim($dir, '/'), 0777, true);
+        }
+        if (!is_dir($dir)) {
+            return false;
+        }
+        $html = '<!doctype html><html><body>' . $marker . '</body></html>';
+        @file_put_contents($dir . 'index.html_gzip', gzencode($html, 8));
+        @file_put_contents($dir . 'index.html', $html);
+
+        $resp = wp_remote_get(home_url('/' . $nonce), [
+            'timeout'    => 10,
+            'sslverify'  => false,
+            'headers'    => ['Accept-Encoding' => 'gzip'],
+            'user-agent' => 'wpc-static-selftest',
+        ]);
+        $ok = (!is_wp_error($resp) && strpos((string) wp_remote_retrieve_body($resp), $marker) !== false);
+
+        
+        
+        
+        $wpc_via = '';
+        if (!$ok) {
+            foreach (['https://127.0.0.1/', 'http://127.0.0.1/'] as $wpc_scheme) {
+                $wpc_r2 = wp_remote_get($wpc_scheme . $nonce, [
+                    'timeout'    => 8,
+                    'sslverify'  => false,
+                    'headers'    => ['Host' => $host, 'Accept-Encoding' => 'gzip'],
+                    'user-agent' => 'wpc-static-selftest',
+                ]);
+                if (!is_wp_error($wpc_r2) && strpos((string) wp_remote_retrieve_body($wpc_r2), $marker) !== false) {
+                    $ok = true;
+                    $wpc_via = $wpc_scheme;
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('static-selftest-via-origin', '', $wpc_scheme, []);
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!$ok) {
+            if (is_wp_error($resp)) {
+                $wpc_probe = 'loopback: ' . substr(preg_replace('/[^a-zA-Z0-9 :._-]/', '', $resp->get_error_message()), 0, 60);
+            } else {
+                $wpc_code  = (int) wp_remote_retrieve_response_code($resp);
+                $wpc_by    = (string) wp_remote_retrieve_header($resp, 'x-cache-by');
+                $wpc_probe = 'http ' . $wpc_code . ($wpc_by !== '' ? ' served-by ' . $wpc_by : ' no-marker')
+                           . ' — rules did not serve the test file (rewrite not matching on this host)';
+            }
+
+
+            if (strpos((string) $this->getContents($this->getHtaccessPath()), '#StartWPC-StaticServe') === false) {
+                $wpc_probe .= ' | rules-block-missing-from-htaccess';
+            }
+            
+            
+            $wpc_probe .= ' | srv:' . substr(preg_replace('/[^a-zA-Z0-9 .\/_-]/', '', (string) ($_SERVER['SERVER_SOFTWARE'] ?? '?')), 0, 40)
+                . (isset($_SERVER['HTTP_CF_RAY']) ? ' cf-fronted' : '');
+            update_option('wpc_static_serve_probe', $wpc_probe, false);
+        } else {
+            delete_option('wpc_static_serve_probe');
+        }
+
+        @unlink($dir . 'index.html_gzip');
+        @unlink($dir . 'index.html');
+        @rmdir(rtrim($dir, '/'));
+        return $ok;
     }
 
     public function extractUrlComponent($url, $component)
@@ -515,11 +849,11 @@ HTACCESS;
 
     public function sslRewrite()
     {
-        // Redirect non SSL to SSL
+        
         $rules = '';
-        #$rules .= 'RewriteCond %{HTTPS} off' . PHP_EOL;
-        #$rules .= 'RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]' . PHP_EOL;
-        // TODO: Check if this works
+        
+        
+        
         $rules .= 'RewriteCond %{HTTPS} !=on' . PHP_EOL;
         $rules .= 'RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]' . PHP_EOL;
         $rules .= 'RewriteCond %{HTTPS} on [OR]' . PHP_EOL;
@@ -559,7 +893,7 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        // Get Contents
+        
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
         if (!$this->htaccessContent || empty($this->htaccessContent)) return;
@@ -586,13 +920,13 @@ HTACCESS;
             return;
         }
 
-        // Is the file writeable?
+        
         if ($this->exists($this->configPath) && !$this->isWriteable($this->configPath)) {
             $error = true;
             $this->notice('not-writeable-config');
         }
 
-        // Is the file readable?
+        
         if ($this->exists($this->configPath) && !$this->isReadble($this->configPath)) {
             $error = true;
             $this->notice('not-readable-config');
@@ -600,19 +934,19 @@ HTACCESS;
 
         if (!empty($error)) return;
 
-        // Get Contents
+        
         $configContents = $this->getContents($this->configPath);
 
-        // Cache Status
+        
         $cacheStatus = $status ? 'true' : 'false';
         $this->cacheConstant = str_replace('VALUE', $cacheStatus, $this->cacheConstant);
 
-        // Check if WP_CACHE is defined
+        
         if (!preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', $configContents)) {
-            // Add definition if missing
+            
             $newContents = preg_replace('/(<\?php)/i', "<?php\r\n{$this->cacheConstant}\r\n", $configContents, 1);
         } else {
-            // Update or remove based on $cacheStatus
+            
             if ($cacheStatus === 'true') {
                 $newContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', "define('WP_CACHE', true);", $configContents);
             } else {
@@ -621,7 +955,7 @@ HTACCESS;
             }
         }
 
-        // Check if content changed
+        
         if (isset($newContents) && $newContents !== $configContents) {
             file_put_contents($this->configPath, $newContents);
         }
@@ -634,7 +968,7 @@ HTACCESS;
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
 
-        // Remove legacy insecure backup
+        
         $legacy_backup = ABSPATH . 'wp-config-backup.php';
         if (file_exists($legacy_backup)) {
             @unlink($legacy_backup);
@@ -649,20 +983,20 @@ HTACCESS;
         $backup_dir  = WP_CONTENT_DIR . '/.wp-compress-backups';
         $backup_file = $backup_dir . '/wp-config.php';
 
-        // Ensure backup directory exists
+        
         if (!is_dir($backup_dir)) {
             wp_mkdir_p($backup_dir);
             @chmod($backup_dir, 0700);
         }
 
-        // Ensure .htaccess exists to block web access (Apache)
+        
         $htaccess = $backup_dir . '/.htaccess';
         if (!file_exists($htaccess)) {
             file_put_contents($htaccess, "Require all denied\n");
             @chmod($htaccess, 0644);
         }
 
-        // Create backup
+        
         if (!file_exists($backup_file)) {
             if (@copy($config_file, $backup_file)) {
                 @chmod($backup_file, 0600);
@@ -671,7 +1005,6 @@ HTACCESS;
 
         return $config_file;
     }
-
 
 
     public function setAdvancedCache()
@@ -683,13 +1016,13 @@ HTACCESS;
             return;
         }
 
-        // Is the file writeable?
+        
         if ($this->exists($this->advancedCachePath) && !$this->isWriteable($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-writeable-adv-cache');
         }
 
-        // Is the file readable?
+        
         if ($this->exists($this->advancedCachePath) && !$this->isReadble($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-readable-adv-cache');
@@ -697,10 +1030,10 @@ HTACCESS;
 
         if ($error) return;
 
-        // Get Contents
+        
         $advancedCacheSample = $this->getContents(WPS_IC_DIR . 'templates/samples/advancedCacheSample.php');
 
-        // Only write if changed
+        
         $currentAdvancedCache = '';
         if (file_exists($this->advancedCachePath)) {
             $currentAdvancedCache = file_get_contents($this->advancedCachePath);
@@ -715,12 +1048,27 @@ HTACCESS;
                 $cacheLoggedIn = 'true';
             }
 
-            // Set cache logged in const in advanced-cache
+            
             $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
             $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
             $newContents = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
 
-            // Set Developer Mode
+            
+            
+            
+            
+            
+            $wpc_tier743 = 'false';
+            if (get_option('wpc_tier_cache', '') === '1'
+                && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierKey')
+                && wps_ic_url_key::tierKey(false) !== '') {
+                $wpc_tier743 = 'true';
+            }
+            $pattern = "#WPC_TIER_CACHE_START\r?\n(.+?)\r?\n#WPC_TIER_CACHE_END";
+            $replacement = "#WPC_TIER_CACHE_START\n define('WPC_TIER_CACHE' , $wpc_tier743 );\n#WPC_TIER_CACHE_END";
+            $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
+
+            
             if (!empty($settings['developer_mode']) && $settings['developer_mode'] === '1') {
                 $pattern = "#WPC_CACHE_DEVELOPER_MODE_START\r?\n(.+?)\r?\n#WPC_CACHE_DEVELOPER_MODE_END";
                 $replacement = "#WPC_CACHE_DEVELOPER_MODE_START\n define('DONOTCACHEPAGE', true);\n return;\n#WPC_CACHE_DEVELOPER_MODE_END";
@@ -731,7 +1079,7 @@ HTACCESS;
                 $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
             }
 
-            // Set cache cookies constant in advanced-cache
+            
             $cookiesConstant = 'false';
             $excludeCookiesConstant = 'false';
             $mandatoryCookiesConstant = 'false';
@@ -751,7 +1099,7 @@ HTACCESS;
                 }
             }
 
-            // Allow plugins to add/modify cache cookies and exclude cookies via filters
+            
             $cookies_list = apply_filters('wps_ic_cache_cookies', $cookies_list);
             $exclude_cookies_list = apply_filters('wps_ic_exclude_cookies', $exclude_cookies_list);
 
@@ -769,7 +1117,7 @@ HTACCESS;
                 $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
             }
 
-            // Mandatory cookies - cache is bypassed entirely if any of these are not set
+            
             $mandatory_cookies_list = apply_filters('wps_ic_mandatory_cookies', []);
             if (!empty($mandatory_cookies_list)) {
                 $mandatoryCookiesFormatted = array_map(function ($cookie) {
@@ -778,23 +1126,23 @@ HTACCESS;
                 $mandatoryCookiesConstant = 'array(' . implode(', ', $mandatoryCookiesFormatted) . ')';
             }
 
-            // Replace cache cookies
+            
             $cookiePattern = "#WPC_CACHE_COOKIES_START\r?\n(.+?)\r?\n#WPC_CACHE_COOKIES_END";
             $cookieReplacement = "#WPC_CACHE_COOKIES_START\ndefine('WPC_CACHE_COOKIES', $cookiesConstant);\n#WPC_CACHE_COOKIES_END";
             $newContents = preg_replace("/$cookiePattern/s", $cookieReplacement, $newContents);
 
-            // Replace exclude cookies
+            
             $excludeCookiePattern = "#WPC_EXCLUDE_COOKIES_START\r?\n(.+?)\r?\n#WPC_EXCLUDE_COOKIES_END";
             $excludeCookieReplacement = "#WPC_EXCLUDE_COOKIES_START\ndefine('WPC_EXCLUDE_COOKIES', $excludeCookiesConstant);\n#WPC_EXCLUDE_COOKIES_END";
             $newContents = preg_replace("/$excludeCookiePattern/s", $excludeCookieReplacement, $newContents);
 
-            // Replace mandatory cookies
+            
             $mandatoryCookiePattern = "#WPC_MANDATORY_COOKIES_START\r?\n(.+?)\r?\n#WPC_MANDATORY_COOKIES_END";
             $mandatoryCookieReplacement = "#WPC_MANDATORY_COOKIES_START\ndefine('WPC_MANDATORY_COOKIES', $mandatoryCookiesConstant);\n#WPC_MANDATORY_COOKIES_END";
             $newContents = preg_replace("/$mandatoryCookiePattern/s", $mandatoryCookieReplacement, $newContents);
 
-            // (v7.10.06) Bake the URL/cache exclude lists into the drop-in so the pre-WP hit path runs
-            // ZERO DB queries (was 2 SELECTs per request). Re-baked here on every settings/excludes save.
+
+            
             $urlExcludesConstant = 'false';
             $cacheExcludesConstant = 'false';
 
@@ -837,11 +1185,11 @@ HTACCESS;
         $config_file = ABSPATH . 'wp-content/advanced-cache.php';
 
         if (!file_exists($config_file)) {
-            // Initialize the WP_Filesystem
+            
             global $wp_filesystem;
             WP_Filesystem();
             $wp_filesystem->put_contents($config_file, "", 0644);
-            //return false;
+
 
             if (!file_exists($config_file)) {
                 return false;
@@ -861,13 +1209,13 @@ HTACCESS;
             return true;
         }
 
-        // Is the file writeable?
+        
         if ($this->exists($this->advancedCachePath) && !$this->isWriteable($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-writeable-adv-cache');
         }
 
-        // Is the file readable?
+        
         if ($this->exists($this->advancedCachePath) && !$this->isReadble($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-readable-adv-cache');
@@ -887,7 +1235,7 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        // Check if WebP rules already exist
+        
         if ($this->hasWebpReplaceRules()) {
             return;
         }
@@ -924,16 +1272,8 @@ HTACCESS;
 
         $webp_rules = '<IfModule mod_rewrite.c>'.PHP_EOL;
         $webp_rules .= 'RewriteEngine On'.PHP_EOL;
-        // v7.01.06 (MF-2) — AVIF negotiation, evaluated BEFORE WebP (AVIF preferred), but ONLY
-        // when the resolved Next-Gen ceiling is 'avif' — the SAME gate as the picture path (RC-3),
-        // so a WebP-only site (wpc_nextgen=webp) with leftover .avif files on disk never
-        // origin-serves AVIF (the format the user disabled). Gated on Accept ONLY: AVIF support is
-        // NOT reliably inferable from User-Agent (unlike WebP's Chrome proxy), so serve AVIF
-        // strictly when the client advertises image/avif. The -f check requires the .avif sibling
-        // on disk; [L] stops before the WebP block when AVIF fires. CACHE-SAFETY: the matching
-        // `Header append Vary Accept env=REDIRECT_avif` below is REQUIRED so a shared cache never
-        // serves AVIF to a non-AVIF client. Two blocks mirror the WebP pair: appended name
-        // (foo.jpg.avif) then replaced-extension (foo.avif — WPC's variant convention).
+
+
         $wpc_avif_ok = !class_exists('WPC_Delivery_Resolver')
             || WPC_Delivery_Resolver::effective_ceiling(get_option(WPS_IC_SETTINGS)) === 'avif';
         if ($wpc_avif_ok) {
@@ -946,17 +1286,11 @@ HTACCESS;
             $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}/%1.avif -f'.PHP_EOL;
             $webp_rules .= 'RewriteRule ^(.+)\.(jpe?g|png|gif)$ $1.avif [E=avif,L]'.PHP_EOL;
         }
-        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp [OR]'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} Chrome [OR]'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights"'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} !Edge/17'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}.webp -f'.PHP_EOL;
         $webp_rules .= 'RewriteRule ^(.+)$ $1.webp [E=webp,L]'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp [OR]'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} Chrome [OR]'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} "Google Page Speed Insights"'.PHP_EOL;
-        $webp_rules .= 'RewriteCond %{HTTP_USER_AGENT} !Edge/17'.PHP_EOL;
+        $webp_rules .= 'RewriteCond %{HTTP_ACCEPT} image/webp'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{REQUEST_URI} ^(.+)\.(jpe?g|png|gif)$'.PHP_EOL;
         $webp_rules .= 'RewriteCond %{DOCUMENT_ROOT}/%1.webp -f'.PHP_EOL;
         $webp_rules .= 'RewriteRule ^(.+)\.(jpe?g|png|gif)$ $1.webp [E=webp,L]'.PHP_EOL;
@@ -964,16 +1298,14 @@ HTACCESS;
 
         $webp_rules .= '<IfModule mod_mime.c>'.PHP_EOL;
         $webp_rules .= 'AddType image/webp .webp'.PHP_EOL;
-        // Make the origin honest about .avif Content-Type (Apache/LS only). Defense-in-depth:
-        // the CDN container trusts magic bytes regardless, but a correct origin CT reduces
-        // X-Origin-CT-Empty noise + helps curl/monitoring see the right type directly.
+
+
         $webp_rules .= 'AddType image/avif .avif'.PHP_EOL;
         $webp_rules .= '</IfModule>'.PHP_EOL;
         $webp_rules .= '<IfModule mod_headers.c>'.PHP_EOL;
         $webp_rules .= 'Header append Vary Accept env=REDIRECT_webp'.PHP_EOL;
-        // v7.01.06 — cache-safety for the AVIF rewrite above, emitted ONLY when the AVIF blocks
-        // were (ceiling=avif). Without this a shared cache keyed on the .jpg URL could serve AVIF
-        // to a non-AVIF client.
+
+
         if ($wpc_avif_ok) {
             $webp_rules .= 'Header append Vary Accept env=REDIRECT_avif'.PHP_EOL;
         }
@@ -992,7 +1324,7 @@ HTACCESS;
         }
 
         if (file_exists($this->htaccessPath) && is_writable($this->htaccessPath)) {
-            insert_with_markers($this->htaccessPath, self::$webPMarker, []); // removes our block
+            insert_with_markers($this->htaccessPath, self::$webPMarker, []);
         }
     }
 

@@ -1,28 +1,5 @@
 <?php
-/**
- * WP Compress — Adaptive Concurrency Control (AIMD).
- *
- * Plugin-side companion to orch's BatchedCallbackOutbox concurrency gate
- * (v3.18.19-adaptive-concurrency). Implements the math from
- * docs/SPEC-adaptive_concurrency.md §3:
- *
- *   • Per-callback-type AIMD (batch / announce / single)
- *   • Records inbound_to_complete_ms (REQUEST_TIME_FLOAT → handler complete)
- *   • Computes p20 baseline + p95 saturation signal over rolling 100 timings
- *   • Multiplicative decrease (×0.5) on saturation; additive increase (+1) on healthy growth
- *   • Adjusts every 15 callbacks + 30s cooldown
- *   • Initial cap = 3, floor = 2, ceiling = 50
- *   • Cap exposed via wpc_v2_get_max_concurrent() for /optimize-v2 envelope
- *   • CLI/cron multiplier (2×) for batch + announce (matches orch's per-origin tracking)
- *   • Manual override via admin UI option (pins cap, disables adaptive)
- *
- * Storage: non-autoloaded WP options. Per-type state (cap, timings, baseline,
- * last_adjust_at, adjust_log). One option write per ~15 callbacks (cheap).
- *
- * Failure modes documented in spec §4. Three kill switches in spec §9.
- *
- * @see docs/SPEC-adaptive_concurrency.md
- */
+
 
 if (!defined('ABSPATH')) {
     exit;
@@ -30,28 +7,21 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_v2_record_handler_timing')) {
 
-// ─── Constants (spec §3 "Why these specific numbers") ─────────────────────
 
-// Legacy ceiling stays at 50 (orch ignores plugin's advertised cap
-// when ADAPTIVE_CONCURRENCY_ENABLED=0). When the wpc_v2_aimd_tuned_enabled
-// flag is ON, the effective values become 8/2/12 via the helpers below.
 if (!defined('WPC_V2_AC_INITIAL_CAP'))     define('WPC_V2_AC_INITIAL_CAP', 3);
 if (!defined('WPC_V2_AC_FLOOR'))           define('WPC_V2_AC_FLOOR', 2);
 if (!defined('WPC_V2_AC_CEILING'))         define('WPC_V2_AC_CEILING', 50);
 
-// Tuned-mode constants for once orch flips ADAPTIVE_CONCURRENCY_ENABLED=1.
-// Defaults match the orch team's recommendation: INITIAL 3→8 (start where
-// the AIMD usually settles), FLOOR stays 2, CEILING 50→12 (orch's actual
-// per-customer fleet ceiling once enforcement turns on).
+
 if (!defined('WPC_V2_AC_INITIAL_CAP_TUNED')) define('WPC_V2_AC_INITIAL_CAP_TUNED', 8);
 if (!defined('WPC_V2_AC_FLOOR_TUNED'))       define('WPC_V2_AC_FLOOR_TUNED', 2);
 if (!defined('WPC_V2_AC_CEILING_TUNED'))     define('WPC_V2_AC_CEILING_TUNED', 12);
 
-/**
- * Effective AIMD constants. Returns the tuned set when the
- * wpc_v2_aimd_tuned_enabled flag is on, legacy otherwise. Centralized so
- * every read site (get_cap, set_cap, adjustment math) sees the same view.
- */
+
+
+
+
+
 function wpc_v2_ac_effective_caps() {
     static $cached = null;
     if ($cached !== null) return $cached;
@@ -69,10 +39,10 @@ if (!defined('WPC_V2_AC_RELAXED_MULT'))    define('WPC_V2_AC_RELAXED_MULT', 1.2)
 if (!defined('WPC_V2_AC_UTILIZATION'))     define('WPC_V2_AC_UTILIZATION', 0.7);
 if (!defined('WPC_V2_AC_ADJUST_LOG_SIZE')) define('WPC_V2_AC_ADJUST_LOG_SIZE', 20);
 
-/**
- * Map type string → option suffix. Centralized so a typo can't drift across files.
- * Valid types: 'batch', 'announce', 'single'.
- */
+
+
+
+
 function wpc_v2_ac_valid_type($type) {
     return in_array($type, ['batch', 'announce', 'single'], true);
 }
@@ -81,13 +51,7 @@ function wpc_v2_ac_opt_name($base, $type) {
     return 'wpc_v2_' . $base . '_' . $type;
 }
 
-/**
- * Read current cap for a callback type. Honors manual override + the
- * `wpc_v2_max_concurrent_override` filter (rollback hatch per spec §9).
- *
- * @param string $type 'batch' | 'announce' | 'single'
- * @return int 2-50
- */
+
 function wpc_v2_ac_get_cap($type) {
     $caps = wpc_v2_ac_effective_caps();
 
@@ -95,13 +59,13 @@ function wpc_v2_ac_get_cap($type) {
         return $caps['initial'];
     }
 
-    // Rollback kill switch (spec §9 — instant override)
+
     $override = apply_filters('wpc_v2_max_concurrent_override', null, $type);
     if ($override !== null) {
         return max($caps['floor'], min($caps['ceiling'], (int) $override));
     }
 
-    // Manual admin pin (per-type or all)
+    
     $manual = get_option('wpc_v2_concurrency_manual_' . $type, null);
     if ($manual === null) {
         $manual = get_option('wpc_v2_concurrency_manual_all', null);
@@ -114,10 +78,10 @@ function wpc_v2_ac_get_cap($type) {
     return max($caps['floor'], min($caps['ceiling'], $cap));
 }
 
-/**
- * Compute percentile of an integer array. Simple sort + index; window is
- * small (≤100) so this is microseconds.
- */
+
+
+
+
 function wpc_v2_ac_percentile(array $values, $p) {
     if (empty($values)) return 0.0;
     sort($values);
@@ -125,39 +89,24 @@ function wpc_v2_ac_percentile(array $values, $p) {
     return (float) $values[$idx];
 }
 
-/**
- * Append a timing to the rolling window for a callback type. Triggers the
- * AIMD adjustment every WPC_V2_AC_ADJUST_EVERY_N records (default 15).
- *
- * CRITICAL: the value passed should be `inbound_to_complete_ms` measured from
- * `$_SERVER['REQUEST_TIME_FLOAT']` — NOT handler-only `total_handler_ms`. See
- * spec §3 "CRITICAL — what we measure". Otherwise AIMD never sees FPM saturation.
- *
- * @param string $type   'batch' | 'announce' | 'single'
- * @param float  $ms     inbound_to_complete_ms (REQUEST_TIME_FLOAT → now)
- */
+
 function wpc_v2_record_handler_timing($type, $ms) {
     if (!wpc_v2_ac_valid_type($type)) return;
     $ms = (float) $ms;
-    if ($ms < 0 || $ms > 600000) return; // sanity: drop anything > 10min as garbage
+    if ($ms < 0 || $ms > 600000) return;
 
     $opt_timings = wpc_v2_ac_opt_name('handler_timings', $type);
     $timings = get_option($opt_timings, []);
     if (!is_array($timings)) $timings = [];
 
-    // Append + trim to window size (deque-style, oldest first)
+    
     $timings[] = (int) round($ms);
     if (count($timings) > WPC_V2_AC_WINDOW_SIZE) {
         $timings = array_slice($timings, -WPC_V2_AC_WINDOW_SIZE);
     }
-    update_option($opt_timings, $timings, false); // non-autoloaded
+    update_option($opt_timings, $timings, false);
 
-    // The adjustment trigger must NOT use count($timings) because the
-    // window slices to WPC_V2_AC_WINDOW_SIZE (100), so count freezes at 100
-    // once full. count(100) % 15 = 10 (never 0) → AIMD permanently stops
-    // adjusting after the window fills. Use a monotonically-increasing
-    // recording counter instead so the every-Nth trigger keeps firing for
-    // the lifetime of the plugin.
+
     $opt_rec_n  = wpc_v2_ac_opt_name('rec_count', $type);
     $rec_count  = (int) get_option($opt_rec_n, 0) + 1;
     update_option($opt_rec_n, $rec_count, false);
@@ -166,24 +115,24 @@ function wpc_v2_record_handler_timing($type, $ms) {
     }
 }
 
-/**
- * AIMD step. Compares p95 against baseline×saturation_mult and either
- * (a) backs off cap multiplicatively, (b) grows additively, or (c) holds.
- * Respects 30s cooldown to prevent thrashing on transient spikes.
- */
+
+
+
+
+
 function wpc_v2_ac_maybe_adjust($type, array $timings) {
-    if (count($timings) < 10) return; // need enough samples for stable percentiles
+    if (count($timings) < 10) return;
 
     $opt_last_adjust = wpc_v2_ac_opt_name('last_adjust_at', $type);
     $last_adjust_at = (int) get_option($opt_last_adjust, 0);
     if ($last_adjust_at > 0 && (time() - $last_adjust_at) < WPC_V2_AC_COOLDOWN_S) {
-        return; // cooldown active
+        return;
     }
 
     $baseline_p20 = wpc_v2_ac_percentile($timings, 20);
     $p95          = wpc_v2_ac_percentile($timings, 95);
 
-    // Persist baseline so admin diagnostic can show it cheaply
+    
     update_option(wpc_v2_ac_opt_name('baseline_ms', $type), $baseline_p20, false);
 
     $cap = wpc_v2_ac_get_cap($type);
@@ -192,7 +141,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
     $direction = 'hold';
     $caps = wpc_v2_ac_effective_caps();
 
-    // Saturation: p95 > baseline × saturation_mult → multiplicative decrease
+    
     if ($baseline_p20 > 0 && $p95 > $baseline_p20 * WPC_V2_AC_SATURATED_MULT) {
         $new_cap = max($caps['floor'], (int) floor($cap * 0.5));
         if ($new_cap !== $cap) {
@@ -201,9 +150,8 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
             $direction = 'decrease';
         }
     } elseif ($baseline_p20 > 0 && $p95 < $baseline_p20 * WPC_V2_AC_RELAXED_MULT) {
-        // Healthy: only grow if we're actually USING the cap (utilization check)
-        // We can't easily observe "in-flight" from plugin side, so we use a proxy:
-        // recent callback throughput >= cap × 0.7 timings in last cooldown window.
+
+
         $recent_throughput = min(count($timings), WPC_V2_AC_ADJUST_EVERY_N);
         if ($recent_throughput >= $cap * WPC_V2_AC_UTILIZATION) {
             $new_cap = min($caps['ceiling'], $cap + 1);
@@ -219,7 +167,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
         update_option(wpc_v2_ac_opt_name('concurrency_cap', $type), $cap, false);
         update_option($opt_last_adjust, time(), false);
 
-        // Append to adjust log ring buffer (cap at 20 entries)
+        
         $opt_log = wpc_v2_ac_opt_name('adjust_log', $type);
         $log = get_option($opt_log, []);
         if (!is_array($log)) $log = [];
@@ -245,12 +193,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
     }
 }
 
-/**
- * Get current cap object for /optimize-v2 envelope. Applies CLI/cron 2× multiplier
- * per spec §3 "WP-CLI / cron context".
- *
- * @return array{batch:int, announce:int, single:int}
- */
+
 function wpc_v2_get_max_concurrent() {
     $is_cli_or_cron = (defined('WP_CLI') && WP_CLI)
                    || (defined('DOING_CRON') && DOING_CRON);
@@ -260,14 +203,11 @@ function wpc_v2_get_max_concurrent() {
     return [
         'batch'    => min($caps['ceiling'], wpc_v2_ac_get_cap('batch') * $mult),
         'announce' => min($caps['ceiling'], wpc_v2_ac_get_cap('announce') * $mult),
-        'single'   => wpc_v2_ac_get_cap('single'), // unmultiplied per spec
+        'single'   => wpc_v2_ac_get_cap('single'),
     ];
 }
 
-/**
- * Returns 'cli' if in CLI/cron context, 'web' otherwise. Used in /optimize-v2
- * envelope `origin` field (spec §11 F4: body-signed, not header).
- */
+
 function wpc_v2_get_request_origin() {
     if ((defined('WP_CLI') && WP_CLI) || (defined('DOING_CRON') && DOING_CRON)) {
         return 'cli';
@@ -275,12 +215,12 @@ function wpc_v2_get_request_origin() {
     return 'web';
 }
 
-/**
- * Admin diagnostic API. Returns the full per-type state — useful for
- * admin UI status panel + WP-CLI inspection.
- *
- * @return array
- */
+
+
+
+
+
+
 function wpc_v2_get_concurrency_state() {
     $out = ['types' => []];
     foreach (['batch', 'announce', 'single'] as $type) {
@@ -305,10 +245,10 @@ function wpc_v2_get_concurrency_state() {
     return $out;
 }
 
-/**
- * Manual override admin AJAX. Customer can pin a value for diagnostic purposes
- * or to work around adaptive misfiring on very-low-traffic sites.
- */
+
+
+
+
 add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
@@ -316,7 +256,7 @@ add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     $type  = isset($_POST['type'])  ? sanitize_key((string) $_POST['type'])  : '';
     $value = isset($_POST['value']) ? (string) $_POST['value'] : '';
 
-    // 'auto' resets to adaptive; a numeric value pins.
+    
     if ($value === 'auto' || $value === '') {
         if ($type === 'all') {
             delete_option('wpc_v2_concurrency_manual_all');
@@ -339,15 +279,11 @@ add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     wp_send_json_success(['mode' => 'manual', 'pinned' => $n, 'state' => wpc_v2_get_concurrency_state()]);
 });
 
-/**
- * Helper: returns true if adaptive concurrency is enabled for this site.
- * Used by v2-client.php to decide whether to emit maxConcurrent in the envelope
- * (kill switch #2 per spec §9 — option flip omits field → orch sees no cap).
- */
+
 function wpc_v2_adaptive_concurrency_enabled() {
-    // Default ENABLED — this is the new normal. Customer can opt out via option.
+    
     $enabled = get_option('wpc_v2_adaptive_concurrency_enabled', 1);
     return (bool) $enabled;
 }
 
-} // end if (!function_exists('wpc_v2_record_handler_timing'))
+}

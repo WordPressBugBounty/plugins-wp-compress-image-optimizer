@@ -4,9 +4,9 @@ class wps_ic_inline_css
 {
 
   public static $excludes;
-  /**
-   * @var array|string[]
-   */
+  
+
+
   public $patterns;
 
   public function __construct()
@@ -15,14 +15,14 @@ class wps_ic_inline_css
     $this->patterns = [
       '/<link[^>]*rel=[\"|\']stylesheet[\"|\'][^>]*>/si',
       '/(?<!<noscript>)<style\b[^>]*\>(.*?)<\/style\>?/si',
-      '/<link\b[^>](.*?)onload=[\"|\']this.rel=[\"|\']stylesheet[\"|\'][\"|\'](.*?)>/' // deferred stylesheets
+      '/<link\b[^>](.*?)onload=[\"|\']this.rel=[\"|\']stylesheet[\"|\'][\"|\'](.*?)>/'
     ];
   }
 
   public function doInline($html)
   {
 
-    //including all links in case rel != stylesheet
+
     $html = preg_replace_callback('/<link\s[^>]*href=(["\'])(.*?)\1[^>]*>/si', [$this, 'doSearch'], $html);
 
     return $html;
@@ -43,16 +43,16 @@ class wps_ic_inline_css
   {
     preg_match('/href=(["\'])(.*?)\1/is', $tag, $matches);
 
-    // No matches found
+    
     if (!$matches || empty($matches[2])) return $tag;
 
-    // Href value
+    
     $src = $matches[2];
 
-    // Unable to get href?
+    
     if (empty($src)) return $tag;
 
-    // If it has ie9 tag exclude by default
+    
     if (strpos($src, 'ie9') !== false) {
       return $tag;
     }
@@ -61,7 +61,7 @@ class wps_ic_inline_css
       return $tag;
     }
 
-    // Remove the query variable
+    
     $src = explode('?', $src);
     $src = $src[0];
 
@@ -70,8 +70,8 @@ class wps_ic_inline_css
 
     $path = wp_make_link_relative($src);
 
-    #$content = $this->getLocalContent($src);
-    #return print_r(array($path, $src, $content),true);
+    
+    
 
     $check = wp_http_validate_url($src);
     if ($check) {
@@ -90,9 +90,8 @@ class wps_ic_inline_css
       $url = 'https:' . $url;
     }
 
-    $data = wp_remote_get($url);
+    $data = wp_remote_get($url, array('timeout' => (int) apply_filters('wpc_combine_fetch_timeout', 3)));
 
-    //todo Check if file is really css
 
     if (is_wp_error($data)) {
       return false;
@@ -104,7 +103,7 @@ class wps_ic_inline_css
   public function getLocalContent($url)
   {
     if ($this->hmwpReplace) {
-      //go trougn their replacements and reverse them to get true path to files
+
       foreach ($this->hmwp_rewrite->_replace['to'] as $key => $value) {
         $replace = $this->hmwp_rewrite->_replace['from'][$key];
         $url = str_replace($value, $replace, $url);
@@ -121,7 +120,7 @@ class wps_ic_inline_css
     $path = wp_make_link_relative($url);
     $path = ltrim($path, '/');
 
-    //check if is folder install and if folder is in url remove it (it is already in ABSPATH)
+
     $last_abspath = basename(ABSPATH);
     $first_path = explode('/', $path)[0];
     if ($last_abspath == $first_path) {

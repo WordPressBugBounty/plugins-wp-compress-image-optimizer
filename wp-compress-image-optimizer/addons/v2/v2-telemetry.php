@@ -1,27 +1,5 @@
 <?php
-/**
- * WP Compress v7.02.11 — FPM telemetry.
- *
- * Records two stream of timings to a rolling 200-entry transient so we can
- * diagnose FPM saturation without grepping debug.log or relying on host-level
- * php-fpm status (which Cloudways doesn't expose by default):
- *
- *   1. `heartbeat` — wall time of wps_ic_media_library_heartbeat handler
- *      (call site: classes/ajax.class.php). Includes any FPM queue wait
- *      experienced by the worker before it started executing (via
- *      REQUEST_TIME_FLOAT vs entry_t delta).
- *   2. `batch` — wall time of wpc_v2_handle_bg_swap_batch handler
- *      (inbound_to_complete_ms, captured from REQUEST_TIME_FLOAT to handler
- *      return). Same FPM-aware semantic.
- *
- * Stats are surfaced via `wp wpc fpm-stats` wp-cli command and the admin
- * widget at Settings → WP Compress → Debug → FPM Telemetry. Both read from
- * the same transient. No host config required, works universally.
- *
- * Disabled by default; enable via `wp option update wpc_v2_telemetry_enabled 1`.
- * Auto-trims on write so the transient size stays bounded even under heavy
- * traffic. ~50 KB max footprint.
- */
+
 
 if (!defined('ABSPATH')) {
     exit;
@@ -34,17 +12,7 @@ if (!defined('WPC_V2_TELEMETRY_TTL')) {
     define('WPC_V2_TELEMETRY_TTL', 3600);
 }
 
-/**
- * Append one timing entry to the rolling buffer. Cheap: one transient
- * read + one transient write. Concurrent writes can lose individual
- * entries — acceptable for telemetry. Skips when option disabled to keep
- * the production fast path zero-cost.
- *
- * $type:  'heartbeat' | 'batch' | other short label
- * $ms:    integer milliseconds (caller-computed)
- * $meta:  optional array of extra fields (image_id, variant_count, etc).
- *         Kept small to bound transient size.
- */
+
 function wpc_v2_telemetry_record($type, $ms, array $meta = [])
 {
     if (!get_option('wpc_v2_telemetry_enabled')) return;
@@ -60,22 +28,14 @@ function wpc_v2_telemetry_record($type, $ms, array $meta = [])
         'ms'   => $ms,
         'meta' => $meta,
     ];
-    // Ring-buffer: keep only the last N entries.
+    
     if (count($buf) > WPC_V2_TELEMETRY_MAX_ENTRIES) {
         $buf = array_slice($buf, -WPC_V2_TELEMETRY_MAX_ENTRIES);
     }
     set_transient('wpc_v2_fpm_telemetry', $buf, WPC_V2_TELEMETRY_TTL);
 }
 
-/**
- * Compute aggregate stats from the rolling buffer. Returns per-type breakdown
- * with count, mean, p50, p95, p99, max, slow count (>2s), age range.
- *
- * Return shape:
- *   { 'enabled' => bool, 'total_entries' => int, 'oldest_age_s' => int,
- *     'types' => { 'heartbeat' => { count, mean_ms, p50_ms, p95_ms, p99_ms, max_ms, slow_2s_count, slow_5s_count },
- *                  'batch'     => { ... } } }
- */
+
 function wpc_v2_telemetry_stats()
 {
     $out = [
@@ -96,7 +56,7 @@ function wpc_v2_telemetry_stats()
     $oldest_t = PHP_INT_MAX;
     $newest_t = 0;
 
-    // Bucket by type.
+    
     $buckets = [];
     foreach ($buf as $e) {
         if (!is_array($e) || empty($e['type']) || !isset($e['ms'])) continue;
@@ -146,9 +106,9 @@ function wpc_v2_telemetry_stats()
     return $out;
 }
 
-/**
- * Pretty-print stats as a single string. Used by wp-cli and admin widget.
- */
+
+
+
 function wpc_v2_telemetry_format_stats(array $stats)
 {
     $lines = [];
@@ -173,9 +133,9 @@ function wpc_v2_telemetry_format_stats(array $stats)
     return implode("\n", $lines);
 }
 
-/**
- * Clear the rolling buffer. Exposed for wp-cli (`wp wpc fpm-stats clear`).
- */
+
+
+
 function wpc_v2_telemetry_clear()
 {
     delete_transient('wpc_v2_fpm_telemetry');

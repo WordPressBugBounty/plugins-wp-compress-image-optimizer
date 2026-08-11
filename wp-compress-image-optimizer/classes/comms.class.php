@@ -24,7 +24,7 @@ class wps_ic_comms extends wps_ic
         $setting_value = sanitize_text_field($_GET['value']);
 
         if ($setting_key == 'cdn') {
-            // First check if CDN Zone already exists
+            
             $options = get_option(WPS_IC_OPTIONS);
 
             $request_params = [];
@@ -33,10 +33,10 @@ class wps_ic_comms extends wps_ic
             $request_params['action'] = 'cdn_check';
             $request_params['url'] = site_url();
 
-            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, // TODO: Mozda true?
+            $params = ['method' => 'POST', 'timeout' => 30, 'redirection' => 3, 'sslverify' => false, 'httpversion' => '1.0', 'blocking' => true, 
                 'headers' => [], 'body' => $request_params, 'cookies' => []];
 
-            // Send call to API
+            
             $call = wp_remote_post(WPS_IC_APIURL, $params);
         }
 
@@ -79,7 +79,7 @@ class wps_ic_comms extends wps_ic
             require_once(ABSPATH . "wp-admin" . '/includes/media.php');
         }
 
-        // Get attachment
+        
         $attachments = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -91,9 +91,9 @@ class wps_ic_comms extends wps_ic
         ORDER BY post_date DESC
         LIMIT 1
         ",
-                'attachment',   // post_type
-                'inherit',      // post_status
-                'image/jpeg'    // post_mime_type
+                'attachment',
+                'inherit',
+                'image/jpeg'
             )
         );
 
@@ -109,11 +109,11 @@ class wps_ic_comms extends wps_ic
 
                 $compressed = get_post_meta($attachments[0]->ID, 'wps_ic_compressed', true);
                 if ($compressed == 'true') {
-                    // Restore first
+                    
                     $file_name = basename($attachment_Path);
                     $file_path = str_replace($file_name, '', $attachment_Path);
 
-                    // Find image source on site
+                    
                     $image = wp_get_attachment_image_src($attachments[0]->ID, 'full');
                     $file_name = basename($image[0]);
 
@@ -134,12 +134,14 @@ class wps_ic_comms extends wps_ic
                             if (!is_wp_error($temp) && filesize($temp) > 0) {
                                 clearstatcache();
 
-                                // Remove file
+                                
                                 unlink($file_path . $file_name);
 
-                                // New file
-                                $fp = fopen($file_path . $file_name, 'w+');
-                                fclose($fp);
+                                
+                                $fp = @fopen($file_path . $file_name, 'w+');
+                                if ($fp) {
+                                    fclose($fp);
+                                }
 
                                 copy($temp, $file_path . $file_name);
 
@@ -149,7 +151,7 @@ class wps_ic_comms extends wps_ic
                                 $attach_data = wp_generate_attachment_metadata($attachments[0]->ID, $attachment_Path);
                                 wp_update_attachment_metadata($attachments[0]->ID, $attach_data);
 
-                                // Delete compress data
+                                
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_started');
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_reset');
                                 delete_post_meta($attachments[0]->ID, 'wps_ic_times');
@@ -165,7 +167,7 @@ class wps_ic_comms extends wps_ic
 
                     }
 
-                    // Set compressing
+                    
                     delete_post_meta($attachments[0]->ID, 'wps_ic_reset');
                     delete_post_meta($attachments[0]->ID, 'wps_ic_started');
                     delete_post_meta($attachments[0]->ID, 'wps_ic_restoring');
@@ -494,24 +496,24 @@ class wps_ic_comms extends wps_ic
     {
         $options = get_option(WPS_IC_OPTIONS);
 
-        // If a test is already in progress, don't start another one
+        
         if (get_transient('wpc_initial_test')) {
             wp_send_json_success('already-running');
         }
 
-        // Purge homepage HTML cache (same as reset button on user site)
+        
         $url = home_url();
         $url_key_class = new wps_ic_url_key();
         $url_key = $url_key_class->setup($url);
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCacheFiles($url_key);
 
-        // Clear home test entry from WPS_IC_TESTS
+        
         $tests = get_option(WPS_IC_TESTS);
         unset($tests['home']);
         update_option(WPS_IC_TESTS, $tests);
 
-        // Save previous GPS result to history
+
         $history = get_option(WPS_IC_LITE_GPS_HISTORY);
         if (empty($history)) {
             $history = [];
@@ -519,15 +521,15 @@ class wps_ic_comms extends wps_ic
         $history[time()] = get_option(WPS_IC_LITE_GPS);
         update_option(WPS_IC_LITE_GPS_HISTORY, $history);
 
-        // Clear current results and flags
+        
         delete_transient('wpc_test_running');
         delete_option(WPS_IC_LITE_GPS);
         delete_option(WPC_WARMUP_LOG_SETTING);
 
-        // Mark test as running
+        
         set_transient('wpc_initial_test', 'running', 5 * 60);
 
-        // Kick off pagespeed test
+        
         $requests = new wps_ic_requests();
         $args = ['url' => home_url(), 'version' => self::$version, 'plugin_version' => self::$version, 'hash' => time() . mt_rand(100, 9999), 'apikey' => $options['api_key']];
         $response = $requests->POST(WPS_IC_PAGESPEED_API_URL_HOME, $args, ['timeout' => 5, 'blocking' => true, 'headers' => ['Content-Type' => 'application/json']]);
@@ -605,7 +607,7 @@ class wps_ic_comms extends wps_ic
         if (isset($form['scheduled'])) {
             $purge_rules['scheduled'] = $form['scheduled'];
         }
-        update_option('wps_ic_purge_rules', $purge_rules);
+        update_option('wps_ic_purge_rules', $purge_rules, false);
         wp_send_json_success();
     }
 
@@ -621,7 +623,7 @@ class wps_ic_comms extends wps_ic
             'serve,jpg', 'serve,png', 'serve,gif', 'serve,svg',
             'generate_adaptive', 'generate_webp', 'retina', 'background-sizing',
             'qualityLevel',
-            'avif-natural-source', 'fetchpriority-high', 'single-url-image-format', // v7.01.93/.94 — HTML-output keys (parity with ajax)
+            'avif-natural-source', 'fetchpriority-high', 'single-url-image-format',
             'critical,css', 'delay,js',
             'minify,html', 'minify,css', 'minify,js',
             'cf,cdn', 'cf,assets',
@@ -682,7 +684,7 @@ class wps_ic_comms extends wps_ic
         }
 
         if (isset($form['cache'])) {
-            update_option('wps_ic_purge_rules', $form['cache']);
+            update_option('wps_ic_purge_rules', $form['cache'], false);
         }
 
         if (isset($form['cache_cookies'])) {
@@ -690,8 +692,11 @@ class wps_ic_comms extends wps_ic
         }
 
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeCriticalFiles();
-        // (v7.03.92) full-site Varnish: a settings import is a maximal site-wide markup change.
+
+        if (!function_exists('wpc_crit_mark_stale_instead') || !wpc_crit_mark_stale_instead()) {
+            $cache::purgeCriticalFiles();
+        }
+
         $cache::purgeAll(false, true, false, false, true);
 
         wp_send_json_success(['msg' => 'Settings imported successfully']);
@@ -738,7 +743,7 @@ class wps_ic_comms extends wps_ic
         }
 
         if (empty($form['apikey']) || $form['apikey'] !== $options['api_key']) {
-            wp_send_json_error(['msg' => 'bad-apikey']); // (v7.10.04) SECURITY: was dumping $_POST/$_GET back to the caller
+            wp_send_json_error(['msg' => 'bad-apikey']);
         }
 
         if (!empty($settings)) {
@@ -774,9 +779,7 @@ class wps_ic_comms extends wps_ic
             }
         }
 
-        // Recalculate live-cdn from the fully-merged settings so a partial agency
-        // save (only the changed key in the payload) doesn't incorrectly set it
-        // based on incomplete form data.
+
         $cdnEnabled = '0';
         foreach (['jpg', 'png', 'gif', 'svg'] as $_k) {
             if (!empty($settings['serve'][$_k]) && $settings['serve'][$_k] == '1') {
@@ -789,24 +792,23 @@ class wps_ic_comms extends wps_ic
         if (!$cdnEnabled && !empty($settings['fonts']) && $settings['fonts'] == '1') $cdnEnabled = '1';
         $settings['live-cdn'] = $cdnEnabled;
 
-        // Capture old modern_image_delivery value BEFORE option write, for toggle-transition handling (L8/L13)
+        
         $oldModernDelivery = get_option(WPS_IC_SETTINGS)['modern_image_delivery'] ?? '0';
         $newModernDelivery = $settings['modern_image_delivery'] ?? '0';
 
         update_option(WPS_IC_SETTINGS, $settings);
 
-        // Toggle-transition cleanup (fires AFTER option write — L8 + L13 + G13)
+        
         if ($oldModernDelivery !== $newModernDelivery) {
-            // Toggle ON: clear all retry-state so previously-failed attachments get a fresh try (L8)
+            
             if ($oldModernDelivery === '0' && $newModernDelivery === '1') {
                 global $wpdb;
-                // One-shot cleanup — can take 5-10s on sites with 100K+ options, acceptable for admin action
+                
                 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_wpc_failed_%' OR option_name LIKE '_transient_timeout_wpc_failed_%'");
                 $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_optimize_attempts'");
             }
-            // Both directions: purge all caches so HTML regenerates with new path (G13). (v7.03.92) a bare
-            // do_action reaches only 3rd-party purgers, NOT host Varnish — go through purgeAll so Varnish
-            // (full-site) + the fan-out both fire.
+
+
             if (class_exists('wps_ic_cache_integrations')) {
                 wps_ic_cache_integrations::purgeAll(false, true, false, false, true);
             }
@@ -837,9 +839,8 @@ class wps_ic_comms extends wps_ic
             $settings['fonts'] = 0;
             $settings['generate_adaptive'] = 1;
             $settings['generate_webp'] = 1;
-            // v7.01.87 — ITEM 2 coherence hardening: the preset already ships picture_avif=1, but make the
-            // next-gen ceiling coherent independent of preset contents so this path can never de-sync
-            // (single Next-Gen control reads ON=avif). Twin of ajax.class.php save_mode_v2.
+
+
             $settings['picture_webp'] = 1;
             $settings['picture_avif'] = 1;
             $settings['wpc_nextgen'] = 'auto';
@@ -868,10 +869,10 @@ class wps_ic_comms extends wps_ic
         update_option(WPS_IC_SETTINGS, $settings);
         update_option(WPS_IC_PRESET, $preset);
 
-        // Preload Page
+        
         $cacheLogic = new wps_ic_cache();
 
-        // Remove generateCriticalCSS Options
+        
         delete_option('wps_ic_gen_hp_url');
 
         if (!class_exists('wps_ic_htaccess')) {
@@ -881,21 +882,21 @@ class wps_ic_comms extends wps_ic
         $htaccess = new wps_ic_htaccess();
 
         if ($preset == 'safe') {
-            // Setup Advanced Caching
+            
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
         } else {
-            // Setup Advanced Caching
-            // Add WP_CACHE to wp-config.php
+            
+            
             $htaccess->setWPCache(true);
             $htaccess->setAdvancedCache();
         }
 
-        // Remove & Purge Cache Files for home directory (that's all pages)
+        
         $cacheLogic::removeHtmlCacheFiles(0);
 
-        // Preload the home page only
+        
         $cacheLogic::preloadPage(0);
 
         wp_send_json_success();
@@ -982,6 +983,12 @@ class wps_ic_comms extends wps_ic
         $response = $fonts->callAPI($url);
         $found = $fonts->scanForFonts($response);
 
+
+        if ((empty($found['googleFontsStylesheets']) && empty($found['gstaticUrls']))
+            && method_exists($fonts, 'localScan') && apply_filters('wpc_font_local_scan', true)) {
+            $found = $fonts->localScan($url);
+        }
+
         $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
         if ($hasGoogleFonts) {
             $fonts->readGoogleStylesheet($found);
@@ -1017,6 +1024,12 @@ class wps_ic_comms extends wps_ic
         $fonts = new wps_ic_fonts();
         $response = $fonts->callAPI($scanUrl);
         $found = $fonts->scanForFonts($response);
+
+
+        if ((empty($found['googleFontsStylesheets']) && empty($found['gstaticUrls']))
+            && method_exists($fonts, 'localScan') && apply_filters('wpc_font_local_scan', true)) {
+            $found = $fonts->localScan($scanUrl);
+        }
 
         $hasGoogleFonts = !empty($found['googleFontsStylesheets']) || !empty($found['gstaticUrls']);
         if ($hasGoogleFonts) {
@@ -1171,13 +1184,22 @@ class wps_ic_comms extends wps_ic
             $allow_live = false;
         }
 
-        $updated_local = update_option('wps_ic_allow_local', $allow_local);
-        $updated_live = update_option('wps_ic_allow_live', $allow_live);
+        
+        
+        if (isset($data->cdn_enabled) && !$data->cdn_enabled) {
+            $allow_live = false;
+        }
+        if (isset($data->local_enabled) && !$data->local_enabled) {
+            $allow_local = false;
+        }
+
+        $updated_local = ((bool) $allow_local !== (bool) get_option('wps_ic_allow_local')) ? update_option('wps_ic_allow_local', $allow_local) : false;
+        $updated_live = ((bool) $allow_live !== (bool) get_option('wps_ic_allow_live')) ? update_option('wps_ic_allow_live', $allow_live) : false;
 
         if ($updated_local || $updated_live) {
             if (class_exists('wps_ic_cache_integrations')) {
                 $cache = new wps_ic_cache_integrations();
-                // (v7.03.92) full-site Varnish: suspend/unsuspend toggles optimization site-wide.
+
                 $cache::purgeAll(false, true, false, false, true);
             }
         }

@@ -5,9 +5,9 @@ jQuery(document).ready(function ($) {
 
 
 
-    /*
-     * Circle
-     */
+    
+
+
     $('#circle-big').circleProgress({
         size: 120,
         startAngle:-Math.PI / 6 * 3,
@@ -19,9 +19,9 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    /**
-     * Question tooltips
-     */
+    
+
+
     $('.ic-tooltip').tooltipster({
         maxWidth:'300'
     });
@@ -32,9 +32,9 @@ jQuery(document).ready(function ($) {
        return false;
     });
 
-    /**
-     * @since 3.3.0
-     */
+    
+
+
     if ($('.wps-ic-trigger_connect').length) {
         var link = $('.wps-ic-authorize-api').attr('href');
         $.ajaxSetup({async: false, cache: false});
@@ -48,9 +48,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Enable Tooltips
-     */
+    
+
+
     $('.button-tooltips').on('click', function (e) {
         e.preventDefault;
 
@@ -58,7 +58,7 @@ jQuery(document).ready(function ($) {
         var tooltips_on = $(this).data('tooltips');
 
         if (tooltips_on == '0') {
-            // Turn  it on
+            
             $('span', link).html('On');
             tooltips = 1;
         } else {
@@ -70,9 +70,9 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * Activate Form
-     */
+    
+
+
     var ajax_run = true;
 
     $('form#wps_ic_activate_form').submit(function (e) {
@@ -142,7 +142,7 @@ jQuery(document).ready(function ($) {
 
                                                                         $(form).hide();
                                                                         $(loading).hide();
-                                                                        /*var swal = $('#swal2-content');*/
+                                                                        
                                                                         WPCSwal.close();
 
                                                                         WPCSwal.fire({
@@ -279,10 +279,10 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Authorize with remote API
-     * @since 3.3.0
-     */
+    
+
+
+
     $('.wps-ic-authorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
@@ -297,10 +297,10 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * Deauthorize with remote API
-     * @since 3.3.0
-     */
+    
+
+
+
     $('.wps-ic-deauthorize-api').on('click', function (e) {
 
         $.ajaxSetup({async: false, cache: false});
@@ -316,9 +316,9 @@ jQuery(document).ready(function ($) {
 
 
 
-    /**
-     * Change Optimization
-     */
+    
+
+
     $('.wps-ic-change-optimization').on('click', function (e) {
         e.preventDefault();
 
@@ -329,16 +329,16 @@ jQuery(document).ready(function ($) {
 
         $.post(ajaxurl, {action: 'wps_ic_settings_change', what: 'optimization', value: value}, function (response) {
             if (response.success) {
-                // Nothing
+                
             } else {
                 alert('Oops! We weren\'t able to save your settings! :(');
             }
         });
     });
 
-    /**
-     * Change Backup Location
-     */
+    
+
+
     $('.wps-ic-change-backup-location').on('click', function (e) {
         e.preventDefault();
 
@@ -349,7 +349,7 @@ jQuery(document).ready(function ($) {
 
         $.post(ajaxurl, {action: 'wps_ic_settings_change', what: 'backup-location', value: value}, function (response) {
             if (response.success) {
-                // Nothing
+                
             } else {
                 alert('Oops! We weren\'t able to save your settings! :(');
             }
@@ -357,9 +357,9 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * Change Otto
-     */
+    
+
+
     $('.wps-ic-change-otto').on('click', function (e) {
         e.preventDefault();
 
@@ -371,7 +371,7 @@ jQuery(document).ready(function ($) {
 
         $.post(ajaxurl, {action: 'wps_ic_settings_change', what: 'otto', value: value}, function (response) {
             if (response.success) {
-                // Nothing
+                
                 saving_settings = false;
             } else {
                 alert('Oops! We weren\'t able to save your settings! :(');
@@ -380,9 +380,9 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * Change Setting
-     */
+    
+
+
     $('.wps-ic-change-setting').on('click', function (e) {
 
         var input = $(this);
@@ -415,7 +415,7 @@ jQuery(document).ready(function ($) {
 
         $.post(ajaxurl, {action: 'wps_ic_settings_change', what: setting, value: value, checked: checked}, function (response) {
             if (response.success) {
-                // Nothing
+                
             } else {
                 alert('Oops! We weren\'t able to save your settings! :(');
             }
@@ -424,9 +424,9 @@ jQuery(document).ready(function ($) {
     });
 
 
-    /**
-     * GDPR
-     */
+    
+
+
     $('.wps-ic-change-gdpr').on('click', function (e) {
 
 

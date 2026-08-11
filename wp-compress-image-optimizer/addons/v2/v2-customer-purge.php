@@ -1,70 +1,11 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
-/**
- * Customer Purge v1: unified fleet cache invalidation.
- *
- * Spec: "Customer Purge — Unified Fleet Invalidation (v1)" (2026-06-03).
- *
- * There's one entry point, wpc_customer_purge(), which fans out to two
- * independent operations and aggregates them into a single result:
- *
- *   1. CloudFlare  (plugin-local, customer-owned token in option WPS_IC_CF)
- *      via the existing WPC_CloudflareAPI SDK — only if the CF integration
- *      is connected.
- *   2. orch POST {orchestrator}/v2/customer-purge — the WPC stack:
- *      Bunny customer PZ + cdn-mc endpoint PZ + the pod-fs LRU fleet
- *      (Redis fan-out). The plugin never holds the Bunny key / endpoint PZ
- *      id / CDN stats key — orch owns those layers.
- *
- * Why this exists, and why it isn't the old wpc_purge_cdn_urls: restore
- * deletes the optimized variants from the origin disk but, ever since
- * compress.php's cleanRestoreMeta landed, purges no cache layer at all. The
- * `?v=` lazy cache-buster only bypasses the Bunny PZ; it never touches the
- * path-keyed cdn-mc pod-fs LRU, which keeps serving the fossilized AVIF for
- * hours or days (confirmed empirically on 2026-06-03: pod node 1163 served
- * bunny-native AVIF while the origin disk held only .jpg, surviving both a WP
- * restore and a PZ purge). This module reaches that layer with one orch call
- * (a fleet broadcast) instead of the ~1,500 sequential per-URL HTTP calls that
- * made the old inline purge cost around 50s per image.
- *
- * Auth is HMAC-signed, identical to v2-config-sync: X-WPC-Sig: t=<ts>,v1=<hmac>
- * over `ts . '.' . sha256(body)` keyed by the apikey, with the apikey echoed in
- * the body. orch verifies with the existing wpc_v2_verify_hmac().
- *
- * Blocking vs fire-and-forget: restore-triggered purges must not block. They
- * pass $blocking=false so orch and CF fire non-blocking (wp_remote_post
- * 'blocking'=>false, no retry, no result), so a restore never stalls, even on
- * the rare sync fallthrough where cleanRestoreMeta runs in the click worker.
- * The blocking, result-returning path ($blocking=true, the default) is for
- * manual purges and the smoke test, where the caller wants the aggregated
- * per-layer result. This version collects the two legs serially (wp_remote_*
- * has no native parallel collect; typical wall is around 1s, within the
- * p95<1.5s SLO).
- *
- * The whole thing is flag-gated behind wpc_unified_purge_enabled() (option
- * `wpc_unified_purge_enabled`, which has defaulted to TRUE since the v7.01.04
- * GA). Orch /v2/customer-purge has been GA-clean since v3.22.6/.7, where the
- * cdn-tag was scoped per-apikey as `cust:<apikey:12>` and the urls_failed
- * idempotency bug was fixed. Set the option to '0', or use the
- * 'wpc_unified_purge_enabled' filter, to disable, canary, or kill it without a
- * deploy. The three restore call sites are try/catch-guarded so a purge error
- * can't 500 a restore.
- */
-
-/* ---------------------------------------------------------------------------
- * Config / gating
- * ------------------------------------------------------------------------- */
 
 if (!function_exists('wpc_unified_purge_enabled')) {
-    /**
-     * Master feature flag. The option has defaulted to TRUE since the v7.01.04
-     * GA: unset means on, an explicit '0'/false means off (!empty handles
-     * both). The 'wpc_unified_purge_enabled' filter overrides per-request, for
-     * canary or kill without a deploy.
-     */
+
     function wpc_unified_purge_enabled()
     {
         $opt = get_option('wpc_unified_purge_enabled', true);
@@ -73,11 +14,7 @@ if (!function_exists('wpc_unified_purge_enabled')) {
 }
 
 if (!function_exists('wpc_customer_purge_endpoint')) {
-    /**
-     * Resolve the orch /v2/customer-purge endpoint from the same base the rest
-     * of the v2 stack uses (constant override, then filter, then geo). Returns
-     * '' if the orchestrator base is unknown.
-     */
+
     function wpc_customer_purge_endpoint()
     {
         $base = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
@@ -89,23 +26,9 @@ if (!function_exists('wpc_customer_purge_endpoint')) {
     }
 }
 
-/* ---------------------------------------------------------------------------
- * Public entry points
- * ------------------------------------------------------------------------- */
 
 if (!function_exists('wpc_purge_compat')) {
-    /**
-     * Flag-gated entry point that callers (restore handlers, config change)
-     * use. With the flag off it's a no-op, which is today's behavior of restore
-     * purging nothing; with the flag on it runs the unified purge.
-     *
-     * @param string $mode     'urls' | 'all'
-     * @param array  $urls     required when mode='urls'
-     * @param string $reason   enum (restore_image|restore_all|config_changed|...)
-     * @param string $apikey   optional — defaults to this site's apikey
-     * @param bool   $blocking false = fire-and-forget (restore paths; never blocks)
-     * @return array
-     */
+
     function wpc_purge_compat($mode, $urls = [], $reason = 'manual_purge', $apikey = '', $blocking = true)
     {
         if (!wpc_unified_purge_enabled()) {
@@ -116,17 +39,7 @@ if (!function_exists('wpc_purge_compat')) {
 }
 
 if (!function_exists('wpc_customer_purge')) {
-    /**
-     * Unified customer-purge — clears CloudFlare (if connected) + the WPC
-     * stack in one aggregated call.
-     *
-     * @param string $apikey   Customer API key. '' → resolve this site's key.
-     * @param string $mode     'urls' | 'all'.
-     * @param array  $urls     Required if mode='urls'. Absolute or root-relative.
-     * @param string $reason   Enum — see spec.
-     * @param bool   $blocking false → fire-and-forget (no wait/retry/result).
-     * @return array Aggregated response (see spec "Aggregated plugin response shape").
-     */
+
     function wpc_customer_purge($apikey, $mode, $urls = [], $reason = 'manual_purge', $blocking = true)
     {
         $t0 = microtime(true);
@@ -145,8 +58,8 @@ if (!function_exists('wpc_customer_purge')) {
 
         $blocking = (bool) $blocking;
 
-        // Build the handles first (no I/O), then collect. This keeps the shape
-        // ready for a curl_multi parallel variant; for now we collect serially.
+        
+        
         $cf_handle   = wpc_purge_cf_async($apikey, $mode, $urls, $blocking);
         $orch_handle = wpc_purge_orch_async($apikey, $mode, $urls, $reason, $blocking);
 
@@ -189,17 +102,14 @@ if (!function_exists('wpc_customer_purge')) {
     }
 }
 
-/* ---------------------------------------------------------------------------
- * CloudFlare branch
- * ------------------------------------------------------------------------- */
 
 if (!function_exists('wpc_purge_cf_async')) {
-    /**
-     * Build a CF purge handle if the customer's CF integration is connected.
-     * No I/O here — wpc_collect_cf() fires the API call(s).
-     *
-     * @return array handle ['type'=>'cf'|'skipped', ...]
-     */
+    
+
+
+
+
+
     function wpc_purge_cf_async($apikey, $mode, $urls, $blocking = true)
     {
         if (!class_exists('wps_ic_cloudflare') || !class_exists('WPC_CloudflareAPI')) {
@@ -229,25 +139,18 @@ if (!function_exists('wpc_purge_cf_async')) {
 }
 
 if (!function_exists('wpc_collect_cf')) {
-    /**
-     * Fire the CF purge for a handle from wpc_purge_cf_async().
-     *
-     * When blocking=false, these are fire-and-forget chunked POSTs with no wait
-     * and no retry. When blocking=true, it's a single purge_everything (for
-     * mode=all) or serial chunks of 30 (CF's per-call limit), with one 500ms
-     * back-off retry per chunk on a rate-limit error.
-     */
+
     function wpc_collect_cf($handle)
     {
         if (!is_array($handle) || !isset($handle['type']) || $handle['type'] !== 'cf') {
             return [
                 'connected' => false,
-                'ok'        => true, // being not connected isn't a failure
+                'ok'        => true,
                 'reason'    => is_array($handle) && isset($handle['reason']) ? $handle['reason'] : 'not_connected',
             ];
         }
 
-        // Fire-and-forget path for restore-triggered purges: this never blocks.
+        
         if (empty($handle['blocking'])) {
             $chunks = wpc_cf_fire_nonblocking($handle['token'], $handle['zone'], $handle['mode'], $handle['urls']);
             return [
@@ -286,13 +189,13 @@ if (!function_exists('wpc_collect_cf')) {
                     }
                     $err = wpc_cf_extract_error($resp);
                     $errors[] = $err;
-                    // On a rate-limit error, retry once after a 500ms back-off.
+                    
                     if (wpc_cf_is_rate_limit_error($err)) {
                         usleep(500000);
                         $resp = $cf->purgeFiles($handle['zone'], $chunk);
                         if (wpc_cf_response_ok($resp)) {
                             $purged += count($chunk);
-                            array_pop($errors); // the retry worked, so drop the error
+                            array_pop($errors);
                         }
                     }
                 }
@@ -314,12 +217,12 @@ if (!function_exists('wpc_collect_cf')) {
 }
 
 if (!function_exists('wpc_cf_fire_nonblocking')) {
-    /**
-     * Fire CF purge_cache fire-and-forget style (blocking=false). This bypasses
-     * the blocking SDK so a restore-triggered purge never waits on CloudFlare.
-     * mode=all sends purge_everything; mode=urls sends one non-blocking POST per
-     * chunk of 30. Returns the number of POSTs fired.
-     */
+    
+
+
+
+
+
     function wpc_cf_fire_nonblocking($token, $zone, $mode, $urls)
     {
         $endpoint = 'https://api.cloudflare.com/client/v4/zones/' . rawurlencode((string) $zone) . '/purge_cache';
@@ -350,11 +253,7 @@ if (!function_exists('wpc_cf_fire_nonblocking')) {
 }
 
 if (!function_exists('wpc_normalize_urls_for_cf')) {
-    /**
-     * CloudFlare wants absolute URLs, so root-relative paths resolve against
-     * this site's URL (the plugin is single-site; $apikey is kept for spec
-     * parity but goes unused).
-     */
+
     function wpc_normalize_urls_for_cf($urls, $apikey = '')
     {
         $site_url = rtrim(function_exists('site_url') ? site_url() : '', '/');
@@ -375,11 +274,11 @@ if (!function_exists('wpc_normalize_urls_for_cf')) {
 }
 
 if (!function_exists('wpc_cf_response_ok')) {
-    /**
-     * WPC_CloudflareAPI returns a decoded array on success, or a WP_Error on
-     * HTTP/CF errors (see cf-sdk.php processResponse). A non-error array counts
-     * as success; if a 'success' key is present, honor it.
-     */
+    
+
+
+
+
     function wpc_cf_response_ok($resp)
     {
         if (empty($resp) || (function_exists('is_wp_error') && is_wp_error($resp))) {
@@ -417,16 +316,15 @@ if (!function_exists('wpc_cf_is_rate_limit_error')) {
     }
 }
 
-/* ---------------------------------------------------------------------------
- * orch branch (HMAC-signed, matches v2-config-sync)
- * ------------------------------------------------------------------------- */
 
 if (!function_exists('wpc_purge_orch_async')) {
-    /**
-     * Build the orch purge handle (body only — no I/O).
-     */
+
     function wpc_purge_orch_async($apikey, $mode, $urls, $reason, $blocking = true)
     {
+        if (function_exists('wpc_purge_record')) {
+            wpc_purge_record('orch', (string) $mode, $mode === 'urls' ? 'url' : 'zone',
+                is_array($urls) ? count($urls) : 1, true, (string) $reason);
+        }
         $body = [
             'apikey' => (string) $apikey,
             'mode'   => $mode,
@@ -436,23 +334,7 @@ if (!function_exists('wpc_purge_orch_async')) {
             $body['urls'] = array_values($urls);
         }
 
-        // The v3.22.8 self-contained-purge contract: carry the customer's own
-        // Bunny pull-zone id and site_url in the HMAC-signed body so the orch
-        // can skip its agencySites apikey->site DB lookup. That lookup was
-        // hanging (host up, auth OK, then no response, proven via a blocking
-        // repro of this exact request), which wedged every restore purge so
-        // that everything stayed stale. This is backwards-compatible: a
-        // pre-v3.22.8 orch ignores these fields and falls back to the DB lookup,
-        // and the HMAC already covers them so they can't be tampered with.
-        //   - zone_id: send it only when numeric. wpc_v2_get_zone_id() returns
-        //     the raw wpc_v2_zone_id option (a string, with legacy fallbacks)
-        //     and can transiently hold a non-numeric/unresolved value; sending
-        //     that would mis-target Bunny, so we omit it (the orch's length>0
-        //     check then fails and it falls back to the DB) rather than ship
-        //     garbage.
-        //   - site_url: the same value /v2/config sync sends (site_url(), over
-        //     in v2-config-sync.php, not home_url()) so the orch's mode=urls
-        //     host check matches the host it already cached from the config sync.
+
         $zid = function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '';
         if ($zid !== '' && ctype_digit($zid)) {
             $body['zone_id'] = $zid;
@@ -472,19 +354,7 @@ if (!function_exists('wpc_purge_orch_async')) {
 }
 
 if (!function_exists('wpc_collect_orch')) {
-    /**
-     * POST the orch purge. It's HMAC-signed exactly like v2-config-sync so
-     * orch's wpc_v2_verify_hmac() validates it.
-     *
-     * With blocking=false it's one fire-and-forget POST (no wait, retry, or
-     * parse). With blocking=true it waits for the response and does a single
-     * jittered retry on a 429.
-     *
-     * Returns ['ok'=>bool, 'layers'=>array, 'duration_ms'=>int, 'http'=>int].
-     * 'layers' is orch's per-layer report, or a synthetic failure-layers map so
-     * the aggregated response keeps the canonical shape when orch is
-     * unreachable.
-     */
+
     function wpc_collect_orch($handle)
     {
         $t0       = isset($handle['started_at']) ? $handle['started_at'] : microtime(true);
@@ -510,7 +380,7 @@ if (!function_exists('wpc_collect_orch')) {
             ];
         }
 
-        // Fire-and-forget path for restore-triggered purges: sign, fire, return.
+        
         if (empty($handle['blocking'])) {
             $ts  = time();
             $sig = hash_hmac('sha256', $ts . '.' . hash('sha256', $body_raw), $apikey);
@@ -520,7 +390,7 @@ if (!function_exists('wpc_collect_orch')) {
                 'sslverify' => true,
                 'headers'   => [
                     'Content-Type' => 'application/json',
-                    'x-wpc-apikey' => $apikey, // orch reads the apikey from this header to recover the HMAC key
+                    'x-wpc-apikey' => $apikey,
                     'X-WPC-Sig'    => 't=' . $ts . ',v1=' . $sig,
                     'User-Agent'   => 'WPCompress/' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '7.00.09'),
                 ],
@@ -543,7 +413,7 @@ if (!function_exists('wpc_collect_orch')) {
                 'sslverify' => true,
                 'headers'   => [
                     'Content-Type' => 'application/json',
-                    'x-wpc-apikey' => $apikey, // orch reads the apikey from this header to recover the HMAC key
+                    'x-wpc-apikey' => $apikey,
                     'X-WPC-Sig'    => 't=' . $ts . ',v1=' . $sig,
                     'User-Agent'   => 'WPCompress/' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '7.00.09'),
                 ],
@@ -583,8 +453,7 @@ if (!function_exists('wpc_collect_orch')) {
             }
         }
 
-        // A 200 means all orch layers are ok; a 207 means partial. Both carry
-        // layers[], so we trust orch's own ok flag for the aggregate verdict.
+
         $ok = ($code >= 200 && $code < 300) && !empty($rbody['ok']);
 
         $layers = (isset($rbody['layers']) && is_array($rbody['layers']))
@@ -601,11 +470,7 @@ if (!function_exists('wpc_collect_orch')) {
 }
 
 if (!function_exists('wpc_orch_failure_layers')) {
-    /**
-     * Synthetic per-layer failure map so the aggregated response always keeps
-     * the canonical {customer_pz, cdn_mc_pz, pod_fs_fleet} shape even when orch
-     * never answered.
-     */
+
     function wpc_orch_failure_layers($error, $detail)
     {
         $entry = ['ok' => false, 'error' => (string) $error];
@@ -620,26 +485,9 @@ if (!function_exists('wpc_orch_failure_layers')) {
     }
 }
 
-/* ---------------------------------------------------------------------------
- * Restore-wiring helper
- * ------------------------------------------------------------------------- */
 
 if (!function_exists('wpc_customer_purge_attachment_urls')) {
-    /**
-     * Build the set of root-relative paths that a restore of $imageID
-     * invalidates: the source files (full size, every registered sub-size, and
-     * the unscaled original) plus their .webp/.avif siblings, which are the
-     * exact paths the CDN layers may have cached. It's derived from attachment
-     * metadata, so it works whether the variant files are unlinked yet or not.
-     *
-     * The paths come back root-relative (e.g. /wp-content/uploads/.../foo.webp):
-     * orch resolves them against the apikey's registered site_url (so no
-     * www/protocol/migration host-match 403, and immune to any
-     * wp_get_attachment_url CDN-host filter), while wpc_normalize_urls_for_cf()
-     * re-absolutizes them against site_url for CloudFlare.
-     *
-     * @return array root-relative paths (deduped).
-     */
+
     function wpc_customer_purge_attachment_urls($imageID)
     {
         $imageID = (int) $imageID;
@@ -651,7 +499,7 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
         if (!$main) {
             return [];
         }
-        $base_url = preg_replace('#/[^/]+$#', '', $main); // the dir URL, with no trailing slash
+        $base_url = preg_replace('#/[^/]+$#', '', $main);
 
         $files = [basename($main)];
         $meta  = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($imageID) : [];
@@ -668,17 +516,7 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
             }
         }
 
-        // Adaptive / lazy-backfilled variants (the universal srcset ladder
-        // 400..2560 plus retina-doubles of every WP sub-size, e.g. -442x300 or
-        // -1132x1536) live only in ic_local_variants postmeta, not in
-        // meta['sizes'], so without this the surgical mode=urls purge would leave
-        // the exact high-res files browsers actually fetch cached after a
-        // restore. Each variant's on-disk name is basename($v['url'])
-        // (-{W}x{H}.webp/.avif), and the stem-to-sibling loop below expands each
-        // to its .webp/.avif siblings. This runs at restore time while the
-        // postmeta still exists (cleanRestoreMeta only deletes ic_local_variants
-        // afterward). It's additive: if the postmeta is already gone, we fall
-        // back to the meta['sizes'] coverage with no regression.
+
         $local_variants = function_exists('get_post_meta') ? get_post_meta($imageID, 'ic_local_variants', true) : [];
         if (is_array($local_variants)) {
             foreach ($local_variants as $v) {
@@ -688,14 +526,7 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
             }
         }
 
-        // The disk-glob belt (a user caught a 442x600 avif whose meta write had
-        // failed still serving from the edge cache through several restores).
-        // Adaptive files that exist on disk but in no registry (a meta-write
-        // failure, races) would otherwise keep their edge-cached URLs alive past
-        // restore for the full cache TTL. This helper runs while the files still
-        // exist (cleanRestoreMeta unlinks afterward), so a stem glob catches
-        // every -WxH next-gen sibling regardless of registry state. Additive
-        // only.
+
         $att_file_g = function_exists('get_attached_file') ? get_attached_file($imageID) : '';
         if ($att_file_g) {
             $stem_g = pathinfo((function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : '') ?: $att_file_g, PATHINFO_FILENAME);
@@ -707,12 +538,11 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
         $abs = [$main];
         foreach (array_unique($files) as $f) {
             $stem = preg_replace('#\.(jpe?g|png|gif|webp|avif)$#i', '', $f);
-            $abs[] = $base_url . '/' . $f;            // the source file itself
+            $abs[] = $base_url . '/' . $f;
             $abs[] = $base_url . '/' . $stem . '.webp';
             $abs[] = $base_url . '/' . $stem . '.avif';
-            // local-mc strips a -scaled suffix for the full-size next-gen
-            // variant, so hero-scaled.jpg becomes hero.webp / hero.avif. Emit
-            // that sibling too, otherwise the full-size fossil never gets purged.
+
+
             if (preg_match('#-scaled$#', $stem)) {
                 $unscaled = preg_replace('#-scaled$#', '', $stem);
                 $abs[] = $base_url . '/' . $unscaled . '.webp';
@@ -732,22 +562,7 @@ if (!function_exists('wpc_customer_purge_attachment_urls')) {
 }
 
 if (!function_exists('wpc_restore_cdn_purge')) {
-    /**
-     * Fire-and-forget CDN invalidation on image restore, as one async POST.
-     *
-     * v7.08.31 removed the old ~1,500-request inline purge fan-out from the
-     * restore paths in favor of the legacy `?v=` cache-buster, but clean-URL
-     * delivery (natural/nd, since v7.01.20) carries no version params, so a
-     * restored image kept serving its cached optimized variants from the zone
-     * until TTL (this was user-reported). This is the Customer-Purge-v1 wiring
-     * that was designed for exactly this case: one non-blocking POST with the
-     * attachment's root-relative path set (source, sub-sizes, and .webp/.avif
-     * siblings), after which orch fans out to customer-PZ, cdn-mc, and pod-fs,
-     * with CF purged too when connected. The reason 'restore_single' is on
-     * orch's whitelist. The static guard keeps this to once per image per
-     * request, since several restore flows write ic_status='restored' more than
-     * once.
-     */
+
     function wpc_restore_cdn_purge($imageID)
     {
         static $done = [];

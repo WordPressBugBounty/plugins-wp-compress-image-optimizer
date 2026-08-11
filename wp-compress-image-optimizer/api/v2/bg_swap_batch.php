@@ -1,26 +1,5 @@
 <?php
-/**
- * WP Compress v7.02 — Direct PHP entry for /wpc/v2/bg_swap_batch
- *
- * Bypasses WordPress REST routing entirely. Same HMAC scheme + same item shape
- * as the REST endpoint (wpc_v2_handle_bg_swap_batch in addons/v2/v2-callback.php).
- * Handler time: 30-80 ms vs 300-500 ms for the REST path.
- *
- * What this handler does:
- *   1. HMAC verify (apikey from wp_options via SHORTINIT $wpdb)
- *   2. Parse + validate batch shape
- *   3. Per-item: validate, write bytes to disk (atomic temp+rename)
- *   4. Append per-image journal entries (filesystem queue)
- *   5. Respond 200 with summary
- *   6. (Maybe) fire non-blocking loopback to drain
- *
- * What this handler does NOT do (deferred to the journal drain):
- *   - update_post_meta on ic_local_variants (the slow one — drain batches it)
- *   - wpc_v2_recompute_savings (drain handles)
- *   - heartbeat transient writes (drain handles)
- *
- * @see SPEC-direct_entry.md
- */
+
 
 define('WPC_V2_DIRECT_ENTRY', true);
 require __DIR__ . '/_shared.php';
@@ -31,7 +10,7 @@ if (!is_string($body_raw) || $body_raw === '') {
     wpc_v2_direct_respond(400, ['error' => 'empty_body']);
 }
 
-// ─── HMAC verify ──────────────────────────────────────────────────────────
+
 $sig_header = isset($_SERVER['HTTP_X_WPC_SIG']) ? (string) $_SERVER['HTTP_X_WPC_SIG'] : '';
 $hmac = wpc_v2_direct_verify_hmac($sig_header, $body_raw);
 if (!$hmac['ok']) {
@@ -39,7 +18,7 @@ if (!$hmac['ok']) {
     wpc_v2_direct_respond(401, ['error' => 'auth', 'reason' => $hmac['reason']]);
 }
 
-// ─── Parse + top-level validate ───────────────────────────────────────────
+
 $body = json_decode($body_raw, true);
 if (!is_array($body)) {
     wpc_v2_direct_respond(400, ['error' => 'invalid_json']);
@@ -57,21 +36,19 @@ $imageID = isset($body['imageID']) ? (int) $body['imageID'] : 0;
 if ($imageID <= 0) {
     wpc_v2_direct_respond(410, ['error' => 'unknown_image', 'imageID' => $imageID]);
 }
-// We can't easily check get_post_type without loading more WP. The drain will
-// reject non-existent attachments during the postmeta merge. Skip the check
-// here to keep the inbound path fast.
+
 
 $jobId      = isset($body['jobId']) ? (string) $body['jobId'] : '';
 $serverTime = isset($body['serverTime']) ? (int) $body['serverTime'] : 0;
 $clockSkewMs = $serverTime > 0 ? (int) round(($entry_t * 1000) - $serverTime) : null;
 $flushReason = isset($body['flush_reason']) ? preg_replace('/[^a-z_]/', '', (string) $body['flush_reason']) : '';
 
-// Wrapper-level fallback fields (JW pod batch shape)
+
 $wrap_size   = isset($body['sizeLabel']) ? preg_replace('/[^a-z0-9_\-]/i', '', (string) $body['sizeLabel']) : '';
 $wrap_orig   = isset($body['originalSize']) ? (int) $body['originalSize'] : 0;
 $wrap_fname  = isset($body['filename']) ? $body['filename'] : null;
 
-// ─── Restored-image guard ─────────────────────────────────────────────────
+
 if (wpc_v2_direct_callbacks_blocked($imageID)) {
     error_log(sprintf(
         '[wpc_v2_direct_batch restored_reject] imageID=%d variants=%d job=%s',
@@ -80,7 +57,7 @@ if (wpc_v2_direct_callbacks_blocked($imageID)) {
     wpc_v2_direct_respond(410, ['error' => 'image_restored', 'imageID' => $imageID]);
 }
 
-// ─── Stale-job check ──────────────────────────────────────────────────────
+
 if ($jobId !== '') {
     $pending = function_exists('get_transient')
         ? get_transient('wpc_v2_pending_' . $imageID)
@@ -96,12 +73,6 @@ if ($jobId !== '') {
 
 $t_after_validate = microtime(true);
 
-// ─── Per-item loop: validate, persist bytes, build journal entry ──────────
-//
-// We do NOT update ic_local_variants here. That's the slow MySQL-write part
-// that drain handles. We DO write the bytes to disk (encoder needs to know
-// the file is on disk before considering the variant delivered) and we
-// append a journal entry that drain reads to do the postmeta merge.
 
 $journal_entries  = [];
 $results          = [];
@@ -128,7 +99,7 @@ foreach ($variants as $idx => $v) {
     }
     if ($fmt === 'jpg') $fmt = 'jpeg';
 
-    // No-improvement: record without bytes write.
+    
     if (!empty($v['noImprovement']) || (isset($v['bumped']) && (string) $v['bumped'] === 'source_already_optimal')) {
         $reason = !empty($v['noImprovement'])
             ? (isset($v['reason']) ? (string) $v['reason'] : 'no_improvement')
@@ -145,10 +116,9 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    // Filename resolution
-    // v7.02.03 — SECURITY: validate any orch-supplied filename (basename +
-    // image-ext + no executable interior segment); supplied-but-hostile → reject
-    // the item (never derive over a hostile name); not supplied → derive.
+    
+
+
     $filename = '';
     $supplied_fn = null;
     if (isset($v['filename']) && is_string($v['filename']) && $v['filename'] !== '') {
@@ -173,7 +143,7 @@ foreach ($variants as $idx => $v) {
         }
     }
 
-    // Bytes
+    
     $b64       = isset($v['bytesB64']) ? (string) $v['bytesB64'] : '';
     $fetch_url = isset($v['fetchUrl']) ? (string) $v['fetchUrl'] : '';
     $raw = null;
@@ -185,12 +155,8 @@ foreach ($variants as $idx => $v) {
             continue;
         }
     } elseif ($fetch_url !== '') {
-        // Direct entry doesn't have wp_remote_get loaded in pure SHORTINIT.
-        // For fetchUrl-mode variants, fall back to file_get_contents (works,
-        // less ergonomic than wp_remote_get but no extra WP loading).
-        // v7.02.03 — SECURITY (SSRF): validate the URL (http/https + public IP
-        // only) and disable redirects so a public host can't 30x into an internal
-        // target (cloud metadata, loopback, private ranges).
+
+
         if (!wpc_v2_direct_safe_fetch_url($fetch_url)) {
             $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => 'unsafe_fetch_url', 'sizeLabel' => $sz, 'format' => $fmt];
             $rejected_count++;
@@ -209,7 +175,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    // Atomic disk write
+    
     $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
     if (!$persist['ok']) {
         $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => $persist['error'], 'sizeLabel' => $sz, 'format' => $fmt];
@@ -227,7 +193,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    // Build the journal entry (drain merges into ic_local_variants)
+    
     $orig_size = isset($v['originalSize']) ? (int) $v['originalSize']
                 : (isset($v['orig_size']) ? (int) $v['orig_size'] : $wrap_orig);
     $kb        = isset($v['kb']) ? (float) $v['kb'] : 0.0;
@@ -252,7 +218,7 @@ foreach ($variants as $idx => $v) {
 
 $t_after_loop = microtime(true);
 
-// ─── Write journal entries (one file per batch) ───────────────────────────
+
 $journal_file = null;
 if (!empty($journal_entries)) {
     $journal_file = wpc_v2_journal_write($imageID, $jobId, [
@@ -261,9 +227,8 @@ if (!empty($journal_entries)) {
         'entries'      => $journal_entries,
     ]);
     if ($journal_file === false) {
-        // Journal write failed (disk full? perms?). We've already written the
-        // bytes to disk — drain can't pick up what it doesn't see. Log and
-        // return a special error so orch can retry into the REST fallback.
+
+
         error_log(sprintf(
             '[wpc_v2_direct_batch journal_write_failed] imageID=%d job=%s persisted=%d',
             $imageID, $jobId !== '' ? substr($jobId, 0, 8) : '-', $persisted_count
@@ -274,10 +239,10 @@ if (!empty($journal_entries)) {
 
 $t_handler_end = microtime(true);
 
-// ─── Timing log (matches REST handler's format for grep correlation) ──────
-//
-// Critical field: direct_entry=yes. Service team's 24h watchdog greps for
-// this in addition to bootstrap_skip=yes to verify the fast path is live.
+
+
+
+
 error_log(sprintf(
     '[wpc_v2_bg_swap_batch_timing] direct_entry=yes imageID=%d jobId=%s variant_count=%d persisted=%d rejected=%d duplicates=%d flush_reason=%s clock_skew_ms=%s validate_ms=%.1f loop_ms=%.1f journal_file=%s total_handler_ms=%.1f',
     $imageID,
@@ -294,7 +259,7 @@ error_log(sprintf(
     max(0.0, ($t_handler_end - $entry_t) * 1000)
 ));
 
-// ─── Build response ───────────────────────────────────────────────────────
+
 $response = [
     'ok'            => true,
     'imageID'       => $imageID,
@@ -308,20 +273,11 @@ $response = [
     'results'       => $results,
 ];
 
-// ─── Fire drain loopback if journal count crossed threshold ───────────────
-//
-// Threshold default = 5. The loopback is non-blocking — fires fire-and-forget
-// curl with ~100ms timeout. Drain runs in full WP context with its own FPM
-// worker, consolidates pending journal files via GET_LOCK. We don't block on it.
-//
-// We do this AFTER building the response so the loopback fire counts against
-// the response time only as overhead (~5-10ms), not against the encoder's wait.
+
 $threshold = defined('WPC_V2_JOURNAL_DRAIN_THRESHOLD') ? (int) WPC_V2_JOURNAL_DRAIN_THRESHOLD : 5;
 if (wpc_v2_journal_count() >= $threshold) {
-    // Fire AFTER response goes out, via shutdown function. fastcgi_finish_request
-    // (called inside wpc_v2_direct_respond) flushes the response first, then
-    // shutdown runs, then we trigger the loopback. Net: encoder sees the 200
-    // immediately, drain starts in parallel.
+
+
     register_shutdown_function('wpc_v2_journal_fire_loopback');
 }
 

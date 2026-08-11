@@ -50,5 +50,4 @@ class wps_ic_log {
     }
 
 
-
 }

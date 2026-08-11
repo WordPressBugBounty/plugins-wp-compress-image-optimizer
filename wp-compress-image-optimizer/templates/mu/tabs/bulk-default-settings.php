@@ -1,8 +1,8 @@
 <?php
 
-/**
- * GeoLocation Stuff
- */
+
+
+
 switch_to_blog(1);
 
 
@@ -30,9 +30,9 @@ if (empty($multisiteDefaultSettings)) {
 
 $settings = $multisiteDefaultSettings;
 
-/**
- * Quick fix for PHP undefined notices
- */
+
+
+
 $wps_ic_active_settings['live-cdn']['local'] = '';
 $wps_ic_active_settings['live-cdn']['live'] = '';
 $wps_ic_active_settings['optimization']['lossless'] = '';
@@ -53,9 +53,9 @@ else {
   }
 }
 
-/**
- * Decides which setting is active
- */
+
+
+
 if ( ! empty($settings['optimization'])) {
   if ($settings['optimization'] == 'lossless') {
     $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
@@ -391,77 +391,8 @@ else {
 
       </div>
     </div>
-    
-    <?php /*
-    <div class="wpc-ic-mu-settings">
-      <div class="settings-container-flex-outer">
-        <div class="settings-container-third" style="margin-bottom:25px;margin-right:10px;">
-          <div class="inner">
-            <div class="setting-group setting-group-center setting-group-narrow">
-              <div class="setting-icon ic-tooltip" title="If you know your site location please select it from the option list below.">
-                <img src="<?php echo WPS_IC_URI; ?>assets/images/icon-geolocation.svg"/>
-              </div>
-              <div class="setting-header" style="line-height: 30px;">
-                <strong>Site GEO Location</strong>
-              </div>
 
-              <div class="setting-value">
-                <p>We've detected your server is in <strong><?php echo $geolocation_text; ?></strong>.</p>
-              </div>
-
-              <strong>Configure per site</strong>
-
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-container-third" style="margin-bottom:25px;margin-left:10px;margin-right:10px;">
-          <div class="inner">
-            <div class="setting-group setting-group-center">
-              <div class="setting-icon ic-tooltip" title="If you know your site location please select it from the option list below.">
-                <img src="<?php echo WPS_IC_URI; ?>assets/images/icon-cdn-custom.svg"/>
-              </div>
-              <div class="setting-header" style="line-height: 30px;">
-                <strong>Exclude List</strong>
-              </div>
-
-              <div class="setting-value">
-                <p>Specify excluded images, files or paths as desired.</p>
-              </div>
-
-              <a href="#" class="wps-ic-configure-popup" data-popup="exclude-list"><i class="svg-icon icon-configure"></i> Configure</a>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-container-third cname-container" style="margin-bottom:25px;margin-left:10px;">
-          <div class="inner">
-            <div class="setting-group setting-group-center">
-              <div class="setting-icon ic-tooltip" title="If you know your site location please select it from the option list below.">
-                <img src="<?php echo WPS_IC_URI; ?>assets/images/icon-exclude-list.svg"/>
-              </div>
-              <div class="setting-header" style="line-height: 30px;">
-                <strong>Custom CDN Domain</strong>
-              </div>
-
-            </div>
-
-            <div class="setting-group setting-group-center">
-
-              <div class="setting-value setting-configure">
-                <p>Use <strong>any domain</strong> you own to serve images and assets.</p>
-              </div>
-
-
-              <strong>Configured per site</strong>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    </div>
- */ ?>
+    <?php  ?>
 
   </div>
 
@@ -488,7 +419,7 @@ else {
           <select name="location-select">
             <?php
             $location_select = ['Automatic' => 'Automatic', 'EU' => 'Europe', 'US' => 'United States', 'AS' => 'Asia', 'OC' => 'Oceania'];
-            
+
             foreach ($location_select as $k => $v) {
               if ($k == $geolocation->continent) {
                 ?>
