@@ -6,7 +6,7 @@ global $wps_ic;
     <div id="wps-ic-test-error" style="display: none;">
         <?php
         echo '<div class="ic-popup ic-popup-v2" id="wps-ic-connection-tests-inner">';
-        
+        #echo '<div class="ic-image"><img src="' . WPS_IC_URI . 'assets/tests/error_robot.png" /></div>';
         echo '<h3 class="ic-title">' . esc_html__('We have encountered an error', WPS_IC_TEXTDOMAIN) . '</h3>';
         echo '<ul class="wps-ic-check-list" style="margin:0px !important;">';
         echo '<li></li>';
@@ -24,7 +24,7 @@ global $wps_ic;
     <div id="wps-ic-connection-tests" style="display: none;">
         <?php
         echo '<div class="ic-popup ic-popup-v2" id="wps-ic-connection-tests-inner">';
-        
+        #echo '<div class="ic-image"><img src="' . WPS_IC_URI . 'assets/tests/robot.png" /></div>';
         echo '<h3 class="ic-title">' . esc_html__('We\'re running a few quick tests', WPS_IC_TEXTDOMAIN) . '</h3>';
         echo '<h5 class="ic-subtitle" style="padding-bottom:10px;">' . esc_html__('It should only be a few moments...', WPS_IC_TEXTDOMAIN) . '</h5>';
         echo '<ul class="wps-ic-check-list" style="margin:0px !important;">';
@@ -167,4 +167,4 @@ global $wps_ic;
     </div>
 
 </div>
-<script type="text/javascript" src="<?php echo WPS_IC_URI . 'assets/js/connect.js'; ?>"></script>
+<script type="text/javascript" src="<?php echo WPS_IC_URI . 'assets/js/connect.js?v=' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1'); ?>"></script>

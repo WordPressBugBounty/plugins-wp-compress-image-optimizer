@@ -25,7 +25,7 @@ class wps_ic_excludes extends wps_ic
     private static $userDeferScript;
 
 
-    
+    // New
     private static $excludesCriticalCSSOption;
     private static $excludesInlineCSSOption;
     private static $excludesOption;
@@ -90,7 +90,7 @@ class wps_ic_excludes extends wps_ic
 
         self::$defaultCombineJSExcludes = ['visitor_mode.min.js', 'jquery.min.js', 'jquery.js', 'jquery-migrate', 'lazy.min.js', 'wp-i18', 'wp.i18', 'dashicon', 'i18', 'hooks', 'lazy', 'all', 'optimizer', 'delay-js', 'application/ld+json'];
 
-        self::$defaultCombineCSSExcludes = [
+        self::$defaultCombineCSSExcludes = [#'responsive', //responsive stuff
             'dashicons', 'wps-inline',
             'wpc-critical-css',
             'wpc-critical-css-mobile',
@@ -100,7 +100,7 @@ class wps_ic_excludes extends wps_ic
         ];
 
 
-        
+        // 94 → 83 bracketed to the install (FCP +750ms, LCP +1.4s, reproduced ×3) — the crit-styled
 
 
         self::$defaultCriticalCSSExcludes = ['frontend-layer', 'xlink=css'
@@ -113,7 +113,7 @@ class wps_ic_excludes extends wps_ic
 
         self::$defaultInlineCSSExcludes = [];
 
-        
+        //Check if default excludes are disabled
         if (!empty(self::$excludesOption['delay_js_default_excludes_disabled']) && self::$excludesOption['delay_js_default_excludes_disabled'] == '1') {
             self::$defaultDelayJSExcludes = [];
         }
@@ -432,13 +432,13 @@ class wps_ic_excludes extends wps_ic
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
-            
+            // Image on site
             return false;
         } else if ((strpos($url, $site_url) === false || strpos($url, '//') === 0) || (strpos($url, $site_url) !== false && strpos($url, $site_url) >= strpos($url, '?'))) {
-            
+            // Image not on site
             return true;
         } else {
-            
+            // Image on site
             return false;
         }
     }

@@ -1,9 +1,9 @@
 <?php
 
 
-
-
-
+/**
+ * Class - Queue
+ */
 class wps_ic_queue extends wps_ic {
 
   public static $options;
@@ -107,11 +107,11 @@ class wps_ic_queue extends wps_ic {
   }
 
 
-  
-
-
-
-
+  /**
+   * @param $attachment_id
+   * @param $status (1 = Success, 0 = In Queue, -1 = Failed, 2 = , 3 = Restoring)
+   * @param $message (json)
+   */
   public function change_queue_status($attachment_id, $status, $message, $type = '', $queue_id = 0) {
     global $wpdb;
     $attachment_id = (int)$attachment_id;
@@ -149,7 +149,7 @@ class wps_ic_queue extends wps_ic {
       $delete = $wpdb->query($delete);
     }
 
-    
+    // Delete compress data
     delete_post_meta($attachment_id, 'wps_ic_started');
     delete_post_meta($attachment_id, 'wps_ic_reset');
     delete_post_meta($attachment_id, 'wps_ic_times');
@@ -194,13 +194,13 @@ class wps_ic_queue extends wps_ic {
 
     $args[] = $type;
 
-    
+    // Query WHERE clause if param not empty
     if ( ! empty($attachment_id) && $attachment_id != 0) {
       $where_attach_id = ' AND attachment_ID=%s';
       $args[]          = $attachment_id;
     }
 
-    
+    // Prepare query
     $fetch = $wpdb->prepare("SELECT attachment_ID, type, status FROM " . $wpdb->prefix . "ic_queue WHERE type=%s" . $where_attach_id, $args);
     $fetch = $wpdb->get_results($fetch);
 
@@ -234,13 +234,13 @@ class wps_ic_queue extends wps_ic {
 
     $args[] = $type;
 
-    
+    // Query WHERE clause if param not empty
     if ( ! empty($attachment_id) && $attachment_id != 0) {
       $where_attach_id = ' AND attachment_ID=%s';
       $args[]          = $attachment_id;
     }
 
-    
+    // Prepare query
     $fetch = $wpdb->prepare("SELECT attachment_ID, type, status FROM " . $wpdb->prefix . "ic_queue WHERE type=%s" . $where_attach_id, $args);
     $fetch = $wpdb->get_results($fetch);
 
@@ -302,13 +302,13 @@ class wps_ic_queue extends wps_ic {
     $args[] = $type;
     $args[] = $status;
 
-    
+    // Query WHERE clause if param not empty
     if ( ! empty($attachment_id) && $attachment_id != 0) {
       $where_attach_id = ' AND attachment_ID=%s';
       $args[]          = $attachment_id;
     }
 
-    
+    // Prepare query
     $fetch = $wpdb->prepare("SELECT attachment_ID, type, status, hash FROM " . $wpdb->prefix . "ic_queue WHERE type=%s AND status=%s" . $where_attach_id . " ORDER BY attachment_ID DESC", $args);
     $fetch = $wpdb->get_results($fetch);
 

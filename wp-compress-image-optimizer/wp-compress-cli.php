@@ -9,7 +9,7 @@ class WPC_CLI_Command extends WP_CLI_Command
 
     public function backfill_avif($args, $assoc)
     {
-        
+        // Bootstrap the plugin's core under wp-cli (normally gated out by wp-compress.php:22)
         if (!function_exists('wpc_backfill_missing_avif')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -85,7 +85,7 @@ class WPC_CLI_Command extends WP_CLI_Command
 
     public function purge_variants($args, $assoc)
     {
-        
+        // Bootstrap the plugin's core under wp-cli (gated out by wp-compress.php:22)
         if (!function_exists('wpc_purge_variants_for_image')) {
             $core = __DIR__ . '/wp-compress-core.php';
             if (file_exists($core)) {
@@ -120,8 +120,8 @@ class WPC_CLI_Command extends WP_CLI_Command
     }
 }
 
-
-
+// v2 protocol smoke + staging tests. Adds CLI surface for
+// driving WPS_LocalV2 directly without the wp-admin UI (which is Day 5-6
 
 
 if (!class_exists('WPC_CLI_V2_Command')) {
@@ -190,7 +190,7 @@ class WPC_CLI_V2_Command extends WP_CLI_Command
 
         $client = new WPS_LocalV2($apikey, $orch_url);
 
-        
+        // Variants — WP default sub-sizes + scaled + original. One marked parent.
         $meta = wp_get_attachment_metadata($imageID);
         $variants = [];
         if (is_array($meta) && !empty($meta['sizes'])) {

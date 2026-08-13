@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wpc_divi {
@@ -11,17 +11,17 @@ class wpc_divi {
 
 
   public function runIntegration($html) {
-    
-    
-    
-    
-    
+    // Only the delay-v3 loader removes .wpc-delay-divi (insertJS() is dead code, never called),
+    // and checkCache() skips the rewriter for every logged-in request — so a logged-in admin got
+    // the deferral with nothing to undo it. content-visibility keeps the content REACHABLE, but
+    // the page still opens short and grows while scrolling. Defer only when it will be undone.
+    // Receipted on Elementor as hawkeye.design; same shape here.
     if (!(function_exists('is_user_logged_in') && is_user_logged_in())) {
       $html = $this->hideSections($html);
       $html = $this->delayBackgrounds($html);
     }
-    
-    
+    // dead reveal swap removed: 'optimize.js' never matches optimizer.* filenames and the
+    // divi/ dist dir is gone — with display:none that left sections hidden FOREVER
     return $html;
   }
 
@@ -44,9 +44,9 @@ class wpc_divi {
     );
 
 
-	  
-	  
-	  
+	  // content-visibility:auto = same below-fold render/bg-fetch deferral as the old
+	  // display:none, but needs NO reveal JS: browsers paint on approach, old browsers
+	  // ignore the property and render normally (fail-open by construction)
 	  $html = str_replace('</head>', '<style>.wpc-delay-divi{content-visibility:auto;contain-intrinsic-size:auto 900px;}</style></head>', $html);
 
     return $html;

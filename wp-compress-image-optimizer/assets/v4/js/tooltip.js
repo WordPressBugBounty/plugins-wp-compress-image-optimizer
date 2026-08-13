@@ -1,25 +1,25 @@
 jQuery(document).ready(function ($) {
 
-    
-    
-    
-    
-    
-    
+    // $('.wpc-custom-tooltip').tooltipster({
+    //     functionInit: function(origin, content) {
+    //         var contentID = $(content.origin).data('tooltip-id');
+    //         var tooltipContent = $('#'+contentID);
+    //         console.log(contentID);
+    // }});
 
-    
+    // Question tooltips
     $('.wpc-tooltip').tooltipster({
         maxWidth: '300', delay: 50,
     });
 
-    
+    // Menu tooltips — disabled (full text labels always visible now)
 
     $('.wpc-custom-tooltip').hover(function (e) {
         var icon = $(this);
         var tooltipID = $(this).data('tooltip-id');
         var tooltipPosition = $(this).data('tooltip-position');
 
-        
+        //$('#'+tooltipID).show();
         var tooltipBox = $('#' + tooltipID);
 
         var parent = $(this).closest('.option-box');

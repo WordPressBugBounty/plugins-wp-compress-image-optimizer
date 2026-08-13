@@ -1,10 +1,10 @@
 <?php
 
 
-
-
-
-
+/**
+ * Class - Config
+ * Handles Configuration Files
+ */
 class wps_ic_config
 {
 

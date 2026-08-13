@@ -1,7 +1,7 @@
 <?php
 
 
-if (!defined('ABSPATH') && !defined('WPC_FP_CLI')) { exit; } 
+if (!defined('ABSPATH') && !defined('WPC_FP_CLI')) { exit; } // WP guard; CLI harness defines WPC_FP_CLI
 
 if (!function_exists('wpc_fp_struct_tokens')) {
 
@@ -66,7 +66,7 @@ if (!function_exists('wpc_fp_calibrate')) {
 }
 
 if (!function_exists('wpc_fp_struct_sig')) {
-	
+	/** sha1(sorted content tokens − calibrated noise), 16 hex. Stable ⇔ DOM structure unchanged. */
 	function wpc_fp_struct_sig($html, $exclTokens = array()) {
 		$ex = array_flip($exclTokens);
 		$keep = array();
@@ -77,16 +77,16 @@ if (!function_exists('wpc_fp_struct_sig')) {
 }
 
 if (!function_exists('wpc_fp_css_sig')) {
-	
-
-
-
-
+	/**
+	 * sha1( sorted enqueued handle:ver  +  sha1(sorted inline rules − calibrated noise) ), 16 hex.
+	 * $enqueued comes from wp_styles at the call site (handle:version strings); [] off-WP.
+	 * Stable ⇔ the CSS the page actually depends on is unchanged.
+	 */
 	function wpc_fp_css_sig($enqueued, $html, $exclRules = array()) {
 		$ex = array_flip($exclRules);
 		$keepSet = array();
-		
-		
+		// Hash the rule SET, not the list: a rule emitted twice vs once is emission noise, not a
+		// dependency change (proven on dm — `img:is([sizes=auto])` emitted A×2/B×1). Dedup here.
 		foreach (wpc_fp_inline_rules($html) as $r) { if (!isset($ex[$r])) { $keepSet[$r] = 1; } }
 		$keep = array_keys($keepSet);
 		sort($keep);
@@ -97,7 +97,7 @@ if (!function_exists('wpc_fp_css_sig')) {
 }
 
 if (!function_exists('wpc_fp_page_key')) {
-	
+	/** The crit persist-key for a URL: struct_sig ⊕ css_sig. Re-derive crit only when this changes. */
 	function wpc_fp_page_key($html, $enqueued, $calib = array()) {
 		$s = wpc_fp_struct_sig($html, isset($calib['tokens']) ? $calib['tokens'] : array());
 		$c = wpc_fp_css_sig($enqueued, $html, isset($calib['rules']) ? $calib['rules'] : array());

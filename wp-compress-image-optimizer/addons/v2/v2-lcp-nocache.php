@@ -33,7 +33,7 @@ add_action('send_headers', function () {
         return;
     }
 
-    
+    // Resolve THIS request's crit dir (same derivation the healer + reader use).
     $url = (is_ssl() ? 'https://' : 'http://')
         . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '')
         . strtok((string) (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/'), '?');
@@ -43,8 +43,8 @@ add_action('send_headers', function () {
     }
     $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/';
 
-    
-    
+    // PENDING = crit exists, lcp.json NOT yet on disk, a lcp_url IS stashed (so it's genuinely coming),
+    // and we haven't given up. Any other state → leave caching alone.
 
 
     if (!@file_exists($dir . 'critical_desktop.css')) {
@@ -53,8 +53,8 @@ add_action('send_headers', function () {
             || get_transient('wpc_critical_key_' . $key)
         );
         if ($wpc_crit_pending) {
-            
-            
+            // Duty-cycle bound: a cycling regen (outage/backoff) must not pin the whole
+            // site no-store indefinitely — pin ≤10 min per hour, then cached-without-crit wins
             $wpc_pin0 = (int) get_option('wpc_crit_pin_started');
             if ($wpc_pin0 && (time() - $wpc_pin0) > 3600) {
                 delete_option('wpc_crit_pin_started');
@@ -100,9 +100,9 @@ add_action('send_headers', function () {
         return;
     }
 
-    
+    // PENDING → suppress storage at every layer for THIS render only.
     if (!defined('DONOTCACHEPAGE')) {
-        define('DONOTCACHEPAGE', true);           
+        define('DONOTCACHEPAGE', true);           // WPC page cache + WP-Rocket/W3TC/WP-Super-Cache/etc
     }
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
     header('Pragma: no-cache');

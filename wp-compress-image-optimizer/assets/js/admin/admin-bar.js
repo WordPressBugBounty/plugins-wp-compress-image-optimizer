@@ -52,11 +52,11 @@ jQuery(document).ready((function($) {
             }
         } catch (e) {}
     }
-    
-    
-    
-    
-    
+    // v7.10.641 — the busy indicator may only ever touch the top-level .ab-item's OWN
+    // content. WP core binds hoverintent on every li.menupop element at page load, and
+    // the old whole-LI innerHTML swap captured the momentary "hover" class with it — so
+    // one click left the rebuilt Advanced flyout either permanently dead (bindings gone)
+    // or permanently open (frozen hover class), until a full page reload.
     function wpcBarBusy(label) {
         var a = document.querySelector("#wp-admin-bar-wp-compress > .ab-item");
         if (!a) {
@@ -99,9 +99,9 @@ jQuery(document).ready((function($) {
         }));
         return false;
     }));
-    
-    
-    
+    // v7.10.725 — per-page lane. The URL rides a data attribute the server stamped
+    // (front end: the viewed page; wp-admin editor: the edited post's permalink), with a
+    // front-end location.href fallback. The server re-validates same-host + page-shape.
     function wpcPageUrl(el) {
         var u = $(el).closest("li").find("[data-wpc-url]").attr("data-wpc-url");
         if (u) {
@@ -246,12 +246,12 @@ jQuery(document).ready((function($) {
         wpcCfDebug("doctor", "Doctor");
         return false;
     }));
-    
+    // "Advanced" is a container, not an action.
     $("body").on("click", ".wp-compress-bar-advanced>a", (function(e) {
         e.preventDefault();
     }));
-    
-    
+    // The one primary intent: "my optimizations are wrong, fix them." The server decides
+    // situationally which layers to touch, so there is nothing for the operator to sequence.
     $("body").on("click", ".wp-compress-bar-rebuild>a", (function(e) {
         e.preventDefault();
         var done = wpcBarBusy("Rebuilding...");

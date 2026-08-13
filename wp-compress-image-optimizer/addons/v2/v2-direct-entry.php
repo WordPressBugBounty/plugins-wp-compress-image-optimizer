@@ -7,11 +7,11 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_v2_callback_url')) {
 
-
-
-
-
-
+/**
+ * Returns the active callback URL for the /optimize-v2 envelope. Caches the
+ * result per-request so multiple v2-client calls in the same request don't
+ * thrash get_option.
+ */
 function wpc_v2_callback_url($endpoint = 'bg_swap') {
     static $cache = [];
     if (isset($cache[$endpoint])) return $cache[$endpoint];
@@ -27,7 +27,7 @@ function wpc_v2_callback_url($endpoint = 'bg_swap') {
 
 
 function wpc_v2_probe_direct_entry($force = false) {
-    
+    // Rate-limit re-probes to once per hour unless forced.
     if (!$force) {
         $last_at = (int) get_option('wpc_v2_direct_entry_probe_at', 0);
         if ($last_at > 0 && (time() - $last_at) < HOUR_IN_SECONDS) {
@@ -51,7 +51,7 @@ function wpc_v2_probe_direct_entry($force = false) {
         'body'      => ['probe_token' => $token],
     ]);
 
-    
+    // Always update probe-at so we don't re-probe on every page load.
     update_option('wpc_v2_direct_entry_probe_at', time(), false);
 
     if (is_wp_error($r)) {
@@ -66,12 +66,12 @@ function wpc_v2_probe_direct_entry($force = false) {
     if ($code !== 200) {
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'http_' . $code, false);
-        
-        
-        
-        
-        
-        
+        // Persistent 403 = host-level PHP-execution deny in the plugin dir
+        // (nginx hardening — Cloudways template class; .htaccess is Apache-only
+        // there). No amount of hourly re-probing changes server config: after 3
+        // consecutive 403s, stretch re-probes to daily and surface an admin
+        // notice carrying the exact nginx exception the host needs (Automa/680-
+        // site fleet report: ~half their installs sat in this state silently).
         if ($code === 403) {
             $wpc_de403 = (int) get_option('wpc_v2_direct_entry_403s', 0) + 1;
             update_option('wpc_v2_direct_entry_403s', $wpc_de403, false);
@@ -86,14 +86,14 @@ function wpc_v2_probe_direct_entry($force = false) {
     delete_option('wpc_v2_direct_entry_403s');
 
     if ($body !== $token) {
-        
-        
+        // Host didn't run the PHP (returned source/text) or the round-trip
+        // broke (transient lost, SHORTINIT crash). Either way: no direct entry.
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'token_mismatch', false);
         return ['ok' => false, 'reason' => 'token_mismatch', 'detail' => 'body=' . substr($body, 0, 100)];
     }
 
-    
+    // Optional journal-writable flag from probe response header
     $headers = wp_remote_retrieve_headers($r);
     $journal_ok = '1';
     if (is_object($headers) || is_array($headers)) {
@@ -102,8 +102,8 @@ function wpc_v2_probe_direct_entry($force = false) {
     }
     update_option('wpc_v2_direct_entry_journal_ok', $journal_ok === '1' ? 1 : 0, false);
 
-    
-    
+    // If direct entry works but uploads/journal isn't writable, we still fall
+    // back to REST — batch handler needs to write bytes + journal entries.
     if ($journal_ok !== '1') {
         update_option('wpc_v2_direct_entry_healthy', 0, false);
         update_option('wpc_v2_direct_entry_last_error', 'journal_not_writable', false);
@@ -116,12 +116,12 @@ function wpc_v2_probe_direct_entry($force = false) {
 }
 
 
-
+// Plugin activation hook (fires once on activate)
 register_activation_hook(WPC_CC_PLUGIN_FILE, function () {
     wpc_v2_probe_direct_entry(true);
 });
 
-
+// Re-probe when apikey is saved/rotated (option update hook)
 add_action('update_option_wps_ic_options', function ($old_value, $new_value) {
     $old_key = is_array($old_value) ? ($old_value['api_key'] ?? '') : '';
     $new_key = is_array($new_value) ? ($new_value['api_key'] ?? '') : '';
@@ -132,15 +132,15 @@ add_action('update_option_wps_ic_options', function ($old_value, $new_value) {
 
 
 add_action('admin_init', function () {
-    
-    
+    // Probe is a blocking loopback — skip it on admin-ajax; it'll run on the
+    // next regular page load instead.
     if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     if (get_option('wpc_v2_direct_entry_probe_at', null) === null) {
         wpc_v2_probe_direct_entry(true);
     }
 }, 999);
 
-
+// Manual re-detect AJAX (for admin "Re-detect" button)
 add_action('wp_ajax_wpc_v2_redetect_direct_entry', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
@@ -155,8 +155,8 @@ add_action('wp_ajax_nopriv_wpc_v2_journal_drain', 'wpc_v2_journal_drain_handler'
 
 
 function wpc_v2_journal_drain_handler() {
-    
-    
+    // Auth via HMAC. Canonical helper also reads 'wps_ic_settings' (where the
+    // settings UI writes the api_key on fresh installs).
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') {
         wp_die('', '', ['response' => 200]);
@@ -202,33 +202,33 @@ function wpc_v2_journal_note_progress($drained, $remaining) {
     $n = (is_array($s) ? (int) (isset($s['noprog']) ? $s['noprog'] : 0) : 0) + 1;
     $until = 0;
     if ($n >= 3) {
-        $until = time() + (int) min(900 * pow(2, $n - 3), 7200); 
+        $until = time() + (int) min(900 * pow(2, $n - 3), 7200); // 15m, 30m, 1h, 2h cap
         error_log(sprintf('[wpc_v2_journal_drain] no-progress x%d — backing off until %s (files=%d)', $n, gmdate('H:i:s', $until), $remaining));
     }
     @file_put_contents($f, json_encode(['noprog' => $n, 'until' => $until]));
 }
 
-
-
-
-
+/**
+ * The actual drain loop. Extracted so the WP cron safety net can call it
+ * directly (no HMAC needed when triggered by cron).
+ */
 function wpc_v2_journal_drain_run() {
     @ini_set('memory_limit', '256M');
     @ini_set('max_execution_time', '30');
     @ignore_user_abort(true);
 
-    
-    
-    
-    
-    
-    
-    
-    
+    // v7.10.472 — the recurring-hook audit found this the ONLY high-frequency recurrence
+    // (5 min) with no load/memory shed: every other one already has it. It is otherwise well
+    // belted (restore yield, backoff, GET_LOCK(0), 8s wall budget, 200-file cap), so this is
+    // the last belt missing.
+    // BUT a shed that never lifts is a LEAK: the stale-file abandonment below runs INSIDE this
+    // drain, so on a permanently loaded box (busy: load1 38-52 on 2 cores all day) skipping
+    // forever means nothing ever reclaims the journal. Shed at most N consecutive times, then
+    // force one drain through regardless — shedding must bound the work, never abandon it.
     if (function_exists('wpc_under_pressure') && wpc_under_pressure()
         && apply_filters('wpc_v2_journal_shed_on_pressure', true)) {
         $wpc_sn472  = (int) get_option('wpc_v2_journal_shed_n', 0);
-        $wpc_smx472 = max(1, (int) apply_filters('wpc_v2_journal_shed_max', 6)); 
+        $wpc_smx472 = max(1, (int) apply_filters('wpc_v2_journal_shed_max', 6)); // ~30 min at 5-min cadence
         if ($wpc_sn472 < $wpc_smx472) {
             update_option('wpc_v2_journal_shed_n', $wpc_sn472 + 1, false);
             error_log('[wpc_v2_journal_drain] shed_pressure n=' . ($wpc_sn472 + 1) . '/' . $wpc_smx472);
@@ -240,7 +240,7 @@ function wpc_v2_journal_drain_run() {
         update_option('wpc_v2_journal_shed_n', 0, false);
     }
 
-    
+    // Yield to a foreground bulk restore. The journal drain is the heaviest
 
 
     if (function_exists('wpc_v2_active_restore_count') && wpc_v2_active_restore_count() > 0) {
@@ -249,7 +249,7 @@ function wpc_v2_journal_drain_run() {
     }
 
 
-    
+    // GET_LOCK — a backed-off drain costs one file stat, no DB contention, no loopback.
     if (wpc_v2_journal_backoff_until() > time()) {
         return;
     }
@@ -257,7 +257,7 @@ function wpc_v2_journal_drain_run() {
     global $wpdb;
     $got = wpc_worker_lock('wpc_v2_journal_drain', 0) ? 1 : 0;
     if (!$got) {
-        
+        // Another drain chain is already running. Bail silently.
         return;
     }
 
@@ -293,7 +293,7 @@ function wpc_v2_journal_drain_run() {
             }
             if (empty($files)) break;
 
-            
+            // Group entries by imageID
             $by_image = [];
             foreach ($files as $file) {
                 $raw = @file_get_contents($file);
@@ -314,8 +314,8 @@ function wpc_v2_journal_drain_run() {
                         'files'   => [],
                     ];
                 }
-                
-                
+                // Each file's payload['entries'] is a wrapped structure:
+                //   ['flush_reason' => ..., 'received_ms' => ..., 'entries' => [...actual entries...]]
                 if (isset($payload['entries']) && is_array($payload['entries'])) {
                     $inner = isset($payload['entries']['entries']) ? $payload['entries']['entries'] : $payload['entries'];
                     if (is_array($inner)) {
@@ -405,8 +405,8 @@ function wpc_v2_journal_drain_run() {
         wpc_worker_unlock('wpc_v2_journal_drain');
     }
 
-    
-    
+    // Self-chain if files remain OR a pending-fire marker is set. The marker is
+    // set when a batch handler hits the fire throttle and skips firing; without
 
 
     $pending_fire = (int) get_transient('wpc_v2_journal_pending_fire');
@@ -422,19 +422,19 @@ function wpc_v2_journal_drain_run() {
     }
 }
 
-
-
-
-
-
-
+/**
+ * Merge N journal entries for one image into ic_local_variants under a single
+ * GET_LOCK + single update_post_meta. Then recompute_savings if appropriate.
+ *
+ * @return array ['ok' => bool, 'reason' => string|null, 'merged' => int]
+ */
 function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array $pulled_bytes_by_url = []) {
     if (empty($entries)) {
         return ['ok' => true, 'merged' => 0, 'reason' => 'no_entries'];
     }
     global $wpdb;
     $lock = 'wpc_bg_meta_' . (int) $imageID;
-    
+    // 15s timeout (not 5s) — long enough to win the merge race with v2-client.
     $got_lock = wpc_worker_lock($lock);
     if (!$got_lock) {
         error_log(sprintf('[WPC V2] journal_merge lock_unavailable imageID=%d entries=%d — proceeding unlocked (race possible)', (int) $imageID, count($entries)));
@@ -487,8 +487,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 continue;
             }
             if ($type === 'idempotent_noop') {
-                
-                
+                // Already on disk; no meta change needed beyond touching bg_upgraded_ms
+                // so heartbeat picks up the re-arrival.
                 $existing[$key] = array_merge($existing[$key] ?? [], [
                     'bg_upgraded'    => $now,
                     'bg_upgraded_ms' => $now_ms,
@@ -534,7 +534,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 }
                 $dest = $dest_dir . '/' . $filename;
 
-                
+                // Idempotent fast path: if same bytes already on disk, no write.
                 $skip_write = false;
                 if (file_exists($dest) && filesize($dest) === strlen($raw)
                     && hash_file('sha256', $dest) === hash('sha256', $raw)) {
@@ -542,8 +542,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 }
                 if (!$skip_write) {
                     $tmp = $dest . '.wpc_v2_tmp_' . wp_generate_password(8, false);
-                    
-                    
+                    // Log errno + bytes on failure so disk-full vs perms-denied vs
+                    // missing-dir are distinguishable.
                     if (@file_put_contents($tmp, $raw) === false) {
                         $err = error_get_last();
                         error_log(sprintf(
@@ -571,13 +571,13 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                         ));
                     }
                 }
-                
-                
+                // Patch into an inline-bytes shape so the 'persisted' block below
+                // handles it. bytes_size from actual bytes, not service-supplied.
                 $e['bytes_path'] = $dest;
                 $e['bytes_size'] = strlen($raw);
 
             }
-            
+            // Default: 'persisted'
             $orig_size = isset($e['originalSize']) ? (int) $e['originalSize'] : 0;
             $bytes_size = isset($e['bytes_size']) ? (int) $e['bytes_size'] : 0;
             $savings = ($orig_size > 0 && $bytes_size > 0)
@@ -607,8 +607,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 'phase_b_v2'          => true,
                 'phase_b_direct_entry' => true,
             ];
-            
-            
+            // Persist bytes_sha256 so pull-manifest can dedupe pre-flight (skip
+            // variants already on disk via push).
             if (!empty($e['bytes_sha256'])) {
                 $entry['bytes_sha256'] = (string) $e['bytes_sha256'];
             }
@@ -636,8 +636,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 }
             }
 
-            
-            
+            // Heartbeat on each merged variant so the chip animation ticks up
+            // in real time during pull-driven landings.
             $chip_fmt  = strtoupper((string) $fmt);
             $chip_size = ucfirst(str_replace(['_', '-'], ' ', (string) $sz));
             $compressing = get_post_meta($imageID, 'ic_compressing', true);
@@ -662,7 +662,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                 'bg_variant_size' => $chip_size,
             ], 300);
 
-            
+            // Remove from wpc_v2_pending_$id (mirrors REST handler's behavior)
             if (function_exists('wpc_v2_remove_pending')) {
                 $drain_complete = wpc_v2_remove_pending($imageID, $sz, $fmt);
                 if ($drain_complete) {
@@ -683,8 +683,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                         update_option('wpc_v2_drain_alive_until_ms', $extend_to, false);
                     }
 
-                    
-                    
+                    // Log which specific variants are missing, by diffing on-disk
+                    // keys against the full expected size×format matrix.
                     $img_variants = get_post_meta($imageID, 'ic_local_variants', true);
                     if (is_array($img_variants)) {
                         $cnt_j = 0; $cnt_w = 0; $cnt_a = 0;
@@ -769,8 +769,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
         }
     }
 
-    
-    
+    // Recompute savings once per image after merge (defer via shutdown so we
+    // don't hold the drain-worker on it).
     if ($any_drain_complete_signal && function_exists('wpc_v2_recompute_savings')) {
         $imageID_for_shutdown = (int) $imageID;
         add_action('shutdown', function () use ($imageID_for_shutdown) {
@@ -780,8 +780,8 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
             if (function_exists('wpc_v2_recompute_savings')) {
                 wpc_v2_recompute_savings($imageID_for_shutdown);
             }
-            
-            
+            // Invalidate HTML cache for pages referencing this attachment so the
+            // next render emits natural URLs, not stale CDN transform URLs.
             if (function_exists('wpc_v2_purge_html_for_attachment')) {
                 wpc_v2_purge_html_for_attachment($imageID_for_shutdown, 'direct-entry');
             }
@@ -791,9 +791,9 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
     return ['ok' => true, 'merged' => $merged, 'reason' => null, 'any_pull_failed' => $any_pull_failed];
 }
 
-
-
-
+/**
+ * List up to $limit .jsonl files in the journal dir, oldest first.
+ */
 function wpc_v2_journal_list_files($limit = 50) {
     $up = wp_get_upload_dir();
     if (empty($up['basedir'])) return [];
@@ -812,10 +812,10 @@ function wpc_v2_journal_list_files($limit = 50) {
     return $files;
 }
 
-
-
-
-
+/**
+ * Cheap count of .jsonl files (no full readdir loop — just for the
+ * "should we self-chain?" check).
+ */
 function wpc_v2_journal_count_files() {
     $up = wp_get_upload_dir();
     if (empty($up['basedir'])) return 0;
@@ -832,13 +832,13 @@ function wpc_v2_journal_count_files() {
     return $n;
 }
 
-
-
-
-
-
+/**
+ * Fire loopback drain from within WP context (used by self-chain + cron).
+ * Direct-entry handlers use their own wpc_v2_journal_fire_loopback() since
+ * they may not have wp_remote_post available in SHORTINIT.
+ */
 function wpc_v2_journal_fire_loopback_from_wp() {
-    
+    // Canonical helper (reads 'wps_ic_settings', falls back to 'wps_ic_options').
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') return;
     $ts = time();
@@ -872,7 +872,7 @@ function wpc_v2_journal_fire_loopback_from_wp() {
     }
 }
 
-
+// ─── WP cron safety net (every 5 min) ────────────────────────────────────
 
 add_action('wpc_v2_journal_drain_cron', 'wpc_v2_journal_drain_run');
 
@@ -898,7 +898,7 @@ add_action('init', function () {
     }
 }, 100);
 
-
+// Cleanup on plugin deactivation
 register_deactivation_hook(WPC_CC_PLUGIN_FILE, function () {
     $ts = wp_next_scheduled('wpc_v2_journal_drain_cron');
     if ($ts) wp_unschedule_event($ts, 'wpc_v2_journal_drain_cron');

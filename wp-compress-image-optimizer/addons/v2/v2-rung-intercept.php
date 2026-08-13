@@ -14,8 +14,8 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         if (!preg_match('#^(.*/)([^/]+)-(\d{2,4})x(\d{2,4})\.(avif|webp|jpe?g|png)$#i', $path, $m)) return;
         if (!apply_filters('wpc_rung_intercept_enabled', true)) return;
 
-        $dir_url  = $m[1];                   
-        $stem     = $m[2];                   
+        $dir_url  = $m[1];                   // e.g. /wp-content/uploads/2026/05/
+        $stem     = $m[2];                   // e.g. puscas-adryan-..._E-unsplash
         $want_w   = (int) $m[3];
         $req_ext  = strtolower($m[5]);
 
@@ -24,7 +24,9 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         $site = untrailingslashit(site_url());
         $att  = 0;
         foreach (['.jpg', '.jpeg', '.png', '-scaled.jpg', '-scaled.jpeg', '-scaled.png'] as $cand_ext) {
-            $att = (int) attachment_url_to_postid($site . $dir_url . $stem . $cand_ext);
+            $att = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_att_id'))
+                ? (int) wps_rewriteLogic::wpc_att_id($site . $dir_url . $stem . $cand_ext)
+                : (int) attachment_url_to_postid($site . $dir_url . $stem . $cand_ext);
             if ($att > 0) break;
         }
         if ($att <= 0) return;
@@ -49,8 +51,8 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         $subdir = (strpos($meta['file'], '/') !== false) ? substr($meta['file'], 0, strrpos($meta['file'], '/') + 1) : '';
         $base   = rtrim($up['basedir'], '/') . '/' . $subdir;
 
-        
-        
+        // Candidate widths: registered sizes + the main file + on-disk adaptive names from
+        // ic_local_variants ({W}x{H}[-fmt] labels — the deterministic naming).
         $widths = [];
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $sz) {

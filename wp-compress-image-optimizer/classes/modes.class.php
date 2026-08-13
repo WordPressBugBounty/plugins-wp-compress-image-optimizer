@@ -5,12 +5,12 @@ class wps_ic_modes extends wps_ic {
 
   public function __construct()
   {
-    
+    #$this->wpc_filesystem = new WP_Filesystem_Direct('');
   }
 
 
   public function getFile($filePath) {
-    
+    // Fetch the image content
     $fileContent = $this->wpc_filesystem->get_contents($filePath);
     return $fileContent;
   }

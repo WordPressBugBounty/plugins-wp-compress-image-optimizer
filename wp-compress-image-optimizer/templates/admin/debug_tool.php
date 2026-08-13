@@ -1,11 +1,14 @@
 <?php
+if (function_exists('update_option')) {
+    update_option('wpc_diag_until', time() + 7 * 86400, true);
+}
 global $wps_ic, $wpdb;
 
-
-
-
-
-
+// v7.10.651 — these action links hardcoded admin.php?page=<slug>, but the menu registers
+// EITHER top-level (add_menu_page) OR under Settings (add_submenu_page 'options-general.php')
+// depending on configuration — so on Settings-registered installs every debug link 403'd
+// ("not allowed to access this page"). Pre-existing, and unrelated to the nonce work, but
+// found while verifying it. menu_page_url() returns whichever base is real.
 if (!function_exists('wpc_dbg_base651')) {
     function wpc_dbg_base651($slug)
     {
@@ -19,19 +22,19 @@ if (!function_exists('wpc_dbg_base651')) {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ── v7.10.651 — CVE-2026-17608: CSRF → arbitrary option deletion (and its siblings) ──
+// The reported hole was `?delete_option=<any option>` with no nonce: one forged link
+// clicked by a logged-in admin could delete siteurl/home/active_plugins. The sweep found
+// the same shape on 9 more GET parameters here (php_development, wps_ic_debug_log,
+// optimizejs_*, ccss_debug, wps_ic_cdn_mc ...) and on unprotected POST bodies — only three
+// actions in this file were nonce-checked.
+//
+// SCOPE NOTE (why this is an explicit list and not deny-by-default): this template is
+// include_once'd unconditionally by advanced_settings_v4.php, so it executes on every
+// settings page render. A "anything unrecognised needs a nonce" guard would wp_die() on
+// that page's own parameters and forms. The list below is instead enforced by the test
+// suite, which re-derives it from this file and fails the build if a state-changing
+// parameter is ever added without being gated here.
 $wpc_get651 = ['delete_option', 'wps_ic_critical_mc', 'wps_ic_cdn_mc', 'wps_ic_delay_v2_debug',
     'optimizejs_remove', 'optimizejs_debug', 'wps_ic_debug_log', 'php_development',
     'php_debug', 'js_debug', 'ps_debug', 'ccss_debug'];
@@ -51,8 +54,8 @@ if ($wpc_hit651) {
     if (!current_user_can('manage_wpc_settings') && !current_user_can('manage_options')) {
         wp_die(esc_html__('You do not have permission to perform this action.', WPS_IC_TEXTDOMAIN), 403);
     }
-    
-    
+    // Pre-existing flows keep their own nonce actions; wpc_settings_save uses a custom
+    // field name, so both carriers are read.
     $wpc_toks651 = [];
     foreach (['_wpnonce', 'wpc_settings_save_nonce'] as $wpc_f651) {
         if (!empty($_REQUEST[$wpc_f651])) {
@@ -84,8 +87,8 @@ if (!isset($settings['cache_refresh_time'])) {
 }
 
 if (!empty($_GET['delete_option'])) {
-    
-    
+    // Even past the nonce gate, only plugin-owned options are deletable — an admin
+    // mis-click can no longer remove siteurl/home/active_plugins.
     $wpc_opt651 = sanitize_text_field((string) $_GET['delete_option']);
     if (preg_match('/^(wps_ic|wpc_|ic_|wps_optimizejs|wps_critical|wps_no_content)/', $wpc_opt651)) {
         delete_option($wpc_opt651);
@@ -156,13 +159,13 @@ if (isset($_POST['savePreloads'])) {
 
 if (!empty($_POST['preloads_lcp'])) {
 	$preloadsLcp = get_option('wps_ic_preloads', []);
-	$preloadsLcp['lcp'] = [$_POST['preloads_lcp']]; 
+	$preloadsLcp['lcp'] = [$_POST['preloads_lcp']]; // Wrap in array
 	update_option('wps_ic_preloads', $preloadsLcp);
 }
 
 if (!empty($_POST['preloadsMobile_lcp'])) {
 	$preloadsLcp = get_option('wps_ic_preloadsMobile', []);
-	$preloadsLcp['lcp'] = [$_POST['preloadsMobile_lcp']]; 
+	$preloadsLcp['lcp'] = [$_POST['preloadsMobile_lcp']]; // Wrap in array
 	update_option('wps_ic_preloadsMobile', $preloadsLcp);
 }
 
@@ -220,12 +223,12 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                         $settings = get_option(WPS_IC_SETTINGS);
                         $settings['mcCriticalCSS'] = 'mc';
                         update_option(WPS_IC_SETTINGS, $settings);
-                        
+                        #update_option('wps_ic_critical_mc', sanitize_text_field($_GET['wps_ic_critical_mc']));
                     } else {
                         $settings = get_option(WPS_IC_SETTINGS);
                         $settings['mcCriticalCSS'] = 'api';
                         update_option(WPS_IC_SETTINGS, $settings);
-                        
+                        #delete_option('wps_ic_critical_mc');
                     }
                 }
 
@@ -374,7 +377,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                 <?php
                 if (!empty($_GET['php_development'])) {
                     update_option('wps_ic_development', sanitize_text_field($_GET['php_development']));
-                    
+                    // fresh 24h window on every explicit toggle-on; clear the stamp on toggle-off
                     if (sanitize_text_field($_GET['php_development']) === 'true') {
                         update_option('wpc_dev_flag_seen', time(), false);
                     } else {
@@ -1139,7 +1142,7 @@ $wpcLadderTotalFailed    = (int) ($wpcLadderFleet['total_backfills_failed'] ?? 0
 
 <?php
 
-
+// End-to-end singleCompressV4 timings with source attribution.
 $wpcCompressStats = get_option('wpc_compress_stats', []);
 if (!is_array($wpcCompressStats)) $wpcCompressStats = [];
 $wpcCompressFleet   = isset($wpcCompressStats['fleet']) && is_array($wpcCompressStats['fleet']) ? $wpcCompressStats['fleet'] : [];
@@ -1213,7 +1216,7 @@ $wpcCompressFailed    = (int) ($wpcCompressFleet['total_compresses_failed'] ?? 0
 
 <?php
 
-
+// Telemetry for the restore pipeline — mirrors the ladder stats panel structure.
 $wpcRestoreStats = get_option('wpc_restore_stats', []);
 if (!is_array($wpcRestoreStats)) $wpcRestoreStats = [];
 $wpcRestoreFleet   = isset($wpcRestoreStats['fleet']) && is_array($wpcRestoreStats['fleet']) ? $wpcRestoreStats['fleet'] : [];

@@ -13,7 +13,7 @@ class wps_ic_remote_actions extends wps_ic {
 
 
     if ( ! defined('ABSPATH')) {
-      
+      /** Set up WordPress environment */
       require_once(dirname(__FILE__) . '/wp-load.php');
     }
 
@@ -27,7 +27,7 @@ class wps_ic_remote_actions extends wps_ic {
       require_once(ABSPATH . "wp-includes" . '/option.php');
     }
 
-    
+    // Get COMPRESSED attachment
       $compressed_attachments = $wpdb->get_results(
           $wpdb->prepare(
               "
@@ -41,8 +41,8 @@ class wps_ic_remote_actions extends wps_ic {
           AND pm.meta_value = %s
         ORDER BY p.post_date DESC
         ",
-              'attachment',        
-              'inherit',           
+              'attachment',        // p.post_type
+              'inherit',           // p.post_status
               'wps_ic_compressed',
               'true'
           )
@@ -58,14 +58,14 @@ class wps_ic_remote_actions extends wps_ic {
         $original_image = get_post_meta($attachment_id, 'wps_ic_remote_img', true);
 
         if ($compress_data == 'not_able') {
-          
+          // Already Optimized
 
-          
+          // Generate thumbnails
 
 
           $thumbnails = wp_remote_get(site_url('?secret_key=' . $wps_ic::$api_key . '&thumbnails=true&attachment_ID=' . $attachment_id), ['timeout' => 2, 'blocking' => false, 'sslverify' => false]);
 
-          
+          // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');
           delete_post_meta($attachment_id, 'wps_ic_times');
           delete_post_meta($attachment_id, 'wps_ic_compressed');
@@ -75,25 +75,25 @@ class wps_ic_remote_actions extends wps_ic {
           delete_post_meta($attachment_id, 'wps_ic_compressing');
           delete_post_meta($attachment_id, 'wps_ic_restoring');
 
-          
+          /// Delete file from compressed table for stats
           $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
-          
+          // Remove Queue
           $wps_ic->queue->remove_queue($attachment_id);
 
-          
+          // Add generate thumbnail to queue
           $uploadfile  = get_attached_file($attachment_id);
           $attach_data = wp_generate_attachment_metadata($attachment_id, $uploadfile);
           wp_update_attachment_metadata($attachment_id, $attach_data);
 
         } else if ($original_image != '') {
 
-          
+          // Fix for old API
           if ( ! preg_match('/https\:/', $original_image)) {
-            
+            // Setup URL
             $original_image = WPS_IC_APIURL . '?find_restore=' . $original_image;
 
-            
+            // Fetch the URL
             $call = wp_remote_get($original_image, ['timeout' => 25, 'sslverify' => false]);
 
             if (wp_remote_retrieve_response_code($call) == 200) {
@@ -101,11 +101,11 @@ class wps_ic_remote_actions extends wps_ic {
               $body           = json_decode($body);
               $original_image = $body->data;
             } else {
-              
+              // Remove Queue
               $wps_ic->queue->remove_queue($attachment_id, false);
               $wps_ic->log->write_log($attachment_id, 'S3 not file');
 
-              
+              // Add generate thumbnail to queue
               $uploadfile  = get_attached_file($attachment_id);
               $attach_data = wp_generate_attachment_metadata($attachment_id, $uploadfile);
               wp_update_attachment_metadata($attachment_id, $attach_data);
@@ -114,12 +114,12 @@ class wps_ic_remote_actions extends wps_ic {
             }
           }
 
-          
+          // Get file path/name
           $file_data = get_attached_file($attachment_id);
           $file_name = basename($file_data);
           $file_path = str_replace($file_name, '', $file_data);
 
-          
+          // Clear server cache
           clearstatcache();
 
           $tempfile = download_url($original_image, 60);
@@ -130,29 +130,29 @@ class wps_ic_remote_actions extends wps_ic {
             $wps_ic->log->write_log($attachment_id, $original_image);
             $wps_ic->log->write_log($attachment_id, $file_path . $file_name);
 
-            
+            // Copy new file
             if ( ! copy($tempfile, $file_path . $file_name)) {
               $wps_ic->log->write_log($attachment_id, 'Restore Copy Failed');
             } else {
-              
-              
+              // Delete the old file
+              #unlink($file_path . $file_name);
             }
 
-            
+            // Add generate thumbnail to queue
             $uploadfile  = get_attached_file($attachment_id);
             $attach_data = wp_generate_attachment_metadata($attachment_id, $uploadfile);
             wp_update_attachment_metadata($attachment_id, $attach_data);
 
           } else {
-            
+            // Remove Queue
             $wps_ic->queue->remove_queue($attachment_id, false);
             $wps_ic->log->write_log($attachment_id, 'S3 could not download ' . $original_image);
           }
 
-          
+          /// Delete file from compressed table for stats
           $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
-          
+          // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');
           delete_post_meta($attachment_id, 'wps_ic_times');
           delete_post_meta($attachment_id, 'wps_ic_compressed');
@@ -163,16 +163,16 @@ class wps_ic_remote_actions extends wps_ic {
           delete_post_meta($attachment_id, 'wps_ic_restoring');
           delete_post_meta($attachment_id, 'wps_ic_started');
 
-          
+          // Remove Queue
           $wps_ic->queue->remove_queue($attachment_id, false);
 
           $wps_ic->log->write_log($attachment_id, 'Restore Add Queue');
 
-          
+          // Get img src
           $image_src = wp_get_attachment_image_src($attachment_id, 'full');
 
         } else if (empty($original_image)) {
-          
+          // Delete compress data
           delete_post_meta($attachment_id, 'wps_ic_reset');
           delete_post_meta($attachment_id, 'wps_ic_times');
           delete_post_meta($attachment_id, 'wps_ic_compressed');
@@ -182,13 +182,13 @@ class wps_ic_remote_actions extends wps_ic {
           delete_post_meta($attachment_id, 'wps_ic_compressing');
           delete_post_meta($attachment_id, 'wps_ic_restoring');
 
-          
+          /// Delete file from compressed table for stats
           $wpdb->update($wpdb->prefix . 'ic_compressed', ['restored' => '1'], ['attachment_ID' => $attachment_id]);
 
-          
+          // Remove Queue
           $wps_ic->queue->remove_queue($attachment_id);
 
-          
+          // Add generate thumbnail to queue
           $uploadfile  = get_attached_file($attachment_id);
           $attach_data = wp_generate_attachment_metadata($attachment_id, $uploadfile);
           wp_update_attachment_metadata($attachment_id, $attach_data);

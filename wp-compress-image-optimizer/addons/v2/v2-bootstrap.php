@@ -13,11 +13,11 @@ if (!defined('WPC_V2_DIR')) {
 $wpc_v2_mode = get_option('wpc_protocol_version', 'v2');
 
 if ($wpc_v2_mode === 'v1') {
-    
+    // Fast path: customer is on the legacy contract. Don't load anything.
     return;
 }
 
-
+// 'shadow', 'v2', or 'auto': load the capability probe, client, and callback handlers.
 require_once WPC_V2_DIR . '/v2-capabilities.php';
 require_once WPC_V2_DIR . '/v2-client.php';
 require_once WPC_V2_DIR . '/v2-store.php';
@@ -28,15 +28,15 @@ require_once WPC_V2_DIR . '/v2-rung-intercept.php';
 require_once WPC_V2_DIR . '/v2-fast-404.php';
 require_once WPC_V2_DIR . '/v2-sized-trigger.php';
 
-
-
-
-
-
-
-
-
-
+// v7.10.654 — SELF-INTEGRITY: never assume our own code is still on disk.
+// Receipt (thepttv, 2026-07-31): a host malware scanner (Imunify-class, realtime/root)
+// repeatedly flagged v2-callback.php — whose legitimate job is base64_decode() of a
+// signed body followed by file_put_contents() into uploads, i.e. byte-for-byte the shape
+// of a webshell dropper — and "cleaned" it to ZERO BYTES. require_once on an empty file
+// SUCCEEDS SILENTLY, so the REST routes simply never registered, every callback 404'd,
+// and the site looked healthy from the inside for six weeks while no optimized image
+// could ever land. The service team spent that time hunting a service-side cause.
+// A missing handler is now a loud, visible, reportable state.
 if (!function_exists('wpc_v2_selfcheck654')) {
     function wpc_v2_selfcheck654()
     {
@@ -80,8 +80,8 @@ if (!function_exists('wpc_v2_selfcheck654')) {
 
 
 require_once WPC_V2_DIR . '/v2-direct-entry.php';
-
-
+// Phase-B drain recovery + diagnostics (deleted-DB / stranded-drain "drain=null").
+// wp wpc-v2-recover <fresh|resync|status>; or ?wpc_v2_pull_recover=… (admin+nonce).
 require_once WPC_V2_DIR . '/v2-recovery.php';
 
 
@@ -95,7 +95,7 @@ require_once WPC_V2_DIR . '/v2-pull.php';
 
 
 require_once WPC_V2_DIR . '/v2-telemetry.php';
-
+// Pull manifest. The plugin polls GET /optimize-v2/manifest from the customer
 
 
 require_once WPC_V2_DIR . '/v2-pull-manifest.php';
@@ -103,7 +103,7 @@ require_once WPC_V2_DIR . '/v2-pull-manifest.php';
 
 require_once WPC_V2_DIR . '/v2-lazy-cdn.php';
 require_once WPC_V2_DIR . '/v2-wake.php';
-
+// Page-load opportunistic drain trigger (defense layer 4 of the lazy_cdn
 
 
 require_once WPC_V2_DIR . '/v2-page-load-poll.php';
@@ -113,7 +113,7 @@ require_once WPC_V2_DIR . '/v2-lcp-health.php';
 
 
 require_once WPC_V2_DIR . '/v2-lcp-nocache.php';
-
+// Shutdown-function drain trigger (real-time, server-side) plus a WP-cron
 
 
 require_once WPC_V2_DIR . '/v2-shutdown-drain.php';
@@ -128,7 +128,7 @@ require_once WPC_V2_DIR . '/v2-signed-header.php';
 require_once WPC_V2_DIR . '/v2-html-cache-purge.php';
 
 
-
+// "restored/deleted but visitors still see the optimized variant" case: restore
 
 
 require_once WPC_V2_DIR . '/v2-customer-purge.php';
@@ -139,7 +139,7 @@ require_once WPC_V2_DIR . '/v2-lazy-test-setup.php';
 
 require_once WPC_V2_DIR . '/v2-rendered-width-beacon.php';
 
-
+// Mark that v2 is at least loaded so other plugin code can branch on it.
 if (!defined('WPC_V2_LOADED')) {
     define('WPC_V2_LOADED', true);
 }

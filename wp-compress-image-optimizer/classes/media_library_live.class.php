@@ -1,8 +1,8 @@
 <?php
 
-
-
-
+/**
+ * Class - Media Library
+ */
 class wps_ic_media_library_live extends wps_ic
 {
 
@@ -26,7 +26,7 @@ class wps_ic_media_library_live extends wps_ic
     {
         static $wpc_booted29 = false;
         if ($wpc_booted29) {
-            return; 
+            return; // constructed twice per request (core has two call sites) — hooks must register ONCE
         }
         $wpc_booted29 = true;
 
@@ -53,11 +53,11 @@ class wps_ic_media_library_live extends wps_ic
                 $meta = wp_generate_attachment_metadata($_GET['regen'], $path_to_image);
                 wp_update_attachment_metadata($_GET['regen'], $meta);
 
-                
+                // Remove meta tags
                 delete_post_meta($imageID, 'ic_stats');
                 delete_post_meta($imageID, 'ic_status');
                 delete_post_meta($imageID, 'ic_bulk_running');
-                
+                //
                 delete_post_meta($imageID, 'ic_compressed_images');
                 delete_post_meta($imageID, 'ic_compressed_thumbs');
                 delete_post_meta($imageID, 'ic_backup_images');
@@ -83,14 +83,14 @@ class wps_ic_media_library_live extends wps_ic
 
                 add_filter('media_row_actions', [$this, 'add_exclude_link'], 10, 2);
 
-                
-                
+                // WP Custom Fields
+                #add_action('attachment_submitbox_misc_actions', array($this, 'wps_custom_media_fields'), PHP_INT_MAX);
 
-                
+                // WP Media MetaBox
                 add_action('add_meta_boxes_attachment', [$this, 'wpc_custom_media_metabox']);
 
 
-                
+                // Register new columns
                 add_filter('manage_media_columns', [$this, 'wps_compress_column']);
                 add_action('manage_media_custom_column', [$this, 'wps_compress_column_value'], 10, 2);
                 add_action('admin_footer', [$this, 'popups']);
@@ -106,8 +106,8 @@ class wps_ic_media_library_live extends wps_ic
                 wp_localize_script('wps-ic-filters', 'WpsIcFilters', ['filters' => $this->get_filters(), 'filter_all' => __('Optimization Filters', WPS_IC_TEXTDOMAIN)]);
                 add_filter('ajax_query_attachments_args', [$this, 'do_wps_ic_ajax_filters']);
 
-                
-                
+                // Bulk actions disabled — queue processor not yet implemented
+                // $this->add_bulk_actions_list();
                 add_action('admin_notices', [$this, 'custom_bulk_admin_notices']);
             } else {
                 add_action('pre_current_active_plugins', [$this, 'wps_ic_hide_compress_plugin_list']);
@@ -115,11 +115,11 @@ class wps_ic_media_library_live extends wps_ic
         }
     }
 
-    
-
-
-
-
+    /**
+     * Is local enabled?
+     * TODO: Maybe remove
+     * @return int|mixed
+     */
     public function get_local_status()
     {
         if (empty(self::$options['api_key'])) {
@@ -131,7 +131,7 @@ class wps_ic_media_library_live extends wps_ic
             return $allow_local;
         }
 
-        
+        // No HTTP here: the account-status sync maintains the durable copy
         $allow_local = get_option('wps_ic_allow_local');
         if ($allow_local === false) {
             $allow_local = 0;
@@ -143,7 +143,7 @@ class wps_ic_media_library_live extends wps_ic
 
     private function get_filters()
     {
-        return ['uncompressed' => 'Uncompressed', 'compressed' => 'Compressed',
+        return ['uncompressed' => 'Uncompressed', 'compressed' => 'Compressed',//'in_queue' => 'In Queue'
         ];
     }
 
@@ -337,7 +337,7 @@ class wps_ic_media_library_live extends wps_ic
         $output .= '<strong><span id="media-dims-52">' . $totalThumbs . '</span> </strong>';
         $output .= '</div>';
 
-        
+        #echo $output;
     }
 
     public function add_bulk_actions_list()
@@ -348,7 +348,7 @@ class wps_ic_media_library_live extends wps_ic
             $filter = '';
         }
 
-        
+        //Uncompressed view
         if ($filter == 'uncompressed' || $filter == 'all' || !isset($_GET['wps-ic-filters'])) {
             add_filter('bulk_actions-upload', function ($bulk_actions) {
                 $bulk_actions['wps_ic_compress_in_background'] = __('Compress Images', 'wp-compress-image-optimizer');
@@ -357,7 +357,7 @@ class wps_ic_media_library_live extends wps_ic
             add_filter('handle_bulk_actions-upload', [$this, 'start_bulk_in_background'], 10, 3);
         }
 
-        
+        //Queue view
         if ($filter == 'in_queue' || $filter == 'all' || !isset($_GET['wps-ic-filters'])) {
             add_filter('bulk_actions-upload', function ($bulk_actions) {
                 $bulk_actions['wps_ic_remove_from_queue'] = __('Remove from Queue', 'wp-compress-image-optimizer');
@@ -410,10 +410,10 @@ class wps_ic_media_library_live extends wps_ic
         return $redirect_url;
     }
 
-    
-
-
-
+    /**
+     * Hook to add our filters in list view
+     * @return void
+     */
     public function add_wps_ic_filters()
     {
         if (isset($_GET['wps-ic-filters'])) {
@@ -433,10 +433,10 @@ class wps_ic_media_library_live extends wps_ic
         <?php
     }
 
-    
-
-
-
+    /**
+     * Filter attachments in list view
+     * @param \WP_Query $query The wp_query instance.
+     */
     public function do_wps_ic_filters($query)
     {
         if (!isset($_GET['wps-ic-filters'])) {
@@ -474,11 +474,11 @@ class wps_ic_media_library_live extends wps_ic
         return $query;
     }
 
-    
-
-
-
-
+    /**
+     * Apply our filters to grid view ajax query
+     * @param array $query Query parameters.
+     * @return array        New query parameters.
+     */
     public function do_wps_ic_ajax_filters($query)
     {
         if (empty($_POST['query']['wps_ic_filters_ajax'])) {
@@ -525,10 +525,10 @@ class wps_ic_media_library_live extends wps_ic
         return '<a href="' . admin_url('/options-general.php?page=' . $this::$slug . '&view=debug_tool&debug_img=' . $args) . '" target="_blank" class="wpc-dropdown-btn wps-ic-debug-log wpc-dropdown-item-hidden">Debug Log</a>';
     }
 
-    
-
-
-
+    /**
+     * Remove plugin from list if it's hidden
+     * @return void
+     */
     public function wps_ic_hide_compress_plugin_list()
     {
         global $wp_list_table;
@@ -542,10 +542,10 @@ class wps_ic_media_library_live extends wps_ic
     }
 
 
-    
-
-
-
+    /**
+     * Hide the plugin
+     * @return void
+     */
     public function wps_ic_hide_compress()
     {
         echo '<script type="text/javascript">';
@@ -563,9 +563,9 @@ class wps_ic_media_library_live extends wps_ic
         return $cols;
     }
 
-    
-
-
+    /**
+     * Add compression status field to grid view attachment modal.
+     */
     public function add_grid_view_fields($form_fields, $post)
     {
         $type = wp_check_filetype(get_attached_file($post->ID));
@@ -625,12 +625,12 @@ class wps_ic_media_library_live extends wps_ic
         $file_data = get_attached_file($id);
         $type = wp_check_filetype($file_data);
 
-        
+        // Is file extension allowed
         if (!in_array(strtolower($type['ext']), self::$allowed_types)) {
 
-            
-
-
+            /**
+             * Extensions is NOT allowed
+             */
 
             if ($column_name == 'wps_ic_all') {
 
@@ -664,13 +664,13 @@ class wps_ic_media_library_live extends wps_ic
             echo $output;
         } else {
             if (in_array($id, self::$exclude_list)) {
-                
+                // Excluded
                 $output .= '<div class="wps-ic-media-actions-container wps-ic-media-actions-' . $id . '">';
                 $output .= $this->excluded_details($id);
                 $output .= '</div>';
             } else {
 
-                
+                #$compressing = get_transient('wps_ic_compress_' . $id);
 
                 $output .= '<div class="wps-ic-media-actions-container wps-ic-media-actions-' . $id . '">';
                 $output .= $this->compress_details($id);
@@ -686,7 +686,7 @@ class wps_ic_media_library_live extends wps_ic
     }
 
 
-    
+    // ─── Icon stack: idle (with exclude badge), success, engines ────
     private static function icon_stack() {
         $idle = self::icon_idle();
         $success = self::icon_success_check();
@@ -696,7 +696,7 @@ class wps_ic_media_library_live extends wps_ic
         return '<div class="wpc-ml-card-icon">' . $idle . $success . $engine . $engine_restore . '</div>';
     }
 
-    
+    // Idle icon: FA Regular image with exclude badge overlay
     private static function icon_idle() {
         return '<svg class="main-icon icon-idle" viewBox="0 0 448 512" fill="currentColor">'
             . '<path d="M64 80c-8.8 0-16 7.2-16 16l0 320c0 8.8 7.2 16 16 16l320 0c8.8 0 16-7.2 16-16l0-320c0-8.8-7.2-16-16-16L64 80zM0 96C0 60.7 28.7 32 64 32l320 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96zm128 32a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm136 72c8.5 0 16.4 4.5 20.7 11.8l80 136c4.4 7.4 4.4 16.6 .1 24.1S352.6 384 344 384l-240 0c-8.9 0-17.2-5-21.3-12.9s-3.5-17.5 1.6-24.8l56-80c4.5-6.4 11.8-10.2 19.7-10.2s15.2 3.8 19.7 10.2l17.2 24.6 46.5-79c4.3-7.3 12.2-11.8 20.7-11.8z"/>'
@@ -709,17 +709,17 @@ class wps_ic_media_library_live extends wps_ic
             . '</svg>';
     }
 
-    
+    // Success icon: FA Duotone Solid sparkles (compressed)
     private static function icon_success_check() {
         return '<svg class="main-icon icon-success" viewBox="0 0 576 512" fill="currentColor"><path opacity=".4" d="M352 448c0 4.8 3 9.1 7.5 10.8L416 480 437.2 536.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L480 480 536.5 458.8c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L480 416 458.8 359.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L416 416 359.5 437.2c-4.5 1.7-7.5 6-7.5 10.8zM384 64c0 4.8 3 9.1 7.5 10.8L448 96 469.2 152.5c1.7 4.5 6 7.5 10.8 7.5s9.1-3 10.8-7.5L512 96 568.5 74.8c4.5-1.7 7.5-6 7.5-10.8s-3-9.1-7.5-10.8L512 32 490.8-24.5c-1.7-4.5-6-7.5-10.8-7.5s-9.1 3-10.8 7.5L448 32 391.5 53.2c-4.5 1.7-7.5 6-7.5 10.8z"/><path d="M205.1 73.3c-2.6-5.7-8.3-9.3-14.5-9.3s-11.9 3.6-14.5 9.3L123.4 187.4 9.3 240C3.6 242.6 0 248.3 0 254.6s3.6 11.9 9.3 14.5L123.4 321.8 176 435.8c2.6 5.7 8.3 9.3 14.5 9.3s11.9-3.6 14.5-9.3l52.7-114.1 114.1-52.7c5.7-2.6 9.3-8.3 9.3-14.5s-3.6-11.9-9.3-14.5L257.8 187.4 205.1 73.3z"/></svg>';
     }
 
-    
+    // Excluded icon: FA Duotone Solid image-circle-xmark
     private static function icon_excluded_ban() {
         return '<svg class="main-icon icon-excluded" viewBox="0 0 640 512" fill="currentColor"><path opacity=".4" d="M64 96c0-35.3 28.7-64 64-64l320 0c35.3 0 64 28.7 64 64l0 80.7c-5.3-.4-10.6-.7-16-.7-54.8 0-104.3 23-139.3 59.9l-.2-.4c-4.4-7.1-12.1-11.5-20.5-11.5s-16.1 4.4-20.5 11.5L254.1 336 227.7 298.2c-4.5-6.4-11.8-10.2-19.7-10.2s-15.2 3.8-19.7 10.2l-56 80c-5.1 7.3-5.8 16.9-1.6 24.8S143.1 416 152 416l158 0c6 23.3 16.3 45 30 64l-212 0c-35.3 0-64-28.7-64-64L64 96zm80 64a48 48 0 1 0 96 0 48 48 0 1 0 -96 0z"/><path d="M352 368a144 144 0 1 1 288 0 144 144 0 1 1 -288 0zm203.3-59.3c-6.2-6.2-16.4-6.2-22.6 0l-36.7 36.7-36.7-36.7c-6.2-6.2-16.4-6.2-22.6 0s-6.2 16.4 0 22.6l36.7 36.7-36.7 36.7c-6.2 6.2-6.2 16.4 0 22.6s16.4 6.2 22.6 0l36.7-36.7 36.7 36.7c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-36.7-36.7 36.7-36.7c6.2-6.2 6.2-16.4 0-22.6z"/></svg>';
     }
 
-    
+    // Inline SVG action icons (12px stroke icons)
     private static function svg_bolt() {
         return '<svg viewBox="0 0 448 512" fill="currentColor"><path d="M341.2-12.1c9.1 6 13 17.3 9.6 27.6L292 192 412.9 192c19.4 0 35.1 15.7 35.1 35.1 0 10-4.2 19.5-11.7 26.1L136 521.9c-8.1 7.3-20.1 8.2-29.2 2.2s-13-17.3-9.6-27.6L156 320 35.1 320C15.7 320 0 304.3 0 284.9 0 275 4.2 265.5 11.7 258.8L312-9.9c8.1-7.3 20.1-8.1 29.2-2.2zM68.9 272l120.4 0c7.7 0 15 3.7 19.5 10s5.7 14.3 3.3 21.6L171.3 425.9 379.1 240 258.7 240c-7.7 0-15-3.7-19.5-10s-5.7-14.3-3.3-21.6L276.7 86.1 68.9 272z"/></svg>';
     }
@@ -736,30 +736,30 @@ class wps_ic_media_library_live extends wps_ic
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>';
     }
 
-    
+    // ─── FA Sharp Light SVG icons (12px inline) ─────────────────
     private static function icon_brand() {
         if (class_exists('whtlbl_whitelabel_plugin')) {
             return '<svg width="20" height="20" viewBox="0 0 640 512" fill="currentColor"><path d="M528-16l-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-64zM288 320c80.6-35.8 128.6-57.2 144-64-15.4-6.8-63.4-28.2-144-64-35.8-80.6-57.2-128.6-64-144-6.8 15.4-28.2 63.4-64 144-80.6 35.8-128.6 57.2-144 64 15.4 6.8 63.4 28.2 144 64 35.8 80.6 57.2 128.6 64 144 6.8-15.4 28.2-63.4 64-144zm-64 65.2l-34.8-78.2-5-11.2-11.2-5-78.2-34.8 78.2-34.8 11.2-5 5-11.2 34.8-78.2 34.8 78.2 5 11.2 11.2 5 78.2 34.8-78.2 34.8-11.2 5-5 11.2-34.8 78.2zM496 384l0-16-32 0 0 64-64 0 0 32 64 0 0 64 32 0 0-64 64 0 0-32-64 0 0-48z"/></svg>';
         }
         return '<svg width="18" height="18" viewBox="0 0 512 512" fill="currentColor"><path d="M322.4 192C358.9 59.4 379.4-15.3 384-32L340.9 3.9 38.4 256 0 288 198.4 288 189.6 320c-36.5 132.6-57 207.3-61.6 224l43.1-35.9 302.5-252.1 38.4-32-198.4 0 8.8-32zm101.2 64L185.9 454.1c34.3-124.6 52.4-190.6 54.5-198.1l-152 0 237.7-198.1C291.8 182.5 273.7 248.5 271.6 256l152 0z"/></svg>';
     }
-    
+    // FA Sharp Light Bolt
     private static function icon_compress() {
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M322.4 192C358.9 59.4 379.4-15.3 384-32L340.9 3.9 38.4 256 0 288 198.4 288 189.6 320c-36.5 132.6-57 207.3-61.6 224l43.1-35.9 302.5-252.1 38.4-32-198.4 0 8.8-32zm101.2 64L185.9 454.1c34.3-124.6 52.4-190.6 54.5-198.1l-152 0 237.7-198.1C291.8 182.5 273.7 248.5 271.6 256l152 0z"/></svg>';
     }
-    
+    // FA Sharp Light Rotate Left
     private static function icon_restore() {
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M0-16l0 192 192 0c-17.6-17.6-46.4-46.4-86.2-86.2 87.9-79.6 223.8-77 308.6 7.8 39.9 39.9 61.6 91.2 65.1 143.5l0 0c3.5 51.5-10.7 104.4-44 149-74 99.1-214.4 119.5-313.5 45.5-31.9-23.8-55.6-54.5-70.7-88.4l-29.2 13c17.2 38.8 44.4 73.9 80.8 101 113.3 84.6 273.7 61.3 358.3-51.9 38-50.9 54.3-111.4 50.3-170.2-4-59.7-28.8-118.3-74.4-164-97.3-97.3-253.4-99.9-353.9-7.8L0-16zM32 61.3l82.7 82.7-82.7 0 0-82.7z"/></svg>';
     }
-    
+    // FA Sharp Light Ban
     private static function icon_exclude() {
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M402.7 425.3l-316-316c-34.1 39.3-54.7 90.6-54.7 146.7 0 123.7 100.3 224 224 224 56.1 0 107.4-20.6 146.7-54.7zm22.6-22.6c34.1-39.3 54.7-90.6 54.7-146.7 0-123.7-100.3-224-224-224-56.1 0-107.4 20.6-146.7 54.7l316 316zM0 256a256 256 0 1 1 512 0 256 256 0 1 1 -512 0z"/></svg>';
     }
-    
+    // FA Sharp Light Chart Bar
     private static function icon_stats() {
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M32 48l0-16-32 0 0 448 512 0 0-32-480 0 0-400zM368 96l16 0 0-32-256 0 0 32 240 0zM144 192l-16 0 0 32 192 0 0-32-176 0zm0 128l-16 0 0 32 320 0 0-32-304 0z"/></svg>';
     }
-    
+    // FA Sharp Light Circle Check
     private static function icon_include() {
         return '<svg width="12" height="12" viewBox="0 0 512 512" fill="currentColor"><path d="M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zm0-480a224 224 0 1 0 0 448 224 224 0 1 0 0-448zM374.3 172.5l-9.4 12.9-128 176-11 15.2-88.6-88.6 22.6-22.6 62.1 62.1 117-160.8 9.4-12.9 25.9 18.8z"/></svg>';
     }
@@ -805,7 +805,7 @@ class wps_ic_media_library_live extends wps_ic
         $compressing = get_post_meta($imageID, 'ic_compressing', true);
         delete_post_meta($imageID, 'ic_bulk_running');
 
-        
+        // Check if the image ID is already in Bulk Process
         $imageStatus = get_transient('wps_ic_compress_' . $imageID);
 
         if (!empty($_GET['debug_media_library'])) {
@@ -840,8 +840,8 @@ class wps_ic_media_library_live extends wps_ic
 
 
         if (!$is_already_compressed && get_post_meta($imageID, 'wps_ic_exclude_live', true) == 'true') {
-            
-            
+            // Unstick: drop any loading transient / optimizing meta that would otherwise
+            // keep flipping this excluded image back to Optimizing on the next refresh.
             if ($imageStatus) {
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);
@@ -868,8 +868,8 @@ class wps_ic_media_library_live extends wps_ic
         }
 
         if (!$is_already_compressed && ($imageStatus || ($isBulkCompressRunning && empty($stats)) || ($isBulkRestoreRunning && !empty($stats) && empty(self::$parsedImages[$imageID])))) {
-            
-            
+            // Distinguish restoring vs compressing so refresh during either action
+            // renders the correct animation state (wps_ic_restore_live sets status=restoring).
             $is_restoring = (is_array($imageStatus) && isset($imageStatus['status']) && $imageStatus['status'] === 'restoring')
                 || $isBulkRestoreRunning;
             $css_class = $is_restoring ? 'is-restoring' : 'is-compressing';
@@ -897,7 +897,7 @@ class wps_ic_media_library_live extends wps_ic
             return $output;
         }
 
-        
+        // ─── Compressed state ─────────────────────
         if ((!empty($compressing['status']) && ($compressing['status'] == 'compressed' || $compressing['status'] == 'no-further')) || !empty($stats)) {
             $ic_savings = get_post_meta($imageID, 'ic_savings', true);
             $ic_bytes   = get_post_meta($imageID, 'ic_savings_bytes', true);
@@ -927,7 +927,7 @@ class wps_ic_media_library_live extends wps_ic
                     $vc_total++;
                     if (strpos($vc_key, '-avif') !== false)      $vc_avif++;
                     elseif (strpos($vc_key, '-webp') !== false)  $vc_webp++;
-                    elseif (strpos($vc_key, '-png') !== false)   {  }
+                    elseif (strpos($vc_key, '-png') !== false)   { /* skip from chip */ }
                     else                                          $vc_jpeg++;
                 }
                 $vc_title = sprintf('%d JPEG · %d WebP · %d AVIF · %d total',
@@ -963,7 +963,7 @@ class wps_ic_media_library_live extends wps_ic
             $output .= '</div>';
             $output .= '</div>';
 
-        
+        // ─── Not compressed / excluded state ─────────────────────
         } else {
             clearstatcache(true);
             $filedata = get_attached_file($imageID);
@@ -991,8 +991,8 @@ class wps_ic_media_library_live extends wps_ic
                 }
 
 
-                
-                
+                // Animated webp: dispatch permanently declines (frames would mangle) —
+                // never offer a Compress button that can only fail; served as-is is correct
                 if (function_exists('wpc_is_animated_webp') && (string) get_post_mime_type($imageID) === 'image/webp') {
                     $wpc_awb_file = get_attached_file($imageID);
                     if ($wpc_awb_file && wpc_is_animated_webp($wpc_awb_file)) {
@@ -1027,8 +1027,8 @@ class wps_ic_media_library_live extends wps_ic
                     $output .= '<a class="wpc-ml-action wpc-ml-action--primary wps-ic-compress-live" data-attachment_id="' . $imageID . '"' . $compress_title . '>' . self::svg_bolt() . ' ' . $compress_label . '</a>';
                 }
 
-                
-                
+                // Thumbnails…" label + Exclude overflow the card. Exclude returns the moment regen ends
+                // (the card re-renders to the normal Compress/Smart-Delivery + Exclude row).
                 if (!$post_restore_regen_pending) {
                     $output .= '<a class="wpc-ml-action wps-ic-exclude-live" data-action="exclude" data-attachment_id="' . $imageID . '">' . self::svg_x() . ' ' . esc_html__('Exclude', 'wp-compress-image-optimizer') . '</a>';
                 }
@@ -1085,7 +1085,7 @@ class wps_ic_media_library_live extends wps_ic
             $savings_list .= '</tr>';
         }
 
-        
+        #$output .= '<div class="wps-ic-compress-details-popup-' . $imageID . '" style="display:none;">';
         $output .= '<div class="wps-ic-compress-details-popup-inner">';
 
         $output .= '<div class="wps-ic-cd-left">';
@@ -1115,15 +1115,15 @@ class wps_ic_media_library_live extends wps_ic
 
         $output .= '</div>';
 
-        
+        #$output .= '</div>';
 
         return $output;
     }
 
 
-    
-
-
+    /**
+     * Finds all images and saves them to queue
+     */
     public function prepare_restore()
     {
         $compressed_images_queue = $this->find_compressed_images();
@@ -1138,8 +1138,8 @@ class wps_ic_media_library_live extends wps_ic
     public function find_compressed_images($queue = false)
     {
         $compressed_images = [];
-        
-        
+        // fields=ids: return attachment IDs, not full post objects — a large library
+        // would otherwise load every row into memory (OOM risk on small hosts).
         $images = get_posts(['post_type' => 'attachment', 'posts_per_page' => -1, 'fields' => 'ids', 'no_found_rows' => true, 'suppress_filters' => true]);
 
         if ($images) {
@@ -1149,7 +1149,7 @@ class wps_ic_media_library_live extends wps_ic
                 $file_data = get_attached_file($imageID);
                 $type = wp_check_filetype($file_data);
 
-                
+                // Is file extension allowed
                 if (!in_array(strtolower($type['ext']), self::$allowed_types)) {
                     continue;
                 }
@@ -1167,9 +1167,9 @@ class wps_ic_media_library_live extends wps_ic
     }
 
 
-    
-
-
+    /**
+     * Finds all images and saves them to queue
+     */
     public function prepare_compress()
     {
         $uncompressed_images_queue = $this->find_uncompressed_images();
@@ -1197,7 +1197,7 @@ class wps_ic_media_library_live extends wps_ic
                     continue;
                 }
 
-                
+                // Is file extension allowed
                 if (!in_array(strtolower($type['ext']), self::$allowed_types)) {
                     continue;
                 }
@@ -1234,8 +1234,8 @@ class wps_ic_media_library_live extends wps_ic
 
         $actions['exclude'] .= '<a href="#" class="wps-ic-include-live-link" id="wps-ic-include-live-link-' . $att->ID . '" data-action="include" data-attachment_id="' . $att->ID . '" title="Include" ' . $include . '>Include</a>';
 
-        
-        
+        // Lifecycle for local next-gen siblings on EVERY image type incl. webp/avif
+        // sources ("unsupported" rows had no way to evict a bad on-disk variant)
         $actions['wpc_purge_variants'] = '<a href="#" class="wpc-purge-variants-link" data-attachment_id="' . $att->ID . '" title="' . esc_attr__('Remove locally generated AVIF/WebP variant files for this image', 'wp-compress-image-optimizer') . '">' . esc_html__('Purge Variants', 'wp-compress-image-optimizer') . '</a>';
 
         return $actions;

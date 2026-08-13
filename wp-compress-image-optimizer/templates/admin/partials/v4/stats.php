@@ -7,16 +7,16 @@ $stats_live = self::$stats_live;
 $stats_local = self::$stats_local;
 $stats_local_sum = self::$stats_local_sum;
 
-
-
-
+/**
+ * Quick fix for PHP undefined notices
+ */
 $wps_ic_active_settings['optimization']['lossless'] = '';
 $wps_ic_active_settings['optimization']['intelligent'] = '';
 $wps_ic_active_settings['optimization']['ultra'] = '';
 
-
-
-
+/**
+ * Decides which setting is active
+ */
 if (!empty($wps_ic::$settings['optimization'])) {
   if ($wps_ic::$settings['optimization'] == 'lossless') {
     $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';

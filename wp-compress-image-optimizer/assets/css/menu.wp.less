@@ -1,5 +1,5 @@
 #wp-admin-bar-wp-compress>a {
-  padding:0px !important;
+  padding: 0 12px 0 30px !important; // FORCED: original rule used !important; one geometry contract with admin-bar.less
   position:relative;
 }
 #old-adminmenuwrap {
@@ -70,7 +70,15 @@
 .wp-compress-admin-bar-icon {
   position: absolute !important;
   top: 5px;
-  left: 5px;
+  left: 7px;
+}
+
+.wpc-admin-bar-title {
+  margin-left: 6px;
+  padding-right: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  vertical-align: middle;
 }
 
 .wp-compress-admin-bar-icon:before {

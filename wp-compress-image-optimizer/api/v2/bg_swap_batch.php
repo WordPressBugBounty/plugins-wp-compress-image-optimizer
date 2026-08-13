@@ -43,7 +43,7 @@ $serverTime = isset($body['serverTime']) ? (int) $body['serverTime'] : 0;
 $clockSkewMs = $serverTime > 0 ? (int) round(($entry_t * 1000) - $serverTime) : null;
 $flushReason = isset($body['flush_reason']) ? preg_replace('/[^a-z_]/', '', (string) $body['flush_reason']) : '';
 
-
+// Wrapper-level fallback fields (JW pod batch shape)
 $wrap_size   = isset($body['sizeLabel']) ? preg_replace('/[^a-z0-9_\-]/i', '', (string) $body['sizeLabel']) : '';
 $wrap_orig   = isset($body['originalSize']) ? (int) $body['originalSize'] : 0;
 $wrap_fname  = isset($body['filename']) ? $body['filename'] : null;
@@ -99,7 +99,7 @@ foreach ($variants as $idx => $v) {
     }
     if ($fmt === 'jpg') $fmt = 'jpeg';
 
-    
+    // No-improvement: record without bytes write.
     if (!empty($v['noImprovement']) || (isset($v['bumped']) && (string) $v['bumped'] === 'source_already_optimal')) {
         $reason = !empty($v['noImprovement'])
             ? (isset($v['reason']) ? (string) $v['reason'] : 'no_improvement')
@@ -116,7 +116,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
+    // Filename resolution
 
 
     $filename = '';
@@ -143,7 +143,7 @@ foreach ($variants as $idx => $v) {
         }
     }
 
-    
+    // Bytes
     $b64       = isset($v['bytesB64']) ? (string) $v['bytesB64'] : '';
     $fetch_url = isset($v['fetchUrl']) ? (string) $v['fetchUrl'] : '';
     $raw = null;
@@ -175,7 +175,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
+    // Atomic disk write
     $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
     if (!$persist['ok']) {
         $results[] = ['ok' => false, 'kind' => 'rejected', 'error' => $persist['error'], 'sizeLabel' => $sz, 'format' => $fmt];
@@ -193,7 +193,7 @@ foreach ($variants as $idx => $v) {
         continue;
     }
 
-    
+    // Build the journal entry (drain merges into ic_local_variants)
     $orig_size = isset($v['originalSize']) ? (int) $v['originalSize']
                 : (isset($v['orig_size']) ? (int) $v['orig_size'] : $wrap_orig);
     $kb        = isset($v['kb']) ? (float) $v['kb'] : 0.0;
@@ -218,7 +218,7 @@ foreach ($variants as $idx => $v) {
 
 $t_after_loop = microtime(true);
 
-
+// ─── Write journal entries (one file per batch) ───────────────────────────
 $journal_file = null;
 if (!empty($journal_entries)) {
     $journal_file = wpc_v2_journal_write($imageID, $jobId, [
@@ -239,8 +239,8 @@ if (!empty($journal_entries)) {
 
 $t_handler_end = microtime(true);
 
-
-
+// ─── Timing log (matches REST handler's format for grep correlation) ──────
+//
 
 
 error_log(sprintf(

@@ -7,24 +7,24 @@ class WPC_Negotiated_Delivery
 
     const EMISSION_READY = true;
 
-    
+    /** Marker so the non-image rewriters / a second pass never re-touch our output. */
     const MARK = 'data-wpc-nd';
 
-    
-
-
-
+    /**
+     * Per-page <img> counter for positional native-lazy injection (reset atop rewrite_buffer()).
+     * First $skipFirst images = eager (LCP region), the rest = native loading="lazy".
+     */
     private static $img_index = 0;
 
 
     private static $jpeg_mode = false;
 
-    
-
-
-
-
-
+    /**
+     * Mode-B flag. build_natural_url() appends ?_wpc_m=r&_redirect_target=origin so the edge
+     * 302-redirects each image to the customer ORIGIN (origin serves the bytes, ~99% Bunny BW). Set by
+     * the ?wpc_delivery=modeb test force OR by edge_origin_active() (resolver-proven Mode-B). The tokens
+     * are constant → one stable cache key per image.
+     */
     private static $modeb_test = false;
 
 
@@ -49,7 +49,7 @@ class WPC_Negotiated_Delivery
                 }
             }
         }
-        
+        // Never-configured installs (card untouched) stay inert.
         return self::EMISSION_READY;
     }
 
@@ -71,12 +71,12 @@ class WPC_Negotiated_Delivery
         return $mode;
     }
 
-    
-
-
-
-
-
+    /**
+     * Images-master gate. The "Images" tile is the master switch for image CDN delivery: it binds to
+     * serve[jpg] but drives ALL image formats. When OFF, image delivery stands down (served from origin)
+     * — matching the model "Images off ⇒ no images on the CDN at all". Next-Gen only decides the FORMAT
+     * when images are actually on the CDN. Pass $s to reuse an already-loaded settings copy.
+     */
     public static function cdn_images_enabled($s = null)
     {
         if ($s === null) {
@@ -94,7 +94,7 @@ class WPC_Negotiated_Delivery
     {
         if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return false;
 
-        
+        // Context bypasses — never rewrite in admin/ajax/cron/feed/amp/rest.
         if (is_admin()) return false;
         if (defined('DOING_AJAX') && DOING_AJAX) return false;
         if (defined('DOING_CRON') && DOING_CRON) return false;
@@ -103,24 +103,24 @@ class WPC_Negotiated_Delivery
         if (function_exists('is_amp_endpoint') && is_amp_endpoint()) return false;
         if (defined('REST_REQUEST') && REST_REQUEST) return false;
 
-        
-        
+        // Test-mode override (runs before emission_ready so a tester can force edge on a next-gen-off
+        // site). 'edge' → on (needs a zone); any other forced mode stands this path down.
         $forced = self::test_force_mode();
         if ($forced === 'edge' || $forced === 'modeb') return self::cdn_host() !== '';
         if ($forced !== null)   return false;
 
-        
+        // Images-master gate (test-mode forces above bypass it so testers can still force edge).
         if (!self::cdn_images_enabled()) return false;
 
         if (!self::emission_ready()) return false;
 
-        
+        // Emergency force-off filter (defaults true — resolver remains the real gate).
         if (!apply_filters('wpc_negotiated_delivery_enabled', true)) return false;
 
 
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) return false;
 
-        
+        // Activate only where the resolver has verified the CDN-edge tier for this site.
         if (!class_exists('WPC_Delivery_Resolver')) return false;
         return WPC_Delivery_Resolver::resolve() === WPC_Delivery_Resolver::TIER_CDN_EDGE;
     }
@@ -130,7 +130,7 @@ class WPC_Negotiated_Delivery
     {
         if (defined('WPC_NEGOTIATED_KILL') && WPC_NEGOTIATED_KILL) return false;
 
-        
+        // Same context bypasses as is_active() — never rewrite in admin/ajax/cron/feed/amp/rest.
         if (is_admin()) return false;
         if (defined('DOING_AJAX') && DOING_AJAX) return false;
         if (defined('DOING_CRON') && DOING_CRON) return false;
@@ -139,12 +139,12 @@ class WPC_Negotiated_Delivery
         if (function_exists('is_amp_endpoint') && is_amp_endpoint()) return false;
         if (defined('REST_REQUEST') && REST_REQUEST) return false;
 
-        
+        // Test-mode override: 'natural' forces THIS path on; 'edge'/'legacy' stand it down.
         $forced = self::test_force_mode();
         if ($forced === 'natural') return self::cdn_host() !== '';
         if ($forced !== null)      return false;
 
-        
+        // Emergency force-off: the shared negotiated kill-filter + a jpeg-natural-specific one.
         if (!apply_filters('wpc_negotiated_delivery_enabled', true)) return false;
         if (!apply_filters('wpc_jpeg_natural_enabled', true)) return false;
 
@@ -153,20 +153,20 @@ class WPC_Negotiated_Delivery
         $s = get_option(WPS_IC_SETTINGS);
         if (!is_array($s)) return false;
 
-        
+        // Images-master gate: jpeg-natural images also stand down when image CDN is off.
         if (!self::cdn_images_enabled($s)) return false;
 
-        
+        // JPEG-natural is ONLY for the Next-Gen-OFF ceiling. webp/avif go through is_active().
         if (WPC_Delivery_Resolver::effective_ceiling($s) !== 'off') return false;
 
-        
+        // CDN must be live — clean zone URLs only make sense with the CDN actually on.
         if (empty($s['live-cdn']) || (string) $s['live-cdn'] !== '1') return false;
 
-        
+        // Respect the per-zone master kill (cdn_disabled / auto-disable) — emit ZERO CDN URLs then.
         if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) return false;
 
-        
-        
+        // Require a PROVEN CDN edge: a zone that negotiates .webp certainly serves a plain .jpg.
+        // resolve_verbose() returns the cached verify on the front-end (no probe — never blocks a render).
         $v = WPC_Delivery_Resolver::resolve_verbose();
         return is_array($v) && isset($v['verify']['cdn']['ok']) && $v['verify']['cdn']['ok'] === true;
     }
@@ -184,11 +184,11 @@ class WPC_Negotiated_Delivery
         return trim((string) get_option('ic_cdn_zone_name'));
     }
 
-    
-
-
-
-
+    /**
+     * TRUE when the resolver has proven CDN-edge with redirect_target='origin' (the "Edge negotiate"
+     * radio with CDN-bytes off: the zone 302-negotiates and the ORIGIN serves the bytes — Mode-B).
+     * Drives the production token append in build_natural_url(). resolve_verbose() is front-end-cached.
+     */
     public static function edge_origin_active()
     {
         if (!class_exists('WPC_Delivery_Resolver')) return false;
@@ -198,15 +198,15 @@ class WPC_Negotiated_Delivery
             && $rv['redirect_target'] === 'origin';
     }
 
-    
-
-
-
-
+    /**
+     * Buffer-level rewrite. Rewrites each eligible <img> to a single plain <img> with .webp native URLs.
+     * Touches <img> ONLY — the caller must still run the CSS/font/JS rewriters. try/catch → on any error
+     * returns the buffer unchanged (never blank a page).
+     */
     public static function rewrite_buffer($html)
     {
         try {
-            
+            // Page-context guards: reuse the legacy gate verbatim (single source of truth).
             if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'dontRunif')
                 && !wps_cdn_rewrite::dontRunif()) {
                 return $html;
@@ -217,7 +217,7 @@ class WPC_Negotiated_Delivery
                 return $html;
             }
 
-            
+            // Reset the per-page <img> counter that drives positional native-lazy injection.
             self::$img_index = 0;
 
 
@@ -226,7 +226,7 @@ class WPC_Negotiated_Delivery
 
             self::$modeb_test = (self::test_force_mode() === 'modeb') || self::edge_origin_active();
 
-            
+            // Protect <noscript> and any pre-existing <picture> from being touched.
             $picture_stash = [];
             $html = preg_replace_callback('/<noscript\b[^>]*>.*?<\/noscript>/is', function ($m) use (&$picture_stash) {
                 $i = '___WPCND_NOSCRIPT_' . count($picture_stash) . '___';
@@ -239,7 +239,7 @@ class WPC_Negotiated_Delivery
                 return $i;
             }, $html);
 
-            
+            // Negative lookbehind on quote: don't match <img> inside an attribute string.
             $html = preg_replace_callback('/(?<![\\"\'])<img\b[^>]*>/i', function ($m) {
                 try {
                     return self::rewrite_one_img($m[0]);
@@ -260,13 +260,13 @@ class WPC_Negotiated_Delivery
         }
     }
 
-    
-
-
-
+    /**
+     * Rewrite a single <img …> to a plain <img> with .webp native URLs, or return it
+     * unchanged if it must be skipped. Reuses the legacy skip predicates (intrinsic guards).
+     */
     private static function rewrite_one_img($tag)
     {
-        
+        // Already processed by us, or already on the CDN → leave it.
         if (strpos($tag, self::MARK) !== false) return $tag;
 
 
@@ -275,7 +275,7 @@ class WPC_Negotiated_Delivery
         $src = isset($attrs['src']) ? trim($attrs['src']) : '';
         if ($src === '') return $tag;
 
-        
+        // ── Intrinsic skips (render-independent; reuse legacy guards) ──────────────
         if (stripos($src, 'data:') === 0) return $tag;
         if (preg_match('/\.(svg|svgz|gif|ico)(\?|$)/i', $src)) return $tag;
         $host = self::cdn_host();
@@ -290,10 +290,10 @@ class WPC_Negotiated_Delivery
         $cls = isset($attrs['class']) ? $attrs['class'] : '';
         if (preg_match('/\b(skip-lazy|notlazy|nolazy|breakdance|jet-image|data-lazy)\b/i', $cls)) return $tag;
 
-        
+        // Resolve the attachment + metadata (need the registered -WxH sub-sizes).
         $att = (class_exists('WPC_Modern_Delivery') && method_exists('WPC_Modern_Delivery', 'resolve_attachment_id'))
             ? (int) WPC_Modern_Delivery::resolve_attachment_id($src, $cls)
-            : (function_exists('attachment_url_to_postid') ? (int) attachment_url_to_postid(preg_replace('/\?.*$/', '', $src)) : 0);
+            : ((class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_att_id')) ? (int) wps_rewriteLogic::wpc_att_id($src) : 0);
         if ($att <= 0) return $tag;
         if (class_exists('WPC_Modern_Delivery') && method_exists('WPC_Modern_Delivery', 'is_processable')
             && !WPC_Modern_Delivery::is_processable($att)) return $tag;
@@ -356,14 +356,14 @@ class WPC_Negotiated_Delivery
         return self::$afold_hints_cache;
     }
 
-    
-
-
-
+    /**
+     * Build the plain <img>. NO <picture>. src + srcset are .webp native URLs at the
+     * registered sub-sizes; the edge negotiates the real format per Accept.
+     */
     private static function build_negotiated_img($tag, $attrs, $att, $meta)
     {
-        
-        $entries = [];   
+        // Width → -WxH .webp URL for each registered sub-size (+ the full size).
+        $entries = [];   // "url Ww"
         $by_width = [];
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $sz) {
@@ -381,7 +381,7 @@ class WPC_Negotiated_Delivery
                 $by_width[$w] = $url;
             }
         }
-        
+        // Full / main size (its basename = the attached file).
         if (!empty($meta['width']) && !empty($meta['file'])) {
             $full = self::build_natural_url(basename((string) $meta['file']), $meta);
             if ($full !== '') $by_width[(int) $meta['width']] = $full;
@@ -402,8 +402,8 @@ class WPC_Negotiated_Delivery
                     $aw = (int) $am[1];
                     $wh = $am[1] . 'x' . $am[2];
                     if ($aw <= 0 || isset($by_width[$aw]) || isset($seen_wh[$wh]) || $base_pr === '') continue;
-                    
-                    
+                    // Same ratio rule for adaptive variants (defensive — a crop-labeled variant must
+                    // never reach a mismatched-ratio srcset).
                     if (!empty($meta['width']) && !empty($meta['height'])
                         && function_exists('wp_image_matches_ratio')
                         && !wp_image_matches_ratio($aw, (int) $am[2], (int) $meta['width'], (int) $meta['height'])) {
@@ -429,7 +429,7 @@ class WPC_Negotiated_Delivery
         }
         if (empty($by_width)) return $tag;
 
-        
+        // IDEAL-WIDTH GENERATOR. The rungs above only advertise widths that already exist; this computes
 
 
         $loading = isset($attrs['loading']) ? $attrs['loading'] : '';
@@ -442,7 +442,7 @@ class WPC_Negotiated_Delivery
             $w_baked = isset($attrs['width']) ? (int) preg_replace('/\D/', '', (string) $attrs['width']) : 0;
             if ($w_baked > (int) $m_baked[1]) {
                 $attrs['sizes'] = '(max-width: ' . $w_baked . 'px) 100vw, ' . $w_baked . 'px';
-                $nd_rw352 = true; 
+                $nd_rw352 = true; // reworked in place = INVENTED, not original-attr
             } else {
                 unset($attrs['sizes']);
             }
@@ -470,13 +470,13 @@ class WPC_Negotiated_Delivery
                 }
             }
         }
-        
+        // $img_index increments LATER (just before attr emission), so here the FIRST image still reads 0.
         if ($wpc_lcp_sizes === '' && self::$img_index === 0) {
             $set_l = get_option(WPS_IC_SETTINGS);
             if (is_array($set_l) && !empty($set_l['optimize-lcp'])) {
                 $w_lcp  = isset($attrs['width']) ? (int) preg_replace('/\D/', '', (string) $attrs['width']) : 0;
-                
-                
+                // auto-sizes resolves pre-layout to the UA fallback (3000px) and a CSS-auto
+                // theme RENDERS it (liampowermagic logo) — never on the first/ATF image.
                 $pfx    = '';
 
 
@@ -499,7 +499,7 @@ class WPC_Negotiated_Delivery
         $ng_cls   = isset($attrs['class']) ? (string) $attrs['class'] : '';
 
 
-        
+        // 887-natural ads kept serving 361 in a 288 box. Let an auto-sized, non-full-bleed tag through on auto.
         $ng_has_auto = isset($attrs['sizes']) && stripos((string) $attrs['sizes'], 'auto') !== false;
         $ng_confident = !preg_match('/\b(alignfull|alignwide|wp-block-cover|elementor|brz-|brxe-|et_pb)\b/i', $ng_cls)
             && (
@@ -597,16 +597,16 @@ class WPC_Negotiated_Delivery
         $nd_set_rs     = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
         $nd_nobasis_rs = (!$nd_has_basis
             && self::$img_index >= 1
-            
+            // real meta dims required — the lane's safety is the injected width/height anchor
             && is_array($meta) && !empty($meta['width']) && !empty($meta['height'])
             && is_array($entries) && count($entries) > 1
             && is_array($nd_set_rs) && !empty($nd_set_rs['lazy-auto-sizes'])
             && !preg_match('/\b(rs|slide|lgx_app|dynamic-image|breakdance)\b/i', (isset($attrs['class']) ? (string) $attrs['class'] : ''))
             && apply_filters('wpc_nd_auto_sizes', true, $attrs));
-        
-        
-        
-        
+        // A one-rung srcset at the image's own width offers no choice — it only flips
+        // intrinsic sizing from natural to sizes-math, which re-renders CSS-auto themes
+        // at attr size (liam logo: 311px vs the theme's 152px). Plain src = tag is
+        // structurally identical to the original, so the theme renders it identically.
         reset($by_width);
         $nd_single353 = (count($by_width) === 1)
             && ((int) key($by_width) === $nd_w_attr || (int) key($by_width) === (int) (isset($meta['width']) ? $meta['width'] : 0));
@@ -648,9 +648,9 @@ class WPC_Negotiated_Delivery
 
 
         $nd_sizes = '';
-        
-        
-        
+        // Only sizes the ORIGINAL tag carried may take the auto prefix — on invented
+        // sizes a CSS-auto theme renders the pre-layout UA fallback (liampowermagic
+        // 3000px logo; this block re-prefixed what the LCP lane had cleaned).
         $nd_from_attr349 = false;
         if ($wpc_lcp_sizes !== '') {
             $nd_sizes = (string) $wpc_lcp_sizes;
@@ -658,7 +658,7 @@ class WPC_Negotiated_Delivery
             $nd_sizes = (string) $attrs['sizes'];
             $nd_from_attr349 = !$nd_rw352;
         } elseif ($nd_w_attr > 0) {
-            
+            // Width attr present: anchor sizes to it (avoids 100vw over-fetch on small slots;
 
             $nd_sizes = '(max-width: ' . $nd_w_attr . 'px) 100vw, ' . $nd_w_attr . 'px';
         } elseif ($nd_nobasis_rs && isset($max_w) && (int) $max_w > 0) {
@@ -666,8 +666,8 @@ class WPC_Negotiated_Delivery
 
             $nd_sizes = (int) $max_w . 'px';
         }
-        
-        
+        // Assigned OUTSIDE the sizes gate — the CLS dims backfill below reads these on
+        // every path, including single-rung tags the .353 gate skips.
         $nd_loading = isset($attrs['loading']) ? (string) $attrs['loading'] : '';
         $nd_dw = isset($attrs['width'])  ? (int) preg_replace('/\D/', '', (string) $attrs['width'])  : 0;
         $nd_dh = isset($attrs['height']) ? (int) preg_replace('/\D/', '', (string) $attrs['height']) : 0;
@@ -679,13 +679,13 @@ class WPC_Negotiated_Delivery
             $nd_set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
             $nd_auto_on = is_array($nd_set) && !empty($nd_set['lazy-auto-sizes']);
             if ($nd_loading === 'lazy'
-                
-                
+                // no-basis lane keeps auto: its injected real dims anchor the render, and
+                // without auto every device downloads the largest rung.
                 && ($nd_from_attr349 || $nd_nobasis_rs)
                 && apply_filters('wpc_nd_auto_sizes', $nd_auto_on, $attrs)
 
 
-                
+                // REAL attr dims or forgo the auto prefix (skip > break).
                 && ($nd_nobasis_rs
                     || (wps_rewriteLogic::lazy_auto_aspect_safe($nd_dw, $nd_dh, $nd_rw, $nd_rh) && $nd_dw > 0 && $nd_dh > 0))
                 && stripos($nd_sizes, 'auto') === false) {
@@ -698,9 +698,9 @@ class WPC_Negotiated_Delivery
         $class = trim((isset($attrs['class']) ? $attrs['class'] : '') . ' wpc-nd');
         $out .= ' class="' . esc_attr($class) . '"';
 
-        
-        
-        
+        // CLS backfill: a style-height-only theme <img> (no width/height attrs) is unsized
+        // and shifts on load — real dims give the browser the aspect ratio; theme CSS still
+        // wins the rendered size (linkware logo receipt: 0.18 CLS from one unsized logo)
         if (empty($attrs['width']) && empty($attrs['height']) && $nd_rw > 0 && $nd_rh > 0) {
             $out .= ' width="' . (int) $nd_rw . '" height="' . (int) $nd_rh . '"';
         }
@@ -734,7 +734,7 @@ class WPC_Negotiated_Delivery
         $up = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : (function_exists('wp_upload_dir') ? wp_upload_dir() : []);
         if (empty($up['baseurl'])) return '';
 
-        
+        // Sub-size 'file' is just a basename; prefix with the main file's year/month subdir.
         $subdir = '';
         if (!empty($meta['file'])) {
             $d = dirname((string) $meta['file']);
@@ -763,14 +763,14 @@ class WPC_Negotiated_Delivery
             $fmt = class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_single_url_format')
                 ? wps_rewriteLogic::wpc_single_url_format($pick_ext, $zone_is_cf_direct, true)
                 : 'webp';
-            
-            
+            // FALSE (KILL / unknown) → keep the proven .webp cache-key default (safe under KILL because
+            // this whole path is gated off when negotiated is_active() is false).
             $swap_ext = (is_string($fmt) && $fmt !== '') ? $fmt : 'webp';
             $rel = preg_replace('/\.(jpe?g|png|gif|webp|avif)$/i', '.' . $swap_ext, $rel);
         }
 
-        
-        $path = parse_url($up['baseurl'], PHP_URL_PATH); 
+        // Build on the uploads path, but with the CDN host (not the origin host).
+        $path = parse_url($up['baseurl'], PHP_URL_PATH); // e.g. /wp-content/uploads
         $path = $path ? rtrim($path, '/') : '/wp-content/uploads';
 
         $url = 'https://' . $host . $path . '/' . $rel;
@@ -785,7 +785,7 @@ class WPC_Negotiated_Delivery
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
             && wps_rewriteLogic::src_hint_enabled()) {
             $sh_oe  = isset($orig_ext) ? strtolower((string) $orig_ext) : '';
-            $sh_src = in_array($sh_oe, ['png', 'gif', 'webp', 'jpg', 'jpeg'], true) ? $sh_oe : ''; 
+            $sh_src = in_array($sh_oe, ['png', 'gif', 'webp', 'jpg', 'jpeg'], true) ? $sh_oe : ''; // literal ext: jpg and jpeg are DISTINCT files at origin
             if ($sh_src !== '' && stripos($url, 'src=') === false) {
                 $url .= (strpos($url, '?') === false ? '?' : '&') . 'src=' . $sh_src;
             }
@@ -793,11 +793,11 @@ class WPC_Negotiated_Delivery
         return $url;
     }
 
-    
-
-
-
-
+    /**
+     * Parse ALL attributes of a single tag → [lower-name => value]. Handles double-, single-,
+     * and unquoted values; entity-decodes first so esc_attr on re-emit doesn't double-encode.
+     * Mirrors wps_rewriteLogic::getAllTags' regex but is self-contained + side-effect-free.
+     */
     private static function parse_attrs($tag)
     {
         $attrs = [];
@@ -820,10 +820,10 @@ class WPC_Negotiated_Delivery
         return $attrs;
     }
 
-    
-
-
-
+    /**
+     * Uploads-relative path of a local URL (e.g. "2026/05/photo-768x1042.jpg"), or '' if the
+     * URL isn't under the uploads dir. Host-agnostic (compares PATHs only).
+     */
     private static function uploads_relative($url)
     {
         if ($url === '') return '';
@@ -837,7 +837,7 @@ class WPC_Negotiated_Delivery
         return ltrim(substr($url_path, strlen($base_path)), '/');
     }
 
-    
+    /** Is this URL on the local site (uploads), not an external host? */
     private static function is_local($url)
     {
         $site = function_exists('site_url') ? site_url() : '';

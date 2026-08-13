@@ -167,7 +167,7 @@
                                            checked="checked">
                                     <label class="with-label" for="mode-options"><span></span></label>
                                 </div>
-                                <?php ?>
+                                <?php #} ?>
                             </div>
                         </div>
                     </div>

@@ -24,9 +24,9 @@ class wps_ic_combine_js
     public $file_count;
     public $current_section;
 
-    
-
-
+    /**
+     * @var void
+     */
 
     public function __construct()
     {
@@ -45,7 +45,7 @@ class wps_ic_combine_js
         $this->all_excludes = self::$excludes->combineJSExcludes();
 
         if (!empty($this->settings['delay-js']) && $this->settings['delay-js'] == '1') {
-            
+            //If it shouldn't be delayed, it shouldn't be combined
             $this->all_excludes = array_merge($this->all_excludes, self::$excludes->delayJSExcludes());
         }
 
@@ -59,7 +59,7 @@ class wps_ic_combine_js
             $this->zone_name = $custom_cname;
         }
 
-        
+        //Check if Hide my WP is active and get replaces
         $this->hmwpReplace = false;
         if (class_exists('HMWP_Classes_ObjController')) {
             $this->hmwpReplace = true;
@@ -91,7 +91,7 @@ class wps_ic_combine_js
         $this->current_file = '';
     }
 
-    
+    // v7.10.644 — see combine_css: a rebuild that shrinks must clear its own leftovers.
     public $wpc_written644 = [];
     public function wpc_sweep_unwritten644()
     {
@@ -105,10 +105,10 @@ class wps_ic_combine_js
         }
     }
 
-    
-    
-    
-    
+    // v7.10.644 — the rebuild trigger used to be DELETION of the key dir, which left a
+    // 404 window for every cached page referencing the files. Now a stale signal: the
+    // 'all' purge stamps wpc_combine_stale_epoch, per-key purges drop a .wpc-stale
+    // marker; a stale dir falls through to the rebuild path, which OVERWRITES in place.
     private function wpc_combine_stale644()
     {
         try {
@@ -178,7 +178,7 @@ class wps_ic_combine_js
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
             return $tag;
-            
+            #return print_r(array($tag),true);
         }
 
 
@@ -186,7 +186,7 @@ class wps_ic_combine_js
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        
+        #return print_r(array($src),true);
 
         if ($is_src_set == 1) {
 
@@ -194,7 +194,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            
+            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -213,8 +213,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            
-            
+            // TODO: Testing
+            //return $tag;
 
             $src = 'Inline Script';
             $content = $tag;
@@ -257,8 +257,8 @@ class wps_ic_combine_js
         $src = '';
 
         if (self::$excludes->strInArray($tag, $this->all_excludes) || current_user_can('manage_wpc_settings')) {
-            
-            
+            #return $tag;
+            #return print_r(array($tag),true);
         }
 
         if (self::$excludes->strInArray($tag, $this->no_content_excludes) || current_user_can('manage_wpc_settings')) {
@@ -271,7 +271,7 @@ class wps_ic_combine_js
         $tag_start = $tag_start[0];
         $is_src_set = preg_match('/src=["|\'](.*?)["|\']/si', $tag_start, $src);
 
-        
+        #return print_r(array($src),true);
 
         if ($is_src_set == 1) {
 
@@ -279,7 +279,7 @@ class wps_ic_combine_js
             $src = str_replace(["'", '"'], "", $src);
             $src = $src[0];
 
-            
+            #return print_r(array($src,$this->url_key_class->is_external($src)),true);
 
 
             if (!$this->combine_external && $this->url_key_class->is_external($src)) {
@@ -288,8 +288,8 @@ class wps_ic_combine_js
 
         } else if ($this->combine_inline_scripts) {
 
-            
-            
+            // TODO: Testing
+            //return $tag;
 
             $src = 'Inline Script';
             $content = $tag;
@@ -332,25 +332,25 @@ class wps_ic_combine_js
 
 
         $html = preg_replace('/<\/head>/', $header_links . '</head>', $html);
-        
-        
+        //$html = preg_replace( '/<head>/', '<head>' . $header_links, $html );
+        //footer
         $html = preg_replace('/<\/body>/', $footer_links . '</body>', $html);
 
         return $html;
     }
 
-    
-    
-    
+    // v7.10.659 — twin of combine_css::wpc_looks_like_html_doc657 (B1). A real script is never
+    // an HTML DOCUMENT; match document markers near the start only, so JS with `<` in a string
+    // or comparison is not misflagged.
     public function wpc_looks_like_html_doc659($s)
     {
         if (!is_string($s) || $s === '') {
             return false;
         }
-        
-        
-        
-        
+        // START-anchored: an error page BEGINS with the doctype or a document root tag; valid
+        // JS/CSS never does. Matching those markers anywhere in the first 512 bytes would
+        // misflag legitimate JS that carries `<body`/`<html` inside a string
+        // (document.write("<body ...">), innerHTML assignments) — a common, real false positive.
         $head = strtolower(ltrim($s));
         return strncmp($head, '<!doctype html', 14) === 0
             || strncmp($head, '<html', 5) === 0
@@ -372,12 +372,12 @@ class wps_ic_combine_js
             return false;
         }
 
-        
-        
-        
-        
-        
-        
+        // v7.10.659 (B1 js_stub twin) — this path had NO response-code check at all, so a source
+        // script fetched as a 404, or a server answering a missing .js with its HTML error
+        // template at 200 (soft-404), was concatenated straight into the combined JS bundle,
+        // where markup is a syntax error that breaks EVERY script on the page. Reject non-200
+        // and any HTML-document response; the caller then leaves that script un-combined
+        // (fail-open) rather than poisoning the bundle.
         if ((int) wp_remote_retrieve_response_code($data) !== 200) {
             return false;
         }
@@ -407,10 +407,10 @@ class wps_ic_combine_js
         }
 
 
-        
+        //$url = preg_replace('/\?.*/', '', $url);
 
-        
-        
+        //$path = wp_make_link_relative($url);
+        //$path = ltrim($path, '/');
 
 
         if (strpos($url, '?') !== false) {

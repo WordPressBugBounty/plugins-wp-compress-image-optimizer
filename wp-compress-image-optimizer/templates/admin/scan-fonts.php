@@ -4,7 +4,7 @@ $gui = new wpc_gui_v4();
 $fontSettings = get_option(WPS_IC_SETTINGS);
 $fontsMode = !empty($fontSettings['replace-fonts']) ? $fontSettings['replace-fonts'] : 'off';
 
-
+// Handle purge font cache before any output (skip in agency mode — handled via AJAX relay instead)
 if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
     delete_option(WPS_IC_FONTS_MAP);
 
@@ -29,8 +29,8 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
 
     <div class="wpc-perf-grid">
         <?php echo $gui::dropdown('font-display', esc_html__('Text Font Display', WPS_IC_TEXTDOMAIN), esc_html__('Automatic verifies fallback font metrics, then serves zero-shift Optional — Swap until verified. Fixes the PageSpeed font-display warning with no layout shift. Icon fonts use their own setting below to prevent garbled characters.', WPS_IC_TEXTDOMAIN), array(
-            
-            
+            // CSS-value vocabulary — NOT translatable: community language packs machine-
+            // translated these as prose ("Auto" is German for car → rendered "car")
             'smart'    => 'Automatic (Recommended)',
             'swap'     => 'Swap',
             'off'      => 'Off',
@@ -56,7 +56,7 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
     <div class="wpc-perf-grid wpc-perf-grid-single">
         <?php
         echo $gui::dropdown('icon-font-display', esc_html__('Icon Font Display', WPS_IC_TEXTDOMAIN), esc_html__('How browsers handle icon font loading. Block (recommended) keeps icons invisible until loaded — prevents garbled characters that appear with swap. Override this if you prefer a different strategy.', WPS_IC_TEXTDOMAIN), array(
-            
+            // CSS-value vocabulary — NOT translatable (see note above)
             'block'    => 'Block',
             'swap'     => 'Swap',
             'auto'     => 'Auto (Browser Default)',
@@ -139,7 +139,7 @@ if (!empty($listFonts)) {
 
 
             $decoded  = urldecode($foundFont);
-            $families = []; 
+            $families = []; // [name => weights[]]
             if (preg_match_all('/family=([^&]+)/', $decoded, $mm)) {
                 foreach ($mm[1] as $fam) {
                     $familyPart = str_replace('+', ' ', $fam);
@@ -174,7 +174,7 @@ if (!empty($listFonts)) {
                     </div>
                     <?php endif; ?>
                 </div>
-                <?php if ($fontIdx === count($families)) : ?>
+                <?php if ($fontIdx === count($families)) : // Remove acts on the stylesheet (all families above) — show once ?>
                 <a href="#" class="wpc-remove-fonts wpc-font-remove-btn" data-font-id="<?php echo esc_attr($foundFont); ?>">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     <?php echo esc_html__('Remove', WPS_IC_TEXTDOMAIN); ?>

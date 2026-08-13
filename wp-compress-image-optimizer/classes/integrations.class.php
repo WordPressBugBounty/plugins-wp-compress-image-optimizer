@@ -6,11 +6,11 @@ spl_autoload_register(function ($class_name) {
         $class_name = str_replace('wps_ic_', '', $class_name);
         $class_name = $class_name . '.php';
 
-        
+        // Try main integrations folder first
         if (file_exists(WPS_IC_DIR . 'integrations/' . $class_name)) {
             include WPS_IC_DIR . 'integrations/' . $class_name;
         }
-        
+        // Try hosting subfolder
         else if (file_exists(WPS_IC_DIR . 'integrations/hosting/' . $class_name)) {
             include WPS_IC_DIR . 'integrations/hosting/' . $class_name;
         }
@@ -62,7 +62,7 @@ class wps_ic_integrations extends wps_ic
     {
         $list = [];
 
-        
+        //This should only be done in admin, it saves all needed fixes, notices, filters and hooks to option
         $this->int_option['overrides'] = [];
         $this->int_option['front_filters'] = [];
         $this->int_option['admin_filters'] = [];
@@ -80,7 +80,7 @@ class wps_ic_integrations extends wps_ic
             new wps_ic_bridge(),
             new wps_ic_advanced_custom_fields(),
             new wps_ic_studiopress(),
-            
+            // Cache Plugins
             new wps_ic_wp_optimize(),
             new wps_ic_wp_super_cache(),
             new wps_ic_w3_total_cache(),
@@ -94,10 +94,10 @@ class wps_ic_integrations extends wps_ic
             new wps_ic_autoptimize(),
             new wps_ic_nginx_helper(),
             new wps_ic_varnish_http_purge(),
-            
+            // CDN/Cloudflare
             new wps_ic_cloudflare(),
             new wps_ic_wp_cloudflare_page_cache(),
-            
+            // Hosting Providers
             new wps_ic_pantheon(),
             new wps_ic_pressidium(),
             new wps_ic_pagely(),
@@ -140,7 +140,7 @@ class wps_ic_integrations extends wps_ic
             }
         }
 
-        
+        // Write-on-change only: these ran as unconditional UPDATEs on every admin request
         if (get_option('wps_ic_conflicts') !== $list) {
             update_option('wps_ic_conflicts', $list);
         }
@@ -148,10 +148,10 @@ class wps_ic_integrations extends wps_ic
             update_option('wps_ic_integrations', $this->int_option);
         }
 
-        
-        
-        
-        
+        //These are conflicted settings checks that dont have to run on every load.
+        // DURABLE gate (options, not transient): with a flushed object cache the transient
+        // guard dies and this block — including a SYNCHRONOUS Cloudflare API call and a
+        // possible purgeAll — ran on EVERY request. Once per 12h, stamped before the work.
         $wpc_ck179 = (int) get_option('wpc_conflicts_checked_at');
         if (time() - $wpc_ck179 < 43200) {
             return;
@@ -164,14 +164,14 @@ class wps_ic_integrations extends wps_ic
             }
         }
 
-        
+        //CF checks
         $cf = get_option(WPS_IC_CF);
         if (!empty($cf) && !empty($cf['token'])){
             require_once WPS_IC_DIR.'/addons/cf-sdk/cf-sdk.php';
             $cfsdk = new WPC_CloudflareAPI($cf['token']);
             $rocketSettings = $cfsdk->checkRocketLoader($cf['zone']);
             if (isset($rocketSettings) && $rocketSettings === 'failed to fetch rocket loader') {
-              
+              // Do nothing!
             } else {
                 if (isset($rocketSettings[$cf['zone']]['value']) && $rocketSettings[$cf['zone']]['value'] == 'on') {
                     $cfsdk->setRocketLoader($cf['zone'], 'off');

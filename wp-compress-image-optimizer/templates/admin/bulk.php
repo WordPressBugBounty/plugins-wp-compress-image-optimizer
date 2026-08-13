@@ -10,7 +10,7 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
     $live_cdn = true;
 }
-
+// Also check CF CDN setting
 if (!$live_cdn) {
     $cfSettings = get_option(WPS_IC_CF);
     if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {
@@ -66,9 +66,9 @@ if (!$live_cdn) {
 
             <div class="wp-compress-bulk-area">
                 <?php
-                
-
-
+                /**
+                 * Find uncompressed images
+                 */
 
 
                 $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
@@ -612,7 +612,7 @@ if (!$live_cdn) {
                                     <h2 class="wpc-restore-complete-title"><?php esc_html_e('Restore Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
                                     <p class="wpc-restore-complete-subtitle">
                                         <?php
-                                        
+                                        /* translators: %s = N images restored */
                                         printf(
                                             esc_html__('Successfully restored all %s images to original quality.', WPS_IC_TEXTDOMAIN),
                                             '<strong data-field="final-count">0</strong>'
@@ -862,7 +862,7 @@ if (!$live_cdn) {
                               <h2 class="wpc-bulk-complete-title"><?php esc_html_e('Optimization Complete!', WPS_IC_TEXTDOMAIN); ?></h2>
                               <p class="wpc-bulk-complete-subtitle">
                                 <?php
-                                
+                                /* translators: 1: N images optimized, 2: N variants generated */
                                 printf(
                                   esc_html__('Successfully optimized %1$s original images, generating %2$s modern variants.', WPS_IC_TEXTDOMAIN),
                                   '<strong data-field="final-count">0</strong>',
@@ -939,7 +939,7 @@ if (!$live_cdn) {
         </div>
 
         <?php
-        
+        // TODO: Bottom bar with hidden message about bulk optimization
         ?>
 
         <?php include WPS_IC_DIR . 'templates/admin/partials/popups/bulk/popups.php'; ?>

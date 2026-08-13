@@ -25,14 +25,14 @@ class wps_ic_connect extends wps_ic
             }
         }
 
-        
+        // API Key
         $siteurl = urlencode(site_url());
         delete_option('wpsShowAdvanced');
 
-        
+        // Required for DEBUG?
         $uri = WPS_IC_KEYSURL . '?action=connectLite&domain=' . $siteurl . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        
+        // Verify API Key is our database and user has is confirmed getresponse
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connectLite', 'domain' => $siteurl, 'plugin_version' => self::$version, 'hash' => md5(time()), 'time_hash' => time()], ['timeout' => 60, 'sslverify' => true]);
 
         if (!empty($call)) {
@@ -62,7 +62,7 @@ class wps_ic_connect extends wps_ic
                 delete_option('wps_ic_allow_live');
 
 
-                
+                // Non-destructive (existing keys win); lever 4 gated on no foreign page cache.
                 if (function_exists('wpc_apply_link_preset')) {
                     wpc_apply_link_preset('connect-lite');
                 }
@@ -74,7 +74,7 @@ class wps_ic_connect extends wps_ic
                 }
 
             } else {
-                
+                // Call Failed
                 if ($return) {
                     return 'call-failed';
                 } else {
@@ -93,24 +93,24 @@ class wps_ic_connect extends wps_ic
     }
 
 
-    
-
-
-
-
-
-
+    /**
+     * Shared connect routine used by the standard AJAX connect and the
+     * MainWP force-connect endpoint. Runs the connectV6 handshake and the
+     * full post-connect site setup. Callers handle auth and the JSON reply.
+     *
+     * @return array ['success' => bool, 'code' => string, 'url' => string, 'data' => object|null]
+     */
     public function connectWithKey($apikey)
     {
         $siteurl = urlencode(site_url());
 
-        
+        // Remove showAdvanced
         delete_option('wpsShowAdvanced');
 
-        
+        // Required for DEBUG?
         $uri = WPS_IC_KEYSURL . '?action=connectV6&apikey=' . $apikey . '&domain=' . $siteurl . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        
+        // Verify API Key is our database and user has is confirmed getresponse
         $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connectV6', 'apikey' => $apikey, 'domain' => $siteurl, 'plugin_version' => self::$version, 'hash' => md5(time()), 'time_hash' => time()], ['timeout' => 60]);
 
         if (empty($call)) {
@@ -119,7 +119,7 @@ class wps_ic_connect extends wps_ic
 
         if (!empty($call->data->code)) {
             if ($call->data->code == 'site-user-different' || $call->data->code == 'site-already-connected') {
-                
+                // Popup Site Already Connected
                 return ['success' => false, 'code' => 'site-already-connected', 'url' => $uri, 'data' => $call->data];
             } elseif ($call->data->code == 'apikey-in-use') {
                 return ['success' => false, 'code' => 'apikey-in-use', 'url' => $uri, 'data' => $call->data];
@@ -149,11 +149,11 @@ class wps_ic_connect extends wps_ic
 
             $settings = get_option(WPS_IC_SETTINGS);
 
-            
-            
-            
-            
-            
+            // Onboarding defaults (aggressive preset + live-cdn on) apply ONLY to a genuinely
+            // fresh connect with no settings yet. A RECONNECT (settings already exist) must
+            // preserve the user's choices — never re-apply the preset or force-enable the CDN.
+            // The old `count($settings) >= 3` ran on every configured site, so a reconnect reset
+            // settings + re-activated the CDN (the mass-reconnect after the apiv3 event exposed it).
             if (empty($settings)) {
                 $sizes = get_intermediate_image_sizes();
                 if ($sizes) {
@@ -171,12 +171,12 @@ class wps_ic_connect extends wps_ic
             }
 
 
-            
+            // Non-destructive (existing keys win); lever 4 gated on no foreign page cache.
             if (function_exists('wpc_apply_link_preset')) {
                 wpc_apply_link_preset('connect');
             }
 
-            
+            // TODO: Setup the Cache Options, if cache is active
 
             $cache = new wps_ic_cache_integrations();
             $cache::purgeAll();
@@ -203,14 +203,14 @@ class wps_ic_connect extends wps_ic
             wp_send_json_error('Forbidden.');
         }
 
-        
+        // API Key
         $apikey = sanitize_text_field($_POST['apikey']);
         $siteurl = urlencode(site_url());
 
-        
+        // Required for DEBUG?
         $uri = WPS_IC_KEYSURL . '?action=connectV6&apikey=' . $apikey . '&domain=' . $siteurl . '&plugin_version=' . self::$version . '&hash=' . md5(time()) . '&time_hash=' . time();
 
-        
+        // Simulations of failure?
         if (!empty($apikey)) {
             if ($apikey == '1') {
                 wp_send_json_error(['msg' => 'api-issue', 'code' => 'call-empty', 'url' => $uri]);

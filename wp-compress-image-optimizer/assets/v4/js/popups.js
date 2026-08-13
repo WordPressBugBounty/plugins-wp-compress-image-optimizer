@@ -1,9 +1,9 @@
 jQuery(document).ready(function ($) {
 
-    
+    // Agency portal pages don't get WordPress's global ajaxurl — fall back to wpc_ajaxVar
     if (typeof ajaxurl === 'undefined') { var ajaxurl = wpc_ajaxVar.ajaxurl; }
 
-    
+    // Copy defaults button handler
     $(document).on('click', '.wpc-copy-defaults-btn', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -21,7 +21,7 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    
+    // Auto-grow textareas in purge settings (no scrollbar)
     function autoGrowTextarea(el) {
         el.style.height = 'auto';
         el.style.height = el.scrollHeight + 'px';
@@ -30,7 +30,7 @@ jQuery(document).ready(function ($) {
         autoGrowTextarea(this);
     });
 
-    
+    // Track which configure button was clicked (for override tint)
     var lastConfigureTrigger = null;
 
     function CustomCnameClose() {
@@ -77,9 +77,9 @@ jQuery(document).ready(function ($) {
             var cname_field = $('[name="custom-cdn"]', popupData).val();
 
             if (cname_field == '') {
-                
+                //wps-ic-mu-popup-empty-cname
                 $('[name="custom-cdn"]', popupData).addClass('empty');
-                $(form).find('.error').remove(); 
+                $(form).find('.error').remove(); // Remove existing error before adding new one
                 $(form).prepend('<p class="error">You must fill out the CNAME.</p>');
                 return false;
             }
@@ -108,7 +108,7 @@ jQuery(document).ready(function ($) {
                     $(configure).hide();
                     $(configured).show();
                     $(step_1).hide();
-                    
+                    //$(step_2_img).attr('src', response.data.image);
                     $('.check-cdn-link', step_2).attr('href', response.data.image);
 
                     $('.wpc-dns-error-text', step_2).hide();
@@ -162,7 +162,7 @@ jQuery(document).ready(function ($) {
                         $('.custom-cdn-error-message', popup).html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> This domain is invalid, please link a new domain...');
                     }
 
-                    
+                    //$('.wpc-dns-error-text', popup).show();
                     $('.custom-cdn-error-message', popup).show();
                     $(step_2).hide();
                     $(step_1_retry).hide();
@@ -211,10 +211,10 @@ jQuery(document).ready(function ($) {
 
                 }
                 else {
-                    
-                    
-                    
-                    
+                    // v7.10.498 — DO NOT auto-remove the CNAME. This branch used to POST
+                    // wps_ic_remove_cname on ANY error, and retry()'s only possible error was a
+                    // 3-press counter — so the third Refresh silently deleted the linked domain.
+                    // Show what is actually outstanding and leave the CNAME in place.
                     var d = response && response.data ? response.data : {};
                     var msg = d.msg || 'Could not verify the linked domain just now. Nothing was changed — press Refresh again in a moment.';
                     $(loading).fadeOut(150, function() { $(content).fadeIn(150); });
@@ -225,7 +225,7 @@ jQuery(document).ready(function ($) {
                         $err = $('<div class="custom-cdn-retry-msg"></div>').appendTo($(step_1));
                     }
                     $err.html(msg).show();
-                    
+                    // Only offer starting over when the stored state is genuinely unusable.
                     if (d.code === 'no-cname') {
                         $(cname_enabled).hide();
                         $(cname_disabled).show();
@@ -360,7 +360,7 @@ jQuery(document).ready(function ($) {
 
                     savePopup(popup);
 
-                    
+                    // Popup tab switching
                     $('.wpc-popup-tab', popup).on('click', function(e) {
                         e.preventDefault();
                         var targetId = $(this).data('tab-target');
@@ -427,7 +427,7 @@ jQuery(document).ready(function ($) {
             var setting_name = $('input[type="text"],textarea', popup).first().data('setting-subset');
             var excludes = $('input[type="text"],textarea', popup).first().val();
 
-            
+            // Collect configure tab data if present (JS Delay popup saves both tabs at once)
             var lastLoadScripts = '';
             var deferScripts = '';
             var $lastLoadTextarea = $('textarea[data-setting-subset="lastLoadScript"]', popup);
@@ -459,7 +459,7 @@ jQuery(document).ready(function ($) {
                 apikey: wpc_ajaxVar.apikey || ''
             }, function(response) {
                 if (response.success) {
-                    
+                    // Toggle override tint on the configure link
                     if (lastConfigureTrigger && lastConfigureTrigger.length) {
                         var hasData = excludes && excludes.trim().length > 0;
                         lastConfigureTrigger.toggleClass('wpc-has-overrides', hasData);
@@ -486,10 +486,10 @@ jQuery(document).ready(function ($) {
         }, function (response) {
             if (response.success) {
 
-                
+                // Set the hooks textarea value
                 $('.hooks-list-textarea-value', popup).val(response.data.hooks);
 
-                
+                // Set checkbox values based on response data
                 if (response.data.all_pages == 1) {
                     $('.wps-all-pages', popup).prop('checked', true);
                 }
@@ -510,14 +510,14 @@ jQuery(document).ready(function ($) {
                     $('.wps-scheduled-purge', popup).val(response.data.scheduled);
                 }
 
-                
+                // Show the user's local time
                 var now = new Date();
                 var localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 $('.wpc-local-time', popup).text(localTime);
             }
             $(loading).fadeOut(150, function() {
                 $(content).fadeIn(150, function() {
-                    
+                    // Auto-grow hooks textarea after content is visible
                     var ta = $('.hooks-list-textarea-value', popup)[0];
                     if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
                 });
@@ -670,7 +670,7 @@ jQuery(document).ready(function ($) {
         }, function (response) {
             if (response.success) {
 
-                
+                // Set the hooks textarea value
                 $('.cache-cookies-textarea-value', popup).val(response.data.cache_cookies);
                 $('.exclude-cookies-textarea-value', popup).val(response.data.exclude_cookies);
 
@@ -714,7 +714,7 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    
+    //Export button
     $('#wpc-export-button').on('click', function(e) {
         e.preventDefault()
         const exportSettings = $('.wps-export-settings').prop('checked');
@@ -738,7 +738,7 @@ jQuery(document).ready(function ($) {
                 if (response.success) {
                     const blob = new Blob([JSON.stringify(response.data)], {type: 'application/json'});
 
-                    
+                    // Create download link
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
@@ -747,7 +747,7 @@ jQuery(document).ready(function ($) {
                     site = site.replace(/^www\./, '').split('.')[0];
                     a.download = 'Settings-' + site + '.json';
 
-                    
+                    // Append to the document, trigger click, and clean up
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
@@ -762,7 +762,7 @@ jQuery(document).ready(function ($) {
         });
     });
 
-    
+    //Import button
     $('#wpc-import-button').on('click', function(e) {
         e.preventDefault()
         $('#wpc-import-file').trigger('click');
@@ -789,7 +789,7 @@ jQuery(document).ready(function ($) {
         reader.readAsText(file);
     });
 
-    
+    //reset to default button
     $('#wpc-set-default-button').on('click', function(e) {
         e.preventDefault();
 
@@ -850,7 +850,7 @@ jQuery(document).ready(function ($) {
 
     }
 
-    
+    // Toggle example lists in popups (accordion)
     $(document).on('click', '.wps-example-toggle-btn', function () {
         var $btn = $(this);
         var $section = $btn.closest('.wps-example-section');

@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class ThemeIntegrations extends wps_cdn_rewrite

@@ -1741,3 +1741,285 @@ label[for="wpc-cf-token"] {
   &.wpc-purge-success { color: @color-success !important; border-color: @color-success !important; } // FORCED: override base
 }
 
+
+// ─── Real-User Performance (Vitals) panel — v7.10.117 ────────────────────────────────
+// Dashboard face of addons/vitals: chips (p75 CWV) + improvement banner + views/LCP chart.
+// Lives inside .wpc-rounded-box-full where the traffic graph used to render.
+.wps_ic_settings_page .wpc-vitals-panel {
+
+  .wpc-vitals-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+
+    h3 {
+      font-family: @font-bold;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+      color: @color-text-dark;
+      margin: 0 0 4px;
+    }
+
+    p {
+      font-family: @font-regular;
+      font-size: 12.5px;
+      color: @color-text-secondary;
+      margin: 0;
+    }
+  }
+
+  .wpc-vitals-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: @color-bg-frost;
+    border-radius: @radius-pill;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+
+  .wpc-vitals-toggle {
+    display: flex;
+    gap: 2px;
+
+    button {
+      border: 0;
+      background: transparent;
+      font-family: @font-semibold;
+      font-size: 12.5px;
+      color: @color-text-secondary;
+      padding: 6px 14px;
+      border-radius: @radius-pill;
+      cursor: pointer;
+      transition: @transition-fast;
+
+      &.active {
+        background: @color-white;
+        color: @color-text-dark;
+        box-shadow: @shadow-sm;
+      }
+    }
+  }
+
+  .wpc-vitals-range {
+    font-family: @font-regular;
+    font-size: 12px;
+    color: @color-gray-text;
+    padding: 0 12px 0 6px;
+  }
+
+  .wpc-vitals-chips {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+    align-items: stretch;
+  }
+
+  .wpc-vitals-chip {
+    border: 1px solid @color-border;
+    border-radius: @radius-lg;
+    padding: 16px 18px;
+    background: @color-white;
+    box-shadow: 0 1px 3px fade(@color-text-dark, 3%);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    // The experience number: LCP reads as the hero card, siblings stay quiet. Resting state
+    // is calm elevation; the Siri glow lives on hover only.
+    &:hover {
+      transform: translateY(-2px);
+      border-color: @color-border-medium;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, .12), 0 6px 16px -6px rgba(15, 23, 42, .12);
+    }
+
+    &[data-wpc-metric="lcp"] {
+      background: linear-gradient(180deg, fade(@color-ice, 60%) 0%, @color-white 100%);
+      border-color: fade(@color-blue, 25%);
+      box-shadow: 0 4px 10px -4px fade(@color-blue, 7%), 0 2px 4px -2px fade(@color-blue, 4%);
+      position: relative;
+      overflow: hidden;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 3px;
+        background: linear-gradient(90deg, @color-blue, fade(@color-blue, 55%));
+      }
+
+      .wpc-vitals-chip-value {
+        font-size: 32px;
+        letter-spacing: -0.025em;
+      }
+    }
+  }
+
+  .wpc-vitals-chip-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+
+    span {
+      font-family: @font-semibold;
+      font-size: 11px;
+      letter-spacing: 0.4px;
+      color: @color-gray-text;
+      text-transform: uppercase;
+    }
+  }
+
+  .wpc-vitals-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: @radius-circle;
+    display: inline-block;
+    background: @color-border-medium;
+
+    &.good { background: @color-success; box-shadow: 0 0 0 2px fade(@color-success, 15%); }
+    &.ni { background: @color-warning; box-shadow: 0 0 0 2px fade(@color-warning, 15%); }
+    &.poor { background: @color-error; box-shadow: 0 0 0 2px fade(@color-error, 15%); }
+  }
+
+  .wpc-vitals-chip-value {
+    font-family: @font-bold;
+    font-size: 26px;
+    color: @color-text-dark;
+    line-height: 1.1;
+
+    span {
+      font-family: @font-semibold;
+      font-size: 14px;
+      color: @color-text-secondary;
+      margin-left: 2px;
+    }
+  }
+
+  .wpc-vitals-chip-delta {
+    font-family: @font-semibold;
+    font-size: 11.5px;
+    margin-top: 6px;
+    min-height: 14px;
+    color: @color-gray-text;
+
+    &.improve { color: @color-success; }
+    &.regress { color: @color-warning; }
+  }
+
+  // The claim banner: one computed sentence, staged like a platform notification.
+  .wpc-vitals-banner {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: linear-gradient(145deg, #16223a 0%, #1e293b 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: @radius-lg;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -50%; left: -20%; width: 70%; height: 200%;
+      background: radial-gradient(circle, fade(@color-blue, 20%) 0%, transparent 60%);
+      pointer-events: none;
+    }
+  }
+
+  .wpc-vitals-banner-ic {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, @color-blue, darken(@color-blue, 14%));
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 8px 16px -4px fade(@color-blue, 40%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  .wpc-vitals-banner-txt {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 1;
+
+    strong {
+      font-family: @font-bold;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+      color: @color-white;
+    }
+
+    span {
+      font-family: @font-regular;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #94a3b8;
+    }
+  }
+
+  .wpc-vitals-legend {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 8px;
+
+    span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: @font-regular;
+      font-size: 12px;
+      color: @color-text-secondary;
+    }
+
+    .wpc-vitals-sw {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      display: inline-block;
+
+      &.sw-cached { background: @color-gradient-mid; }
+      &.sw-rendered { background: @color-border-blue; }
+      &.sw-line { width: 14px; height: 3px; border-radius: 2px; background: @color-success; }
+    }
+  }
+
+  .wpc-vitals-chart {
+    height: 300px;
+    position: relative;
+  }
+}
+
+// ─── Real-User Performance panel — Mobile ─────────────────────────
+@media screen and (max-width: 1024px) {
+  .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-chips {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media screen and (max-width: 768px) {
+  .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-head {
+    flex-direction: column;
+  }
+  .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+    gap: 10px;
+  }
+}
+@media screen and (max-width: 480px) {
+  .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-chips {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-chart {
+    height: 240px;
+  }
+}

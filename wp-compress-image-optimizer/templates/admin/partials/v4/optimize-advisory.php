@@ -8,6 +8,27 @@ if (!function_exists('current_user_can') || !current_user_can('manage_wpc_settin
 }
 $wpc_oa_nonce   = wp_create_nonce('wps_ic_nonce_action');
 $wpc_oa_ajaxurl = admin_url('admin-ajax.php');
+
+
+$wpc_oa_apikey = '';
+if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+
+
+    if (function_exists('get_query_var')) {
+        $wpc_oa_apikey = (string) sanitize_text_field(get_query_var('apikey'));
+    }
+    if ($wpc_oa_apikey === '') {
+        global $wps_ic;
+        if (!empty($wps_ic) && method_exists($wps_ic, 'extractApiKey')) {
+            $wpc_oa_apikey = (string) $wps_ic->extractApiKey();
+        }
+    }
+
+
+    if ($wpc_oa_apikey === '') {
+        return;
+    }
+}
 ?>
 <div class="wpc-optimize-advisory" id="wpc-optimize-advisory">
     <div class="wpc-oa-head">
@@ -176,6 +197,9 @@ $wpc_oa_ajaxurl = admin_url('admin-ajax.php');
     var CFG = {
         ajaxurl: <?php echo wp_json_encode($wpc_oa_ajaxurl); ?>,
         nonce:   <?php echo wp_json_encode($wpc_oa_nonce); ?>,
+        // Agency portal only. Every action below mutates site state, so without this the
+        // portal would run Auto Mode / safe mode against ITSELF instead of the client site.
+        apikey:  <?php echo wp_json_encode($wpc_oa_apikey); ?>,
         pollMs: 4000,
         maxPolls: 30 // ~2 min ceiling; a real run finishes in ~15-20s
     };
@@ -217,6 +241,7 @@ $wpc_oa_ajaxurl = admin_url('admin-ajax.php');
     }
     function post(action, extra){
         var body = 'action=' + encodeURIComponent(action) + '&nonce=' + encodeURIComponent(CFG.nonce);
+        if (CFG.apikey) body += '&apikey=' + encodeURIComponent(CFG.apikey);
         for (var k in (extra||{})) body += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(extra[k]);
         return fetch(CFG.ajaxurl, {
             method:'POST', credentials:'same-origin',

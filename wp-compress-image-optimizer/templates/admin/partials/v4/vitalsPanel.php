@@ -4,12 +4,15 @@ if (!defined('ABSPATH')) {
 }
 
 
+if (function_exists('wpc_vitals_epoch_guard')) {
+    wpc_vitals_epoch_guard();
+}
 $wpc_vp_daily = get_option('wpc_vitals_daily', []);
 if (!is_array($wpc_vp_daily)) {
     $wpc_vp_daily = [];
 }
-
-
+// v7.10.863 — SAME-DAY DATA: today's day-file joins the chart before the nightly rollup runs,
+// so the panel shows real measurements minutes after install instead of tomorrow.
 if (function_exists('wpc_vitals_today_partial')) {
     $wpc_vp_tp = wpc_vitals_today_partial();
     if (is_array($wpc_vp_tp)) {
@@ -17,7 +20,7 @@ if (function_exists('wpc_vitals_today_partial')) {
     }
 }
 
-
+// Day keys only (Ymd, ascending) — weekly 'w:' compaction keys are history, not chart rows.
 $wpc_vp_days = [];
 foreach ($wpc_vp_daily as $wpc_vp_k => $wpc_vp_v) {
     if (preg_match('/^\d{8}$/', (string) $wpc_vp_k) && is_array($wpc_vp_v)) {
@@ -29,8 +32,8 @@ $wpc_vp_n     = count($wpc_vp_days);
 $wpc_vp_cur   = array_slice($wpc_vp_days, max(0, $wpc_vp_n - 28), 28, true);
 $wpc_vp_prior = $wpc_vp_n > 28 ? array_slice($wpc_vp_days, max(0, $wpc_vp_n - 56), min(28, $wpc_vp_n - 28), true) : [];
 
-
-
+// Safari INP rides its own bucket lane (inp_s) so engines stay comparable in exports; for the
+// single chip the two lanes merge — a visitor is a visitor.
 $wpc_vp_merge_inp = function ($days) {
     foreach ($days as $k => $d) {
         foreach (['m', 'd'] as $dev) {
@@ -66,15 +69,15 @@ $wpc_vp_fmt = function ($val, $metric) {
     }
     return $val < 1000 ? [(string) $val, 'ms'] : [rtrim(rtrim(number_format($val / 1000, 1), '0'), '.'), 's'];
 };
-
+// CWV thresholds (good / needs-improvement) — CLS values ×1000 to match the bucket edges.
 $wpc_vp_TH = ['lcp' => [2500, 4000], 'inp' => [200, 500], 'cls' => [100, 250], 'ttfb' => [800, 1800]];
 
 $wpc_vp_baseline = get_option('wpc_vitals_baseline');
 $wpc_vp_base_lcp = (is_array($wpc_vp_baseline) && !empty($wpc_vp_baseline['lcp_m_p75'])) ? (int) $wpc_vp_baseline['lcp_m_p75'] : 0;
-
-
-
-
+// v7.10.833 — LIVE BASELINE: p75 of the ?disableWPC=true cohort (bm/bd lanes). When enough
+// bypass samples exist it beats the first-week capture — on Link-and-Go sites the first week
+// is ALREADY optimized traffic, so the stored number undersells the product. Field-to-field,
+// same days, same visitor mix, zero effect on real visitors.
 $wpc_vp_bsamp = ['m' => 0, 'd' => 0];
 $wpc_vp_blive = ['m' => 0, 'd' => 0];
 foreach (['m' => 'bm', 'd' => 'bd'] as $wpc_vp_bl_dev => $wpc_vp_bl_lane) {
@@ -92,11 +95,11 @@ if ($wpc_vp_blive['m'] > 0) {
     $wpc_vp_base_lcp = $wpc_vp_blive['m'];
     $wpc_vp_base_src = 'live';
 }
-
-
-
-
-
+// v7.10.835 — BASELINE SANITY GATE: a stored first-week "before" that is not higher than the
+// current p75 is contaminated capture (Link-and-Go sites' first week is already optimized
+// traffic), never a real regression — showing it would tell the user the plugin slowed them
+// down based on bad data. Suppress it per device; the live ?disableWPC cohort is a true
+// concurrent A/B and is NEVER gated — if it reads worse, that is honest and stays.
 $wpc_vp_curp = [
     'm' => (int) wpc_vitals_p75($wpc_vp_curM, 'm', 'lcp'),
     'd' => (int) wpc_vitals_p75($wpc_vp_curM, 'd', 'lcp'),
@@ -118,6 +121,21 @@ foreach (['m', 'd'] as $wpc_vp_dev) {
         $dot = 'na';
         if ($cur > 0) {
             $dot = $cur <= $wpc_vp_TH[$wpc_vp_metric][0] ? 'good' : ($cur <= $wpc_vp_TH[$wpc_vp_metric][1] ? 'ni' : 'poor');
+        } elseif ($wpc_vp_metric === 'cls') {
+            // p75 of 0 with real samples = every visit shifted NOTHING — the best possible
+            // score, not missing data. Bucket 0's edge is 0, so the >0 test alone reads a
+            // perfect site as "na" and have4 (all four chips) could never unlock.
+            $wpc_cls906 = 0;
+            foreach ($wpc_vp_curM as $wpc_vp_cd906) {
+                if (!empty($wpc_vp_cd906[$wpc_vp_dev]['cls']) && is_array($wpc_vp_cd906[$wpc_vp_dev]['cls'])) {
+                    $wpc_cls906 += (int) array_sum($wpc_vp_cd906[$wpc_vp_dev]['cls']);
+                }
+            }
+            if ($wpc_cls906 >= 5) {
+                $dot = 'good';
+                $num = '0.00';
+                $unit = '';
+            }
         }
         $delta = '';
         $dcls  = '';
@@ -166,7 +184,7 @@ foreach (['m', 'd'] as $wpc_vp_dev) {
     }
 }
 
-
+// Per-day chart series (sample-scaled counts; per-day p75 LCP per device, 0 → null gap).
 $wpc_vp_labels = $wpc_vp_cached = $wpc_vp_rendered = [];
 $wpc_vp_lcp = ['m' => [], 'd' => []];
 $wpc_vp_lcpq = ['m' => ['p25' => [], 'p50' => []], 'd' => ['p25' => [], 'p50' => []]];
@@ -192,7 +210,7 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
 }
 $wpc_vp_share = $wpc_vp_raw28 > 0 ? (int) round($wpc_vp_hits28 / $wpc_vp_raw28 * 100) : 0;
 
-
+// Banner: field-to-field improvement once the baseline exists; calm measuring line otherwise.
 $wpc_vp_cur_lcp_m  = (int) wpc_vitals_p75($wpc_vp_curM, 'm', 'lcp');
 $wpc_vp_banner     = '';
 $wpc_vp_banner_sub = '';
@@ -210,7 +228,7 @@ if ($wpc_vp_base_lcp > 0 && $wpc_vp_cur_lcp_m > 0 && $wpc_vp_cur_lcp_m < $wpc_vp
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
-
+// v7.10.831 — per-day p75 matrix for every vital (same per-day slice call the LCP series uses).
 $wpc_vp_matrix = ['m' => [], 'd' => []];
 foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_mm) {
     foreach (['m', 'd'] as $wpc_vp_dv) {
@@ -226,8 +244,8 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
     }
 }
 
-
-
+// v7.10.863 — the Timeline draws only the days that recorded anything (compact, well-spaced);
+// the Details matrix keeps the full 28-day calendar with blanks. tlx = data-bearing indices.
 $wpc_vp_tlidx = [];
 $wpc_vp_ti863 = 0;
 foreach ($wpc_vp_curM as $wpc_vp_d863) {
@@ -237,9 +255,9 @@ foreach ($wpc_vp_curM as $wpc_vp_d863) {
     $wpc_vp_ti863++;
 }
 
-
-
-
+// v7.10.831 — CAUSALITY MARKERS: the actions the plugin took, pinned to the days they happened.
+// Source: the cflog journal (rotating jsonl) + the link-preset journal; whitelisted, friendly-
+// labeled, one marker per event type per day, capped at 6 (highest-priority first).
 $wpc_vp_events = [];
 if (function_exists('wpc_vitals_panel_events')) {
     $wpc_vp_events = wpc_vitals_panel_events($wpc_vp_curM);
@@ -287,9 +305,9 @@ if (function_exists('wpc_vitals_panel_events')) {
     usort($wpc_vp_events, function ($a, $b) { return $a['i'] <=> $b['i']; });
 }
 
-
-
-
+// v7.10.845 — EXPERIENCE SPECTRUM + REGIONS + CLAIM PICKER.
+// One bar answers everything at rest: fully-optimized (cached-cohort median), typical (p50),
+// slowest-quarter start (p75), Google's 2.5s tick, and — honesty-gated — the "without" ghost.
 $wpc_vp_lanecount = function ($days, $lane, $metric) {
     $n = 0;
     foreach ($days as $d) {
@@ -297,8 +315,8 @@ $wpc_vp_lanecount = function ($days, $lane, $metric) {
     }
     return $n;
 };
-
-
+// Whitelabel: every customer-facing "WP Compress" in this panel resolves through the same
+// brand source the admin menu uses; WL builds override it, stock installs read 'WP Compress'.
 $wpc_vp_brand = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
 $wpc_vp_spec = [];
 foreach (['m', 'd'] as $wpc_vp_sd) {
@@ -310,7 +328,7 @@ foreach (['m', 'd'] as $wpc_vp_sd) {
         : ($wpc_vp_blive['d'] > 0 ? $wpc_vp_blive['d']
             : ((is_array($wpc_vp_baseline) && !empty($wpc_vp_baseline['lcp_d_p75'])) ? (int) $wpc_vp_baseline['lcp_d_p75'] : 0));
     $wpc_vp_sp75 = (int) wpc_vitals_p75($wpc_vp_curM, $wpc_vp_sd, 'lcp');
-    
+    // Ghost gate: live cohort only, >=30 samples, gap >=25% or >=600ms — a knockout or nothing.
     $wpc_vp_ghost = 0;
     if ($wpc_vp_base_src === 'live' && $wpc_vp_bsamp[$wpc_vp_sd] >= 8 && $wpc_vp_sbase > 0 && $wpc_vp_sp75 > 0
         && ($wpc_vp_sbase >= $wpc_vp_sp75 * 1.25 || $wpc_vp_sbase - $wpc_vp_sp75 >= 600)) {
@@ -326,7 +344,7 @@ foreach (['m', 'd'] as $wpc_vp_sd) {
         'ghost' => $wpc_vp_ghost,
     ];
 }
-
+// Regions: shown only when >=2 regions carry >=20 views across the window.
 $wpc_vp_regnames = [1 => 'NA', 2 => 'EU', 3 => 'APAC', 4 => 'LATAM', 5 => 'MEA'];
 $wpc_vp_regv = [];
 foreach ($wpc_vp_curM as $wpc_vp_rd) {
@@ -352,9 +370,10 @@ foreach ($wpc_vp_regv as $wpc_vp_rg => $wpc_vp_rc) {
         'p75' => $wpc_vp_rp75, 'ser' => $wpc_vp_rser];
 }
 if (count($wpc_vp_reg) < 2) { $wpc_vp_reg = []; }
-
-
+// Claim picker: strongest TRUE claim wins the banner. 1) gated counterfactual · 2) instant
+// share · 3) the existing improvement line (already computed above) · 4) measuring line.
 $wpc_vp_specm = $wpc_vp_spec['m'];
+$wpc_vp_bpair = null;
 if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m > 0) {
     $wpc_vp_g50 = (int) wpc_vitals_pct($wpc_vp_curM, 'bm', 'lcp', 0.5);
     $wpc_vp_c50 = (int) $wpc_vp_specm['p50'];
@@ -362,10 +381,12 @@ if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m 
         && ($wpc_vp_g50 >= $wpc_vp_c50 * 1.25 || $wpc_vp_g50 - $wpc_vp_c50 >= 600)) {
         list($wpc_vp_gn, $wpc_vp_gu) = $wpc_vp_fmt($wpc_vp_g50, 'lcp');
         list($wpc_vp_cn2, $wpc_vp_cu2) = $wpc_vp_fmt($wpc_vp_c50, 'lcp');
+        $wpc_vp_bpair = ['off' => (int) $wpc_vp_g50, 'on' => (int) $wpc_vp_c50, 'avg' => 1];
         $wpc_vp_banner = sprintf(__('Your average visitor loads in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_cn2 . $wpc_vp_cu2, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
     } else {
         list($wpc_vp_gn, $wpc_vp_gu) = $wpc_vp_fmt($wpc_vp_specm['ghost'], 'lcp');
         list($wpc_vp_cn2, $wpc_vp_cu2) = $wpc_vp_fmt($wpc_vp_cur_lcp_m, 'lcp');
+        $wpc_vp_bpair = ['off' => (int) $wpc_vp_specm['ghost'], 'on' => (int) $wpc_vp_cur_lcp_m, 'avg' => 0];
         $wpc_vp_banner = sprintf(__('Your visitors load in %1$s — without %2$s they would wait %3$s.', WPS_IC_TEXTDOMAIN), $wpc_vp_cn2 . $wpc_vp_cu2, $wpc_vp_brand, $wpc_vp_gn . $wpc_vp_gu);
     }
     $wpc_vp_mins = (int) floor(max(0, $wpc_vp_specm['ghost'] - $wpc_vp_cur_lcp_m) * $wpc_vp_views28 / 60000);
@@ -382,10 +403,10 @@ if ($wpc_vp_specm['ghost'] > 0 && $wpc_vp_bsamp['m'] >= 30 && $wpc_vp_cur_lcp_m 
         . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
 }
 
-
-
-
-
+// v7.10.855 — SAMPLE PREVIEW for a brand-new install: zero recorded views AND no p75 means
+// every state below would be an empty box. Instead the panel renders a full, clearly-badged
+// example dataset so a fresh user sees what the system delivers; the collecting card and the
+// banner say plainly that it is sample data, and the first real measurements replace it.
 $wpc_vp_demo = ($wpc_vp_views28 < 1 && $wpc_vp_cur_lcp_m < 1 && apply_filters('wpc_vitals_sample_preview', true));
 if ($wpc_vp_demo) {
     $wpc_vp_labels = $wpc_vp_cached = $wpc_vp_rendered = [];
@@ -441,6 +462,54 @@ if ($wpc_vp_demo) {
     $wpc_vp_banner = __('This is a sample preview — measuring your real visitors has started.', WPS_IC_TEXTDOMAIN);
     $wpc_vp_banner_sub = __('Every number shown is example data so you can explore the views. Your own measurements replace it automatically — starting with today\'s very first visits.', WPS_IC_TEXTDOMAIN);
 }
+// v7.10.905 — MATURITY GATE: a device leg's real-visitor aggregates display only once the
+// lane holds enough samples to mean anything (default 50 LCP samples, or 5 distinct days).
+// Below that, first-day capture is dominated by the owner's own uncached test visits —
+// install churn, purges, background tabs — and a p75 of a dozen such hits is not "your
+// visitors". Immature legs are nulled at this single choke point, so every consumer
+// (timeline line, spectrum, chips, matrix, banner pair) degrades through the same empty
+// paths the demo handover already exercises, and the Initial Speed Check seeds the
+// timeline instead. Mature legs are untouched.
+$wpc_vp_mat = ['m' => ['n' => 0, 'days' => 0, 'ok' => 1], 'd' => ['n' => 0, 'days' => 0, 'ok' => 1]];
+if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vitals_maturity_gate', true))) {
+    $wpc_vp_matmin = function_exists('apply_filters') ? (int) apply_filters('wpc_vitals_mature_n', 50) : 50;
+    foreach (['m', 'd'] as $wpc_vp_gdv) {
+        $wpc_vp_gn905 = 0;
+        $wpc_vp_gd905 = 0;
+        foreach ($wpc_vp_curM as $wpc_vp_gday) {
+            $wpc_vp_gc905 = (!empty($wpc_vp_gday[$wpc_vp_gdv]['lcp']) && is_array($wpc_vp_gday[$wpc_vp_gdv]['lcp']))
+                ? (int) array_sum($wpc_vp_gday[$wpc_vp_gdv]['lcp']) : 0;
+            if ($wpc_vp_gc905 > 0) { $wpc_vp_gn905 += $wpc_vp_gc905; $wpc_vp_gd905++; }
+        }
+        $wpc_vp_gok = ($wpc_vp_gn905 >= $wpc_vp_matmin || $wpc_vp_gd905 >= 5) ? 1 : 0;
+        $wpc_vp_mat[$wpc_vp_gdv] = ['n' => $wpc_vp_gn905, 'days' => $wpc_vp_gd905, 'ok' => $wpc_vp_gok, 'min' => $wpc_vp_matmin];
+        if (!$wpc_vp_gok) {
+            $wpc_vp_gcnt = count($wpc_vp_lcp[$wpc_vp_gdv]);
+            $wpc_vp_lcp[$wpc_vp_gdv] = $wpc_vp_gcnt > 0 ? array_fill(0, $wpc_vp_gcnt, null) : [];
+            $wpc_vp_lcpq[$wpc_vp_gdv] = [
+                'p25' => $wpc_vp_gcnt > 0 ? array_fill(0, $wpc_vp_gcnt, null) : [],
+                'p50' => $wpc_vp_gcnt > 0 ? array_fill(0, $wpc_vp_gcnt, null) : [],
+            ];
+            foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_gmm) {
+                $wpc_vp_gmc = count($wpc_vp_matrix[$wpc_vp_gdv][$wpc_vp_gmm]);
+                $wpc_vp_matrix[$wpc_vp_gdv][$wpc_vp_gmm] = $wpc_vp_gmc > 0 ? array_fill(0, $wpc_vp_gmc, null) : [];
+                list($wpc_vp_gz1, $wpc_vp_gz2) = $wpc_vp_fmt(0, $wpc_vp_gmm);
+                $wpc_vp_chips[$wpc_vp_gdv][$wpc_vp_gmm] = ['num' => $wpc_vp_gz1, 'unit' => $wpc_vp_gz2,
+                    'dot' => 'na', 'delta' => '', 'dcls' => '', 'q25' => null, 'q50' => null];
+            }
+            $wpc_vp_spec[$wpc_vp_gdv] = ['opt' => 0, 'p50' => 0, 'p75' => 0, 'n' => 0, 'hn' => 0, 'sh1' => -1, 'ghost' => 0];
+        }
+    }
+    if (!$wpc_vp_mat['m']['ok']) {
+        $wpc_vp_bpair = null;
+        if ($wpc_vp_views28 > 0) {
+            $wpc_vp_banner = __('Optimized delivery is live — measuring your visitors\' real experience.', WPS_IC_TEXTDOMAIN);
+            $wpc_vp_banner_sub = sprintf(__('%s views in the past 28 days', WPS_IC_TEXTDOMAIN), number_format($wpc_vp_views28))
+                . ' · ' . sprintf(__('%d%% served from cache', WPS_IC_TEXTDOMAIN), $wpc_vp_share);
+        }
+    }
+    if (!$wpc_vp_mat['m']['ok'] && !$wpc_vp_mat['d']['ok']) { $wpc_vp_reg = []; }
+}
 $wpc_vp_have4 = ['m' => true, 'd' => true];
 foreach (['m', 'd'] as $wpc_vp_dv860) {
     foreach (['lcp', 'inp', 'cls', 'ttfb'] as $wpc_vp_m850) {
@@ -456,12 +525,12 @@ $wpc_vp_payload = [
         'd' => max(0, 8 - (int) $wpc_vp_bsamp['d']),
         'u' => (function_exists('home_url') ? home_url('/') : '/') . '?disableWPC=true',
     ] : null,
-    'sc'     => (function_exists('apply_filters') && apply_filters('wpc_vitals_speed_check', true)
-        && ($wpc_vp_demo || $wpc_vp_bsamp['m'] < 8 || !$wpc_vp_have4['m'])) ? [
+    'sc'     => (function_exists('apply_filters') && apply_filters('wpc_vitals_speed_check', true)) ? [
         'u'  => (function_exists('home_url') ? home_url('/') : '/'),
         'ub' => (function_exists('home_url') ? home_url('/') : '/') . '?disableWPC=true',
     ] : null,
     'spec'   => $wpc_vp_spec,
+    'bpair'  => $wpc_vp_bpair,
     'reg'    => $wpc_vp_reg,
     'v28'    => (int) $wpc_vp_views28,
     'tlx'    => $wpc_vp_tlidx,
@@ -482,6 +551,7 @@ $wpc_vp_payload = [
             : __('Before optimization', WPS_IC_TEXTDOMAIN),
     ],
     'th'       => $wpc_vp_TH,
+    'mat'      => ['m' => (int) $wpc_vp_mat['m']['ok'], 'd' => (int) $wpc_vp_mat['d']['ok']],
     'demo'     => $wpc_vp_demo ? 1 : 0,
     'bnrg'     => ($wpc_vp_banner === __('Optimized delivery is live — measuring your visitors\' real experience.', WPS_IC_TEXTDOMAIN)) ? 1 : 0,
 ];
@@ -601,7 +671,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 #wpc-vitals-panel .wpc-vp-scres{display:flex;align-items:center;gap:26px;animation:wpcVpScIn .55s cubic-bezier(.16,1,.3,1)}
 @keyframes wpcVpScIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 #wpc-vitals-panel .wpc-vp-scres-main{flex:1;min-width:0}
-#wpc-vitals-panel .wpc-vp-scres-head{font-size:13.5px;font-weight:800;letter-spacing:.05em;color:#0f172a;text-transform:uppercase;margin:0 0 10px}
+#wpc-vitals-panel .wpc-vp-scres-head{display:flex;align-items:center;font-size:13.5px;font-weight:800;letter-spacing:.05em;color:#0f172a;text-transform:uppercase;margin:0 0 10px}
 #wpc-vitals-panel .wpc-vp-scres-head span{font-weight:500;letter-spacing:0;text-transform:none;color:#94a3b8;margin-left:8px}
 #wpc-vitals-panel .wpc-vp-scrow{display:flex;align-items:center;gap:10px;margin:5px 0}
 #wpc-vitals-panel .wpc-vp-scrow .lab{flex:0 0 158px;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -625,11 +695,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 @media (max-width:900px){#wpc-vitals-panel .wpc-vp-scrow .lab{flex-basis:110px}}
 @media (max-width:640px){#wpc-vitals-panel .wpc-vp-scres{flex-direction:column;align-items:flex-start;gap:12px}#wpc-vitals-panel .wpc-vp-scres-main{width:100%}#wpc-vitals-panel .wpc-vp-scstat{align-self:flex-end}}
 @keyframes wpcVpScPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
-#wpc-vitals-panel .wpc-vp-scstage{font-size:12px;color:#64748b;font-weight:500;margin:0 0 9px;min-height:17px}
-#wpc-vitals-panel .wpc-vp-scstage b{color:#0f172a;font-weight:700}
-#wpc-vitals-panel .wpc-vp-scsteps{display:inline-flex;gap:4px;margin-left:10px;vertical-align:2px}
-#wpc-vitals-panel .wpc-vp-scsteps i{width:5px;height:5px;border-radius:50%;background:#e2e8f0;transition:background .3s}
-#wpc-vitals-panel .wpc-vp-scsteps i.on{background:#10B981}
+#wpc-vitals-panel .wpc-vp-scres-head span.wpc-vp-scghost{margin-left:auto;font-size:10.5px;font-weight:600;letter-spacing:.01em;text-transform:none;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;padding:3.5px 11px;border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64%}
 #wpc-vitals-panel .wpc-vp-scrow b.chip.empty{color:#cbd5e1}
 #wpc-vitals-panel .wpc-vp-shim{position:relative}
 #wpc-vitals-panel .wpc-vp-shim:after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(90deg,transparent,rgba(148,163,184,.25),transparent);animation:wpcVpShim 1.4s linear infinite}
@@ -745,6 +811,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 #wpc-vitals-panel .wpc-vitals-banner{animation:wpcVpFade .55s cubic-bezier(.16,1,.3,1) .15s both}
 #wpc-vitals-panel .wpc-vp-path-anim{stroke-dasharray:4000;stroke-dashoffset:4000;animation:wpcVpDraw 1.1s cubic-bezier(.16,1,.3,1) .15s forwards}
 #wpc-vitals-panel .wpc-vp-area-anim{animation:wpcVpFade .7s ease .55s both}
+#wpc-vitals-panel #wpc-vp-endb{transition:opacity .12s ease}
+#wpc-vitals-panel #wpc-vp-endb.wpc-vp-hid{opacity:0 !important}
 #wpc-vitals-panel .wpc-vp-ring-anim{animation:wpcVpPulse 2.4s cubic-bezier(.16,1,.3,1) infinite}
 #wpc-vitals-panel .wpc-vp-noanim .wpc-vp-marker,#wpc-vitals-panel .wpc-vp-noanim .wpc-vp-path-anim,#wpc-vitals-panel .wpc-vp-noanim .wpc-vp-area-anim,#wpc-vitals-panel .wpc-vp-noanim .wpc-vp-bar{animation:none;opacity:1;transform:none;stroke-dasharray:none;stroke-dashoffset:0}
 @media (prefers-reduced-motion:reduce){#wpc-vitals-panel .wpc-vp-tip{transition:none}#wpc-vitals-panel .wpc-vp-scrow .fill{transition:none}#wpc-vitals-panel .wpc-vp-cell{transition:none}#wpc-vitals-panel .wpc-vp-marker,#wpc-vitals-panel .wpc-vp-path-anim,#wpc-vitals-panel .wpc-vp-area-anim,#wpc-vitals-panel .wpc-vp-ring-anim,#wpc-vitals-panel .wpc-vp-pulse,#wpc-vitals-panel .wpc-vp-cellin,#wpc-vitals-panel .wpc-vp-sweep,#wpc-vitals-panel .wpc-vp-mkin,#wpc-vitals-panel .wpc-vp-valswap,#wpc-vitals-panel .wpc-vp-bar,#wpc-vitals-panel .wpc-vitals-chip,#wpc-vitals-panel .wpc-vitals-banner,#wpc-vitals-panel .wpc-vitals-sc-dot,#wpc-vitals-panel .wpc-vp-devdot,#wpc-vitals-panel .wpc-vp-scres,#wpc-vitals-panel .wpc-vp-scstat,#wpc-vitals-panel .wpc-vp-scbadge{animation:none !important;opacity:1 !important;transform:none !important;stroke-dasharray:none !important;stroke-dashoffset:0 !important}#wpc-vitals-panel .wpc-vp-shim:after{display:none !important}}
@@ -752,6 +820,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 <script type="text/javascript">
     (function () {
         var VP = <?php echo wp_json_encode($wpc_vp_payload); ?>;
+        try { if (localStorage.getItem('wpcVpDbg') === '1') { window.wpcVpDebug = VP; } } catch (e) {}
         var dev = VP.defdev === 'd' ? 'd' : 'm', view = 'timeline', chipPhase = 'p75';
         var wpcBrandRaw = (window.getComputedStyle ? getComputedStyle(document.documentElement).getPropertyValue('--wpc-brand-primary') : '').trim();
         var ACC = /^#[0-9a-fA-F]{6}$/.test(wpcBrandRaw) ? wpcBrandRaw : '#3B82F6';
@@ -843,6 +912,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             }
             var plotP75 = (activeReg && activeReg.p75 > 0) ? activeReg.p75 : s.p75;
             var plotGhost = activeReg ? 0 : (s.ghost || 0);
+            if (plotGhost > 0 && s.p75 > 0 && !(plotGhost > s.p75)) { plotGhost = 0; s.ghost = 0; }
             wrap.style.display = '';
             wrap.innerHTML = '';
             var W = 960, H = 176, L = 24, R = 24, bw = W - L - R, by = 76, bh = 8;
@@ -1041,7 +1111,10 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 (VP.reg || []).forEach(function (rr) { if (rr.c === region && rr.ser) { s75 = pick(rr.ser); s50 = []; s25 = []; } });
             }
             var tlLabels = pick(VP.labels), tlCached = pick(VP.cached), tlRendered = pick(VP.rendered);
-            var series = s50.filter(function (v) { return v != null; }).length > 1 ? s50 : s75;
+            var s50n = s50.filter(function (v) { return v != null; }).length;
+            var s75n = s75.filter(function (v) { return v != null; }).length;
+            var wpcHeroP50 = s50n > 1 || (s50n === 1 && s75n === 1);
+            var series = wpcHeroP50 ? s50 : s75;
             var n = s75.length;
             if (!n) { return; }
             var W = 960, H = 290, L = 52, R = 20, T = 20, B = 34, iw = W - L - R, ih = H - T - B;
@@ -1081,6 +1154,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             if (showAxes && 2500 < maxY) {
                 svg.appendChild(el('line', { x1: L, x2: W - R, y1: Y(2500), y2: Y(2500), stroke: '#10B981', 'stroke-width': 1.5, 'stroke-dasharray': '6 6', opacity: .55 }));
                 var gcx = W - R - 76;
+                svg.appendChild(el('rect', { x: gcx - 10, y: Y(2500) - 21, width: 86, height: 20, rx: 10, fill: '#ffffff', 'fill-opacity': '.92' }));
                 svg.appendChild(el('circle', { cx: gcx, cy: Y(2500) - 11, r: 6, fill: '#10B981' }));
                 svg.appendChild(el('path', { d: 'M' + (gcx - 2.6) + ',' + (Y(2500) - 11) + ' l1.9,2 l3.4,-3.9', fill: 'none', stroke: '#fff', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
                 var gt = el('text', { x: gcx + 11, y: Y(2500) - 7, 'font-size': '9.5', 'font-weight': '700', fill: '#10B981', 'letter-spacing': '.04em' });
@@ -1112,7 +1186,15 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             }
             if (!showAxes) {
                 var em = el('text', { x: L + iw / 2, y: T + ih * 0.42, 'text-anchor': 'middle', 'font-size': '12.5', 'font-weight': '500', fill: '#94a3b8' });
-                em.textContent = '<?php echo esc_js(__('Measuring real visitor speed — the trend line appears after a few days of traffic.', WPS_IC_TEXTDOMAIN)); ?>';
+                if (typeof scBusy !== 'undefined' && scBusy[dev]) {
+                    em.textContent = dev === 'd'
+                        ? '<?php echo esc_js(__('Measuring desktop now — first numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>'
+                        : '<?php echo esc_js(__('Running your first speed check — numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>';
+                } else if (maxV > 0) {
+                    em.textContent = '<?php echo esc_js(__('Visitors are landing — speed numbers appear here as they report in.', WPS_IC_TEXTDOMAIN)); ?>';
+                } else {
+                    em.textContent = '<?php echo esc_js(__('Measuring real visitor speed — the trend line appears after a few days of traffic.', WPS_IC_TEXTDOMAIN)); ?>';
+                }
                 svg.appendChild(em);
             }
             var lineKey = document.getElementById('wpc-vp-tlkey-line');
@@ -1144,7 +1226,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 svg.appendChild(path);
                 return pp;
             }
-            var hero = region ? s75 : (s50.filter(function (v) { return v != null; }).length > 1 ? s50 : s75);
+            var hero = region ? s75 : (wpcHeroP50 ? s50 : s75);
             var pts = linePts(hero);
             if (!pts.length && !region) { hero = s75; pts = linePts(s75); }
             if (pts.length > 1) {
@@ -1190,7 +1272,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 for (var li = hero.length - 1; li >= 0; li--) { if (hero[li] != null) { lastVal = hero[li]; break; } }
                 var lvTxt = fmtMs(lastVal);
                 var lvW = lvTxt.length * 7.8 + 18, lvH = 24;
-                var lvG = el('g', { 'class': 'wpc-vp-area-anim' });
+                var lvG = el('g', { 'class': 'wpc-vp-area-anim', id: 'wpc-vp-endb' });
                 lvG.appendChild(el('rect', { x: last[0] - 12 - lvW, y: last[1] - 12 - lvH / 2, width: lvW, height: lvH, rx: 8, fill: '#ffffff', 'fill-opacity': '.95', stroke: '#e2e8f0', 'stroke-width': 1 }));
                 var lv = el('text', { x: last[0] - 12 - lvW / 2, y: last[1] - 7.5, 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '800', fill: '#0f172a' });
                 lv.textContent = lvTxt; lvG.appendChild(lv);
@@ -1206,6 +1288,10 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             wrap.appendChild(svg);
             wpcTlW = wrap.clientWidth;
             var tip = tipFor(wrap);
+            function endB(show) {
+                var eb = svg.querySelector('#wpc-vp-endb');
+                if (eb) { eb.classList[show ? 'remove' : 'add']('wpc-vp-hid'); }
+            }
             var hover = el('g', {});
             svg.appendChild(hover);
             series.forEach(function (v, i) {
@@ -1217,21 +1303,26 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     function tipRow(sw, label, val) {
                         return '<span class="wpc-vp-tiprow"><i style="background:' + sw + '"></i><span>' + label + '</span><b>' + val + '</b></span>';
                     }
+                    var fi = tlx ? tlx[i] : i;
+                    var seeded = (VP.sci != null && fi === VP.sci && s50[i] == null && s25[i] == null);
                     var rows = '';
                     if (region) {
                         if (s75[i] != null) { rows = tipRow(ACC, '<?php echo esc_js(__('Region · typical', WPS_IC_TEXTDOMAIN)); ?>', fmtMs(s75[i])); }
+                    } else if (seeded && s75[i] != null) {
+                        rows = tipRow(ACC, '<?php echo esc_js(__('Initial speed check · optimized', WPS_IC_TEXTDOMAIN)); ?>', fmtMs(s75[i]));
                     } else {
                         if (s25[i] != null) { rows += tipRow(accA(.35), '<?php echo esc_js(__('Fastest visits', WPS_IC_TEXTDOMAIN)); ?>', fmtMs(s25[i])); }
                         if (s50[i] != null) { rows += tipRow(ACC, '<?php echo esc_js(__('Typical visitor', WPS_IC_TEXTDOMAIN)); ?>', fmtMs(s50[i])); }
                         if (s75[i] != null) { rows += tipRow(ACCG, '<?php echo esc_js(__('Slowest quarter', WPS_IC_TEXTDOMAIN)); ?>', fmtMs(s75[i])); }
                     }
+                    endB(false);
                     place(tip, wrap, (X(i) / W) * r.width, hy,
                         '<span class="wpc-vp-tiphead">' + esc(tlLabels[i]) + '</span>' + rows +
-                        ((!tot && tlx && VP.sci != null && tlx[i] === VP.sci)
-                            ? '<span class="wpc-vp-tipfoot"><?php echo esc_js(__('Initial speed check — measured from this browser', WPS_IC_TEXTDOMAIN)); ?></span>'
+                        (seeded
+                            ? '<span class="wpc-vp-tipfoot"><?php echo esc_js(__('Measured from this browser — real visitors take over as they arrive', WPS_IC_TEXTDOMAIN)); ?>' + (tot ? ' \u00b7 <b>' + tot.toLocaleString() + '</b> <?php echo esc_js(__('views', WPS_IC_TEXTDOMAIN)); ?>' : '') + '</span>'
                             : '<span class="wpc-vp-tipfoot"><b>' + tot.toLocaleString() + '</b> <?php echo esc_js(__('views', WPS_IC_TEXTDOMAIN)); ?>' + (tot ? ' \u00b7 ' + Math.round(cached / tot * 100) + '% <?php echo esc_js(__('from cache', WPS_IC_TEXTDOMAIN)); ?>' : '') + '</span>'));
                 });
-                hz.addEventListener('pointerleave', function () { tip.classList.remove('show'); });
+                hz.addEventListener('pointerleave', function () { tip.classList.remove('show'); endB(true); });
                 hover.appendChild(hz);
             });
             (VP.events || []).forEach(function (ev) {
@@ -1336,17 +1427,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 x.classList.toggle('active', x.getAttribute('data-wpc-view') === v);
                 x.setAttribute('aria-selected', x.getAttribute('data-wpc-view') === v ? 'true' : 'false');
             });
-            if (typeof scRes !== 'undefined' && scRes) {
+            if (typeof scCard === 'function') {
                 scCard(scRes, scLive);
-            } else if (v !== 'timeline') {
-                var scB = document.getElementById('wpc-vp-scbadge');
-                if (scB) { scB.style.display = 'none'; }
-                var scBox = document.getElementById('wpc-vp-sc');
-                if (scBox && scBox.style.display !== 'none') {
-                    scBox.style.display = 'none';
-                    var scBnr = document.querySelector('#wpc-vitals-panel .wpc-vitals-banner');
-                    if (scBnr) { scBnr.style.display = ''; }
-                }
             }
             ['timeline', 'experience', 'details'].forEach(function (k) {
                 var e = document.getElementById('wpc-vp-' + k);
@@ -1376,7 +1458,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 animOn = !vpReduce;
                 chipPhase = 'p75';
                 render();
-                if (typeof scRes !== 'undefined' && scRes && VP.sc) { scCard(scRes, scLive); }
+                if (typeof scCard === 'function') { scCard(scRes, scLive); }
             });
         });
         document.querySelectorAll('#wpc-vitals-panel .wpc-vitals-viewseg button').forEach(function (b) {
@@ -1441,15 +1523,17 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             var bnr = document.querySelector('#wpc-vitals-panel .wpc-vitals-banner');
             if (bnr) { bnr.style.display = ''; }
         }
+        function scTry(mk) {
+            return mk().then(function (v) { return v > 0 ? v : mk(); });
+        }
         var scBrand = '<?php echo esc_js($wpc_vp_brand); ?>';
         var scWithout = '<?php echo esc_js(sprintf(__('Without %s', WPS_IC_TEXTDOMAIN), $wpc_vp_brand)); ?>';
         function scSkel(step, off) {
             var stage = step === 1
-                ? '<b><?php echo esc_js(sprintf(__('Loading your homepage without %s…', WPS_IC_TEXTDOMAIN), $wpc_vp_brand)); ?></b> — <?php echo esc_js(__('a first-time visit, no optimization', WPS_IC_TEXTDOMAIN)); ?>'
-                : '<b><?php echo esc_js(__('Now measuring the fully optimized version…', WPS_IC_TEXTDOMAIN)); ?></b> — <?php echo esc_js(__('cached, compressed, delivered', WPS_IC_TEXTDOMAIN)); ?>';
+                ? '<?php echo esc_js(sprintf(__('Loading your homepage without %s — a first-time visit, no optimization…', WPS_IC_TEXTDOMAIN), $wpc_vp_brand)); ?>'
+                : '<?php echo esc_js(__('Now measuring the fully optimized version — cached, compressed, delivered…', WPS_IC_TEXTDOMAIN)); ?>';
             scText('<div class="wpc-vp-scres"><div class="wpc-vp-scres-main">'
-                + '<div class="wpc-vp-scres-head"><?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?><span class="wpc-vp-scsteps"><i class="on"></i><i' + (step > 1 ? ' class="on"' : '') + '></i><i></i></span></div>'
-                + '<div class="wpc-vp-scstage">' + stage + '</div>'
+                + '<div class="wpc-vp-scres-head"><?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?><span class="wpc-vp-scghost">' + stage + '</span></div>'
                 + '<div class="wpc-vp-scrow"><span class="lab">' + scWithout + '</span><div class="trk' + (step === 1 ? ' wpc-vp-shim' : '') + '"><div class="fill off" data-wpc-w="' + (step > 1 && off > 0 ? 100 : 0) + '"></div></div><b class="chip' + (step > 1 && off > 0 ? '' : ' empty') + '">' + (step > 1 && off > 0 ? fmtMs(off) : '—') + '</b></div>'
                 + '<div class="wpc-vp-scrow"><span class="lab"><?php echo esc_js(__('Fully optimized', WPS_IC_TEXTDOMAIN)); ?></span><div class="trk' + (step > 1 ? ' wpc-vp-shim' : '') + '"><div class="fill on" data-wpc-w="0"></div></div><b class="chip empty">—</b></div>'
                 + '</div></div>', true);
@@ -1458,6 +1542,13 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     fl.style.width = fl.getAttribute('data-wpc-w') + '%';
                 });
             });
+        }
+        function scSkelD() {
+            scText('<div class="wpc-vp-scres"><div class="wpc-vp-scres-main">'
+                + '<div class="wpc-vp-scres-head"><?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?><span class="wpc-vp-scghost"><?php echo esc_js(__('Measuring the desktop version now — first numbers land in about a minute…', WPS_IC_TEXTDOMAIN)); ?></span></div>'
+                + '<div class="wpc-vp-scrow"><span class="lab">' + scWithout + '</span><div class="trk wpc-vp-shim"><div class="fill off" data-wpc-w="0"></div></div><b class="chip empty">—</b></div>'
+                + '<div class="wpc-vp-scrow"><span class="lab"><?php echo esc_js(__('Fully optimized', WPS_IC_TEXTDOMAIN)); ?></span><div class="trk wpc-vp-shim"><div class="fill on" data-wpc-w="0"></div></div><b class="chip empty">—</b></div>'
+                + '</div></div>', true);
         }
         function scDeskDot(on) {
             var b = document.querySelector('#wpc-vitals-panel .wpc-vitals-toggle button[data-wpc-dev="d"]');
@@ -1507,6 +1598,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     bnr.style.opacity = '1';
                 }, vpReduce ? 0 : 500);
             }
+            animOn = !vpReduce;
+            render();
         }
         function scLeg(r, dv) {
             if (!r) { return null; }
@@ -1516,6 +1609,13 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         }
         function scValid(rr) { return !!(rr && rr.on > 0 && rr.off > rr.on * 1.15); }
         var scRes = null, scLive = false;
+        var scBusy = { m: false, d: false };
+        function scQuietNow() { return !!(VP.have4 && VP.have4.m && VP.have4.d && !VP.demo); }
+        function scBusySet(dv, on) {
+            scBusy[dv] = !!on;
+            if (view === 'timeline') { drawTimeline(); }
+            if (dev === 'd' && typeof scCard === 'function') { scCard(scRes, scLive); }
+        }
         function scInfoTxt(when, legName) {
             return when + ' \u00b7 <?php echo esc_js(__('your homepage, loaded as a first-time visitor', WPS_IC_TEXTDOMAIN)); ?> \u00b7 ' + legName + '. <?php echo esc_js(__('Real visitor measurements take over as they arrive.', WPS_IC_TEXTDOMAIN)); ?>';
         }
@@ -1528,8 +1628,26 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             var rm = scValid(rl) ? rl : (scValid(scLeg(r, 'm')) ? scLeg(r, 'm') : (rl || scLeg(r, 'm')));
             var badge = scBadgeEl();
             if (view !== 'timeline') { scHide(); if (badge) { badge.style.display = 'none'; } return; }
+            if (dev === 'd' && scBusy.d && !scQuietNow() && !scValid(scLeg(r, 'd'))) {
+                if (badge) { badge.style.display = 'none'; }
+                scSkelD();
+                return;
+            }
             var mature = !!(VP.have4 && VP.have4[dev] && !VP.demo);
-            if (!rm) { scHide(); if (badge) { badge.style.display = 'none'; } return; }
+            if (!rm && mature) {
+                if (dev === 'm' && VP.bpair && VP.bpair.off > 0 && VP.bpair.on > 0 && VP.bpair.off > VP.bpair.on * 1.15) {
+                    rm = { off: VP.bpair.off, on: VP.bpair.on, rv: 1, avg: VP.bpair.avg };
+                } else {
+                    var spd = (VP.spec && VP.spec[dev]) ? VP.spec[dev] : null;
+                    if (spd && spd.ghost > 0 && spd.p75 > 0 && spd.ghost > spd.p75 * 1.15) {
+                        rm = { off: spd.ghost, on: spd.p75, rv: 1 };
+                    }
+                }
+            }
+            if (!rm) {
+                if ((scBusy.m || scBusy.d) && !scQuietNow()) { return; }
+                scHide(); if (badge) { badge.style.display = 'none'; } return;
+            }
             if (mature) {
                 if (badge && rm.off > 0 && rm.off > rm.on * 1.15) {
                     badge.innerHTML = '<i><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l2.1 4.9L17 12l-4.9 2.1L10 19l-2.1-4.9L3 12l4.9-2.1L10 5z" fill="#10B981"/><path d="M18 2l1.2 2.8L22 6l-2.8 1.2L18 10l-1.2-2.8L14 6l2.8-1.2L18 2z" fill="#34d399" opacity=".75"/><path d="M19 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z" fill="#34d399" opacity=".5"/></svg></i><b>' + Math.round((1 - rm.on / rm.off) * 100) + '%</b><span><?php echo esc_js(__('faster', WPS_IC_TEXTDOMAIN)); ?></span>';
@@ -1542,20 +1660,27 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             } else if (badge) {
                 badge.style.display = 'none';
             }
-            var legName = (rm === scLeg(r, 'd') && scLeg(r, 'd') !== scLeg(r, 'm')) ? '<?php echo esc_js(__('desktop', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('mobile', WPS_IC_TEXTDOMAIN)); ?>';
+            var legName = rm.rv
+                ? (dev === 'd' ? '<?php echo esc_js(__('desktop', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('mobile', WPS_IC_TEXTDOMAIN)); ?>')
+                : ((rm === scLeg(r, 'd') && scLeg(r, 'd') !== scLeg(r, 'm')) ? '<?php echo esc_js(__('desktop', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('mobile', WPS_IC_TEXTDOMAIN)); ?>');
             var when = live ? '<?php echo esc_js(__('measured just now from this browser', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('measured from this browser', WPS_IC_TEXTDOMAIN)); ?>';
+            var scHeadTxt = rm.rv ? '<?php echo esc_js(__('Before & After', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?>';
+            var scOnLab = rm.rv ? (rm.avg ? '<?php echo esc_js(__('Average visit', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Typical visit', WPS_IC_TEXTDOMAIN)); ?>') : '<?php echo esc_js(__('Fully optimized', WPS_IC_TEXTDOMAIN)); ?>';
+            var scInfo = rm.rv
+                ? '<?php echo esc_js(__('Measured from your real visitors — typical load time (p75) vs real unoptimized comparison visits', WPS_IC_TEXTDOMAIN)); ?> · ' + legName + '.'
+                : scInfoTxt(when, legName);
             if (rm.off > 0 && rm.off > rm.on * 1.15) {
                 var pct = Math.round((1 - rm.on / rm.off) * 100);
                 var onW = Math.max(4, Math.round(rm.on / rm.off * 100));
                 var scStatHtml = mature ? '' : '<div class="wpc-vp-scstat"><i><svg width="11" height="7" viewBox="0 0 11 7" aria-hidden="true"><path d="M1.5 1.5 5.5 5.5 9.5 1.5" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i><b>' + pct + '%</b><span><?php echo esc_js(__('faster', WPS_IC_TEXTDOMAIN)); ?></span></div>';
                 scText('<div class="wpc-vp-scres">'
                     + '<div class="wpc-vp-scres-main">'
-                    + '<div class="wpc-vp-scres-head"><?php echo esc_js(__('Initial Speed Check', WPS_IC_TEXTDOMAIN)); ?>'
-                    + '<span class="wpc-vp-scinfo" tabindex="0" role="note" aria-label="' + scInfoTxt(when, legName).replace(/"/g, '&quot;') + '">i<span class="wpc-vp-scinfo-tip">' + scInfoTxt(when, legName) + '</span></span>'
+                    + '<div class="wpc-vp-scres-head">' + scHeadTxt
+                    + '<span class="wpc-vp-scinfo" tabindex="0" role="note" aria-label="' + scInfo.replace(/"/g, '&quot;') + '">i<span class="wpc-vp-scinfo-tip">' + scInfo + '</span></span>'
                     + (live ? '<span class="wpc-vp-sctoast" id="wpc-vp-sctoast">✓ <?php echo esc_js(__('Measured just now', WPS_IC_TEXTDOMAIN)); ?></span>' : '')
                     + '</div>'
                     + '<div class="wpc-vp-scrow"><span class="lab">' + scWithout + '</span><div class="trk"><div class="fill off" data-wpc-w="100"></div></div><b class="chip">' + fmtMs(rm.off) + '</b></div>'
-                    + '<div class="wpc-vp-scrow"><span class="lab"><?php echo esc_js(__('Fully optimized', WPS_IC_TEXTDOMAIN)); ?></span><div class="trk"><div class="fill on" data-wpc-w="' + onW + '"></div></div><b class="chip fast">' + fmtMs(rm.on) + '</b></div>'
+                    + '<div class="wpc-vp-scrow"><span class="lab">' + scOnLab + '</span><div class="trk"><div class="fill on" data-wpc-w="' + onW + '"></div></div><b class="chip fast">' + fmtMs(rm.on) + '</b></div>'
                     + '</div>'
                     + scStatHtml
                     + '</div>', true);
@@ -1591,11 +1716,13 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         // striped baseline band and the optimized paint becomes today's point — per device leg,
         // only where the server has nothing yet (real lanes overwrite on the next load).
         function scInject(r) {
-            if (VP.demo || !r) { return; }
+            if (VP.demo || !r || r.e !== 1) { return; }
             var chg = false;
             ['m', 'd'].forEach(function (dv) {
                 var rr = scLeg(r, dv);
                 if (!rr) { return; }
+                var sp = (VP.spec && VP.spec[dv]) ? VP.spec[dv] : null;
+                if (sp && sp.p75 > 0 && sp.n >= 10 && !(rr.off > sp.p75 * 1.15)) { return; }
                 if (scValid(rr) && VP.base && !(VP.base[dv] > 0)) {
                     VP.base[dv] = Math.round(rr.off);
                     VP.base.label = scWithout;
@@ -1616,6 +1743,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 }
             });
             if (chg && view === 'timeline') { animOn = !vpReduce; render(); }
+            return chg;
         }
         (function () {
             var badge = scBadgeEl();
@@ -1624,31 +1752,35 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     scOpen = !scOpen;
                     try { localStorage.setItem('wpcVpScOpen', scOpen ? '1' : '0'); } catch (e) {}
                     badge.setAttribute('aria-expanded', scOpen ? 'true' : 'false');
-                    if (scRes) { scCard(scRes, scLive); }
+                    scCard(scRes, scLive);
                 });
             }
         })();
         var scCred = 'credentialless' in HTMLIFrameElement.prototype;
         try {
             var scStored = JSON.parse(localStorage.getItem('wpcVpSC') || 'null');
-            if (VP.sc && scLeg(scStored, 'm')) { scCard(scStored, false); scInject(scStored); }
+            if (VP.sc && scStored && scStored.e === 1 && scLeg(scStored, 'm')) { scCard(scStored, false); scInject(scStored); }
             var scFresh = scStored && scStored.e === 1 && (Date.now() - (scStored.t || 0)) <= 24 * 3600 * 1000;
+            var scDok = !!(scStored && scStored.d && scStored.d.on > 0 && scStored.d.off > 0);
             if (VP.sc && scCred && document.visibilityState === 'visible'
-                && scFresh && scLeg(scStored, 'm') && !scLeg(scStored, 'd')) {
+                && scFresh && scLeg(scStored, 'm') && !scDok) {
                 var scLastD = parseInt(localStorage.getItem('wpcVpScRun') || '0', 10);
                 if (!(scLastD > 0) || (Date.now() - scLastD) > 20 * 60 * 1000) {
                     localStorage.setItem('wpcVpScRun', String(Date.now()));
                     setTimeout(function () {
                         scDeskDot(true);
-                        scFrame(VP.sc.ub, 1200, 800, 10000, true).then(function (doff) {
+                        scBusySet('d', true);
+                        scTry(function () { return scFrame(VP.sc.ub + '&wpcb=' + Date.now(), 1200, 800, 12000, true); }).then(function (doff) {
                             return scWarm(VP.sc.u).then(function () {
-                                return scFrame(VP.sc.u, 1200, 800, 10000, true);
+                                return scTry(function () { return scFrame(VP.sc.u, 1200, 800, 10000, true); });
                             }).then(function (don) {
-                                var mig = { m: scLeg(scStored, 'm'), d: { off: doff, on: don }, t: scStored.t || Date.now(), e: 1 };
+                                var mig = { m: scLeg(scStored, 'm'), t: scStored.t || Date.now(), e: 1 };
+                                if (don > 0 && doff > 0) { mig.d = { off: doff, on: don }; }
                                 try { localStorage.setItem('wpcVpSC', JSON.stringify(mig)); } catch (e) {}
                                 scDeskDot(false);
+                                scBusy.d = false;
                                 scCard(mig, false);
-                                scInject(mig);
+                                if (!scInject(mig) && view === 'timeline') { drawTimeline(); }
                             });
                         });
                     }, 1500);
@@ -1661,25 +1793,39 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                     var scQuiet = !!(VP.have4 && VP.have4.m && VP.have4.d && !VP.demo);
                     setTimeout(function () {
                         if (!scQuiet) { scSkel(1, 0); }
-                        scFrame(VP.sc.ub, 390, 700, 12000, true).then(function (off) {
+                        scBusy.m = true;
+                        scBusySet('d', true);
+                        scTry(function () { return scFrame(VP.sc.ub + '&wpcb=' + Date.now(), 390, 700, 12000, true); }).then(function (off) {
                             if (!scQuiet) { scSkel(2, off); }
                             return scWarm(VP.sc.u).then(function () {
-                                return scFrame(VP.sc.u, 390, 700, 10000, true);
+                                return scTry(function () { return scFrame(VP.sc.u, 390, 700, 10000, true); });
                             }).then(function (on) {
+                                if (!(on > 0 && off > 0)) {
+                                    scBusy.m = false;
+                                    scBusy.d = false;
+                                    scDeskDot(false);
+                                    if (!scQuiet && view === 'timeline') { scHide(); }
+                                    if (view === 'timeline') { drawTimeline(); }
+                                    return;
+                                }
                                 var res = { m: { off: off, on: on }, t: Date.now(), e: 1 };
                                 try { localStorage.setItem('wpcVpSC', JSON.stringify(res)); } catch (e) {}
                                 scDemoLand(res);
                                 scCard(res, true);
-                                scInject(res);
+                                scBusy.m = false;
+                                if (!scInject(res) && view === 'timeline') { drawTimeline(); }
                                 scDeskDot(true);
-                                return scFrame(VP.sc.ub, 1200, 800, 10000, true).then(function (doff) {
+                                return scTry(function () { return scFrame(VP.sc.ub + '&wpcb=' + Date.now(), 1200, 800, 12000, true); }).then(function (doff) {
                                     return scWarm(VP.sc.u).then(function () {
-                                        return scFrame(VP.sc.u, 1200, 800, 10000, true);
+                                        return scTry(function () { return scFrame(VP.sc.u, 1200, 800, 10000, true); });
                                     }).then(function (don) {
-                                        res.d = { off: doff, on: don };
-                                        try { localStorage.setItem('wpcVpSC', JSON.stringify(res)); } catch (e) {}
+                                        if (don > 0 && doff > 0) {
+                                            res.d = { off: doff, on: don };
+                                            try { localStorage.setItem('wpcVpSC', JSON.stringify(res)); } catch (e) {}
+                                        }
                                         scDeskDot(false);
-                                        scInject(res);
+                                        scBusy.d = false;
+                                        if (!scInject(res) && view === 'timeline') { drawTimeline(); }
                                         if (dev === 'd') { scCard(res, true); }
                                     });
                                 });
@@ -1689,6 +1835,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                 }
             }
         } catch (e) {}
+        if (!scRes && typeof scCard === 'function') { scCard(null, false); }
         // ── silent baseline fallback: browsers without credentialless iframes still mint the
         // ?disableWPC cohort from THIS admin browser (homepage only, invisible iframes, never
         // a real visitor) until each device leg holds 8 samples ──
@@ -1704,7 +1851,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                         legs.forEach(function (sz, i) {
                             setTimeout(function () {
                                 var f = document.createElement('iframe');
-                                f.src = VP.bl.u;
+                                f.src = VP.bl.u + '&wpcb=' + Date.now();
                                 f.setAttribute('aria-hidden', 'true');
                                 f.setAttribute('tabindex', '-1');
                                 f.style.cssText = 'position:fixed;right:0;bottom:0;width:' + sz[0] + 'px;height:' + sz[1] + 'px;border:0;opacity:.01;transform:scale(.02);transform-origin:bottom right;pointer-events:none';

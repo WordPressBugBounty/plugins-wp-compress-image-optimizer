@@ -61,7 +61,7 @@ if ($filename === '') {
     }
 }
 
-
+// No-improvement signal
 if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body['bumped'] === 'source_already_optimal')) {
     $reason = !empty($body['noImprovement'])
         ? (isset($body['reason']) ? (string) $body['reason'] : 'no_improvement')
@@ -90,7 +90,7 @@ if (!empty($body['noImprovement']) || (isset($body['bumped']) && (string) $body[
     wpc_v2_direct_respond(200, ['ok' => true, 'kind' => $reason, 'direct_entry' => true]);
 }
 
-
+// Resolve bytes
 $raw = null;
 if ($b64 !== '') {
     $raw = base64_decode($b64, true);
@@ -108,7 +108,7 @@ if ($b64 !== '') {
     wpc_v2_direct_respond(400, ['error' => 'missing_bytes_or_fetchUrl']);
 }
 
-
+// Atomic disk write
 $persist = wpc_v2_direct_persist_bytes($imageID, $filename, $raw);
 if (!$persist['ok']) {
     wpc_v2_direct_respond(500, ['error' => $persist['error']]);
@@ -143,7 +143,7 @@ error_log(sprintf(
     (microtime(true) - $entry_t) * 1000
 ));
 
-
+// Trigger drain on threshold (less likely with single-variant, but consistent)
 $threshold = defined('WPC_V2_JOURNAL_DRAIN_THRESHOLD') ? (int) WPC_V2_JOURNAL_DRAIN_THRESHOLD : 5;
 if (wpc_v2_journal_count() >= $threshold) {
     register_shutdown_function('wpc_v2_journal_fire_loopback');

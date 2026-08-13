@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_breeze extends wps_ic_integrations {
@@ -10,11 +10,11 @@ class wps_ic_breeze extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No specific checks needed
     }
 
     public function fix_setting($setting) {
-        
+        // No specific fixes needed
     }
 
     public function add_admin_hooks() {
@@ -28,15 +28,15 @@ class wps_ic_breeze extends wps_ic_integrations {
     }
 
     public function purge_cache($url_key = false) {
-        
+        // Action hook
         do_action('breeze_clear_all_cache');
 
-        
+        // Class method
         if (class_exists('Breeze_PurgeCache') && is_callable(['Breeze_PurgeCache', 'breeze_cache_flush'])) {
             call_user_func(['Breeze_PurgeCache', 'breeze_cache_flush']);
         }
 
-        
+        // Full cache clear
         if (defined('BREEZE_VERSION')) {
             global $wp_filesystem;
             require_once(ABSPATH . 'wp-admin/includes/file.php');

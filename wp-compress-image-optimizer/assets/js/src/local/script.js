@@ -1,4 +1,4 @@
-
+// Lazy
 var regularImages = [];
 var active;
 var activeRegular;

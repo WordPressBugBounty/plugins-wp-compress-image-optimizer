@@ -6,10 +6,10 @@ if (!defined('ABSPATH')) {
 }
 
 if (!function_exists('wpc_v2_lazy_test_check_apikey')) {
-    
-
-
-
+    /**
+     * Apikey-gate via query param OR POST body. Returns true if matches the
+     * plugin's stored apikey (constant-time compare).
+     */
     function wpc_v2_lazy_test_check_apikey()
     {
         $provided = '';
@@ -36,7 +36,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_miss')) {
             wp_send_json_error(['msg' => 'missing_image_id'], 400);
         }
 
-        
+        // Resolve the sub-size path for AVIF + WebP variants.
         $src = wp_get_attachment_image_src($image_id, $size);
         if (!$src) {
             wp_send_json_error(['msg' => 'size_not_available'], 404);
@@ -69,11 +69,11 @@ if (!function_exists('wpc_v2_ajax_lazy_force_miss')) {
 add_action('wp_ajax_wpc_v2_lazy_force_miss',        'wpc_v2_ajax_lazy_force_miss');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_miss', 'wpc_v2_ajax_lazy_force_miss');
 
-
-
-
-
-
+/**
+ * Dump the plugin settings + state relevant to image-delivery behavior.
+ * Apikey-gated. Used by support to diagnose why a customer's images render at
+ * unexpected widths.
+ */
 if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
     function wpc_v2_ajax_lazy_inspect_settings()
     {
@@ -86,9 +86,9 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             'fetchpriority-high',
             'lazySkipCount',
             'optimize-lcp',
-            'maxWidth',           
+            'maxWidth',           // ← cap for buildLcpSrcset ladder (default 2560)
             'retina',
-            'imageWidth',         
+            'imageWidth',         // ← max image-tag width
             'live-cdn',
             'picture_webp',
             'picture_avif',
@@ -116,7 +116,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             'sample_settings_total_keys'        => count($s),
         ];
         if ($all_keys) {
-            
+            // Flatten nested arrays for easier audit reading; preserve raw structure too.
             ksort($s);
             $response['all_settings_raw'] = $s;
         }
@@ -182,11 +182,11 @@ if (!function_exists('wpc_v2_ajax_lazy_patch_setting')) {
 add_action('wp_ajax_wpc_v2_lazy_patch_setting',        'wpc_v2_ajax_lazy_patch_setting');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_patch_setting', 'wpc_v2_ajax_lazy_patch_setting');
 
-
-
-
-
-
+/**
+ * Tail recent WPC log entries. Apikey-gated. Returns last N lines matching
+ * WPC patterns. For monitoring during canary tests when SSH access isn't
+ * available.
+ */
 if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
     function wpc_v2_ajax_lazy_log_tail()
     {
@@ -198,7 +198,7 @@ if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
         if (!file_exists($log_path) || !is_readable($log_path)) {
             wp_send_json_error(['msg' => 'no_debug_log', 'path' => $log_path], 404);
         }
-        
+        // Read just the tail (last ~256KB) so we don't load the whole file
         $fp = @fopen($log_path, 'r');
         if (!$fp) wp_send_json_error(['msg' => 'log_open_failed'], 500);
         fseek($fp, 0, SEEK_END);
@@ -208,7 +208,7 @@ if (!function_exists('wpc_v2_ajax_lazy_log_tail')) {
         $chunk = fread($fp, $tail_bytes);
         fclose($fp);
 
-        
+        // Filter WPC-related lines
         $all = explode("\n", (string) $chunk);
         $wpc = [];
         foreach ($all as $line) {
@@ -258,7 +258,7 @@ if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
             }
             update_option(WPS_IC_SETTINGS, $s);
         }
-        
+        // Backstop: keep the explicit pull coupling the production path also enforces.
         if ($enabled) {
             $cur = (bool) get_site_option('wpc_v2_pull_enabled', false);
             if (!$cur) update_site_option('wpc_v2_pull_enabled', 1);
@@ -274,10 +274,10 @@ if (!function_exists('wpc_v2_ajax_lazy_set_local_mirror')) {
 add_action('wp_ajax_wpc_v2_lazy_set_local_mirror',        'wpc_v2_ajax_lazy_set_local_mirror');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_set_local_mirror', 'wpc_v2_ajax_lazy_set_local_mirror');
 
-
-
-
-
+/**
+ * Inspect plugin settings + optionally flip a key. Apikey-gated.
+ * Body: { apikey, set?: "key=value", get?: 1 }
+ */
 if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
     function wpc_v2_ajax_lazy_inspect_settings()
     {
@@ -300,7 +300,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
             }
         }
 
-        
+        // Only return relevant picture/cdn-mode keys to keep response tight.
         $interesting = [
             'picture_webp', 'picture_avif', 'generate_webp', 'generate_adaptive',
             'live-cdn', 'cdn', 'webp', 'adaptive_images',
@@ -324,10 +324,10 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_settings')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_settings',        'wpc_v2_ajax_lazy_inspect_settings');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_settings', 'wpc_v2_ajax_lazy_inspect_settings');
 
-
-
-
-
+/**
+ * Purge WPC HTML cache (wp-content/cache/wp-cio/ + wp-preload/).
+ * Required to see rendered HTML changes after rewriteLogic.php updates.
+ */
 if (!function_exists('wpc_v2_ajax_lazy_purge_cache')) {
     function wpc_v2_ajax_lazy_purge_cache()
     {
@@ -373,7 +373,7 @@ if (!function_exists('wpc_v2_ajax_lazy_verify_patch')) {
         $content = $exists ? @file_get_contents($rewriter_path) : '';
         $has_optimistic = $exists && strpos($content, '$optimistic_avif') !== false;
         $has_v7052_marker = $exists && strpos($content, 'v7.05.2') !== false;
-        
+        // Check cdn-rewrite.php patch too
         $cdn_content = file_exists($cdn_rewrite_path) ? @file_get_contents($cdn_rewrite_path) : '';
         $cdn_has_optimistic = strpos($cdn_content, '$optimistic_avif') !== false;
         $cdn_mtime = file_exists($cdn_rewrite_path) ? gmdate('Y-m-d H:i:s', filemtime($cdn_rewrite_path)) : null;
@@ -405,10 +405,10 @@ if (!function_exists('wpc_v2_ajax_lazy_verify_patch')) {
 add_action('wp_ajax_wpc_v2_lazy_verify_patch',        'wpc_v2_ajax_lazy_verify_patch');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_verify_patch', 'wpc_v2_ajax_lazy_verify_patch');
 
-
-
-
-
+/**
+ * Force opcache invalidation on rewriteLogic.php (workaround for no-SSH
+ * staging where touched files aren't picked up by stale opcache).
+ */
 if (!function_exists('wpc_v2_ajax_lazy_opcache_invalidate')) {
     function wpc_v2_ajax_lazy_opcache_invalidate()
     {
@@ -473,7 +473,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
         $basedir    = rtrim((string) $upload_dir['basedir'], '/');
         $baseurl    = rtrim((string) $upload_dir['baseurl'], '/');
 
-        
+        // Resolve target attachment(s)
         $target_ids = [];
         $image_id_arg = isset($_REQUEST['image_id']) ? (int) $_REQUEST['image_id'] : 0;
         $all_arg      = !empty($_REQUEST['all']);
@@ -517,7 +517,7 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
                     $candidates_no_ext[] = preg_replace('/\.[^.]+$/', '', basename((string) $sz_data['file']));
                 }
             }
-            
+            // Un-scaled original (when WP scaled at upload time)
             if (function_exists('wp_get_original_image_path')) {
                 $orig_path = (string) wp_get_original_image_path($att_id);
                 if ($orig_path !== '') {
@@ -649,12 +649,12 @@ if (!function_exists('wpc_v2_ajax_lazy_backfill_postmeta')) {
 add_action('wp_ajax_wpc_v2_lazy_backfill_postmeta',        'wpc_v2_ajax_lazy_backfill_postmeta');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_backfill_postmeta', 'wpc_v2_ajax_lazy_backfill_postmeta');
 
-
-
-
-
-
-
+/**
+ * Disk + postmeta inspector. Pass ?image_id=N to get:
+ *   - ic_local_variants postmeta (what plugin THINKS exists)
+ *   - directory listing of the image's uploads subdir (what REALLY exists)
+ *   - per-sub-size disk-presence check for .avif/.webp siblings
+ */
 if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
     function wpc_v2_ajax_lazy_inspect_disk()
     {
@@ -695,7 +695,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
                 }));
                 $out['directory_listing'] = $entries;
 
-                
+                // Per sub-size: does .avif sibling exist? .webp sibling?
                 $per_size = [];
                 if (isset($meta['sizes'])) {
                     foreach ($meta['sizes'] as $size_name => $size_data) {
@@ -724,9 +724,9 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_disk')) {
 add_action('wp_ajax_wpc_v2_lazy_inspect_disk',        'wpc_v2_ajax_lazy_inspect_disk');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_inspect_disk', 'wpc_v2_ajax_lazy_inspect_disk');
 
-
-
-
+/**
+ * Cache layer / plugin inspector — what's listening for purges?
+ */
 if (!function_exists('wpc_v2_ajax_lazy_inspect_cache_layer')) {
     function wpc_v2_ajax_lazy_inspect_cache_layer()
     {
@@ -780,7 +780,7 @@ if (!function_exists('wpc_v2_ajax_lazy_inspect_cache_layer')) {
         $out['rocket_clean_post_exists'] = function_exists('rocket_clean_post');
         $out['wp_cache_post_change_exists'] = function_exists('wp_cache_post_change');
 
-        
+        // Capture Varnish-related headers from a local request to check.
         $out['varnish_seen_via_localhost'] = null;
         if (function_exists('wp_remote_head')) {
             $r = wp_remote_head(home_url('/sample-page/'), ['timeout' => 5, 'sslverify' => false]);
@@ -837,10 +837,10 @@ if (!function_exists('wpc_v2_ajax_lazy_force_config_sync')) {
 add_action('wp_ajax_wpc_v2_lazy_force_config_sync',        'wpc_v2_ajax_lazy_force_config_sync');
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_config_sync', 'wpc_v2_ajax_lazy_force_config_sync');
 
-
-
-
-
+/**
+ * Force pull-drain fire bypassing the 5-min page-load-poll throttle.
+ * Extends drain_alive_until_ms first so the loop actually polls.
+ */
 if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
     function wpc_v2_ajax_lazy_force_drain()
     {
@@ -850,7 +850,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
         if (!function_exists('wpc_v2_pull_drain_fire')) {
             wp_send_json_error(['msg' => 'pull_drain_helper_missing'], 500);
         }
-        
+        // Extend deadline so loop actually polls
         $now_ms = (int) (microtime(true) * 1000);
         $target = $now_ms + 60000;
         wp_cache_delete('wpc_v2_drain_alive_until_ms', 'options');
@@ -858,7 +858,7 @@ if (!function_exists('wpc_v2_ajax_lazy_force_drain')) {
         if ($target > $current) {
             update_option('wpc_v2_drain_alive_until_ms', $target, false);
         }
-        
+        // Bypass throttle too
         delete_option('wpc_v2_last_pull_check_ms');
         $dispatched = (bool) wpc_v2_pull_drain_fire();
         wp_send_json_success([
@@ -871,10 +871,10 @@ add_action('wp_ajax_wpc_v2_lazy_force_drain',        'wpc_v2_ajax_lazy_force_dra
 add_action('wp_ajax_nopriv_wpc_v2_lazy_force_drain', 'wpc_v2_ajax_lazy_force_drain');
 
 
+//
 
 
-
-
+//
 
 
 if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
@@ -901,7 +901,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
                 'fix' => "wp option update wpc_v2_orch_admin_host '<orch.region.host>' (or pass ?orch_host=)",
             ], 503);
         }
-        
+        // Strip any scheme the operator pasted in.
         $orch_host = preg_replace('#^https?://#', '', $orch_host);
         $orch_host = trim($orch_host, "/ \t");
 
@@ -910,7 +910,7 @@ if (!function_exists('wpc_v2_ajax_lazy_check_orch_writes')) {
 
         $n = isset($_REQUEST['n']) ? max(1, min(500, (int) $_REQUEST['n'])) : 50;
 
-        
+        // Build server-side query string with only the allowlisted params.
         $server_params = ['key' => $stats_key, 'n' => $n];
         $server_params['apikey_hash'] = isset($_REQUEST['apikey_hash']) && $_REQUEST['apikey_hash'] !== ''
             ? (string) $_REQUEST['apikey_hash']

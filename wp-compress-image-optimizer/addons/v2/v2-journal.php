@@ -30,7 +30,7 @@ function wpc_v2_journal_dir() {
             $cached = '';
             return $cached;
         }
-        
+        // Files contain no secrets but no reason to serve them either.
         @file_put_contents($dir . '/.htaccess', "Deny from all\n");
         @file_put_contents($dir . '/index.html', '');
     }
@@ -49,7 +49,7 @@ function wpc_v2_journal_write_batch($imageID, $jobId, array $entries, $flush_rea
     }
     $dir = wpc_v2_journal_dir();
     if ($dir === '') {
-        
+        // Postmortem item p0: this was silent. The caller (pull-manifest
 
 
         error_log(sprintf(
@@ -118,7 +118,7 @@ function wpc_v2_journal_fire_loopback_fast() {
     }
     update_option('wpc_v2_journal_fire_last_ms', $now_ms, false);
 
-    
+    // Canonical helper (see v2-capabilities.php).
     $apikey = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
     if ($apikey === '') {
         return false;
@@ -164,7 +164,7 @@ function wpc_v2_journal_fire_loopback_fast() {
         }
     }
     if (!$fp) {
-        
+        // Mark pending so drain exit-fence or shutdown-hook catches up.
         set_transient('wpc_v2_journal_pending_fire', $now_ms, 60);
         return false;
     }

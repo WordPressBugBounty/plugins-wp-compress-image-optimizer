@@ -6,9 +6,9 @@ if (!class_exists('wps_ic_url_key')) {
 
 
 if (!function_exists('wpc_crit_meta_write')) {
-    
-    
-    
+    // Mixed-tree belt: the canonical atomic writer lives in defines.php — a partial
+    // deploy (FTP truncation, stale defines.php) degrades to a plain write here,
+    // never a fatal (law 10). Complete trees never reach this definition.
     function wpc_crit_meta_write($path, $value)
     {
         try {
@@ -29,39 +29,39 @@ class wps_criticalCss
     public $urlKey;
     public $serverRequest;
     public $url_key_class;
-    
-
-
-
-
-
+    /**
+     * Normalize a URL to use the public-facing hostname from home_url().
+     * On reverse proxy / Kinsta sites, HTTP_HOST and get_permalink() return the
+     * origin hostname. This rewrites it to the public domain so keys match.
+     * On normal sites (HTTP_HOST === home_url host), returns URL unchanged.
+     */
     private function normalizeUrl($url) {
         $homeUrl = rtrim(home_url(), '/');
         $homeHost = parse_url($homeUrl, PHP_URL_HOST);
         $httpHost = $_SERVER['HTTP_HOST'] ?? '';
 
         if (!$homeHost || !$httpHost || $httpHost === $homeHost) {
-            
+            // Same host — no proxy, return as-is (99% of sites)
             if (strpos($url, 'http') !== 0 && strpos($url, '/') === 0) {
                 return $homeUrl . $url;
             }
             return $url;
         }
 
-        
+        // Proxy detected: HTTP_HOST differs from home_url host
         $parsed = parse_url($url);
 
         if (!empty($parsed['scheme']) && !empty($parsed['host'])) {
-            
+            // Full URL with scheme
             if ($parsed['host'] === $homeHost) {
 
                 return $url;
             }
-            
+            // Wrong host → replace with home_url
             return $homeUrl . ($parsed['path'] ?? '/') . (!empty($parsed['query']) ? '?' . $parsed['query'] : '');
         }
 
-        
+        // No scheme (e.g. "origin.host.com/path") → strip origin hostname, prepend home_url
         $path = $url;
         if (strpos($path, $httpHost) === 0) {
             $path = substr($path, strlen($httpHost));
@@ -163,9 +163,9 @@ class wps_criticalCss
     public function generateCriticalCSS($postID = 0, $skipCap = false)
     {
 
-        
-        
-        
+        // The branch below already resolves the front page for 'home' / falsy / 0, so the
+        // former if (!empty($postID)) wrapper made this method a silent no-op for its OWN
+        // default argument — every caller passing 0 did nothing and reported success.
         if ($postID === 'home' || !$postID || $postID == 0) {
             $homePage = get_option('page_on_front');
             $blogPage = get_option('page_for_posts');
@@ -186,7 +186,7 @@ class wps_criticalCss
         $url_key = $this->url_key_class->setup($url);
 
         if ($this->criticalExists()) {
-            
+            // Nothing
         } else {
             $url = rtrim($url, '?');
             $this->initCritical($postID, $url, $url_key, $type = 'meta','', $skipCap);
@@ -217,17 +217,17 @@ class wps_criticalCss
             return false;
         }
 
-        
-        
+        // v7.10.391 zero-dark purge: stale artifacts inside a hard-purge bypass window
+        // resolve as absent — every lane degrades to the ordinary critless render.
         if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($this->urlKey)) {
             return false;
         }
 
-        
-        
-        
-        
-        
+        // v7.10.524 — GENERATOR EPOCH GATE. Artifacts were keyed on the template hash alone,
+        // so a service-side correctness fix could never reach one already on disk: it looked
+        // exactly like the bug was never fixed. Same shape as the bypass above — below the
+        // advertised floor resolves as ABSENT, and the existing refetch path does the rest.
+        // Fails OPEN: floor 0 (the shipped default) or an unreadable stamp changes nothing.
         $wpc_fmin524 = (int) get_option('wpc_crit_epoch_min', 0);
         if ($wpc_fmin524 > 0 && defined('WPS_IC_CRITICAL')) {
             $wpc_epf524 = WPS_IC_CRITICAL . $this->urlKey . '/crit_epoch.txt';
@@ -258,13 +258,13 @@ class wps_criticalCss
                 return false;
             }
 
-            
-            
-            
+            // v7.10.617 — sanity mark: the rewrite seam proved these exact bytes are blind
+            // to the page's ATF sections. Resolve ABSENT like the gates above; regenerated
+            // bytes no longer match the mark, so a fresh artifact serves untouched.
             if (function_exists('wpc_crit_sanity_bad617')
                 && wpc_crit_sanity_bad617(dirname($desktopFilePath), $content)) {
-                
-                
+                // v7.10.622 — the loop runs HERE (mark holds, page critless, dispatch
+                // re-fires): tick the stall where it can actually count.
                 $wpc_stall622 = function_exists('wpc_crit_sanity_stall_tick622')
                     ? wpc_crit_sanity_stall_tick622(dirname($desktopFilePath)) : 0;
                 if (function_exists('wpc_cache_first_log')) {
@@ -275,12 +275,12 @@ class wps_criticalCss
                 return false;
             }
 
-            
-            
-            
-            
-            
-            
+            // v7.10.546 — ALWAYS expose the disk paths under explicit keys, whatever $returnDir
+            // says. The default is FALSE, so a caller that omits it silently receives URLs; feed
+            // one to file_get_contents/filemtime and PHP opens a NETWORK stream on
+            // default_socket_timeout, following redirects. That cost this site 18-42s per render
+            // and was invisible to http_n, the FPM slowlog and PROCESSLIST simultaneously.
+            // A filesystem call can now ask for a path by name and never get a URL by omission.
             $return['desktop_path'] = $desktopFilePath;
             $return['dir']          = dirname($desktopFilePath) . '/';
             if ($returnDir) {
@@ -319,9 +319,9 @@ $return['mobile_path'] = $mobileFilePath;
         if (function_exists('is_404') && function_exists('did_action') && did_action('template_redirect') && is_404()) {
             return true;
         }
-        
-        
-        
+        // v7.10.530 — attachment/search/feed pages were minting a crit dir each (19,955 files on
+        // the flagship vs 20 page-cache entries). Same did_action guard: conditionals are only
+        // meaningful once the query is resolved.
         if (function_exists('did_action') && did_action('template_redirect')
             && function_exists('wpc_is_low_value_page') && wpc_is_low_value_page()) {
             return true;
@@ -333,12 +333,12 @@ $return['mobile_path'] = $mobileFilePath;
             return false;
         }
 
-        
+        // Normalize URL + recompute key so ALL downstream code uses the public domain
         $url = $this->normalizeUrl($url);
         $url_key = $this->url_key_class->setup($url);
 
-        
-        
+        // A generation nobody will consume is pure waste: every dispatch lane funnels
+        // through here, so the consume-side switch gates the gen side at the choke point
         if (apply_filters('wpc_gen_requires_consume', true) && empty($_GET['forceCritical'])
             && !(function_exists('wp_doing_ajax') && wp_doing_ajax()
                 && function_exists('current_user_can') && current_user_can('manage_options'))) {
@@ -362,9 +362,9 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
 
-        
-        
-        
+        // The .530 guard above is gated on template_redirect, so off the render path
+        // (admin-ajax Rebuild, cron, CLI) it never ran and attachment permalinks minted a
+        // crit dir each. Same intent, resolved from the URL. Render path keeps the query test.
         if (!(function_exists('did_action') && did_action('template_redirect'))
             && function_exists('wpc_url_is_low_value') && wpc_url_is_low_value($url)) {
             if (function_exists('wpc_cache_first_log')) {
@@ -373,9 +373,9 @@ $return['mobile_path'] = $mobileFilePath;
             return true;
         }
 
-        
-        
-        
+        // Successful-generation rate cap: landless loops park below, but a loop whose
+        // generations all LAND resets that brake and can run for days. Four automatic
+        // dispatches per URL per two hours; human regenerate bypasses.
         if (!$skipCap && !(function_exists('wp_doing_ajax') && wp_doing_ajax())
             && apply_filters('wpc_gen_rate_cap', true)) {
             $wpc_rc166 = (array) get_option('wpc_gen_rate', []);
@@ -389,8 +389,8 @@ $return['mobile_path'] = $mobileFilePath;
                 }
                 return false;
             }
-            
-            
+            // Site-wide automatic budget: per-URL caps don't bound breadth (sitemap-wide
+            // crawls = URLs × 4/2h); human regenerate bypasses via the same gate above.
             $wpc_sb166 = array_values(array_filter((array) get_option('wpc_gen_rate_site', []), function ($t) {
                 return (time() - (int) $t) < 3600;
             }));
@@ -415,12 +415,12 @@ $return['mobile_path'] = $mobileFilePath;
             wps_ic_url_key::persistKeyUrl($url_key, $url);
         }
 
-        
+        // Poll /status for any in-flight request for this URL
         $needsPush = true;
         $uuid_key    = 'wpc_critical_uuid_' . $url_key;
         $pendingUuid = get_transient($uuid_key);
 
-        
+        // Fallback: if object cache (Redis) lost the transient, read directly from DB
         if (!$pendingUuid) {
             global $wpdb;
             $dbVal = $wpdb->get_var($wpdb->prepare(
@@ -436,11 +436,11 @@ $return['mobile_path'] = $mobileFilePath;
         if (!$pendingUuid && defined('WPS_IC_CRITICAL')) {
             $wpc_uf = WPS_IC_CRITICAL . $url_key . '/uuid.txt';
             if (@is_readable($wpc_uf)) {
-                
-                
-                
-                
-                
+                // IDENTITY BELT (service receipt: /compare-2/ crit, ZERO dispatches in their
+                // requests table): a dispatch writes uuid.txt WITH dispatch_ts.txt; a land
+                // writes it with land_uuid.txt. A uuid with NO dispatch stamp was never
+                // dispatched for THIS page — storm-borrowed foreign state; trusting it
+                // re-lands another page's crit forever. Unlink; a real dispatch re-mints.
                 if (!@is_readable(WPS_IC_CRITICAL . $url_key . '/dispatch_ts.txt')) {
                     @unlink($wpc_uf);
                     if (function_exists('wpc_cache_first_log')) {
@@ -448,8 +448,8 @@ $return['mobile_path'] = $mobileFilePath;
                     }
                 } elseif ((time() - (int) @filemtime($wpc_uf)) > 6 * 3600
                     && !@is_readable(WPS_IC_CRITICAL . $url_key . '/land_uuid.txt')) {
-                    
-                    
+                    // A2: TTL — a uuid older than 6h whose gen never landed is dead weight
+                    // pinning /status polls on artifacts that may have expired server-side.
                     @unlink($wpc_uf);
                 } else {
                     $wpc_disk_uuid = preg_replace('/[^A-Za-z0-9-]/', '', trim((string) @file_get_contents($wpc_uf)));
@@ -461,16 +461,16 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        
-        
-        
+        // Visitor renders may carry at most ONE 3s poll per URL per minute — under a cold-cache
+        // convoy every queued render otherwise pays this inline, and 2s renders become 60s queues.
+        // Background lanes (cron/ajax/warm) poll freely; they hold one budgeted worker.
         $wpc_bg178 = (function_exists('wp_doing_ajax') && wp_doing_ajax())
             || (defined('DOING_CRON') && DOING_CRON)
             || !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']);
         if ($pendingUuid && !$wpc_bg178) {
-            
-            
-            
+            // Visitor renders carry ZERO artifact HTTP; background lanes own the poll.
+            // Site-wide kick budget: post-update every URL is pending — per-URL gates alone
+            // fan one loopback per URL into an FPM stampede.
             if (function_exists('wpc_pipeline_admission_ok') && !wpc_pipeline_admission_ok()) {
                 $pendingUuid = false;
             } elseif (!get_transient('wpc_stpoll_' . md5($url_key)) && !get_transient('wpc_kick_budget30')) {
@@ -503,8 +503,8 @@ $return['mobile_path'] = $mobileFilePath;
                             'lcp_url' => !empty($data['lcp_url']) ? $data['lcp_url'] : '',
                             'lcp_src' => 'poll',
 
-                            
-                            
+                            // Root of "manifest emitted but never consumed": both callers built this
+                            // array by hand and dropped delay_url, so the stash+fetch never armed.
                             'delay_url' => !empty($data['delay_url']) ? $data['delay_url'] : '',
 
 
@@ -517,8 +517,8 @@ $return['mobile_path'] = $mobileFilePath;
                             $wpc_poll_fonts = (!empty($data['fonts']) && is_array($data['fonts'])) ? $data['fonts'] : [];
                             if (empty($wpc_poll_fonts) && !empty($data['fonts_url'])) {
                                 if (defined('WPS_IC_CRITICAL')) { wpc_crit_meta_write(rtrim(WPS_IC_CRITICAL, '/') . '/' . $url_key . '/fonts_url.txt', trim((string) $data['fonts_url'])); }
-                                
-                                
+                                // Inline fetch only in background lanes; visitor renders leave the
+                                // stashed fonts_url.txt to the cron repull.
                                 if ($wpc_bg178) {
                                     $wpc_ff = wp_remote_get((string) $data['fonts_url'], ['timeout' => 6]);
                                     if (!is_wp_error($wpc_ff) && wp_remote_retrieve_response_code($wpc_ff) === 200) {
@@ -555,7 +555,7 @@ $return['mobile_path'] = $mobileFilePath;
 
                             wps_ic_cache_integrations::purgeCacheFiles($pageUrlKey);
 
-                            
+                            // 2. Kinsta edge cache — per-URL if available, full if not
                             if (isset($GLOBALS['kinsta_cache']) && !empty($GLOBALS['kinsta_cache']->kinsta_cache_purge)) {
                                 if (method_exists($GLOBALS['kinsta_cache']->kinsta_cache_purge, 'purge_url')) {
                                     $GLOBALS['kinsta_cache']->kinsta_cache_purge->purge_url($url);
@@ -564,7 +564,7 @@ $return['mobile_path'] = $mobileFilePath;
                                 }
                             }
 
-                            
+                            // 3. Other hosts (WP Engine, SiteGround, Cloudflare, Varnish, etc.)
                             wpc_foreign_purge610($pageUrlKey, 'crit-v2');
                         }
 
@@ -576,11 +576,11 @@ $return['mobile_path'] = $mobileFilePath;
                     if (!empty($data['status']) && $data['status'] === 'not_found') {
                         delete_transient($uuid_key);
                         delete_transient('wpc_critical_key_' . $url_key);
-                        
-                        
-                        
-                        
-                        
+                        // uuid.txt too — the disk fallback re-hydrates a dead uuid otherwise.
+                        // JOURNAL IT: dropping a pending uuid is how a FINISHED gen silently
+                        // disappears (busy: /status returned success for c7c999c8, then uuid.txt
+                        // vanished while land_uuid stayed on the previous gen and lcp.json never
+                        // changed). Without this line the only evidence is an absence.
                         if (defined('WPS_IC_CRITICAL')) {
                             if (function_exists('wpc_cache_first_log')) {
                                 wpc_cache_first_log('uuid-cleared-not-found', (string) $url_key, '', [
@@ -611,7 +611,7 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        
+        // (it used to sit at the top of initCritical, which skipped polling entirely inside a backoff
 
 
         if (function_exists('wpc_gen_backoff_active') && wpc_gen_backoff_active()) {
@@ -637,19 +637,19 @@ $return['mobile_path'] = $mobileFilePath;
             return true;
         }
 
-        $transient_name = 'wpc_critical_key_' . $url_key; 
+        $transient_name = 'wpc_critical_key_' . $url_key; // Safe, short, unique.
         $critTransient = get_transient($transient_name);
 
         if (!empty($critTransient) && empty($_GET['forceCritical'])) {
-            
+            // Die, already running!
             return true;
         }
 
 
         if (apply_filters('wpc_gen_single_flight', true) && empty($_GET['forceCritical'])) {
-            
-            
-            
+            // flock front: add_option is check-then-insert (racy under true simultaneity, and
+            // the transient fast-shed above dies with the object cache) — the file lock is the
+            // atomic gate that caps concurrent gen work at 1 per URL. Held for the request.
             if (defined('WPS_IC_CRITICAL')) {
                 static $wpc_genlk = [];
                 $wpc_lkf = rtrim(WPS_IC_CRITICAL, '/') . '/.genlock-' . md5((string) $url_key) . '.lock';
@@ -663,7 +663,7 @@ $return['mobile_path'] = $mobileFilePath;
                             }
                             return true;
                         }
-                        $wpc_genlk[$wpc_lkf] = $wpc_fh; 
+                        $wpc_genlk[$wpc_lkf] = $wpc_fh; // held until process exit releases it
                     }
                 }
             }
@@ -701,7 +701,7 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
 
-        
+        // Make transient expire after 30 mins
         set_transient($transient_name, true, 60 * 5);
 
         $uuid     = wp_generate_uuid4();
@@ -709,8 +709,8 @@ $return['mobile_path'] = $mobileFilePath;
         set_transient($uuid_key, $uuid, 60 * 5);
 
 
-        
-        
+        // "real loop-sustainer". Disk survives object-cache loss; the poll reads this back (transient →
+        // DB → this file). Sanitized identically to the land-time writer (see saveCriticalCss uuid.txt).
         if (defined('WPS_IC_CRITICAL')) {
             $wpc_udir = WPS_IC_CRITICAL . $url_key . '/';
             if (!is_dir($wpc_udir)) { @mkdir($wpc_udir, 0777, true); }
@@ -722,7 +722,7 @@ $return['mobile_path'] = $mobileFilePath;
         $apikey  = $options['api_key'] ?? '';
         $forcePull = isset($_GET['pushMode']) && sanitize_key($_GET['pushMode']) === 'false';
 
-        
+        // Build args — matches existing flow (cdn-rewrite.php:2968, ajax.class.php:464)
         $args = [
             'url'     => (function_exists('wpc_canon_url609') ? wpc_canon_url609($url) : $url) . '?criticalCombine=true&testCompliant=true',
             'source'  => 'crit-v2',
@@ -738,8 +738,8 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        
-        
+        // (entries[].key full paths, has_form, atf_bg, lcp_element…) are emitted only for
+        // capability-mode requests; canary/bridge regens still produce the v1 flat shape, which
 
 
         $wpc_v3set = get_option(WPS_IC_SETTINGS);
@@ -761,8 +761,8 @@ $return['mobile_path'] = $mobileFilePath;
             $wpc_dtk = wpc_dispatch_tpl_key($url_key);
             if ($wpc_dtk !== '') { $args['tpl_key'] = $wpc_dtk; }
         }
-        
-        
+        // (Phase B per-page cache) content-version for the service's lcp/oversized cache — singular
+        // posts/pages only (helper omits homepage/archive/dynamic). Inert until Phase B reads it.
         if (function_exists('wpc_dispatch_post_mtime') && apply_filters('wpc_send_post_modified', true)) {
             $wpc_pm = wpc_dispatch_post_mtime($postID, $url);
             if ($wpc_pm !== '') { $args['post_modified'] = $wpc_pm; }
@@ -782,8 +782,8 @@ $return['mobile_path'] = $mobileFilePath;
 
 
         if (!$forcePull && ($needsPush || wp_doing_ajax())) {
-            
-            
+            // Durable (options, not transient — the 24h back-off must survive object-cache
+            // loss or every render fires a full-page loopback). Ajax bypass = admins only.
             $pushFailedKey = 'wpc_push_nope2_' . $url_key;
             $wpc_pushAdmin = wp_doing_ajax() && function_exists('current_user_can') && current_user_can('manage_options');
             $wpc_pushNopeAt = (int) get_option($pushFailedKey, 0);
@@ -802,17 +802,17 @@ $return['mobile_path'] = $mobileFilePath;
                     $wpc_ff794 = wpc_font_localizer_faces();
                     if (!empty($wpc_ff794)) { $args['fonts'] = $wpc_ff794; }
                 } elseif (!$wpc_pushAdmin) {
-                    
+                    // Push recovery failed — don't penalize visitors for 24h
                     update_option($pushFailedKey, time(), false);
                 }
             }
         }
 
-        
-        
-        
-        
-        
+        // v7.10.496 — an EXPLICIT regenerate must bypass the service's GEN_DEBOUNCE_S (300s).
+        // A debounced /generate returns 200 with the EXISTING crit_uuid — the stale artifact —
+        // so a regenerate issued inside 5 minutes of any prior gen silently re-copies the old
+        // crit and is indistinguishable from success. Routine/auto dispatches deliberately do
+        // NOT force: the debounce is the service's only protection against gen storms.
         if (!empty($GLOBALS['wpc_gen_force496']) || apply_filters('wpc_gen_force', false, $url_key)) {
             $args['force'] = 1;
             if (function_exists('wpc_cache_first_log')) {
@@ -820,7 +820,7 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
 
-        
+        // POST to API — fire-and-forget
         if (!empty($args['css']) && function_exists('gzencode')) {
             $wpc_gzbody763 = gzencode(wp_json_encode($args));
             if ($wpc_gzbody763 !== false && strlen($wpc_gzbody763) < 10 * 1024 * 1024) {
@@ -848,7 +848,7 @@ $return['mobile_path'] = $mobileFilePath;
             ]);
         }
 
-        
+        // B2: dispatch owns its pickup — collection must never depend on future traffic.
         if (function_exists('wpc_crit_collector_arm')) {
             wpc_crit_collector_arm((string) $url_key);
         }
@@ -858,11 +858,11 @@ $return['mobile_path'] = $mobileFilePath;
 
 
     private function fetchCriticalCombineHtml($url) {
-        
-        
-        
-        
-        
+        // Adaptive timeout: AJAX 5s (admin click), auto 1.5s (visitor page load)
+        // v7.10.547 — the 5s tier said "admin click" but tested wp_doing_ajax(), a TRANSPORT
+        // fact. wpc_repull_kick is registered on wp_ajax_nopriv, so any anonymous caller took
+        // the 5s branch: receipted at 5,429ms per hit, unauthenticated, on a public endpoint.
+        // Price the wait on who is actually waiting - a logged-in admin, not merely "an AJAX".
         $wpc_human547 = function_exists('wp_doing_ajax') && wp_doing_ajax()
             && function_exists('is_user_logged_in') && is_user_logged_in()
             && function_exists('current_user_can') && current_user_can('manage_options');
@@ -875,9 +875,9 @@ $return['mobile_path'] = $mobileFilePath;
         ]);
 
         if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-            
-            
-            
+            // A CF-fronted origin challenges its OWN loopback (public DNS resolves through the
+            // edge) — exactly the sites push mode exists for. Go direct to self: same URL at
+            // SERVER_ADDR with the Host header, TLS unverified (cert is for the hostname)
             $wpc_ip771 = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
             $wpc_host771 = (string) parse_url($url, PHP_URL_HOST);
             if ($wpc_ip771 !== '' && $wpc_host771 !== '' && filter_var($wpc_ip771, FILTER_VALIDATE_IP)
@@ -912,7 +912,7 @@ $return['mobile_path'] = $mobileFilePath;
             return null;
         }
 
-        
+        // Strip scripts and blank images — not needed for CSS generation
         $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
         $html = preg_replace('/(<img[^>]+)\bsrc=["\'][^"\']*["\']/i', '$1src=""', $html);
 
@@ -944,7 +944,7 @@ $return['mobile_path'] = $mobileFilePath;
     }
 
 
-    
+    // ?apiGenerateCritical/?apiPreload endpoints — every one holds an FPM worker for the full
 
 
     public function sendCriticalUrl($realUrl = '', $postID = 0, $timeout = 20)
@@ -1052,7 +1052,7 @@ $return['mobile_path'] = $mobileFilePath;
                 break;
             }
 
-            
+            // Parse Desktop
             $parsedData['desktop']['before']['performanceScore'] = $data['desktop']['beforeScore'];
             $parsedData['desktop']['after']['performanceScore'] = $data['desktop']['afterScore'];
 
@@ -1065,7 +1065,7 @@ $return['mobile_path'] = $mobileFilePath;
             $parsedData['desktop']['before']['ttfb'] = $data['desktop']['beforeTTFB'];
             $parsedData['desktop']['after']['ttfb'] = $data['desktop']['afterTTFB'];
 
-            
+            // Parse Mobile
             $parsedData['mobile']['before']['performanceScore'] = $data['mobile']['beforeScore'];
             $parsedData['mobile']['after']['performanceScore'] = $data['mobile']['afterScore'];
 
@@ -1080,7 +1080,7 @@ $return['mobile_path'] = $mobileFilePath;
 
             $this->debugPageSpeed(print_r($parsedData,true));
 
-            
+            // Check if parsedData was populated
             if (!empty($parsedData)) {
                 $stats['home'] = $parsedData;
                 update_option(WPS_IC_TESTS, $stats);
@@ -1089,7 +1089,7 @@ $return['mobile_path'] = $mobileFilePath;
                 break;
             }
 
-            
+            // If parsedData is empty, re-poll via event — never sleep a worker
             if ($attempt === 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && !wp_next_scheduled('wpc_psi_poll', [$urlKey, $uuid])) {
                 wp_schedule_single_event(time() + 45, 'wpc_psi_poll', [$urlKey, $uuid]);
@@ -1147,9 +1147,9 @@ $return['mobile_path'] = $mobileFilePath;
         $desktop = wp_remote_get($json['url']['desktop'], ['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
         $mobile = wp_remote_get($json['url']['mobile'], ['headers' => ['user-agent' => WPS_IC_API_USERAGENT]]);
 
-        
+        // If fetching remote files is ERROR stop process
         if (is_wp_error($desktop)) {
-            
+            // No Desktop LCP
             $preloadsLcp = get_option('wps_ic_preloads');
             $preloadsLcp['lcp'] = '';
             update_option('wps_ic_preloads', $preloadsLcp);
@@ -1164,9 +1164,9 @@ $return['mobile_path'] = $mobileFilePath;
             $jobStatus['lcp-desktop-success'] = true;
         }
 
-        
+        // If fetching remote files is ERROR stop process
         if (is_wp_error($mobile)) {
-            
+            // No Mobile LCP
             $preloadsLcp = get_option('wps_ic_preloadsMobile');
             $preloadsLcp['lcp'] = '';
             update_option('wps_ic_preloadsMobile', $preloadsLcp);
@@ -1268,12 +1268,12 @@ $return['mobile_path'] = $mobileFilePath;
         $wpc_interactive2 = function_exists('wp_doing_ajax') && wp_doing_ajax()
             && empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
             && function_exists('current_user_can') && current_user_can('manage_options');
-        
-        
-        
-        
-        
-        
+        // v7.10.524 — SAME DEAD HOST, SECOND CALLER. .515 bounded and breakered the assets
+        // call in criticalCss.php (v1) and I called it done; the CDN team pointed out v2 is
+        // the file actually loaded. The timeout here was already sane (.508: 45s interactive /
+        // 12s background) but without the breaker EVERY attempt re-pays it against a host that
+        // black-holes — DNS resolves, the connect never completes. One shared breaker key, so
+        // whichever file is loaded, one failure silences both for 15 minutes.
         if (get_transient('wpc_v1_assets_down515')) {
             return false;
         }
@@ -1375,17 +1375,17 @@ $return['mobile_path'] = $mobileFilePath;
         if (is_array($wpc_opt151) && !empty($wpc_opt151['api_key'])) {
             $args['apikey'] = (string) $wpc_opt151['api_key'];
         }
-        
-        
-        
-        
-        
+        // Operator "Pull Latest" (resync) → sync=1 tells the service to SKIP its template
+        // cache and grind a genuinely fresh gen carrying every current-schema field
+        // (ceiling, hints, verified-unique prescriptions). Threaded per-dispatch from the
+        // redispatch lane — NEVER a shared transient (that leaked onto visitor kicks; the
+        // param only reaches this call on the operator's own resync dispatch). (v7.10.357)
         if ($sync) {
             $args['sync'] = 1;
         }
-        
-        
-        
+        // v7.10.623 — the seam's detection-moment kick lands HERE: a marked key must get
+        // its template-cache-busting generation on the FIRST kick, not wait for the next
+        // visitor's page-load dispatch. Same helper, same 30min rate limit.
         if (function_exists('wpc_sanity_escalate622')) {
             $args = wpc_sanity_escalate622($args, urldecode($this->serverRequest));
         }
@@ -1404,50 +1404,50 @@ $return['mobile_path'] = $mobileFilePath;
         if (function_exists('wpc_used_css_apply_demand') && !empty($this->urlKey)) {
             $wpc_ucss_armed = wpc_used_css_apply_demand($args, $this->urlKey);
         }
-        
-        
+        // (Phase B) same tpl_key broadening as initCritical — send it whenever we have it, so the
+        // service's observation cache covers delay/fonts-only sites, not just used-css ones.
         if (empty($args['tpl_key']) && !empty($this->urlKey) && function_exists('wpc_dispatch_tpl_key')
             && apply_filters('wpc_send_tpl_key_always', true)) {
             $wpc_dtk = wpc_dispatch_tpl_key($this->urlKey);
             if ($wpc_dtk !== '') { $args['tpl_key'] = $wpc_dtk; }
         }
-        
-        
+        // (Phase B per-page cache) content-version — no $postID in the ajax path, so resolve the URL
+        // to a post id inside the helper (url_to_postid → 0 for homepage/archive → omitted).
         if (function_exists('wpc_dispatch_post_mtime') && apply_filters('wpc_send_post_modified', true)) {
             $wpc_pm2 = wpc_dispatch_post_mtime(0, urldecode($this->serverRequest));
             if ($wpc_pm2 !== '') { $args['post_modified'] = $wpc_pm2; }
         }
 
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // 45s (to outwait a DB-degraded grind for the ack uuid) ONLY when a real admin clicked
+        // and is watching — never on a warm loopback / render-kick / cron, where blocking 45s is
+        // the contention we just saw; those get 12s and rely on the async DB-free HEAD-loop.
+        // v7.10.508 — "is an admin watching?" cannot be inferred from wp_doing_ajax() + a capability.
+        // wpc_repull_kick IS admin-ajax carrying the admin's cookie, so a BACKGROUND kick classified
+        // as interactive and took the 45s BLOCKING branch. Receipt: an 8,839ms request with boot 139ms
+        // and tpl 164ms, http_ms 8,565 and worst=crit-push.zapwp.net/generate:6020ms — the worker was
+        // parked on HTTP, not computing. Purges make it worse because a purge triggers a repull kick.
+        //
+        // Intent is only knowable if the entry point DECLARES it, so reuse the explicit flag the
+        // human-initiated paths already set (.496/.507): the Regenerate button and apiGenerateCritical.
+        // Everything else — repull kicks, render kicks, warm loopbacks, cron — is background.
         $wpc_interactive = !empty($GLOBALS['wpc_gen_force496'])
             && function_exists('wp_doing_ajax') && wp_doing_ajax()
             && empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
             && function_exists('current_user_can') && current_user_can('manage_options');
-        
-        
+        // Background dispatch must never park a worker for long: the ack is optional there because
+        // the artifact lands via callback/webhook regardless (the dispatch stamp is written above).
         $wpc_dtimeout = (int) apply_filters('wpc_gen_dispatch_timeout', $wpc_interactive ? 45 : 5);
-        
-        
+        // Dispatch stamp at POST time, not ack time — a held-connection gen that outlives
+        // this timeout still lands via callback/webhook and must still measure (B7).
         if (!empty($this->urlKey) && defined('WPS_IC_CRITICAL') && function_exists('wpc_crit_meta_write')) {
             $wpc_sd218 = WPS_IC_CRITICAL . $this->urlKey . '/';
             if (!is_dir($wpc_sd218)) { @mkdir($wpc_sd218, 0777, true); }
             wpc_crit_meta_write($wpc_sd218 . 'dispatch_ts.txt', (string) time());
         }
-        
-        
-        
+        // Corpus rides THIS path too: of the two dispatch paths only initCritical attached
+        // html/css, so every repull/kick/cron dispatch arrived corpus-less and the service fell
+        // back to fetching our sheets from its ASN — CF walls that => css_stub/fetch_blocked.
         if (empty($args['html']) && apply_filters('wpc_push_corpus_ajax', true)) {
             $wpc_curl794 = !empty($args['url']) ? (string) $args['url'] : urldecode((string) $this->serverRequest);
             $wpc_h794 = $this->fetchCriticalCombineHtml(strtok($wpc_curl794, '?'));
@@ -1499,8 +1499,8 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        
-        
+        // UNREACHABLE backend (connect/DNS/SSL WP_Error — NOT a timeout) or a real 5xx backs off now;
+        // the async timeout rides the status-poll / kick / repull recovery instead.
         if (function_exists('wpc_gen_note_failure')) {
             $wpc_dcode = is_wp_error($call) ? 0 : (int) wp_remote_retrieve_response_code($call);
             $wpc_is_timeout = false;
@@ -1511,21 +1511,21 @@ $return['mobile_path'] = $mobileFilePath;
                     || strpos($wpc_emsg, 'too slow') !== false);
             }
             if ($wpc_dcode >= 500 || (is_wp_error($call) && !$wpc_is_timeout)) {
-                
-                
-                
-                
-                
+                // The wire fact (receipted 2026-08-06): a per-URL generation failure comes back
+                // as HTTP 500 with a JSON body naming error_type (css_stub / fetch_blocked), and
+                // a saturated edge can answer with a contract-less HTML 5xx. Neither is backend
+                // death. Arm the SITE-WIDE breaker only when the body affirms it: JSON that
+                // either says arm_backoff truthy or carries no refusal contract at all.
                 $wpc_arm794 = true;
                 if (!is_wp_error($call)) {
                     $wpc_jb794 = json_decode((string) $body, true);
                     if (!is_array($wpc_jb794)) {
-                        $wpc_arm794 = false; 
+                        $wpc_arm794 = false; // non-JSON 5xx (edge HTML 504): retryable, never arm
                     } elseif (array_key_exists('arm_backoff', $wpc_jb794)) {
                         $wpc_arm794 = !empty($wpc_jb794['arm_backoff']);
                     } elseif (!empty($wpc_jb794['error_type'])
                         && in_array((string) $wpc_jb794['error_type'], ['css_stub', 'fetch_blocked', 'server_busy'], true)) {
-                        $wpc_arm794 = false; 
+                        $wpc_arm794 = false; // per-URL gen failure riding a 500 status
                     }
                 }
                 if ($wpc_arm794) {
@@ -1538,14 +1538,14 @@ $return['mobile_path'] = $mobileFilePath;
                     ]);
                 }
             }
-            
-            
+            // B5: a failed dispatch schedules its own retry per the service's retry_after
+            // (bounded 60..3600; 500→300 default) — one lost packet must never cost an hour.
             if (($wpc_dcode >= 500 || $wpc_dcode === 429 || (is_wp_error($call) && !$wpc_is_timeout))
                 && !empty($this->urlKey) && function_exists('wpc_pl_sched')
                 && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_crit_redispatch', [(string) $this->urlKey])) {
                 $wpc_ra179 = is_wp_error($call) ? 0 : (int) wp_remote_retrieve_header($call, 'retry-after');
                 if ($wpc_ra179 <= 0 && !is_wp_error($call)) {
-                    
+                    // v2 spec: retry_after also rides the 500-body JSON today (pre fast-ack).
                     $wpc_rb179 = json_decode((string) wp_remote_retrieve_body($call), true);
                     if (is_array($wpc_rb179) && !empty($wpc_rb179['retry_after'])) {
                         $wpc_ra179 = (int) $wpc_rb179['retry_after'];
@@ -1557,15 +1557,15 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        
-        
-        
-        
+        // A dispatch that got no usable ack (code=0/5xx, empty body) must NOT hold the full
+        // 120s single-flight lock — an admin waiting on a fresh purge, or the land watchdog,
+        // needs to retry within ~20s. Backdate the lock instead of clearing it (clearing would
+        // let every visitor hammer a down backend); success clears it fully in saveCriticalCss.
         $wpc_dcode2 = is_wp_error($call) ? 0 : (int) wp_remote_retrieve_response_code($call);
         if ($wpc_interactive && !empty($this->urlKey) && ($wpc_dcode2 === 0 || $wpc_dcode2 >= 500) && strlen((string) $body) < 32) {
             $wpc_ksf2 = 'wpc_gen_sf_' . $this->urlKey;
             if (get_option($wpc_ksf2) !== false) {
-                update_option($wpc_ksf2, time() - 100); 
+                update_option($wpc_ksf2, time() - 100); // ~20s until the <120s gate releases
             }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('gen-lock-shortened', (string) $this->urlKey, '', ['code' => $wpc_dcode2]);
@@ -1574,8 +1574,8 @@ $return['mobile_path'] = $mobileFilePath;
 
 
         $body = trim((string) $body);
-        
-        
+        // A dispatch ack (fresh or X-WPC-Debounced) names the service-known uuid — the poll
+        // must track THAT one; a locally assumed uuid the service never minted polls forever.
         $wpc_ack218 = $body !== '' && $body[0] === '{' ? json_decode($body, true) : null;
         $wpc_srvu218 = is_array($wpc_ack218) && !empty($wpc_ack218['uuid'])
             ? preg_replace('/[^A-Za-z0-9-]/', '', (string) $wpc_ack218['uuid']) : '';
@@ -1606,8 +1606,8 @@ $return['mobile_path'] = $mobileFilePath;
             $this->saveCriticalCss($this->urlKey, $body);
         }
 
-        
-        
+        // B2: no sync land in the ack (202 fast-ack / timeout / still grinding) → the
+        // dispatch owns its pickup; this lane is already a background worker.
         if (!empty($this->urlKey) && defined('WPS_IC_CRITICAL') && function_exists('wpc_crit_collector_arm')) {
             $wpc_cd218 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $this->urlKey . '/';
             $wpc_landed218 = @filesize($wpc_cd218 . 'critical_desktop.css') > 64
@@ -1619,9 +1619,9 @@ $return['mobile_path'] = $mobileFilePath;
         }
     }
 
-    
-    
-    
+    // DB-free storage pointer: resolves crit_uuid without any service DB when we hold no
+    // uuid. The pointer is overwritten in place, so ?t= is a mandatory cache-bust. url_key
+    // per the service spec = host (www folded) + path, no scheme, lowercased ("perkzilla.com/").
     private function fetchLatestPointerUuid($urlKey)
     {
         if (!function_exists('get_option') || !defined('WPS_IC_OPTIONS')) {
@@ -1637,9 +1637,9 @@ $return['mobile_path'] = $mobileFilePath;
             $u = (string) wps_ic_url_key::getUrlFromKey($urlKey);
         }
         if ($u === '' && function_exists('home_url')) {
-            
-            
-            
+            // A8 law, pointer edition (staging.wpcompress.com /pricing receipt): the home
+            // fallback ONLY for the home key — for any other key it resolved the HOMEPAGE
+            // pointer and landed home crit into subpage dirs. Unresolvable key = no pull.
             if (ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/') === ltrim((string) $urlKey, '/')) {
                 $u = home_url('/');
             } else {
@@ -1649,8 +1649,8 @@ $return['mobile_path'] = $mobileFilePath;
                 return '';
             }
         }
-        
-        
+        // url.txt is stored SCHEME-LESS — parse_url without a scheme yields no host and
+        // this lane silently died (brightvibes receipt: artifacts on the shelf, pointer never GET)
         if ($u !== '' && strpos($u, '://') === false) {
             $u = 'https://' . ltrim($u, '/');
         }
@@ -1675,12 +1675,12 @@ $return['mobile_path'] = $mobileFilePath;
         if (!is_array($j)) {
             return '';
         }
-        
-        
-        
-        
-        
-        
+        // v7.10.524 — capture the service's generator epoch floor. Two dials by the crit
+        // team's design, and theirs is better than the single integer I proposed: CRIT_EPOCH
+        // stamps every artifact, CRIT_EPOCH_MIN invalidates, and the floor ships at 0 so it is
+        // inert. Bump the stamp, let natural regeneration carry it, THEN raise the floor —
+        // collapsing them would invalidate the whole fleet in one step, and crit is ~82% of
+        // their render cost. We only ever read the floor; we never invent one.
         if (isset($j['crit_epoch_min'])) {
             $wpc_fl524 = (int) $j['crit_epoch_min'];
             if ($wpc_fl524 !== (int) get_option('wpc_crit_epoch_min', 0)) {
@@ -1693,18 +1693,31 @@ $return['mobile_path'] = $mobileFilePath;
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('crit-pointer-resolve', (string) $urlKey, '', ['ready' => (int) ($j['ready'] ?? 0)]);
         }
-        
-        
+        // §6 near_expiry rides the pointer: arm a regen (helper fail-opens when nothing
+        // usable is on disk — the pull below proceeds regardless; expiry is a floor).
         if (!empty($j['near_expiry']) && function_exists('wpc_near_expiry_regen')) {
             wpc_near_expiry_regen((string) $urlKey);
+        }
+        // v7.20.19 — crit-push v3.198.68 answers expired:true for a ready row whose objects
+        // aged out of the 14-day retention. The uuid is a corpse: pulling by it only spends
+        // 404s, so ask for a regen and hand back nothing (the caller's no-uuid path is the
+        // same one a never-generated page takes). Their retry_after paces the next look.
+        if (!empty($j['expired'])) {
+            if (function_exists('wpc_used_css_expired_dispatch19')) {
+                wpc_used_css_expired_dispatch19((string) $urlKey, 'resolver-expired');
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('crit-pointer-expired', (string) $urlKey, '', ['retry' => (int) ($j['retry_after'] ?? 0)]);
+            }
+            return '';
         }
         return preg_replace('/[^a-f0-9-]/i', '', (string) ($j['crit_uuid'] ?? ''));
     }
 
-    
-    
-    
-    
+    // DB-free landing: artifact URLs are derivable from the uuid alone
+    // (critical-css-mc.b-cdn.net/{uuid:0:4}/{uuid}-{device}.css), and saveCriticalCss pulls
+    // them straight from Bunny CDN — no /status, no service DB. Immune to the admission-DB
+    // outage class: if the gen finished its grind, the files exist regardless of DB state.
     public function pullDerivedArtifacts($urlKey = '', $uuid = '', $force = false)
     {
         if (empty($urlKey)) {
@@ -1714,18 +1727,18 @@ $return['mobile_path'] = $mobileFilePath;
             return false;
         }
         $cd = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
-        
+        // stale.txt = serve-stale copy on disk; a replacement pull must overwrite it.
         if (@is_file($cd . 'stale.txt')) {
             $force = true;
         }
         if (!$force && @filesize($cd . 'critical_desktop.css') > 64 && @filesize($cd . 'critical_mobile.css') > 64) {
-            return true; 
+            return true; // already landed
         }
         if (empty($uuid)) {
             $uuid = (string) get_transient('wpc_critical_uuid_' . $urlKey);
             if ($uuid === '') {
-                
-                
+                // IDENTITY BELT: a disk uuid without this dir's own dispatch stamp is
+                // storm-borrowed foreign state — never pull by it (initCritical twin).
                 if (@is_readable($cd . 'dispatch_ts.txt')) {
                     $uuid = trim((string) @file_get_contents($cd . 'uuid.txt'));
                 } elseif (@is_readable($cd . 'uuid.txt')) {
@@ -1738,31 +1751,31 @@ $return['mobile_path'] = $mobileFilePath;
         }
         $uuid = preg_replace('/[^a-f0-9-]/i', '', (string) $uuid);
         if (strlen($uuid) < 8) {
-            
-            
+            // No uuid in hand (census-miss / lost pointer) — resolve via the DB-free storage
+            // pointer (/latest/{sha1(apikey)[:16]}/{sha1(url_key)[:16]}.json, v3.61.0+).
             $uuid = $this->fetchLatestPointerUuid($urlKey);
             if (strlen($uuid) < 8) {
                 return false;
             }
         }
-        
+        // Forced pull of a uuid that already landed (and isn't stale-marked) is a no-op.
         if ($force && !@is_file($cd . 'stale.txt')
             && @filesize($cd . 'critical_desktop.css') > 64 && @filesize($cd . 'critical_mobile.css') > 64
             && trim((string) @file_get_contents($cd . 'land_uuid.txt')) === $uuid) {
             return true;
         }
-        
-        
-        
+        // Serve-stale regen intent with no newer ack (dispatch timeout ate the uuid): the
+        // POINTER decides — a fresh publish (pointer ≠ landed) collects anyway; only when
+        // the pointer still names the landed artifact is there truly nothing new to land.
         if (@is_file($cd . 'stale.txt') && trim((string) @file_get_contents($cd . 'land_uuid.txt')) === $uuid) {
             $wpc_p325 = $this->fetchLatestPointerUuid($urlKey);
             if ($wpc_p325 === '' || $wpc_p325 === $uuid) {
-                
-                
-                
-                
-                
-                
+                // v7.10.682 — MOOT-STALE SELF-HEAL. The pointer CONFIRMS the landed artifact is
+                // the latest published AND no dispatch is in flight: this stale mark can never be
+                // satisfied (the rebuild-press outage shape: stale-marked, the follow-up dispatch
+                // died, and every kick refused right here for ~70 minutes while pages rendered
+                // critless). The landed artifact IS current — clear the mark so serving resumes,
+                // and arm ONE redispatch so the regen intent still lands fresh in the background.
                 if ($wpc_p325 === $uuid
                     && (time() - (int) @file_get_contents($cd . 'dispatch_ts.txt')) > (int) apply_filters('wpc_stale_moot_after_s', 600)) {
                     @unlink($cd . 'stale.txt');
@@ -1779,22 +1792,22 @@ $return['mobile_path'] = $mobileFilePath;
             }
             $uuid = $wpc_p325;
         }
-        
-        
-        
+        // NOT backoff-gated: these are CDN GETs (the artifacts' shelf), not backend calls —
+        // the breaker stops dispatch, never pickup (brightvibes receipt: artifacts waited
+        // on the shelf while a failed re-gen's backoff blocked collection)
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
             return false;
         }
         $base = 'https://critical-css-mc.b-cdn.net/' . substr($uuid, 0, 4) . '/' . $uuid;
-        
-        
-        
+        // HEAD first — cheap existence probe while the gen may still be grinding.
+        // ?t= cache-bust throughout (joint spec v2 S3): Bunny edge may negative-cache a
+        // premature 404, and a repeat-probing collector would otherwise never see the 200.
         $wpc_cb179 = '?t=' . time();
         $head = wp_remote_head($base . '-mobile.css' . $wpc_cb179, ['timeout' => 3, 'user-agent' => WPS_IC_API_USERAGENT]);
         if (is_wp_error($head) || (int) wp_remote_retrieve_response_code($head) !== 200) {
-            
-            
-            
+            // A2 (incident report 2026-07-20): a held uuid can be EXPIRED server-side while a
+            // newer publish exists — the pointer twin is authoritative; a dead uuid must
+            // never block collection (staging b8ef631a loop: dead uuid rehydrated forever).
             $wpc_ptr179 = $this->fetchLatestPointerUuid($urlKey);
             if ($wpc_ptr179 === '' || $wpc_ptr179 === $uuid) {
                 return false;
@@ -1856,11 +1869,11 @@ $return['mobile_path'] = $mobileFilePath;
 
 
         $wpc_land_fail = function ($why, $detail) use ($urlKey, $pageUrl) {
-            
-            
-            
-            
-            
+            // A3 (incident report 2026-07-20): a per-URL land failure (404/wrong-type = THIS
+            // artifact) must never arm the SITE-WIDE backoff — one stale-uuid page halted
+            // every URL's generation for the whole staging site. Only 'fetch' (CDN itself
+            // unreachable — genuinely global) escalates globally; the per-URL landless park
+            // and the scheduled repull below already own the per-page consequence.
             if ($why === 'fetch' && function_exists('wpc_gen_note_failure')) {
                 wpc_gen_note_failure('land-' . $why);
             }
@@ -1914,11 +1927,11 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
 
-        
-        
-        
-        
-        
+        // The render PREFERS critical_combined.css, but only the callback JSON path ever
+        // wrote it — pull-landed sites served a stale combined forever (hawkeye receipt:
+        // fresh device files on disk, page still inlining the old combined). Combined must
+        // never outlive the device files it wraps: refresh from the shelf when published,
+        // remove when not — the two-blob wrap serves as the fallback.
         $wpc_cmb338 = '';
         if (!empty($json['url']['desktop']) && is_string($json['url']['desktop'])) {
             $wpc_cmu338 = str_replace('-desktop.css', '-combined.css', (string) $json['url']['desktop']);
@@ -1966,12 +1979,12 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
 
-        
-        
-        
-        
-        
-        
+        // Check if file really exists and file size is bigger than 5
+        // v7.10.554 — a LANDING clears the landless counter, and one variant is a landing.
+        // The clear used to sit inside the desktop-AND-mobile pair check, so a desktop-only gen
+        // (or a racing mobile write) left gen_fails incrementing forever despite success:
+        // receipted as n:2 on the flagship while crit-land fired. The counter asks "did this
+        // dispatch produce anything?" - the pair check answers "did it produce both?".
         if (function_exists('wpc_gen_landless_clear')
             && ((@filesize($critical_path . 'critical_desktop.css') > 5)
                 || (@filesize($critical_path . 'critical_mobile.css') > 5))) {
@@ -1989,8 +2002,8 @@ $return['mobile_path'] = $mobileFilePath;
                 if ($type == 'meta') {
                     update_post_meta(sanitize_title($urlKey), 'wpc_critical_css', $critical_path . 'critical.css');
                 }
-                
-                
+                // Dropped the 'wps_critical_css_<key>' option write: autoload=yes, one
+                // permanent row per URL, zero readers. Purge Critical CSS cleans old rows.
 
                 $jobStatus['critical-css'] = 'success';
 
@@ -2002,14 +2015,14 @@ $return['mobile_path'] = $mobileFilePath;
                     wpc_land_cooldown_stamp($urlKey);
                 }
 
-                
-                
-                
+                // B7 land receipt: dispatch→land seconds is the SLO's plugin half.
+                // land_uuid.txt = what actually landed (uuid.txt is overwritten at dispatch,
+                // so it cannot serve as the landed marker — webhook dedupe reads this).
                 $wpc_dts179 = (int) @file_get_contents($critical_path . 'dispatch_ts.txt');
                 wpc_crit_meta_write($critical_path . 'land_ts.txt', (string) time());
-                
-                
-                
+                // The epoch travels INSIDE the css (/*wpc-epoch:N*/, v3.116.1 — it survives the
+                // combiner). Persist it next to the artifact so freshness is a property of the
+                // artifact itself, not of anything we can lose. Absent = pre-epoch gen = 0.
                 $wpc_ep524 = 0;
                 foreach (['critical_desktop.css', 'critical_mobile.css', 'critical_combined.css'] as $wpc_ef524) {
                     $wpc_eh524 = (string) @file_get_contents($critical_path . $wpc_ef524, false, null, 0, 128);
@@ -2025,8 +2038,8 @@ $return['mobile_path'] = $mobileFilePath;
                 if ($wpc_dts179 > 0 && function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('crit-land-latency', (string) $urlKey, (string) $pageUrl, ['s' => max(0, time() - $wpc_dts179)]);
                 }
-                
-                
+                // (inv2) fresh artifact landed → drop this URL's fingerprint keys so the next
+                // render adopts against the NEW crit. No-op while the engine is off.
                 if (function_exists('wpc_inv2_on_land')) {
                     wpc_inv2_on_land($urlKey);
                 }
@@ -2075,9 +2088,9 @@ $return['mobile_path'] = $mobileFilePath;
                 }
 
 
-                
-                
-                
+                // AUTO-100 §4: prescriptions ride the land. URL meta from the callback when
+                // present (else /v2/latest artifacts{} lands it); fetch + poll-#2 arm in one
+                // helper — the +45s repull leg is the miss backstop.
                 if (!empty($json['prescriptions_url']) && is_string($json['prescriptions_url'])
                     && preg_match('#^https?://#i', trim($json['prescriptions_url']))) {
                     wpc_crit_meta_write($critical_path . 'prescriptions_url.txt', trim($json['prescriptions_url']));
@@ -2087,8 +2100,8 @@ $return['mobile_path'] = $mobileFilePath;
                 }
 
 
-                
-                
+                // .470: record the echo BEFORE the pointer test — "asked and got nothing" is
+                // exactly the case with no used_css_url, so gating on one loses the other.
                 if (function_exists('wpc_used_css_echo_note')) {
                     wpc_used_css_echo_note('callback', $json);
                 }
@@ -2139,8 +2152,8 @@ $return['mobile_path'] = $mobileFilePath;
                         $wpc_us51 = get_option(WPS_IC_SETTINGS);
                         if (is_array($wpc_us51) && !empty($wpc_us51['used-css']) && $wpc_us51['used-css'] == '1'
                             && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                            
-                            
+                            // Hit-rate law (.325): used.css is tpl-keyed — purge that template's
+                            // pages only; the site-wide wipe is the bounded fallback.
                             if (!function_exists('wpc_used_css_scoped_purge')
                                 || !wpc_used_css_scoped_purge((string) $json['tpl_key'])) {
                                 try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
@@ -2224,7 +2237,7 @@ $return['mobile_path'] = $mobileFilePath;
 
 }
 
-
+// PSI results poll — bounded event chain replacing the in-request sleep(30) loop
 add_action('wpc_psi_poll', function ($urlKey, $uuid) {
     $wpc_pn = (int) get_transient('wpc_psi_poll_n_' . md5((string) $uuid));
     if ($wpc_pn >= 4 || !class_exists('wps_criticalCss')) {

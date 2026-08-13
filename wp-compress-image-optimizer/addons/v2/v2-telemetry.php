@@ -28,7 +28,7 @@ function wpc_v2_telemetry_record($type, $ms, array $meta = [])
         'ms'   => $ms,
         'meta' => $meta,
     ];
-    
+    // Ring-buffer: keep only the last N entries.
     if (count($buf) > WPC_V2_TELEMETRY_MAX_ENTRIES) {
         $buf = array_slice($buf, -WPC_V2_TELEMETRY_MAX_ENTRIES);
     }
@@ -56,7 +56,7 @@ function wpc_v2_telemetry_stats()
     $oldest_t = PHP_INT_MAX;
     $newest_t = 0;
 
-    
+    // Bucket by type.
     $buckets = [];
     foreach ($buf as $e) {
         if (!is_array($e) || empty($e['type']) || !isset($e['ms'])) continue;
@@ -106,9 +106,9 @@ function wpc_v2_telemetry_stats()
     return $out;
 }
 
-
-
-
+/**
+ * Pretty-print stats as a single string. Used by wp-cli and admin widget.
+ */
 function wpc_v2_telemetry_format_stats(array $stats)
 {
     $lines = [];
@@ -133,9 +133,9 @@ function wpc_v2_telemetry_format_stats(array $stats)
     return implode("\n", $lines);
 }
 
-
-
-
+/**
+ * Clear the rolling buffer. Exposed for wp-cli (`wp wpc fpm-stats clear`).
+ */
 function wpc_v2_telemetry_clear()
 {
     delete_transient('wpc_v2_fpm_telemetry');

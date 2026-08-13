@@ -30,21 +30,21 @@ $has = function ($needle) use ($warnings) {
     return false;
 };
 
-
+// ── Derive the card STATE + plain-language copy (never overclaim) ─────────────
 $pending    = $has('cdn_pending_verify') || $has('htaccess_pending_verify');
 $optimizing = $has('cdn_pending_orch');
 $degraded   = $has('cdn_verify_failed') || $has('htaccess_verify_failed') || $has('override_');
 $jpeg_forced_off = $has('next_gen_disabled_jpeg_only');
 
-
-
+// The sub-line describes the METHOD (the "how"), not the value prop — the hero already states
+// "best format per browser", so repeating it here is just noise.
 if ($ceiling === 'off') {
     $state = 'off';   $badge = 'Off';        $method = 'Next-gen images are off'; $sub = 'Delivering optimized JPEG/PNG to every visitor.';
 } elseif ($tier === WPC_Delivery_Resolver::TIER_CDN_EDGE) {
     $rt = isset($rv['redirect_target']) ? (string) $rv['redirect_target'] : 'samehost';
     if (!$images_on) {
 
-        
+        // CDN; next-gen is served from origin (path A <picture>). Don't claim CDN/fastest (a lie).
         $state = 'ok';    $badge = '✓ Active';   $method = 'Served from origin';   $sub = 'Images delivery is off — next-gen images are served from your origin, not the CDN.';
     } elseif ($rt === 'origin') {
 
@@ -56,7 +56,7 @@ if ($ceiling === 'off') {
             : 'Next-gen on clean URLs, no picture tags — the edge picks the format, your origin serves the bytes.';
     } elseif ($override === 'edge') {
 
-        
+        // Automatic (CDN), but keep the CHOSEN mode visible so the radio and the status agree.
         $state = 'ok';    $badge = '✓ Verified'; $method = 'Edge negotiate';
         $sub = 'Next-gen on clean URLs, no picture tags — delivered &amp; cached at the edge.';
     } else {
@@ -73,7 +73,7 @@ if ($ceiling === 'off') {
     $sub    = $optimizing
         ? 'Generating optimized versions in the background — switches to faster CDN delivery automatically once ready.'
         : 'Broadly compatible with every theme.';
-} else { 
+} else { // JPEG floor
     $state  = $jpeg_forced_off ? 'warn' : 'off';
     $badge  = $jpeg_forced_off ? '⚠ Heads up' : 'Off';
     $method = $jpeg_forced_off ? 'Next-gen unavailable for visitors' : 'Optimized JPEG/PNG';
@@ -82,7 +82,7 @@ if ($ceiling === 'off') {
 }
 
 
-
+// Formats the visitor gets when On — the best-first cascade AVIF → WebP → JPEG.
 
 
 $formats = ($ceiling === 'off') ? ['JPEG'] : (($ceiling === 'webp') ? ['WebP', 'JPEG'] : ['AVIF', 'WebP', 'JPEG']);
@@ -132,7 +132,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
 
   <div class="wpc-ngd-status">
 
-    <?php 
+    <?php // ── HERO — the value prop leads the section: best format per browser, automatically ──
 
     ?>
       <div class="wpc-ngd-hero"<?php echo $ceiling === 'off' ? ' style="display:none"' : ''; ?> title="<?php echo esc_attr__('Each visitor is served the single best format their browser supports; older browsers automatically fall back to the next one.', WPS_IC_TEXTDOMAIN); ?>">

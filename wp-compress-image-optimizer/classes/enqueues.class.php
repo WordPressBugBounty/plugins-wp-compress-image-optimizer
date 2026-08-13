@@ -1,9 +1,9 @@
 <?php
 
 
-
-
-
+/**
+ * Class - Enqueues
+ */
 class wps_ic_enqueues extends wps_ic
 {
 
@@ -72,7 +72,7 @@ class wps_ic_enqueues extends wps_ic
             }
         }
 
-        
+        //Rocket settings check
         if (function_exists('get_rocket_option')) {
             $rocket_settings = get_option('wp_rocket_settings');
 
@@ -95,26 +95,26 @@ class wps_ic_enqueues extends wps_ic
 
         $this->js_delay = new wps_ic_js_delay();
 
-        
+        // Setup CF CNAME
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $cf = get_option(WPS_IC_CF);
-        
-        
+        // Honor the fail-open verified-gate (consistent with the cdn-rewrite resolver) so
+        // CSS/JS + the localized zoneName don't emit a cname that's mid-change-unverified ('0').
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
         if (!empty($custom_cname)) {
             self::$zone_name = $custom_cname;
         }
 
         if (!empty($_GET['trp-edit-translation']) || (!empty($_GET['action']) && $_GET['action'] == 'in-front-editor') || !empty($_GET['elementor-preview']) || !empty($_GET['preview']) || !empty($_GET['tatsu']) || (!empty($_GET['fl_builder']) || isset($_GET['fl_builder'])) || !empty($_GET['PageSpeed']) || !empty($_GET['et_fb']) || !empty($_GET['is-editor-iframe']) || !empty($_GET['tve']) || !empty($_GET['fb-edit']) || !empty($_GET['bricks']) || !empty($_GET['ct_builder']) || (!empty($_SERVER['SCRIPT_URL']) && $_SERVER['SCRIPT_URL'] == "/wp-admin/customize.php" || strpos($_SERVER['REQUEST_URI'], 'wp-login.php') !== false)) {
-            
+            // Do nothing
         } else {
 
             if ($this->isAgencyPortal()) {
 
-                
-                
-                
-                
+                // extractApiKey() only matches /view-site/{key}/, so the bulk
+                // settings page needs its own check — it renders the same v4
+                // UI with no single target site. URL-based on purpose: this
+                // runs at init, before $GLOBALS['wpc_agency_ui'] is set.
                 if ($this->extractApiKey() || preg_match('#^/bulk-settings/?#', $_SERVER['REQUEST_URI'] ?? '')) {
                     add_action('wp_enqueue_scripts', [$this, 'agencyScripts']);
                 }
@@ -134,7 +134,7 @@ class wps_ic_enqueues extends wps_ic
             if (is_admin()) {
 
                 if (!empty($_GET['page']) && ($_GET['page'] == 'wpcompress-mu')) {
-                    
+                    // Multisite
                     add_action('admin_enqueue_scripts', [$this, 'enqueue_all_scripts']);
                     add_action('admin_enqueue_scripts', [$this, 'enqueue_v4']);
                 } elseif (!empty($_GET['view']) && ($_GET['view'] == 'advanced_settings_v4')) {
@@ -160,15 +160,15 @@ class wps_ic_enqueues extends wps_ic
                 add_action('wp_print_scripts', [$this, 'inlineFrontend'], 1);
                 add_action('wp_footer', [$this, 'inline_delay_v2_placeholder'], PHP_INT_MAX);
                 if (!self::$isAmp->isAmp()) {
-                    
-
-
+                    /**
+                     * Remove CSS/JS Versioning - required for CDN
+                     */
 
 
                     if (!is_user_logged_in() && !$this->isAgencyPortal()) {
                         if (empty($_GET['disableDelay2'])) {
                             if ((!empty(self::$settings['delay-js']) && self::$settings['delay-js'] == '1' && !self::$delay_js_override && !self::$preloaderAPI) || (isset(self::$page_excludes['delay_js']) && self::$page_excludes['delay_js'] == '1')) {
-                                
+                                #add_filter('script_loader_tag', [$this->js_delay, 'delay_script_replace'], 10, 3);
                             } elseif (!empty(self::$settings['defer-js']) && self::$settings['defer-js'] == '1' && !self::$preloaderAPI) {
                                 add_filter('script_loader_tag', [$this, 'deferJS'], 10, 3);
                             }
@@ -178,7 +178,7 @@ class wps_ic_enqueues extends wps_ic
             }
         }
 
-        
+        // Disable cart fragments for WooCommerce
         if ($this->isPluginActive('woocommerce/woocommerce.php') && !empty(self::$settings['disable-cart-fragments']) && self::$settings['disable-cart-fragments'] == 1) {
             add_action('wp_enqueue_scripts', [$this, 'disableCartFragments'], 999);
         }
@@ -191,7 +191,7 @@ class wps_ic_enqueues extends wps_ic
         if (!apply_filters('wpc_gf_nonce_refresh', true)) {
             return;
         }
-        
+        // Only when Gravity Forms is actually present — no cost on non-GF sites.
         if (!class_exists('GFForms') && !class_exists('GFCommon') && !function_exists('gravity_form')) {
             return;
         }
@@ -290,7 +290,7 @@ JS;
     public function removeVersion($src)
     {
         if (!empty(self::$settings['css']) && self::$settings['css'] == '1') {
-            
+            // Remove for CSS Files
             if (strpos($src, '.css')) {
                 if (strpos($src, '?ver=')) {
                     $src = remove_query_arg('ver', $src);
@@ -299,7 +299,7 @@ JS;
         }
 
         if (!empty(self::$settings['js']) && self::$settings['js'] == '1') {
-            
+            // Check for JS Files
             if (strpos($src, '.js')) {
                 $verPosition = strpos($src, '?ver=');
                 if ($verPosition !== false) {
@@ -352,7 +352,7 @@ JS;
             $delayOn = "true";
         }
 
-        
+        // Preload links on hover, hardcoded!
         $linkPreload = "false";
         if (is_user_logged_in()) {
             $linkPreload = "false";
@@ -452,12 +452,12 @@ JS;
         }
 
         if (is_user_logged_in() && (current_user_can('manage_wpc_settings') || current_user_can('manage_wpc_purge'))) {
-            
+            // Required for Admin Bar
             wp_enqueue_style($this::$slug . '-admin-bar', WPS_IC_URI . 'assets/css/admin-bar.css', [], $this::$version);
             wp_enqueue_script($this::$slug . '-admin-bar-js', WPS_IC_URI . 'assets/js/admin/admin-bar' . WPS_IC_MIN . '.js', ['jquery'], $this::$version, true);
             wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
-            
-            
+            // v2 head-poll is admin bulk-screen only (see enqueue_bulk) — never front-end:
+            // cacheable front-end HTML would serve the poller to anon visitors + crawlers.
         }
 
 
@@ -538,7 +538,7 @@ JS;
                     }
                 }
 
-                
+                // Force retina
                 $force_retina = '0';
                 if (!empty($_GET['force_retina'])) {
                     $retina = 'true';
@@ -557,7 +557,7 @@ JS;
                         $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js');
                         wp_add_inline_script($this::$slug . '-aio', $scriptContent);
                     } else {
-                        
+                        // Live CDN Disabled
                         wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.local' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
                     }
 
@@ -570,7 +570,7 @@ JS;
                             $scriptContent = file_get_contents(WPS_IC_DIR . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js');
                             wp_add_inline_script($this::$slug . '-aio', $scriptContent);
                         } else {
-                            
+                            // Live CDN Enabled
                             wp_enqueue_script($this::$slug . '-aio', WPS_IC_URI . 'assets/js/dist/optimizer.adaptive' . $retinaJS . WPS_IC_MIN . '.js', [], $this::$version);
                         }
                     } else {
@@ -585,7 +585,7 @@ JS;
                     }
                 }
 
-                
+                // Force retina
                 $force_retina = 'false';
                 if (!empty($_GET['force_retina'])) {
                     $retina = 'true';
@@ -615,7 +615,7 @@ JS;
             $this->wpc_inline_vars_shim(false);
         }
 
-        
+        // Integration for Javascript in Themes/Plugins
         add_action('wp_footer', [$this, 'enqueueIntegration'], 9999);
     }
 
@@ -638,9 +638,9 @@ JS;
     public function enqueueIntegration()
     {
 
-        $theme = wp_get_theme(); 
+        $theme = wp_get_theme(); // Get the current theme object
 
-        
+        // Check if the theme name or template matches BuddyBoss
         if ($theme->get('Name') === 'BuddyBoss Theme' || $theme->get('Template') === 'buddyboss-theme') {
             if (!empty(self::$settings['delay-js']) && self::$settings['delay-js'] == '1') { ?>
                 <script type="wpc-delay-last-script">
@@ -657,7 +657,7 @@ JS;
     {
         $screen = get_current_screen();
 
-        
+        // SAME page under a toplevel hook; without it here the whole v4 UI loads unstyled.
         $page_array = ['upload', 'toplevel_page_' . $this::$slug,
                 'toplevel_page_' . $this::$slug . '-mu-network',
                 'media_page_' . $this::$slug . '_optimize', 'media_page_' . $this::$slug . '_restore', 'media_page_' . $this::$slug . '_restore', 'settings_page_' . $this::$slug, 'plugins'];
@@ -687,14 +687,14 @@ JS;
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js?ver=' . $this::$version, ['jquery'], '1.0.0');
 
-        
+        // Icons
         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-        
+        // Tooltipster
         $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-        
+        // Sweetalert
         $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
         $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
@@ -704,7 +704,7 @@ JS;
         $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js?ver=' . $this::$version);
         wp_localize_script($this::$slug . '-admin-settings-live', 'wpc_ajaxVar', $this->get_ajax_var_data());
 
-        
+        #$this->bootstrap();
         $gui = get_option(WPS_IC_GUI);
         if (!empty($gui) && $gui == 'lite') {
             $this->lite();
@@ -743,7 +743,7 @@ JS;
         $color = sanitize_hex_color(WPC_BRAND_COLOR);
         if (empty($color)) return;
 
-        
+        // Derive tint/light/dark variants from the brand color
         $r = hexdec(substr($color, 1, 2));
         $g = hexdec(substr($color, 3, 2));
         $b = hexdec(substr($color, 5, 2));
@@ -764,7 +764,7 @@ JS;
 
     public function agencyScripts()
     {
-        
+        // v4 UI assets always needed in agency mode (view-site renders the settings page)
         $ui = $GLOBALS['wpc_agency_ui'] ?? '';
         if ($ui !== '' && $ui !== 'new') {
             return;
@@ -773,11 +773,11 @@ JS;
         wp_enqueue_style($this::$slug . '-tooltip-bundle-wcio', WPS_IC_URI . 'assets/tooltip/css/tooltipster.bundle.min.css', [], $this::$version);
         wp_enqueue_script($this::$slug . '-admin-tooltip-wcio', WPS_IC_URI . 'assets/tooltip/js/tooltipster.bundle.min.js', ['jquery'], $this::$version);
 
-        
+        // Sweetalert
         $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
         $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
-        
+        // Icons
         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
         wp_enqueue_style($this::$slug . '-v4-style-css', WPS_IC_URI . 'assets/v4/css/style.css', [], $this::$version);
@@ -800,7 +800,7 @@ JS;
 
             wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js?ver=' . $this::$version, ['jquery'], '1.0.0');
 
-            
+            // Tooltipster
             $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
             $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
@@ -854,36 +854,36 @@ JS;
                 if ($screen->base == 'toplevel_page_' . $this::$slug . '-mu-network') {
                     $this->script('admin-mu-connect', 'mu.connect' . WPS_IC_MIN . '.js');
 
-                    
+                    // CSS
                     $this->style('admin', 'admin.styles.css');
                     $this->style('admin-media-library', 'admin.media-library.css');
                     $this->style('admin-settings-page', 'settings_page.css');
                     $this->style('admin-checkboxes', 'checkbox.css');
 
-                    
+                    // Icons
                     $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-                    
+                    // Tooltipster
                     $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
                     $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-                    
+                    // Sweetalert
                     $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
                     $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
-                    
+                    // Mu style
                     $this->style('admin-mu', 'multisite.style.css');
 
-                    
+                    // Vars
                     wp_localize_script($this::$slug . '-admin-mu-connect', 'wpc_ajaxVar', $this->get_ajax_var_data());
                 }
 
                 if ($screen->base == 'toplevel_page_' . $this::$slug || $screen->base == 'settings_page_' . $this::$slug) {
 
-                    
+                    // Select Modes
                     $this->script('admin-select-modes', 'admin/select-modes' . WPS_IC_MIN . '.js');
 
-                    
+                    // Settings Area
                     $this->script('admin-settings', 'admin/settings.admin' . WPS_IC_MIN . '.js');
                     $this->script('admin-lottie-player', 'admin/lottie/lottie-player.min.js');
                     $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
@@ -898,14 +898,14 @@ JS;
 
                 if (!empty($apikey)) {
                     if (($screen->base == 'settings_page_' . $this::$slug || $screen->base == 'toplevel_page_' . $this::$slug) && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
-                        
-                        
+                        // Shared bulk UI module. Must enqueue BEFORE both consumers
+                        // so window.WPCBulk is defined when their poll callbacks fire.
                         $this->script('bulk-ui', 'admin/bulk-ui' . WPS_IC_MIN . '.js');
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
 
-                        
+                        // Manifest/activity poller — bulk screen only, gated on enablement.
                         if ((function_exists('wpc_v2_head_poll_enabled') && wpc_v2_head_poll_enabled())
                             || (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled())) {
                             wp_enqueue_script($this::$slug . '-v2-head-poll', WPS_IC_URI . 'addons/v2/v2-head-poll.js', ['jquery'], $this::$version, true);
@@ -913,12 +913,12 @@ JS;
                         }
                     }
 
-                    
+                    // Media Library Area
                     if ($screen->base == 'upload' || $screen->base == 'media_page_' . $this::$slug . '_optimize' || $screen->base == 'plugins' || $screen->base == 'media_page_' . $this::$slug . '_restore' || $screen->base == 'media_page_wp_hard_restore_bulk') {
-                        
+                        // Icons
                         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-                        
+                        // Tooltips
                         $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.css');
                         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
@@ -927,8 +927,8 @@ JS;
                     }
 
                     if ($screen->base == 'toplevel_page_' . $this::$slug || $screen->base == 'upload' || $screen->base == 'media_page_' . $this::$slug . '_optimize' || $screen->base == 'plugins' || $screen->base == 'media_page_' . $this::$slug . '_restore' || $screen->base == 'media_page_wp_hard_restore_bulk' || $screen->base == 'settings_page_' . $this::$slug) {
-                        
-                        
+                        #$this->script('admin', 'admin' . WPS_IC_MIN . '.js');
+                        #$this->script('popups', 'popups' . WPS_IC_MIN . '.js');
                     }
                 }
 
@@ -936,7 +936,7 @@ JS;
                     $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
                     $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-                    
+                    // Fontello
                     $this->asset_style('admin-fontello', 'icons/css/fontello.css');
                 }
 
@@ -947,12 +947,12 @@ JS;
                     $this->style('admin-checkboxes', 'checkbox.css');
                     $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js');
 
-                    
+                    // Sweetalert
                     $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
                     $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
                 }
 
-                
+                // Print footer script
                 wp_localize_script('wps_ic-admin', 'wps_ic', ['uri' => WPS_IC_URI]);
             }
         }
@@ -970,14 +970,14 @@ JS;
         wp_localize_script($this::$slug . '-admin-bar-js', 'wpc_ajaxVar', $this->get_ajax_var_data());
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
-        
+        // Icons
         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-        
+        // Tooltipster
         $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-        
+        // Sweetalert
         $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
         $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
@@ -1013,14 +1013,14 @@ JS;
 
         wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
-        
+        // Icons
         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-        
+        // Tooltipster
         $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-        
+        // Sweetalert
         $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
         $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
 
@@ -1053,7 +1053,7 @@ JS;
                 wp_enqueue_script($this::$slug . '-circle', WPS_IC_URI . 'assets/js/circle-progress/circle-progress.min.js', ['jquery'], '1.0.0');
 
                 if ($screen->base == 'toplevel_page_' . $this::$slug || in_array($screen->base, $page_array)) {
-                    
+                    // Settings Area
                     $this->script('admin-settings', 'admin/settings.admin' . WPS_IC_MIN . '.js');
                     $this->script('admin-lottie-player', 'admin/lottie/lottie-player.min.js');
                     $this->script('admin-settings-live', 'admin/live-settings.admin' . WPS_IC_MIN . '.js');
@@ -1066,14 +1066,14 @@ JS;
 
                 if (!empty($apikey)) {
                     if (in_array($screen->base, $page_array) && (!empty($_GET['view']) && $_GET['view'] == 'bulk')) {
-                        
-                        
+                        // Shared bulk UI module. Must enqueue BEFORE both consumers
+                        // so window.WPCBulk is defined when their poll callbacks fire.
                         $this->script('bulk-ui', 'admin/bulk-ui' . WPS_IC_MIN . '.js');
                         $this->script('media-library-bulk', 'admin/media-library-bulk' . WPS_IC_MIN . '.js');
                         wp_localize_script($this::$slug . '-media-library-bulk', 'ajaxVar', $this->get_ajax_var_data());
                         $this->script('check-bulk-running', 'admin/check-bulk-running' . WPS_IC_MIN . '.js');
 
-                        
+                        // Manifest/activity poller — bulk screen only, gated on enablement.
                         if ((function_exists('wpc_v2_head_poll_enabled') && wpc_v2_head_poll_enabled())
                             || (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled())) {
                             wp_enqueue_script($this::$slug . '-v2-head-poll', WPS_IC_URI . 'addons/v2/v2-head-poll.js', ['jquery'], $this::$version, true);
@@ -1081,12 +1081,12 @@ JS;
                         }
                     }
 
-                    
+                    // Media Library Area
                     if ($screen->base == 'upload' || $screen->base == 'media_page_' . $this::$slug . '_optimize' || $screen->base == 'plugins' || $screen->base == 'media_page_' . $this::$slug . '_restore' || $screen->base == 'media_page_wp_hard_restore_bulk') {
-                        
+                        // Icons
                         $this->asset_style('admin-fontello', 'icons/css/fontello.min.css');
 
-                        
+                        // Tooltips
                         $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.css');
                         $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
@@ -1101,7 +1101,7 @@ JS;
                     $this->asset_style('admin-tooltip-bundle-wcio', 'tooltip/css/tooltipster.bundle.min.css');
                     $this->asset_script('admin-tooltip', 'tooltip/js/tooltipster.bundle.min.js');
 
-                    
+                    // Fontello
                     $this->asset_style('admin-fontello', 'icons/css/fontello.css');
                 }
 
@@ -1112,12 +1112,12 @@ JS;
                     $this->style('admin-checkboxes', 'checkbox.css');
                     $this->asset_script('admin-settings-page-charts', 'js/admin/charts/chartsjs.min.js');
 
-                    
+                    // Sweetalert
                     $this->asset_style('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.min.css');
                     $this->asset_script('admin-sweetalert', 'js/admin/sweetalert/sweetalert2.all.min.js');
                 }
 
-                
+                // Print footer script
                 wp_localize_script('wps_ic-admin', 'wps_ic', ['uri' => WPS_IC_URI]);
             }
         }

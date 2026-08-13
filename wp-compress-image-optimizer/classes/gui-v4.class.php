@@ -14,7 +14,7 @@ class wpc_gui_v4 extends wps_ic
     public static $accountQuota;
     public static $slug;
 
-    
+    // Popup ID → [option_group, option_key] for override detection
     private static $popup_option_map = [
         'exclude-critical-css'          => ['wpc-excludes', 'critical_css'],
         'exclude-js-delay-v2'           => ['wpc-excludes', 'delay_js_v2'],
@@ -39,9 +39,9 @@ class wpc_gui_v4 extends wps_ic
 
     private static $excludes_cache = null;
 
-    
-
-
+    /**
+     * Check if a configure popup has stored overrides (non-empty exclude list)
+     */
     public static function hasPopupOverrides($popup_id) {
         if (empty($popup_id) || !isset(self::$popup_option_map[$popup_id])) {
             return false;
@@ -88,7 +88,7 @@ class wpc_gui_v4 extends wps_ic
             self::$options = $options;
         }
 
-        
+        // Update Stats
 
 
         $statsclass = new wps_ic_stats();
@@ -106,7 +106,7 @@ class wpc_gui_v4 extends wps_ic
                 self::$user_credits->account->quotaType = 'requests';
             }
 
-            
+            // Get Account Quota
             self::$accountQuota = parent::getAccountQuota(self::$user_credits, self::$user_credits->account->quotaType);
         }
     }
@@ -316,7 +316,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -337,7 +337,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            
+            #$optionName = $option[0].','.$option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -475,9 +475,9 @@ class wpc_gui_v4 extends wps_ic
         $html .= '</div>';
 
 
-        
-
-
+        /**
+         * Check if connected option is active or not
+         */
         $active = false;
 
         if (is_array($args['connected_to'])) {
@@ -485,20 +485,20 @@ class wpc_gui_v4 extends wps_ic
             $optionNameClean = 'options_' . $option[0] . '_' . $option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             if (isset(self::$options[$option[0]][$option[1]]) && self::$options[$option[0]][$option[1]] == '1') {
-                
+                // Active
                 $active = true;
             } else {
-                
+                // Not Active
             }
         } else {
             $option = $args['connected_to'];
             $optionNameClean = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             if (isset(self::$options[$option]) && self::$options[$option] == '1') {
-                
+                // Active
                 $active = true;
             } else {
-                
+                // Not Active
             }
         }
 
@@ -554,7 +554,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -575,7 +575,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            
+            #$optionName = $option[0].','.$option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -661,7 +661,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
 
@@ -682,7 +682,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            
+            #$optionName = $option[0].','.$option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -705,10 +705,10 @@ class wpc_gui_v4 extends wps_ic
         }
 
         if (!empty($option)) {
-            
+            //    $html .= '<div class="form-check">';
 
-            
-            
+            //      $html .= '<label class="with-label" for="select-all-' . $option . '"><div>Select All</div><span></span></label>';
+            //      $html .= '</div>';
 
             $html .= '<label class="wpc-switch" for="select-all-' . $option . '">';
             $html .= '<input type="checkbox" data-for-div-id="' . $option . '" class="form-check-input checkbox mt-0 wpc-checkbox-select-all" value="1" id="select-all-' . $option . '" name="select-all-' . $optionName . '"/>';
@@ -729,7 +729,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        
+        // Hide for Whitelabel users
         if (!class_exists('whtlbl_whitelabel_plugin')) {
             if (!empty($helpBtn)) {
                 $html .= '<div class="form-check" style="max-width:120px;">';
@@ -753,7 +753,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -834,7 +834,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -859,7 +859,7 @@ class wpc_gui_v4 extends wps_ic
             $cssClass = 'no-description';
         }
 
-        
+        // Is it locked?
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -970,7 +970,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1020,7 +1020,7 @@ class wpc_gui_v4 extends wps_ic
             $cssClass = 'no-description';
         }
 
-        
+        // Is it locked?
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1087,7 +1087,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1132,7 +1132,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        
+        // Is it locked?
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1280,12 +1280,12 @@ class wpc_gui_v4 extends wps_ic
             $circleActive = '';
         }
 
-        
+        // Inline SVG for dynamic coloring via CSS currentColor
         $iconPath = WPS_IC_DIR . 'assets/v4/images/' . $icon;
         $svgContent = '';
         if (file_exists($iconPath) && pathinfo($iconPath, PATHINFO_EXTENSION) === 'svg') {
             $svgContent = file_get_contents($iconPath);
-            
+            // Strip XML declaration and comments, add class for CSS targeting
             $svgContent = preg_replace('/<!--.*?-->/s', '', $svgContent);
             $svgContent = preg_replace('/<\?xml[^>]*\?>/', '', $svgContent);
             $svgContent = str_replace('<svg ', '<svg class="wpc-iconcheckbox-svg" ', $svgContent);
@@ -1341,7 +1341,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
@@ -1386,7 +1386,7 @@ class wpc_gui_v4 extends wps_ic
         }
 
 
-        
+        // Is it locked?
         $lockedCss = '';
         if ($locked) {
             $circleActive = '';
@@ -1483,7 +1483,7 @@ class wpc_gui_v4 extends wps_ic
         $circleActive = '';
 
         if (!is_array($option)) {
-            
+            #$optionName = $option;
             $optionName = 'options[' . $option . ']';
             $tooltipID = 'option_tooltip_' . $option;
             if (isset(self::$options[$option]) && self::$options[$option] == '1') {
@@ -1503,7 +1503,7 @@ class wpc_gui_v4 extends wps_ic
                 $safe = 0;
             }
         } else {
-            
+            #$optionName = $option[0].','.$option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
             $tooltipID = 'option_tooltip_' . $option[0] . '_' . $option[1];
 
@@ -1694,7 +1694,7 @@ class wpc_gui_v4 extends wps_ic
         $cfSettings = get_option(WPS_IC_CF);
         $cfCdnActive = !empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1';
 
-        
+        // Show CF CNAME when CF is connected AND CF CDN is active
         $isCfActive = !empty($cfSettings) && $cfCdnActive;
         if ($isCfActive) {
             $popup = 'cf-cdn';
@@ -1738,11 +1738,11 @@ class wpc_gui_v4 extends wps_ic
               <div>';
 
         if (!empty($zone_name) && $isCfActive) {
-            
+            // CF is active with a CNAME — show Configure (CF popup), not Remove
             $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup-width="600" data-popup="cf-cdn">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
 
         } elseif (!empty($zone_name)) {
-            
+            // Generic/Bunny CNAME is set — show Remove + hidden Configure
             $html .= '<a href="#" class="wps-ic-configure-popup setting-configured" data-popup="remove-custom-cdn">
                 <i class="icon-trash"></i> ' . esc_html__('Remove', WPS_IC_TEXTDOMAIN) . '</a>
                 <a href="#" class="wps-ic-configure-popup setting-configure" data-popup-width="600" data-popup="' . $popup . '" style="display:none;">' . esc_html__('Configure', WPS_IC_TEXTDOMAIN) . '</a>';
@@ -1770,8 +1770,8 @@ class wpc_gui_v4 extends wps_ic
 
     public static function isFeatureEnabled($featureName)
     {
-        
-        
+        // v7.10.505 — one reader (wpc_caps_enabled). This had FOUR copies and only this one
+        // carried the agency bypass, so an agency install locked on the other three.
         if (function_exists('wpc_caps_enabled')) {
             return wpc_caps_enabled($featureName);
         }
@@ -1802,9 +1802,12 @@ class wpc_gui_v4 extends wps_ic
         if (!function_exists('wpc_vitals_p75') || !function_exists('wpc_vitals_enabled') || !wpc_vitals_enabled()) {
             return false;
         }
-        
-        
-        
+        // v7.10.863 — the panel owns every state now (sample preview when empty, first speed
+        // check, same-day partial), so enablement alone decides. Requiring a rolled-up day
+        // meant no fresh install ever saw the preview or ran its first speed check.
+        if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
+            return !empty(wps_ic::$remoteVitalsHasData);
+        }
         return true;
     }
 
@@ -1879,13 +1882,13 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        
+        // Clean parenthesized text from button label
         $buttonLabel = $values[$currentSetting];
         if (preg_match('/^(.+?)\s*\(.+?\)\s*$/', $buttonLabel, $bm)) {
             $buttonLabel = trim($bm[1]);
         }
 
-        
+        // Generate dropdown HTML with unique classes
         $html .= '<input type="hidden" class="wpc-dropdown-setting" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $currentSetting . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
@@ -1900,7 +1903,7 @@ class wpc_gui_v4 extends wps_ic
             if ($k == $currentSetting) {
                 $s = 'wpc-cf-active';
             }
-            
+            // Extract parenthesized text as badge
             $badge = '';
             $label = $v;
             if (preg_match('/^(.+?)\s*\((.+?)\)\s*$/', $v, $m)) {
@@ -1908,7 +1911,7 @@ class wpc_gui_v4 extends wps_ic
                 $badgeClass = (stripos($m[2], 'Recommended') !== false) ? 'wpc-recommended-badge' : 'wpc-info-badge';
                 $badge = '<span class="' . $badgeClass . '">' . esc_html($m[2]) . '</span>';
             }
-            
+            // Explicit recommended param overrides
             if ($recommended !== '' && $k === $recommended && empty($badge)) {
                 $badge = '<span class="wpc-recommended-badge">' . esc_html__('Recommended', WPS_IC_TEXTDOMAIN) . '</span>';
             }
@@ -1926,10 +1929,10 @@ class wpc_gui_v4 extends wps_ic
 
     public static function cf_dropdown($title = 'Demo', $description = 'Demo')
     {
-        
+        // Dropdown options
         $cf_preset = ['off' => 'Off', 'home' => 'Home Page', 'all' => 'Full Site'];
 
-        
+        // Fixed option path
         $option = ['cf', 'edge-cache'];
         $optionName_cleaned = 'options_cf_edge-cache';
         $optionName = 'options[cf][edge-cache]';
@@ -1937,7 +1940,7 @@ class wpc_gui_v4 extends wps_ic
 
         $cfOptions = get_option(WPS_IC_CF);
 
-        
+        // Get current value
         $cf_preset_config = $cfOptions['settings']['edge-cache'] ?? 'off';
 
         if (empty($cf_preset_config)) {
@@ -1964,7 +1967,7 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        
+        // Generate dropdown HTML with unique classes
         $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $cf_preset_config . '" />
 <div class="wpc-cf-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-cf-select-button" type="button">
@@ -1997,7 +2000,7 @@ class wpc_gui_v4 extends wps_ic
         $active = false;
         $circleActive = '';
 
-        
+        // Get CF settings from WPS_IC_CF option
         $cf = get_option(WPS_IC_CF);
         $cf_settings = isset($cf['settings']) ? $cf['settings'] : ['assets' => '1', 'edge-cache' => 'home'];
 
@@ -2005,7 +2008,7 @@ class wpc_gui_v4 extends wps_ic
             $optionName_cleaned = 'options_' . $option;
             $optionName = 'options[' . $option . ']';
 
-            
+            // Check CF settings
             if (isset($cf_settings[$option]) && $cf_settings[$option] == '1') {
                 $active = true;
                 $circleActive = 'active';
@@ -2014,7 +2017,7 @@ class wpc_gui_v4 extends wps_ic
             $optionName_cleaned = 'options_' . $option[0] . '_' . $option[1];
             $optionName = 'options[' . $option[0] . '][' . $option[1] . ']';
 
-            
+            // Check CF settings using the second array key
             if (isset($cf_settings[$option[1]]) && $cf_settings[$option[1]] == '1') {
                 $active = true;
                 $circleActive = 'active';
@@ -2067,7 +2070,7 @@ class wpc_gui_v4 extends wps_ic
 
     public static function font_dropdown($title = 'Demo', $description = 'Demo')
     {
-        
+        // Dropdown options
         $font_display_options = [
             'off' => 'Off',
             'auto' => 'Auto (Browser Default)',
@@ -2082,7 +2085,7 @@ class wpc_gui_v4 extends wps_ic
 
         $settings = get_option(WPS_IC_SETTINGS);
 
-        
+        // Get current value
         $current_value = $settings['font-display'] ?? 'swap';
 
         if (empty($current_value)) {
@@ -2109,7 +2112,7 @@ class wpc_gui_v4 extends wps_ic
 
         $html .= '<div class="wpc-box-check">';
 
-        
+        // Generate dropdown HTML
         $html .= '<input type="hidden" name="' . $optionName . '" id="' . $optionName_cleaned . '_hidden" value="' . $current_value . '" />
 <div class="wpc-font-select-dropdown" id="' . $optionName_cleaned . '_dropdown">
   <button class="wpc-font-select-button" type="button">

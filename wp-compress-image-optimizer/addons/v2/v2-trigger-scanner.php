@@ -14,7 +14,7 @@ if (!function_exists('wpc_v2_defer_lazy_trigger')) {
             $wpc_v2_deferred_triggers = [];
             add_action('shutdown', 'wpc_v2_run_deferred_lazy_triggers', PHP_INT_MAX);
         }
-        
+        // Keyed by id = same-request dedupe (buffer pass + cache-write hook overlap).
         $wpc_v2_deferred_triggers[(int) $id] = [(int) $id, (array) $widths, (bool) $upgrade_partial, (string) $release_sig];
     }
 
@@ -26,8 +26,8 @@ if (!function_exists('wpc_v2_defer_lazy_trigger')) {
         }
         $batch = $wpc_v2_deferred_triggers;
         $wpc_v2_deferred_triggers = [];
-        
-        
+        // Close the connection BEFORE the loopback POSTs — they cost real wall time
+        // (TLS-to-self + saturated pool) and must never hold the response open.
         if (function_exists('fastcgi_finish_request')) {
             @fastcgi_finish_request();
         } elseif (function_exists('litespeed_finish_request')) {
@@ -61,9 +61,9 @@ if (!function_exists('wpc_v2_extract_srcset_widths')) {
     {
         if (!is_string($html) || $html === '') return [];
 
-        $map = []; 
+        $map = []; // [id => [widths]]
 
-        
+        // Pattern 1: class="wp-image-N" appears BEFORE srcset
         if (preg_match_all(
             '/<img\b[^>]*?\bclass="[^"]*\bwp-image-(\d+)\b[^"]*"[^>]*?\bsrcset="([^"]+)"/i',
             $html, $matches, PREG_SET_ORDER
@@ -80,7 +80,7 @@ if (!function_exists('wpc_v2_extract_srcset_widths')) {
             }
         }
 
-        
+        // Pattern 2: srcset appears BEFORE class="wp-image-N"
         if (preg_match_all(
             '/<img\b[^>]*?\bsrcset="([^"]+)"[^>]*?\bclass="[^"]*\bwp-image-(\d+)\b[^"]*"/i',
             $html, $matches, PREG_SET_ORDER
@@ -109,8 +109,8 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
         if (!function_exists('wpc_lazy_trigger_v2')) return 0;
         if (!function_exists('wpc_lazy_mode_active') || !wpc_lazy_mode_active()) return 0;
 
-        
-        
+        // Scanner kill switch. In lazy_cdn mode the canonical path
+        // is CDN-driven (CDN sees 404 → fires /optimize-v2 for the SPECIFIC
 
 
         $default_enabled = !(function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled());
@@ -147,8 +147,8 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
         $ids = array_filter($ids, function ($id) { return $id > 0; });
         if (empty($ids)) return 0;
 
-        
-        
+        // Phase 2 smart-lazy: per-image widths needed by THIS page's srcset.
+        // Empty array for an imageID = full ladder (fallback to legacy lazy_full).
         $widths_map = wpc_v2_extract_srcset_widths($html);
 
         $triggered = 0;
@@ -195,12 +195,12 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
                     }
                 }
             }
-            
-            
+            // CDN-off backfill encodes the FULL ladder (empty widths = full),
+            // matching a manual Compress click; smart-trimmed widths stay for the WAF-fallback case.
             $needed_widths = $wpc_llb_full_ladder ? [] : (isset($widths_map[$id]) ? (array) $widths_map[$id] : []);
 
 
-            
+            //
 
 
             wpc_v2_defer_lazy_trigger($id, $needed_widths, $wpc_upgrade_partial,
@@ -224,7 +224,7 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
 }
 
 
-
+// Trigger source: WPC page cache write
 
 
 add_action('wpc_cache_buffer_ready', function ($buffer, $url, $prefix) {
@@ -232,7 +232,7 @@ add_action('wpc_cache_buffer_ready', function ($buffer, $url, $prefix) {
 }, 10, 3);
 
 
-
+// Trigger source: post save/publish
 
 
 add_action('save_post', function ($post_id, $post, $update) {
@@ -247,7 +247,7 @@ add_action('save_post', function ($post_id, $post, $update) {
 }, 20, 3);
 
 
-
+// Trigger source: universal output buffer (cache-plugin agnostic)
 
 
 add_action('template_redirect', function () {
@@ -257,12 +257,12 @@ add_action('template_redirect', function () {
     if (!function_exists('wpc_lazy_mode_active') || !wpc_lazy_mode_active()) return;
 
     ob_start(function ($html) {
-        
-        
+        // Scanner is fully gated internally — safe to call unconditionally.
+        // Any errors are caught so we never break the page response.
         try {
             wpc_v2_scan_html_for_lazy_triggers((string) $html, 'output-buffer');
         } catch (\Throwable $e) {
-            
+            // Silent — page render must not break on trigger-scan errors.
         }
         return $html;
     });

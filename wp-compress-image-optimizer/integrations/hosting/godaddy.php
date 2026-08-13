@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_godaddy extends wps_ic_integrations {
@@ -17,11 +17,11 @@ class wps_ic_godaddy extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No specific checks needed
     }
 
     public function fix_setting($setting) {
-        
+        // No specific fixes needed
     }
 
     public function add_admin_hooks() {
@@ -44,15 +44,15 @@ class wps_ic_godaddy extends wps_ic_integrations {
 
         $url = untrailingslashit(set_url_scheme(str_replace($host, $this->vip_url, $url), 'http'));
 
-        
+        // Flush object cache
         if (function_exists('wp_cache_flush')) {
             if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('godaddy'); } else { @wp_cache_flush(); }
         }
 
-        
+        // Update option to flush APC cache across server
         update_option('gd_system_last_cache_flush', time());
 
-        
+        // Purge Varnish with BAN method
         wp_remote_request(
             esc_url_raw($url),
             [

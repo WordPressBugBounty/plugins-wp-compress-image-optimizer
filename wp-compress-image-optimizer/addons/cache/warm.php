@@ -4,9 +4,9 @@ if (!defined('ABSPATH')) {
 }
 
 if (!function_exists('wpc_crit_meta_write')) {
-    
-    
-    
+    // Mixed-tree belt: the canonical atomic writer lives in defines.php — a partial
+    // deploy (FTP truncation, stale defines.php) degrades to a plain write here,
+    // never a fatal (law 10). Complete trees never reach this definition.
     function wpc_crit_meta_write($path, $value)
     {
         try {
@@ -20,9 +20,9 @@ if (!function_exists('wpc_crit_meta_write')) {
 
 
 if (!function_exists('wpc_mc_up')) {
-    
-    
-    
+    // Global MC circuit breaker: an unreachable service must cost ~zero. A
+    // timed-out call trips a 5-min skip-all window (staging.wpcompress.com
+    // receipt: config-sync blocked ADMIN pages 8s each while the MC was dark).
     function wpc_mc_up()
     {
         return !get_transient('wpc_mc_down');
@@ -39,12 +39,12 @@ if (!function_exists('wpc_mc_up')) {
 
 
 if (!function_exists('wpc_delay_aggr_rearm')) {
-    
-    
-    
-    
-    
-    
+    // A fresh measured gen = a new keep list = a new aggressive-delay attempt:
+    // clear the boot-watchdog demote so the site retries interaction-only.
+    // DAMPED: each prior trip adds an hour of hold before a land may re-arm
+    // (trip-purge oscillation breaker — an unrelated URL's land must not
+    // instantly re-arm a site that just demoted). 5 trips = 30d cool-down;
+    // any trip older than 30d decays the counter to 0 (no lifetime penalty).
     function wpc_delay_aggr_rearm()
     {
         $wpc_t360 = (int) get_option('wpc_delay_aggr_off', 0);
@@ -102,12 +102,12 @@ if (!function_exists('wpc_settings_drift_guard')) {
 
 
 if (!function_exists('wpc_cache_first_enabled')) {
-    
-
-
-
-
-
+    /**
+     * Cache-first = pages cache from the very first hit (no pre-crit no-store); crit/LCP landing
+     * converges via per-URL HTML purge + warm instead of holding the page uncached. Default ON.
+     * Kill-switches: add_filter('wpc_cache_first','__return_false'), define('WPC_CACHE_FIRST', false)
+     * or define('WPC_CACHE_FIRST_DISABLE', true), or option wpc_cache_first = '0'.
+     */
     function wpc_cache_first_enabled()
     {
         if (defined('WPC_CACHE_FIRST_DISABLE') && WPC_CACHE_FIRST_DISABLE) {
@@ -122,14 +122,14 @@ if (!function_exists('wpc_cache_first_enabled')) {
     }
 }
 
-
+// ─── Bounded observability log (last 40 events, autoload off) ────────────────────────────
 if (!function_exists('wpc_cache_first_log')) {
     function wpc_cache_first_log($event, $key = '', $url = '', $layers = [])
     {
-        
-        
-        
-        
+        // v7.10.518 — breadcrumb for the 61.5s renders. The phase timeline proves the whole
+        // stall sits between shutdown pri 0 and pri 999, but 16 of our callbacks live in that
+        // band, so knowing the LAST thing we logged (and when) names the one that then hung.
+        // Set before any work so a hang inside this function still leaves the crumb.
         $GLOBALS['wpc_lastlog518'] = [(string) $event, microtime(true)];
         try {
 
@@ -144,9 +144,9 @@ if (!function_exists('wpc_cache_first_log')) {
             $wpc_lf = defined('WPS_IC_CACHE') ? rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl' : '';
             $wpc_ok = false;
             if ($wpc_lf !== '') {
-                
-                
-                
+                // Purge windows can briefly take the cache dir out from under the logger —
+                // repair + one retry, else B7/SLO receipts fall into the 3-cap DB fallback
+                // and the latency distribution grows silent holes (drill forensics 2026-07-20).
                 if (!is_dir(dirname($wpc_lf))) {
                     @mkdir(dirname($wpc_lf), 0777, true);
                 }
@@ -178,8 +178,8 @@ if (!function_exists('wpc_cache_first_log')) {
             }
 
 
-            
-            
+            // (auto toggle → 3-min floor → 25s throttle → single-flight), so this choke point
+            // costs one boolean per event when Auto Mode is off.
             if (function_exists('wpc_auto_chain_maybe')
                 && preg_match('/^(land-saved|fonts-landed|kick-rx|warm-rx)$/', (string) $event)) {
                 wpc_auto_chain_maybe((string) $event);
@@ -202,8 +202,8 @@ if (!function_exists('wpc_cache_first_log')) {
                     }
                 }
             }
-            
-            
+            // land-report beacon into the joint delivery ledger — land-saved is inline/reliable,
+            // land-finalize is the settled point; throttled once per key|uuid, idempotent server-side.
             if (function_exists('wpc_land_report') && ($event === 'land-finalize' || $event === 'land-saved')) {
                 wpc_land_report((string) $key);
             }
@@ -214,13 +214,13 @@ if (!function_exists('wpc_cache_first_log')) {
 }
 
 if (!function_exists('wpc_land_report')) {
-    
-
-
-
-
-
-
+    /**
+     * Land-report beacon → the joint delivery ledger (service §8, wire-proven both directions).
+     * POST crit-push.zapwp.net/land-report, X-WPC-Sig/X-WPC-Ts headers (ms ts, ±600s), HMAC-SHA256
+     * over uuid|url_key|ts keyed with the site apikey — the url_key signed IS the url_key sent.
+     * Digest = cflog serialization (<=4KB, stored verbatim). Load-gated, blocking=false, throttled
+     * once per key|uuid. A pinned box (load-gated out) leaves the row serve-probe-only, not blind.
+     */
     function wpc_land_report($key)
     {
         try {
@@ -287,21 +287,21 @@ if (!function_exists('wpc_land_report')) {
 }
 
 if (!function_exists('wpc_warm_url_variants')) {
-    
-
-
-
-
-
+    /**
+     * The 4 cache-variant request shapes. MUST mirror the writer (cacheHtml.php saveCache:
+     * webp = Accept contains image/webp, mobile = is_mobile() UA regex) and the drop-in reader.
+     * Order matters: webp forms fire LAST per device so the static mirror bucket (which collapses
+     * webp) ends holding the webp render — what real browsers send.
+     */
     function wpc_warm_url_variants()
     {
         $desktop = 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0';
         $mobile  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-        
-        
-        
-        
-        
+        // v7.10.522 — 4 -> 2. The webp variants rendered BYTE-IDENTICAL HTML into a second
+        // filename, so half of every fan-out was pure waste: on a 4-worker host, warming two
+        // needless variants is half the pool. Kept behind the same single filter as the cache
+        // key so the two can never drift apart — a key/fan-out mismatch would warm a file the
+        // serve path never looks for.
         $wpc_vars522 = [
             ''            => ['ua' => $desktop, 'accept' => 'text/html'],
             'mobile'      => ['ua' => $mobile,  'accept' => 'text/html'],
@@ -315,15 +315,15 @@ if (!function_exists('wpc_warm_url_variants')) {
 }
 
 if (!function_exists('wpc_warm_url_queue')) {
-    
+    /**
+     * Queue a non-blocking warm of ONE URL (all 4 variants) after its HTML was purged, so even the
+     * first visitor after a crit/LCP land gets an optimized cache hit. Fail-safe: any bail-out just
+     * leaves the page to warm on first visit (today's behavior), never worse.
+     */
 
-
-
-
-
-    
-    
-    
+    // wpc_service_warm removed (joint spec v2 S2): the /warm endpoint never shipped
+    // service-side — every POST was a silent 404 no-op. Purge-path regen is owned by
+    // wpc_crit_purge_redispatch.
     function wpc_warm_url_queue($url, $context = '')
     {
         static $queued = [];
@@ -348,8 +348,8 @@ if (!function_exists('wpc_warm_url_queue')) {
             }
 
 
-            
-            
+            // (joint spec v2 S2): /warm never shipped service-side — the POST was a 404
+            // no-op; purge-path regen rides wpc_crit_purge_redispatch instead.
 
 
             if (defined('WPS_IC_SETTINGS')) {
@@ -358,7 +358,7 @@ if (!function_exists('wpc_warm_url_queue')) {
                     return false;
                 }
             }
-            
+            // The loopback can't land on a Basic-Auth site.
             if (function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth()) {
                 return false;
             }
@@ -369,7 +369,7 @@ if (!function_exists('wpc_warm_url_queue')) {
             set_transient($wpc_lock, 1, (int) apply_filters('wpc_url_warm_debounce_seconds', 25));
             if ($wpc_debounced) {
                 wpc_cache_first_log('warm-coalesced', '', $url, ['context' => $context]);
-                return true; 
+                return true; // the debounce must actually gate (was log-only — latent bug)
             }
 
 
@@ -387,7 +387,7 @@ if (!function_exists('wpc_warm_url_queue')) {
 
             $queued[$url] = true;
             register_shutdown_function('wpc_warm_url_fire', $url);
-            
+            // Cron backstop: verifies all 4 variants actually landed, re-fires the missing ones.
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && !wp_next_scheduled('wpc_url_warm', [$url, 1])) {
                 wpc_pl_sched(time() + 60, 'wpc_url_warm', [$url, 1]);
@@ -401,9 +401,9 @@ if (!function_exists('wpc_warm_url_queue')) {
 }
 
 if (!function_exists('wpc_crit_resync_wave_h')) {
-    
-
-
+    /** Follow-up waves after a resync click: re-open the one-shot used-css gates and
+     *  re-pull, so observe-leg artifacts (geometry/fonts/used amendments) land without
+     *  another human action. Bounded: one probe + one kick per wave, pressure-yielding. */
     function wpc_crit_resync_wave_h($urlKey, $wave = 0)
     {
         try {
@@ -424,9 +424,9 @@ if (!function_exists('wpc_crit_resync_wave_h')) {
                 delete_transient('wpc_ucsr266_' . md5($wpc_gf334));
                 delete_transient('wpc_ucsp_' . md5($wpc_gf334));
             }
-            
-            
-            
+            // Amendments land IN PLACE on the same uuid (geometry bake, observe leg) —
+            // the collector dedupes on unchanged uuid, so force the re-pull like
+            // refetch=crit does: drop the land stamp (atomic overwrite, never critless).
             @unlink(rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/land_uuid.txt');
             delete_transient('wpc_repull_kick_' . md5((string) $urlKey));
             delete_transient('wpc_prescfetch_' . md5((string) $urlKey));
@@ -447,8 +447,8 @@ if (!function_exists('wpc_crit_resync_wave_h')) {
 }
 
 if (!function_exists('wpc_purge_hot_set')) {
-    
-
+    /** Pages worth re-warming after a full wipe = dirs with crit identity. url.txt
+     *  survives every purge by design, so the hot set survives the wipe it heals. */
     function wpc_purge_hot_set($cap = 12)
     {
         $wpc_scored111 = [];
@@ -470,8 +470,8 @@ if (!function_exists('wpc_purge_hot_set')) {
         return array_slice(array_keys($wpc_scored111), 0, max(1, (int) $cap));
     }
 
-    
-
+    /** Staggered single events, one page per slot — the rebuild must never become the
+     *  storm it exists to prevent. Home rides the immediate warm queue, not this wave. */
     function wpc_purge_rewarm_hot_set($context = '')
     {
         try {
@@ -481,13 +481,13 @@ if (!function_exists('wpc_purge_hot_set')) {
             if (get_transient('wpc_rewarm_hot_lock')) {
                 return 0;
             }
-            
-            
-            
-            
-            
-            
-            
+            // DEFAULT OFF: the hot set is SPECULATION. It pays a full uncached render (3-4s on a
+            // small box) for pages nobody has asked for, and the homepage — the one page whose
+            // traffic is actually predictable — is excluded from this set anyway because it rides
+            // the immediate warm queue. So home-only is the honest default; a stale sub-page costs
+            // exactly one on-demand render when a visitor arrives, versus twelve speculative ones
+            // that a hot box will re-purge before anyone reads them. Raise per site if the box has
+            // headroom and the traffic spread justifies it.
             if (!apply_filters('wpc_purge_rewarm_enabled', false)) {
                 if (function_exists('wpc_cache_first_log') && !get_transient('wpc_rewarm_off_log')) {
                     set_transient('wpc_rewarm_off_log', 1, 900);
@@ -498,13 +498,13 @@ if (!function_exists('wpc_purge_hot_set')) {
                 }
                 return 0;
             }
-            
-            
-            
-            
-            
-            
-            
+            // The 20s stagger bounds the RATE, not the AMOUNT. Where an uncached render costs
+            // 3-4s on 2 cores, 12 staggered warms are still 12 renders the box cannot absorb and
+            // the rebuild becomes the storm it exists to prevent (busy: 13 queued at load 42).
+            // Under real pressure shed the wave ENTIRELY — the homepage rides the immediate warm
+            // queue and is excluded from this set by design, so shedding leaves exactly
+            // home-only. A hot box will re-purge whatever we warm anyway, and a visitor-triggered
+            // render is one render on demand instead of twelve speculative ones.
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 if (function_exists('wpc_cache_first_log') && !get_transient('wpc_rewarm_shed_log')) {
                     set_transient('wpc_rewarm_shed_log', 1, 300);
@@ -517,8 +517,8 @@ if (!function_exists('wpc_purge_hot_set')) {
                 return 0;
             }
             set_transient('wpc_rewarm_hot_lock', 1, 300);
-            
-            
+            // Scale the fan-out to the hardware: 2 cores -> 4 pages, 4 -> 8, 8+ -> the old 12.
+            // Widen the stagger on small boxes, where each render occupies a larger share of it.
             $wpc_cores111 = function_exists('wpc_box_cores') ? max(1, (int) wpc_box_cores()) : 2;
             $wpc_cap111  = max(1, (int) apply_filters('wpc_purge_rewarm_cap', min(12, $wpc_cores111 * 2)));
             $wpc_gap111 = max(10, (int) apply_filters('wpc_purge_rewarm_gap_seconds', $wpc_cores111 <= 2 ? 45 : 20));
@@ -541,34 +541,34 @@ if (!function_exists('wpc_purge_hot_set')) {
 }
 
 if (!function_exists('wpc_warm_url_fire')) {
-    
-
-
-
-
+    /**
+     * Shutdown transport: flush the triggering response, then fire the 4 variant renders as
+     * non-blocking local-vhost loopbacks (the proven fireHomepageWarm transport, generalized).
+     * The receiver survives the client-close via the X-WPC-Cache-Warm guard in wp-compress.php.
+     */
     function wpc_warm_url_fire($url, $only_variants = null)
     {
         try {
-            
-            
-            
+            // v7.10.609 — canonical form BEFORE the fetch. The field log showed two cron
+            // loopbacks to /about-us with no trailing slash, 2049ms + 2005ms: WordPress answers
+            // a canonical 301, so each warm booted WordPress twice.
             if (function_exists('wpc_canon_url609')) {
                 $url = wpc_canon_url609($url);
             }
-            
-            
-            
-            
+            // v7.10.520 BELT 1 — PARITY. wpc_warm_url_queue() has refused to run inside a
+            // warm request since it was written; fire() never did. A warm loopback could
+            // therefore fan out four more, and only a racy 15s global cooldown stood in the
+            // way. Measured: 3 hard refreshes produced ~19 concurrent 724KB renders.
             if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('warm-refire-blocked', '', (string) $url, []);
                 }
                 return false;
             }
-            
-            
-            
-            
+            // BELT 2 — a request that CANNOT cache must not trigger a warm. A hard refresh
+            // sends Cache-Control: no-cache, saveCache bails at the server-control gate, so
+            // nothing is stored — which makes the "variants missing" signal permanently true
+            // and re-fires the whole 4-variant fan-out on every single refresh.
             $wpc_cc520 = strtolower((string) ($_SERVER['HTTP_CACHE_CONTROL'] ?? ''));
             if ($wpc_cc520 !== '' && (strpos($wpc_cc520, 'no-cache') !== false
                 || strpos($wpc_cc520, 'no-store') !== false)) {
@@ -577,22 +577,22 @@ if (!function_exists('wpc_warm_url_fire')) {
                 }
                 return false;
             }
-            
-            
-            
+            // BELT 3 — the 15s cooldown was get_transient()-then-set_transient(): a
+            // read-then-write race that ~19 simultaneous requests walk straight through.
+            // GET_LOCK(name,0) is atomic, so exactly one caller can win.
             if (function_exists('wpc_worker_lock') && !wpc_worker_lock('warm_fire_gate')) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('warm-gate-contended', '', (string) $url, []);
                 }
                 return false;
             }
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.531 — the release was a NESTED shutdown function, so it ran last and the gate
+            // was held across fastcgi_finish_request() and the whole fan-out: captured holding
+            // GET_LOCK for 33s with its MySQL connection in Sleep (blocked on loopback HTTP, not
+            // on a query). FPM reports that phase as "Finishing" and request_slowlog_timeout
+            // cannot see it, so the most expensive lock in the plugin was structurally invisible.
+            // The shutdown release stays as a crash belt only; the real release is explicit, the
+            // moment the cooldown transient makes the decision durable.
             if (function_exists('wpc_worker_unlock')) {
                 register_shutdown_function(function () { @wpc_worker_unlock('warm_fire_gate'); });
             }
@@ -616,8 +616,8 @@ if (!function_exists('wpc_warm_url_fire')) {
                 }
                 set_transient('wpc_warm_cooldown', 1, $wpc_cool117);
             }
-            
-            
+            // Decision is now durable in the cooldown — the gate has done its whole job. Everything
+            // below (jitter + loopback renders) must NOT hold it.
             if (!empty($wpc_gate531) && function_exists('wpc_worker_unlock')) {
                 @wpc_worker_unlock('warm_fire_gate');
                 $wpc_gate531 = false;
@@ -655,8 +655,8 @@ if (!function_exists('wpc_warm_url_fire')) {
                 }
 
 
-                
-                
+                // ONE transport per variant: the socket loopback when available, wp_remote_get
+                // only as its fallback. Double-firing doubled the self-inflicted render load.
                 if (!$wpc_socket_ok) {
                     wp_remote_get($url, [
                         'blocking' => false,
@@ -682,7 +682,7 @@ if (!function_exists('wpc_warm_url_fire')) {
                         @fclose($fp);
                     }
                 }
-                
+                // Small gap so the 4 renders queue politely instead of landing simultaneously.
                 @usleep(mt_rand(150, 400) * 1000);
             }
         } catch (\Throwable $e) {
@@ -693,11 +693,11 @@ if (!function_exists('wpc_warm_url_fire')) {
 }
 
 if (!function_exists('wpc_warm_rx_gate')) {
-    
-
-
-
-
+    /**
+     * Receiver-side shed: our own warm loopbacks may never exhaust the FPM pool. At most
+     * wpc_warm_rx_cap warm renders run concurrently; excess loopbacks get an instant 204
+     * (the cron backstop re-fires anything that didn't land). Real visitors are never shed.
+     */
     function wpc_warm_rx_gate()
     {
         try {
@@ -742,11 +742,11 @@ if (!function_exists('wpc_warm_rx_gate')) {
                 } catch (\Throwable $e) {
                 }
             });
-            
-            
-            
-            
-            
+            // v7.10.691 — warm traffic is the wire's heartbeat. The kick-lane catchup only runs
+            // on repull branches, which a HEALTHY site may not enter for hours — the exact state
+            // that left c3720e5a's crit serving with 0a0080ce's manifest. Warms are internal and
+            // detached (nobody waits on them), fire on every update-window/land wave, and each
+            // one heals its own URL. Transient-gated inside (300s): ~3 file reads per warm.
             if (function_exists('wpc_wire_catchup') && class_exists('wps_ic_url_key')) {
                 $wpc_wk691 = ltrim((string) (new wps_ic_url_key())->setup(''), '/');
                 if ($wpc_wk691 !== ''
@@ -761,14 +761,14 @@ if (!function_exists('wpc_warm_rx_gate')) {
 }
 
 if (!function_exists('wpc_url_warm_cron_handler')) {
-    
-
-
-
+    /**
+     * Cron backstop: check which of the 4 hashed-cache variant files actually landed; re-fire only
+     * the missing ones. Max 2 attempts, then leave the rest to live traffic.
+     */
     function wpc_url_warm_cron_handler($url, $attempt = 1)
     {
-        
-        
+        // .473: Safe Mode stands the DRAIN down too, not just admission — a cron event already
+        // in the row would otherwise run. Returns without rescheduling, so nothing accumulates.
         if (function_exists('wpc_bg_lane_allowed') && !wpc_bg_lane_allowed('wpc_url_warm')) {
             return;
         }
@@ -800,8 +800,8 @@ if (!function_exists('wpc_url_warm_cron_handler')) {
             if (empty($wpc_missing)) {
                 return;
             }
-            
-            
+            // Sender-side yield: never fire warm renders INTO pressure (the receiver shed
+            // just burns a retry), and small boxes rebuild one variant per tick
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 $wpc_rkp49 = 'wpc_warm_resk_' . md5($url);
                 $wpc_rcp49 = (int) get_transient($wpc_rkp49);
@@ -814,7 +814,7 @@ if (!function_exists('wpc_url_warm_cron_handler')) {
             }
             if (function_exists('wpc_box_cores') && wpc_box_cores() <= 2 && count($wpc_missing) > 1) {
                 $wpc_missing = array_slice($wpc_missing, 0, 1);
-                
+                // Bounded by the same resk counter as the pressure path — never an open loop
                 $wpc_rks49 = 'wpc_warm_resk_' . md5($url);
                 $wpc_rcs49 = (int) get_transient($wpc_rks49);
                 if ($wpc_rcs49 < 6 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
@@ -850,9 +850,9 @@ if (!function_exists('wpc_url_warm_cron_handler')) {
 
 
 if (!function_exists('wpc_crit_cur_uuid')) {
-    
-
-
+    /** The gen uuid to derive artifact URLs from — land_uuid (what actually
+     *  landed) preferred over uuid (overwritten at dispatch). Requires ≥8 HEX
+     *  chars so a degenerate value (all-dashes) can't derive a malformed URL. */
     function wpc_crit_cur_uuid($dir)
     {
         $dir = rtrim((string) $dir, '/') . '/';
@@ -866,15 +866,15 @@ if (!function_exists('wpc_crit_cur_uuid')) {
     }
 }
 if (!function_exists('wpc_crit_artifact_url')) {
-    
-
-
-
-
-
-
-
-
+    /** URL of an observation artifact (delay.json / lcp.json), meta-or-DERIVED.
+     *  The service returns /status=success (crit done) with NO delay_url/lcp_url
+     *  BEFORE the observation artifacts land, and nothing re-polls after success —
+     *  so the URL meta is frequently absent while {uuid[:4]}/{uuid}.<artifact> is
+     *  already 200 (busyprosai bd175a43, confirmed live: 29KB measured delay.json +
+     *  lcp.json with lcp_preload). Prefer the advertised meta; derive from the
+     *  on-disk uuid only as the fallback. ?t= busts Bunny's edge so an IN-PLACE
+     *  amendment (same uuid, richer body) is seen. Suffixes are the service's
+     *  canonical layout (delay/lcp fleet-confirmed 200). */
     function wpc_crit_artifact_url($dir, $which)
     {
         $suf = ['delay' => '.delay.json', 'lcp' => '.lcp.json'];
@@ -897,7 +897,7 @@ if (!function_exists('wpc_crit_artifact_url')) {
     }
 }
 if (!function_exists('wpc_lcp_has_facts776')) {
-    
+    /** USABLE atf facts = an entry carrying stem+css_w in some leg (legged or flat). */
     function wpc_lcp_has_facts776($j)
     {
         if (!is_array($j) || !isset($j['atf_images']) || !is_array($j['atf_images'])) { return false; }
@@ -913,12 +913,12 @@ if (!function_exists('wpc_lcp_has_facts776')) {
     }
 }
 if (!function_exists('wpc_lcp_write_preserve781')) {
-    
-
-
-
-
-
+    /** THE ONLY lcp.json WRITER. Census facts live on the gen uuid, so a regen ships a
+     *  factless artifact and the pointer follows it — the sizes bake would flap off on
+     *  every regen until the next mint (up to a day on a 1/domain budget). Facts already
+     *  measured for THIS url survive: grafted onto the incoming body, marked inherited
+     *  (never laundered as native), age-bounded, and only ever when the incoming body
+     *  carries none of its own. Native facts always win. */
     function wpc_lcp_write_preserve781($dir, $body)
     {
         $dir = rtrim((string) $dir, '/') . '/';
@@ -957,10 +957,10 @@ if (!function_exists('wpc_lcp_write_preserve781')) {
     }
 }
 if (!function_exists('wpc_lcp_taint_pending776')) {
-    
-
-
-
+    /** On-disk lcp.json is a challenged taint with no census and no usable facts, <7d old
+     *  — the shape the in-place amend replaces. Shared by the recovery trigger AND the
+     *  traffic carrier's converged-gate: a caller that returns on "measured delay" must
+     *  still fall through while this is true. */
     function wpc_lcp_taint_pending776($dir)
     {
         if (!@is_readable($dir . 'lcp.json')) { return false; }
@@ -968,10 +968,10 @@ if (!function_exists('wpc_lcp_taint_pending776')) {
         if ($mt <= 0 || (time() - $mt) >= 7 * DAY_IN_SECONDS) { return false; }
         $j = json_decode((string) @file_get_contents($dir . 'lcp.json'), true);
         if (!is_array($j) || empty($j['nav_debug']['challenged'])) { return false; }
-        
-        
-        
-        
+        // A census whose facts were INHERITED (service carry-forward, v3.198.24: method
+        // "inherited", or per-leg census.legs{mobile|desktop}) is not this gen's own
+        // measurement — same standing as our own wpc_inherited marker, so it must not
+        // retire the refetch. Any single inherited leg keeps us converging.
         if (isset($j['census'])) {
             $wpc_inh784 = false;
             if (is_array($j['census'])) {
@@ -984,41 +984,41 @@ if (!function_exists('wpc_lcp_taint_pending776')) {
             }
             if (!$wpc_inh784) { return false; }
         }
-        
-        
+        // Inherited facts keep the bake armed but are NOT this gen's measurement — the
+        // refetch keeps trying for native ones until the mint (or carry-forward) lands.
         return !wpc_lcp_has_facts776($j) || !empty($j['wpc_inherited']);
     }
 }
 if (!function_exists('wpc_amend_delay_recovery')) {
-    
-
-
-
-
-
-
-
-
-
+    /** IN-PLACE AMENDMENT RECOVERY (Artifact Identity Contract 2026-07-22): the
+     *  service amends artifacts under a STABLE uuid — ceiling / lcp_preload /
+     *  schema_epoch land AFTER the initial crit, so a by-URL cache pins the pre-
+     *  amendment copy (busyprosai). While the on-disk delay.json is NOT measured-
+     *  shape, re-fetch it (meta-or-DERIVED URL) IGNORING write-once; overwrite ONLY
+     *  if the refetch IS measured-shape (never regress). Self-throttled ≤once/5min
+     *  per key; retires the instant it's measured. A land also re-pulls the amended
+     *  lcp.json (replace-on-200, never blanks a working hero). Extracted so BOTH the
+     *  cron/rail repull AND the cron-FREE traffic carrier (wpc_amend_traffic_enqueue,
+     *  post-response) run the exact same recovery. Returns true on a measured land. */
     function wpc_amend_delay_recovery($urlKey)
     {
         if ((string) $urlKey === '' || !defined('WPS_IC_CRITICAL') || !class_exists('wps_ic_js_delay_v3')
             || !apply_filters('wpc_delay_amend_refetch', true)
             || (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
-            return false; 
+            return false; // load gate: the refetch is blocking HTTP — yield to visitors when hot
         }
         $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
-        
-        
-        
-        
+        // A tainted lcp.json (challenged legs, facts withheld) is amended IN PLACE under the
+        // same uuid after gen completes — the write-once law pins the taint, and the delay
+        // measured-shape gate below never runs on a converged site. Re-fetch while the taint
+        // shape persists; replace only when the refetch carries facts. Never regress.
         if (apply_filters('wpc_lcp_taint_refetch', true)
             && !get_transient('wpc_amend_lj_' . md5((string) $urlKey))) {
             if (wpc_lcp_taint_pending776($dir)) {
                 set_transient('wpc_amend_lj_' . md5((string) $urlKey), 1, HOUR_IN_SECONDS);
                 $wpc_lju774 = wpc_crit_artifact_url($dir, 'lcp');
-                
-                
+                // Every exit journals: 'ran, got factless' and 'never ran' must never be
+                // the same silence again.
                 $wpc_miss779 = '';
                 if ($wpc_lju774 !== '' && preg_match('#^https?://#i', $wpc_lju774)) {
                     $wpc_ljr774 = wp_remote_get($wpc_lju774, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
@@ -1054,7 +1054,7 @@ if (!function_exists('wpc_amend_delay_recovery')) {
         }
         $wpc_djcur = json_decode((string) @file_get_contents($dir . 'delay.json'), true);
         if (wps_ic_js_delay_v3::wpc_delay_measured_shape($wpc_djcur)) {
-            return false; 
+            return false; // already measured — converged
         }
         set_transient('wpc_amend_dj_' . md5((string) $urlKey), 1, 300);
         $wpc_amu = wpc_crit_artifact_url($dir, 'delay');
@@ -1068,11 +1068,11 @@ if (!function_exists('wpc_amend_delay_recovery')) {
         $wpc_amb = wp_remote_retrieve_body($wpc_amr);
         $wpc_amj = json_decode((string) $wpc_amb, true);
         if (!wps_ic_js_delay_v3::wpc_delay_measured_shape($wpc_amj)) {
-            return false; 
+            return false; // never regress
         }
         wpc_crit_meta_write($dir . 'delay.json', $wpc_amb);
-        
-        
+        // Re-pull the amended lcp.json in the SAME pass (hero lcp_preload), replace-on-200
+        // only — a transient miss never blanks a working hero (never-blank law).
         $wpc_alu = wpc_crit_artifact_url($dir, 'lcp');
         if ($wpc_alu !== '') {
             $wpc_alr = wp_remote_get($wpc_alu, ['headers' => ['user-agent' => defined('WPS_IC_API_USERAGENT') ? WPS_IC_API_USERAGENT : ''], 'timeout' => 5]);
@@ -1102,8 +1102,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
 
     function wpc_lcp_repull_handler($urlKey, $attempt = 1)
     {
-        
-        
+        // .473: Safe Mode stands the DRAIN down too, not just admission — a cron event already
+        // in the row would otherwise run. Returns without rescheduling, so nothing accumulates.
         if (function_exists('wpc_bg_lane_allowed') && !wpc_bg_lane_allowed('wpc_lcp_repull')) {
             return;
         }
@@ -1111,10 +1111,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             return;
         }
         if (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($urlKey)) {
-            return; 
+            return; // junk url_key chain dies here, no reschedule
         }
-        
-        
+        // Breaker: when the backend is known-down every leg below times out (~70-90s of
+        // blocking HTTP per fire) — skip the whole chain, keep ONE bounded backstop.
         if (function_exists('wpc_gen_backoff_active') && wpc_gen_backoff_active()) {
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && (int) $attempt < 8 && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
@@ -1122,9 +1122,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             }
             return;
         }
-        
-        
-        
+        // Phase-0 load gate: the legs below are all blocking HTTP (status / v2-latest /
+        // artifact fetch), each holding a worker. On a hot box they must yield to
+        // visitors and retry when pressure clears — never pile onto an overloaded pool.
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && (int) $attempt < 8 && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
@@ -1132,10 +1132,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             }
             return;
         }
-        
-        
-        
-        
+        // Fleet-wide singleton: post-purge, N url-keys kick in parallel and each
+        // repull holds a worker 10-20s (artifact chain) — N of them drown a small
+        // FPM pool and every visitor queues (staging.wpcompress.com 60s+ receipt).
+        // One repull at a time; the skipped keys re-carry via probes/due-tick.
         if (get_transient('wpc_repull_mutex')) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('repull-mutex-skip', $urlKey, '', []);
@@ -1146,8 +1146,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
 
 
-        
-        
+        // DB-free landing: if crit is missing but the gen finished, the artifact is on Bunny
+        // CDN regardless of any service-DB outage — pull it by uuid, no /status needed.
         if (class_exists('wps_criticalCss')
             && !((int) @filesize($dir . 'critical_desktop.css') > 64 && (int) @filesize($dir . 'critical_mobile.css') > 64)) {
             try {
@@ -1196,10 +1196,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 if (!is_wp_error($wpc_rs) && (int) wp_remote_retrieve_response_code($wpc_rs) === 200) {
                     $wpc_rd = json_decode((string) wp_remote_retrieve_body($wpc_rs), true);
                     if (is_array($wpc_rd)) {
-                        
-                        
-                        
-                        
+                        // observation:ready|pending (service 3.77.1/.2) — status:success means the
+                        // CRIT finished, NOT the observation leg (delay/lcp/fonts land later). On
+                        // 'pending' keep retrying; NEVER conclude absence from a missing url (that
+                        // stranded busyprosai — polled 3s in, saw success + no delay_url, gave up).
                         if (($wpc_rd['observation'] ?? '') === 'pending'
                             && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                             && (int) $attempt < $wpc_max_att && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
@@ -1210,10 +1210,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         if (!@is_readable($dir . 'fonts_url.txt') && !empty($wpc_rd['fonts_url'])) { wpc_crit_meta_write($dir . 'fonts_url.txt', trim((string) $wpc_rd['fonts_url'])); }
                         if (!@is_readable($dir . 'prescriptions_url.txt') && !empty($wpc_rd['prescriptions_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['prescriptions_url']))) { wpc_crit_meta_write($dir . 'prescriptions_url.txt', trim((string) $wpc_rd['prescriptions_url'])); }
 
-                        
-                        
-                        
-                        
+                        // /status like fonts_url. Capture it + (if present) the content url + tpl_key, so the repull
+                        // leg below can land used.css even when the consolidated callback is dropped.
+                        // URL metas only ever hold real URLs — the service serializes null as
+                        // the literal 'None', which then shadows derivation forever downstream.
                         if (!@is_readable($dir . 'used_css_sheets_url.txt') && !empty($wpc_rd['used_css_sheets_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['used_css_sheets_url']))) { wpc_crit_meta_write($dir . 'used_css_sheets_url.txt', trim((string) $wpc_rd['used_css_sheets_url'])); }
                         if (!@is_readable($dir . 'used_css_url.txt') && !empty($wpc_rd['used_css_url']) && preg_match('#^https?://#i', trim((string) $wpc_rd['used_css_url']))) { wpc_crit_meta_write($dir . 'used_css_url.txt', trim((string) $wpc_rd['used_css_url'])); }
                         if (!@is_readable($dir . 'used_tpl.txt') && !empty($wpc_rd['tpl_key'])) {
@@ -1232,13 +1232,13 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
 
 
-        
+        // URL). The /status leg above needs uuid.txt — which a purge wipes with the dir, and whose
 
 
-        
-        
-        
-        
+        // Prescriptions only hold the /v2/latest gate open when the service has SIGNALLED
+        // they exist (presc_want.txt, webhook-written, ≤1h fresh) — otherwise a fleet that
+        // never emits prescriptions would poll /v2/latest forever (law 12: absent = prior
+        // behavior, so the leg must converge to zero once the standing artifacts land).
         $wpc_pwant356 = !@is_readable($dir . 'prescriptions_url.txt')
             && ($wpc_pwm356 = (int) @filemtime($dir . 'presc_want.txt')) > 0
             && (time() - $wpc_pwm356) < 3600;
@@ -1267,17 +1267,17 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     if (is_array($wpc_ld136) && !empty($wpc_ld136['ready'])
                         && !empty($wpc_ld136['artifacts']) && is_array($wpc_ld136['artifacts'])) {
                         $wpc_a136 = $wpc_ld136['artifacts'];
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
+                        // FRESH-GEN SUPERSEDES STALE WRITE-ONCE delay.json (the flip's gate).
+                        // delay.json/lcp.json are write-once, so a fresh gen never overwrites a
+                        // stale on-disk copy — busyprosai pinned an 18.9h-old, ceiling-less
+                        // delay.json while the pointer advanced, so the flip never fired despite
+                        // perfect fetches. When /v2/latest offers a delay/lcp URL that DIFFERS
+                        // from on-disk (or on-disk URL was purged away while the content stayed),
+                        // drop the stale pair so the loop below re-writes the fresh URL and the
+                        // content-fetch re-derives. Only on a real change with a replacement in
+                        // hand — never wipes bare. The mtime-vs-land heuristic (delay.json older
+                        // than the last crit land) catches the post-purge case where the URL is
+                        // gone but the content persists.
                         $wpc_land369 = (int) @file_get_contents($dir . 'land_ts.txt');
                         foreach (['delay' => 'delay_url.txt', 'lcp' => 'lcp_url.txt'] as $wpc_sk369 => $wpc_su369) {
                             if (empty($wpc_a136[$wpc_sk369]) || !is_string($wpc_a136[$wpc_sk369])) { continue; }
@@ -1286,8 +1286,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                             $wpc_cur369  = @is_readable($dir . $wpc_su369) ? trim((string) @file_get_contents($dir . $wpc_su369)) : '';
                             $wpc_cf369   = $wpc_sk369 === 'delay' ? 'delay.json' : 'lcp.json';
                             $wpc_cfmt369 = (int) @filemtime($dir . $wpc_cf369);
-                            $wpc_stale369 = ($wpc_cur369 !== '' && $wpc_fresh369 !== $wpc_cur369)              
-                                || ($wpc_cur369 === '' && @is_readable($dir . $wpc_cf369)                      
+                            $wpc_stale369 = ($wpc_cur369 !== '' && $wpc_fresh369 !== $wpc_cur369)              // URL advanced
+                                || ($wpc_cur369 === '' && @is_readable($dir . $wpc_cf369)                      // URL purged, content pinned
                                     && $wpc_land369 > 0 && $wpc_cfmt369 > 0 && $wpc_land369 - $wpc_cfmt369 > 60);
                             if ($wpc_stale369) {
                                 @unlink($dir . $wpc_su369);
@@ -1311,8 +1311,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         }
 
 
-                        
-                        
+                        // Contract delta 2: prescriptions + used_css (union) ride artifacts{}
+                        // directly — THE delivery channel; shelf paths are never derived.
                         foreach (['prescriptions' => 'prescriptions_url.txt', 'used_css' => 'used_css_url.txt'] as $wpc_nk356 => $wpc_np356) {
                             if (!@is_readable($dir . $wpc_np356) && !empty($wpc_a136[$wpc_nk356]) && is_string($wpc_a136[$wpc_nk356])
                                 && preg_match('#^https?://#i', trim((string) $wpc_a136[$wpc_nk356]))) {
@@ -1321,8 +1321,8 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                         }
 
 
-                        
-                        
+                        // §6 near_expiry: >13d of 14d retention — regen beats pulling
+                        // about-to-expire URLs; fail-open handled inside the helper.
                         if (!empty($wpc_ld136['near_expiry']) && function_exists('wpc_near_expiry_regen')) {
                             wpc_near_expiry_regen((string) $urlKey);
                         }
@@ -1390,16 +1390,16 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
 
 
-        
-        
+        // In-place amendment recovery (Artifact Identity Contract) — extracted so the
+        // cron/rail repull AND the cron-free traffic carrier share one implementation.
         wpc_amend_delay_recovery($urlKey);
 
-        
-        
-        
-        
-        
-        
+        // Self-heal the promotion kill-switch (BACKGROUND, not render path): a
+        // measured delay.json on disk means the aggressive flip is valid, but
+        // manifest_off (set by an old promoted-script ReferenceError) is cleared
+        // only on the write-once delay.json WRITE above — so a stale switch froze
+        // the flip forever once delay.json existed (busyprosai's 2h stall). Clear
+        // it here whenever a measured gen is confirmed present.
         if (get_option('wpc_delay_v3_manifest_off') && @is_readable($dir . 'delay.json') && class_exists('wps_ic_js_delay_v3')) {
             $wpc_djh366 = json_decode((string) @file_get_contents($dir . 'delay.json'), true);
             if (wps_ic_js_delay_v3::wpc_delay_measured_shape($wpc_djh366)) {
@@ -1420,40 +1420,40 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
             }
         }
-        
-        
+        // Poll-#2 due-tick rides this handler — which the loopback KICK lane runs on
+        // real traffic, so the post-verdict re-pull lands even where cron never fires.
         if (function_exists('wpc_presc_due_tick')) {
             wpc_presc_due_tick($urlKey);
         }
-        
-        
-        
+        // §10 TTFB actuation rides the same background lane: once delay.json (with its
+        // ceiling{}) is on disk, a measured recoverable origin-TTFB arms the static serve.
+        // Fully gated + hourly-throttled + self-test-rolled-back inside — safe to call here.
         if (@is_readable($dir . 'delay.json') && function_exists('wpc_ttfb_maybe_arm_static_serve')) {
             wpc_ttfb_maybe_arm_static_serve($urlKey);
         }
 
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // fonts_none.txt = fail-open sentinel: "no fonts to subset" is provable,
+        // not inferred (law 12). Without it a 404/empty fonts.json re-fetched on
+        // every kick forever (busyprosai: atf_faces:0 cross-origin Google Fonts →
+        // 3x/2x/2x per uuid). Service v3.75.4 now emits an empty array; this belt
+        // covers pre-.4 gens + any genuine 404, and converges the repull loop.
+        // v7.10.485 — fonts_none.txt MUST be revisitable. It is written on "200 + empty", but the
+        // service's fast-emit writes fonts.json ASYNCHRONOUSLY, so an early read sees [] before the
+        // subsets exist. That is "not yet", not "provably none" — and the sentinel was permanent.
+        // zinsenvergleich receipt: fonts_none.txt AND fonts_url.txt both present, four subsets
+        // uploaded and fetchable, font-subsets.css ABSENT, every gate withheld for want of a pair.
+        // A NEWER fonts_url.txt is proof a later gen supplied fonts after we concluded none, so the
+        // conclusion is stale by construction. Clearing it only re-opens the fetch; the fail-open
+        // sentinel is rewritten if the artifact really is empty.
         $wpc_fn485 = (int) @filemtime($dir . 'fonts_none.txt');
         $wpc_fu485 = (int) @filemtime($dir . 'fonts_url.txt');
-        
-        
-        
-        
-        
-        
+        // v7.10.487 — KEY THE REVISIT ON THE GEN, NOT ON fonts_url.txt. .485 required a newer
+        // fonts_url.txt, but a land can DELETE that file while leaving the sentinel: zinsenvergleich
+        // ended with fonts_none.txt present and fonts_url.txt absent, and the fetch gate below
+        // REQUIRES fonts_url.txt — so both the fetch and the revisit were dead permanently. The
+        // sentinel is a statement about ONE gen; any newer gen makes it non-authoritative whether or
+        // not the url file survived. land_ts/crit mtime is the gen clock and is always present.
         $wpc_gen487 = max((int) @filemtime($dir . 'land_ts.txt'), (int) @filemtime($dir . 'critical_desktop.css'));
         if ($wpc_fn485 > 0 && apply_filters('wpc_fonts_none_revisit', true)
             && ($wpc_fu485 > $wpc_fn485 || $wpc_gen487 > $wpc_fn485)) {
@@ -1466,9 +1466,9 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 ]);
             }
         }
-        
-        
-        
+        // .487: if a land deleted fonts_url.txt we can still derive it from the gen uuid — the
+        // same two-owner derivation .486 uses. Without this the gate is unreachable on exactly the
+        // sites whose land dropped the pointer.
         if (!@is_readable($dir . 'fonts_url.txt') && @is_readable($dir . 'uuid.txt')
             && apply_filters('wpc_fonts_url_derive', true)) {
             $wpc_du487 = preg_replace('/[^0-9a-fA-F-]/', '', trim((string) @file_get_contents($dir . 'uuid.txt')));
@@ -1504,17 +1504,17 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                     if ($wpc_frc === 200) {
                         $wpc_fj = json_decode((string) wp_remote_retrieve_body($wpc_fr), true);
                         $wpc_fa = (is_array($wpc_fj) && !empty($wpc_fj['fonts']) && is_array($wpc_fj['fonts'])) ? $wpc_fj['fonts'] : (is_array($wpc_fj) ? $wpc_fj : []);
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
-                        
+                        // v7.10.486 — TWO OWNERS, ONE ARTIFACT. fonts.json has two possible homes:
+                        // the crit-time fast-emit writes it under the GEN uuid, while /status
+                        // advertises fonts_url under the OBS uuid. On a fresh observation they are
+                        // the same; on a TEMPLATE-CACHE HIT they diverge and the fast-emit's copy —
+                        // the icon-complete one — is never advertised. zinsenvergleich: gen 45891209
+                        // carried 4 icon entries / 16,884b while the advertised a3059372 copy was a
+                        // genuine computed-empty. We followed a correct instruction to the wrong file.
+                        // So: when the advertised url names a DIFFERENT uuid than the gen on disk,
+                        // try the gen-uuid sibling and prefer whichever actually has entries. Costs
+                        // one bounded GET only when the uuids disagree AND the advertised copy is
+                        // empty, and it converges to a no-op once the resolver points at the gen.
                         if (empty($wpc_fa) && apply_filters('wpc_fonts_gen_uuid_fallback', true)) {
                             $wpc_gu486 = @is_readable($dir . 'uuid.txt')
                                 ? trim((string) @file_get_contents($dir . 'uuid.txt')) : '';
@@ -1550,12 +1550,12 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                                 function_exists('wpc_land_purge_coalesced') ? wpc_land_purge_coalesced($urlKey, '', 'fonts-subset-land') : wps_ic_cache_integrations::purgeUrlHtml($urlKey, '', ['context' => 'fonts-subset-land']);
                             }
                         } elseif (!empty($wpc_fj['fonts_computed']) || array_key_exists('fonts_computed', (array) $wpc_fj)) {
-                            
+                            // .485: only an EXPLICIT computed-and-empty statement proves absence.
                             wpc_crit_meta_write($dir . 'fonts_none.txt', '1');
                         } else {
-                            
-                            
-                            
+                            // Empty with no statement = ambiguous (async emit may not have written
+                            // yet). Write the sentinel so we do not hammer, but a later fonts_url.txt
+                            // re-opens it via the revisit above.
                             wpc_crit_meta_write($dir . 'fonts_none.txt', '1');
                             if (function_exists('wpc_cache_first_log')) {
                                 wpc_cache_first_log('fonts-none-ambiguous', (string) $urlKey, '',
@@ -1563,7 +1563,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                             }
                         }
                     } elseif ($wpc_frc === 404 || $wpc_frc === 410) {
-                        wpc_crit_meta_write($dir . 'fonts_none.txt', '1'); 
+                        wpc_crit_meta_write($dir . 'fonts_none.txt', '1'); // definitive absence = fail-open, stop re-fetching
                     }
                 }
 
@@ -1584,14 +1584,14 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         }
 
 
-        
-        
-        
-        
+        // .466: neither crit-dir pointer is required any more. The template-stale cleanup
+        // deletes both while leaving the bundle in place, which made this branch — the ONLY
+        // path that refreshes a used-css bundle or rebuilds its siblings — unreachable for
+        // good. Fall back to the tpl_key on disk and to the URL remembered beside the bundle.
         if ($wpc_ucss_on && function_exists('wpc_used_css_fetch') && function_exists('wpc_used_css_path')) {
             $wpc_uu = @is_readable($dir . 'used_css_url.txt')
                 ? trim((string) @file_get_contents($dir . 'used_css_url.txt')) : '';
-            if ($wpc_uu !== '' && !preg_match('#^https?://#i', $wpc_uu)) { $wpc_uu = ''; } 
+            if ($wpc_uu !== '' && !preg_match('#^https?://#i', $wpc_uu)) { $wpc_uu = ''; } // 'None'-class meta
             $wpc_ut = @is_readable($dir . 'used_tpl.txt')
                 ? trim((string) @file_get_contents($dir . 'used_tpl.txt')) : '';
             if ($wpc_ut === '') {
@@ -1605,12 +1605,22 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 }
             }
             $wpc_up = wpc_used_css_path($wpc_ut);
-            
+            // store-hit is cheap inside fetch — and it's where split siblings arm
             if ($wpc_uu !== '' && $wpc_up !== '') {
-                if (!wpc_used_css_fetch($wpc_uu, $wpc_ut) && (int) $attempt < $wpc_max_att
-                    && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
-                    && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
-                    wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
+                $wpc_uwhy19 = '';
+                if (!wpc_used_css_fetch($wpc_uu, $wpc_ut, '', $wpc_uwhy19)) {
+                    // A 404 that survived the first backoff step is an EXPIRED artifact, not a
+                    // slow one — ask for a regen instead of only sleeping longer (v3.198.68).
+                    if (strpos($wpc_uwhy19, 'http:404') === 0
+                        && (int) get_transient('wpc_ucss404_' . md5((string) $wpc_uu) . '_n') >= 2
+                        && function_exists('wpc_used_css_expired_dispatch19')) {
+                        wpc_used_css_expired_dispatch19($urlKey, $wpc_uwhy19);
+                    }
+                    if ((int) $attempt < $wpc_max_att
+                        && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                        && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
+                        wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
+                    }
                 }
             }
         }
@@ -1622,7 +1632,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
                 $wpc_uf18 = $dir . 'used_css_' . $wpc_dv18b . '_url.txt';
                 if (!@is_readable($wpc_uf18)) { continue; }
                 $wpc_du18 = trim((string) @file_get_contents($wpc_uf18));
-                if ($wpc_du18 !== '' && !preg_match('#^https?://#i', $wpc_du18)) { $wpc_du18 = ''; } 
+                if ($wpc_du18 !== '' && !preg_match('#^https?://#i', $wpc_du18)) { $wpc_du18 = ''; } // 'None'-class meta
                 $wpc_dp18 = $wpc_ut18 !== '' ? wpc_used_css_path($wpc_ut18, $wpc_dv18b) : '';
                 if ($wpc_du18 !== '' && $wpc_dp18 !== '') {
                     wpc_used_css_fetch($wpc_du18, $wpc_ut18, $wpc_dv18b);
@@ -1653,7 +1663,7 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         if ($wpc_ucss_on && function_exists('wpc_used_css_store_sheets') && function_exists('wpc_used_css_sheets_path')
             && @is_readable($dir . 'used_css_sheets_url.txt') && @is_readable($dir . 'used_tpl.txt')) {
             $wpc_su2 = trim((string) @file_get_contents($dir . 'used_css_sheets_url.txt'));
-            if ($wpc_su2 !== '' && !preg_match('#^https?://#i', $wpc_su2)) { $wpc_su2 = ''; } 
+            if ($wpc_su2 !== '' && !preg_match('#^https?://#i', $wpc_su2)) { $wpc_su2 = ''; } // 'None'-class meta
             $wpc_st2 = trim((string) @file_get_contents($dir . 'used_tpl.txt'));
             $wpc_sp2 = wpc_used_css_sheets_path($wpc_st2);
             if ($wpc_su2 !== '' && $wpc_sp2 !== '' && !@is_readable($wpc_sp2)) {
@@ -1668,15 +1678,15 @@ if (!function_exists('wpc_lcp_repull_handler')) {
         if (@is_readable($dir . 'lcp.json')) {
             return;
         }
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // lcp_none = fail-open back-off (mirrors fonts_none). Since .371 the lcp URL
+        // is DERIVED from uuid when unadvertised — but many sites have no distinct
+        // lcp.json (no img-hero preload), so an unbounded derive→404 would re-hit
+        // origin on every repull. A definitive 404/410 writes this sentinel; the
+        // read below backs off for a TTL (self-heals if the service emits it later)
+        // and it's cleared on a fresh measured gen (delay-supersede / amend-land)
+        // for prompt re-check. NOTE: NO equivalent for delay.json — a delay 404 is
+        // "gen not ready yet" (must keep retrying) and amendments land at the SAME
+        // uuid, so a delay sentinel would wrongly suppress recovery.
         if (($wpc_lnm = (int) @filemtime($dir . 'lcp_none.txt')) > 0
             && (time() - $wpc_lnm) < (int) apply_filters('wpc_lcp_none_ttl', 3600)) {
             return;
@@ -1707,10 +1717,10 @@ if (!function_exists('wpc_lcp_repull_handler')) {
             }
         }
         if ($wpc_lcode === 404 || $wpc_lcode === 410) {
-            wpc_crit_meta_write($dir . 'lcp_none.txt', '1'); 
+            wpc_crit_meta_write($dir . 'lcp_none.txt', '1'); // provable absence → back off (TTL); no reschedule
             return;
         }
-        
+        // Transient (timeout / 5xx / invalid body) → bounded retry (~3 min), then give up silently.
         if ((int) $attempt < $wpc_max_att && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
             && !wp_next_scheduled('wpc_lcp_repull', [$urlKey, (int) $attempt + 1])) {
             wpc_pl_sched(time() + 45, 'wpc_lcp_repull', [$urlKey, (int) $attempt + 1]);
@@ -1721,18 +1731,18 @@ if (!function_exists('wpc_lcp_repull_handler')) {
 
 
 if (!function_exists('wpc_amend_traffic_enqueue')) {
-    
-
-
-
-
-
-
-
-
-
-
-
+    /** CRON-FREE CONVERGENCE. The recovery rides wpc_lcp_repull, only ENQUEUED on
+     *  gen/purge/land — so a steady-state stuck page (crit present, delay.json stale)
+     *  with DISABLE_WP_CRON / a dead crontab / no active regen never self-heals (the
+     *  rail is flag-gated OFF by default, so an enqueue degrades to WP-Cron). This
+     *  makes a stuck front-end page run its OWN recovery on TRAFFIC, INLINE and
+     *  POST-RESPONSE (fastcgi_finish_request first → visitor waits 0ms) — the only
+     *  carrier that needs neither cron, rail, nor loopback. Bounded: only WPC pages
+     *  (crit dir present) NOT yet measured; the check is filesystem-throttled
+     *  once/5min per key (amend_tick.txt — no transient bloat at 100k scale) and the
+     *  recovery self-throttles via its own 5min transient, so the post-response
+     *  worker-hold is one ~29KB fetch, rare (contention doctrine: worker-accounted).
+     *  A cron/rail enqueue rides along as a backstop for the fuller repull work. */
     function wpc_amend_traffic_enqueue()
     {
         try {
@@ -1754,26 +1764,26 @@ if (!function_exists('wpc_amend_traffic_enqueue')) {
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/';
             if (!@is_readable($dir . 'critical_desktop.css')) {
-                return; 
+                return; // not a WPC-managed/crit page — nothing to recover
             }
             $tick = $dir . 'amend_tick.txt';
             if (($m = (int) @filemtime($tick)) > 0 && (time() - $m) < (int) apply_filters('wpc_amend_tick_ttl', 300)) {
-                return; 
+                return; // filesystem throttle — checked recently, no DB writes
             }
             @touch($tick);
             $dj = @is_readable($dir . 'delay.json') ? json_decode((string) @file_get_contents($dir . 'delay.json'), true) : null;
             if (is_array($dj) && wps_ic_js_delay_v3::wpc_delay_measured_shape($dj)
                 && !(function_exists('wpc_lcp_taint_pending776') && wpc_lcp_taint_pending776($dir))) {
-                return; 
+                return; // measured AND no lcp taint pending — converged, nothing to do
             }
-            
-            
-            
-            
-            
-            
-            
-            
+            // Stuck → run the recovery INLINE, POST-RESPONSE. This is the only carrier
+            // that works with DISABLE_WP_CRON + a dead crontab (the rail is flag-gated
+            // OFF by default, so wpc_pl_sched degrades to WP-Cron there). Flush the
+            // response FIRST so the visitor waits 0ms; the recovery is one ~29KB fetch
+            // (+lcp), self-throttled ≤once/5min per key and mutex-bounded, so the post-
+            // response worker-hold is tiny and rare (contention doctrine: worker-
+            // accounted). The cron/rail enqueue rides along as a backstop for the
+            // FULLER repull work (status / v2-latest / used-css), no-op-cheap when dead.
             if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
             elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
             if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
@@ -1789,15 +1799,15 @@ if (!function_exists('wpc_amend_traffic_enqueue')) {
 
 
 if (!function_exists('wpc_used_css_key_valid')) {
-    
+    /** Exactly the identity the plugin itself mints in wpc_compute_tpl_key(). */
     function wpc_used_css_key_valid($tplKey)
     {
         return is_string($tplKey) && (bool) preg_match('/^tpl:[0-9a-f]{16}$/', $tplKey);
     }
 }
 if (!function_exists('wpc_used_css_zoneify')) {
-    
-
+    /** Origin-host image url()s inside a stored used.css bypass every HTML rewriter —
+     *  point them at the zone so the edge serves sized/next-gen bytes. */
     function wpc_used_css_zoneify($css)
     {
         try {
@@ -1882,34 +1892,34 @@ if (!function_exists('wpc_used_css_path')) {
         $j = json_decode((string) @file_get_contents($p), true);
         return is_array($j) ? $j : [];
     }
-    
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
+    /**
+     * v7.10.464 — identity of the artifact revision a DERIVED sibling was built from.
+     * The used-css path is keyed on tpl_key alone, which does not move when the template
+     * is unchanged, so a new artifact with the same tpl_key produced no new cache key, no
+     * rebuild, and the old .atf.css served indefinitely (busy: service pruned to 0 orphaned
+     * keyframes, the wire kept 561). Same class as the .429 remote_range freeze: the map
+     * updated, the file it feeds was frozen.
+     * The union's CONTENT is the faithful basis — union and split come from the same gen —
+     * so the sibling carries a stamp of it and rebuilds when it moves. Stamp-and-compare
+     * rather than a new filename: nothing orphans on disk and an unchanged bundle is stable.
+     */
+    /**
+     * v7.10.466 — the artifact URL, persisted BESIDE the bundle it built.
+     * The crit-dir pointers (used_css_url.txt / used_tpl.txt) are deleted by the
+     * template-stale cleanup, which does NOT delete the derived bundle — so the files
+     * outlive the pointer needed to refresh them and the refresh path becomes permanently
+     * unreachable (busy: siblings correctly read STALE, nothing could ever act on it, and
+     * uuid.txt was gone too so /status recovery could not re-land the pointer either).
+     * Keyed by tpl_key in the used-css dir, so a crit-dir wipe cannot orphan it.
+     */
+    /**
+     * v7.10.470 — parse a service tri-state WITHOUT ever testing truthiness.
+     * The service pinned the JS trap ('0' is truthy there); PHP has the mirror image —
+     * the string "false" is TRUTHY here, so !empty($v) on an echoed boolean reads a
+     * decline as an accept. Anything unrecognised is UNKNOWN (-1), never a silent 1:
+     * a defaulting field is the bug this whole contract exists to remove.
+     * Returns 1 = true, 0 = false, -1 = unknown/absent.
+     */
     function wpc_tri_bool($v)
     {
         if ($v === null) { return -1; }
@@ -1922,26 +1932,26 @@ if (!function_exists('wpc_used_css_path')) {
         if (in_array($s, ['0', 'false', 'no', 'off'], true)) { return 0; }
         return -1;
     }
-    
-
-
-
-
+    /**
+     * Record the service's used-css echo (v3.109.0: used_css_requested + used_css_known).
+     * Without this the two failure modes the service just made distinguishable — "asked and
+     * got nothing" vs "never asked" — arrive and vanish. One non-autoload option, latest wins.
+     */
     function wpc_used_css_echo_note($src, $arr)
     {
         if (!is_array($arr)) { return false; }
-        
-        
+        // The echo arrives as used_css_requested (the ask) on the callback and as used_css (the
+        // durable column) on /status — accept either rather than guess which branch we are on.
         $raw = null;
         foreach (['used_css_requested', 'used_css'] as $wpc_ek471) {
             if (array_key_exists($wpc_ek471, $arr)) { $raw = $arr[$wpc_ek471]; break; }
         }
-        if ($raw === null) { return false; } 
+        if ($raw === null) { return false; } // pre-v3.109 payload — nothing echoed at all
         $req = wpc_tri_bool($raw);
-        
-        
-        
-        
+        // INVERTED BY DESIGN: used_css_known is a MARKER meaning "we cannot speak for this row".
+        // Its ABSENCE means the value IS known — "a known zero carries no such marker" (service
+        // v3.109.0). Reading absence as unknown, which .470 did, reports every genuine decline as
+        // unknown and throws away the whole point of the field.
         $kn = array_key_exists('used_css_known', $arr)
             ? (wpc_tri_bool($arr['used_css_known']) === 0 ? 0 : 1)
             : 1;
@@ -1960,25 +1970,25 @@ if (!function_exists('wpc_used_css_path')) {
     }
     function wpc_used_css_url_path($tplKey, $device = '')
     {
-        
-        
-        
-        
-        
-        
+        // v7.10.475 — DEVICE-SCOPED, mirroring wpc_used_css_path(). .466 keyed the pointer on
+        // tplKey alone while the bundles are per-device, so union -> mobile -> desktop each
+        // remembered in turn and the LAST one won: zinsenvergleich stored the desktop URL as the
+        // union's pointer. A refresh would then have fetched the desktop bundle into the union
+        // slot, and .469's demand gate trusts exactly this pointer. Union keeps the original
+        // filename, so pointers written by .466 stay valid for the union.
         $p = wpc_used_css_path($tplKey, $device);
         return $p === '' ? '' : (string) preg_replace('/\.css$/', '.url.txt', $p);
     }
-    
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.471 — a pointer EARNS trust by working; presence alone is not proof.
+     * Service /status advertises used_css_url unconditionally under wantsObservation (their
+     * deliberate v3.33.13 fail-open), so a used_css:0 gen ships a locator that 404s and always
+     * will. Remembering that as authoritative would let .469's demand gate see "a pointer
+     * exists, we can refresh ourselves", suppress the demand, and RE-CREATE the fossil deadlock
+     * with a pointer that can never fetch — strictly worse than the bug it replaced.
+     * So the file is two lines: the candidate URL, and 'ok' once a fetch through it succeeded.
+     * Only a VERIFIED pointer may suppress the demand.
+     */
     function wpc_used_css_url_remember($tplKey, $url, $verified = false, $device = '')
     {
         $p = wpc_used_css_url_path($tplKey, $device);
@@ -1989,7 +1999,7 @@ if (!function_exists('wpc_used_css_path')) {
         $cur = @is_readable($p) ? (string) @file_get_contents($p) : '';
         $curU = trim((string) strtok($cur, "\n"));
         $curOk = (strpos($cur, "\nok") !== false);
-        
+        // Never DOWNGRADE a verified pointer for the same URL to unverified.
         if ($curU === $url && ($curOk || !$verified)) { return true; }
         if (!is_dir(dirname($p))) { @wp_mkdir_p(dirname($p)); }
         return (wpc_crit_meta_write($p, $url . ($verified ? "\nok" : '')) !== false);
@@ -2008,14 +2018,14 @@ if (!function_exists('wpc_used_css_path')) {
         $c = (string) @file_get_contents($p);
         return (preg_match('#^https?://#i', trim((string) strtok($c, "\n"))) && strpos($c, "\nok") !== false);
     }
-    
-
-
-
-
-
-
-
+    /**
+     * v7.10.828 — THE PIN IS A DECLARATION: a used-css bundle serving a page with builder
+     * conceal markers must DECLARE the dynamic-state safelist (service v3.198.60 stamps
+     * `wpc-safelist:v1` into union/atf/rest heads). An unstamped bundle on such a page is the
+     * pre-safelist artifact class that kept .et-waypoint{opacity:0} while pruning every
+     * .et-animated reveal — consumption refuses, full sheets serve (correct, slightly
+     * slower), and the next gen lands stamped.
+     */
     function wpc_used_css_stamped828($path)
     {
         $wpc_h828 = (string) @file_get_contents((string) $path, false, null, 0, 240);
@@ -2038,6 +2048,47 @@ if (!function_exists('wpc_used_css_path')) {
         return ($head !== '' && strpos($head, wpc_used_css_stamp($basis)) !== false);
     }
 }
+if (!function_exists('wpc_used_css_expired_dispatch19')) {
+    /**
+     * v7.20.19 — AN EXPIRED ARTIFACT NEEDS A DISPATCH, NOT A LONGER SLEEP. Service finding
+     * (crit-push v3.198.68): object sets expire at 14 days, and the pointer resolver kept
+     * advertising ready=1 rows whose objects had aged out — 18,736 rows across 591 sites.
+     * The .18 escalating backoff alone would have made those sites heal SLOWER, because
+     * nothing else asks for a regen. Past the first escalation (or on an explicit
+     * expired:true from the resolver) we schedule one regen for this template and let the
+     * normal land path take over. Throttled per url-key at the service's 30-min debounce
+     * cap so a fleet of pages cannot herd.
+     */
+    function wpc_used_css_expired_dispatch19($urlKey, $why = '404')
+    {
+        $urlKey = ltrim((string) $urlKey, '/');
+        if ($urlKey === '' || !apply_filters('wpc_used_css_expired_dispatch', true)) {
+            return false;
+        }
+        $bk = 'wpc_ucss_redisp_' . md5($urlKey);
+        if (function_exists('get_transient') && get_transient($bk)) {
+            return false;
+        }
+        if (function_exists('set_transient')) {
+            set_transient($bk, 1, (int) apply_filters('wpc_used_css_expired_dispatch_ttl', 1800));
+        }
+        if (function_exists('wp_next_scheduled') && function_exists('wpc_pl_sched')
+            && !wp_next_scheduled('wpc_crit_redispatch', [$urlKey])) {
+            wpc_pl_sched(time() + 20, 'wpc_crit_redispatch', [$urlKey]);
+            if (function_exists('wpc_spawn_cron')) {
+                wpc_spawn_cron();
+            }
+        }
+        if (function_exists('wpc_crit_collector_arm')) {
+            wpc_crit_collector_arm($urlKey);
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('ucss-expired-dispatch', $urlKey, '', ['why' => (string) $why]);
+        }
+        return true;
+    }
+}
+
 if (!function_exists('wpc_used_css_fetch')) {
 
     function wpc_used_css_fetch($url, $tplKey, $device = '', &$wpc_why341 = null)
@@ -2048,29 +2099,29 @@ if (!function_exists('wpc_used_css_fetch')) {
             $wpc_why341 = $path === '' ? 'bad-tpl-path' : 'empty-url';
             return false;
         }
-        
-        
-        
+        // Remember the URL BEFORE any gate — including the store-hit path — so an already
+        // stored bundle gains a durable pointer on the first run after upgrade rather than
+        // only on the next fetch.
         if (function_exists('wpc_used_css_url_remember')) {
             wpc_used_css_url_remember($tplKey, $url, false, $device);
         }
         if (@is_readable($path) && @filesize($path) > 5) {
-            
-            
-            
-            
-            
-            
-            
-            
+            // One-shot refresh: stores from before the service pageTokens repair can lack
+            // hidden-element state rules — re-pull the current bundle once per artifact.
+            // NEVER unlink first: the fetch below writes temp+rename (atomic), so a 404
+            // leaves the existing good file intact. Just fall through to force the refetch.
+            // .464: keyed on md5($path) alone with a 30-DAY ttl, this gate made the union
+            // permanent — same path for a new artifact, transient already set, never refetched.
+            // Fold the artifact URL in (invalidates outright if the service versions it) and
+            // bound the ttl so the union self-heals regardless.
             $wpc_rk464 = 'wpc_ucsr266_' . md5($path . '|' . $url);
             if (!get_transient($wpc_rk464)) {
                 set_transient($wpc_rk464, 1, (int) apply_filters('wpc_used_css_refresh_ttl', 3 * DAY_IN_SECONDS));
             } else {
-                
-                
-                
-                
+                // Union already stored — arm the split siblings once per window (they appear
+                // only on gens ≥ v3.56.0, so absence is normal and must not hammer). The arm
+                // condition is the union BASIS, not mere presence: an .atf.css built from an
+                // older union must rebuild, which "absent" never detected.
                 $wpc_atf464 = (string) preg_replace('/\.css$/', '.atf.css', $path);
                 $wpc_bas464 = wpc_used_css_basis($path);
                 $wpc_sk464  = 'wpc_ucsp_' . md5($path . '|' . $wpc_bas464);
@@ -2098,14 +2149,14 @@ if (!function_exists('wpc_used_css_fetch')) {
         };
 
 
-        
-        
-        
+        // Artifacts can be amended IN PLACE on the same uuid/URL — an un-busted GET gets
+        // Bunny's stale edge copy (hawkeye receipt: corrected bytes on origin, old order
+        // served). Every real fetch busts; the one-shot gates already bound frequency.
         $wpc_bust336 = (strpos($url, '?') === false ? '?' : '&') . 't=' . time();
-
-
-
-
+// v7.10.550 — the service advertises used_css_*_url unconditionally on one /status
+// branch while the sibling branch HEAD-probes first, so a URL can be published for an
+// object that was never uploaded. We treated the advertisement as proof and re-probed
+// on EVERY land. Remember a 404 briefly: presence must be proven, not announced.
 $wpc_nk550 = 'wpc_ucss404_' . md5((string) $url);
 if (function_exists('get_transient') && get_transient($wpc_nk550)) {
     return false;
@@ -2114,7 +2165,19 @@ if (function_exists('get_transient') && get_transient($wpc_nk550)) {
         if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
             if (!is_wp_error($resp) && (int) wp_remote_retrieve_response_code($resp) === 404
                 && function_exists('set_transient')) {
-                set_transient($wpc_nk550, 1, (int) apply_filters('wpc_used_css_404_ttl', 900));
+                // A URL the service advertised but never uploaded 404s forever; a flat 15-min
+                // memory re-probes it ~100x/day per device and starves the budget (customer
+                // receipt: 45 fetch failures + 94 budget-deferred per HOUR). Escalate per URL:
+                // 15m -> 1h -> 6h -> 24h cap; any 200 lands the bundle and retires the counter.
+                $wpc_na18 = (int) get_transient($wpc_nk550 . '_n') + 1;
+                set_transient($wpc_nk550 . '_n', $wpc_na18, 7 * DAY_IN_SECONDS);
+                $wpc_lad18 = [900, 3600, 21600, 86400];
+                $wpc_ttl18 = $wpc_lad18[min($wpc_na18, 4) - 1];
+                set_transient($wpc_nk550, 1, (int) apply_filters('wpc_used_css_404_ttl', $wpc_ttl18));
+                // v7.20.19 — site-wide "the stylesheet is not coming" flag. The conceal guard
+                // hides real UI until the used-css link releases it; while the fetch is known to
+                // be failing the guard must concede at once instead of hiding navigation.
+                set_transient('wpc_ucss_failing', 1, (int) $wpc_ttl18);
             }
             $wpc_ucf_log('http', ['code' => is_wp_error($resp) ? ('err:' . $resp->get_error_code()) : (int) wp_remote_retrieve_response_code($resp)]);
             return false;
@@ -2126,7 +2189,7 @@ if (function_exists('get_transient') && get_transient($wpc_nk550)) {
         }
         if (preg_match('/<(?:html|body|head|!doctype)\b/i', substr($body, 0, 4096))) {
             $wpc_ucf_log('html', ['head' => substr(preg_replace('/\s+/', ' ', $body), 0, 50)]);
-            return false; 
+            return false; // HTML (error/redirect page) — never store as CSS
         }
         $body = wpc_used_css_process_body($body);
         $dir = dirname($path);
@@ -2148,7 +2211,8 @@ if (function_exists('get_transient') && get_transient($wpc_nk550)) {
             return false;
         }
         $wpc_ucf_log('ok', ['bytes' => strlen($body)]);
-        
+        if (function_exists('delete_transient')) { delete_transient($wpc_nk550 . '_n'); delete_transient('wpc_ucss_failing'); }
+        // The fetch went through, so this locator is real — promote it to verified (.471).
         if (function_exists('wpc_used_css_url_remember')) {
             wpc_used_css_url_remember($tplKey, $url, true, $device);
         }
@@ -2159,14 +2223,14 @@ if (function_exists('get_transient') && get_transient($wpc_nk550)) {
     }
 }
 if (!function_exists('wpc_used_css_process_body')) {
-    
-
-
-
-
-
-
-
+    /**
+     * v7.10.394 embed-document leak belt: collector rules sourced from iframe embeds
+     * (vimeo/youtube players) carry html/body{overflow:hidden} — correct inside the
+     * embed's OWN document, a page-wide scroll lock when unioned into ours (busy
+     * receipt: tpl-781b8d54b6c778d9.desktop.atf.css, "source: player.vimeo.com").
+     * Strip overflow:hidden from any rule whose selector list hits BARE html/body;
+     * class-scoped locks (.modal-open body) are legitimate and pass through.
+     */
     function wpc_used_css_embed_leak_belt($body)
     {
         if (!is_string($body) || $body === '' || stripos($body, 'overflow') === false) {
@@ -2183,7 +2247,7 @@ if (!function_exists('wpc_used_css_process_body')) {
         }, $body);
         return is_string($out) ? $out : $body;
     }
-    
+    /** One-shot heal of already-landed artifacts (the belt covers future fetches). */
     function wpc_used_css_disk_resanitize()
     {
         if (get_option('wpc_ucss_resan394') || !defined('WPS_IC_CRITICAL')) { return; }
@@ -2200,15 +2264,15 @@ if (!function_exists('wpc_used_css_process_body')) {
             }
         }
     }
-    
+    /** Shared post-fetch pipeline for every stored used-css body (union, atf, rest). */
     function wpc_used_css_process_body($body)
     {
         $body = wpc_used_css_embed_leak_belt($body);
         if (function_exists('wpc_css_insert_fallbacks')) {
             $body = wpc_css_insert_fallbacks($body);
         }
-        
-        
+        // Faces inside the used bundle bypass the font emitters — bake the effective
+        // display here (strip-then-set; a later declaration would win a bare prepend).
         if (is_string($body) && stripos($body, '@font-face') !== false) {
             $wpc_fdu = 'smart';
             $wpc_su18 = get_option(WPS_IC_SETTINGS);
@@ -2219,8 +2283,8 @@ if (!function_exists('wpc_used_css_process_body')) {
                 $wpc_fdu = wpc_font_display_effective($wpc_fdu);
             }
             if ($wpc_fdu !== '' && $wpc_fdu !== 'off' && preg_match('/^[a-z-]{2,16}$/', $wpc_fdu)) {
-                
-                
+                // .485: per-face, for the same reason as the CSS emitters — one blanket value
+                // put 'optional' on families with no metric-matched fallback.
                 $wpc_fdraw485 = $wpc_fdu;
                 $body = (string) preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($wpc_fdraw485) {
                     $b = (string) preg_replace('/font-display\s*:\s*[a-z-]+\s*;?/i', '', $m[0]);
@@ -2240,8 +2304,8 @@ if (!function_exists('wpc_used_css_process_body')) {
     }
 }
 if (!function_exists('wpc_used_css_fetch_split')) {
-    
-
+    /** ATF/REST siblings, derived from the legacy URL. Both-or-neither — a lone half
+     *  is worse than the union, so any failure drops the pair. */
     function wpc_used_css_fetch_split($url, $tplKey, $device = '')
     {
         try {
@@ -2266,9 +2330,9 @@ if (!function_exists('wpc_used_css_fetch_split')) {
                 }
                 $bodies[$part] = wpc_used_css_process_body($b);
             }
-            
-            
-            
+            // Stamp the union basis into each sibling so a later render can tell "built from
+            // THIS union" from "built from some earlier one" — the distinction mere presence
+            // could not make, which is why the pruned bundle never reached the wire.
             $wpc_bas464 = function_exists('wpc_used_css_basis') ? wpc_used_css_basis($base) : '';
             foreach ($bodies as $part => $b) {
                 $p = (string) preg_replace('/\.css$/', '.' . $part . '.css', $base);
@@ -2292,12 +2356,12 @@ if (!function_exists('wpc_used_css_fetch_split')) {
     }
 }
 if (!function_exists('wpc_used_css_demand_args')) {
-    
-
-
-
-
-
+    /**
+     * THE demand-control line — the single decision point for advertising the capability.
+     * Reads the render-persisted tpl.txt for this URL (async /generate contexts can't compute
+     * a template identity — no styles enqueued); returns ['tpl_key','used_css'] ONLY when that
+     * template has no artifact on disk. Store-hit or unknown-template → [] → nothing sent.
+     */
     function wpc_used_css_demand_args($urlKey)
     {
         if (!defined('WPS_IC_CRITICAL') || empty($urlKey)) {
@@ -2315,26 +2379,26 @@ if (!function_exists('wpc_used_css_demand_args')) {
         if (!wpc_used_css_key_valid($tk)) {
 
 
-            
+            // Bounded by the same dispatch cadence + .51 self-arm caps as the keyed path.
             return ['tpl_key' => '', 'used_css' => '1'];
         }
-        
-        
+        // A HIT requires the current-era per-device artifact; a legacy union alone must not
+        // suppress the demand or old stores block their own upgrade indefinitely.
         $pm = wpc_used_css_path($tk, 'mobile');
         if ($pm !== '' && @is_readable($pm) && @filesize($pm) > 64) {
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.469 — PRESENCE IS NOT REFRESHABILITY, and the guard above anticipated this
+            // class for a legacy union without covering a stale per-device store doing the same.
+            // busy deadlocked exactly here: the fossil on disk suppressed the demand, used_css:0
+            // meant the service never sent used_css_url, without that pointer nothing could
+            // refresh the union or rebuild the siblings, so the gate kept seeing the same fossil
+            // — 602KB of permanently un-updatable CSS with 561 orphaned keyframes on the wire.
+            // Only a store we could replace OURSELVES may suppress its own replacement.
+            // Self-limiting: once a pointer lands this suppresses again, and re-asserting costs
+            // no extra request (it sets a capability on a dispatch already being made, under the
+            // same cadence + self-arm caps as the keyed path).
+            // .471: VERIFIED, not merely present. An unverified pointer can be the service's
+            // fail-open /status locator for a gen that never produced a bundle (404 forever);
+            // trusting it would re-create the very deadlock .469 closed.
             if (function_exists('wpc_used_css_url_verified') && wpc_used_css_url_verified($tk)) {
                 return [];
             }
@@ -2370,20 +2434,20 @@ if (!function_exists('wpc_used_css_apply_demand')) {
             $args['capabilities'] = [];
         }
         $args['capabilities']['used_css'] = 1;
-        
+        // Flat belt for the form-encoded POST path (either parser sees it; harmless on JSON).
         $args['used_css'] = '1';
         return true;
     }
 }
 
 
-
+// The demand line rides /generate, but a healthy site with crit present never fires one — so
 
 
 if (!function_exists('wpc_css_insert_fallbacks')) {
-    
-
-
+    /** Insert metric-fallback family names into font-family chains (declarations only;
+     *  @font-face descriptors masked). Unknown fallback families are skipped by browsers,
+     *  so inserting for every metrics-table family is safe. */
     function wpc_css_insert_fallbacks($css)
     {
         try {
@@ -2407,17 +2471,17 @@ if (!function_exists('wpc_css_insert_fallbacks')) {
                     continue;
                 }
                 $fam = trim($fam);
-                
-                
+                // Per-weight rows are 'family|weight|style' — the piped key must NEVER
+                // splice literally; splice the base family once (faces carry the weights).
                 if (strpos($fam, '|') !== false) {
                     $fam = trim((string) strstr($fam, '|', true));
                     if ($fam === '') {
                         continue;
                     }
                 }
-                
-                
-                
+                // v7.10.731 — splice only what the declarer will declare: a row with no valid
+                // percentage metric produces no @font-face, and an undeclared name in the stack
+                // is a pin that lies.
                 $wpc_dcl731 = false;
                 foreach (['size-adjust', 'ascent-override', 'descent-override', 'line-gap-override'] as $wpc_mk731) {
                     if (!empty($row[$wpc_mk731]) && preg_match('/^[0-9.]+%$/', (string) $row[$wpc_mk731])) {
@@ -2455,12 +2519,12 @@ if (!function_exists('wpc_css_insert_fallbacks')) {
 }
 
 if (!function_exists('wpc_header_css_slice')) {
-    
-
-
-
-
-
+    /**
+     * Extract every rule governing the header region from a stylesheet. The deferred CSS
+     * is our own file — inlining its header rules with crit makes first-paint header
+     * geometry IDENTICAL to final, so late application can't move anything, regardless
+     * of crit coverage. Cached beside the source, keyed by its mtime.
+     */
     function wpc_header_css_slice($cssPath, $tokens = [])
     {
         try {
@@ -2478,8 +2542,8 @@ if (!function_exists('wpc_header_css_slice')) {
                 return '';
             }
             $css   = preg_replace('#/\*.*?\*/#s', '', $css);
-            
-            
+            // Keyword selectors alone miss opaque builder IDs (.elementor-element-xxxx) that
+            // style the header region — the markup-derived tokens make the slice complete.
             $selRx = '/(?:^|[\s,>+~(])(?:header\b|\.elementor-location-header|#masthead|\.site-header|\.main-header|\.[\w-]*navbar[\w-]*|\.elementor-nav-menu[\w-]*|\.[\w-]*site-logo[\w-]*|\.custom-logo\b)/i';
             $pick  = function ($block) use ($selRx, $tokens, &$pick) {
                 $out = '';
@@ -2491,7 +2555,7 @@ if (!function_exists('wpc_header_css_slice')) {
                         break;
                     }
                     $sel = trim(substr($block, $i, $open - $i));
-                    
+                    // balanced-brace scan for the block body
                     $depth = 1;
                     $j = $open + 1;
                     while ($j < $len && $depth > 0) {
@@ -2508,7 +2572,7 @@ if (!function_exists('wpc_header_css_slice')) {
                                 $out .= $sel . '{' . $inner . '}';
                             }
                         }
-                        
+                        // other at-rules (@font-face, @keyframes) never move the header — skip
                     } else {
                         $hit = preg_match($selRx, $sel);
                         if (!$hit && $tokens) {
@@ -2537,7 +2601,7 @@ if (!function_exists('wpc_header_css_slice')) {
 }
 
 if (!function_exists('wpc_fallback_restitch')) {
-    
+    /** Re-apply the fallback stack-splice to stored used.css once metrics exist. Idempotent. */
     function wpc_fallback_restitch($urlKey)
     {
         try {
@@ -2545,8 +2609,8 @@ if (!function_exists('wpc_fallback_restitch')) {
                 || !function_exists('wpc_css_insert_fallbacks') || !function_exists('wpc_used_css_path')) {
                 return;
             }
-            
-            
+            // Metrics may have landed within this request — drop the primed request-cache
+            // so the splice below reads the freshly-written table.
             unset($GLOBALS['wpc_fm_cache159']);
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
             $tpl = trim((string) @file_get_contents($dir . 'used_tpl.txt'));
@@ -2586,7 +2650,7 @@ if (!function_exists('wpc_fallback_restitch')) {
 }
 
 if (!function_exists('wpc_fallback_restitch_once')) {
-    
+    // One-shot per version: converge the already-stored used.css that missed the splice.
     function wpc_fallback_restitch_once()
     {
         try {
@@ -2606,16 +2670,16 @@ if (!function_exists('wpc_fallback_restitch_once')) {
 }
 
 if (!function_exists('wpc_memory_pressure')) {
-    
-
-
-
-
+    /**
+     * Load-avg-free pressure signal: true when PHP is near its memory ceiling. Works on
+     * every host (shared/containerized boxes that lack a usable sys_getloadavg). Conservative
+     * — only fires close to OOM, where deferring background work is exactly the right call.
+     */
     function wpc_memory_pressure()
     {
         $limit = function_exists('ini_get') ? (string) @ini_get('memory_limit') : '';
         if ($limit === '' || $limit === '-1') {
-            return false; 
+            return false; // no ceiling → no memory pressure to detect
         }
         $bytes = (int) $limit;
         $unit  = strtolower(substr(trim($limit), -1));
@@ -2632,21 +2696,21 @@ if (!function_exists('wpc_memory_pressure')) {
 }
 
 if (!function_exists('wpc_under_pressure')) {
-    
-
-
-
-
-
+    /**
+     * Fleet governor: on small shared pools our background work must yield to visitors
+     * entirely, not just stay bounded. Load above ~1.5x cores means the box is queueing —
+     * every background lane defers and retries when the pressure clears. Memory pressure
+     * (wpc_memory_pressure) is checked first so hosts without sys_getloadavg still shed.
+     */
     function wpc_under_pressure()
     {
         try {
             if (!apply_filters('wpc_pressure_governor', true)) {
                 return false;
             }
-            
-            
-            
+            // Memory pressure works on EVERY host (no sys_getloadavg dependency) — shared and
+            // containerized boxes often lack a usable load average, so checking it first means
+            // the governor still sheds background work when a tiny box is about to OOM.
             if (function_exists('wpc_memory_pressure') && wpc_memory_pressure()) {
                 return true;
             }
@@ -2657,8 +2721,8 @@ if (!function_exists('wpc_under_pressure')) {
             if (!is_array($l) || !isset($l[0])) {
                 return false;
             }
-            
-            
+            // Load is only meaningful against a core count we actually KNOW. Unknown cores =
+            // host-load vs container mismatch — never shed on it (memory belt above still guards)
             if (!apply_filters('wpc_pressure_trust_load',
                 function_exists('wpc_cores_known767') ? wpc_cores_known767() : true)) {
                 return false;
@@ -2686,8 +2750,8 @@ if (!function_exists('wpc_box_cores')) {
             if ($ci !== '' && preg_match_all('/^processor\s*:/m', $ci, $pm)) {
                 $cores = max(1, count($pm[0]));
             } else {
-                
-                
+                // Containerized: the cgroup CPU quota is the container's real allowance —
+                // host cpuinfo (when readable at all) overstates it
                 $cg = wpc_cgroup_cores767();
                 if ($cg > 0) {
                     $cores = $cg;
@@ -2701,7 +2765,7 @@ if (!function_exists('wpc_box_cores')) {
 if (!function_exists('wpc_cgroup_cores767')) {
     function wpc_cgroup_cores767()
     {
-        
+        // v2: "<quota|max> <period>"; v1: cfs_quota_us (-1 = unlimited) / cfs_period_us
         $v2 = @is_readable('/sys/fs/cgroup/cpu.max') ? trim((string) @file_get_contents('/sys/fs/cgroup/cpu.max')) : '';
         if ($v2 !== '' && preg_match('/^(\d+)\s+(\d+)$/', $v2, $m) && (int) $m[2] > 0) {
             return max(1, (int) ceil((int) $m[1] / (int) $m[2]));
@@ -2716,10 +2780,10 @@ if (!function_exists('wpc_cgroup_cores767')) {
 }
 
 if (!function_exists('wpc_cores_known767')) {
-    
-
-
-
+    /** Cores are KNOWN when either /proc/cpuinfo or a cgroup quota is readable. When neither
+     *  is, sys_getloadavg() is the HOST's number on a shared box — judging a 2-core default
+     *  against host load shed every render forever (searchcommander: host load 13, container
+     *  idle, MySQL 1 active query, cron 0 overdue — dark for months). */
     function wpc_cores_known767()
     {
         static $known = null;
@@ -2733,10 +2797,10 @@ if (!function_exists('wpc_cores_known767')) {
 }
 
 if (!function_exists('wpc_pipeline_admission_ok')) {
-    
-    
-    
-    
+    // URL-space guard: the crit/warm/repull pipeline is for CANONICAL pages only.
+    // Query-string URLs (tracking params, bot probes, our own marker params) each
+    // minted their own url_key + crit dir + repull/warm/fonts event chains — cron
+    // bloated to hundreds of per-URL entries and alloptions paid for it per request.
     function wpc_pipeline_admission_ok()
     {
         $q = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
@@ -2751,39 +2815,39 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
                 continue;
             }
             if ($wpc_plain && in_array($pk, ['p', 'page_id'], true)) {
-                continue; 
+                continue; // plain-permalink sites: ?p= IS the canonical URL
             }
             return false;
         }
         return true;
     }
-    
-    
+    // Junk-key detector for ALREADY-QUEUED chains: our own pipeline markers and common
+    // tracking params folded into url_keys must never keep re-arming their own events
     function wpc_pipeline_key_junk($urlKey)
     {
         return (bool) preg_match('/criticaldone|criticalcombine|testcomplete|disablewpc|remote_generate|remote-generate|wpc_smoke|gad_source|gad_campaignid|gclid|fbclid|utm_|wpc_no_buffer/i', (string) $urlKey);
     }
-    
-    
-    
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
+    // Global ceiling on pending per-URL pipeline events — beyond it, chains stop
+    // re-arming (live traffic re-arms organically; the cron row must stay small)
+    /**
+     * v7.10.472 — the ceiling, scaled to the box instead of a flat 40.
+     * 40 was sized for a healthy host. busy ran all day on 2 cores at load1 38-52, where 40
+     * queued pipeline events is far more than the box can drain — the contention doctrine's
+     * fan-out ceiling has to be a function of capacity, not a constant. Floored at 8 so the
+     * pipeline still functions on the smallest box.
+     */
+    /**
+     * v7.10.473 — SAFE MODE: the operator lever the 2026-07-08 FPM audit specified and that was
+     * never built. Deliberately NOT a third mechanism: it is the existing warm pause
+     * (wpc_url_warm_on_purge / wpc_warm_paused_at) generalised from ONE hook to EVERY background
+     * lane, enforced at the same choke point. ?disableWPC stays untouched — that is a per-request
+     * whole-plugin bypass for a human debugging one URL, a different scope and audience.
+     *
+     * MANUAL ONLY, by design. The automatic behaviour already exists as .472's per-schedule
+     * pressure shed. An auto-arming site-wide stand-down on a chronically loaded box (busy: load1
+     * 38-52 all day) would never lift, and a stand-down that never lifts is the journal-leak shape
+     * — bounded shedding belongs per-call, a permanent lever belongs to a human.
+     */
     function wpc_safe_mode()
     {
         static $wpc_sm473 = null;
@@ -2792,10 +2856,10 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
         }
         return (bool) apply_filters('wpc_safe_mode', $wpc_sm473);
     }
-    
-
-
-
+    /**
+     * The single question every background lane asks. Returns false when the lane must stand down.
+     * Safe Mode stands down ALL lanes; the legacy warm pause still stands down warm alone.
+     */
     function wpc_bg_lane_allowed($lane = '')
     {
         if (wpc_safe_mode()) {
@@ -2813,9 +2877,9 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
     }
     function wpc_pipeline_events_ok()
     {
-        
-        
-        
+        // On RAIL sites the pipeline lives in the rail table, not the cron array — so counting
+        // cron alone returned ~0 and the ceiling never bound on exactly the sites whose queue
+        // grows fastest. Count whichever queue the work is actually going into.
         if (function_exists('wpc_rail_on') && wpc_rail_on() && function_exists('wpc_rail_depth')) {
             static $wpc_rd472 = null;
             if ($wpc_rd472 === null) { $wpc_rd472 = (int) wpc_rail_depth(); }
@@ -2842,8 +2906,8 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
                 }
             }
         }
-        
-        
+        // The count is cached per request; wpc_pl_sched bumps it on every successful
+        // schedule so a single request cannot blow past the ceiling between re-reads.
         if (isset($GLOBALS['wpc_plsched_bump179'])) {
             $n += (int) $GLOBALS['wpc_plsched_bump179'];
             unset($GLOBALS['wpc_plsched_bump179']);
@@ -2853,15 +2917,15 @@ if (!function_exists('wpc_pipeline_admission_ok')) {
 }
 
 if (!function_exists('wpc_pl_sched')) {
-    
+    // Capped scheduler for per-URL pipeline events — the cron row must stay small
     function wpc_pl_sched($ts, $hook, $args = [])
     {
-        
-        
-        
-        
-        
-        
+        // Warm pause is enforced HERE because this is the only path every warm scheduling site
+        // shares (:368 :380 :479 :682 :694 :705 — retry paths included). .423 gated one site and
+        // left the rest open, so the queue refilled to 12 within 7 minutes of pausing. One choke
+        // point, not N agreeing lists — same lesson as the icon-font detectors.
+        // .473: ONE question for every lane. Safe Mode stands all of them down; the legacy warm
+        // pause still stands down warm alone, so existing behaviour is unchanged when it is off.
         if (function_exists('wpc_bg_lane_allowed') && !wpc_bg_lane_allowed((string) $hook)) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('pl-sched-standdown', (string) $hook, '', [
@@ -2870,12 +2934,12 @@ if (!function_exists('wpc_pl_sched')) {
             }
             return false;
         }
-        
-        
-        
-        
-        
-        
+        // v7.10.472 — ORDER IS THE FIX. The ceiling used to sit AFTER the rail branch, so a rail
+        // site (busy: rail-engine=loopback) returned early and wpc_pipeline_events_ok() never ran:
+        // the fan-out ceiling was dead code on exactly the sites whose queue grows fastest. Both
+        // the shed and the ceiling now gate EVERY engine, before any enqueue decision.
+        // Shed first: a box already over its load/memory line must stop ADMITTING work, not just
+        // stop draining it — the dual-admission law. Fail-open if the probe is unavailable.
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()
             && apply_filters('wpc_pl_sched_shed_on_pressure', true)) {
             if (function_exists('wpc_cache_first_log')) {
@@ -2895,13 +2959,13 @@ if (!function_exists('wpc_pl_sched')) {
             }
             return false;
         }
-        
-        
+        // RAIL: when enabled, ALL pipeline work rides the single queue — one consumer,
+        // priorities, dedupe, off-pool engines. Legacy single-events otherwise.
         if (function_exists('wpc_rail_on') && wpc_rail_on() && function_exists('wpc_rail_enqueue')) {
             $wpc_rq472 = wpc_rail_enqueue($hook, $args, ['at' => (int) $ts]);
             if ($wpc_rq472) {
-                
-                
+                // Same in-request accounting the cron path gets, so one request cannot burst
+                // past the ceiling between two depth reads.
                 $GLOBALS['wpc_plsched_bump179'] = (int) ($GLOBALS['wpc_plsched_bump179'] ?? 0) + 1;
             }
             return $wpc_rq472;
@@ -2915,10 +2979,10 @@ if (!function_exists('wpc_pl_sched')) {
 }
 
 if (!function_exists('wpc_land_purge_coalesced')) {
-    
-    
-    
-    
+    // Land purges COALESCE: crit/lcp/delay/fonts artifacts arrive in waves 30-150s apart,
+    // and each purge restarts the cache-rebuild convoy. First land purges immediately
+    // (visitors need crit fast); every later wave inside the window marks dirty and ONE
+    // finalize event does the last purge+warm.
     function wpc_land_purge_coalesced($urlKey, $url, $context)
     {
         if (!class_exists('wps_ic_cache_integrations') || !method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
@@ -2962,7 +3026,7 @@ if (!function_exists('wpc_land_purge_coalesced')) {
 }
 
 if (!function_exists('wpc_bg_slot_take')) {
-    
+    /** Bounded budget for background helper work so visitor requests always keep pool workers. */
     function wpc_bg_slot_take($name = '')
     {
         try {
@@ -2998,23 +3062,23 @@ if (!function_exists('wpc_bg_slot_take')) {
 }
 
 if (!function_exists('wpc_font_metrics_unwrap593')) {
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /** Measured per-family fallback rows from the fonts artifact, mapped and range-gated. */
+    /**
+     * v7.10.593 — read a metrics artifact in either shape, and capture its generation identity.
+     *
+     * Bare map (today):  { "roboto": {...}, "roboto|500|normal": {...} }
+     * Stamped envelope:  { "v":3, "uuid":"…", "tpl_key":"…", "generated_at":…,
+     *                      "families": { "roboto": {...} } }
+     *
+     * Payload key is whichever of families/faces/metrics/fonts holds an array. Envelope scalars
+     * are captured, never treated as families. A bare map is returned untouched, so this is a
+     * no-op on every artifact that exists today.
+     *
+     * Identity goes to $GLOBALS['wpc_fm_ident593'] for wpc_font_metrics_gen_check() to compare
+     * against the crit dir's landed generation. It is OBSERVABILITY ONLY — a mismatch is logged
+     * and nothing is dropped, because a silent drop on a stale pairing would be the same class of
+     * bug as the one .592 removed. Act on it only once the field says how often it fires.
+     */
     function wpc_font_metrics_unwrap593($j, $urlKey = '')
     {
         $wpc_ident593 = [];
@@ -3031,8 +3095,8 @@ if (!function_exists('wpc_font_metrics_unwrap593')) {
             }
         }
         if ($wpc_pay593 === null) {
-            
-            
+            // Bare map. Strip any envelope scalars that were stamped alongside the families so a
+            // half-stamped artifact cannot be read as a family named "uuid".
             if ($wpc_ident593) {
                 foreach (array_keys($wpc_ident593) as $wpc_dk593) {
                     unset($j[$wpc_dk593]);
@@ -3044,28 +3108,28 @@ if (!function_exists('wpc_font_metrics_unwrap593')) {
             $GLOBALS['wpc_fm_ident593'] = $wpc_ident593;
             wpc_font_metrics_gen_check($wpc_ident593, (string) $urlKey);
         }
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.10.597 — PER-ROW PROVENANCE IS THE ONE THAT CAN SEE A CARRIED-FORWARD ROW.
+        // The service declined the top-level stamp for good reasons — the wire format is a bare
+        // array every consumer iterates, wrapping it breaks readers below .593 — and shipped
+        // gen_uuid per row instead. That is strictly better here: a single top-level uuid cannot
+        // describe an artifact whose merge step can hold rows from two generations, so .593's
+        // check would have passed a mixed set as consistent. It also answers the question mtime
+        // spread cannot: a row carried forward from an older gen has a FRESH mtime and shows zero
+        // spread, which is why the staging mtime evidence could rule out torn writes but not this.
+        // function_exists so unwrap593 stays independently testable — the suites slice one
+        // function and replay it, and a hard call to a sibling makes that impossible. Same
+        // guard as the priority-5 call site for the same reason.
         if (function_exists('wpc_font_metrics_row_gens597')) {
             wpc_font_metrics_row_gens597($wpc_pay593, (string) $urlKey);
         }
         return $wpc_pay593;
     }
 
-    
-
-
-
-
+    /**
+     * v7.10.597 — read gen_uuid off the ROWS and report a mixed-generation artifact.
+     * Consumer half of the service's genCensus(). Logs only, never drops: a mixed set is still
+     * the best data available, and dropping it would hide the producer-side race that made it.
+     */
     function wpc_font_metrics_row_gens597($payload, $urlKey)
     {
         if (!is_array($payload) || !$payload || !apply_filters('wpc_font_metrics_row_gen_check', true)) {
@@ -3088,7 +3152,7 @@ if (!function_exists('wpc_font_metrics_unwrap593')) {
                 if ($wpc_g597 === '') { $wpc_bare597++; continue; }
                 $wpc_gens597[$wpc_g597] = isset($wpc_gens597[$wpc_g597]) ? $wpc_gens597[$wpc_g597] + 1 : 1;
             }
-            
+            // No row carries provenance => pre-.139 artifact. Unknown is not a mismatch.
             if (!$wpc_gens597) {
                 return;
             }
@@ -3131,10 +3195,10 @@ if (!function_exists('wpc_font_metrics_unwrap593')) {
         }
     }
 
-    
-
-
-
+    /**
+     * v7.10.593 — does the metrics artifact belong to the generation the crit dir landed?
+     * Logs only. Absent identity on either side says nothing at all: unknown is not a mismatch.
+     */
     function wpc_font_metrics_gen_check($ident, $urlKey)
     {
         if (!apply_filters('wpc_font_metrics_gen_check', true) || !is_array($ident) || !$ident) {
@@ -3180,9 +3244,9 @@ if (!function_exists('wpc_font_metrics_from_artifact')) {
 
     function wpc_font_metrics_from_artifact($table)
     {
-        
-        
-        
+        // Request-cache lives in $GLOBALS so a fonts/metrics LAND in this same request can
+        // bust it (wpc_fallback_restitch) — a function-static primed empty before the land
+        // would make the post-land restitch splice against a stale empty table.
         $cached = isset($GLOBALS['wpc_fm_cache159']) ? $GLOBALS['wpc_fm_cache159'] : null;
         if ($cached === null) {
             $cached = [];
@@ -3191,13 +3255,13 @@ if (!function_exists('wpc_font_metrics_from_artifact')) {
                     $hk = (new wps_ic_url_key())->setup(home_url('/'));
                     $f = $hk ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $hk . '/font-metrics.json' : '';
                     $j = ($f !== '' && @is_readable($f)) ? json_decode((string) @file_get_contents($f), true) : null;
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+                    // v7.10.593 — ACCEPT A STAMPED ENVELOPE so the artifact can carry its own
+                    // identity. This loop reads every top-level key as a family name, which is
+                    // exactly why the service could not add uuid/tpl_key/generated_at without
+                    // breaking it: a payload key would be read as a family and its contents as a
+                    // metrics row. Tolerating both shapes here means generation identity can live
+                    // IN the file instead of in a sibling manifest, and set-consistency becomes
+                    // checkable on the render path — the check whose absence made .589 invisible.
                     if (is_array($j)) {
                         $j = wpc_font_metrics_unwrap593($j, $hk);
                     }
@@ -3212,9 +3276,9 @@ if (!function_exists('wpc_font_metrics_from_artifact')) {
                                 continue;
                             }
                             $src = strtolower((string) ($fb['sample_source'] ?? ''));
-                            
-                            
-                            
+                            // v7.10.731 — estimated rows the generator VALIDATED against the
+                            // rendered page (validated:true) are usable pins; unvalidated
+                            // estimates stay out.
                             if ($src !== '' && $src !== 'real_glyphs'
                                 && !(!empty($fb['validated']) && apply_filters('wpc_font_metrics_estimated', true))) {
                                 continue;
@@ -3246,7 +3310,7 @@ if (!function_exists('wpc_font_metrics_from_artifact')) {
                                 if (isset($fb['local']) && is_string($fb['local']) && preg_match('/^[A-Za-z ]{3,32}$/', $fb['local'])) {
                                     $row['local'] = $fb['local'];
                                 } elseif (isset($fb['fallback']) && is_string($fb['fallback']) && preg_match('/^[A-Za-z ]{3,32}$/', $fb['fallback'])) {
-                                    
+                                    // §3 metrics{} names its measured local face 'fallback'
                                     $row['local'] = $fb['fallback'];
                                 }
                                 $cached[strtolower(trim($fam))] = $row;
@@ -3268,10 +3332,10 @@ if (!function_exists('wpc_font_metrics_from_artifact')) {
 }
 
 if (!function_exists('wpc_font_metrics_area')) {
-    
-    
-    
-    
+    // Inline content area a fallback face will produce, in % of font-size:
+    // (ascent + descent + line-gap) x size-adjust. Browser-verified both ways —
+    // Roboto 117.2 x 1.001 = 117.3 (measured 117), Circular Std 97.17 x 1.0291 = 100.0
+    // (measured 100). Zero means "not computable", never "matches".
     function wpc_font_metrics_area($row)
     {
         if (!is_array($row)) {
@@ -3292,32 +3356,32 @@ if (!function_exists('wpc_font_metrics_area')) {
 }
 
 if (!function_exists('wpc_font_metrics_consistency_gate')) {
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    // v7.10.592 — PREMISE INVERTED. This gate was written when a per-weight row disagreeing with
+    // the family row was read as evidence the row was wrong. It is the opposite: a real per-weight
+    // measurement MUST differ from the family value, because different weights have different
+    // metrics. That is the entire point of the service's per-face work, and at a 10% band this
+    // gate would have started dropping those rows at exactly the moment they became correct —
+    // silently, leaving the browser on the family value while the service artifact said per_face.
+    // A silent fail-open is indistinguishable from "the fix does not work" from the other side.
+    //
+    // What it now rejects is IMPLAUSIBILITY, not disagreement. Band sized off the WITHIN-family
+    // spread, which is what a per-weight row can legitimately move: Circular Std measures
+    // 102.0 / 103.9 / 105.5 across w400/500/600, a 3.4% spread. (The ~7% figure this comment
+    // carried was a spread ACROSS families — Roboto vs Circular Std — which says nothing about
+    // how far one family's weights may diverge.) 35% is clear of 3.4% by an order of magnitude
+    // and still catches gross corruption: wrong family, unit error, doubled box.
+    //
+    // v7.10.595 — AND THIS GATE IS STRUCTURALLY BLIND TO THE FAILURE THAT ACTUALLY HAPPENS.
+    // Content area is very nearly INVARIANT across weights, because ascent+descent and
+    // size-adjust are inversely coupled: Circular Std's three faces compute to 126.48 / 126.45
+    // / 126.49, a spread of 0.04%. So an area comparison can neither reject a wrong row nor
+    // notice a COLLAPSED one — three weights carrying one measurement pass at ~0.1% delta,
+    // which is precisely the live defect. The quantity that varies is size-adjust. Collapse
+    // detection therefore lives in wpc_font_metrics_collapse595(), on size-adjust, and reports
+    // rather than drops: a normalisation is a producer bug and dropping the rows would hide it.
+    // Rows kept past the OLD band are receipted so the service side can confirm the plugin
+    // honoured the value it shipped. Still fails OPEN: no family row, or either area not
+    // computable, leaves the table untouched.
     function wpc_font_metrics_consistency_gate($table)
     {
         if (!is_array($table) || !$table) {
@@ -3337,9 +3401,9 @@ if (!function_exists('wpc_font_metrics_consistency_gate')) {
             if ($tol <= 0.0) {
                 return $table;
             }
-            
-            
-            
+            // The old default. Rows between this and $tol are the ones .591 and earlier dropped;
+            // they are now KEPT and receipted, because that band is where a genuine per-weight
+            // measurement lands once the service measures faces rather than families.
             $wpc_prev592 = (float) apply_filters('wpc_font_metrics_area_receipt_from', 10.0);
             static $wpc_seen592 = [];
             foreach ($table as $k => $v) {
@@ -3356,9 +3420,9 @@ if (!function_exists('wpc_font_metrics_consistency_gate')) {
                 }
                 $delta = abs($pa - $fam[$base]) / $fam[$base] * 100.0;
                 if ($delta <= $tol) {
-                    
-                    
-                    
+                    // KEPT. Receipt only the band that used to be dropped, once per key per
+                    // request — this is the line that tells the service side its per-weight
+                    // value actually reached the browser instead of being silently replaced.
                     if ($delta > $wpc_prev592 && empty($wpc_seen592[$k])
                         && function_exists('wpc_cache_first_log')) {
                         $wpc_seen592[$k] = 1;
@@ -3389,23 +3453,23 @@ if (!function_exists('wpc_font_metrics_consistency_gate')) {
 }
 
 if (!function_exists('wpc_font_metrics_collapse595')) {
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.595 — DID THE PRODUCER MEASURE THREE WEIGHTS, OR NORMALISE ONE VALUE ACROSS THREE?
+     *
+     * A family whose per-weight rows all carry the SAME size-adjust has not been measured
+     * per-weight; it has been given one number three times. Same shape as the .555 bug where
+     * three faces landed on exactly 1.000em, and the same law: identical values across inputs
+     * that genuinely differ is a normalisation, not a measurement.
+     *
+     * size-adjust is the field to test. Content area cannot see this — ascent+descent and
+     * size-adjust are inversely coupled, so a collapsed family's areas agree to ~0.04% and pass
+     * every area band ever chosen. Real within-family spread is ~3.4%.
+     *
+     * Reports only, never drops: a collapse is the producer's bug and the rows are still the
+     * best available. Dropping them would hide the very thing this exists to surface. Also logs
+     * healthy spreads once, so a consumer can prove it received per-weight values rather than
+     * inferring it from a rendered page.
+     */
     function wpc_font_metrics_collapse595($table)
     {
         if (!is_array($table) || !$table || !apply_filters('wpc_font_metrics_collapse_check', true)) {
@@ -3449,7 +3513,7 @@ if (!function_exists('wpc_font_metrics_collapse595')) {
         }
         return $table;
     }
-    
+    // After the consistency gate (99) so it observes the final table the consumer will emit.
     add_filter('wpc_font_fallback_metrics', 'wpc_font_metrics_collapse595', 100);
 }
 
@@ -3502,7 +3566,7 @@ if (!function_exists('wpc_used_css_self_arm')) {
             }
 
 
-            
+            // Bounds key falls back to the home url-key when tpl is unknown.
             $wpc_bk139 = $tk !== '' ? $tk : 'home:' . $hk;
 
 
@@ -3534,7 +3598,7 @@ if (!function_exists('wpc_used_css_self_arm')) {
 }
 
 
-
+// Pre-envelope combine-lane gens landed WITHOUT delay.json, so delay-v3 delays render-critical
 
 
 if (!function_exists('wpc_delay_manifest_self_heal')) {
@@ -3609,8 +3673,8 @@ if (!function_exists('wpc_crit_land_self_heal')) {
             if (!defined('WPS_IC_CRITICAL') || !class_exists('wps_ic_url_key')) {
                 return;
             }
-            
-            
+            // The feature toggle gates the healer like every other crit lane: with
+            // critical.css off, a missing artifact is the CONFIGURED state, not a wound.
             $wpc_set845 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : false;
             if (!is_array($wpc_set845) || empty($wpc_set845['critical']['css']) || (string) $wpc_set845['critical']['css'] !== '1') {
                 return;
@@ -3664,8 +3728,8 @@ if (!function_exists('wpc_crit_land_self_heal')) {
 }
 
 
-
-
+// f056962…woff2). Run it once per plugin version; the function honors the 'off' opt-out and
+// now sweeps unmapped cache files too.
 if (!function_exists('wpc_fontdisplay_rebake_once')) {
     function wpc_fontdisplay_rebake_once()
     {
@@ -3699,37 +3763,37 @@ if (!function_exists('wpc_fontdisplay_rebake_once')) {
 
 
 if (!function_exists('wpc_font_display_effective')) {
-    
-    
+    // 'smart' resolves per-site: optional only when the deterministic metrics verdict
+    // landed (matched twin proven from the woff2 tables) — zero-CLS is then free; else swap.
     function wpc_font_display_effective($raw, $family = '')
     {
         $raw = strtolower(trim((string) $raw));
-        
-        
-        
-        
-        
-        
+        // v7.10.401: 'smart' has always resolved to optional once metrics are validated.
+        // Extend that to plain 'swap': a swap with a VALIDATED metrics-matched fallback still
+        // swap-reflows on every load for zero benefit (the fallback is metrics-identical), and
+        // that reflow is the residual CLS on Divi headings (busy desktop 0.131 -> ~0). Only
+        // upgrades when metrics are proven (trustworthy fallback); un-validated swap is left
+        // alone (show the real font). Filtered so an explicit swap preference can be restored.
         if ($raw === 'smart' || ($raw === 'swap' && apply_filters('wpc_fd_swap_to_optional_when_validated', true))) {
-            
-            
-            
+            // A trustworthy fallback exists when the SERVICE validated it (strict) OR the plugin
+            // computed font-metrics for the site and baked size-adjust fallbacks (present). Either
+            // makes the fallback metric-matched, so optional is safe and kills the swap-CLS.
             $v = get_option('wpc_font_metrics_validated');
-            
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.483 — PER-FAMILY, not site-wide. 'optional' is safe only when THIS family has a
+            // metric-matched fallback; the guard read only $v['t'], a site-wide boolean, so one
+            // family with metrics promoted EVERY face to optional. zinsenvergleich receipt: two
+            // Astra faces, size-adjust=(NONE) and ascent-override=(NONE) on both, one emitted as
+            // optional — and Astra is still fetched over the network, so that glyph may simply
+            // never paint. That is the .443 trade (invisible icon beats no byte win) arriving by a
+            // different route. The per-family list was already being written into $v['fams'] and
+            // simply never read.
+            // No family supplied => unchanged site-wide behaviour, so no caller regresses.
             $wpc_fam483 = strtolower(trim((string) $family, " \t\"'"));
             if ($wpc_fam483 !== '') {
                 $wpc_fams483 = (is_array($v) && !empty($v['fams']) && is_array($v['fams']))
                     ? array_map('strtolower', $v['fams']) : [];
-                
-                
+                // Unknown family => swap. The font renders and may reflow; optional risks never
+                // rendering at all. Reflow is recoverable, invisible text is not.
                 return in_array($wpc_fam483, $wpc_fams483, true) ? 'optional' : 'swap';
             }
             $ok = (is_array($v) && !empty($v['t'])) || (int) get_option('wpc_font_metrics_present', 0) === 1;
@@ -3781,16 +3845,16 @@ if (!function_exists('wpc_compute_tpl_key')) {
                 foreach ((array) $GLOBALS['wp_styles']->done as $handle) {
                     $reg = isset($GLOBALS['wp_styles']->registered[$handle]) ? $GLOBALS['wp_styles']->registered[$handle] : null;
                     $wpc_v626 = ($reg && !empty($reg->ver)) ? (string) $reg->ver : '0';
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+                    // v7.10.626 — A BUILD STAMP IS NOT A TEMPLATE VERSION. Elementor
+                    // enqueues its per-post CSS with ver = the file's mtime
+                    // (post-6912.css?ver=1785456828), so every CSS rebuild minted a brand
+                    // new tpl_key: the service saw an endless stream of "new" templates,
+                    // its 3-template observation budget filled, and 7 of 10 staging
+                    // templates could not refresh their used-css since July (their trace,
+                    // 2026-07-31: /affiliates/ minted two keys six minutes apart). The key
+                    // names WHICH sheets compose this template; a 10-digit unix timestamp
+                    // says only WHEN one was written. Real release versions (1.2.3, theme
+                    // versions) still participate.
                     if (preg_match('/^\d{9,11}$/', $wpc_v626)
                         && (int) $wpc_v626 > 946684800 && (int) $wpc_v626 < 4102444800) {
                         $wpc_v626 = 'b';
@@ -3832,18 +3896,18 @@ if (!function_exists('wpc_compute_tpl_key')) {
         if (!function_exists('get_post_modified_time')) {
             return '';
         }
-        
+        // Homepage / front page → dynamic ATF, no reliable content-version → omit.
         if (function_exists('home_url') && rtrim((string) $url, '/') === rtrim((string) home_url('/'), '/')) {
             return '';
         }
         $pid = (is_numeric($postID) && (int) $postID > 0) ? (int) $postID : 0;
         if ($pid === 0 && function_exists('url_to_postid')) {
-            $pid = (int) url_to_postid((string) $url); 
+            $pid = (int) url_to_postid((string) $url); // 0 for archives / taxonomies / search → omit
         }
         if ($pid <= 0) {
             return '';
         }
-        $mt = get_post_modified_time('U', true, $pid); 
+        $mt = get_post_modified_time('U', true, $pid); // GMT unix
         return ($mt && function_exists('get_post_status') && get_post_status($pid) === 'publish') ? (string) $mt : '';
     }
 }
@@ -3861,7 +3925,7 @@ if (!function_exists('wpc_land_second_wave')) {
                 return;
             }
 
-            
+            // 1. External re-purge (same primitives purgeUrlHtml uses; each self-gates/no-ops).
             if (class_exists('wps_ic_cache_integrations')) {
                 try {
                     if (method_exists('wps_ic_cache_integrations', 'purgeVarnish')) {
@@ -3907,7 +3971,7 @@ if (!function_exists('wpc_land_second_wave')) {
                 }
             }
 
-            
+            // 2. Edge pre-warm from the ARMED page (our own cache file — no origin request needed).
             if (!apply_filters('wpc_land_asset_prewarm', true) || !function_exists('wp_remote_get')) {
                 return;
             }
@@ -3934,8 +3998,8 @@ if (!function_exists('wpc_land_second_wave')) {
             if (preg_match_all('/<link[^>]*rel="preload"[^>]*as="font"[^>]*href="([^"]+)"/i', $html, $mm)) {
                 $targets = array_merge($targets, array_slice($mm[1], 0, 4));
             }
-            
-            
+            // v7.10.689 — font preloads are post-paint injected now (data-wpc-fpb script,
+            // JSON [[url,mime],...]); warm those URLs exactly like the old static tags.
             if (preg_match('/<script[^>]*data-wpc-fpb="1"[^>]*>\(function\(\)\{var u=(\[\[.*?\]\]);/s', $html, $m689)) {
                 $wpc_fpj689 = json_decode(str_replace('<\/', '</', (string) $m689[1]), true);
                 if (is_array($wpc_fpj689)) {
@@ -4004,7 +4068,7 @@ if (!function_exists('wpc_crit_mark_stale_instead')) {
 }
 
 
-
+// The manual purge button was the last delete-first path: it wiped the store and rebuilt in
 
 
 if (!function_exists('wpc_crit_soft_purge_all')) {
@@ -4042,23 +4106,23 @@ if (!function_exists('wpc_crit_soft_purge_all')) {
 }
 
 if (!function_exists('wpc_delay_manifest_reset')) {
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * Delete the JS delay manifest and its sticky option state (v7.10.519).
+     *
+     * Reported by Denis and confirmed: NOTHING deleted delay.json. The only unlink in the
+     * tree is delay_url.txt (the POINTER), dropped on every crit land while the body was
+     * kept — so a fresh generation got a fresh pointer and the old manifest. And because
+     * an overwrite requires the replacement to already be measured-shape ("never regress"),
+     * a wrong manifest was immortal: no button could clear it.
+     *
+     * Worse, two of the option lanes had writers and ZERO deleters — wpc_presc_pins (2
+     * writers) and wpc_delay_v3_jqneed (1 writer). A stale pin can hold one script eager
+     * while its dependency stays delayed, which tears the chain and breaks JS with no way
+     * out. Same class as every other bug this release: state with a writer and no deleter.
+     *
+     * Deleting the manifest does NOT regress behaviour — it drops to the unmeasured lane
+     * until a new one lands, and since .512 the unmeasured defer path is order-safe.
+     */
     function wpc_delay_manifest_reset($ctx = '')
     {
         $wpc_f519 = 0;
@@ -4076,8 +4140,8 @@ if (!function_exists('wpc_delay_manifest_reset')) {
                         if (!@is_dir($wpc_d519)) {
                             continue;
                         }
-                        
-                        
+                        // Pointer AND body together — dropping only one is what created the
+                        // fresh-pointer/stale-body split in the first place.
                         foreach (['delay.json', 'delay_url.txt'] as $wpc_n519) {
                             if (@is_file($wpc_d519 . '/' . $wpc_n519) && @unlink($wpc_d519 . '/' . $wpc_n519)) {
                                 $wpc_f519++;
@@ -4086,7 +4150,7 @@ if (!function_exists('wpc_delay_manifest_reset')) {
                     }
                 }
             }
-            
+            // Global (not per-key) lanes that outlived every file purge.
             foreach ([
                 'wpc_delay_v3_manifest_off', 'wpc_delay_aggr_off', 'wpc_delay_v3_promoted',
                 'wpc_presc_pins', 'wpc_delay_v3_jqneed',
@@ -4108,24 +4172,24 @@ if (!function_exists('wpc_delay_manifest_reset')) {
 }
 
 if (!function_exists('wpc_crit_bypass_active')) {
-    
-
-
-
-
-
-
+    /**
+     * v7.10.391 zero-dark purge. Hard purge writes bypass.txt instead of deleting artifacts:
+     * while active, STALE artifacts resolve as absent (pages render critless but CACHEABLE —
+     * no layer is ever cold + forbidden to cache at once, the exact interaction behind the
+     * post-purge 60s outages). An artifact fresher than the window start lifts the bypass
+     * for its URL the moment it lands. File-based (stale.txt idiom): zero DB cost per render.
+     */
     function wpc_crit_bypass_start()
     {
         if (!defined('WPS_IC_CRITICAL') || !function_exists('wpc_crit_meta_write')) { return false; }
         return wpc_crit_meta_write(rtrim(WPS_IC_CRITICAL, '/') . '/bypass.txt', (string) time()) !== false;
     }
-    
-
-
-
-
-
+    /**
+     * v7.10.825 — per-URL window for Rebuild This Page: the clicked page stops serving its
+     * suspect crit IMMEDIATELY (renders with full theme CSS, cacheable) instead of serving it
+     * for the whole gen window. Same laws as the global window: land lifts it, orphan lifts it,
+     * the 1800s ceiling bounds it.
+     */
     function wpc_crit_bypass_page_start($key)
     {
         if (!defined('WPS_IC_CRITICAL') || !function_exists('wpc_crit_meta_write')) { return false; }
@@ -4140,7 +4204,7 @@ if (!function_exists('wpc_crit_bypass_active')) {
         $wpc_root825 = rtrim(WPS_IC_CRITICAL, '/');
         $bf = $wpc_root825 . '/bypass.txt';
         $t = (int) @file_get_contents($bf);
-        
+        // .825: no global window -> consult this key's own window (Rebuild This Page).
         if ($t <= 0 && $key !== '') {
             $bf = $wpc_root825 . '/' . $key . '/bypass.txt';
             $t = (int) @file_get_contents($bf);
@@ -4151,12 +4215,12 @@ if (!function_exists('wpc_crit_bypass_active')) {
             return false;
         }
         if ($key === '') { return false; }
-        
-        
-        
-        
-        
-        
+        // v7.10.690 — A DEFERRAL IS A PROMISE SOMETHING WILL UNDO IT. The window's undo is a
+        // fresh land; its trigger is the purge-side redispatch. If NOTHING has dispatched for
+        // this key since the window armed and the ≤60s land contract's budget is long spent,
+        // the promise is broken: lift and serve the existing crit (soft-purge semantics)
+        // instead of riding the 1800s ceiling critless. Keys whose regen DID dispatch keep the
+        // window (dispatch_ts >= arm) and lift per-URL the moment their land arrives.
         if ((time() - $t) > (int) apply_filters('wpc_crit_bypass_orphan_s', 240)) {
             $wpc_dts690 = (int) @file_get_contents(rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/dispatch_ts.txt');
             if ($wpc_dts690 < $t) {
@@ -4168,7 +4232,7 @@ if (!function_exists('wpc_crit_bypass_active')) {
             }
         }
         $m = (int) @filemtime(rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/critical_desktop.css');
-        
+        // missing artifact = the ordinary critless path owns it; fresher-than-window = landed, lift
         return $m > 0 && $m <= $t;
     }
 }
@@ -4197,8 +4261,8 @@ if (!function_exists('wpc_repull_kick_now')) {
     }
 
 
-    
-    
+    // (wpc_warm_cooldown / wpc_warm_bucket / wpc_crit_watchdog) are OBJECT-CACHE-backed and vanish
+    // on a cache flush — so N distinct crit-less URLs each start an independent kick→receiver→warm
 
 
     function wpc_kick_global_bucket_ok()
@@ -4238,8 +4302,8 @@ if (!function_exists('wpc_repull_kick_now')) {
     }
 
 
-    
-    
+    // A client that re-dispatches crit generation every ~45s to a FAILING backend (502 / no-response
+    // / land-fail) amplifies the outage — it holds an overloaded pod flat instead of letting it drain
 
 
     function wpc_gen_backoff_file()
@@ -4250,7 +4314,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         return $d . 'genfail.json';
     }
 
-    
+    /** TRUE ⇒ the gen dispatch should be DEFERRED (we're inside a failure-backoff window). */
     function wpc_gen_backoff_active()
     {
         try {
@@ -4264,7 +4328,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
     }
 
-    
+    /** Record a gen/land FAILURE → widen the backoff window (exponential, capped). */
     function wpc_gen_note_failure($why = '')
     {
         try {
@@ -4275,7 +4339,7 @@ if (!function_exists('wpc_repull_kick_now')) {
             $fails = (is_array($j) && !empty($j['fails'])) ? (int) $j['fails'] + 1 : 1;
             $base  = (int) apply_filters('wpc_gen_backoff_base', 45);
             $max   = (int) apply_filters('wpc_gen_backoff_max', 900);
-            $wait  = min($base * (1 << min($fails - 1, 6)), $max);       
+            $wait  = min($base * (1 << min($fails - 1, 6)), $max);       // 45,90,180,360,720,900,900…
             wpc_crit_meta_write($f, json_encode(['fails' => $fails, 'until' => time() + $wait, 't' => time(), 'why' => substr((string) $why, 0, 40)]));
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('gen-backoff', '', '', ['fails' => $fails, 'wait' => $wait, 'why' => substr((string) $why, 0, 24)]);
@@ -4284,7 +4348,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
     }
 
-    
+    /** Record a land SUCCESS → clear the backoff (the backend is healthy again). */
     function wpc_gen_note_success()
     {
         try {
@@ -4303,7 +4367,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         return is_dir($d) ? $d . 'gen_fails.json' : '';
     }
 
-    
+    /** TRUE ⇒ this URL is parked (too many landless dispatches) — skip generation for now. */
     function wpc_gen_landless_parked($urlKey)
     {
         try {
@@ -4317,7 +4381,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
     }
 
-    
+    /** Count one dispatch for this URL; arm the park after 5 without a landing. */
     function wpc_gen_landless_note($urlKey)
     {
         try {
@@ -4328,7 +4392,7 @@ if (!function_exists('wpc_repull_kick_now')) {
             $n = (is_array($j) && !empty($j['n'])) ? (int) $j['n'] + 1 : 1;
             $until = 0;
             if ($n >= 5) {
-                $until = time() + (int) min(3600 * pow(2, $n - 5), 86400); 
+                $until = time() + (int) min(3600 * pow(2, $n - 5), 86400); // 1h, 2h, 4h … 24h cap
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('gen-parked', (string) $urlKey, '', ['n' => $n, 'until' => $until]);
                 }
@@ -4338,7 +4402,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
     }
 
-    
+    /** A landing for this URL clears its landless counter + park. */
     function wpc_gen_landless_clear($urlKey)
     {
         try {
@@ -4357,7 +4421,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         return $d . 'land_' . md5($urlKey) . '.txt';
     }
 
-    
+    /** TRUE ⇒ this URL landed successfully within the cooldown window — defer any new dispatch. */
     function wpc_land_cooldown_active($urlKey)
     {
         try {
@@ -4371,7 +4435,7 @@ if (!function_exists('wpc_repull_kick_now')) {
         }
     }
 
-    
+    /** Stamp a successful land — starts this URL's cooldown window. */
     function wpc_land_cooldown_stamp($urlKey)
     {
         try {
@@ -4412,9 +4476,9 @@ if (!function_exists('wpc_repull_kick_now')) {
             }
 
 
-            
-            
-            
+            // B4 (≤60s contract): the landless park gates GENERATION only (inside
+            // generateCriticalAjax) — it must never block the kick, because the kick is
+            // also the COLLECTION lane and the artifact may be waiting on the shelf.
             set_transient('wpc_kick_fire_' . md5($urlKey), 1, 60);
             wpc_kick_stamp($urlKey, 'fire');
             $wpc_dir62   = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/' : '';
@@ -4501,28 +4565,28 @@ if (!function_exists('wpc_repull_kick_now')) {
             if ($wpc_stale73) {
                 $have = false;
             }
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.685 — PRESENCE IS NOT SERVICE. $have decided COLLECT-vs-GENERATE purely on a
+            // crit FILE existing, but a crit the render refuses to paint — the zero-dark bypass
+            // window, or a content-keyed sanity reject — serves nobody. While that file sat on
+            // disk every kick took the collect branch, so the ONE page that needed a fresh gen was
+            // the one page that never dispatched. Receipt (wpcompress, 2026-08-02): pages with no
+            // crit file reached the service all afternoon while the homepage sent ZERO requests for
+            // hours and rendered critless. stale.txt was already honoured above; these are its two
+            // untreated twins.
             $wpc_unserv685 = false;
             if ($have && $dir && apply_filters('wpc_kick_gen_on_unservable', true)) {
                 if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($k)) {
                     $wpc_unserv685 = 'bypass';
                 } elseif (function_exists('wpc_crit_sanity_bad617')) {
-                    
-                    
+                    // Only read the blob if the cheap check passed — kicks are rare, but this is
+                    // an 80KB+ read on a background lane.
                     $wpc_cb685 = (string) @file_get_contents($dir . 'critical_desktop.css');
                     if ($wpc_cb685 !== '' && wpc_crit_sanity_bad617(rtrim($dir, '/'), $wpc_cb685)) {
                         $wpc_unserv685 = 'sanity';
                     }
                 }
                 if ($wpc_unserv685 !== false) {
-                    $have = false; 
+                    $have = false; // regenerate: a crit nobody paints is not a crit we hold
                 }
             }
             if (function_exists('wpc_cache_first_log')) {
@@ -4556,39 +4620,39 @@ if (!function_exists('wpc_repull_kick_now')) {
                     }
                 }
                 if (function_exists('wpc_wire_catchup')) {
-                    wpc_wire_catchup($k); 
+                    wpc_wire_catchup($k); // v7.10.684 — heal a declared-but-not-held wire on the kick lane
                 }
                 wpc_lcp_repull_handler($k, 1);
             } elseif (class_exists('wps_criticalCss')
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
+                // v7.10.686 — AN UNSERVABLE CRIT MUST NOT BE VETOED BY COLLECTION. .685 correctly
+                // routed a bypassed/sanity-rejected crit to this branch, and then collection
+                // answered "already landed" from the same file-presence test the branch exists to
+                // escape (pullDerivedArtifacts returns true when both blobs are >64B) — so the
+                // generate below never ran. Receipt (wpcompress 2026-08-02): kick-rx
+                // {have:0, unservable:"bypass"} immediately followed by kick-collect-landed, and
+                // still no dispatch. Re-collecting cannot help either suppression state: the
+                // bypass rejects THESE bytes by mtime and the sanity mark rejects them by hash,
+                // so the same bytes stay unservable however many times we fetch them. Only a new
+                // generation changes the answer — short-circuit straight to it.
                 && ($wpc_unserv685 !== false
                     || !(function_exists('wpc_crit_kick_collect') && wpc_crit_kick_collect($k)))) {
-                
-                
+                // B3 (≤60s contract): collection ran first and found nothing on the shelf —
+                // only now is generation the right move.
 
                 $u = '';
                 if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey')) {
                     $u = (string) wps_ic_url_key::getUrlFromKey($k);
                 }
-                
-                
-                
-                
+                // A8 (incident report 2026-07-20): an unresolvable key must be a NO-OP, not a
+                // home_url fallback — the fallback redirected five different pages' kicks at
+                // the one page already parked and failing (and stamped home's key over their
+                // logs, A7). Home itself still resolves: its key matches setup(home_url()).
                 if ($u === '' && function_exists('home_url') && class_exists('wps_ic_url_key')
                     && ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/') === ltrim((string) $k, '/')) {
                     $u = home_url('/');
                 }
                 if ($u === '') {
-                    
+                    // v7.10.530 — record the proof so the render path stops minting chains for it.
                     if (function_exists('wpc_kick_dead_mark')) {
                         wpc_kick_dead_mark($k);
                     }
@@ -4653,7 +4717,7 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
             }
             if (!is_admin() && !(function_exists('wp_doing_ajax') && wp_doing_ajax())
                 && function_exists('wpc_pipeline_admission_ok') && !wpc_pipeline_admission_ok()) {
-                return; 
+                return; // query-string URLs never self-arm the pipeline
             }
             set_transient('wpc_crit_watchdog', 1, 120);
             $set = get_option(WPS_IC_SETTINGS);
@@ -4672,9 +4736,9 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
                 return;
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/';
-            
-            
-            
+            // B6 (≤60s contract): non-home URLs get the same self-heal — any dir with a
+            // fresh dispatch (uuid.txt <6h) and no landed crit gets a collection kick.
+            // Bounded ≤3/tick; stale uuids age out of the window on their own.
             $wpc_root179s = rtrim(WPS_IC_CRITICAL, '/') . '/';
             $wpc_sw179 = 0;
             foreach (['*/uuid.txt', '*/*/uuid.txt', '*/*/*/uuid.txt'] as $wpc_gp179) {
@@ -4685,14 +4749,14 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
                     $wpc_ud179 = dirname($wpc_uf179) . '/';
                     $wpc_uk179 = trim(substr($wpc_ud179, strlen($wpc_root179s)), '/');
                     if ($wpc_uk179 === '' || $wpc_uk179 === ltrim($k, '/')) {
-                        continue; 
+                        continue; // homepage rides the dedicated lane below
                     }
-                    
-                    
-                    
-                    
-                    
-                    
+                    // AUTO-QUARANTINE (out-of-the-box recovery): land_uuid WITHOUT dispatch_ts
+                    // = landed-but-never-dispatched = storm-borrowed foreign crit. Wipe the
+                    // dir; the sentinel/kick regenerate it legitimately. Pre-.320 dirs have
+                    // NEITHER stamp and are untouched.
+                    // manifest.held_gen belt (v7.10.697): a manifest flip is a legitimate land
+                    // whether or not a dispatch stamp survives — never quarantine that dir.
                     if (@is_readable($wpc_ud179 . 'land_uuid.txt') && !@is_readable($wpc_ud179 . 'dispatch_ts.txt')
                         && !@is_readable($wpc_ud179 . 'manifest.held_gen')) {
                         foreach ((array) @glob($wpc_ud179 . '*') as $wpc_cf179) {
@@ -4722,9 +4786,9 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
                     }
                 }
             }
-            
-            
-            
+            // v7.10.685 — twin of the kick receiver's servability gate: the watchdog stood down on
+            // FILE PRESENCE too, so a homepage whose crit is bypassed/sanity-rejected had neither
+            // lane able to arm a regen. A crit that does not paint must not satisfy the watchdog.
             if (@filesize($dir . 'critical_desktop.css') > 5
                 && !(apply_filters('wpc_kick_gen_on_unservable', true)
                     && function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($k))) {
@@ -4746,15 +4810,15 @@ if (!function_exists('wpc_crit_self_arm_watchdog')) {
 }
 
 
-
+// ─── Crit ≤60s land contract (v7.10.320): dispatch-owned collector + publish webhook ───
 if (!function_exists('wpc_crit_collect_now')) {
-    
-
-
-
-
-
-
+    /**
+     * ZERO-HELD-WORKER collector (v7.10.324, James's contention law): ONE probe —
+     * HEAD by uuid / pointer fallback, land through the validated save path — and exit.
+     * No sleep, no loop, no held FPM child. The cadence comes from pre-scheduled probe
+     * events, fired by whatever PHP runs next (spawn-nudge, webhook, sentinel beacon,
+     * admin heartbeat). $budget > 0 ⇒ on a miss, one follow-up probe is scheduled.
+     */
     function wpc_crit_collect_now($urlKey, $budget = 0, $interval = 12)
     {
         try {
@@ -4765,21 +4829,21 @@ if (!function_exists('wpc_crit_collect_now')) {
                 return false;
             }
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
-                return false; 
+                return false; // scheduled probes keep trying; never add load to a hot box
             }
             $lk = 'wpc_collect_' . md5((string) $urlKey);
             if (get_transient($lk)) {
-                return false; 
+                return false; // collapse simultaneous probes
             }
             set_transient($lk, 1, 8);
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
-            
-            
+            // A dispatch newer than the land (uuid.txt ≠ land_uuid.txt) must overwrite —
+            // organic regens and serve-stale copies are otherwise stranded by "already landed".
             $du = trim((string) @file_get_contents($dir . 'uuid.txt'));
             $lu = trim((string) @file_get_contents($dir . 'land_uuid.txt'));
             $force = ($du !== '' && $du !== $lu);
-            
-            
+            // stale + same-uuid is decided INSIDE pullDerivedArtifacts via the pointer
+            // (a fresh publish collects even when the dispatch timeout ate the ack).
             $landed = false;
             try {
                 $cc = new wps_criticalCss();
@@ -4797,9 +4861,9 @@ if (!function_exists('wpc_crit_collect_now')) {
                 && !wp_next_scheduled('wpc_crit_collect', [$urlKey, 9])) {
                 wpc_pl_sched(time() + max(8, (int) $interval), 'wpc_crit_collect', [$urlKey, 9]);
             }
-            
-            
-            
+            // NO spawn_cron on a miss — a probe miss re-spawning cron chains cron passes
+            // continuously across many armed URLs (staging TTFB storm receipt); the arm's
+            // single nudge + organic PHP + the webhook carry the cadence.
             return false;
         } catch (\Throwable $e) {
             return false;
@@ -4808,11 +4872,11 @@ if (!function_exists('wpc_crit_collect_now')) {
 }
 
 if (!function_exists('wpc_crit_collector_arm')) {
-    
-
-
-
-
+    /**
+     * B2 as probe BURSTS (law 9 + zero-held-workers): dispatch mints its own pickup
+     * appointments — staggered single events, each a sub-second probe — plus the repull
+     * backstop and a spawn nudge. No shutdown worker, no sleeping FPM child, ever.
+     */
     function wpc_crit_collector_arm($urlKey)
     {
         try {
@@ -4840,7 +4904,7 @@ if (!function_exists('wpc_crit_collector_arm')) {
     add_action('wpc_crit_collect', function ($urlKey, $n = 1) {
         wpc_crit_collect_now((string) $urlKey, ((int) $n === 4 || (int) $n === 9) ? 1 : 0);
     }, 10, 2);
-    
+    // B5: a failed dispatch re-dispatches itself (retry_after-scheduled by the dispatcher).
     add_action('wpc_crit_redispatch', function ($urlKey, $sync = 0) {
         try {
             if (empty($urlKey) || !class_exists('wps_criticalCss') || !class_exists('wps_ic_url_key')) {
@@ -4857,7 +4921,7 @@ if (!function_exists('wpc_crit_collector_arm')) {
             }
             $c = new wps_criticalCss($u);
             if (method_exists($c, 'generateCriticalAjax')) {
-                $c->generateCriticalAjax((bool) $sync); 
+                $c->generateCriticalAjax((bool) $sync); // sync=1 = operator Pull Latest (bust tpl cache)
             }
         } catch (\Throwable $e) {
         }
@@ -4865,11 +4929,11 @@ if (!function_exists('wpc_crit_collector_arm')) {
 }
 
 if (!function_exists('wpc_near_expiry_regen')) {
-    
-
-
-
-
+    /** §6 near_expiry (>13d of 14d retention): arm a fresh gen instead of relying on
+     *  about-to-expire shelf URLs. FAIL-OPEN: with no served crit on disk the caller's
+     *  pull proceeds untouched (an expiring artifact beats none). Herd-gated: the expiry
+     *  horizon is fleet-synchronized by construction — long per-key transient, global
+     *  backoff + pressure yields, jittered dispatch. */
     function wpc_near_expiry_regen($urlKey)
     {
         try {
@@ -4893,10 +4957,10 @@ if (!function_exists('wpc_near_expiry_regen')) {
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 return false;
             }
-            
-            
-            
-            
+            // Schedule FIRST, suppress only on a committed dispatch — the pipeline
+            // ceiling can eat the schedule, and a burned shot with a 2-day suppression
+            // would outlive the ≤1-day retention runway. 12h suppression = a second
+            // attempt still fits inside the window.
             $wpc_nsch356 = false;
             if (function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')) {
                 $wpc_nsch356 = wp_next_scheduled('wpc_crit_redispatch', [(string) $urlKey]) !== false
@@ -4917,14 +4981,14 @@ if (!function_exists('wpc_near_expiry_regen')) {
     }
 }
 
-
-
-
-
-
-
+// ─── §10 TTFB actuation — the slow-ttfb lever (v7.10.357) ───
+// The service MEASURES a recoverable origin-TTFB cap (ceiling.caps[factor:ttfb,scope:origin].
+// fixable_ms); the plugin ACTUATES by arming the zero-PHP static serve (Lane A), whose OWN
+// self-test + auto-rollback lives in htaccess.class.php — so the rollback safety is local to
+// the actuator (contract §10 v1.2.1). Never touches Lane B (cache.advanced / R9) or the manual
+// toggle; a host it cannot serve on rolls back to PHP serve, unchanged, and backs off.
 if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
-    
+    /** Recoverable origin-TTFB think-time (ms) from a delay.json ceiling{}; 0 if none. */
     function wpc_ttfb_read_ceiling_cap($dir)
     {
         try {
@@ -4948,12 +5012,12 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             $best = 0;
             foreach ($lists as $wpc_caps357) {
                 foreach ($wpc_caps357 as $c) {
-                    
-                    
-                    
-                    
-                    
-                    
+                    // caps[].basis (service 3.77.1/.81.0): ONLY actuate on measured origin
+                    // think-time. 'coarse_upper_bound' (server_ms absent → ttfb−floor) over-
+                    // claims; 'cpu_share_proxy' is the TBT cap, never TTFB. Skip a degenerate
+                    // cross-device read (3.81.0) or an unmeasured leg — a slow origin can't tell
+                    // which viewport asked (staging: 28s "measured" TTFB, real 260ms → bogus
+                    // 45-point cap). Absent basis (pre-3.77 gens) is NOT trusted → no actuation.
                     if (is_array($c) && (string) ($c['factor'] ?? '') === 'ttfb' && (string) ($c['scope'] ?? '') === 'origin'
                         && (string) ($c['basis'] ?? '') === 'measured_server_ms'
                         && empty($c['ttfb_read_degenerate']) && empty($c['ttfb_unmeasured'])
@@ -4968,8 +5032,8 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
         }
     }
 
-    
-
+    /** Exponential-capped retry window after a host can't serve statically (mirrors the
+     *  gen-backoff): base 1h, cap 7d — never re-probe a non-serving host every land. */
     function wpc_ttfb_ss_backoff_bump()
     {
         $n = max(0, (int) get_option('wpc_ttfb_ss_fails'));
@@ -4990,33 +5054,33 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             if (!apply_filters('wpc_ttfb_static_serve_auto', true) || get_option('wpc_ttfb_ss_optout')) {
                 return false;
             }
-            
-            
-            
-            
+            // Only evaluate in an HTTP context (loopback cron / admin-ajax kick): a WP-CLI
+            // system-cron run has no SERVER_SOFTWARE, so isApache() would false-negative and
+            // POISON the backoff on a genuinely Apache host. Skip cleanly — no state touched
+            // — and let the next HTTP-context kick decide.
             if (empty($_SERVER['SERVER_SOFTWARE'])) {
                 return false;
             }
-            
+            // Already serving statically (auto OR user OR live block) → nothing to do.
             if (get_option('wpc_static_serve_active') == 1 || get_option('wpc_ttfb_ss_auto') === '1') {
                 return false;
             }
             $set = get_option(WPS_IC_SETTINGS);
             if (is_array($set) && !empty($set['static-serve']) && $set['static-serve'] == '1') {
-                return false; 
+                return false; // user already armed it manually
             }
-            
+            // Nothing to statically serve unless the plugin's own HTML cache is on.
             if (function_exists('wpc_cache_first_enabled') && !wpc_cache_first_enabled()) {
                 return false;
             }
-            
+            // Evaluate at most hourly; honor the failure backoff; yield under pressure.
             if (get_transient('wpc_ttfb_ss_eval') || time() < (int) get_option('wpc_ttfb_ss_next')) {
                 return false;
             }
             if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 return false;
             }
-            
+            // Never stomp a competing full-page cache (WP Rocket / LiteSpeed / foreign drop-in).
             if (function_exists('wpc_detect_foreign_page_cache') && wpc_detect_foreign_page_cache() !== false) {
                 return false;
             }
@@ -5026,7 +5090,7 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
             $fixable = $dir !== '' ? wpc_ttfb_read_ceiling_cap($dir) : 0;
             $min = (int) apply_filters('wpc_ttfb_static_serve_min_ms', 300);
             if ($fixable < $min) {
-                return false; 
+                return false; // no meaningful recoverable TTFB — leave the host alone
             }
 
             if (!class_exists('wps_ic_htaccess') && defined('WPS_IC_DIR')) {
@@ -5036,14 +5100,14 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
                 return false;
             }
             $h = new wps_ic_htaccess();
-            
-            
-            
+            // The constructor only detects Apache under is_admin(); this lane is a background
+            // kick/cron worker, so force detection now (needs SERVER_SOFTWARE — absent only
+            // under WP-CLI, where there is no request to serve and skipping is correct).
             if (method_exists($h, 'isApache')) {
                 $h->isApache();
             }
-            
-            
+            // Arm the serve-decision flag BEFORE apply so the enable's warm writes real mirror
+            // files (the wpc_static_serve filter below honors it); rolled back on any failure.
             update_option('wpc_ttfb_ss_auto', '1', false);
             $res = method_exists($h, 'applyStaticServe') ? $h->applyStaticServe() : ['ok' => false, 'reason' => 'no-method'];
             if (!empty($res['ok'])) {
@@ -5056,8 +5120,8 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
                 }
                 return true;
             }
-            
-            
+            // not-apache / not-writeable / self-test-failed (already rolled the htaccess block
+            // back to PHP serve, nothing broken) → clear our flag + back off hard.
             delete_option('wpc_ttfb_ss_auto');
             wpc_ttfb_ss_backoff_bump();
             if (function_exists('wpc_cache_first_log')) {
@@ -5071,9 +5135,9 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
     }
 
     if (function_exists('add_filter')) {
-        
-        
-        
+        // Serve-decision: honor the auto-armed TTFB static serve so cacheHtml writes the
+        // mirror files. The constant / user setting still win first (the core filter runs
+        // and returns early when either is set); this only ORs in the auto flag.
         add_filter('wpc_static_serve', function ($v) {
             return $v ? $v : (get_option('wpc_ttfb_ss_auto') === '1');
         });
@@ -5081,15 +5145,15 @@ if (!function_exists('wpc_ttfb_read_ceiling_cap')) {
 }
 
 if (!function_exists('wpc_crit_kick_collect')) {
-    
+    /** B3: the kick lane COLLECTS before it generates — the shelf outranks the brakes. */
     function wpc_crit_kick_collect($urlKey)
     {
         try {
             if (empty($urlKey) || !class_exists('wps_criticalCss') || !defined('WPS_IC_CRITICAL')) {
                 return false;
             }
-            
-            
+            // stale + same-uuid is decided inside pullDerivedArtifacts via the pointer —
+            // it refuses only when nothing newer than the landed artifact is published.
             $cc = new wps_criticalCss();
             if ($cc->pullDerivedArtifacts((string) $urlKey)) {
                 if (function_exists('wpc_cache_first_log')) {
@@ -5104,7 +5168,7 @@ if (!function_exists('wpc_crit_kick_collect')) {
 }
 
 if (!function_exists('wpc_crit_purge_redispatch')) {
-    
+    /** B1: the crit purge itself owns the homepage regen — detached, ungated on cache mode. */
     function wpc_crit_purge_redispatch($sync = false)
     {
         try {
@@ -5115,14 +5179,14 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
             if ($k === '') {
                 return;
             }
-            
-            
-            
-            
-            
+            // Operator Pull Latest passes $sync=true → the cron backstop carries sync=1 so a
+            // fresh (tpl-cache-busting) gen happens even if the detach below dies. The NON-sync
+            // path keeps the 1-arg [$k] shape so it still dedups with near_expiry / B5 redispatch
+            // (which schedule [$urlKey]); a sync resync uses [$k,1] and is INTENDED to fire even
+            // if a non-sync gen is pending (only sync busts the cache).
             $wpc_rd_args357 = $sync ? [$k, 1] : [$k];
             if (function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_crit_redispatch', $wpc_rd_args357)) {
-                wpc_pl_sched(time() + 20, 'wpc_crit_redispatch', $wpc_rd_args357); 
+                wpc_pl_sched(time() + 20, 'wpc_crit_redispatch', $wpc_rd_args357); // backstop if the detach dies
             }
             if (function_exists('spawn_cron')) {
                 wpc_spawn_cron();
@@ -5130,7 +5194,7 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('purge-redispatch', $k, '', []);
             }
-            
+            // Probe bursts own the pickup (zero-held-workers) — armed regardless of SAPI.
             if (function_exists('wpc_crit_collector_arm')) {
                 wpc_crit_collector_arm($k);
             }
@@ -5144,16 +5208,16 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
                     } elseif (function_exists('litespeed_finish_request')) {
                         @litespeed_finish_request();
                     }
-                    
-                    
-                    
+                    // Bounded ≤ ~15s total (8s dispatch + one probe) — ONE ordinary-request-
+                    // sized burst per human purge click, never a sleeping worker (James's
+                    // contention law; the probe bursts + webhook carry the tail).
                     if (function_exists('set_time_limit')) { @set_time_limit(30); }
                     if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
                     add_filter('wpc_gen_dispatch_timeout', function () use ($sync) { return $sync ? 20 : 8; });
-                    $_GET['forceCritical'] = '1'; 
+                    $_GET['forceCritical'] = '1'; // human-initiated: automatic caps stand down
                     $c = new wps_criticalCss(home_url('/'));
                     if (method_exists($c, 'generateCriticalAjax')) {
-                        $c->generateCriticalAjax((bool) $sync); 
+                        $c->generateCriticalAjax((bool) $sync); // Pull Latest → fresh, tpl-cache-busting gen
                     }
                     if (function_exists('wpc_crit_collect_now')) {
                         wpc_crit_collect_now($k, 1);
@@ -5167,13 +5231,13 @@ if (!function_exists('wpc_crit_purge_redispatch')) {
 }
 
 if (!function_exists('wpc_delay_inline_fresher')) {
-    
-
-
-
-
-
-
+    /**
+     * Delay-inline landing gate (v7.10.381, service-flagged): land when the on-disk delay.json is
+     * ABSENT, or when the incoming measured manifest is NEWER by generated_at (the service amends
+     * in place under a stable uuid, so a stale first-land must not pin us forever). Forward-only —
+     * an incoming with no/older/unparseable stamp keeps the on-disk copy, so it can never regress.
+     * The measured-shape gate still applies separately, so a non-measured body never lands here.
+     */
     function wpc_delay_inline_fresher($file, $incoming)
     {
         if (!@is_readable($file)) { return true; }
@@ -5187,8 +5251,8 @@ if (!function_exists('wpc_delay_inline_fresher')) {
 }
 
 if (!function_exists('wpc_lcp_first_auth')) {
-    
-
+    /** First lcp_preload's url_is_authoritative: true (or absent => true) emits a BARE hero
+     *  preload; false = responsive skip; null = no preload entry. Decides the bare<->skip flip. */
     function wpc_lcp_first_auth($lcpArr)
     {
         if (!is_array($lcpArr) || empty($lcpArr['hints']['lcp_preload'][0]) || !is_array($lcpArr['hints']['lcp_preload'][0])) {
@@ -5198,10 +5262,10 @@ if (!function_exists('wpc_lcp_first_auth')) {
         return array_key_exists('url_is_authoritative', $e) ? (bool) $e['url_is_authoritative'] : true;
     }
 
-    
-
-
-
+    /** v7.10.383 — synchronous CF edge purge for the bare->skip lcp flip ONLY. The served page
+     *  still carries the old bare preload; the batched CF purge (purgeEdgeHtmlUrls default queue)
+     *  pressure-defers on a pinned box (queued becomes never), so evict this one URL inline, past
+     *  the queue. Batched path untouched for everything else. Best-effort; never blocks. */
     function wpc_lcp_edge_flip_purge($url)
     {
         try {
@@ -5211,7 +5275,7 @@ if (!function_exists('wpc_lcp_first_auth')) {
             $clean = (string) strtok((string) $url, '?');
             if ($clean === '') { return; }
             $forms = array_values(array_filter([$clean, (substr($clean, -1) === '/') ? rtrim($clean, '/') : $clean . '/']));
-            wps_ic_cache::purgeEdgeHtmlUrls($forms, true); 
+            wps_ic_cache::purgeEdgeHtmlUrls($forms, true); // inline=true => synchronous, past the batch queue
             if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('cf-purge-flip-sync', '', $clean, []); }
         } catch (\Throwable $e) {
         }
@@ -5219,17 +5283,17 @@ if (!function_exists('wpc_lcp_first_auth')) {
 }
 
 if (!function_exists('wpc_crit_webhook_rx')) {
-    
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v3.69.1 publish webhook receiver (joint spec v2 FINAL):
+     * POST /wp-admin/admin-ajax.php?action=wpc_crit_published with
+     * {event:'crit_published', uuid, url, url_key, ts, sig},
+     * sig = HMAC-SHA256("uuid|url_key|ts", apikey) — url_key verbatim from the body
+     * (service canonicalizeForKey form), used for the signature ONLY; our own key
+     * derivation stays wps_ic_url_key::setup. The webhook is a SIGNAL, not a data
+     * carrier: artifacts{} is advisory — the pull derives URLs from the signed uuid
+     * through the validated save path, so a tampered body can never point this site
+     * at foreign CSS.
+     */
     function wpc_crit_webhook_rx()
     {
         try {
@@ -5238,28 +5302,28 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 echo 'off';
                 exit;
             }
-            
-            
-            
-            
+            // v3.82.0+ consolidated callback carries artifacts INLINE (delay.json ~29KB), so
+            // the old 16KB cap truncated the body → json_decode failed → 403 → the plugin fell
+            // back to polling. Read the full signed body up to a bounded cap (the sig is verified
+            // before any of it is trusted; an unsigned POST just pays one bounded read, then 403).
             $raw  = (string) @file_get_contents('php://input', false, null, 0, (int) apply_filters('wpc_crit_webhook_max_body', 262144));
             $j    = json_decode($raw, true);
             $uuid = is_array($j) ? preg_replace('/[^A-Za-z0-9-]/', '', (string) ($j['uuid'] ?? '')) : '';
             $url  = is_array($j) ? (string) ($j['url'] ?? '') : '';
             $ukey = is_array($j) ? (string) ($j['url_key'] ?? '') : '';
-            
-            
-            
+            // Signature transport: X-WPC-Sig / X-WPC-Ts headers (service 3.83.0 consolidated
+            // callback), falling back to body sig/ts (legacy crit_published). Same HMAC recipe
+            // over uuid|url_key|ts either way — url_key/uuid always ride the body.
             $ts   = (string) (!empty($_SERVER['HTTP_X_WPC_TS']) ? $_SERVER['HTTP_X_WPC_TS'] : (is_array($j) ? ($j['ts'] ?? '') : ''));
             $sig  = strtolower((string) (!empty($_SERVER['HTTP_X_WPC_SIG']) ? $_SERVER['HTTP_X_WPC_SIG'] : (is_array($j) ? ($j['sig'] ?? '') : '')));
             $evt  = is_array($j) ? (string) ($j['event'] ?? '') : '';
-            
-            
+            // Q2: 'prescriptions_updated' rides this receiver with the identical field
+            // set + signature recipe; everything below the event check stays shared.
             $ok   = is_array($j) && in_array($evt, ['crit_published', 'prescriptions_updated'], true)
                 && strlen($uuid) >= 8 && $url !== '' && strlen($url) <= 2048
                 && $ukey !== '' && strlen($ukey) <= 1024
                 && ctype_digit($ts) && (bool) preg_match('/^[a-f0-9]{64}$/', $sig);
-            
+            // ts is milliseconds in the contract — accept s or ms, 10min skew.
             $tsn = $ok ? (float) $ts : 0;
             if ($tsn > 20000000000) {
                 $tsn = $tsn / 1000;
@@ -5281,9 +5345,9 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 exit;
             }
             if ($evt === 'prescriptions_updated') {
-                
-                
-                
+                // SIGNAL-ONLY (body URLs untrusted): schedule the pull; it re-derives
+                // through the validated /v2/latest + prescriptions_url.txt path. Own
+                // dedupe key — the crit event shares this uuid and must not eat it.
                 if (get_transient('wpc_whkp_' . md5($uuid . '|' . $ts))) {
                     status_header(200);
                     echo 'dup';
@@ -5299,11 +5363,11 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('whk-presc-rx', $wpc_pk355, (string) strtok($url, '?'), ['uuid' => substr($uuid, 0, 8)]);
                 }
-                
-                
-                
-                
-                
+                // The webhook is the POSITIVE SIGNAL that prescriptions exist. Write the
+                // want-marker (opens the /v2/latest prescriptions gate for ≤1h so the URL
+                // meta lands even on sites that already hold every other artifact) AND, if
+                // the URL is already on disk, a due-NOW marker so the next traffic kick
+                // pulls immediately even with cron dead.
                 $wpc_pdir355 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_pk355 . '/';
                 if (is_dir($wpc_pdir355)) {
                     wpc_crit_meta_write($wpc_pdir355 . 'presc_want.txt', (string) time());
@@ -5321,11 +5385,11 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                 }
                 exit;
             }
-            
-            
-            
-            
-            
+            // Dedupe per DELIVERY (uuid|ts), not per uuid — v3.86.0 sends a SECOND signed
+            // crit_published (observation_late follow-up, fresh ts) for the same uuid carrying
+            // the amended url_is_authoritative lcp inline; keying on uuid alone would 'dup' it
+            // out before the inline-consume blocks. A retry re-sends the same signed ts → still
+            // deduped; the consume is idempotent (delay write-once, lcp overwrite) regardless.
             if (get_transient('wpc_whk_' . md5($uuid . '|' . $ts))) {
                 status_header(200);
                 echo 'dup';
@@ -5344,14 +5408,14 @@ if (!function_exists('wpc_crit_webhook_rx')) {
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/';
             if (!is_dir($dir) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($dir); }
             wpc_crit_meta_write($dir . 'uuid.txt', $uuid);
-            
-            
-            
-            
-            
-            
-            
-            
+            // v3.83.0 delay_inline: consume the INLINE delay.json (zero-HTTP) instead of the
+            // blocking locator pull — delay.json was the last artifact still forcing a fetch.
+            // The signed body is now a verified data carrier for this artifact, BUT we only
+            // trust it after the SAME measured-shape gate a pulled artifact must pass, so a bad
+            // inline body can never land a worse gen than the pull would. ADDITIVE: the by-uuid
+            // pull below stays the authoritative path (delay_url locator never goes away), so a
+            // bug here can't break delivery — it just misses the optimization. Field shape per
+            // service §7: $j['delay'] (top-level body) + $j['delay_inline']===true.
             if (!empty($j['delay_inline']) && isset($j['delay']) && is_array($j['delay'])
                 && function_exists('wpc_delay_inline_fresher') && wpc_delay_inline_fresher($dir . 'delay.json', $j['delay'])
                 && class_exists('wps_ic_js_delay_v3')
@@ -5368,13 +5432,13 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                     }
                 }
             }
-            
-            
-            
-            
-            
-            
-            
+            // v3.85.0 lcp_inline: consume the INLINE lcp.json off the signed callback (zero-HTTP),
+            // carrying the fresh url_is_authoritative shape. UNLIKE delay (write-once, never-
+            // regress) this OVERWRITES — the callback's lcp is THIS gen's authoritative copy, and
+            // the point is to replace a stale on-disk lcp the load-gated repull will never
+            // supersede on a chronically-loaded box. Validated as a real lcp.json (lcp_element or
+            // hints) before trusting; signature already verified above. Drops lcp_none + purges so
+            // the next render skips the bare-href preload (duplicate-kill) with no idle-load wait.
             if (!empty($j['lcp_inline']) && isset($j['lcp']) && is_array($j['lcp'])
                 && (isset($j['lcp']['lcp_element']) || isset($j['lcp']['hints']))
                 && apply_filters('wpc_lcp_inline_consume', true)) {
@@ -5384,8 +5448,8 @@ if (!function_exists('wpc_crit_webhook_rx')) {
                         ? wpc_lcp_first_auth(json_decode((string) @file_get_contents($dir . 'lcp.json'), true)) : null;
                     wpc_lcp_write_preserve781($dir, $wpc_lib385);
                     @unlink($dir . 'lcp_none.txt');
-                    
-                    
+                    // bare->skip flip = the duplicate-kill: evict the CF edge copy NOW (sync),
+                    // not via the batched queue a pinned box defers indefinitely.
                     if ($wpc_oldauth383 !== false && function_exists('wpc_lcp_first_auth') && wpc_lcp_first_auth($j['lcp']) === false
                         && function_exists('wpc_lcp_edge_flip_purge')) {
                         wpc_lcp_edge_flip_purge((string) strtok($url, '?'));
@@ -5408,7 +5472,7 @@ if (!function_exists('wpc_crit_webhook_rx')) {
             } elseif (function_exists('litespeed_finish_request')) {
                 @litespeed_finish_request();
             } else {
-                
+                // No detach: never pull inline on a 5s-timeout webhook — cron + nudge.
                 if (function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_crit_collect', [$k])) {
                     wpc_pl_sched(time() + 1, 'wpc_crit_collect', [$k]);
                 }
@@ -5427,7 +5491,7 @@ if (!function_exists('wpc_crit_webhook_rx')) {
             }
             exit;
         } catch (\Throwable $e) {
-            
+            // fail OPEN: a webhook fault answers 200 and leaves the B2 backstop to land it
         }
         status_header(200);
         echo '';
@@ -5438,11 +5502,11 @@ if (!function_exists('wpc_crit_webhook_rx')) {
 }
 
 
-
-
-
+// ─── AUTO-100 prescriptions consumption (contract v1.1.1 §4, Phase A) ───
+// Land-time only: validate → store → apply-route → journal. Render reads the stored
+// file with fail-open parse guards; no HTTP ever leaves the render path.
 if (!function_exists('wpc_presc_known_classes')) {
-    
+    /** Complete 12-class enum (contract delta 1) — a short list rejects every real file. */
     function wpc_presc_known_classes()
     {
         return ['font-metric-swap', 'icon-pop', 'crit-removal', 'used-swap', 'unsized-media',
@@ -5450,9 +5514,9 @@ if (!function_exists('wpc_presc_known_classes')) {
             'third-party-lane', 'delay-created-conceal'];
     }
 
-    
-
-
+    /** Envelope + per-item structural validation. Law 12: unknown keys pass through,
+     *  unknown classes stay in (apply skips + journals them) — only structurally broken
+     *  items are dropped, never the whole file. Returns the sanitized envelope or false. */
     function wpc_prescriptions_valid($j)
     {
         if (!is_array($j) || !isset($j['v']) || !isset($j['prescriptions']) || !is_array($j['prescriptions'])) {
@@ -5480,9 +5544,9 @@ if (!function_exists('wpc_presc_known_classes')) {
         return $out;
     }
 
-    
-
-
+    /** Replace-by-id receipts, single non-autoload option, hard-capped, only-on-change:
+     *  an identical row is a no-op (original applied_at receipt preserved — the verdict
+     *  loop keys on it); a changed row keeps first_at. Cflog mirror per change (law 7). */
     function wpc_presc_journal_merge($rows)
     {
         if (!is_array($rows) || empty($rows)) {
@@ -5502,7 +5566,7 @@ if (!function_exists('wpc_presc_known_classes')) {
                 && (string) ($prev['skipped'] ?? '') === (string) ($row['skipped'] ?? '')
                 && (string) ($prev['class'] ?? '') === (string) ($row['class'] ?? '')
                 && (string) ($prev['fix'] ?? '') === (string) ($row['fix'] ?? '')) {
-                continue; 
+                continue; // identical receipt — keep the original timestamps
             }
             $row['applied_at'] = time();
             $row['first_at'] = $prev !== null ? (int) ($prev['first_at'] ?? $prev['applied_at'] ?? time()) : time();
@@ -5516,9 +5580,9 @@ if (!function_exists('wpc_presc_known_classes')) {
         if (!$dirty) {
             return;
         }
-        
-        
-        
+        // Evict junk (skips/reports) before LIVE receipts — stable armed/applied rows
+        // keep their original applied_at by design, so age alone would evict exactly
+        // the receipts the verdict loop needs most (multi-page sites, 48 ids/URL).
         if (count($j) > 160) {
             uasort($j, function ($a, $b) {
                 $w = function ($r) {
@@ -5536,12 +5600,12 @@ if (!function_exists('wpc_presc_known_classes')) {
         wpc_presc_journal_merge([(string) $id => $row]);
     }
 
-    
-
-
-
-
-
+    /** A3 gate-2 STICKY store: ids the runtime re-count found non-unique on the served
+     *  DOM. Kept OUT of the churny journal so a forced re-apply cannot re-arm them and
+     *  eviction cannot drop the gate state. Each mark is STAMPED with the 12-hex artifact
+     *  tag (av = md5(prescriptions body)[:12]) it was computed against, so a mark is
+     *  honored only while that exact artifact is live — a republish, a purge-and-refetch,
+     *  or a stale in-flight beacon all self-invalidate on av mismatch. id => av. Bounded. */
     function wpc_presc_av_tag($body)
     {
         return substr(md5((string) $body), 0, 12);
@@ -5551,7 +5615,7 @@ if (!function_exists('wpc_presc_known_classes')) {
         $s = get_option('wpc_presc_notuniq');
         return is_array($s) ? $s : [];
     }
-    
+    /** Is this id currently refuted FOR the live artifact av? */
     function wpc_presc_notuniq_hit($store, $id, $av)
     {
         $id = strtolower((string) $id);
@@ -5567,14 +5631,14 @@ if (!function_exists('wpc_presc_known_classes')) {
             if (!preg_match('/^[a-f0-9]{6,40}$/', $id) || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
                 continue;
             }
-            
-            
-            
-            
+            // Move to the TAIL on every confirm (unconditional per-id, not gated on a
+            // batch change-flag) — eviction is LRU-by-mark, so a repeatedly-refuted id is
+            // the LAST to evict, not the first (the insertion-order slice dropped exactly
+            // those). The consume lane is ≤1/60s, so the write below is not churn.
             unset($s[$id]);
             $s[$id] = $av;
         }
-        if ($s !== $orig) { 
+        if ($s !== $orig) { // value change OR reorder
             if (count($s) > 512) {
                 $s = array_slice($s, -512, null, true);
             }
@@ -5600,9 +5664,9 @@ if (!function_exists('wpc_presc_known_classes')) {
         }
     }
 
-    
-
-
+    /** Route each entry per the §4 fix.type→action map; journal every id (law 7) in ONE
+     *  batched option write. $av = the artifact tag this envelope was applied from
+     *  (a runtime not-unique mark is honored only while its av is the live one). */
     function wpc_presc_apply($urlKey, $env, $av = '')
     {
         $known = wpc_presc_known_classes();
@@ -5613,12 +5677,12 @@ if (!function_exists('wpc_presc_known_classes')) {
         if (!is_array($storedPins)) {
             $storedPins = [];
         }
-        
-        
-        
+        // A3 gate-2: ids the served-DOM re-count already refuted stay demoted across
+        // every re-apply — a forced refetch of an unchanged file must not re-arm them
+        // (the oscillation class). A genuine service rewrite clears them (see fetch).
         $notUniq = function_exists('wpc_presc_notuniq_get') ? wpc_presc_notuniq_get() : [];
-        
-        
+        // Same selector alphabet the render leg enforces — land and render must agree,
+        // or 'armed' receipts describe rules that never emit.
         $selRx = '/^[A-Za-z0-9 _\-#.:\[\]=>+~()]+$/';
         foreach ((array) ($env['prescriptions'] ?? []) as $p) {
             $id = (string) $p['id'];
@@ -5634,17 +5698,17 @@ if (!function_exists('wpc_presc_known_classes')) {
                 continue;
             }
             if ($fx === 'reserve-rect') {
-                
-                
-                
+                // A3 gate 1: only the verdict probe's verified_unique:true stamp arms an
+                // emission (the runtime re-count is check #2). Unstamped = pre-verdict file
+                // — the poll-#2 rewrite carries the stamps; false = service-demoted.
                 if (isset($p['verified_unique']) && $p['verified_unique'] === false) {
                     $rows[$id] = $base + ['status' => 'report', 'skipped' => 'not-unique-verdict'];
                     continue;
                 }
                 $sel = isset($p['fix']['payload']['sel']) ? trim((string) $p['fix']['payload']['sel']) : '';
-                
-                
-                
+                // Same rounding the render leg applies — (int) truncation would journal
+                // 'armed' for 2000.5 (render drops it) and 'bad-payload' for 23.7 (render
+                // emits it): receipts must describe what actually ships.
                 $px  = isset($p['fix']['payload']['min_height_px']) && is_numeric($p['fix']['payload']['min_height_px'])
                     ? (int) round((float) $p['fix']['payload']['min_height_px']) : 0;
                 if ($sel === '' || strlen($sel) > 400 || !preg_match($selRx, $sel) || $px < 24 || $px > 2000) {
@@ -5656,9 +5720,9 @@ if (!function_exists('wpc_presc_known_classes')) {
                     continue;
                 }
                 if (wpc_presc_notuniq_hit($notUniq, $id, $av)) {
-                    
-                    
-                    
+                    // runtime re-count refuted this id FOR THIS artifact version — do not
+                    // re-arm (render suppresses it too). A different av (republish) is not
+                    // a hit, so a genuinely re-published/fixed id arms again.
                     $rows[$id] = $base + ['status' => 'skipped', 'skipped' => 'not-unique'];
                     continue;
                 }
@@ -5667,11 +5731,11 @@ if (!function_exists('wpc_presc_known_classes')) {
             } elseif ($fx === 'lane-demote') {
                 $host = isset($p['fix']['payload']['host']) ? strtolower(trim((string) $p['fix']['payload']['host'])) : '';
                 $mode = isset($p['fix']['payload']['mode']) ? strtolower(trim((string) $p['fix']['payload']['mode'])) : '';
-                
-                
-                
-                
-                
+                // Contract §2 lane names → internal lanes (service-confirmed emitted set:
+                // delay-interaction-only, keep-eager, facade). keep-eager = consent pin —
+                // surfaced via the eager lane, NEVER wired into excludes (dm law: the
+                // built-in consent keeps do the actual eager-keeping); facade = Phase C,
+                // report lane. Unknown modes journal as skips.
                 $modeMap = ['delay-interaction-only' => 'io', 'io' => 'io', 'delay' => 'delay',
                     'keep-eager' => 'eager', 'facade' => 'report', 'report' => 'report', 'review' => 'report'];
                 if ($host === '' || $mode === '' || !function_exists('wpc_auto_3p_lane_set')) {
@@ -5684,21 +5748,21 @@ if (!function_exists('wpc_presc_known_classes')) {
                 }
                 $m = (isset($p['match']) && is_array($p['match'])) ? $p['match'] : [];
                 $lr = wpc_auto_3p_lane_set($host, $modeMap[$mode], $m, 'presc:' . $id);
-                
+                // A false receipt blinds the verdict loop — journal what actually happened.
                 $rows[$id] = $lr !== false
                     ? $base + ['status' => 'applied']
                     : $base + ['status' => 'skipped', 'skipped' => 'lane-rejected'];
             } elseif ($fx === 'lane-pin') {
-                
-                
+                // A2: the chain walk needs wp_scripts, which only exists on a front-end
+                // render — store the intent; the delay-v3 pass resolves or degrades there.
                 $cand = (isset($p['evidence']['candidates']) && is_array($p['evidence']['candidates']))
                     ? array_slice(array_map('strval', $p['evidence']['candidates']), 0, 6) : [];
                 if (empty($cand)) {
                     $rows[$id] = $base + ['status' => 'skipped', 'skipped' => 'no-candidates'];
                     continue;
                 }
-                
-                
+                // A render-decided pin keeps BOTH its state and its journal receipt —
+                // re-journaling 'armed' here would erase the 'applied'/'report' truth.
                 $wpc_pst356 = (string) ($storedPins[$id]['state'] ?? '');
                 if ($wpc_pst356 === 'resolved' || $wpc_pst356 === 'degraded') {
                     $pins[$id] = $storedPins[$id];
@@ -5718,15 +5782,15 @@ if (!function_exists('wpc_presc_known_classes')) {
         wpc_presc_journal_merge($rows);
         {
             $cur = $storedPins;
-            
+            // pending intents refresh; resolved/degraded verdicts stick (render decided)
             foreach ($pins as $wpc_pid => $wpc_pin) {
                 if (!isset($cur[$wpc_pid]) || (($cur[$wpc_pid]['state'] ?? '') === 'pending')) {
                     $cur[$wpc_pid] = $wpc_pin;
                 }
             }
-            
-            
-            
+            // WITHDRAWAL: this key's stored pins absent from the current envelope (or
+            // re-typed away from lane-pin) un-pin — a chain must not stay promoted
+            // after the service retreats from the prescription.
             foreach (array_keys($cur) as $wpc_wpid356) {
                 if ((string) ($cur[$wpc_wpid356]['k'] ?? '') === (string) $urlKey && !isset($pins[$wpc_wpid356])) {
                     unset($cur[$wpc_wpid356]);
@@ -5745,8 +5809,8 @@ if (!function_exists('wpc_presc_known_classes')) {
         return $armed;
     }
 
-    
-
+    /** Fetch → validate → store → apply. Buster-always (§1 fetch law: the file is amended
+     *  in place post-verdict); ETag is a change marker ONLY — never If-None-Match (delta 3). */
     function wpc_prescriptions_fetch($urlKey, $force = false)
     {
         try {
@@ -5756,10 +5820,10 @@ if (!function_exists('wpc_presc_known_classes')) {
             if (function_exists('wpc_pipeline_key_junk') && wpc_pipeline_key_junk($urlKey)) {
                 return false;
             }
-            
-            
-            
-            
+            // A FORCED fetch (poll #2 / webhook / due-tick) bypasses the 30s land-side
+            // single-flight (a heated land fetch must not swallow the post-verdict pull)
+            // but takes a SHARED 15s force-mutex — the cron poll and the traffic tick
+            // have disjoint lane throttles and would otherwise double-fetch concurrently.
             if (!$force && get_transient('wpc_prescfetch_' . md5((string) $urlKey))) {
                 return false;
             }
@@ -5788,7 +5852,7 @@ if (!function_exists('wpc_presc_known_classes')) {
             $etag = is_string($etag) ? trim($etag) : '';
             if (!$force && $etag !== '' && @is_readable($dir . 'prescriptions.json')
                 && $etag === trim((string) @file_get_contents($dir . 'prescriptions_etag.txt'))) {
-                return true; 
+                return true; // unchanged shelf copy — already applied
             }
             $env = wpc_prescriptions_valid(json_decode($body, true));
             if ($env === false) {
@@ -5797,10 +5861,10 @@ if (!function_exists('wpc_presc_known_classes')) {
                 }
                 return false;
             }
-            
-            
-            
-            
+            // CHANGE DETECTION keys on a PERSISTED per-URL body md5 (option, survives the
+            // prescriptions.json unlink that our own purge/refetch does) — NOT the on-disk
+            // json, whose absence would false-positive "changed" on a byte-identical
+            // refetch and spuriously clear the sticky store / fire a purge.
             $wpc_bmd356 = md5($body);
             $wpc_av356  = wpc_presc_av_tag($body);
             $wpc_bstore356 = get_option('wpc_presc_bodymd5');
@@ -5813,10 +5877,10 @@ if (!function_exists('wpc_presc_known_classes')) {
                 wpc_crit_meta_write($dir . 'prescriptions_etag.txt', $etag);
             }
             if ($changed) {
-                
-                
-                
-                
+                // Re-insert at the tail (LRU): the change-detection baseline for an
+                // actively-refetched URL must outlive eviction, else a >cap multi-page
+                // site false-positives 'changed' on a byte-identical refetch and fires an
+                // avoidable purge. 256 URLs is far beyond any real per-install footprint.
                 unset($wpc_bstore356[(string) $urlKey]);
                 $wpc_bstore356[(string) $urlKey] = $wpc_bmd356;
                 if (count($wpc_bstore356) > 256) {
@@ -5824,9 +5888,9 @@ if (!function_exists('wpc_presc_known_classes')) {
                 }
                 update_option('wpc_presc_bodymd5', $wpc_bstore356, false);
             }
-            
-            
-            
+            // The av stamp makes marks self-invalidate across versions, so an explicit
+            // clear is no longer load-bearing — but prune this envelope's stale-av marks
+            // on a genuine republish to keep the store tight.
             if ($changed && function_exists('wpc_presc_notuniq_clear')) {
                 $wpc_cids356 = [];
                 $wpc_nu356 = wpc_presc_notuniq_get();
@@ -5844,8 +5908,8 @@ if (!function_exists('wpc_presc_known_classes')) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('presc-landed', (string) $urlKey, '', ['n' => count((array) $env['prescriptions']), 'armed' => (int) $armed, 'changed' => (int) $changed]);
             }
-            
-            
+            // Purge on ANY content change (coalescer bounds the cost): a rewrite that
+            // only DEMOTES must also rotate cached HTML, or stale reserve rules persist.
             if ($changed && function_exists('wpc_land_purge_coalesced')) {
                 wpc_land_purge_coalesced($urlKey, '', 'presc-land');
             }
@@ -5855,11 +5919,11 @@ if (!function_exists('wpc_presc_known_classes')) {
         }
     }
 
-    
-
-
-
-
+    /** Land ride: try now if the URL meta is here, and arm poll #2 (+300s) for the
+     *  post-verdict rewrite (§1: prescriptions.json is amended after verdict).
+     *  CRON-INDEPENDENCE: the due-marker file makes the traffic-driven kick lane a
+     *  co-equal executor of poll #2 (wpc_presc_due_tick below) — WP-Cron is an
+     *  optimization here, never a dependency (DISABLE_WP_CRON + dead crontab sites). */
     function wpc_presc_on_land($urlKey)
     {
         try {
@@ -5870,13 +5934,13 @@ if (!function_exists('wpc_presc_known_classes')) {
             if ($dir !== '' && @is_readable($dir . 'prescriptions_url.txt')) {
                 wpc_prescriptions_fetch($urlKey);
             }
-            
-            
-            
+            // Arm the +300s post-verdict poll ONLY when prescriptions are known for this
+            // site (url meta present). A prescriptions-less site gets no marker — else the
+            // due-tick drips a 120s transient write per trafficked kick forever.
             if ($dir !== '' && is_dir($dir) && @is_readable($dir . 'prescriptions_url.txt')) {
-                
-                
-                
+                // Keep the EARLIER due time: a webhook's due-NOW marker must never be
+                // pushed out by a land re-arm (cron-dead sites: the marker is the only
+                // carrier of the post-verdict pull).
                 $wpc_pdcur356 = (int) trim((string) @file_get_contents($dir . 'presc_due.txt'));
                 $wpc_pdnew356 = time() + 300;
                 if ($wpc_pdcur356 <= 0 || $wpc_pdcur356 > $wpc_pdnew356) {
@@ -5892,10 +5956,10 @@ if (!function_exists('wpc_presc_known_classes')) {
         }
     }
 
-    
-
-
-
+    /** Traffic-driven poll executor: any kick/repull after the due time runs poll #2
+     *  inline on a BACKGROUND worker (the kick lane is loopback-driven, cron-free).
+     *  Also folds the beacon queue opportunistically — same cron-independence. Bounded:
+     *  120s throttle + the fetch's own single-flight; marker clears only on success. */
     function wpc_presc_due_tick($urlKey)
     {
         try {
@@ -5918,8 +5982,8 @@ if (!function_exists('wpc_presc_known_classes')) {
             }
             set_transient('wpc_prescdt_' . md5((string) $urlKey), 1, 120);
             if (!@is_readable($dir . 'prescriptions_url.txt')) {
-                
-                
+                // No URL to fetch — retire this marker (the /v2/latest + presc_want lane
+                // lands the URL and re-arms). Never drip a per-kick transient forever.
                 @unlink($dir . 'presc_due.txt');
                 return false;
             }
@@ -5929,9 +5993,9 @@ if (!function_exists('wpc_presc_known_classes')) {
                 delete_transient('wpc_prescdf_' . md5((string) $urlKey));
                 return true;
             }
-            
-            
-            
+            // Duration cap: a marker whose fetch NEVER succeeds (withdrawn shelf URL)
+            // retires after 12 consecutive failures — the next land re-arms it. Without
+            // this the 120s-throttled retry drips forever on trafficked sites.
             $wpc_df356 = (int) get_transient('wpc_prescdf_' . md5((string) $urlKey)) + 1;
             set_transient('wpc_prescdf_' . md5((string) $urlKey), $wpc_df356, DAY_IN_SECONDS);
             if ($wpc_df356 >= 12) {
@@ -5946,9 +6010,9 @@ if (!function_exists('wpc_presc_known_classes')) {
         }
     }
 
-    
-
-
+    /** Poll #2 handler: force-refetch the post-verdict rewrite. Every blocked path
+     *  DEFERS instead of dropping (bounded by a wave counter) — a swallowed poll loses
+     *  the verified_unique stamps until the next full generation. */
     function wpc_presc_poll_h($urlKey)
     {
         try {
@@ -5962,7 +6026,7 @@ if (!function_exists('wpc_presc_known_classes')) {
             $defer = function ($secs) use ($urlKey, $ctr) {
                 $n = (int) get_transient($ctr);
                 if ($n >= 8) {
-                    return; 
+                    return; // wave cap — stop chaining, the next land re-arms
                 }
                 set_transient($ctr, $n + 1, HOUR_IN_SECONDS);
                 if (function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')
@@ -5981,14 +6045,14 @@ if (!function_exists('wpc_presc_known_classes')) {
             set_transient('wpc_prescpoll_' . md5((string) $urlKey), 1, 60);
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
             if (!@is_readable($dir . 'prescriptions_url.txt')) {
-                
-                
+                // Positive-signal path only (webhook wrote presc_want): clear the /v2/latest
+                // throttle so the repull lands the URL meta now, not up to 60s later.
                 delete_transient('wpc_v2l_' . md5((string) $urlKey));
                 if (function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')
                     && !wp_next_scheduled('wpc_lcp_repull', [(string) $urlKey, 1])) {
                     wpc_pl_sched(time() + 1, 'wpc_lcp_repull', [(string) $urlKey, 1]);
                 }
-                $defer(120); 
+                $defer(120); // re-poll after the repull lands the URL meta
                 return;
             }
             if (wpc_prescriptions_fetch($urlKey, true)) {
@@ -6005,9 +6069,9 @@ if (!function_exists('wpc_presc_known_classes')) {
 
 
 if (!function_exists('wpc_presc_seen_handler')) {
-    
-
-
+    /** A3 runtime re-count beacon (loader disagrees with the verdict at apply time).
+     *  font_seen shape: accept filter, lock, strict input caps, bounded queue, deferred
+     *  consume — zero blocking work on the beacon request. */
     function wpc_presc_seen_handler()
     {
         try {
@@ -6018,13 +6082,13 @@ if (!function_exists('wpc_presc_seen_handler')) {
                 wp_die('', '', 204);
             }
             set_transient('wpc_presc_seen_lock', 1, 30);
-            
-            
+            // One beacon per pageload carries up to 4 comma-joined ids (the 30s lock
+            // would drop a second same-visitor beacon).
             $idr = isset($_POST['id']) ? strtolower(trim((string) wp_unslash($_POST['id']))) : '';
             $sk  = isset($_POST['skipped']) ? trim((string) wp_unslash($_POST['skipped'])) : '';
-            
-            
-            
+            // av = the artifact tag the verdict was computed against; a mark is honored
+            // only while that av is live, so a stale in-flight beacon can't suppress a
+            // freshly re-published id.
             $av  = isset($_POST['av']) ? strtolower(trim((string) wp_unslash($_POST['av']))) : '';
             if ($idr === '' || strlen($idr) > 180 || !in_array($sk, ['not-unique'], true)
                 || !preg_match('/^[a-f0-9]{6,32}$/', $av)) {
@@ -6070,11 +6134,11 @@ if (!function_exists('wpc_presc_seen_handler')) {
             foreach ($q as $id => $av) {
                 wpc_presc_journal_put((string) $id, ['status' => 'skipped', 'skipped' => 'not-unique', 'via' => 'runtime-recount']);
                 if (preg_match('/^[a-f0-9]{6,32}$/', (string) $av)) {
-                    $mark[(string) $id] = (string) $av; 
+                    $mark[(string) $id] = (string) $av; // id => artifact tag
                 }
             }
-            
-            
+            // Sticky gate: survives journal eviction AND forced re-applies; the av stamp
+            // makes a stale-artifact verdict self-invalidate.
             if (!empty($mark) && function_exists('wpc_presc_notuniq_mark')) {
                 wpc_presc_notuniq_mark($mark);
             }
@@ -6085,10 +6149,10 @@ if (!function_exists('wpc_presc_seen_handler')) {
 }
 
 
-
-
-
-
+// ─── used-css scoped purge (v7.10.325, hit-rate law): a used.css artifact is TEMPLATE-
+// keyed — purging ALL local HTML for it wiped every page's cache on every used-css land.
+// Purge only the pages whose crit dir carries the same tpl (bounded); fall back to the
+// old full wipe only when the template family is too large to enumerate. ───
 if (!function_exists('wpc_used_css_scoped_purge')) {
     function wpc_used_css_scoped_purge($tplKey)
     {
@@ -6107,7 +6171,7 @@ if (!function_exists('wpc_used_css_scoped_purge')) {
                     }
                     $keys[] = trim(substr(dirname($tf) . '/', strlen($root)), '/');
                     if (count($keys) > $cap) {
-                        return false; 
+                        return false; // family too large — caller falls back to the full wipe
                     }
                 }
             }
@@ -6128,10 +6192,10 @@ if (!function_exists('wpc_used_css_scoped_purge')) {
 }
 
 
-
-
-
-
+// ─── LiteSpeed purge-ping (v7.10.324, hawkeye receipt): background lands cannot emit
+// response headers, and LiteSpeed purges ONLY via response headers — so the clean URL
+// keeps serving a stale LS HIT that never runs PHP. The ping is one non-blocking
+// cache-miss loopback (?wpc_lsp) whose own response carries the purge directive. ───
 if (!function_exists('wpc_ls_purge_ping')) {
     function wpc_ls_purge_ping($url)
     {
@@ -6145,7 +6209,7 @@ if (!function_exists('wpc_ls_purge_ping')) {
                 return false;
             }
             if (get_transient('wpc_lsp_' . md5((string) $url))) {
-                return true; 
+                return true; // one ping per URL per window
             }
             set_transient('wpc_lsp_' . md5((string) $url), 1, 20);
             wp_remote_get(add_query_arg('wpc_lsp', (string) time(), (string) $url),
@@ -6165,8 +6229,8 @@ if (!function_exists('wpc_ls_purge_ping')) {
             if (empty($_GET['wpc_lsp'])) {
                 return;
             }
-            
-            
+            // Purges only THIS request's own clean path — the same power any visitor already
+            // has via a random query param; rate-limited so probe floods mint nothing.
             $path = (string) strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
             if ($path === '') {
                 $path = '/';
@@ -6192,18 +6256,18 @@ if (!function_exists('wpc_ls_purge_ping')) {
             echo 'ok';
             exit;
         } catch (\Throwable $e) {
-            
+            // fail OPEN: never break the render this rode in on
         }
     }
     add_action('init', 'wpc_ls_purge_ping_rx', 0);
 }
 
 
-
-
-
-
-
+// ─── Crit pipeline SELF-TEST (v7.10.323): the acceptance drill, productized ───
+// Preflight = read-only hop checks. Drill (&drill=1) = windowless: stale-mark the
+// homepage (old crit keeps serving), regenerate through the real lanes, measure
+// dispatch→land from the B7 stamps, verify the marker cleared; on timeout the marker
+// is removed so serving state is exactly as before. One budgeted worker, bounded.
 if (!function_exists('wpc_crit_selftest_run')) {
     function wpc_crit_selftest_report_file()
     {
@@ -6263,9 +6327,9 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 $r['verdict'] = $preOk ? 'PASS-PREFLIGHT' : 'FAIL';
                 return $r;
             }
-            
-            
-            
+            // DRILL START (zero-held-workers): stale-mark + the real purge-regen lane +
+            // probe bursts; the verdict materializes in the stamps and the POLL endpoint
+            // computes it. No sleeping worker, works on every SAPI.
             if (!$preOk || !class_exists('wps_criticalCss')) {
                 $r['notes'][] = 'preflight-failed';
                 return $r;
@@ -6284,7 +6348,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
         }
     }
 
-    
+    /** Poll-side finalize: PASS/FAIL computed from the on-disk stamps; FAIL restores serving state. */
     function wpc_crit_selftest_finalize($rep)
     {
         try {
@@ -6300,9 +6364,9 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 $rep['hops']['landed'] = true;
                 $rep['verdict'] = 'PASS';
             } elseif (time() > (int) ($rep['deadline'] ?? 0)) {
-                @unlink($dir . 'stale.txt'); 
-                
-                
+                @unlink($dir . 'stale.txt'); // restore serving state exactly as before
+                // The landed artifact may BE the latest published (service debounced the
+                // regen — nothing newer exists to land). That is freshness, not failure.
                 $wpc_pf325 = '';
                 try {
                     $opt325 = get_option(WPS_IC_OPTIONS);
@@ -6354,10 +6418,10 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 echo 'x';
                 exit;
             }
-            
-            
-            
-            
+            // v7.10.379 TRACE (read-only cross-team debug, &trace=1): this key's landing lifecycle
+            // — gen uuid (the service's join key), artifact inventory + quality flags, and the cflog
+            // hop timeline with per-hop deltas. Pure disk reads, bounded; no side effects. &k= a
+            // non-home URL, &all=1 unfiltered stream, &tail=N rows.
             if (isset($_GET['trace'])) {
                 $tk = isset($_GET['k']) && (string) $_GET['k'] !== ''
                     ? ltrim((string) (new wps_ic_url_key())->setup((string) strtok((string) $_GET['k'], '?')), '/')
@@ -6405,12 +6469,12 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 }
                 $twhk = (int) $trd(rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/whk_last.txt');
                 $tdts = (int) $trd($tdir . 'dispatch_ts.txt'); $tlts = (int) $trd($tdir . 'land_ts.txt');
-                
-                
-                
-                
-                
-                
+                // v7.10.688 — the wire block. §8(c)/§8.1 read wire.json at render and no endpoint
+                // surfaced it, so "is the manifest carrying the instruction?" was answerable on
+                // neither side of the fence (the .687 Roboto/hero standstill). held_url vs
+                // declared_url is the §2 dedupe key — a mismatch means declared-but-not-held
+                // (wpc_wire_catchup's case). Per-device counts + the drop families + lcp verdict
+                // are the two consumers' entire decision surface. Pure disk reads.
                 $twp = function_exists('wpc_wire_provenance') ? wpc_wire_provenance($tk)
                     : ['rev' => 0, 'sig' => '', 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
                 $twire = [
@@ -6446,16 +6510,16 @@ if (!function_exists('wpc_crit_selftest_run')) {
                     'ver'  => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
                     'now'  => $tnow, 'key' => $tk,
                     'uuid' => ['on_disk' => trim($trd($tdir . 'uuid.txt')), 'land_uuid' => trim($trd($tdir . 'land_uuid.txt'))],
-                    
-                    
-                    
+                    // Atomic Contract canary surface (v7.10.697): which path owns this key and
+                    // which generation the manifest hold names — diff against the service's
+                    // pointer read; a mismatch names the owning side in one look.
                     'manifest' => [
                         'held_gen' => trim($trd($tdir . 'manifest.held_gen')),
                         'present'  => @is_readable($tdir . 'manifest.json'),
                         'mode'     => function_exists('wpc_manifest_mode') ? (wpc_manifest_mode($tk) !== '') : false,
                     ],
-                    
-                    
+                    // Verified Copy Contract surface (v7.10.700): last refusal + storm state —
+                    // one look answers "why is the edge not filling?" / "did a bad copy sneak in?"
                     'admission' => (array) get_option('wpc_admission_state700', []),
                     'wire' => $twire,
                     'artifacts' => [
@@ -6472,10 +6536,10 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         'used_css_url' => trim($trd($tdir . 'used_css_url.txt')) !== '',
                     ],
                     'stamps' => [
-                        
-                        
-                        
-                        
+                        // raw last-write stamps — NOT gen-scoped (dispatch_ts/land_ts can be
+                        // different gens, so a derived delta lies). Authoritative per-gen
+                        // dispatch->serve latency is the ledger's (uuid-joined + serve-probe);
+                        // honest hop spacing is the timeline dt_s below.
                         'dispatch_ts' => $tdts ?: null, 'land_ts' => $tlts ?: null,
                         'note' => 'last-write, not gen-scoped',
                     ],
@@ -6484,19 +6548,19 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 ]);
                 exit;
             }
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+            // REFETCH (v7.10.327): re-consume held/amended shelf artifacts without FTP.
+            // &refetch=fonts → drop the local subset+metrics so the fonts leg refetches
+            //   the (possibly re-amended) fonts_url on the next kick — crit embeds keep
+            //   carrying first paint meanwhile.
+            // &refetch=crit → drop land_uuid.txt only; the collector force-pulls the held
+            //   uuid and OVERWRITES in place (atomic rename — never a critless window).
+            // &refetch=used → clear the one-shot fetch gates and re-pull the stored
+            //   used-css bundles inline (amended shelf bytes can differ at identical
+            //   length), then rotate page copies exactly like a land would.
+            // Optional &k= targets a non-home key (junk-gated); default homepage.
+            // &refetch=resync → the one-click full close: stale-mark everything (pages
+            //   keep serving), clear every gate/backoff, force a fresh dispatch, pull all
+            //   lanes now, and self-schedule follow-up waves for the observe-leg artifacts.
             $wpc_rf327 = isset($_GET['refetch']) ? sanitize_key((string) $_GET['refetch']) : '';
             $wpc_resync334 = ($wpc_rf327 === 'resync');
             if ($wpc_resync334) {
@@ -6512,15 +6576,15 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 }
                 $wpc_rd327 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_rk327 . '/';
                 $wpc_done327 = [];
-                
-                
+                // Captured BEFORE the crit branch unlinks land_uuid.txt (all-mode ordering);
+                // identity law: a bare uuid without its dispatch stamp is borrowed state.
                 $wpc_uid333 = trim((string) @file_get_contents($wpc_rd327 . 'land_uuid.txt'));
                 if ($wpc_uid333 === '' && @is_readable($wpc_rd327 . 'dispatch_ts.txt')) {
                     $wpc_uid333 = trim((string) @file_get_contents($wpc_rd327 . 'uuid.txt'));
                 }
                 if ($wpc_resync334) {
                     if (function_exists('wpc_crit_soft_purge_all')) {
-                        wpc_crit_soft_purge_all(); 
+                        wpc_crit_soft_purge_all(); // blank-slate that never blanks a page
                     }
                     delete_option('wpc_gen_sf_global');
                     delete_option('wpc_gen_sf_' . $wpc_rk327);
@@ -6530,15 +6594,15 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         @unlink(wpc_kick_lockfile($wpc_rk327, 'recv'));
                         @unlink(wpc_kick_lockfile($wpc_rk327, 'fire'));
                     }
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+                    // Pull Latest force-gens with sync=1 (v7.10.357) — threaded through the
+                    // redispatch cron arg + detached runner (NOT a shared transient, which
+                    // leaked the blocking full-sync onto visitor kicks). sync=1 makes the
+                    // service SKIP its template cache and grind a genuinely fresh, current-
+                    // schema gen (ceiling / hints / verified-unique prescriptions) — without
+                    // it, resync re-pulls the SAME stale tpl-cached artifact (staging receipt:
+                    // 48's morning gen had no ceiling until a sync=1 gen busted the cache).
                     if (function_exists('wpc_crit_purge_redispatch')) {
-                        wpc_crit_purge_redispatch(true); 
+                        wpc_crit_purge_redispatch(true); // operator force-sync, detached runner
                     }
                     foreach ([150, 330] as $wpc_wv334) {
                         wpc_pl_sched(time() + $wpc_wv334, 'wpc_crit_resync_wave', [$wpc_rk327, (int) $wpc_wv334]);
@@ -6551,8 +6615,8 @@ if (!function_exists('wpc_crit_selftest_run')) {
                     $wpc_done327[] = 'fonts';
                 }
                 if ($wpc_rf327 === 'used' || $wpc_rf327 === 'all') {
-                    
-                    
+                    // prescriptions re-consume rides the used refetch: drop the stored file
+                    // + gates so the next kick pulls the (possibly re-amended) shelf copy.
                     @unlink($wpc_rd327 . 'prescriptions.json');
                     @unlink($wpc_rd327 . 'prescriptions_etag.txt');
                     delete_transient('wpc_prescfetch_' . md5((string) $wpc_rk327));
@@ -6565,28 +6629,28 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 $wpc_landed327 = null;
                 if ($wpc_rf327 === 'crit' || $wpc_rf327 === 'all') {
                     @unlink($wpc_rd327 . 'land_uuid.txt');
-                    
-                    
-                    
+                    // Manifest-path escape hatch (v7.10.697): the crit drill also drops the
+                    // manifest hold, reverting the key to the legacy flow until the next
+                    // generation_complete webhook re-establishes it.
                     @unlink($wpc_rd327 . 'manifest.held_gen');
                     @unlink($wpc_rd327 . 'manifest.json');
                     if (function_exists('wpc_crit_collector_arm')) {
                         wpc_crit_collector_arm($wpc_rk327);
                     }
                     if (function_exists('wpc_crit_collect_now')) {
-                        $wpc_landed327 = (bool) wpc_crit_collect_now($wpc_rk327, 1); 
+                        $wpc_landed327 = (bool) wpc_crit_collect_now($wpc_rk327, 1); // one bounded inline probe
                     }
                     $wpc_done327[] = 'crit';
                 }
                 if ($wpc_rf327 === 'used' || $wpc_rf327 === 'all') {
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+                    // URL metas are ARTIFACTS (purges delete them; identity survives) — when
+                    // absent, derive the shelf URLs. POINTER FIRST: a refetch means "give me
+                    // what the service currently publishes", and staged corrections can live
+                    // on a held uuid the local stamps have already moved past (hawkeye
+                    // receipt: stamps → morning gen, corrected used.css → pointer's uuid).
+                    // Local stamps are the fallback when the pointer is unreachable.
+                    // NOTE: stamps were captured early ($wpc_uid333) — the crit branch above
+                    // unlinks land_uuid.txt in 'all' mode.
                     $wpc_ub333 = '';
                     $wpc_phu347 = '';
                     $wpc_bsrc347 = '';
@@ -6595,7 +6659,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         $wpc_ak333 = is_array($wpc_opts333) && !empty($wpc_opts333['api_key']) ? (string) $wpc_opts333['api_key'] : '';
                         $wpc_cu333 = trim((string) @file_get_contents($wpc_rd327 . 'url.txt'));
                         if ($wpc_cu333 === '' && ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/') === ltrim((string) $wpc_rk327, '/')) {
-                            $wpc_cu333 = home_url('/'); 
+                            $wpc_cu333 = home_url('/'); // A8 law: home fallback only for the home key
                         }
                         if ($wpc_ak333 !== '' && $wpc_cu333 !== '') {
                             if (strpos($wpc_cu333, '://') === false) {
@@ -6628,19 +6692,19 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         $wpc_ub333 = 'https://critical-css-mc.b-cdn.net/' . substr($wpc_uid333, 0, 4) . '/' . $wpc_uid333;
                         $wpc_bsrc347 = 'stamp';
                     }
-                    
-                    
-                    
-                    
+                    // Crit lands are ASYNC — during the click land_uuid.txt still holds the
+                    // PREVIOUS gen, so a pointer that advertises used files (has_used_css:1,
+                    // truthful since the kick carries the capability) outranks the live stamp.
+                    // The stamp still wins when the pointer lacks used files or timed out.
                     $wpc_ulive342 = trim((string) @file_get_contents($wpc_rd327 . 'land_uuid.txt'));
                     if ($wpc_phu347 === '' && preg_match('/^[0-9a-f-]{8,}$/i', $wpc_ulive342)) {
                         $wpc_ub333 = 'https://critical-css-mc.b-cdn.net/' . substr($wpc_ulive342, 0, 4) . '/' . $wpc_ulive342;
                         $wpc_bsrc347 = 'land';
                     }
-                    
-                    
-                    
-                    
+                    // Operator override (temporary until the service advertises used_css=1 on
+                    // the kick so every gen mints its own bundle): &used_uuid=<uuid> pulls the
+                    // known-good used bundle by uuid — a fresh gen with real used files later
+                    // supersedes it organically. One-shot, no persistence, no FTP.
                     $wpc_uovr343 = isset($_GET['used_uuid']) ? preg_replace('/[^0-9a-f-]/i', '', (string) $_GET['used_uuid']) : '';
                     if (strlen($wpc_uovr343) >= 8) {
                         $wpc_ub333 = 'https://critical-css-mc.b-cdn.net/' . substr($wpc_uovr343, 0, 4) . '/' . $wpc_uovr343;
@@ -6655,8 +6719,8 @@ if (!function_exists('wpc_crit_selftest_run')) {
                         }
                     }
                     if ($wpc_ut327 === '') {
-                        
-                        
+                        // Page-dir identity missing (pre-.327 installs / service rows with
+                        // tpl_key=None): recover the key from the newest store file itself.
                         $wpc_newest327 = 0;
                         foreach ((array) @glob(rtrim(WPS_IC_CRITICAL, '/') . '/used-css/tpl-*.css') as $wpc_sf327) {
                             $wpc_bn327 = basename($wpc_sf327);
@@ -6678,15 +6742,15 @@ if (!function_exists('wpc_crit_selftest_run')) {
                             $wpc_mraw341 = trim((string) @file_get_contents($wpc_rd327 . $wpc_pair327[1]));
                             $wpc_uu327 = $wpc_mraw341;
                             if ($wpc_uu327 !== '' && !preg_match('#^https?://#i', $wpc_uu327)) {
-                                $wpc_uu327 = ''; 
+                                $wpc_uu327 = ''; // 'None'/junk meta (service-side null serialization) — derive instead
                             }
                             $wpc_msrc341 = $wpc_uu327 !== '' ? 'meta' : 'none';
                             if ($wpc_uu327 !== '' && $wpc_ub333 !== '' && strpos($wpc_uu327, basename($wpc_ub333)) === false) {
-                                $wpc_uu327 = ''; 
+                                $wpc_uu327 = ''; // meta uuid ≠ the generation that just landed — stale by definition
                                 $wpc_msrc341 = 'meta-stale';
                             }
                             if ($wpc_uu327 === '' && $wpc_ub333 !== '') {
-                                $wpc_uu327 = $wpc_ub333 . $wpc_sfx333[$wpc_lb327] . '?t=' . time(); 
+                                $wpc_uu327 = $wpc_ub333 . $wpc_sfx333[$wpc_lb327] . '?t=' . time(); // ?t= — Bunny negative-caches premature 404s
                                 $wpc_msrc341 = ($wpc_msrc341 === 'meta-stale') ? 'derived-over-stale-meta' : 'derived';
                             }
                             $wpc_pp327 = $wpc_uu327 !== '' ? wpc_used_css_path($wpc_ut327, $wpc_pair327[0]) : '';
@@ -6704,12 +6768,12 @@ if (!function_exists('wpc_crit_selftest_run')) {
                                 'ok' => $wpc_upulled327[$wpc_lb327],
                                 'mtime_before' => $wpc_mtb341, 'mtime_after' => (int) @filemtime($wpc_pp327),
                             ];
-                            
-                            
-                            
+                            // Unconditional on success — a pointer-first pull that leaves the
+                            // OLD uuid in the meta gets reverted by the next meta-driven
+                            // re-pull (waves/kick legs fetch the stale address and overwrite).
                             if ($wpc_upulled327[$wpc_lb327] && $wpc_bsrc347 !== 'override' && function_exists('wpc_crit_meta_write')) {
-                                
-                                
+                                // override stays one-shot — persisting it would let repull
+                                // waves re-fetch a hand-pasted uuid forever.
                                 wpc_crit_meta_write($wpc_rd327 . $wpc_pair327[1], (string) strtok($wpc_uu327, '?'));
                             }
                         }
@@ -6723,7 +6787,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 }
                 delete_transient('wpc_repull_kick_' . md5($wpc_rk327));
                 if (function_exists('wpc_repull_kick_now')) {
-                    wpc_repull_kick_now($wpc_rk327); 
+                    wpc_repull_kick_now($wpc_rk327); // fonts leg refetches on the kicked repull
                 }
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('refetch', $wpc_rk327, '', ['what' => implode(',', $wpc_done327), 'landed' => $wpc_landed327]);
@@ -6738,7 +6802,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
 
             $f = wpc_crit_selftest_report_file();
             if (empty($_GET['run'])) {
-                
+                // POLL: finalizes a RUNNING drill from the stamps (and self-restores on timeout).
                 $rep = json_decode(($f !== '' && @is_readable($f)) ? (string) @file_get_contents($f) : '', true);
                 if (is_array($rep) && ($rep['verdict'] ?? '') === 'RUNNING' && function_exists('wpc_crit_selftest_finalize')) {
                     $rep = wpc_crit_selftest_finalize($rep);
@@ -6754,7 +6818,7 @@ if (!function_exists('wpc_crit_selftest_run')) {
                 echo '{"verdict":"ALREADY-RUNNING"}';
                 exit;
             }
-            
+            // Start (preflight or drill) is a sub-second request — no worker held, any SAPI.
             $rep = wpc_crit_selftest_run(!empty($_GET['drill']));
             if ($f !== '') {
                 wpc_crit_meta_write($f, (string) wp_json_encode($rep));
@@ -6814,7 +6878,7 @@ if (!function_exists('wpc_cflog_viewer')) {
     }
     add_action('wp_ajax_wpc_cflog', 'wpc_cflog_viewer');
 
-    
+    // URLs only — no secrets. Filter-gated for the debug window; flip off after the soak.
     if (apply_filters('wpc_cflog_nopriv', true)) {
         add_action('wp_ajax_nopriv_wpc_cflog', function () {
             $log = function_exists('wpc_cflog_read') ? wpc_cflog_read(40) : (array) get_option('wpc_cache_first_log', []);
@@ -6843,12 +6907,12 @@ if (!function_exists('wpc_font_metrics_from_evidence')) {
                 $f = $k ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/font-metrics.json' : '';
                 if ($f && @is_readable($f)) {
                     $j = json_decode((string) @file_get_contents($f), true);
-                    
-                    
-                    
-                    
-                    
-                    
+                    // v7.10.593 — SECOND READER OF THE SAME ARTIFACT, and the one with no
+                    // validation window: it merges the decoded object straight into the metrics
+                    // table. Unwrapped, a stamped envelope would enter as families named v/uuid/
+                    // tpl_key/generated_at plus one called "families". It also runs at priority 5,
+                    // ahead of the reader at 10, so fixing only that one would have left this the
+                    // live path. function_exists guard: the helper is defined in its own block.
                     if (is_array($j) && function_exists('wpc_font_metrics_unwrap593')) {
                         $j = wpc_font_metrics_unwrap593($j, (string) $k);
                     }
@@ -6866,7 +6930,7 @@ if (!function_exists('wpc_font_metrics_from_evidence')) {
 }
 
 
-
+// The census metrics above are the precise source, but they only generate when an observation ran
 
 
 if (!function_exists('wpc_static_font_metrics')) {
@@ -7018,8 +7082,8 @@ if (!function_exists('wpc_font_rescan_handler')) {
             }
             if (!empty($found['googleFontsStylesheets'])) {
                 $fonts->readGoogleStylesheet($found);
-                
-                
+                // Localized sheets only reach visitors once the cached HTML that still
+                // carries the remote links is dropped.
                 if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeAll')) {
                     wps_ic_cache_integrations::purgeAll(false, false, true, false);
                 }
@@ -7062,20 +7126,20 @@ if (!function_exists('wpc_font_inline_localize_cron_handler')) {
 }
 
 
-
+// ≤6 files ≤64KB, woff2 only, crit-MC host only. Kill: wpc_fonts_artifact_consume / wpc_atf_subset_inline.
 if (!function_exists('wpc_consume_wire_artifact')) {
-    
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * §2 (v7.10.678) — consume the service's per-URL wire.json manifest.
+     *
+     * Called from the crit callback (a SEPARATE background request, never a page render). Stores
+     * the render-provenance stamp (wire_rev/wire_sig) per-URL alongside the crit, and — when a real
+     * URL + rev are present — fetches, validates and caches the manifest, recording its material_rev,
+     * schema_epoch and scope. `wire_rev` 0 / `wire_sig` '' means "no manifest for this gen": the stamp
+     * is written as 0 and NOTHING is fetched or acted on (§5 never purges on rev 0). The fetch is
+     * host-allowlisted, size-capped and JSON-validated — never trusts an arbitrary callback URL — and
+     * is idempotent: a repeat callback for a rev already cached does not re-hit the network. No render
+     * touches this; §5/render read the stamp back with wpc_wire_provenance() (a cheap file read).
+     */
     function wpc_consume_wire_artifact($urlKey, $wireUrl, $wireRev, $wireSig)
     {
         if (empty($urlKey) || !defined('WPS_IC_CRITICAL')
@@ -7083,9 +7147,9 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             return 0;
         }
         try {
-            
-            
-            
+            // P2 (v7.10.697, Atomic Contract): a key on the manifest path takes wire bytes from
+            // the manifest ONLY — the legacy declaration lane is exactly where the straggler /
+            // rev-reset / first-callback-downgrade classes lived. Nothing stamped, nothing fetched.
             if (function_exists('wpc_manifest_mode') && wpc_manifest_mode($urlKey) !== '') {
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('legacy-wire-shadowed', (string) $urlKey, '', []);
@@ -7099,15 +7163,15 @@ if (!function_exists('wpc_consume_wire_artifact')) {
                     ? wpc_crit_meta_write($p, $v) : @file_put_contents($p, $v);
             };
             $rev = (int) $wireRev;
-            
+            // Always stamp the provenance — even rev 0 records "no manifest this gen" for §5.
             $wireUrl = is_string($wireUrl) ? $wireUrl : '';
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.696 — GEN-MONOTONIC CONSUME. A straggler callback from a SUPERSEDED gen
+            // (3dcd's late amend, arriving 500s after 77f1's) overwrote the newer gen's wire and
+            // flipped lcp_verdict inline→keep — un-inlining the hero the 97 was scored on. .695
+            // guards poor-vs-rich, not rich-vs-out-of-order. The gen the plugin LANDED (uuid.txt
+            // / land_uuid — written by the crit save that precedes every legit wire declaration)
+            // is the monotonic authority: an incoming wire URL naming a DIFFERENT uuid is a
+            // stale gen — hold everything, stamp nothing (a chased stamp re-points the catchup).
             $wpc_gen696 = '';
             foreach (['land_uuid.txt', 'uuid.txt'] as $wpc_gf696) {
                 if (@is_file($dir . $wpc_gf696)) {
@@ -7127,31 +7191,31 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             $write($dir . 'wire_rev.txt', (string) $rev);
             $write($dir . 'wire_sig.txt', substr((string) $wireSig, 0, 4096));
             if ($wireUrl !== '') { $write($dir . 'wire_url.txt', $wireUrl); }
-            
+            // rev 0 / no url ⇒ nothing to fetch (the callback said "not yet / never").
             if ($rev <= 0 || $wireUrl === '') { return 0; }
-            
+            // Host allowlist: only the crit MC / bunny CDN, never an arbitrary param URL.
             $host = strtolower((string) parse_url($wireUrl, PHP_URL_HOST));
             if ($host === '' || (substr($host, -10) !== '.b-cdn.net' && stripos($host, 'critical-css-mc') === false)) {
                 return 0;
             }
-            
-            
-            
-            
-            
+            // v7.10.684 — idempotence keys on the SHELF OBJECT ({uuid}.wire.json is immutable),
+            // NEVER on material_rev: rev RESETS PER-UUID (the service's own §5 warning), so the
+            // first-ever consumed rev-2 wire made every later uuid's rev-2 wire skip as "already
+            // held" — wpcompress served a 4-day-frozen manifest while the shelf carried the
+            // drop[]/lcp entries §8(c)/§8.1 were waiting for.
             $heldUrl = @is_file($dir . 'wire.held_url') ? trim((string) @file_get_contents($dir . 'wire.held_url')) : '';
-            
-            
-            
-            
-            
+            // v7.10.694 — AMENDS REWRITE THE SAME URL. The .684 "shelf object is immutable"
+            // premise is false for the amend flow: the late callback re-declares the SAME
+            // {uuid}.wire.json at rev 2 after the obs lands (live: 3dcd3509 held at rev 1 with
+            // the rev-2 amend minutes out). Same-URL idempotence therefore also requires the
+            // held material to be at least the DECLARED rev; a rev advance re-fetches.
             $wpc_prevrev694 = @is_file($dir . 'wire.rev') ? (int) @file_get_contents($dir . 'wire.rev') : 0;
             if ($heldUrl !== '' && $heldUrl === $wireUrl && $wpc_prevrev694 >= $rev
                 && @is_file($dir . 'wire.json') && (int) @filesize($dir . 'wire.json') > 2) {
                 return 1;
             }
-            
-            
+            // Amended object, same URL: bust any shelf-CDN copy of the stale rev on the FETCH
+            // only — held_url stays canonical for the dedupe key.
             $wpc_fetch694 = ($heldUrl === $wireUrl)
                 ? $wireUrl . ((strpos($wireUrl, '?') === false ? '?' : '&') . 'wr=' . $rev)
                 : $wireUrl;
@@ -7161,19 +7225,19 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             if ($raw === '' || strlen($raw) > 262144) { return 0; }
             $wire = json_decode($raw, true);
             if (!is_array($wire)) { return 0; }
-            
-            
+            // Envelope: unknown fields ignored; scope BRANCHED not inferred (unknown => 'url', the
+            // conservative per-page side, per spec §5.1).
             $matRev = isset($wire['material_rev']) ? (int) $wire['material_rev'] : 0;
             $epoch  = isset($wire['schema_epoch']) ? (int) $wire['schema_epoch'] : 0;
             $scope  = (isset($wire['scope']) && strtolower(trim((string) $wire['scope'])) === 'site') ? 'site' : 'url';
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.695 — NEVER DOWNGRADE THE WIRE. A new gen's FIRST callback ships an
+            // allow-only rev-1 wire; consuming it over the previous gen's rev-2 replaced real
+            // instructions (roboto drop, hero verdict — page-level census facts that do not
+            // change gen-to-gen) with nothing for the whole ~11min observation window, every
+            // gen. Hold the richer held wire when the incoming is a PRE-AMEND (rev<=1) empty:
+            // the declared stamps above still update, so the .694 rev-advance re-fetch pulls
+            // the amend the moment it exists and replaces honestly. A rev>=2 wire with no
+            // instructions is an HONEST empty (census says nothing to do) and always lands.
             $wpc_rich695 = function ($w) {
                 $n = 0;
                 foreach (['mobile', 'desktop'] as $d) {
@@ -7191,7 +7255,7 @@ if (!function_exists('wpc_consume_wire_artifact')) {
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('wire-hold-richer', (string) $urlKey, '', ['incoming_rev' => $matRev, 'to' => substr($wireUrl, -22)]);
                     }
-                    return 1; 
+                    return 1; // keep serving the rich wire; the amend re-fetch replaces it honestly
                 }
             }
             $tmp = $dir . 'wire.json.tmp.' . getmypid();
@@ -7199,15 +7263,15 @@ if (!function_exists('wpc_consume_wire_artifact')) {
             $write($dir . 'wire.rev', (string) $matRev);
             $write($dir . 'wire.epoch', (string) $epoch);
             $write($dir . 'wire.scope', $scope);
-            $write($dir . 'wire.held_url', $wireUrl); 
-            
-            
-            
-            
-            
-            
-            
-            
+            $write($dir . 'wire.held_url', $wireUrl); // the dedupe key: which shelf object these bytes ARE
+            // v7.10.692 — DERIVED FILES NEED THE ARTIFACT'S CONTENT IN THEIR KEY. The stored
+            // HTML is a derived copy of the wire and was keyed on NOTHING wire-shaped: a new
+            // shelf object consumed here left every stored page rendering the OLD instructions
+            // (receipt: ad78b676's roboto drop on disk, §3b firing on the same renders, zero
+            // late-faces served — the replay against the same bytes fired instantly). The rev
+            // stamp can't gate this purge — rev resets per-uuid (.684) and adjacent gens both
+            // declared rev 2. held_url CHANGING is the one honest content signal. Local layers
+            // only: CF eviction already rides the crit-land tag purge.
             if ($heldUrl !== $wireUrl || $matRev > $wpc_prevrev694) {
                 if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
                     wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
@@ -7232,38 +7296,38 @@ if (!function_exists('wpc_consume_wire_artifact')) {
 }
 
 if (!function_exists('wpc_wire_catchup')) {
-    
-
-
-
-
-
+    /**
+     * v7.10.684 — heal a MISSED wire consume. The callback stamps wire_url.txt on every gen even
+     * when the fetch is skipped/fails, so a declared-but-not-held wire (wire_url.txt newer than
+     * wire.held_url — the exact state the rev-reset trap left the whole fleet in) is detectable
+     * from disk. Rides the kick lane, transient-gated; consumes via the same allowlisted fetch.
+     */
     function wpc_wire_catchup($urlKey)
     {
         try {
             if (empty($urlKey) || !defined('WPS_IC_CRITICAL') || !function_exists('wpc_consume_wire_artifact')) {
                 return false;
             }
-            
-            
+            // P2 (v7.10.697): on the manifest path the pointer/webhook owns wire freshness —
+            // catchup's derive-from-land heuristic is a legacy belt and stands down entirely.
             if (function_exists('wpc_manifest_mode') && wpc_manifest_mode($urlKey) !== '') {
                 return false;
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . ltrim((string) $urlKey, '/') . '/';
             $declared = @is_file($dir . 'wire_url.txt') ? trim((string) @file_get_contents($dir . 'wire_url.txt')) : '';
-            
-            
-            
-            
-            
-            
-            
-            
+            // v7.10.691 — THE WIRE FOLLOWS THE LAND, not the lane. Wire declaration rode the
+            // webhook callback only, so a gen landing via the poll/collect lane kept the OLD
+            // gen's declared URL — held==declared stayed true and .684's heal saw nothing
+            // (receipt: c3720e5a's crit served 42min with 0a0080ce's manifest, drop/lcp null).
+            // When the landed uuid is not the uuid inside the declared URL, derive the shelf
+            // URL from land_uuid ({first4}/{uuid}.wire.json — the same immutable-object naming
+            // the shelf uses for used.css). A gen with no wire 404s harmlessly and the 300s
+            // transient stops any retry storm.
             $wpc_land691 = @is_file($dir . 'land_uuid.txt')
                 ? preg_replace('/[^a-f0-9\-]/', '', strtolower(trim((string) @file_get_contents($dir . 'land_uuid.txt')))) : '';
-            
-            
-            
+            // v7.10.696 — land_uuid is transiently unlinked by the resync refetch leg; uuid.txt
+            // names the same gen and survives (live: land_uuid empty, on_disk 77f1f837, derive
+            // disarmed exactly when it was needed to heal a straggler overwrite).
             if (strlen($wpc_land691) < 32 && @is_file($dir . 'uuid.txt')) {
                 $wpc_land691 = preg_replace('/[^a-f0-9\-]/', '', strtolower(trim((string) @file_get_contents($dir . 'uuid.txt'))));
             }
@@ -7279,7 +7343,7 @@ if (!function_exists('wpc_wire_catchup')) {
             }
             $held = @is_file($dir . 'wire.held_url') ? trim((string) @file_get_contents($dir . 'wire.held_url')) : '';
             if ($held === $declared && @is_file($dir . 'wire.json')) {
-                return false; 
+                return false; // already current
             }
             if (get_transient('wpc_wirecu_' . md5((string) $urlKey))) {
                 return false;
@@ -7299,12 +7363,12 @@ if (!function_exists('wpc_wire_catchup')) {
 }
 
 if (!function_exists('wpc_wire_provenance')) {
-    
-
-
-
-
-
+    /**
+     * §2 — read the stored wire provenance for a urlKey. Cheap file reads; safe at render.
+     * Returns ['rev'=>int (callback stamp), 'sig'=>string, 'url'=>string,
+     *          'scope'=>'url'|'site', 'material_rev'=>int (cached manifest), 'epoch'=>int].
+     * rev 0 ⇒ no manifest was declared for this render (§5 must not purge on it).
+     */
     function wpc_wire_provenance($urlKey)
     {
         $out = ['rev' => 0, 'sig' => '', 'url' => '', 'scope' => 'url', 'material_rev' => 0, 'epoch' => 0];
@@ -7322,13 +7386,13 @@ if (!function_exists('wpc_wire_provenance')) {
 }
 
 if (!function_exists('wpc_manifest_mode')) {
-    
-
-
-
-
-
-
+    /**
+     * Atomic Generation Contract (spec v1, frozen 2026-08-02) — is this key on the manifest
+     * path? Returns the held gen_id ('' = legacy path). True once wpc_manifest_consume() has
+     * flipped at least one generation for the key. Per-key file, so the operator escape hatch
+     * is the same as every other artifact reset: &refetch=crit unlinks it and the key reverts
+     * to the legacy flow; the filter is the site-wide kill.
+     */
     function wpc_manifest_mode($urlKey)
     {
         if (empty($urlKey) || !defined('WPS_IC_CRITICAL') || !apply_filters('wpc_manifest_mode', true)) {
@@ -7341,18 +7405,18 @@ if (!function_exists('wpc_manifest_mode')) {
 }
 
 if (!function_exists('wpc_copy_admissible')) {
-    
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * P-A (v7.10.700) — the Verified Copy Contract, Law A: a degraded render must never become
+     * a cached copy. One verdict consulted by every memoizer (HTML store, static mirror, and —
+     * via the refusal's no-store header — the CF edge, whose full-HTML rule respects origin).
+     * Returns '' to admit, or the refusal reason. Receipted classes it kills (2026-08-02, live):
+     * the critless PSI-90 copy, the hero-uncovered PSI-97/96 copies, tracer-armed renders.
+     * Failure semantics per spec: a CHECK failing refuses; the CHECKER erroring admits
+     * (availability beats purity) with its own receipt. Refusal-storm brake: >20 in 10min
+     * stands the gate down for an hour — a config mismatch degrades to today's behavior,
+     * never to an uncacheable site. Each refusal fires the throttled warm kick: the refused
+     * copy is the symptom, the warm is the cure.
+     */
     function wpc_copy_admissible($html, $urlKey, $prefix = '')
     {
         try {
@@ -7363,7 +7427,7 @@ if (!function_exists('wpc_copy_admissible')) {
             $wpc_chk700 = (array) apply_filters('wpc_copy_admission_checks', ['crit' => 1, 'hero' => 1, 'arm' => 1]);
             $wpc_brk700 = (array) get_option('wpc_admission_state700', []);
             if (!empty($wpc_brk700['until']) && time() < (int) $wpc_brk700['until']) {
-                return ''; 
+                return ''; // storm brake engaged — fail-open until it expires
             }
             $dir = rtrim(WPS_IC_CRITICAL, '/') . '/' . ltrim((string) $urlKey, '/') . '/';
             $refuse = function ($why) use ($urlKey, $wpc_brk700) {
@@ -7383,7 +7447,7 @@ if (!function_exists('wpc_copy_admissible')) {
                 }
                 return $why;
             };
-            
+            // 1 — CRIT CARRIED, config-aware: the copy must hold what the configuration promises.
             if (!empty($wpc_chk700['crit'])) {
                 $wpc_set700 = get_option(WPS_IC_SETTINGS);
                 if (is_array($wpc_set700) && isset($wpc_set700['critical']['css']) && (string) $wpc_set700['critical']['css'] === '1'
@@ -7392,8 +7456,8 @@ if (!function_exists('wpc_copy_admissible')) {
                     return $refuse('crit');
                 }
             }
-            
-            
+            // 2 — HERO COVERED: verdict=inline admits only with the OBSERVED inline (same-request
+            // pass receipt) or the fallback pair P-B emits. Intent never vouches for effect.
             if (!empty($wpc_chk700['hero']) && @is_readable($dir . 'wire.json')) {
                 $wpc_w700 = json_decode((string) @file_get_contents($dir . 'wire.json'), true);
                 $wpc_dev700 = (strpos((string) $prefix, 'mobile') !== false) ? 'mobile'
@@ -7407,7 +7471,7 @@ if (!function_exists('wpc_copy_admissible')) {
                     return $refuse('hero');
                 }
             }
-            
+            // 3 — NO MEASUREMENT ARM: tracer renders serve once and evaporate.
             if (!empty($wpc_chk700['arm'])
                 && (strpos($html, 'id="wpc-img-trace"') !== false || strpos($html, 'id="wpc-lcp-trace"') !== false)) {
                 return $refuse('arm');
@@ -7423,25 +7487,25 @@ if (!function_exists('wpc_copy_admissible')) {
 }
 
 if (!function_exists('wpc_gen_semantic_ok')) {
-    
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.705 — SEMANTIC verify: hashes prove transport, never provenance. A generation whose
+     * observation ran against an ALREADY-OPTIMIZED copy is self-referential — its lcp record
+     * points at a fragment of our own inlined data-URI instead of a real asset, and its crit
+     * can carry serve-time-only markers. Live receipt (wpcompress.com 2026-08-02): the sweep
+     * re-observed optimized pages; the resulting gen shipped jQuery eager, unparked the theme
+     * sheets and put full woff2s back on the render chain — PSI 100 → 90. Refusing the gen
+     * whole keeps the predecessor serving (all-or-nothing already guarantees that).
+     * Checker error ⇒ true: this belt must never block a clean landing.
+     */
     function wpc_gen_semantic_ok($bodies, &$why = '')
     {
         try {
-            
-            
-            
-            
-            
-            
+            // v7.10.706 — 'wpc-css-live' is NOT an ingestion marker anymore: service v3.189.3
+            // emits natively-scoped conceal-guards (html:not(.wpc-css-live) + the
+            // /*wpc-conceal-scoped:1*/ mark), so its presence is the CONVERGED format, not
+            // proof of self-reference. The remaining markers are serve-time-only artifacts
+            // (script sentinel text + our injected style/link ids) that no legit CSS
+            // extraction can produce.
             foreach (['crit_desktop', 'crit_mobile'] as $k) {
                 if (isset($bodies[$k]) && is_string($bodies[$k])) {
                     foreach (['wpc-arm-sentinel', 'bg-authority700', 'wpc-lcp-bg-preload'] as $mk) {
@@ -7490,20 +7554,20 @@ if (!function_exists('wpc_gen_semantic_ok')) {
 }
 
 if (!function_exists('wpc_manifest_consume')) {
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * P1 (v7.10.697) — the Atomic Generation Contract's whole consume path, per the frozen
+     * spec: fetch manifest → verify EVERY artifact (bytes + sha) before anything lands →
+     * land all → single flip → purge every memoized render. Newness is decided by AUTHORITY
+     * (the predecessor chain — a gen is newer than every gen in its ancestor chain), never
+     * by clocks; a replayed webhook is a cheap idempotent no-op; a stale or disjoint gen is
+     * held with nothing written. Called only from the generation_complete webhook branch —
+     * dormant until the service ships S1 and starts minting manifests.
+     *
+     * v1 landing coverage: crit (via saveCriticalCss — full bookkeeping: combined refresh,
+     * land stamps, land purge incl. CF), wire, delay, lcp, fonts (shared consumer). used_css
+     * is VERIFIED but still lands via the legacy callback: the store keys on tpl_key, which
+     * manifest v1 does not carry (flagged to the service for spec v1.1).
+     */
     function wpc_manifest_consume($urlKey, $manifestUrl, $genId, $pageUrl = '')
     {
         try {
@@ -7516,7 +7580,7 @@ if (!function_exists('wpc_manifest_consume')) {
             };
             $genId = preg_replace('/[^a-f0-9\-]/', '', strtolower((string) $genId));
             if (strlen($genId) < 32) { return 0; }
-            
+            // Host allowlist — manifest AND every artifact URL inside it (never trust webhook URLs).
             $allow = function ($u) {
                 $h = strtolower((string) parse_url((string) $u, PHP_URL_HOST));
                 return $h !== '' && (substr($h, -10) === '.b-cdn.net' || stripos($h, 'critical-css-mc') !== false);
@@ -7529,7 +7593,7 @@ if (!function_exists('wpc_manifest_consume')) {
             };
             $held = @is_file($dir . 'manifest.held_gen')
                 ? preg_replace('/[^a-f0-9\-]/', '', strtolower(trim((string) @file_get_contents($dir . 'manifest.held_gen')))) : '';
-            
+            // Law 3: the webhook is idempotent and replayable — a replay of the held gen is free.
             if ($held !== '' && $held === $genId && @is_file($dir . 'manifest.json')) {
                 $log('manifest-replay', ['gen' => substr($genId, 0, 8)]);
                 return 1;
@@ -7556,15 +7620,15 @@ if (!function_exists('wpc_manifest_consume')) {
                 $log('manifest-gen-mismatch', ['gen' => substr($genId, 0, 8)]);
                 return 0;
             }
-            
+            // A gen that cannot name its own crit pair never flips render identity.
             if (empty($m['artifacts']['crit_mobile']['url']) || empty($m['artifacts']['crit_desktop']['url'])) {
                 $log('manifest-no-crit', ['gen' => substr($genId, 0, 8)]);
                 return 0;
             }
-            
-            
-            
-            
+            // Newness by pointer authority: the held gen must sit in the incoming gen's ancestor
+            // chain (successors reference predecessors; the chain is linear per url_key). Held
+            // NOT in the chain = stale straggler or disjoint history — hold everything; the
+            // pointer's real current gen re-announces via webhook replay or /reannounce.
             if ($held !== '' && $held !== $genId) {
                 $wpc_base697 = 'https://critical-css-mc.b-cdn.net/';
                 if (preg_match('#^(https?://[^/]+/)#i', (string) $manifestUrl, $wpc_bm697)) { $wpc_base697 = $wpc_bm697[1]; }
@@ -7583,8 +7647,8 @@ if (!function_exists('wpc_manifest_consume')) {
                     return 0;
                 }
             }
-            
-            
+            // Law 2, consumed honestly: verify EVERY listed artifact — bytes and sha256 against
+            // the manifest — before a single byte lands. Any failure holds the whole generation.
             $bodies = [];
             $budget = 8 * 1024 * 1024;
             foreach ($m['artifacts'] as $name => $a) {
@@ -7609,9 +7673,9 @@ if (!function_exists('wpc_manifest_consume')) {
                 $log('manifest-verify-fail', ['a' => 'semantic', 'why' => (string) $wpc_semwhy705]);
                 return 0;
             }
-            
-            
-            
+            // LAND — crit rides the proven path (device files, combined refresh, land stamps,
+            // land purge incl. the CF tag). uuid = gen_id keeps the .696 gen-monotonic authority
+            // and every legacy reader pointing at the manifest's generation.
             $landed = [];
             if (!class_exists('wps_criticalCss') && defined('WPS_IC_DIR')) {
                 include_once WPS_IC_DIR . 'addons/criticalCss/criticalCss-v2.php';
@@ -7622,9 +7686,9 @@ if (!function_exists('wpc_manifest_consume')) {
                 'url'  => ['desktop' => (string) $m['artifacts']['crit_desktop']['url'], 'mobile' => (string) $m['artifacts']['crit_mobile']['url']],
                 'uuid' => $genId,
             ];
-            
-            
-            
+            // v7.10.699 — spec v1.1: tpl_key rides the manifest (service v3.187), so used_css
+            // lands through the same proven saver path (used_css_url.txt + used_tpl.txt + the
+            // Route-2 artifact-land hooks) and NOTHING remains on the legacy callback.
             $wpc_tpl699 = (isset($m['tpl_key']) && is_string($m['tpl_key'])) ? trim($m['tpl_key']) : '';
             if ($wpc_tpl699 !== '' && !empty($m['artifacts']['used_css']['url'])) {
                 $wpc_scc699['tpl_key']      = $wpc_tpl699;
@@ -7635,8 +7699,8 @@ if (!function_exists('wpc_manifest_consume')) {
                 $log('manifest-land-fail', ['a' => 'crit']);
                 return 0;
             }
-            
-            
+            // Verify effect, not execution: the flip requires the device pair ON DISK — a save
+            // that returned without the failure key but landed only one variant must not flip.
             if ((int) @filesize($dir . 'critical_desktop.css') <= 5 || (int) @filesize($dir . 'critical_mobile.css') <= 5) {
                 $log('manifest-land-fail', ['a' => 'crit', 'why' => 'files']);
                 return 0;
@@ -7681,14 +7745,14 @@ if (!function_exists('wpc_manifest_consume')) {
                     $landed[] = 'fonts';
                 }
             }
-            
-            
+            // FLIP — stamps last, then purge every LOCAL memoized render (an HTML render is a
+            // derived file of the manifest — the .692 law). CF already rode the crit-land purge.
             $write($dir . 'manifest.json', $raw);
             $write($dir . 'manifest.held_gen', $genId);
             $write($dir . 'uuid.txt', $genId);
             $write($dir . 'land_uuid.txt', $genId);
             if (!@is_file($dir . 'dispatch_ts.txt')) {
-                $write($dir . 'dispatch_ts.txt', (string) time()); 
+                $write($dir . 'dispatch_ts.txt', (string) time()); // quarantine reads land-without-dispatch as foreign crit
             }
             if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeCacheFiles')) {
                 wps_ic_cache_integrations::purgeCacheFiles((string) $urlKey);
@@ -7728,18 +7792,18 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
             $wpc_pwn356 = 0;
             foreach ($fonts as $fe) {
                 if (!is_array($fe)) { continue; }
-                
-                
-                
+                // Metrics capture is pure array work — deliberately ABOVE the download
+                // slot/budget gates so which fallback rows exist never depends on how
+                // many woff2 files this pass happened to fetch.
                 if (!empty($fe['fallback']) && is_array($fe['fallback']) && !empty($fe['family'])) {
                     $metrics[(string) $fe['family']] = $fe['fallback'];
                 }
-                
-                
-                
-                
-                
-                
+                // remote_range must be captured on EVERY transport, not just the callback. The
+                // .420 producer lived only in the callback consumer (wp-compress-core), so fonts
+                // arriving via the /status -> fonts_url POLL built the subset but left the map
+                // empty and the range-gate silently no-op'd. This is the shared consumer the poll
+                // path uses, so capturing here covers it. Pure array work, above the download
+                // gates — same reasoning as metrics.
                 if (!empty($fe['family'])) {
                     if (!isset($wpc_rr_diag356)) { $wpc_rr_diag356 = []; }
                     $wpc_rr_diag356[] = strtolower((string) $fe['family']) . '|' . (string) ($fe['weight'] ?? '400')
@@ -7758,12 +7822,12 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                         $wpc_rr_map356[$wpc_rr_fam . '|' . $wpc_rr_wt . '|' . $wpc_rr_st] = $wpc_rr_v;
                     }
                 }
-                
-                
-                
-                
-                
-                
+                // v7.10.398 remote_dup {hosts, css_links}: the service's authoritative "our
+                // subset supersedes the remote face, drop its <link>" signal (budget_basis
+                // provider_replacement). It OWNS the coverage guarantee (observed the page,
+                // subset the used weights); the plugin trusts it and collects match tokens.
+                // Tokens: fam:<family> (safety — never orphan an un-covered family),
+                // @href:<css_link> (authoritative exact drop), @host:<host> (family-gated drop).
                 if (!empty($fe['remote_dup']) && !empty($fe['family'])) {
                     if (!isset($wpc_rdup398) || !is_array($wpc_rdup398)) { $wpc_rdup398 = []; }
                     $wpc_rdup398['fam:' . strtolower((string) $fe['family'])] = true;
@@ -7779,9 +7843,9 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                         $wpc_rdup398['@href:' . strtolower($wpc_rd_v)] = true;
                     }
                 }
-                
-                
-                
+                // §3 per-weight metrics{}: keyed 'family|weight|style' (same sanitizers as
+                // the subset lane); a metrics{} without a usable weight rides the family
+                // lane. Entries without metrics keep today's behavior untouched.
                 if (!empty($fe['metrics']) && is_array($fe['metrics']) && !empty($fe['family'])) {
                     $wpc_mw356 = trim(preg_replace('/\s+/', ' ', preg_replace('/[^0-9 ]/', ' ', (string) ($fe['weight'] ?? ''))));
                     $wpc_ms356 = (strtolower((string) ($fe['style'] ?? 'normal')) === 'italic') ? 'italic' : 'normal';
@@ -7817,9 +7881,9 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                 $cd = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
                 if (!is_dir($cd)) { @wp_mkdir_p($cd); }
                 if (!empty($metrics)) { wpc_crit_meta_write($cd . 'font-metrics.json', wp_json_encode($metrics)); update_option('wpc_font_metrics_present', 1, false); }
-                
-                
-                
+                // Persist the range-gate map collected above (poll transport). Font-scoped, not
+                // page-scoped, so one small non-autoloaded option serves every render; written only
+                // when the artifact actually carried remote_range, and only on change.
                 if (!empty($wpc_rr_diag356)) {
                     update_option('wpc_fonts_consume_diag', ['t' => time(), 'src' => 'shared-consume', 'rows' => array_slice($wpc_rr_diag356, 0, 8)], false);
                 }
@@ -7829,8 +7893,8 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                         wpc_cache_first_log('font-remote-ranges', (string) $urlKey, '', ['n' => count($wpc_rr_map356), 'src' => 'consume']);
                     }
                 }
-                
-                
+                // v3.51.0 deterministic verdict (woff2-table metrics): the trustworthy gate
+                // for font-display 'smart' -> optional.
                 if (!empty($wpc_fdval219)) {
                     update_option('wpc_font_metrics_validated', ['t' => time(), 'fams' => array_values(array_unique($wpc_fdval219))], false);
                 }
@@ -7869,7 +7933,7 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                 $wpc_strip_w = function ($h) { return strpos($h, 'www.') === 0 ? substr($h, 4) : $h; };
 
 
-                
+                // Raleway 400/500/600 all in-chain); preloading only #1 left #2/#3 a full CSS→face
 
 
                 $wpc_dom114 = [];
@@ -7890,10 +7954,10 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
                 if (!empty($wpc_dom114)) { wpc_crit_meta_write($cd . 'font-preload.txt', implode("\n", $wpc_dom114)); }
                 elseif (@is_readable($cd . 'font-preload.txt')) { @unlink($cd . 'font-preload.txt'); }
             }
-            
-            
-            
-            
+            // v7.10.398: persist remote_dup match tokens as a global option (fonts localization
+            // is site-consistent — a family the service subsets is subset on every page). The
+            // output pass drops matching <link>s. Only faces that actually inlined a subset
+            // (sn>0) count, so a dropped subset never orphans its remote in the same pass.
             if (!empty($wpc_rdup398) && is_array($wpc_rdup398) && isset($sn) && (int) $sn > 0) {
                 $wpc_rdcur398 = get_option('wps_ic_fonts_remote_dup');
                 $wpc_rdcur398 = is_array($wpc_rdcur398) ? $wpc_rdcur398 : [];
@@ -7905,16 +7969,16 @@ if (!function_exists('wpc_consume_fonts_artifact')) {
 
                 wpc_cache_first_log('fonts-landed', $urlKey, '', ['recv' => is_array($fonts) ? count($fonts) : 0, 'dl' => $n, 'subset' => isset($sn) ? (int) $sn : -1, 'metrics' => count($metrics), 'rdup' => isset($wpc_rdup398) ? count($wpc_rdup398) : 0]);
             }
-            
-            
-            
+            // Sticky subsets marker: the preload standdowns must not flap during the brief
+            // window an artifact land rewrites font-subsets.css — one flapped render mints a
+            // preload-heavy copy the edge then serves for its whole TTL.
             if (isset($sn) && (int) $sn > 0) {
                 update_option('wpc_subsets_seen', time(), false);
             }
-            
-            
-            
-            
+            // The metrics table may land AFTER used.css was fetched-and-spliced (receipted:
+            // used.css 19:30:57, metrics 19:30:58) — the stored file then carries no fallback
+            // stacks and pre-swap text paints in raw fallback metrics. Re-stitch on landing;
+            // the mtime bump re-versions the ?uv= href so pages pick it up.
             if (function_exists('wpc_fallback_restitch')) { wpc_fallback_restitch($urlKey); }
             if (function_exists('wpc_autopurge_on_land')) { wpc_autopurge_on_land($urlKey); }
             return $n;
@@ -7933,8 +7997,8 @@ if (!function_exists('wpc_perf_debug_report')) {
         }
         $wpc_adm742 = current_user_can('manage_options');
         if (!$wpc_adm742) {
-            
-            
+            // Read-only lookup: an unauthenticated request must never be able to MINT the secret
+            // by asking for it, only to present one it already holds.
             $wpc_tok742 = function_exists('wpc_perf_debug_token742') ? wpc_perf_debug_token742(false) : '';
             if (!isset($_GET['t']) || $wpc_tok742 === '' || !hash_equals($wpc_tok742, (string) $_GET['t'])) {
                 wp_die('denied', '', ['response' => 403]);
@@ -7945,12 +8009,12 @@ if (!function_exists('wpc_perf_debug_report')) {
         $url = !empty($_GET['url']) ? esc_url_raw((string) $_GET['url']) : home_url('/');
         $o = [];
         $o[] = "=== WPC PERF DEBUG  (plugin " . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?') . ") ===";
-        
+        // Minted here, on an admin-authenticated view, so a fresh install needs no wp-config edit.
         if ($wpc_adm742 && function_exists('wpc_perf_debug_token742')) {
             $o[] = "token: " . wpc_perf_debug_token742() . "   (append &t=TOKEN to read this without being logged in)";
         }
-        
-        
+        // v7.10.743 — same trip arms the benchmark: mint the tier key, set the cache flag, and
+        // rewrite the drop-in so the pre-WordPress read gate can see it. Admin branch only.
         if ($wpc_adm742 && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierKey')) {
             $wpc_tk743 = wps_ic_url_key::tierKey();
             if ($wpc_tk743 !== '') {
@@ -7970,10 +8034,10 @@ if (!function_exists('wpc_perf_debug_report')) {
                 $o[] = "tier_urls: ?wpc_tier=control|free|local|edge &wpc_key=" . $wpc_tk743;
             }
         }
-        
-        
-        
-        
+        // The natural-assets gate needs a MIME proof on CF zones, and its probe only ever fires
+        // from an is_admin()/cron context or a cold render's loopback — a site can sit unproven
+        // (every asset in its m:0 working form) indefinitely. admin-ajax IS an is_admin() context,
+        // so this report is the arming trip: run the probe synchronously when unproven.
         $wpc_mok748 = (string) get_option('wpc_v2_cf_asset_mime_ok', '');
         if ($wpc_mok748 !== '1' && function_exists('wpc_v2_asset_mime_probe_run')) {
             delete_transient('wpc_v2_cf_asset_mime_retry');
@@ -7981,8 +8045,8 @@ if (!function_exists('wpc_perf_debug_report')) {
             $wpc_pr748 = wpc_v2_asset_mime_probe_run();
             $wpc_mok748 = (string) get_option('wpc_v2_cf_asset_mime_ok', '');
             $o[] = "natural_assets: mime probe RAN -> " . ($wpc_pr748 ? 'PROVEN' : 'refused (zone not serving text/css yet)');
-            
-            
+            // Newly proven: cached HTML still carries the m:0 working forms (they keep serving —
+            // pass-through), so drop the page cache once and the next render emits natural.
             if ($wpc_pr748 && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
                 wps_ic_cache::removeHtmlCacheFiles('all');
                 $o[] = "natural_assets: page cache purged — next render collapses m:0";
@@ -7990,8 +8054,8 @@ if (!function_exists('wpc_perf_debug_report')) {
         }
         $o[] = "natural_assets: mime_ok=" . ($wpc_mok748 !== '' ? $wpc_mok748 : 'unproven')
              . " | gate=" . ((class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'natural_assets_on') && wps_rewriteLogic::natural_assets_on()) ? 'OPEN (m:0 collapses)' : 'SHUT (m:0 stands)');
-        
-        
+        // Origin security headers replayed by the pull can block cross-origin image delivery
+        // (ERR_BLOCKED_BY_RESPONSE) — surface the guard's verdict, and run it now if never run.
         $wpc_cg823 = get_option('wpc_corp_guard_state', []);
         if ((!is_array($wpc_cg823) || empty($wpc_cg823['state'])) && function_exists('wpc_corp_guard_tick')) {
             wpc_corp_guard_tick(true);
@@ -8001,14 +8065,14 @@ if (!function_exists('wpc_perf_debug_report')) {
             ? $wpc_cg823['state'] . ' (origin corp=' . (isset($wpc_cg823['corp']) ? ($wpc_cg823['corp'] !== '' ? $wpc_cg823['corp'] : 'none') : '?')
                 . (isset($wpc_cg823['after']) ? ' -> ' . ($wpc_cg823['after'] !== '' ? $wpc_cg823['after'] : 'none') : '') . ')'
             : 'never-ran (guard off, cdn off, or probe unreachable)');
-        
-        
-        
+        // THE WHOLE CHAIN, in evaluation order, with the probe's ACTUAL last response. A gate
+        // that only reports its verdict makes every refusal a guess about invisible option
+        // state; this makes "why is this site still on m:0" readable in one line.
         $set = get_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings'); $set = is_array($set) ? $set : [];
-        
-        
-        
-        
+        // The zone statics are populated by the cdn bootstrap, which a front-end render runs and
+        // admin-ajax does not: reading them here reported EMPTY on sites whose zone is correct and
+        // serving, and printed a probe URL of https:/// . Fall back to the options the bootstrap
+        // itself reads, and say which vantage the value came from.
         $wpc_zn812  = (class_exists('wps_rewriteLogic') && is_string(wps_rewriteLogic::$zoneName)) ? trim((string) wps_rewriteLogic::$zoneName) : '';
         $wpc_zsr812 = $wpc_zn812 !== '' ? '' : ' (from options; cdn bootstrap has not run in this admin context)';
         if ($wpc_zn812 === '') {
@@ -8045,13 +8109,117 @@ if (!function_exists('wpc_perf_debug_report')) {
         $o[] = "natural_probe_url: " . ($wpc_zn812 !== ''
              ? 'https://' . preg_replace('#/.*$#', '', $wpc_zn812) . '/wp-includes/css/dist/block-library/style.min.css   (must answer 200 + text/css FROM THIS SERVER, not from your browser)'
              : 'no zone configured — nothing to probe');
+        // suppressed=YES has five possible trips; a verdict without the tripped branch makes
+        // every "toggle on, serves origin" ticket a guessing game. Print each predicate.
+        $wpc_sw933 = [];
+        $wpc_al933 = get_option('wps_ic_allow_live', 'unset');
+        $wpc_sw933[] = 'account_live=' . ($wpc_al933 === 'unset' ? 'unset' : ($wpc_al933 ? '1' : '0 <-TRIP'));
+        $wpc_sw933[] = 'env_changed=' . ((function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed())
+            ? ((function_exists('wpc_v2_zone_origin_proved') && wpc_v2_zone_origin_proved()) ? 'YES (BRIDGED by measured origin-proof — not suppressing)' : 'YES <-TRIP')
+            : 'no');
+        $wpc_cfc933 = (defined('WPS_IC_CF_CNAME')) ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        $wpc_cfo933 = (defined('WPS_IC_CF')) ? get_option(WPS_IC_CF) : false;
+        $wpc_cfv933 = get_option('wpc_cf_cname_verified');
+        $wpc_sw933[] = 'cf_cname=' . ($wpc_cfc933 !== ''
+            ? (substr($wpc_cfc933, 0, 30) . ' verified=' . (($wpc_cfv933 === '1' || $wpc_cfv933 === 1) ? '1'
+                : (is_array($wpc_cfo933) && !empty($wpc_cfo933['settings']['cdn']) ? (string) $wpc_cfv933 . ' <-TRIP' : (string) $wpc_cfv933)))
+            : 'none');
+        $wpc_sw933[] = 'foreign_zone=' . ((function_exists('wpc_cdn_zone_is_foreign') && wpc_cdn_zone_is_foreign()) ? 'YES <-TRIP' : 'no');
+        $wpc_sw933[] = 'zone_disabled=' . ((function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled()) ? 'YES <-TRIP' : 'no');
+        $wpc_sw933[] = 'auto_disabled=' . ((function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()) ? 'YES <-TRIP' : 'no');
+        $o[] = "cdn_suppress_why: " . implode(' | ', $wpc_sw933);
+        // env_changed has NO standing healer unless force/unprov/moved already hold — a
+        // never-stamped fingerprint (site provisioned before the mechanism) trips FOREVER.
+        // The panel visit arms the bounded self-heal chain: reset (sets force_provision)
+        // then ensure_bg -> deferred config sync; a 2xx re-stamps the fingerprint and the
+        // suppression clears. Capped at 12 attempts, 2-min pacing — same belts as always.
+        if (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed()
+            && function_exists('wpc_v2_provision_reset_for_env') && function_exists('wpc_v2_config_sync_lazy_enabled')
+            && apply_filters('wpc_env_heal_armtrip', true)) {
+            wpc_v2_provision_reset_for_env();
+            // v7.20.10 — run ONE sync inline and print the wire verdict. The ensure_bg path
+            // reported ARMED while the sync failed silently (its ok/http_code/reason were
+            // returned and dropped); a heal whose failure is invisible is not a heal.
+            $wpc_zid933 = '';
+            if (function_exists('wpc_v2_get_zone_id')) {
+                $wpc_zid933 = (string) wpc_v2_get_zone_id();
+            }
+            if ($wpc_zid933 === '' || !ctype_digit($wpc_zid933)) {
+                $wpc_cn933 = trim((string) get_option('ic_custom_cname'));
+                $wpc_zid933 = $wpc_cn933 !== '' ? $wpc_cn933 : trim((string) get_option('ic_cdn_zone_name'));
+            }
+            if ($wpc_zid933 !== '') {
+                $wpc_sr933 = wpc_v2_config_sync_lazy_enabled(
+                    $wpc_zid933,
+                    function_exists('wpc_v2_get_lazy_enabled') ? wpc_v2_get_lazy_enabled() : false
+                );
+                $wpc_ec933 = function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed();
+                $o[] = "env_heal: sync ran inline -> ok=" . (!empty($wpc_sr933['ok']) ? '1' : '0')
+                     . " http=" . (isset($wpc_sr933['http_code']) ? (int) $wpc_sr933['http_code'] : '?')
+                     . (isset($wpc_sr933['reason']) ? " reason=" . (string) $wpc_sr933['reason'] : '')
+                     . " | env_changed now: " . ($wpc_ec933 ? 'STILL TRIPPED' : 'CLEARED (suppression lifts this request)');
+                // v7.20.11 — outage bridge: when the declaration cannot re-stamp, MEASURE
+                // the invariant instead (uploads asset through the zone vs local bytes).
+                if ($wpc_ec933 && function_exists('wpc_v2_zone_origin_probe_run')) {
+                    delete_transient('wpc_v2_origin_probe_bk');
+                    $wpc_op933 = wpc_v2_zone_origin_probe_run();
+                    $o[] = "zone_origin_proof: " . ($wpc_op933
+                        ? 'MEASURED OK -> env trip bridged, CDN emission unsuppressed (12h proof; re-proved hourly, re-stamped properly when the orchestrator returns)'
+                        : 'FAILED/mismatch -> suppression stands (zone did not serve this origin\'s bytes)');
+                }
+            } else {
+                $o[] = "env_heal: no zone id/cname resolvable — nothing to sync against";
+            }
+        }
+        // The cname trip has a bounded self-healer (config-sync + healthcheck legs already
+        // call it); make the panel visit an arming trip too, same pattern as the .748 mime
+        // probe: run it synchronously when tripped, report the promote/refuse verdict.
+        if ($wpc_cfc933 !== '' && is_array($wpc_cfo933) && !empty($wpc_cfo933['settings']['cdn'])
+            && $wpc_cfv933 !== '1' && $wpc_cfv933 !== 1 && function_exists('wpc_v2_cf_cname_reverify')) {
+            $wpc_rv933 = wpc_v2_cf_cname_reverify(false);
+            $o[] = "cf_cname_reverify: RAN -> " . ($wpc_rv933
+                ? 'PROMOTED (verified=1, html cache purged — next render emits the cname)'
+                : 'refused (cname not answering yet, or probe throttled <120s)');
+        }
         $o[] = "url: $url";
         $o[] = "settings: replace-fonts=" . ($set['replace-fonts'] ?? 'unset') . " | used-css=" . ($set['used-css'] ?? 'unset')
              . " | delay-js-v2=" . ($set['delay-js-v2'] ?? 'unset') . " | delay-js-v3=" . ($set['delay-js-v3'] ?? '(absent=on)');
+        // Mode drift: a preset switch REPLACES the settings array with the profile, and any
+        // later writer stamping '0' into profile-absent keys hard-disables features the mode
+        // intended on (dalton: aggressive profile predated delay-js-v3 -> v3 dead). Diff the
+        // stored array against the active mode's CURRENT profile so drift names itself.
+        $wpc_pn933 = (string) get_option(defined('WPS_IC_PRESET') ? WPS_IC_PRESET : 'wps_ic_preset_setting', '');
+        $wpc_dr933 = [];
+        if ($wpc_pn933 !== '' && class_exists('wps_ic_options')) {
+            $wpc_pf933 = (new wps_ic_options())->get_preset($wpc_pn933);
+            if (is_array($wpc_pf933)) {
+                foreach ($wpc_pf933 as $wpc_pk933 => $wpc_pv933) {
+                    if (is_array($wpc_pv933) || count($wpc_dr933) >= 12) { continue; }
+                    $wpc_sv933 = array_key_exists($wpc_pk933, $set) ? (string) $set[$wpc_pk933] : '(absent)';
+                    if ($wpc_sv933 !== (string) $wpc_pv933) {
+                        $wpc_dr933[] = $wpc_pk933 . '=' . $wpc_sv933 . ' (profile:' . (string) $wpc_pv933 . ')';
+                    }
+                }
+            }
+        }
+        $o[] = "mode_drift: preset=" . ($wpc_pn933 !== '' ? $wpc_pn933 : 'none')
+             . ($wpc_dr933 ? ' | ' . implode(' | ', $wpc_dr933) : ($wpc_pn933 !== '' ? ' | in sync' : ''));
+        // Panel visit doubles as the coherence-heal trip (belt for the upgrade lane): the
+        // v2=1+v3=0 pair is unreachable through any current writer, so heal it here too.
+        if (isset($set['delay-js-v2']) && $set['delay-js-v2'] == '1'
+            && isset($set['delay-js-v3']) && $set['delay-js-v3'] === '0'
+            && apply_filters('wpc_settings_coherence_heal', true)) {
+            $set['delay-js-v3'] = '1';
+            update_option(defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings', $set);
+            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                wps_ic_cache::removeHtmlCacheFiles('all');
+            }
+            $o[] = "coherence_heal: RAN -> delay-js-v3=1 (html cache purged; next render drops legacy optimize.js)";
+        }
         $key = class_exists('wps_ic_url_key') ? (new wps_ic_url_key())->setup($url) : '';
         $cd  = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/' : '';
-        
-        
+        // The full consume-gate chain: every runtime reason a crit-bearing dir still serves
+        // nothing, in evaluation order — settings, excludes, caps, then the absent-resolvers
         $wpc_cg766 = [];
         $wpc_cg766[] = 'critical.css=' . (isset($set['critical']['css']) ? (string) $set['critical']['css'] : 'UNSET');
         $wpc_cg766[] = 'inline-css=' . (isset($set['inline-css']) ? (string) $set['inline-css'] : 'unset');
@@ -8099,10 +8267,10 @@ if (!function_exists('wpc_perf_debug_report')) {
                     $e = (is_array($le) && isset($le[$dev])) ? $le[$dev] : null;
                     $o[] = "  lcp_element[$dev]: " . (is_array($e) ? (($e['type'] ?? '?') . ' url=' . substr((string) ($e['url'] ?? ''), -54) . ' net_url=' . substr((string) ($e['net_url'] ?? '-'), -30) . ' sel=' . substr((string) ($e['sel'] ?? ''), 0, 36)) : 'null/absent');
                 }
-                
-                
-                
-                
+                // THE CONSUMER'S EYE. The lines above read lcp_element[dev]; the preload emitter
+                // prefers lcp[dev] and falls back to a flat lcp_element. A panel that reads a
+                // different container than the code it describes reports a healthy artifact for a
+                // lane that is refusing, so print what the EMITTER would resolve, same precedence.
                 foreach (['desktop', 'mobile'] as $wpc_cd813) {
                     $wpc_cc814 = [];
                     if (is_array($j) && isset($j['lcp'][$wpc_cd813]) && is_array($j['lcp'][$wpc_cd813])) {
@@ -8144,10 +8312,10 @@ if (!function_exists('wpc_perf_debug_report')) {
                         . (!empty($j['wpc_inherited']) ? ' INHERITED from=' . (string) $j['wpc_inherited']['from']
                             . ' age=' . max(0, time() - (int) $j['wpc_inherited']['t']) . 's' : '') . ')'
                     : 'absent');
-                
-                
-                
-                
+                // Why the preload came out the way it did, per hint entry. A bare-href preload on
+                // a RESPONSIVE element is the double-fetch hazard, so the three fields that decide
+                // it must be visible: rungs_complete gates the ladder, url_is_authoritative gates
+                // whether a bare href is allowed at all, and sizes_attr feeds imagesizes.
                 $wpc_lph450 = (isset($j['hints']['lcp_preload']) && is_array($j['hints']['lcp_preload']))
                     ? $j['hints']['lcp_preload'] : null;
                 if (is_array($wpc_lph450)) {
@@ -8167,26 +8335,26 @@ if (!function_exists('wpc_perf_debug_report')) {
                             . ' sizes_attr=' . (isset($wpc_e450['sizes_attr']) ? (string) $wpc_e450['sizes_attr'] : '-')
                             . ' css_w=' . (isset($wpc_e450['css_w']) ? (int) $wpc_e450['css_w'] : 0)
                             . ' dpr=' . (isset($wpc_e450['dpr']) ? (string) $wpc_e450['dpr'] : '-');
-                        
+                        // The one combination that emits a bare-href preload on a responsive img.
                         if (!empty($wpc_e450['responsive']) && !empty($wpc_e450['url_is_authoritative'])
                             && ($wpc_r450 === null || empty($wpc_e450['rungs_complete']))) {
                             $o[] = "     !! responsive + authoritative but NO usable ladder -> bare-href preload"
                                  . " (one fetch only while the img resolves to the SAME rung; a different DPR double-fetches)";
                         }
-                        
-                        
-                        
-                        
-                        
-                        
-                        
+                        // ORIGIN-SERVE FEASIBILITY (&originprobe=1). Moving the LCP image off the
+                        // zone removes a simulated cross-origin handshake, but ONLY if the origin
+                        // holds the SAME rung bytes — otherwise the browser gets a different file
+                        // and the test measures bytes instead of the handshake. Zone URLs are a
+                        // pure host swap of the origin path (the natural-URL contract), so the
+                        // local path is exact, not inferred. Both lanes must move together: an
+                        // origin <img> beside a zone preload is the .444 double-fetch.
                         if (!empty($_GET['originprobe']) && $wpc_r450) {
-                            
-                            
-                            
-                            
-                            
-                            
+                            // URL path -> local path must go through the uploads baseurl/basedir PAIR.
+                            // ABSPATH . path is wrong three ways: /storage is a base path that is not
+                            // under ABSPATH, a subdirectory install double-counts the subdir so every
+                            // file reads MISSING, and a custom UPLOADS dir maps elsewhere. All three
+                            // would report "swap impossible" when it may be possible — a false verdict
+                            // is worse than no probe.
                             $wpc_ud461 = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
                             $wpc_ubu461 = is_array($wpc_ud461) && !empty($wpc_ud461['baseurl'])
                                 ? rtrim((string) parse_url((string) $wpc_ud461['baseurl'], PHP_URL_PATH), '/') : '';
@@ -8201,19 +8369,19 @@ if (!function_exists('wpc_perf_debug_report')) {
                                 if ($wpc_pth461 === '' || strpos($wpc_pth461, '..') !== false
                                     || $wpc_ubu461 === '' || $wpc_ubd461 === ''
                                     || strpos($wpc_pth461, $wpc_ubu461 . '/') !== 0) {
-                                    
-                                    
+                                    // Not under the uploads baseurl (e.g. /storage) — edge-only by
+                                    // layout, not a missing file. Different fact, said differently.
                                     $wpc_nomap461[] = basename($wpc_pth461);
                                     continue;
                                 }
                                 $wpc_loc461 = $wpc_ubd461 . '/' . ltrim(substr($wpc_pth461, strlen($wpc_ubu461)), '/');
-                                
-                                
-                                
-                                
-                                
-                                
-                                
+                                // The ladder URL carries the DELIVERED extension (.webp, ?src=png),
+                                // but the CDN BAKES the rung to disk as {base}-{W}x{H}.avif. Testing
+                                // the URL's extension verbatim reported "absent" for a rung sitting
+                                // right there under another extension — 1/14 when the real question
+                                // is the variant FAMILY. Same WRITE<->READ symmetry the variant
+                                // filename derivation depends on: never assume the served extension
+                                // is the stored one.
                                 $wpc_stem461 = (string) preg_replace('/\.[a-z0-9]+$/i', '', $wpc_loc461);
                                 $wpc_hitx461 = ''; $wpc_hitb461 = 0;
                                 foreach (['avif', 'webp', 'jpg', 'jpeg', 'png', 'gif'] as $wpc_xt461) {
@@ -8221,9 +8389,9 @@ if (!function_exists('wpc_perf_debug_report')) {
                                     if (!@is_readable($wpc_cnd461) || @is_dir($wpc_cnd461)) { continue; }
                                     $wpc_csz461 = (int) @filesize($wpc_cnd461);
                                     if ($wpc_csz461 <= 0) { continue; }
-                                    
-                                    
-                                    
+                                    // Report the SMALLEST present variant — that is what an origin
+                                    // serve would actually send, so it is the byte figure that
+                                    // decides whether the swap is one-variable.
                                     if ($wpc_hitx461 === '' || $wpc_csz461 < $wpc_hitb461) {
                                         $wpc_hitx461 = $wpc_xt461; $wpc_hitb461 = $wpc_csz461;
                                     }
@@ -8235,9 +8403,9 @@ if (!function_exists('wpc_perf_debug_report')) {
                                     $wpc_fmt461[$wpc_hitx461] = (int) ($wpc_fmt461[$wpc_hitx461] ?? 0) + 1;
                                     $wpc_res461[] = $wpc_rw461 . '=' . $wpc_hitx461 . '/' . (int) round($wpc_hitb461 / 1024) . 'K';
                                 } else {
-                                    
-                                    
-                                    
+                                    // "Absent" and "present at a different height" need completely
+                                    // different fixes — generate the bake vs align the derivation
+                                    // (1200x950 at w=510 is h=403.75: floor 403, round 404). Say which.
                                     $wpc_nm461 = '';
                                     if (preg_match('/^(.*)-(\d+)x(\d+)$/', $wpc_stem461, $wpc_nmm461)) {
                                         $wpc_nh461 = [];
@@ -8282,8 +8450,8 @@ if (!function_exists('wpc_perf_debug_report')) {
                             if ($wpc_res461) {
                                 $o[] = '       per-rung (w=format/bytes): ' . implode(' ', $wpc_res461);
                             }
-                            
-                            
+                            // What is ACTUALLY baked next to the hero, so a ladder/disk mismatch is
+                            // visible rather than inferred from misses alone.
                             if (!empty($wpc_r450[0]['url'])) {
                                 $wpc_p0461 = (string) parse_url((string) $wpc_r450[0]['url'], PHP_URL_PATH);
                                 if ($wpc_ubu461 !== '' && $wpc_ubd461 !== '' && strpos($wpc_p0461, $wpc_ubu461 . '/') === 0) {
@@ -8379,8 +8547,8 @@ if (!function_exists('wpc_perf_debug_report')) {
                  . " | used_tpl=" . ($wpc_dbg_utpl !== '' ? substr($wpc_dbg_utpl, 0, 24) : '-')
                  . " | tpl.txt=" . ($wpc_dbg_tpl !== '' ? substr($wpc_dbg_tpl, 0, 24) : '-')
                  . " | match=" . (($wpc_dbg_utpl !== '' && $wpc_dbg_utpl === $wpc_dbg_tpl) ? 'Y' : 'N');
-            
-            
+            // .464 derived-sibling freshness. STALE here is the whole reason a pruned service
+            // bundle can be correct while the wire still serves 561 orphaned keyframes.
             if ($wpc_dbg_up !== '' && function_exists('wpc_used_css_basis')) {
                 $wpc_dbg_bas = wpc_used_css_basis($wpc_dbg_up);
                 foreach (['', '.desktop', '.mobile'] as $wpc_dbg_dv) {
@@ -8406,11 +8574,11 @@ if (!function_exists('wpc_perf_debug_report')) {
             }
             $wpc_dbg_uu = @is_readable($cd . 'used_css_url.txt') ? trim((string) @file_get_contents($cd . 'used_css_url.txt')) : '';
             $wpc_dbg_ur = ($wpc_dbg_uk !== '' && function_exists('wpc_used_css_url_recall')) ? wpc_used_css_url_recall($wpc_dbg_uk) : '';
-
-
-
-
-
+// v7.10.551 — make the WITHHELD per-device droplist visible. crit-push v3.121.1 now
+// probes before advertising and fail-closes on a partial pair (page cache is
+// variant-split, so a mobile-only droplist is a variant disagreeing with its sibling,
+// not half the benefit). Without this line we take the degraded path SILENTLY - which
+// is exactly what let a permanent 404 loop hide: clean degradation concealed the fault.
 $wpc_cd551 = rtrim((string) (isset($wpc_dbg_dir) ? $wpc_dbg_dir : ''), '/');
 if ($wpc_cd551 !== '') {
     $wpc_d551 = @is_file($wpc_cd551 . '/used_css_desktop_url.txt');
@@ -8422,11 +8590,11 @@ if ($wpc_cd551 !== '') {
         $o[] = '  used-css PER-DEVICE: none advertised (union-only gen) — droplist runs from the union';
     }
 }
-
-
-
-
-
+// v7.10.551 — AUTOLOAD CENSUS. 483KB of wps_ic_* options (31% of this site's total) are
+// fetched AND unserialised on every request whether read or not; boot:924ms observed.
+// Flipping autoload blind is the wrong move - an option genuinely read each request is
+// cheaper autoloaded than as a query. So MEASURE first: list the biggest by size and let
+// the decision be per-option. Add &autoload=1 to run it; costs one query, never on a render.
 if (!empty($_GET['autoload'])) {
     global $wpdb;
     $wpc_rows551 = $wpdb->get_results("SELECT option_name, LENGTH(option_value) AS b, autoload
@@ -8449,7 +8617,7 @@ if (!empty($_GET['autoload'])) {
                 $o[] = "     !! NO pointer either way — the refresh path cannot run, so STALE siblings can never rebuild."
                      . " .469 now re-asserts the demand when a store is orphaned; watch for ucss-demand-reasserted.";
             }
-            
+            // Service echo (v3.109.0): separates "asked and got nothing" from "never asked".
             $wpc_dbg_ec = get_option('wpc_used_css_echo', []);
             if (is_array($wpc_dbg_ec) && $wpc_dbg_ec) {
                 $wpc_tb = function ($v) { return $v === 1 ? 'YES' : ($v === 0 ? 'no' : 'unknown'); };
@@ -8461,16 +8629,16 @@ if (!empty($_GET['autoload'])) {
                      . " | via=" . (string) ($wpc_dbg_ec['src'] ?? '?')
                      . " | " . human_time_diff((int) ($wpc_dbg_ec['t'] ?? time())) . " ago";
                 if ($wpc_kn === 0) {
-                    
-                    
+                    // used_css_known:false is the service's "we cannot speak for this row" MARKER;
+                    // it is NOT a decline, and reading it as one is how a pre-v3.109 row lies.
                     $o[] = "     (used_css_known:false marker — a pre-v3.109 row the service cannot speak for; NOT a decline)";
                 } elseif ($wpc_rq === 1 && empty($wpc_dbg_ec['ptr'])) {
                     $o[] = "     !! WE ASKED and no pointer came back — that is a SERVICE-side gap, not the plugin's.";
                 } elseif ($wpc_rq === 0) {
                     $o[] = "     (KNOWN decline this gen — expected while a store is present AND its pointer is verified)";
                 }
-                
-                
+                // /status advertises used_css_url unconditionally under wantsObservation (service
+                // v3.33.13 fail-open), so a pointer alongside a KNOWN decline is a 404 forever.
                 if ($wpc_rq === 0 && $wpc_kn === 1 && !empty($wpc_dbg_ec['ptr'])) {
                     $o[] = "     note: pointer advertised alongside a known decline — expected to 404; .471 will not trust it unverified";
                 }
@@ -8483,11 +8651,11 @@ if (!empty($_GET['autoload'])) {
                 $o[] = "  used-css echo: none recorded yet (pre-v3.109 service, or no gen landed since upgrade)";
             }
 
-            
-            
-            
-            
-            
+            // GLYPH CENSUS GAP — why a remote icon face is fetched at all. The inline subset only
+            // eliminates the remote font if it covers every codepoint the page's CSS asks for; on
+            // busy the subset held 15 while the CSS requested 55, so 51 glyphs forced a 91 KiB
+            // fetch that "the widening is shipped" would otherwise imply was gone. This computes
+            // it per site from artifacts already on disk — no network, bounded reads.
             if (!empty($_GET['glyphs'])) {
                 $wpc_cov451 = [];
                 $wpc_sub451 = @is_readable($cd . 'font-subsets.css') ? (string) @file_get_contents($cd . 'font-subsets.css') : '';
@@ -8548,13 +8716,13 @@ if (!empty($_GET['autoload'])) {
             } else {
                 $o[] = "  GLYPH CENSUS: add &glyphs=1 to compute subset coverage vs CSS demand";
             }
-            
+            // Beaconed FCP->LCP traces (?wpc_lcp_trace=1&send=1 during a PSI run).
             $wpc_trr452 = get_option('wpc_lcp_trace_reports', []);
             if (is_array($wpc_trr452) && $wpc_trr452) {
-                
-                
-                
-                
+                // A full-page capture reports viewport=16383px, where an image 10,784px down is
+                // "in viewport" and wins LCP at 35x the real figure. Those rows are correct
+                // measurements of a condition no visitor and no PSI run is ever in, so they must
+                // never enter an aggregate. Derived from stored vh so existing rows classify too.
                 $wpc_vhmax461 = max(1200, (int) apply_filters('wpc_lcp_trace_real_vh_max', 2400));
                 $wpc_syn461 = function ($wpc_r461) use ($wpc_vhmax461) {
                     $wpc_v461 = isset($wpc_r461['vh']) ? (int) $wpc_r461['vh'] : -1;
@@ -8580,8 +8748,8 @@ if (!empty($_GET['autoload'])) {
                             ? $wpc_vs461[intdiv($wpc_c461, 2)]
                             : (int) round(($wpc_vs461[$wpc_c461 / 2 - 1] + $wpc_vs461[$wpc_c461 / 2]) / 2);
                     };
-                    
-                    
+                    // Median, not mean: one synthetic row that slips the filter still cannot
+                    // move a median the way it moves an average.
                     $o[] = sprintf('   MEDIAN over %d real-viewport trace%s: FCP=%dms LCP=%dms GAP=%dms',
                         count($wpc_real461), count($wpc_real461) === 1 ? '' : 's',
                         $wpc_med461('fcp'), $wpc_med461('lcp'), $wpc_med461('gap'));
@@ -8599,11 +8767,11 @@ if (!empty($_GET['autoload'])) {
                         (string) ($wpc_tr452['v'] ?? '?'), (int) ($wpc_tr452['own'] ?? 0), (int) ($wpc_tr452['pct'] ?? 0))
                         . '  via=' . (($wpc_tr452['ch'] ?? '?') === 'b' ? 'sendBeacon' : ((($wpc_tr452['ch'] ?? '?') === 'i') ? 'imageGET' : '?'));
                     $o[] = sprintf('       el=%s  url=...%s', (string) ($wpc_tr452['el'] ?? '-'), (string) ($wpc_tr452['url'] ?? '-'));
-                    
-                    
-                    
-                    
-                    
+                    // humanSignal is the difference between a PSI run and a browser visit: PSI never
+                    // interacts, so hum=0 is the comparable path and hum=1 means the replay had already
+                    // run. A gap-window long-task count is vacuous when gap=0 — ltms is the real figure.
+                    // A below-fold element winning LCP is the difference between a 2s and a 17s
+                    // reading, so say whether it was in the viewport when the browser chose it.
                     $wpc_iv452 = isset($wpc_tr452['inv']) ? (int) $wpc_tr452['inv'] : -1;
                     if ($wpc_iv452 !== -1) {
                         $o[] = sprintf('       element box: top=%dpx viewport=%dpx  %s',
@@ -8639,10 +8807,10 @@ if (!empty($_GET['autoload'])) {
         }
         $map = get_option('wps_ic_fonts_inline_map');
         $o[] = "inline_font_map entries: " . (is_array($map) ? count($map) : 0) . " | inline_lock: " . (get_transient('wpc_font_inline_lock') ? 'LOCKED' : 'clear');
-        
-        
-        
-        
+        // THREE lanes emit the hero preload under three different ids — the autoderive bg lane
+        // (wpc-lcp-bg-preload), its device-pinned twin (wpc-lcp-hero-preload) and the lcp.json
+        // lane (wpc-lcp-img-preload). Reporting only the first printed N for documents that
+        // plainly carried one of the others.
         $wpc_pre815 = function ($doc) {
             $hit = [];
             foreach (['bg' => 'wpc-lcp-bg-preload', 'hero' => 'wpc-lcp-hero-preload', 'img' => 'wpc-lcp-img-preload'] as $wpc_k815 => $wpc_id815) {
@@ -8658,22 +8826,22 @@ if (!empty($_GET['autoload'])) {
              . " | size-adjust=" . (strpos($h, 'size-adjust') !== false ? 'Y' : 'N');
 
 
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // The headers below are ours; an edge in front of the origin does not honour them and
+        // returns the same cached body, which is why this arm printed bytes IDENTICAL to SERVED on
+        // every report and reported absent markers for a document that plainly carried them. A
+        // unique query string is the only bypass that survives a foreign edge. .815 used a NOVEL
+        // param — which fragmented the url_key, so the render lost its own delay.json/crit
+        // artifacts and reported aggr:0 for a site whose visitors get aggr:1: the cachebust had
+        // changed the code path it was measuring. disable_cache is the one param with exactly the
+        // needed semantics ALREADY: trackingParams() strips it from the key (real artifacts, real
+        // code path) while controlParams() refuses cache read/write for it (a genuinely fresh
+        // render, never stored). The timestamp value defeats the foreign edge's query-keyed cache.
         $wpc_fu815 = $url . ((strpos($url, '?') !== false) ? '&' : '?') . 'disable_cache=' . time();
         $rf = wp_remote_get($wpc_fu815, ['timeout' => 25, 'headers' => ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile', 'X-WPC-Cache-Warm' => '1', 'X-WPC-Diag' => '1']]);
         $hf = is_wp_error($rf) ? '' : wp_remote_retrieve_body($rf);
-        
-        
-        
+        // An empty arm must say WHY: a transport error, a non-200, and an empty 200 are three
+        // different diagnoses (blocked loopback / edge challenge / render died), and a bare 0B
+        // collapses them into a guess.
         $wpc_fw816 = '';
         if (is_wp_error($rf)) {
             $wpc_fw816 = ' | FETCH FAILED: ' . substr((string) $rf->get_error_message(), 0, 90);
@@ -8682,9 +8850,9 @@ if (!empty($_GET['autoload'])) {
         } elseif ((int) wp_remote_retrieve_response_code($rf) !== 200) {
             $wpc_fw816 = ' | HTTP ' . (int) wp_remote_retrieve_response_code($rf) . ' — markers below are from an ERROR page';
         }
-        
-        
-        
+        // On any failure, the response HEADERS say who answered — an edge challenge carries
+        // cf-cache-status/server, a shed origin answers bare, a WAF names itself. Without them
+        // the empty arm bounded the failure to "origin busy" but could not name the exit.
         if ($wpc_fw816 !== '' && !is_wp_error($rf)) {
             $wpc_fh818 = [];
             foreach (['server', 'cf-cache-status', 'content-type', 'content-length', 'x-powered-by', 'retry-after'] as $wpc_hk818) {
@@ -8711,14 +8879,14 @@ if (!empty($_GET['autoload'])) {
 
         if (is_dir($cd)) {
             $o[] = "crit_dir files: " . implode(', ', array_map('basename', (array) @glob($cd . '*')));
-            
+            // READINESS: one line answering "is this site converged and safe to PSI?"
             $wpc_rd = [];
             $wpc_rd['crit']  = @is_readable($cd . 'critical_desktop.css') && @is_readable($cd . 'critical_mobile.css');
             $wpc_rd['lcp']   = @is_readable($cd . 'lcp.json');
             $wpc_rd['delay'] = @is_readable($cd . 'delay.json');
             $wpc_rd['fonts'] = @is_readable($cd . 'font-subsets.css') || (strpos((string) @file_get_contents($cd . 'delay.json'), '-apple-system') !== false ? null : false);
             $wpc_ucs = is_array($set) ? (string) ($set['used-css'] ?? '0') : '0';
-            $wpc_rd['used-css'] = $wpc_ucs === '1' ? true : null; 
+            $wpc_rd['used-css'] = $wpc_ucs === '1' ? true : null; // null = probation pending, not a fault
             $wpc_dressed = null;
             if (defined('WPS_IC_CACHE') && class_exists('wps_ic_url_key')) {
                 $wpc_cf157 = rtrim(WPS_IC_CACHE, '/') . '/' . (new wps_ic_url_key())->setup(home_url('/')) . '/index.html_gzip';
@@ -8732,9 +8900,9 @@ if (!empty($_GET['autoload'])) {
             }
             $wpc_rd['cache-dressed'] = $wpc_dressed;
             $wpc_rd['cf-crown'] = (bool) get_option('wpc_cf_purge_verified');
-            
-            
-            
+            // v7.10.682 — readiness measured FILE PRESENCE while stale.txt / the zero-dark bypass
+            // window withheld crit from every render (the rebuild-press outage read 7/7 READY with
+            // crit=N on the served page). Serving state is part of readiness, not a footnote.
             $wpc_rd['fresh'] = !@is_file($cd . 'stale.txt')
                 && !(function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active(basename(rtrim($cd, '/'))));
             $wpc_parts = [];
@@ -8751,19 +8919,19 @@ if (!empty($_GET['autoload'])) {
                 $wpc_gf157 = (string) @file_get_contents($cd . 'gen_fails.json');
                 $o[] = "gen_fails (tail): " . substr(trim($wpc_gf157), -600);
             }
-            
+            // A5: both brakes in one place — operators were guessing which gate blocked.
             $wpc_gbf157 = function_exists('wpc_gen_backoff_file') ? wpc_gen_backoff_file() : '';
             if ($wpc_gbf157 !== '' && @is_file($wpc_gbf157)) {
                 $o[] = "global gen-backoff: " . trim((string) @file_get_contents($wpc_gbf157));
             }
-            
+            // ≤60s-contract receipts: dispatch→land seconds + publish-webhook liveness.
             $wpc_dts157 = (int) @file_get_contents($cd . 'dispatch_ts.txt');
             $wpc_lts157 = (int) @file_get_contents($cd . 'land_ts.txt');
             $wpc_whk157 = (int) @file_get_contents(rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks/whk_last.txt');
-            
-            
-            
-            
+            // "took Ns" is only meaningful when both stamps belong to the SAME generation.
+            // Subtracting a new gen's dispatch from a previous gen's land invents a latency that
+            // never happened — it read "took 5739s" on busy while the real story was a finished
+            // gen that was never consumed, and it sent the diagnosis the wrong way.
             $wpc_du157 = trim((string) @file_get_contents($cd . 'uuid.txt'));
             $wpc_lu157 = trim((string) @file_get_contents($cd . 'land_uuid.txt'));
             $wpc_same157 = ($wpc_du157 !== '' && $wpc_du157 === $wpc_lu157);
@@ -8792,9 +8960,9 @@ if (!empty($_GET['autoload'])) {
                     . max(0, time() - (int) ($wpc_st157['t'] ?? 0)) . 's ago'
                     . (isset($wpc_st157['latency_s']) && $wpc_st157['latency_s'] !== null ? ', land ' . (int) $wpc_st157['latency_s'] . 's' : '') . ')'
                 : 'never run — POST admin-ajax?action=wpc_crit_selftest&run=1&drill=1');
-            
-            
-            
+            // CRIT-BLAME: when crit is missing, name the side. The pointer shelf is the
+            // service's PUBLISH receipt — present = plugin pickup stalled; absent = service
+            // generate pending (or never dispatched if no fail evidence). Debug-only probe.
             if (empty($wpc_rd['crit'])) {
                 $wpc_bl_opts = function_exists('get_option') && defined('WPS_IC_OPTIONS') ? get_option(WPS_IC_OPTIONS) : [];
                 $wpc_bl_key  = is_array($wpc_bl_opts) && !empty($wpc_bl_opts['api_key']) ? (string) $wpc_bl_opts['api_key'] : '';
@@ -8858,14 +9026,14 @@ if (!empty($_GET['autoload'])) {
                 if (is_array($d)) { $ev[] = $d; }
             }
         }
-        if (empty($ev)) { 
+        if (empty($ev)) { // DB fallback (wpc_cache_first_log writes here when the file path refuses)
             $log = get_option('wpc_cache_first_log', []);
             if (is_array($log)) { $ev = array_slice($log, -22); }
         }
-        
-        
-        
-        
+        // v7.10.614 — LANE SPLIT, surfaced explicitly. It fires at most once a day while the
+        // cflog runs hundreds of entries an hour, so the last-22 tail below would essentially
+        // never contain it. "no split found" and "the detector has not run" are completely
+        // different answers and must never look alike, so both are printed.
         $wpc_ls614 = null;
         if ($clf && @is_readable($clf)) {
             foreach (array_reverse(array_slice((array) @file($clf, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES), -4000)) as $wpc_ln614) {
@@ -8894,16 +9062,16 @@ if (!empty($_GET['autoload'])) {
         foreach ($ev as $e) {
             if (is_array($e)) {
                 $o[] = "  " . gmdate('H:i:s', (int) ($e['t'] ?? 0)) . " " . ($e['event'] ?? '?')
-                     
-                     
-                     
+                     // 70 chars truncated diagnostic payloads to uselessness — the .441
+                     // no-stem-match fields (uri/inhtml/qw/imgs) sat past a 60-char stem and
+                     // were never readable. A log you cannot read is not instrumentation.
                      . (empty($e['layers']) ? '' : ' ' . substr(json_encode($e['layers']), 0,
                          (int) apply_filters('wpc_cflog_payload_chars', 560)));
             }
         }
-        
-        
-        
+        // AGGRESSIVE-FLIP DIAGNOSIS: the exact reason a page does/doesn't go
+        // interaction-only — reads the same inputs the render flip reads, so it
+        // names the blocker without guessing (added .368 for the busy stall).
         $o[] = "--- FLIP DIAGNOSIS ---";
         $wpc_fd_moff = (int) get_option('wpc_delay_v3_manifest_off', 0);
         $wpc_fd_aoff = (int) get_option('wpc_delay_aggr_off', 0);
@@ -8923,9 +9091,9 @@ if (!empty($_GET['autoload'])) {
             }
             $wpc_fd_measured = class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_measured_shape($wpc_fd_j);
         }
-        
-        
-        
+        // Evaluate for the TARGET $cd/$key directly — NOT the ambient admin-ajax
+        // request context (wpc_aggr_live()/wpc_measured use the request url_key,
+        // which is admin-ajax here → false negative; the 48 self-test caught it).
         $wpc_fd_uuid = @is_readable($cd . 'uuid.txt') ? trim((string) @file_get_contents($cd . 'uuid.txt')) : '-';
         $wpc_fd_luid = @is_readable($cd . 'land_uuid.txt') ? trim((string) @file_get_contents($cd . 'land_uuid.txt')) : '-';
         $wpc_fd_lpre = 'absent';
@@ -8936,9 +9104,9 @@ if (!empty($_GET['autoload'])) {
         $o[] = "on-disk uuid: " . $wpc_fd_uuid . " | land_uuid: " . $wpc_fd_luid . " | lcp.json lcp_preload: " . $wpc_fd_lpre . "  <-- land_uuid is the OBS uuid; it holds steady by design while the CRIT uuid advances (template-cache split). Only STALE if lcp_preload is absent";
         $o[] = "delay.json on disk: " . ($wpc_fd_djok ? filesize($wpc_fd_dj) . 'B, mtime ' . max(0, time() - $wpc_fd_mt) . 's ago' : 'ABSENT');
         $o[] = "  schema_epoch: " . $wpc_fd_epoch . " | ceiling{}: " . ($wpc_fd_ceil ? 'PRESENT' : 'ABSENT') . " | render_critical key: " . $wpc_fd_rc . ($wpc_fd_djok && !$wpc_fd_measured ? '  <-- OLD-SCHEMA gen (no schema_epoch>=1 / no ceiling); amendment-refetch (meta-or-DERIVED uuid URL) supersedes on next repull' : '');
-        
-        
-        
+        // Live probe of what the amendment-refetch WILL pull (meta-or-derived from
+        // the on-disk uuid) — proves whether the fix converges plugin-side or is
+        // genuinely blocked service-side, without guessing.
         if ($wpc_fd_djok && !$wpc_fd_measured && function_exists('wpc_crit_artifact_url')) {
             $wpc_fd_amu = wpc_crit_artifact_url($cd, 'delay');
             if ($wpc_fd_amu !== '') {
@@ -8947,11 +9115,11 @@ if (!empty($_GET['autoload'])) {
                 $wpc_fd_pb = $wpc_fd_pc === 200 ? (string) wp_remote_retrieve_body($wpc_fd_pr) : '';
                 $wpc_fd_pm = $wpc_fd_pb !== '' && class_exists('wps_ic_js_delay_v3')
                     && wps_ic_js_delay_v3::wpc_delay_measured_shape(json_decode($wpc_fd_pb, true));
-                
-                
-                
-                
-                
+                // v7.10.476 — DO NOT ATTRIBUTE ON AN OLD ARTIFACT. The probe fetches the copy for
+                // the uuid ON DISK. If that gen predates the measured-shape feature, "old-schema"
+                // says nothing about what the service emits TODAY — and the previous wording
+                // ("SERVICE-side") sent the service team hunting a fault that was not theirs.
+                // A stale artifact is un-attributable by construction; only a RECENT one accuses.
                 $wpc_fd_age = ($wpc_fd_mt > 0) ? max(0, time() - $wpc_fd_mt) : -1;
                 $wpc_fd_oldgen = ($wpc_fd_age < 0
                     || $wpc_fd_age > (int) apply_filters('wpc_amend_probe_attribution_max_age', 6 * HOUR_IN_SECONDS));
@@ -8976,10 +9144,10 @@ if (!empty($_GET['autoload'])) {
         $o[] = "delay master: " . $wpc_fd_master . " | measured(this gen): " . ($wpc_fd_measured ? 'YES' : 'NO')
             . " | telemetry+io: " . ($wpc_fd_tele ? 'on' : 'OFF');
         $wpc_fd_flip = $wpc_fd_master === 'ON' && $wpc_fd_measured && !$wpc_fd_moffblk && $wpc_fd_aoff <= 0 && $wpc_fd_tele;
-        
-        
-        
-        
+        // Ground truth from real HTML: served (what visitors/PSI get) + fresh
+        // loopback (what a fresh render produces). If VERDICT=should-fire but
+        // served shows 60 while fresh shows 0 → stale page-cache (purge). If
+        // fresh ALSO shows 60 → the flip genuinely isn't firing (on-disk gen).
         $wpc_fd_cfg = function ($html) {
             return (is_string($html) && preg_match('/wpcDelayV3Cfg=\{"timeout":(\d+),"aggr":(\d+)/', $html, $m))
                 ? 'timeout:' . $m[1] . ',aggr:' . $m[2] : 'n/a';
@@ -8997,11 +9165,79 @@ if (!empty($_GET['autoload'])) {
     add_action('wp_ajax_nopriv_wpc_perf_debug', 'wpc_perf_debug_report');
 }
 
+if (!function_exists('wpc_upload_premint15')) {
+    /**
+     * v7.20.15 — upload-hook pre-mint (service contract: the natural URL IS the pre-mint
+     * endpoint). When an upload's sizes land, fire non-blocking GETs at each emitted
+     * size's next-gen zone URL with its origin-ext hint: the edge mints and caches, the
+     * first visitor lands on warm keys. Bounded: full + WP sizes x2 formats, 12-URL cap,
+     * blocking=false + 2s timeout, image mimes only, standalone from compress-on-upload
+     * (fires even with auto-optimize off). Kill filter wpc_upload_premint.
+     */
+    function wpc_upload_premint15($data, $attachment_id)
+    {
+        try {
+            if (!is_array($data) || !apply_filters('wpc_upload_premint', true)
+                || !function_exists('wp_remote_get') || !function_exists('wp_get_attachment_url')
+                || !class_exists('wps_rewriteLogic') || !method_exists('wps_rewriteLogic', 'src_hint_qs')) {
+                return $data;
+            }
+            $zone = trim((string) get_option('ic_cdn_zone_name', ''));
+            if ($zone === ''
+                || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed())) {
+                return $data;
+            }
+            $url   = (string) wp_get_attachment_url($attachment_id);
+            $clean = (string) preg_replace('/[?#].*$/', '', $url);
+            $ext   = strtolower((string) pathinfo($clean, PATHINFO_EXTENSION));
+            if (!in_array($ext, array('jpg', 'jpeg', 'png', 'webp'), true)) {
+                return $data;
+            }
+            $site = rtrim((string) site_url(), '/');
+            if (strpos($clean, $site) !== 0) {
+                return $data;
+            }
+            $base = 'https://' . $zone . substr($clean, strlen($site));
+            $hint = wps_rewriteLogic::src_hint_qs($ext);
+            $dir  = substr($base, 0, strrpos($base, '/') + 1);
+            $mk   = function ($fileBase) use ($hint, $ext) {
+                $out = array();
+                foreach (array('webp', 'avif') as $f) {
+                    $u = (string) preg_replace('/\.(?:jpe?g|png|webp)$/i', '.' . $f, $fileBase);
+                    if ($u === $fileBase && $f === $ext) { $out[] = $u; continue; }
+                    $out[] = $u . ($hint !== '' ? $hint : '');
+                }
+                return $out;
+            };
+            $urls = $mk($base);
+            if (isset($data['sizes']) && is_array($data['sizes'])) {
+                foreach ($data['sizes'] as $sz) {
+                    if (count($urls) >= 12) { break; }
+                    if (empty($sz['file']) || !is_string($sz['file'])) { continue; }
+                    foreach ($mk($dir . $sz['file']) as $u) {
+                        if (count($urls) >= 12) { break; }
+                        $urls[] = $u;
+                    }
+                }
+            }
+            foreach ($urls as $u) {
+                wp_remote_get($u, array('blocking' => false, 'timeout' => 2, 'redirection' => 0, 'sslverify' => true));
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('upload-premint', '', '', array('n' => count($urls), 'id' => (int) $attachment_id));
+            }
+        } catch (\Throwable $e) {
+        }
+        return $data;
+    }
+    add_filter('wp_generate_attachment_metadata', 'wpc_upload_premint15', PHP_INT_MAX - 1, 2);
+}
+
 if (!function_exists('wpc_rum_census_receiver')) {
-    
-
-
-
+    /** RUM census relay: the page beacon posts SAME-ORIGIN (no CSP connect-src walls, no
+     *  third-party blocking, and the apikey never appears in page bytes — injected here).
+     *  Always 204, allowlist-rebuilt payload (never relays arbitrary bytes), own-host URL
+     *  only (no open relay), hourly forward cap mirroring the ingest bucket. */
     function wpc_rum_census_receiver()
     {
         while (ob_get_level()) { @ob_end_clean(); }
@@ -9103,7 +9339,7 @@ if (!function_exists('wpc_font_inline_self_arm')) {
                 return;
             }
 
-            set_transient('wpc_font_selfarm_lock', 1, 30 * MINUTE_IN_SECONDS); 
+            set_transient('wpc_font_selfarm_lock', 1, 30 * MINUTE_IN_SECONDS); // ≤1/30min, own throttle
             register_shutdown_function(function () use ($f) {
                 if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
                 if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
@@ -9111,9 +9347,9 @@ if (!function_exists('wpc_font_inline_self_arm')) {
                 try {
                     $n = method_exists($f, 'localizeInlineFonts') ? (int) $f->localizeInlineFonts('') : 0;
                     if ($n > 0) {
-                        
-                        
-                        
+                        // Site-wide purge at most once/day: a recurring n>0 means the localize
+                        // loop hasn't converged, and wiping the HTML cache each pass turns that
+                        // into a permanent cold-cache storm (the FPM-stampede class).
                         if (!get_transient('wpc_font_purgeall_day')
                             && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
                             set_transient('wpc_font_purgeall_day', 1, DAY_IN_SECONDS);
@@ -9135,7 +9371,7 @@ if (!function_exists('wpc_font_inline_self_arm')) {
 }
 
 
-
+// (crit-less is the lander's job, not ours). Logged. Kill: wpc_convergence_selfheal.
 if (!function_exists('wpc_convergence_selfheal')) {
     function wpc_convergence_selfheal()
     {
@@ -9156,13 +9392,13 @@ if (!function_exists('wpc_convergence_selfheal')) {
                     $h = (string) wp_remote_retrieve_body($r);
                     if (strpos($h, 'wpc-critical-css') === false) { return; }
                     $miss = '';
-                    
+                    // (1) a bg-hero is derivable but the served page has no preload → stale
                     if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_lcp_autoderive_bg')
                         && strpos($h, 'wpc-lcp-bg-preload') === false) {
                         $ad = wps_rewriteLogic::wpc_lcp_autoderive_bg($h, '');
                         if (is_array($ad) && !empty($ad['url'])) { $miss = 'lcp-preload'; }
                     }
-                    
+                    // (2) a subset was built but isn't in the served crit → stale
                     if ($miss === '' && class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
                         $k  = (new wps_ic_url_key())->setup($url);
                         $sf = rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/font-subsets.css';
@@ -9251,7 +9487,7 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
         $o = is_array($old) && isset($old['replace-fonts']) ? $old['replace-fonts'] : '';
         $n = is_array($new) && isset($new['replace-fonts']) ? $new['replace-fonts'] : '';
         if ($o !== $n) {
-            
+            // Deferred: a Save must never pay the full wipe inline
             if (!wp_next_scheduled('wpc_sitechange_trailing')) {
                 wp_schedule_single_event(time() + 8, 'wpc_sitechange_trailing');
             }
@@ -9262,14 +9498,14 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
 }, 10, 2);
 
 
-
-
+// Opt-in per site via the Performance Advisory card toggle (wpc_auto_mode option). The loop is
+// SERVER-side (cron single-events; this file is loaded by BOTH core and wp-compress-cron.php, so
 
 
 if (!function_exists('wpc_auto_mode_on')) {
     function wpc_auto_mode_on()
     {
-        
+        // Default ON for connected sites; an explicit off (option '0') is always respected.
         $v = get_option('wpc_auto_mode', null);
         if ($v === null || $v === false || $v === '') {
             $o = get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
@@ -9277,14 +9513,14 @@ if (!function_exists('wpc_auto_mode_on')) {
         }
         return apply_filters('wpc_auto_mode', $v === '1');
     }
-    
-
-
-
-
-
-
-
+    /**
+     * v7.10.824 — a freeze is a verdict about ONE generation, not about the site forever.
+     * frozen[] had no remover: a lever measured during a stale/settling window (vincire's R2)
+     * reverted once and stayed off permanently, surviving upgrades and fresh gens that changed
+     * everything the measurement was based on. The freeze now carries the epoch it was minted
+     * in (plugin version + landed gen uuid); a different epoch thaws every frozen lever once,
+     * journaled, and the measured cycle re-tries it — worst case one measured revert per epoch.
+     */
     function wpc_auto_freeze_epoch824()
     {
         static $wpc_e824 = null;
@@ -9331,8 +9567,8 @@ if (!function_exists('wpc_auto_mode_on')) {
     {
         update_option('wpc_auto_mode_state', $s, false);
     }
-    
-    
+    // Slow-render profiler: any frontend request over 3s journals WHERE the time went —
+    // outbound HTTP (count/ms/worst call) named per-URL.
     if (!function_exists('wpc_slowreq_arm')) {
         function wpc_slowreq_arm()
         {
@@ -9352,9 +9588,9 @@ if (!function_exists('wpc_auto_mode_on')) {
                     $GLOBALS['wpc_sr_http']['worst_ms'] = $ms;
                     $GLOBALS['wpc_sr_http']['worst'] = substr((string) $url, 0, 90);
                 }
-                
-                
-                
+                // The worst call alone accounted for 275 of 955ms on a busy visitor render and left
+                // ~680ms across four unnamed calls. A compact per-call list closes that: host + last
+                // path segment + ms + b|n for blocking, capped at 8 entries so the payload stays small.
                 if (count($GLOBALS['wpc_sr_http']['calls']) < 8) {
                     $wpc_ch157 = (string) parse_url((string) $url, PHP_URL_HOST);
                     $wpc_cp157 = trim((string) parse_url((string) $url, PHP_URL_PATH), '/');
@@ -9372,29 +9608,29 @@ if (!function_exists('wpc_auto_mode_on')) {
                     return;
                 }
                 $ms = (int) round((microtime(true) - $t0) * 1000);
-                
-                
-                
-                
-                
+                // Deliberate holds (the dashboard's manifest LONG-POLL parks a connection for up
+                // to 25s BY DESIGN) waive their measured wait here — a 26s "slow render" that is
+                // 25s of intentional idle sent two teams investigating a non-problem. The waiver
+                // is an accumulator, not an action-name match: any future deliberate wait joins by
+                // adding its measured hold, and only the REMAINDER is judged.
                 $wpc_waived751 = isset($GLOBALS['wpc_sr_waived_ms']) ? (int) $GLOBALS['wpc_sr_waived_ms'] : 0;
                 if (($ms - $wpc_waived751) < 3000) {
                     return;
                 }
                 $h = isset($GLOBALS['wpc_sr_http']) ? $GLOBALS['wpc_sr_http'] : ['n' => 0, 'ms' => 0, 'worst' => '', 'worst_ms' => 0];
                 if (function_exists('wpc_auto_journal')) {
-                    
-                    
-                    
+                    // Phase deltas answer WHERE the seconds went: big 'boot' = PHP/FPM queue
+                    // or plugin load; big init->tpl gap = a hook; big q = DB volume; big
+                    // http_ms = outbound calls; high load = machine, not this request.
                     $wpc_m157 = isset($GLOBALS['wpc_ms157']) ? $GLOBALS['wpc_ms157'] : [];
                     $wpc_d157 = function ($k) use ($wpc_m157, $t0) {
                         return isset($wpc_m157[$k]) ? (int) round(($wpc_m157[$k] - $t0) * 1000) : -1;
                     };
                     global $wpdb;
                     $wpc_load157 = function_exists('sys_getloadavg') ? (array) sys_getloadavg() : [0];
-                    
-                    
-                    
+                    // Ordered phase timeline — the GAP between two adjacent stamps names the
+                    // phase that ate the seconds. Only stamps that fired are listed, so a
+                    // missing name is itself evidence (never reached that hook).
                     $wpc_ph157 = [];
                     foreach (['init', 'loaded', 'tpl', 'adm', 'wp', 'head0', 'head9', 'foot0', 'foot9',
                               'shut', 's1', 's5', 's9', 's10', 's20', 's100', 's500'] as $wpc_pk157) {
@@ -9409,20 +9645,20 @@ if (!function_exists('wpc_auto_mode_on')) {
                         'boot'    => $wpc_d157('init'),
                         'tpl'     => $wpc_d157(function_exists('is_admin') && is_admin() ? 'adm' : 'tpl'),
                         'ph'      => $wpc_ph157 ? implode(' ', $wpc_ph157) : '-',
-                        
-                        
+                        // last cflog event + its offset: if the stall follows a known step,
+                        // this names it; if it precedes everything, the stall is pre-log.
                         'lastlog' => isset($GLOBALS['wpc_lastlog518'])
                             ? $GLOBALS['wpc_lastlog518'][0] . '@'
                               . (int) round(($GLOBALS['wpc_lastlog518'][1] - $t0) * 1000)
                             : '-',
-                        
-                        
-                        
+                        // ob buffers still open at shutdown: WP flushes them at 'shutdown'
+                        // priority 1, so a non-zero count here means our rewrite/save chain
+                        // runs INSIDE the measured band (this corrects an earlier assumption).
                         'ob'      => function_exists('ob_get_level') ? (int) ob_get_level() : -1,
-                        
-                        
-                        
-                        
+                        // v7.10.530 — the missing half. 'ph'/'ob' localise the stall to a BAND;
+                        // this names the FUNCTION. Worst-first label:ms/n, incl. lock waits
+                        // (lock:*) and contended locks (LOCKFAIL:*) — the two ways a request
+                        // burns 60 s of wall clock without burning CPU or tripping a slowlog.
                         'prof'    => function_exists('wpc_prof_dump') ? wpc_prof_dump(25) : '-',
                         'q'       => isset($wpdb->num_queries) ? (int) $wpdb->num_queries : -1,
                         'http_n'  => $h['n'],
@@ -9451,8 +9687,8 @@ if (!function_exists('wpc_auto_mode_on')) {
         add_action('admin_init', function () {
             if (isset($GLOBALS['wpc_ms157'])) { $GLOBALS['wpc_ms157']['adm'] = microtime(true); }
         }, 0);
-        
-        
+        // Markers stopped at template_redirect, so every second after it read as one
+        // opaque block: a 62s render logged boot:618 tpl:684 and named nothing.
         add_action('wp', function () {
             if (isset($GLOBALS['wpc_ms157'])) { $GLOBALS['wpc_ms157']['wp'] = microtime(true); }
         }, 99999);
@@ -9471,11 +9707,11 @@ if (!function_exists('wpc_auto_mode_on')) {
         add_action('shutdown', function () {
             if (isset($GLOBALS['wpc_ms157'])) { $GLOBALS['wpc_ms157']['shut'] = microtime(true); }
         }, 0);
-        
-        
-        
-        
-        
+        // v7.10.518 — the 61.5s renders land ENTIRELY between shut:721 and the priority-999
+        // journal write, so the whole request is fast and one shutdown callback eats a minute.
+        // 13 of ours are registered in that band; rather than guess, stamp the band edges so
+        // the gap between two adjacent marks names the priority, and the priority names the
+        // hook. Six extra microtime() calls per request.
         foreach ([1, 5, 9, 10, 20, 100, 500] as $wpc_sp518) {
             add_action('shutdown', function () use ($wpc_sp518) {
                 if (isset($GLOBALS['wpc_ms157'])) {
@@ -9592,7 +9828,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         }
         if ($rule === 'R9') {
 
-            
+            // (serving itself is verified by the next measure + the drop-in's own self-gates).
             $p = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/advanced-cache.php' : '';
             if ($p !== '' && @is_readable($p)) {
                 $head = (string) @file_get_contents($p, false, null, 0, 4096);
@@ -9603,7 +9839,7 @@ if (!function_exists('wpc_auto_mode_on')) {
             }
             return false;
         }
-        return true; 
+        return true; // R8 & unknown rules: the flip is the outcome (delay engine keys off settings)
     }
 
 
@@ -9617,7 +9853,7 @@ if (!function_exists('wpc_auto_mode_on')) {
             }
             if ($rule === 'R2' && function_exists('wpc_warm_url_fire') && function_exists('home_url')) {
 
-                
+                // = one dispatch. Bounded by the loop's single-flight + 3-cycle cap.
                 wpc_warm_url_fire(home_url('/'));
             }
             if ($rule === 'R9') {
@@ -9640,7 +9876,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         ]);
     }
 
-    
+    // TICK — ensure crit is armed, then start a measure run.
     function wpc_auto_mode_tick_handler($attempt = 1)
     {
         try {
@@ -9662,7 +9898,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                 return;
             }
 
-            
+            // Crit armed for the homepage? (The render path dispatches gen itself — one warm
 
             $armed = false;
             if (class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL') && function_exists('home_url')) {
@@ -9697,7 +9933,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                 return;
             }
 
-            
+            // Start the measure (mirrors the advisory proxy; same host, https, verified TLS).
             $opts   = get_option(WPS_IC_OPTIONS);
             $apikey = (is_array($opts) && !empty($opts['api_key'])) ? $opts['api_key'] : '';
             if ($apikey === '') {
@@ -9757,7 +9993,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         wpc_auto_mode_tick_handler($attempt);
     });
 
-    
+    // POLL — wait for the run, then process the report.
     function wpc_auto_mode_poll_handler($attempt = 1)
     {
         try {
@@ -9851,29 +10087,29 @@ if (!function_exists('wpc_auto_mode_on')) {
                 $st['status'] = 'done'; $st['msg'] = 'reverted-then-capped';
             } else {
                 $st['status'] = 'settling';
-                $st['next_tick_at'] = time() + (int) apply_filters('wpc_auto_cycle_floor', 180); 
+                $st['next_tick_at'] = time() + (int) apply_filters('wpc_auto_cycle_floor', 180); // P2 floor
                 wpc_auto_schedule('wpc_auto_mode_tick', 240, [1]);
             }
             wpc_auto_state_save($st);
             return;
         }
 
-        
+        // 2. PLATEAU / CAP — converged?
         $plateau = ($score !== null && $st['last_score'] !== null && abs($score - (float) $st['last_score']) < 2);
 
-        
+        // 3. APPLY — whitelisted, owner:auto, currently-off, not-frozen recommendations.
         $flips = [];
         $set = get_option(WPS_IC_SETTINGS);
         $levers = wpc_auto_levers();
-        
-        
+        // Actuation reads auto_plan.actions; recommendations[] is the advisory layer and may
+        // contain diagnostics that are never plan actions.
         $recs = [];
         if (is_array($report) && !empty($report['auto_plan']['actions']) && is_array($report['auto_plan']['actions'])) {
             $recs = $report['auto_plan']['actions'];
         } elseif (is_array($report) && !empty($report['recommendations']) && is_array($report['recommendations'])) {
             $recs = $report['recommendations'];
         }
-        
+        // Per-vendor third-party actions: apply the recommended default for heavy entities.
         if (function_exists('wpc_auto_apply_third_parties')) {
             wpc_auto_apply_third_parties($report);
         }
@@ -9949,7 +10185,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                 wpc_auto_journal('auto-apply', ['rule' => $f['rule'], 'key' => $f['key'],
                     'from' => (string) $f['from'], 'to' => $f['to'], 'cycle' => $st['cycle'], 'score' => $score]);
             }
-            update_option(WPS_IC_SETTINGS, $set); 
+            update_option(WPS_IC_SETTINGS, $set); // P5d purges HTML on the fonts flip automatically
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
                 try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
             }
@@ -9970,7 +10206,7 @@ if (!function_exists('wpc_auto_mode_on')) {
                 wpc_auto_schedule('wpc_auto_mode_tick', 240, [1]);
             }
         } else {
-            
+            // Nothing left to flip (or plateau) — converged. Residuals stay named in the card.
             $st['flipped_last'] = []; $st['last_score'] = $score; $st['last_score_d'] = $scoreD;
             $st['status'] = 'converged';
             $st['msg'] = $plateau ? 'plateau' : 'no-applicable-levers';
@@ -9985,7 +10221,7 @@ if (!function_exists('wpc_auto_mode_on')) {
         wpc_auto_state_save($st);
     }
 
-    
+    // AJAX — toggle / status / revert (card UI). Same nonce + capability as the advisory proxies.
     function wpc_auto_mode_ajax_guard()
     {
         if (!current_user_can('manage_wpc_settings')
@@ -9993,11 +10229,11 @@ if (!function_exists('wpc_auto_mode_on')) {
             wp_send_json_error(['msg' => 'forbidden'], 403);
         }
     }
-    
-
-
-
-
+    /**
+     * Arms the Auto loop on sites where it is on by default (no toggle click ever happens on a
+     * link-and-go install). One-shot latch; respects the explicit-off option, the connected
+     * gate, and developer mode. Journals its own arming for the status timeline.
+     */
     function wpc_auto_bootstrap()
     {
         try {
@@ -10026,9 +10262,13 @@ if (!function_exists('wpc_auto_mode_on')) {
     add_action('wpc_lcp_repull', 'wpc_auto_bootstrap', 8);
     add_action('wpc_autopurge_sweep', 'wpc_auto_bootstrap', 8);
 
-    add_action('wp_ajax_wpc_auto_mode_set', function () {
-        wpc_auto_mode_ajax_guard();
-        $on = isset($_POST['on']) && $_POST['on'] === '1';
+
+
+
+
+    function wpc_auto_mode_apply_set($on)
+    {
+        $on = (bool) $on;
         update_option('wpc_auto_mode', $on ? '1' : '0', false);
         if ($on) {
             $st = wpc_auto_state();
@@ -10047,10 +10287,12 @@ if (!function_exists('wpc_auto_mode_on')) {
                 wp_unschedule_hook('wpc_auto_mode_poll');
             }
         }
-        wp_send_json_success(['on' => $on, 'state' => wpc_auto_state()]);
-    });
-    add_action('wp_ajax_wpc_auto_mode_status', function () {
-        wpc_auto_mode_ajax_guard();
+        return ['on' => $on, 'state' => wpc_auto_state()];
+    }
+
+
+    function wpc_auto_mode_build_status()
+    {
 
 
         if (function_exists('wpc_auto_chain_maybe')) { wpc_auto_chain_maybe('status-poll'); }
@@ -10058,7 +10300,7 @@ if (!function_exists('wpc_auto_mode_on')) {
 
         $wpc_r2s123 = function_exists('wpc_r2_probation_state') ? wpc_r2_probation_state() : [];
         if (!empty($wpc_r2s123['phase']) && function_exists('wpc_r2_kick')) { wpc_r2_kick(); }
-        wp_send_json_success([
+        return [
             'on' => wpc_auto_mode_on(),
             'state' => wpc_auto_state(),
             'r2' => [
@@ -10070,14 +10312,16 @@ if (!function_exists('wpc_auto_mode_on')) {
                 'verified' => get_option('wpc_r2_verified'),
             ],
             'journal' => array_reverse(array_slice((array) get_option('wpc_auto_mode_journal', []), -12)),
-        ]);
-    });
-    add_action('wp_ajax_wpc_auto_mode_revert', function () {
-        wpc_auto_mode_ajax_guard();
+        ];
+    }
+
+
+    function wpc_auto_mode_do_revert()
+    {
         $j = (array) get_option('wpc_auto_mode_journal', []);
         $set = get_option(WPS_IC_SETTINGS);
         $n = 0;
-        
+        // Journal is oldest-first; keep the FIRST 'from' per key (the pre-Auto value) + its rule.
         $orig = [];
         foreach ($j as $e) {
             if (($e['event'] ?? '') === 'auto-apply' && isset($e['key']) && !array_key_exists($e['key'], $orig)) {
@@ -10112,7 +10356,33 @@ if (!function_exists('wpc_auto_mode_on')) {
             try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
         }
         wpc_auto_journal('manual-revert', ['restored' => $n]);
-        wp_send_json_success(['restored' => $n]);
+        return ['restored' => $n];
+    }
+
+
+    add_action('wp_ajax_wpc_auto_mode_set', function () {
+        wpc_auto_mode_ajax_guard();
+        $on = isset($_POST['on']) && $_POST['on'] === '1';
+        if (function_exists('wpc_agency_forward_json')) {
+            wpc_agency_forward_json('autoModeSet', ['on' => $on ? '1' : '0']);
+        }
+        wp_send_json_success(wpc_auto_mode_apply_set($on));
+    });
+
+    add_action('wp_ajax_wpc_auto_mode_status', function () {
+        wpc_auto_mode_ajax_guard();
+        if (function_exists('wpc_agency_forward_json')) {
+            wpc_agency_forward_json('autoModeStatus');
+        }
+        wp_send_json_success(wpc_auto_mode_build_status());
+    });
+
+    add_action('wp_ajax_wpc_auto_mode_revert', function () {
+        wpc_auto_mode_ajax_guard();
+        if (function_exists('wpc_agency_forward_json')) {
+            wpc_agency_forward_json('autoModeRevert');
+        }
+        wp_send_json_success(wpc_auto_mode_do_revert());
     });
 
 
@@ -10235,8 +10505,8 @@ if (!function_exists('wpc_sitechange_purge')) {
                 return;
             }
             $wpc_scp75 = true;
-            
-            
+            // ALWAYS deferred: menu/widget/theme saves never pay the wipe inline;
+            // event dedup coalesces bursts into one purge
             if (!wp_next_scheduled('wpc_sitechange_trailing')) {
                 wp_schedule_single_event(time() + 8, 'wpc_sitechange_trailing');
             }
@@ -10255,9 +10525,9 @@ if (!function_exists('wpc_sitechange_purge')) {
             }
         }
     });
-    
-    
-    
+    // v7.10.567 — crit-mode flip. ALL html layers, not just the local mirror: the edge is
+    // holding copies keyed under the previous device model, so a local-only wipe would leave
+    // CF serving the old shape until its own TTL expires.
     add_action('wpc_critmode_purge', function () {
         if (function_exists('wpc_r2_purge_html_layers')) {
             wpc_r2_purge_html_layers();
@@ -10272,11 +10542,11 @@ if (!function_exists('wpc_sitechange_purge')) {
     add_action('customize_save_after',    function () { wpc_sitechange_purge('customizer'); });
     add_action('wp_update_nav_menu',      function () { wpc_sitechange_purge('menu'); });
     add_action('deactivated_plugin',      function () { wpc_sitechange_purge('plugin-deactivated'); });
-    
-    
-    
-    
-    
+    // A plugin/theme UPDATE rewrites the very asset URLs and markup our cached HTML points
+    // at (builder CSS files re-hash, image markup changes) — deactivation purged, activation
+    // purged, and the update in between did not, so a stale copy kept referencing files that
+    // no longer exist. vincire.nl receipt: images vanished after a Kadence update and came
+    // back only when the plugin was toggled, which is the purge this hook was missing.
     add_action('upgrader_process_complete', function () { wpc_sitechange_purge('plugin-updated'); });
     add_action('update_option_sidebars_widgets', function () { wpc_sitechange_purge('widgets'); });
     add_action('edited_term',             function () { wpc_sitechange_purge('term-edited'); });
@@ -10293,15 +10563,15 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
             if ($o !== $n) { $changed = true; break; }
         }
         if (!$changed) { return; }
-        
-        
-        
-        
-        
-        
-        
-        
-        
+        // v7.10.567 — A MODE CHANGE MUST INVALIDATE THE COPIES MADE UNDER THE OLD MODE.
+        // Either key flips the emitted HTML between device-universal (one combined blob) and
+        // device-divergent, and the CF rule re-patch below changes the edge's key model — but
+        // nothing invalidated what is already stored under the old one. With max-age=300 +
+        // stale-while-revalidate=86400 the old shape can serve for a day, and inside that window
+        // the edge can hand a mobile visitor desktop-shaped HTML. Every other mode flip already
+        // purges (format toggles core:5125, fonts warm:7555, used-css warm:9414); this was the
+        // one that re-patched the rules and left the payload. Deferred + coalesced, so a Save
+        // never pays the wipe inline — same contract as wpc_sitechange_purge().
         if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
             && !wp_next_scheduled('wpc_critmode_purge')) {
             wp_schedule_single_event(time() + 8, 'wpc_critmode_purge');
@@ -10320,7 +10590,7 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
         if (class_exists('WPC_CloudflareAPI')) {
             $sdk = new WPC_CloudflareAPI($cf['token']);
             if (method_exists($sdk, 'patchHtmlRulesRespectOrigin')) {
-                
+                // Compute combined-mode from the FRESH ($new) settings — mid-save, the statics
 
                 $combined = class_exists('wps_rewriteLogic')
                     && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on')
@@ -10336,7 +10606,7 @@ add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'w
 }, 10, 2);
 
 
-
+// Connect/refresh no longer fail when OUR keys server answers slowly (the "connected on hard
 
 
 if (!function_exists('wpc_cf_finish_cname')) {
@@ -10381,8 +10651,8 @@ if (!function_exists('wpc_cf_finish_cname')) {
 }
 
 
-
-
+// This handler can only: read /status for the SAME stashed uuid → consume fonts → purge this
+// page. It cannot dispatch, kick, or write uuid.txt — re-generation is structurally impossible.
 if (!function_exists('wpc_combine_fonts_fetch_handler')) {
     function wpc_combine_fonts_fetch_handler($url_key = '', $attempt = 1)
     {
@@ -10415,12 +10685,12 @@ if (!function_exists('wpc_combine_fonts_fetch_handler')) {
                     $fj = json_decode((string) wp_remote_retrieve_body($ff), true);
                     if (is_array($fj)) { $fonts = (!empty($fj['fonts']) && is_array($fj['fonts'])) ? $fj['fonts'] : $fj; }
                 } elseif ($wpc_fc624 === 404 || $wpc_fc624 === 410) {
-                    
-                    
-                    
-                    
-                    
-                    
+                    // v7.10.624 — a DEAD pointer must reach a terminal state: the scheduled
+                    // path caps at 4 attempts but the admin-visit heal re-enters at attempt 1
+                    // every 10min forever (QM receipt: 3 x 404 per admin load). Count 404s
+                    // keyed to THIS url; at 4 the pointer file is deleted — the heal glob
+                    // stops selecting the dir, and any fresh generation rewrites the pointer
+                    // (new url => counter resets by key).
                     $wpc_4f624 = $dir . 'fonts_404.txt';
                     $wpc_4s624 = @is_readable($wpc_4f624) ? explode(':', trim((string) @file_get_contents($wpc_4f624))) : [0, ''];
                     $wpc_4n624 = (substr((string) ($wpc_4s624[1] ?? ''), 0, 8) === substr(md5($fu), 0, 8))
@@ -10451,8 +10721,8 @@ if (!function_exists('wpc_combine_fonts_fetch_handler')) {
                 && !wp_next_scheduled('wpc_combine_fonts_fetch', [$url_key, (int) $attempt + 1])) {
                 wpc_pl_sched(time() + 60, 'wpc_combine_fonts_fetch', [$url_key, (int) $attempt + 1]);
             } elseif ((int) $attempt >= 4 && function_exists('wpc_cache_first_log')) {
-                
-                
+                // v7.10.397: a silent terminal state made "fonts never landed" a mystery —
+                // the pointer heal below owns recovery, this line owns observability.
                 wpc_cache_first_log('fonts-fetch-exhausted', (string) $url_key, '', ['attempts' => (int) $attempt]);
             }
         } catch (\Throwable $e) {
@@ -10462,19 +10732,19 @@ if (!function_exists('wpc_combine_fonts_fetch_handler')) {
 }
 
 if (!function_exists('wpc_fonts_pointer_heal')) {
-    
-
-
-
-
-
+    /**
+     * v7.10.397: fonts consumption was cron-scheduled only — on a loaded box that sheds
+     * cron (pressure-deferred), a landed fonts_url pointer sat unconsumed forever (busy:
+     * pointer present 40+ min, subsets absent, no fonts-landed journal). Admin visits are
+     * the one traffic class that always happens: consume inline, throttled, cron-free.
+     */
     function wpc_fonts_pointer_heal()
     {
         try {
             if (!defined('WPS_IC_CRITICAL') || !function_exists('wpc_combine_fonts_fetch_handler')) { return; }
-            
-            
-            
+            // v7.10.401: backfill the metrics-present signal from any already-landed
+            // font-metrics.json, so the swap->optional CLS fix applies to sites whose
+            // metrics landed before this release (no fresh consume needed).
             if (!get_option('wpc_font_metrics_present')
                 && (array) @glob(rtrim(WPS_IC_CRITICAL, '/') . '/*/font-metrics.json')) {
                 foreach ((array) @glob(rtrim(WPS_IC_CRITICAL, '/') . '/*/font-metrics.json') as $wpc_fm401) {
@@ -10505,23 +10775,23 @@ if (!function_exists('wpc_update_window_active')) {
         return $until > 0 && time() < $until;
     }
 
-    
-
-
-
-
-
+    /**
+     * Presence is not currency: pointer files from old generations satisfy existence checks and
+     * block their own modernization. On every plugin version change, clear the POINTER chain for
+     * the homepage key (artifacts stay serving) and re-arm the resolver so the current-era
+     * artifact set lands within one cycle.
+     */
     function wpc_artifact_refresh_on_update()
     {
         try {
             $v = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '';
             if ($v === '' || get_option('wpc_artifact_refresh_v') === $v) { return; }
             update_option('wpc_artifact_refresh_v', $v, false);
-            
-            
+            // A failed-era selftest gate must not delay the crown after new code lands —
+            // each version change earns a fresh attempt.
             delete_transient('wpc_cf_selftest_gate');
-            
-            
+            // A background render pays the post-update compile/setup cost within seconds,
+            // so the first human arrival never does.
             if (function_exists('wpc_warm_url_queue')) {
                 wpc_warm_url_queue(home_url('/'), 'post-update-prime');
             }
@@ -10531,9 +10801,9 @@ if (!function_exists('wpc_update_window_active')) {
             $d = rtrim(WPS_IC_CRITICAL, '/') . '/' . $hk . '/';
             foreach (['lcp_url.txt', 'delay_url.txt', 'fonts_url.txt', 'used_css_sheets_url.txt',
                 'used_css_url.txt', 'used_css_mobile_url.txt', 'used_css_desktop_url.txt', 'uuid.txt'] as $f) {
-                
-                
-                
+                // v7.10.682 — uuid.txt is the PENDING-GEN pointer, not an old-era locator: deleting
+                // it under a live dispatch orphans the in-flight generation collection lane (the
+                // update-day outage shape). An old-era uuid still clears (dispatch stamp aged out).
                 if ($f === 'uuid.txt'
                     && (time() - (int) @file_get_contents($d . 'dispatch_ts.txt')) < 900) {
                     continue;
@@ -10572,10 +10842,10 @@ if (!function_exists('wpc_update_window_active')) {
         if (time() < $until) {
             return;
         }
-        
-        
-        
-        
+        // Phase-0 load gate: a purge-all (→ cold origin → visitor-render herd) + warm
+        // burst on an already-hot box is self-inflicted (busy: 2 cores @ load 35 → 503).
+        // Defer the whole thing until pressure clears; the flag stays set so the
+        // rescheduled run re-attempts. Lazy-warm on real visits covers any gap.
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
             if (function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')
                 && !wp_next_scheduled('wpc_update_window_end')) {
@@ -10586,21 +10856,21 @@ if (!function_exists('wpc_update_window_active')) {
         delete_option('wpc_update_window_until');
         try {
 
-            
+            // (crit-tree maps survive either way; homepage always present).
             $wpc_warm_list114 = [];
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'wpcHtmlUrlList')) {
-                
-                
-                
-                
-                
-                
+                // World-class warming: eagerly warm the HOMEPAGE only (highest-value,
+                // highest-traffic — the one page where a cold first-visit hurts). Every
+                // other page re-optimizes lazily on its next visit (free, spread over time,
+                // no cold-cache herd). On a slow-origin box each render is seconds, so the
+                // old top-6 was 6× the cost for pages that get a handful of visits/day.
+                // Filterable up for fast boxes; the durable version is service-side warm.
                 $wpc_warm_list114 = array_slice((array) wps_ic_cache::wpcHtmlUrlList(12), 0, max(1, (int) apply_filters('wpc_update_window_warm_max', 1)));
             }
             if (empty($wpc_warm_list114)) {
                 $wpc_warm_list114 = [home_url('/')];
             }
-            
+            // THE purge-at-END: levers are live now — rebuild every layer from optimized renders.
             if (class_exists('wps_ic_cache_integrations')) {
                 wps_ic_cache_integrations::purgeAll(false, true, false, false, true);
             }
@@ -10610,10 +10880,10 @@ if (!function_exists('wpc_update_window_active')) {
             if (defined('LSCWP_V')) { do_action('litespeed_purge_all'); }
             if (defined('WPHB_VERSION')) { do_action('wphb_clear_page_cache'); }
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeBreeze')) { wps_ic_cache::purgeBreeze(); }
-            
-            
-            
-            
+            // Edge purge DELAYED: dropping every CF copy while the origin is still cold sends
+            // all live traffic into a concurrent-render herd (receipted: 11x 5-41s renders).
+            // Local layers purge now; the warms below rebuild statics; CF drops in ~90s onto
+            // a warm origin. Old edge copies stay styled meanwhile — acceptable staleness.
             if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
                 && !wp_next_scheduled('wpc_cf_allhtml_delayed')) {
                 wp_schedule_single_event(time() + 90, 'wpc_cf_allhtml_delayed');
@@ -10628,7 +10898,7 @@ if (!function_exists('wpc_update_window_active')) {
                 }
             }
 
-            
+            // (once per version; the once-guard inside makes this free on every later window).
 
             if (function_exists('wpc_fd_auto_migrate')) {
                 wpc_fd_auto_migrate();
@@ -10662,11 +10932,11 @@ if (!function_exists('wpc_update_window_active')) {
             $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
             $critOn = is_array($set) && !empty($set['critical']['css']) && $set['critical']['css'] == '1';
             if ($critOn && strpos($buffer, 'id="wpc-critical-css"') === false && strpos($buffer, "id='wpc-critical-css'") === false) {
-                
-                
-                
-                
-                
+                // SELF-CONSISTENT crit-less render (deferral stood down / was restored to
+                // blocking): the page is complete and safe to cache — crit-less periods
+                // must serve HITs, not no-store convoys. Only the INCONSISTENT state
+                // (deferred <link> sheets without crit) stays uncacheable. Tag-scoped:
+                // the loader's inline JS carries marker strings as selectors.
                 if (!preg_match('/<link\b[^>]*(?:rel|type)=["\']wpc-(?:late-|mobile-)?stylesheet["\']/i', $buffer)) {
                     return true;
                 }
@@ -10723,9 +10993,9 @@ if (!function_exists('wpc_cf_url_tag')) {
             $path .= '/';
         }
         $wpc_tag = 'wpc-u-' . substr(md5($host . $path), 0, 20);
-        
-        
-        
+        // The tag is a truncated md5 and cannot be reversed, so the purge ledger could only
+        // ever report the hash. Remember what we hashed — this is the ONLY point that knows
+        // both — and the ledger resolves the tag back to a readable URL.
         if (function_exists('wpc_purge_tag_remember')) {
             wpc_purge_tag_remember($wpc_tag, $host . $path);
         }
@@ -10766,21 +11036,21 @@ if (!function_exists('wpc_cf_emit_html_tags')) {
 }
 
 
-
+// Doctor covers diagnosis.
 if (!function_exists('wpc_cf_wait_evicted')) {
-    
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * Wait for a purge to actually land, rather than guessing how long it takes (v7.10.575).
+     *
+     * Every eviction check in this plugin used a fixed 2-3s sleep and one probe. Cloudflare
+     * allows a purge up to ~30s to reach a given PoP, so on any zone slower than the guess the
+     * check read "still HIT" and concluded the purge had failed. Measured directly on the
+     * flagship: the purge DID evict and returned a fresh render, but a probe 3s later at another
+     * colo still saw the old object aging. That one wrong assumption is why the verified-purge
+     * crown, and with it tiered caching, has been unreachable on most zones.
+     *
+     * Polls until the edge stops saying HIT, or the window closes. Returns the last status; ''
+     * means the probe itself errored and is never treated as proof of eviction by callers.
+     */
     function wpc_cf_wait_evicted($probe, $tries = 8, $gap = 3)
     {
         $last = '';
@@ -10819,10 +11089,10 @@ if (!function_exists('wpc_cf_selftest_handler')) {
             if (!method_exists($sdk, 'purgeFiles')) {
                 return;
             }
-            
-            
-            
-            
+            // Test the PRODUCTION OBJECT: a query-param probe URL renders no-store by design
+            // (unknown-param poisoning defense), so it can never HIT and the test always
+            // bailed. The homepage is the real cached object — prime it, purge it, verify
+            // eviction, then immediately re-warm so visitors never meet the test's MISS.
             $url   = home_url('/');
             $probe = function () use ($url) {
                 $r = wp_remote_get($url, [
@@ -10843,13 +11113,13 @@ if (!function_exists('wpc_cf_selftest_handler')) {
                 if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('selftest-prime-failed', '', '', ['last' => $hit]); }
                 return;
             }
-            
-            
-            
+            // Verify the primitive production actually relies on: purge-by-URL works on every
+            // Cloudflare plan. Tag purge is Enterprise-only — testing it meant the crown could
+            // never earn on most zones, keeping the long edge TTL permanently locked.
             $sdk->purgeFiles($cf['zone'], [$url]);
-            
+            // v7.10.575 — poll, do not guess. A 2s window failed every zone slower than 2s.
             $wpc_pv112 = wpc_cf_wait_evicted($probe);
-            
+            // '' = probe error, NOT proof of eviction — same guard leg B already has
             if ($wpc_pv112 !== '' && $wpc_pv112 !== 'HIT') {
                 update_option('wpc_cf_purge_verified', ['t' => time(), 'method' => 'url', 'via' => 'selftest'], false);
                 delete_option('wpc_cf_selftest_fails');
@@ -10864,18 +11134,18 @@ if (!function_exists('wpc_cf_selftest_handler')) {
                     }
                 }
 
-                
-                
-                
-                
+                // EARNED TIERED: purges propagate through all tiers (CF docs) — the historical
+                // breakage was custom cache keys, never the tiers. Tiered warms every POP from
+                // the first visit anywhere (the lab/PSI colo is never cold), so enable it — but
+                // only if eviction re-verifies WITH tiered active, and revert on any doubt.
                 if (apply_filters('wpc_earned_tiered', true)
                     && method_exists($sdk, 'enableTieredCache') && method_exists($sdk, 'disableTieredCache')) {
-                    
-                    
-                    
-                    
-                    
-                    
+                    // v7.10.576 — SHUTDOWN GUARD, armed BEFORE the enable. .575 stretched this leg
+                    // from a 2s guess to a poll of up to ~56s, which makes it long enough to be
+                    // killed by max_execution_time mid-verify — and a death between enable and
+                    // verdict leaves tiered caching ON and unproven, the one state this whole
+                    // mechanism exists to prevent. The Doctor's tiered-on already had this belt;
+                    // the cron path did not, and only became long enough to need it in .575.
                     @set_time_limit(300);
                     $GLOBALS['wpc_tiered_armed576'] = true;
                     register_shutdown_function(function () use ($sdk, $cf) {
@@ -10892,7 +11162,7 @@ if (!function_exists('wpc_cf_selftest_handler')) {
                     });
                     $sdk->enableTieredCache($cf['zone']);
                     wpc_diag_sleep(3, 'cf-selftest');
-                    
+                    // Re-prime the homepage (leg A just purged it) — the probes themselves seed it.
                     $wpc_h2 = '';
                     for ($i = 0; $i < 6; $i++) {
                         $wpc_h2 = $probe();
@@ -10902,12 +11172,12 @@ if (!function_exists('wpc_cf_selftest_handler')) {
                     $wpc_earned203 = false;
                     if ($wpc_h2 === 'HIT') {
                         $sdk->purgeFiles($cf['zone'], [$url]);
-                        
+                        // Same fix as leg A: this 2s window is why tiered never earned anywhere.
                         $h3 = wpc_cf_wait_evicted($probe);
                         $wpc_earned203 = ($h3 !== '' && $h3 !== 'HIT');
                     }
-                    
-                    
+                    // Verdict reached — disarm the shutdown belt either way. Placed before the
+                    // branches so no path can return with it still armed.
                     $GLOBALS['wpc_tiered_armed576'] = false;
                     if ($wpc_earned203) {
                         update_option('wpc_cf_purge_verified', ['t' => time(), 'method' => 'url+tiered', 'via' => 'selftest'], false);
@@ -10917,14 +11187,14 @@ if (!function_exists('wpc_cf_selftest_handler')) {
                         if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('tiered-reverted', '', '', []); }
                     }
                 }
-                
+                // Heal the test's own purge: re-seed the homepage so no visitor meets a MISS.
                 if (function_exists('wpc_warm_url_queue')) {
                     wpc_warm_url_queue($url, 'selftest-reheal');
                 }
             } else {
                 update_option('wpc_cf_selftest_fails', (int) get_option('wpc_cf_selftest_fails') + 1, false);
-                
-                
+                // Eviction failed — if a previous crown had earned tiered, revert it too:
+                // an unverifiable zone must fall all the way back to the safe floor.
                 $wpc_pvf = get_option('wpc_cf_purge_verified');
                 if (is_array($wpc_pvf) && strpos((string) ($wpc_pvf['method'] ?? ''), 'tiered') !== false
                     && method_exists($sdk, 'disableTieredCache')) {
@@ -10937,9 +11207,9 @@ if (!function_exists('wpc_cf_selftest_handler')) {
     }
     add_action('wpc_cf_selftest', 'wpc_cf_selftest_handler');
 
-    
-    
-    
+    // The self-test earns (and periodically re-earns) the verified-purge crown that
+    // unlocks the long edge TTL. Fires shortly after each version change, and weekly
+    // re-verifies so the crown always reflects the zone's current behavior.
     add_action('admin_init', function () {
         try {
             if (!function_exists('wp_schedule_single_event') || !function_exists('wp_next_scheduled')) {
@@ -10957,8 +11227,8 @@ if (!function_exists('wpc_cf_selftest_handler')) {
             if (get_transient('wpc_cf_selftest_gate') || wp_next_scheduled('wpc_cf_selftest')) {
                 return;
             }
-            
-            
+            // Durable belt: an unverifiable zone must not re-run the selftest (6 loopbacks
+            // + sleeps in a worker) every few minutes when the object cache is flushed
             $wpc_sta45 = (int) get_option('wpc_cf_selftest_attempt_at');
             $wpc_stf45 = (int) get_option('wpc_cf_selftest_fails');
             $wpc_stb45 = min(12 * HOUR_IN_SECONDS * max(1, $wpc_stf45), 7 * DAY_IN_SECONDS);
@@ -10974,10 +11244,10 @@ if (!function_exists('wpc_cf_selftest_handler')) {
 }
 
 
+// Any used-css OFF→ON flip — Auto Mode, link preset, service plan, or a human — enters
 
 
-
-
+// BEFORE the artifact landed — it approved an unchanged page, converged, and the artifact then
 
 
 if (!function_exists('wpc_r2_probation_state')) {
@@ -11013,7 +11283,7 @@ if (!function_exists('wpc_r2_probation_state')) {
         } catch (\Throwable $e) {
         }
     }
-    
+    /** Roll the lever back + purge + freeze R2 against auto re-flips. $why is journaled. */
     function wpc_r2_rollback($why, $extra = [])
     {
         try {
@@ -11036,7 +11306,7 @@ if (!function_exists('wpc_r2_probation_state')) {
         } catch (\Throwable $e) {
         }
     }
-    
+    /** Start one measure run; '' when it could not start. Mirrors the Auto Mode transport. */
     function wpc_r2_measure_start($desktop)
     {
         try {
@@ -11062,7 +11332,7 @@ if (!function_exists('wpc_r2_probation_state')) {
         }
         return '';
     }
-    
+    /** Poll one run: float score when done, null on failure, '' while pending. */
     function wpc_r2_measure_score($run_id)
     {
         try {
@@ -11149,8 +11419,8 @@ if (!function_exists('wpc_r2_probation_state')) {
                     wpc_r2_journal('r2-baseline', ['m' => $s['base_m'], 'd' => $s['base_d']]);
 
 
-                    
-                    
+                    // The probation owns this dispatch: clear the arm bounds so the demand
+                    // actually fires inside the gate window regardless of prior attempts.
                     if (function_exists('wpc_used_css_arm_reset')) { wpc_used_css_arm_reset(); }
                     if (function_exists('wpc_used_css_self_arm')) { wpc_used_css_self_arm(); }
                     $again(90); delete_transient('wpc_r2_prob_lock'); return;
@@ -11270,14 +11540,14 @@ if (!function_exists('wpc_r2_probation_state')) {
         }
     }
 
-    
+    // The choke point: EVERY used-css transition passes through the settings option.
     add_action('update_option_' . (defined('WPS_IC_SETTINGS') ? WPS_IC_SETTINGS : 'wps_ic_settings'), function ($old, $new) {
         try {
             $o = is_array($old) && isset($old['used-css']) ? (string) $old['used-css'] : '';
             $n = is_array($new) && isset($new['used-css']) ? (string) $new['used-css'] : '';
             if ($n === '1' && $o !== '1') {
                 if (function_exists('wpc_auto_schedule')) {
-                    wpc_auto_schedule('wpc_r2_probation_kick', 8); 
+                    wpc_auto_schedule('wpc_r2_probation_kick', 8); // 40s of PSI HTTP leaves the Save request
                 } else {
                     wpc_r2_probation_begin();
                 }
@@ -11294,7 +11564,7 @@ if (!function_exists('wpc_r2_probation_state')) {
 
 
 if (!function_exists('wpc_autopurge_on_land')) {
-    
+    /** Called from every artifact store site with the crit-dir path or url_key. */
     function wpc_autopurge_on_land($dirOrKey)
     {
         try {
@@ -11310,7 +11580,7 @@ if (!function_exists('wpc_autopurge_on_land')) {
         } catch (\Throwable $e) {
         }
     }
-    
+    /** Newest artifact mtime in a crit dir — the "what should be serving" clock. */
     function wpc_autopurge_artifact_mtime($critDir)
     {
         $mt = 0;
@@ -11329,16 +11599,16 @@ if (!function_exists('wpc_autopurge_on_land')) {
         }
         return $mt;
     }
-    
+    /** Oldest cached-HTML mtime for a key — the "what is serving" clock (0 = nothing cached). */
     function wpc_autopurge_cached_mtime($key)
     {
         if (!defined('WPS_IC_CACHE')) { return 0; }
         $mt = 0;
-        
-        
-        
-        
-        
+        // v7.10.643 — the clock must see VARIANT copies (team atlas: cookie-variant
+        // ghost). Oldest-mtime is the whole point of this clock — the stalest copy a
+        // visitor can be served — and the operator's own logged-in/cookie variant of
+        // the homepage was exactly the copy it could not see: bare copy fresh ⇒ no
+        // purge fired, while the variant served old crit for weeks.
         foreach ([
             WPS_IC_CACHE . $key . '/*index.html*',
             WPS_IC_CACHE . $key . '_*/*index.html*',
@@ -11350,10 +11620,10 @@ if (!function_exists('wpc_autopurge_on_land')) {
                 if ($m && ($mt === 0 || $m < $mt)) { $mt = $m; }
             }
         }
-        
-        
-        
-        
+        // v7.10.647 — the STATIC MIRROR is a different tree (URI-keyed under <host>/)
+        // and was invisible here: hashed copy gone + mirror stale read as "nothing
+        // cached" and no purge ever fired while the mirror kept serving (wpcompress.com,
+        // 6.7h-stale receipt). Resolve the key's URL and score the mirror copies too.
         if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey')) {
             $wpc_u647 = (string) wps_ic_url_key::getUrlFromKey($key);
             if ($wpc_u647 !== '' && strpos($wpc_u647, '..') === false) {
@@ -11382,12 +11652,12 @@ if (!function_exists('wpc_autopurge_on_land')) {
             if ($art === 0 || $html === 0 || $html >= $art) {
                 return;
             }
-            
-            
-            
-            
-            
-            
+            // v7.10.604 — STALENESS FLOOR. Any lag at all counted as stale, so a cached page
+            // 4 SECONDS behind its artifact triggered a full edge purge and a cold MISS
+            // (measured 1.024s vs 0.104s on a HIT). Measured lag distribution on wpcompress.com:
+            // median 123s, and only 24% under 60s while ~84% fall under 300s. A small lag also
+            // self-heals — the next natural render picks up the current artifact set — so the
+            // purge buys a marginally fresher crit at the price of evicting a warm page.
             $wpc_lagmin604 = (int) apply_filters('wpc_autopurge_min_lag_s', 300);
             if ($wpc_lagmin604 > 0 && ($art - $html) < $wpc_lagmin604) {
                 if (function_exists('wpc_auto_journal')) {
@@ -11446,7 +11716,7 @@ if (!function_exists('wpc_autopurge_on_land')) {
         }
     }
     add_action('wpc_autopurge_check', 'wpc_autopurge_check_handler');
-    
+    // Sweep belt: re-check the homepage key even if the per-key event was lost (cron dedupe etc.)
     function wpc_autopurge_sweep_handler()
     {
         try {
@@ -11460,31 +11730,31 @@ if (!function_exists('wpc_autopurge_on_land')) {
 }
 
 if (!function_exists('wpc_crit_junk_sweep599')) {
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.599 — remove crit dirs that can never be used, and NOTHING else.
+     *
+     * Receipted by the crit team on staging: 21 of 32 dirs under cache/critical/ hold no crit CSS
+     * at all. Most predate .530/.590, which closed the two paths that minted them (attachment
+     * permalinks, and endpoints like admin-ajax.php resolving to no post). A gate stops new ones;
+     * it cannot remove the ones already on disk.
+     *
+     * THE DANGEROUS PART IS NOT THE DELETION, IT IS THE PREDICATE. Two of those 21 were `inv2/`
+     * and `used-css/` — infrastructure, not page dirs — so a naive "no crit CSS means junk" sweep
+     * would have destroyed them. That is the whole reason this got its own build, and it is why
+     * every rule below is a reason to KEEP rather than a reason to delete.
+     *
+     * A dir is removed only when ALL of these hold:
+     *   1. its name is not infrastructure (inv2*, used-css, anything dot-prefixed)
+     *   2. it carries no critical_desktop/mobile/combined.css
+     *   3. it carries no font-subsets.css — a fonts-only dir still serves faces (.561)
+     *   4. every file in it is older than the age floor, so a generation in flight is never
+     *      touched: a dispatched-but-unlanded dir has a fresh dispatch_ts.txt and is skipped
+     *   5. it contains no subdirectories — an unexpected shape is left alone by definition
+     *   6. its realpath is genuinely inside WPS_IC_CRITICAL
+     * Bounded per run, every removal logged with the file list that justified it, and
+     * `wpc_crit_junk_sweep_dry_run` reports without unlinking so the predicate can be audited on
+     * a real site before it is trusted.
+     */
     function wpc_crit_junk_sweep599()
     {
         if (!apply_filters('wpc_crit_junk_sweep', true) || !defined('WPS_IC_CRITICAL')) {
@@ -11508,7 +11778,7 @@ if (!function_exists('wpc_crit_junk_sweep599')) {
                 if ($wpc_name599 === '.' || $wpc_name599 === '..' || $wpc_name599 === '') {
                     continue;
                 }
-                
+                // Infrastructure and dot-dirs are never candidates, by name, before any file test.
                 if ($wpc_name599[0] === '.' || strpos($wpc_name599, 'inv2') === 0
                     || $wpc_name599 === 'used-css' || $wpc_name599 === 'combine') {
                     continue;
@@ -11541,14 +11811,14 @@ if (!function_exists('wpc_crit_junk_sweep599')) {
                     $wpc_files599[] = $wpc_f599;
                     $wpc_newest599 = max($wpc_newest599, (int) @filemtime($wpc_fp599));
                     if (count($wpc_files599) > 60) {
-                        $wpc_subdir599 = true; 
+                        $wpc_subdir599 = true; // unexpected shape; treat as do-not-touch
                         break;
                     }
                 }
                 if ($wpc_subdir599) {
                     continue;
                 }
-                
+                // A dir with recent activity is a generation in flight, not junk.
                 if ($wpc_newest599 > 0 && ($wpc_now599 - $wpc_newest599) < $wpc_age599) {
                     $wpc_kept599++;
                     continue;
@@ -11586,15 +11856,15 @@ if (!function_exists('wpc_crit_junk_sweep599')) {
     add_action('wpc_autopurge_sweep', 'wpc_crit_junk_sweep599', 20);
 }
 
-
-
-
-
-
-
-
-
-
+// v7.10.642 — RETENTION for the three writer-with-no-deleter stores (James: ".kicklocks
+// and used-css are never deleted... we can't let those folders just grow"). The used-css
+// comment's "deleting orphans HTML alive in CDN/browser caches" argues against
+// delete-on-purge, not against GC. Age alone cannot prove deadness for in-place stores
+// (a healthy site's live artifact sits byte-stable for months), so the serve paths now
+// refresh liveness — used-css by touching the served artifact (its URL never derives
+// from mtime), combine via a .wpc-live sidecar (artifact mtime feeds the content hash) —
+// and this sweep collects only what nothing has served for 60 days. Kicklocks are
+// transient locks and land markers: anything older than 48h is dead by definition.
 if (!function_exists('wpc_store_retention_sweep642')) {
     function wpc_store_retention_sweep642()
     {
@@ -11609,7 +11879,7 @@ if (!function_exists('wpc_store_retention_sweep642')) {
                 return $wpc_dry642 ? true : @unlink($wpc_fp);
             };
 
-            
+            // 1. kicklocks: transient locks/markers, 48h floor, files only.
             $wpc_kd642 = rtrim(WPS_IC_CRITICAL, '/') . '/.kicklocks';
             $wpc_kage642 = (int) apply_filters('wpc_kicklock_max_age', 172800);
             $wpc_kcap642 = 300;
@@ -11622,10 +11892,10 @@ if (!function_exists('wpc_store_retention_sweep642')) {
                 }
             }
 
-            
-            
-            
-            
+            // 2. used-css: files only, never the dir itself; grouped by TEMPLATE STEM
+            //    (tpl-X.css / tpl-X.mobile.css / tpl-X.sheets.json are one family) so the
+            //    serve-path touch on the bundle spares its siblings. A family whose newest
+            //    member is 60d untouched has served nothing for 60 days.
             $wpc_uage642 = (int) apply_filters('wpc_store_retention_max_age', 60 * 86400);
             $wpc_ud642 = rtrim(WPS_IC_CRITICAL, '/') . '/used-css';
             $wpc_ucap642 = 100;
@@ -11651,8 +11921,8 @@ if (!function_exists('wpc_store_retention_sweep642')) {
                 }
             }
 
-            
-            
+            // 3. combine: per-key dirs under WPS_IC_COMBINE; a key dir whose .wpc-live
+            //    sidecar (or newest artifact) is younger than the floor is spared whole.
             if (defined('WPS_IC_COMBINE')) {
                 $wpc_cr642 = rtrim(WPS_IC_COMBINE, '/');
                 $wpc_ccap642 = 100;
@@ -11694,13 +11964,13 @@ if (!function_exists('wpc_store_retention_sweep642')) {
 }
 
 
-
+// PERMANENT decline, never retried daily. Kill: option wpc_webp_source='0' / filter.
 if (!function_exists('wpc_webp_source_ok')) {
     function wpc_webp_source_ok()
     {
         return (bool) apply_filters('wpc_webp_source', get_option('wpc_webp_source', '1') === '1');
     }
-    
+    /** The one list every scope gate reads — bulk queries, ML cards, verification in_arrays. */
     function wpc_optimizable_mimes()
     {
         $m = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
@@ -11724,19 +11994,19 @@ if (!function_exists('wpc_webp_source_ok')) {
             if (substr($b, 12, 4) !== 'VP8X') {
                 return false;
             }
-            return (ord($b[20]) & 0x02) === 0x02; 
+            return (ord($b[20]) & 0x02) === 0x02; // VP8X flags byte, ANIMATION bit
         } catch (\Throwable $e) {
             return false;
         }
     }
-    
+    /** Permanent decline: scope filters exclude it; the ML card names it; no daily retry churn. */
     function wpc_webp_animated_decline($attachmentId)
     {
         if ((int) $attachmentId > 0 && function_exists('update_post_meta')) {
             update_post_meta((int) $attachmentId, '_wpc_animated_webp', '1');
         }
     }
-    
+    /** Scope-time gate for one attachment: true = dispatchable webp source. */
     function wpc_webp_attachment_ok($attachmentId, $path = '')
     {
         if (!wpc_webp_source_ok()) { return false; }
@@ -11850,8 +12120,8 @@ if (!function_exists('wpc_pipeline_debug_handler')) {
 }
 
 if (!function_exists('wpc_3p_pattern_ok')) {
-    
-
+    /** A1 pattern gate — delegates to the v3 engine's validator (single authority);
+     *  conservative inline fallback when the class isn't loaded on this lane. */
     function wpc_3p_pattern_ok($p)
     {
         if (class_exists('wps_ic_js_delay_v3') && method_exists('wps_ic_js_delay_v3', 'wpc_io_pattern_ok')) {
@@ -11863,9 +12133,9 @@ if (!function_exists('wpc_3p_pattern_ok')) {
 }
 
 if (!function_exists('wpc_auto_3p_lane_set')) {
-    
-
-
+    /** Per-vendor lane store: {host: {lane, match[], ts, src}} — single non-autoload
+     *  option, only-on-change, hard caps. Reversible: emptying restores prior behavior.
+     *  Returns 'changed' | 'same' | false (rejected) — callers must branch on it. */
     function wpc_auto_3p_lane_set($host, $lane, $match = [], $src = 'auto')
     {
         try {
@@ -11881,9 +12151,9 @@ if (!function_exists('wpc_auto_3p_lane_set')) {
                     $pats[] = trim((string) $m);
                 }
             }
-            
-            
-            
+            // A1: auto-applied lanes require PATH-PROVEN match[] patterns — a bare host
+            // is exactly the host-keyed application the amendment forbids (gstatic serves
+            // recaptcha AND fonts). No usable patterns → reject; the caller journals it.
             if (empty($pats) && in_array($lane, ['delay', 'io'], true)) {
                 return false;
             }
@@ -11898,9 +12168,9 @@ if (!function_exists('wpc_auto_3p_lane_set')) {
             }
             $lanes[$host] = $row;
             if (count($lanes) > 16) {
-                
-                
-                
+                // Evict report/eager (informational) lanes before active delay/io lanes;
+                // ts breaks ties — unchanged rows never refresh ts, so lane class must
+                // outrank age or the longest-stable ACTIVE lanes evict first.
                 uasort($lanes, function ($a, $b) {
                     $w = function ($r) {
                         return in_array((string) ($r['lane'] ?? ''), ['delay', 'io'], true) ? 1 : 0;
@@ -11921,11 +12191,11 @@ if (!function_exists('wpc_auto_3p_lane_set')) {
 }
 
 if (!function_exists('wpc_auto_apply_third_parties')) {
-    
-
-
-
-
+    /**
+     * Consume the per-vendor third-party block (AUTO-100 §2 artifact shape with match[]
+     * verbatim per A1, or the legacy PSI-report {entity, recommended} shape). Lanes route
+     * per recommended; the stored options are the single source — reversible.
+     */
     function wpc_auto_apply_third_parties($report)
     {
         try {
@@ -11961,7 +12231,7 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
                 $host = strtolower(trim((string) ($tp['host'] ?? '')));
                 $vkey = $host !== '' ? $host : $ent;
                 if ($vkey === '') { continue; }
-                
+                // A1: match[] verbatim when present; the curated entity map as fallback.
                 $pats = [];
                 foreach (array_slice((array) ($tp['match'] ?? []), 0, 6) as $tm) {
                     if (wpc_3p_pattern_ok($tm)) { $pats[] = trim((string) $tm); }
@@ -11973,14 +12243,14 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
                     }
                 }
                 if ($rec === 'delay-interaction-only') {
-                    
+                    // A4: interaction-only for EVERY visitor — the io lane.
                     $wpc_lr356 = wpc_auto_3p_lane_set($vkey, 'io', $pats, 'measure');
                     if ($wpc_lr356 === 'changed') { $lanesChanged = true; $applied[$vkey] = $rec; }
                     elseif ($wpc_lr356 === false) { $unknown[] = $vkey; }
                 } elseif ($rec === 'delay') {
-                    
-                    
-                    
+                    // Service match[] rides the SRC-only delay lane — the flat list feeds
+                    // userForceDelay, which content-matches inline scripts (the dm door);
+                    // only the curated entity map may still use it (pre-existing shape).
                     if ($fromMatch356) {
                         $wpc_lr356 = wpc_auto_3p_lane_set($vkey, 'delay', $pats, 'measure');
                         if ($wpc_lr356 === 'changed') { $lanesChanged = true; $applied[$vkey] = $rec; }
@@ -11993,11 +12263,11 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
                         }
                     }
                 } elseif ($rec === 'keep-eager') {
-                    
-                    
-                    
-                    
-                    
+                    // dm dependency-graph law: keep-eager JS is per-DEPENDENCY-GRAPH, never
+                    // per-name — consent stacks are already built-in keeps at every door;
+                    // new vendors journal + surface, never auto-wire into excludes.
+                    // A reclassification must also WITHDRAW the vendor's previously-stored
+                    // delay patterns, or keep-eager can never undo an earlier delay.
                     $wpc_lr356 = wpc_auto_3p_lane_set($vkey, 'eager', $pats, 'measure');
                     if (!empty($pats)) {
                         $wpc_kept356 = array_values(array_diff($stored, $pats));
@@ -12006,17 +12276,17 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
                         }
                     }
                     if ($wpc_lr356 === 'changed') {
-                        
+                        // a WITHDRAWAL (io→eager) changes render output — must purge too
                         $lanesChanged = true;
                         if (function_exists('wpc_auto_journal')) {
                             wpc_auto_journal('auto-3p-keep-eager-surfaced', ['host' => $vkey]);
                         }
                     }
                 } elseif ($rec === 'review' || $rec === 'facade') {
-                    
+                    // §2: review is human-lane, never auto-delayed; facade is Phase C.
                     $wpc_lr356 = wpc_auto_3p_lane_set($vkey, 'report', $pats, $rec);
                     if ($wpc_lr356 === 'changed') {
-                        $lanesChanged = true; 
+                        $lanesChanged = true; // io→report withdrawal must rotate cached HTML
                         if (function_exists('wpc_auto_journal')) {
                             wpc_auto_journal('auto-3p-' . $rec, ['host' => $vkey, 'kb' => (int) ($tp['kb'] ?? 0), 'est_pts' => (int) ($tp['est_pts'] ?? 0)]);
                         }
@@ -12032,7 +12302,7 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
                 if (function_exists('wpc_auto_journal')) {
                     wpc_auto_journal('auto-3p-apply', ['entities' => array_keys($applied), 'patterns' => count($stored)]);
                 }
-                
+                // Lane changes only exist on re-rendered HTML (purge scoped to home copies).
                 if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')
                     && class_exists('wps_ic_url_key') && function_exists('home_url')) {
                     $hk = ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
@@ -12047,10 +12317,10 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
         }
     }
     if (function_exists('add_filter')) {
-        
-        
-        
-        
+        // Legacy flat delay list only — lane patterns deliberately do NOT ride this
+        // filter (it lands in userForceDelay, which content-matches inline scripts
+        // ahead of every consent keep — the dm class). Lanes travel the two SRC-only
+        // filters below, consumed exclusively by the v3 engine.
         add_filter('wpc_builtin_force_delay', function ($list) {
             $auto = get_option('wpc_auto_3p_delay', []);
             return (is_array($auto) && !empty($auto))
@@ -12085,9 +12355,9 @@ if (!function_exists('wpc_auto_apply_third_parties')) {
 }
 
 if (!function_exists('wpc_dress_check')) {
-    
-    
-    
+    // DRESS-CHECK SENTINEL: a transitional cached homepage (bare crit or stale-version
+    // loader from a mid-purge render) must never survive to the next PSI run — detect
+    // and re-dress once calm, capped 4/day
     function wpc_dress_check()
     {
         try {
@@ -12104,7 +12374,7 @@ if (!function_exists('wpc_dress_check')) {
             }
             $f = rtrim(WPS_IC_CACHE, '/') . '/' . $key . '/index.html_gzip';
             if (!@is_readable($f)) {
-                return; 
+                return; // nothing cached — the warm lane owns first fill
             }
             $html = function_exists('gzdecode') ? @gzdecode((string) @file_get_contents($f)) : '';
             if (!is_string($html) || $html === '') {
@@ -12147,13 +12417,13 @@ if (!function_exists('wpc_dress_check')) {
 }
 
 if (!function_exists('wpc_box_debug_report')) {
-    
-
-
-
-
-
-
+    /**
+     * Box-pressure diagnosis for hosts with no shell (busy). Answers "what is consuming this
+     * machine" from inside PHP: real runnable-process count, a bounded /proc snapshot, and the
+     * WP-cron backlog — an overdue/duplicated cron queue is the classic cause of a pegged box
+     * with healthy per-render numbers, and it is invisible from the front end.
+     * Read-only, bounded, admin- or token-gated. Never called on a visitor path.
+     */
     function wpc_box_debug_report()
     {
         $tok = isset($_GET['t']) ? (string) $_GET['t'] : '';
@@ -12167,9 +12437,9 @@ if (!function_exists('wpc_box_debug_report')) {
         $o = [];
         $o[] = '=== WPC BOX DEBUG (plugin ' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?') . ') ===';
 
-        
-        
-        
+        // &purges=1 — the purge ledger. Every purge is a self-inflicted MISS (1.587s TTFB
+        // against 0.096s on a HIT), so "how often, from which line, and why" is an
+        // operational question. &purges=1&download=1 serves the raw JSONL for offline audit.
         if (!empty($_GET['purges']) && function_exists('wpc_purge_ledger_report')) {
             if (!empty($_GET['download']) && function_exists('wpc_purge_ledger_file')) {
                 $wpc_lf = wpc_purge_ledger_file();
@@ -12236,12 +12506,12 @@ if (!function_exists('wpc_box_debug_report')) {
             $o[] = '';
         }
 
-        
-        
-        
-        
-        
-        
+        // &warm=off — the brake for a box the warmer is holding down. Each wpc_url_warm event is an
+        // UNCACHED render; a queue of them on a small box self-sustains (warm renders spawn cron on
+        // page loads, which runs more warm). Disabling the scheduler alone leaves the queue to drain,
+        // so this also clears what is already scheduled. Reversible with &warm=on.
+        // &safe=on / &safe=off — the operator lever. LOUD by design: printed on every debug run
+        // with how long it has been on, because a stand-down left on by accident is its own outage.
         $wpc_sa473 = isset($_GET['safe']) ? strtolower((string) $_GET['safe']) : '';
         if ($wpc_sa473 === 'on' || $wpc_sa473 === 'off') {
             if ($wpc_sa473 === 'on') {
@@ -12301,13 +12571,13 @@ if (!function_exists('wpc_box_debug_report')) {
         $la = function_exists('sys_getloadavg') ? sys_getloadavg() : [];
         $raw = trim((string) @file_get_contents('/proc/loadavg'));
         $o[] = 'cores: ' . ($cores ?: '?') . ' | loadavg: ' . (is_array($la) ? implode(' ', array_map(function ($x) { return round($x, 2); }, $la)) : 'n/a');
-        
+        // 4th field of /proc/loadavg is runnable/total — the number that says HOW MANY things want CPU
         if ($raw !== '' && preg_match('#(\d+)/(\d+)#', $raw, $m)) {
             $o[] = 'runnable/total procs: ' . $m[1] . '/' . $m[2] . '   (runnable >> cores = saturated)';
         }
         $o[] = 'raw /proc/loadavg: ' . ($raw !== '' ? $raw : 'unreadable (containerised)');
 
-        
+        // Bounded process snapshot — who is actually on the box
         $procs = [];
         $dh = @opendir('/proc');
         if ($dh) {
@@ -12339,7 +12609,7 @@ if (!function_exists('wpc_box_debug_report')) {
             $o[] = '--- /proc not readable (open_basedir / container) — use host monitoring ---';
         }
 
-        
+        // WP-cron backlog: overdue events are the classic pegged-box cause and are invisible outside
         $o[] = '';
         $o[] = '--- WP-CRON backlog ---';
         $cron = function_exists('_get_cron_array') ? _get_cron_array() : [];
@@ -12371,10 +12641,10 @@ if (!function_exists('wpc_box_debug_report')) {
             $o[] = sprintf('  %4dx  %s%s', $c, $hook, (strpos($hook, 'wpc') === 0 || strpos($hook, 'wps_ic') === 0) ? '   <-- OURS' : '');
         }
 
-        
-        
-        
-        
+        // LCP preload correctness. Populated ONLY when a real browser reported that the element
+        // it chose as LCP was not the one we preloaded — a wrong preload spends the LCP's
+        // bandwidth at fetchpriority="high" on the wrong resource. Empty here is the healthy
+        // state; entries name the stem we promised vs the stem the browser actually used.
         $wpc_mxr440 = get_option('wpc_lcp_preload_mismatch', []);
         $o[] = '';
         if (is_array($wpc_mxr440) && !empty($wpc_mxr440)) {
@@ -12389,7 +12659,7 @@ if (!function_exists('wpc_box_debug_report')) {
                     isset($wpc_me440['got']) ? $wpc_me440['got'] : '(none)');
             }
         } else {
-            
+            // "none reported" alone is ambiguous — say whether a browser actually confirmed.
             $wpc_okr447 = get_option('wpc_lcp_preload_ok', []);
             if (is_array($wpc_okr447) && !empty($wpc_okr447['t'])) {
                 $o[] = 'LCP preload: VERIFIED CORRECT by ' . (int) $wpc_okr447['n']
@@ -12400,7 +12670,7 @@ if (!function_exists('wpc_box_debug_report')) {
             }
         }
 
-        
+        // Autoloaded options — a bloated autoload tax is paid on EVERY request
         global $wpdb;
         if (isset($wpdb) && is_object($wpdb)) {
             $al = $wpdb->get_row("SELECT COUNT(*) n, ROUND(SUM(LENGTH(option_value))/1024) kb FROM {$wpdb->options} WHERE autoload='yes'");
@@ -12411,9 +12681,9 @@ if (!function_exists('wpc_box_debug_report')) {
             }
         }
 
-        
-        
-        
+        // MySQL saturation — readable from PHP where /proc is not. Threads_running is the real
+        // signal (Threads_connected counts idle ones); a processlist deep in 'Sending data' means
+        // the load is DB-bound, not PHP-bound, and no amount of cron braking will touch it.
         if (isset($wpdb) && is_object($wpdb)) {
             $o[] = '';
             $o[] = '--- MYSQL ---';
@@ -12449,16 +12719,16 @@ if (!function_exists('wpc_box_debug_report')) {
             }
         }
 
-        
-        
+        // opcache: disabled or full means PHP recompiles this whole plugin on every request — the
+        // single biggest silent CPU multiplier on a big codebase, and invisible from the front end.
         $o[] = '';
         $o[] = '--- PHP / OPCACHE ---';
         $o[] = '  php ' . PHP_VERSION . ' | sapi ' . PHP_SAPI . ' | memory_limit ' . ini_get('memory_limit')
              . '  (flat 1024M x N workers invites swap on a small box)';
-        
-        
-        
-        
+        // opcache_get_status() returns false for TWO reasons — genuinely disabled, OR
+        // opcache.restrict_api set (a common hardening) while opcache runs perfectly. Relying on
+        // it made me report "disabled" from a silent false. extension_loaded()/ini_get() are not
+        // affected by restrict_api, so ask those first and never guess again.
         $oc_ext = extension_loaded('Zend OPcache') || extension_loaded('opcache');
         $oc_on  = (string) ini_get('opcache.enable');
         $oc_res = (string) ini_get('opcache.restrict_api');
@@ -12521,24 +12791,24 @@ if (!function_exists('wpc_box_debug_report')) {
 }
 
 if (!function_exists('wpc_img_trace_emit')) {
-    
-
-
-
-
-
-
+    /**
+     * `?wpc_img_trace=1` — in-page image-lane tracer. Front-end only, query-gated, never for visitors.
+     * Exists because the broken-image flash is invisible to HAR/netlog/external probing: a decode
+     * failure or an attribute write produces no distinguishable network entry. This runs BEFORE any
+     * other script, so it sees every write and every error event including ones an inline onerror
+     * would otherwise swallow.
+     */
     function wpc_img_trace_emit()
     {
         if (empty($_GET['wpc_img_trace']) || is_admin()) { return; }
         echo '<script id="wpc-img-trace">/*wpc-arm-sentinel*/(function(){' .
         'var L=function(t,c,m){try{console.log("%c[IMGTRACE] "+t,"background:"+c+";color:#fff;padding:1px 4px",m||"")}catch(e){}};' .
         'var N=function(el){return (el&&(el.className||"")+"").slice(0,40)||"(no class)"};' .
-        
+        // every error event, capture phase — fires before any inline onerror
         'document.addEventListener("error",function(e){var t=e.target;if(!t||t.tagName!=="IMG")return;' .
         'L("ERROR","#c00",{cls:N(t),src:(t.currentSrc||t.getAttribute("src")||"(none)"),' .
         'complete:t.complete,natW:t.naturalWidth,srcset:!!t.getAttribute("srcset")});},true);' .
-        
+        // src / srcset writes, with stack
         'var D=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");' .
         'try{Object.defineProperty(HTMLImageElement.prototype,"src",{get:function(){return D.get.call(this)},' .
         'set:function(v){if(!v||v==="null"||v==="undefined"){L("WRITE-EMPTY-src","#c00",{cls:N(this),val:v,stack:(new Error()).stack})}' .
@@ -12549,11 +12819,11 @@ if (!function_exists('wpc_img_trace_emit')) {
         'var RA=Element.prototype.removeAttribute;Element.prototype.removeAttribute=function(n){' .
         'if(this.tagName==="IMG"&&(n==="src"||n==="srcset")){L("REMOVE-"+n,"#a50",{cls:N(this),stack:(new Error()).stack})}' .
         'return RA.apply(this,arguments)};' .
-        
-        
-        
-        
-        
+        // aggregate snapshots: how many images are actually broken vs merely unloaded
+        // An image can be perfectly LOADED and still paint nothing (opacity/visibility/zero-rect,
+        // or a reveal animation whose selector was dropped from the extracted CSS). That state is
+        // invisible to error events, HAR, and naturalWidth — it needs computed style. Walks 4
+        // ancestors because the hiding rule is often on a wrapper, not the <img>.
         'var WHY=function(m){try{var s=getComputedStyle(m),r=m.getBoundingClientRect(),w=[];' .
         'if(+s.opacity===0)w.push("opacity:0");' .
         'if(s.visibility==="hidden")w.push("visibility:hidden");' .
@@ -12580,15 +12850,15 @@ if (!function_exists('wpc_img_trace_emit')) {
 }
 
 if (!function_exists('wpc_lcp_trace_script')) {
-    
-
-
-
-
-
-
-
-
+    /**
+     * `?wpc_lcp_trace=1` — what actually occupies the FCP -> LCP gap. Front-end only, query-gated.
+     * Exists because the LCP SUBPARTS do not explain the metric: on busy they sum to ~320ms against
+     * a 2,100ms score, so the gap is neither the image fetch nor its discovery. This reports the
+     * real paint timeline plus everything competing inside the window — network AND main thread —
+     * because a 1s gap with a 240ms resource is by elimination style/layout, and guessing which is
+     * how four theories died today.
+     * v7.10.717 — split into a builder so the armed-copy serve lane injects the SAME script.
+     */
     function wpc_lcp_trace_script()
     {
         $wpc_snd452 = !empty($_GET['send']) ? '1' : '';
@@ -12599,7 +12869,7 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'var fcp=0,lcp=0,lel=null,lurl="",tasks=[],done=0;' .
         'var hum=function(){try{return (window.__wpcEngaged||window.__wpcHuman)?1:0}catch(e){return-1}};' .
         'var P=function(t,cb){try{var o=new PerformanceObserver(cb);o.observe({type:t,buffered:true});return o}catch(e){return null}};' .
-        
+        // paint + LCP + long tasks, all buffered so nothing before arm is lost
         'P("paint",function(l){l.getEntries().forEach(function(e){if(e.name==="first-contentful-paint")fcp=e.startTime})});' .
         'var dbt=null,lrect=null;' .
         'P("largest-contentful-paint",function(l){l.getEntries().forEach(function(e){lcp=e.startTime;lel=e.element||null;lurl=e.url||(e.element&&e.element.currentSrc)||"";' .
@@ -12614,7 +12884,7 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'var gap=Math.round(lcp-fcp);' .
         'L("PAINT","#059",{FCP:Math.round(fcp)+"ms",LCP:Math.round(lcp)+"ms",GAP:gap+"ms",' .
         'lcpEl:lel?(lel.tagName+"."+((lel.className||"")+"").split(" ")[0]):"-",lcpUrl:lurl.slice(-46)});' .
-        
+        // the LCP resource, phase by phase — proves whether the fetch is even in the window
         'var lr=null;R().forEach(function(r){if(lurl&&r.name===lurl)lr=r});' .
         'L("LCP ELEMENT BOX",(lrect&&!lrect.inView)?"#c00":"#059",lrect||"(no element - text LCP?)");' .
         'if(lrect&&!lrect.inView){L("ANOMALY","#c00","the LCP element was OUTSIDE the viewport when chosen — a below-fold lazy image winning LCP is why some sessions read 14-17s")}' .
@@ -12623,12 +12893,12 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'download:Math.round(lr.responseEnd-lr.responseStart),end:Math.round(lr.responseEnd),' .
         'kb:Math.round((lr.transferSize||0)/1024),afterLCP:(lr.responseEnd>lcp)});}' .
         'else{L("LCP RESOURCE","#a50","no resource entry matched "+lurl.slice(-40)+" (text LCP, or cross-origin without Timing-Allow-Origin)");}' .
-        
+        // everything whose fetch overlapped the gap = the network side of the answer
         'var ov=[];R().forEach(function(r){if(r.responseEnd>fcp&&r.startTime<lcp)ov.push({res:r.name.split("/").pop().slice(0,38),' .
         'start:Math.round(r.startTime),end:Math.round(r.responseEnd),kb:Math.round((r.transferSize||0)/1024),via:r.initiatorType})});' .
         'ov.sort(function(a,b){return a.start-b.start});' .
         'L("IN THE GAP: network ("+ov.length+")",ov.length?"#a50":"#070",ov.slice(0,14));' .
-        
+        // main-thread side: long tasks inside the window, and how much of the gap they own
         'var g=tasks.filter(function(t){return t[0]+t[1]>fcp&&t[0]<lcp});' .
         'var owned=0;g.forEach(function(t){owned+=Math.min(t[0]+t[1],lcp)-Math.max(t[0],fcp)});' .
         'var gAll=tasks.filter(function(t){return t[0]<lcp}),ownAll=0;' .
@@ -12642,9 +12912,9 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'L("VERDICT","#059",V==="main-thread"?"MAIN-THREAD bound — style/layout/script owns the gap, not bytes":' .
         '(V==="paint-blocked"?"LCP resource finished BEFORE FCP — the gap is PAINT-blocked, not fetch-blocked"' .
         ':(V==="no-gap"?"FCP and LCP coincide — there is no gap in THIS environment; check humanSignal before generalising":"see the tables above")));' .
-        
-        
-        
+        // Lighthouse runs on Google's infra, so console output is unreachable — the only way to
+        // see the gap in the environment where it EXISTS is to beacon it back. Payload is kept
+        // compact because the report handler rejects anything over 2048 bytes.
         'if(SEND&&EP){try{' .
         'var pl={lcptrace:1,ln:(window.__wpcTraceLane||0),u:location.pathname.slice(0,60),fcp:Math.round(fcp),lcp:Math.round(lcp),gap:gap,' .
         'el:lel?(lel.tagName+"."+((lel.className||"")+"").split(" ")[0]).slice(0,28):"-",url:lurl.slice(-44),v:V,' .
@@ -12657,11 +12927,11 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'net:ov.slice(0,6).map(function(r){return[r.res.slice(0,22),r.start,r.end,r.kb]}),' .
         'lt:g.slice(0,5).map(function(t){return[t[0],t[1]]})};' .
         'var okb=false,oki=false;' .
-        
-        
-        
-        
-        
+        // sendBeacon returning true means QUEUED, not delivered — Lighthouse destroys the target
+        // before the queue flushes, which is why a PSI run reported success and nothing arrived.
+        // So fire BOTH channels every time; the image GET starts on the wire immediately and needs
+        // no response to have been useful. Duplicates are harmless (rows are timestamped, cap 8)
+        // and the ch field tells us which channel actually survived.
         'try{if(navigator.sendBeacon){var pb={};for(var k in pl)pb[k]=pl[k];pb.ch="b";' .
         'var fd=new FormData;fd.append("action","wpc_delay_v3_report");' .
         'fd.append("payload",JSON.stringify(pb));okb=navigator.sendBeacon(EP,fd)===true}}catch(e){okb=false}' .
@@ -12670,7 +12940,7 @@ if (!function_exists('wpc_lcp_trace_script')) {
         'L("BEACON",(okb||oki)?"#070":"#c00",{sendBeacon:okb?"queued":"refused",imageGET:oki?"fired":"failed",note:"queued != delivered"});' .
         '}catch(e){}}' .
         '};' .
-        
+        // report once LCP has settled; pagehide catches an early leave
         'var sends=0,lastLcp=0;var fire=function(){if(sends>=2)return;if(sends===1&&lcp<=lastLcp)return;' .
         'lastLcp=lcp;sends++;done=0;rep()};' .
         'if(document.readyState==="complete"){setTimeout(fire,300)}else{window.addEventListener("load",function(){setTimeout(fire,300)},{once:true})}' .
@@ -12691,16 +12961,16 @@ if (!function_exists('wpc_lcp_trace_emit')) {
 }
 
 if (!function_exists('wpc_lcp_trace_serve717')) {
-    
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.717 — INSTRUMENT PARITY. ?wpc_lcp_trace previously fell into the unknown-param
+     * class: the read gate refused the cached copy, WP rendered fresh, and the beacon measured
+     * a divergent variant no visitor receives (legacy crit, no wire-lcp-inline — the two wrong
+     * conclusions of the pin-714 night). The instrument now serves the EXACT armed bytes: the
+     * clean-key cached copy with the beacon injected at serve time, no-store so an instrumented
+     * body can never become a cacheable representation anywhere. Payload key ln:1 names the
+     * lane. Falls through to the old render lane when no admissible copy exists, the visitor
+     * is logged in, or the residual query is itself uncacheable.
+     */
     function wpc_lcp_trace_serve717()
     {
         try {
@@ -12724,11 +12994,11 @@ if (!function_exists('wpc_lcp_trace_serve717')) {
                 || !function_exists('wpc_lcp_trace_script')) {
                 return;
             }
-            
-            
-            
-            
-            
+            // v7.10.718 - the copy lives under the CLEAN key. The url-key derives from
+            // REQUEST_URI, which still carries the instrument params here - constructing
+            // against the raw URI looks up a key no writer ever mints and always falls
+            // through (receipted live on the .717 first check). Strip the params for the
+            // construction, restore on fallthrough (success exits inside the serve).
             $wpc_ru717 = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
             $wpc_qo717 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
             $wpc_qc717 = http_build_query($wpc_q717);
@@ -12752,12 +13022,12 @@ if (!function_exists('wpc_lcp_trace_serve717')) {
     add_action('init', 'wpc_lcp_trace_serve717', 1);
 }
 
-
-
-
-
-
-
+// v7.10.644 — USED-CSS DEFAULT ON (private beta; service: "a default that's wrong 94%
+// of the time is a default, not a feature flag" — lanes reach 9.5% of delivering sites
+// and succeed 94.5% when asked). One-time flip: any site not already '1' becomes '1',
+// prior value recorded, existing probation machinery (lever auto-off on a failed gate
+// outcome) supervises every flipped site individually. Kill: wpc_used_css_beta_default
+// filter, or the recorded prior value for a manual revert.
 if (!function_exists('wpc_used_css_beta_flip644')) {
     function wpc_used_css_beta_flip644()
     {
@@ -12769,10 +13039,10 @@ if (!function_exists('wpc_used_css_beta_flip644')) {
             if (!is_array($wpc_s644)) {
                 return;
             }
-            
-            
-            
-            
+            // v7.10.645 — JANITOR BEFORE WAVE (service: "run wave one after the janitor
+            // so the join is unambiguous"): canonicalize the key stores in the same
+            // request, then journal the apikey FINGERPRINT — the join key between our
+            // wave journal and their consumption sweep.
             if (function_exists('wpc_apikey_canonicalize644')) {
                 wpc_apikey_canonicalize644();
             }
@@ -12796,6 +13066,6 @@ if (!function_exists('wpc_used_css_beta_flip644')) {
 }
 
 
-
-
+// v7.10.647 — Brotli land handler (spec §3). v7.10.656 moved it to its own file: it
+// decodes a live request body, and this file is the plugin's most write-heavy one.
 require_once __DIR__ . '/html-br-land.php';

@@ -38,7 +38,7 @@ global $wps_ic, $wpdb;
               <?php
               $logs_dir = WPS_IC_LOG;
 
-              
+              // Create logs directory if it doesn't exist
               if (!file_exists($logs_dir)) {
                   mkdir($logs_dir, 0755, true);
               }
@@ -55,13 +55,13 @@ global $wps_ic, $wpdb;
                       $file_url = site_url($relative_path);
 
                       if (is_dir($path)) {
-                          
+                          // It's a directory
                         $output .= '<li>';
                         $output .= '<strong>' . esc_html($item) . '</strong>';
                         $output .= list_directory_contents($path, $base_url);
                         $output .= '</li>';
                       } else {
-                          
+                          // It's a file
                         $file_size = size_format(filesize($path));
 
                         $output .= '<li>';
@@ -75,10 +75,10 @@ global $wps_ic, $wpdb;
                   return $output;
               }
 
-              
+              // Get the site URL for direct file access
               $site_url = site_url();
 
-              
+              // Display the directory contents
               echo list_directory_contents($logs_dir, $site_url);
               ?>
             </div>

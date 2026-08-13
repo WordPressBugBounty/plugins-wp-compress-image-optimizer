@@ -9,10 +9,10 @@ class wps_ic_oEmbed
 
   public function run()
   {
-    
+    /* @var WP $wp */
     global $wp;
 
-    
+    // Remove the embed query var.
     $wp->public_query_vars = array_diff($wp->public_query_vars, [
         'embed',
     ]);

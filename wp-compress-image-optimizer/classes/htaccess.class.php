@@ -48,13 +48,13 @@ class wps_ic_htaccess extends wps_ic
             return;
         }
 
-        
+        // Is the file writeable?
         if ($this->exists($this->htaccessPath) && !$this->isWriteable($this->htaccessPath)) {
             $error = true;
             $this->notice('not-writeable-htaccess');
         }
 
-        
+        // Is the file readable?
         if ($this->exists($this->htaccessPath) && !$this->isReadble($this->htaccessPath)) {
             $error = true;
             $this->notice('not-readable-htaccess');
@@ -62,21 +62,21 @@ class wps_ic_htaccess extends wps_ic
 
         if ($error) return;
 
-        
+        // Get Contents
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-        
+        // Did we retrieve the correct htaccess content?
         if (!empty($this->htaccessContent)) {
 
-            
+            // Check if gzip rules already exist
             if (strpos($this->htaccessContent, 'mod_deflate') === false) {
 
                 $rules = $this->modifyModDeflate();
 
-                
+                // Prepare new content (append)
                 $newHtaccessContent = rtrim($this->htaccessContent) . "\n\n" . $rules;
 
-                
+                // Only write if content actually changed
                 if (!empty($newHtaccessContent) && $newHtaccessContent !== $this->htaccessContent) {
                     file_put_contents($this->htaccessPath, $newHtaccessContent);
                 }
@@ -153,13 +153,13 @@ class wps_ic_htaccess extends wps_ic
             return;
         }
 
-        
+        // Is the file writeable?
         if ($this->exists($this->htaccessPath) && !$this->isWriteable($this->htaccessPath)) {
             $error = true;
             $this->notice('not-writeable-htaccess');
         }
 
-        
+        // Is the file readable?
         if ($this->exists($this->htaccessPath) && !$this->isReadble($this->htaccessPath)) {
             $error = true;
             $this->notice('not-readable-htaccess');
@@ -167,20 +167,20 @@ class wps_ic_htaccess extends wps_ic
 
         if ($error) return;
 
-        
+        // Get Contents
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
-        
+        // Did we retrieve the correct htaccess content?
         if (!empty($this->htaccessContent)) {
-            
+            // Does it already have modifications?
 
             if (!$this->hasRewriteMods() || !empty($_GET['rebuildHtaccess'])) {
                 $this->modifyHtaccess();
             }
 
-            
+            // Remove Mods Fix
             if ($this->hasRewriteMods() && !empty($_GET['removeHtaccess'])) {
-                
+                // Remove HtAccess Rules
                 $this->removeHtaccessRules();
             }
         }
@@ -284,8 +284,8 @@ class wps_ic_htaccess extends wps_ic
             if ($content === '') {
                 return false;
             }
-            
-            
+            // Append our block LAST (idempotent: strip any prior copy first). WordPress' managed
+            // rewrite block runs first for routing; cache headers are order-independent.
             $desired = rtrim($this->wpcStripBcBlock($content)) . PHP_EOL . PHP_EOL . $this->wpcBrowserCacheRules();
             if (trim($desired) === trim($content)) {
                 return true;
@@ -311,7 +311,7 @@ class wps_ic_htaccess extends wps_ic
                 ]);
                 $wpc_last = is_wp_error($r) ? 0 : (int) wp_remote_retrieve_response_code($r);
                 if ($wpc_last >= 500) { $wpc_bad = true; break; }
-                if ($wpc_last >= 200 && $wpc_last < 500) { $wpc_any_ok = true; } 
+                if ($wpc_last >= 200 && $wpc_last < 500) { $wpc_any_ok = true; } // 200/302/401/403 = Apache parsed .htaccess OK
             }
             if ($wpc_bad || !$wpc_any_ok) {
                 @file_put_contents($path, $content);
@@ -543,17 +543,17 @@ HTACCESS;
 
     public function modifyForCaching()
     {
-        
+        // Multisite does not require rewrite rules
         if (is_multisite()) {
             return;
         }
 
-        
+        // Korean is having problems, does not require rules
         if ('ko_KR' === get_locale() || (defined('WPLANG') && 'ko_KR' === WPLANG)) {
             return;
         }
 
-        
+        // Get root base.
         $homeRoot = $this->extractUrlComponent(home_url(), PHP_URL_PATH);
         $homeRoot = isset($homeRoot) ? trailingslashit($homeRoot) : '/';
 
@@ -603,9 +603,9 @@ HTACCESS;
         $rules .= $this->webpRewrite($cache_dir_path);
         $rules .= $gzip_rules;
 
-        
+        // TODO: Exclude Mobile?
         $mobileCacheEnabled = false;
-        
+        #if (!$mobileCacheEnabled) {
         $rules .= 'RewriteCond %{HTTP_USER_AGENT} "android|blackberry|iphone|ipod|iemobile|opera mobile|palmos|webos|googlebot-mobile" [NC]' . PHP_EOL;
         $rules .= 'RewriteRule .* - [E=WPC_MOBILE:mobile_]' . PHP_EOL;
 
@@ -622,7 +622,7 @@ HTACCESS;
 
         $rules .= 'RewriteCond "' . $cache_dir_path . '/%{ENV:WPC_MOBILE}index.html' . $enc . '" -s' . PHP_EOL;
         $rules .= 'RewriteRule .* "' . $cacheRoot . $http_host . '%{REQUEST_URI}/%{ENV:WPC_MOBILE}index.html' . $enc . '" [L]' . PHP_EOL;
-        
+        #}
 
         $rules .= 'RewriteCond %{REQUEST_METHOD} GET' . PHP_EOL;
 
@@ -630,19 +630,19 @@ HTACCESS;
         $rules .= 'RewriteCond %{HTTP:X-WPC-Cache-Warm} ^$' . PHP_EOL;
         $rules .= 'RewriteCond %{QUERY_STRING} ^$' . PHP_EOL;
 
-        
-        
-        
-        
-        
+        // v7.10.682 — the desktop-file fallback must NEVER serve a mobile UA. Serving the desktop
+        // mirror to a mobile visitor bypasses PHP, so the mobile variant is never rendered and the
+        // page stays device-blind PERMANENTLY (and a device-bucketed edge in front caches that
+        // wrong copy per bucket — the wpcompress mobile-got-desktop-crit vector). A mobile UA with
+        // no mobile variant falls through to PHP, which renders AND writes the mobile copy once.
         $rules .= 'RewriteCond %{ENV:WPC_MOBILE} ^$' . PHP_EOL;
 
-        
+        #$cookies = $this->rejectCookies();
         if ($cookies) {
             $rules .= 'RewriteCond %{HTTP:Cookie} !(' . $cookies . ') [NC]' . PHP_EOL;
         }
 
-        
+        // TODO: Excluded URLs from Cache?
         $excludedCacheUrls = false;
         if ($excludedCacheUrls) {
             $rules .= 'RewriteCond %{REQUEST_URI} !^(' . $excludedCacheUrls . ')$ [NC]' . PHP_EOL;
@@ -655,7 +655,7 @@ HTACCESS;
     }
 
 
-    
+    /** Write the #StartWPC-StaticServe block (modifyForCaching rules), replacing any prior one. */
     private function writeStaticServeBlock()
     {
         $rules = $this->modifyForCaching();
@@ -668,7 +668,7 @@ HTACCESS;
         return $this->fileSystem()->put_contents($this->htaccessPath, $block . $content);
     }
 
-    
+    /** Enable static serve: write rules → self-test → keep, or auto-rollback if the host doesn't serve it. */
     public function applyStaticServe()
     {
         $wpc_was_active530  = (int) get_option('wpc_static_serve_active', 0) === 1;
@@ -699,9 +699,9 @@ HTACCESS;
         if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'ensureStaticMirrorHeaderHtaccess')) {
             wps_cacheHtml::ensureStaticMirrorHeaderHtaccess();
         }
-        
+        // The load-bearing safety: prove a REAL zero-PHP static serve works on THIS host before trusting it.
         if (!$this->staticServeSelfTest()) {
-            $this->removeStaticServe(); 
+            $this->removeStaticServe(); // ROLLBACK → site stays on the PHP serve, nothing broken
             $wpc_probe = get_option('wpc_static_serve_probe');
             return ['ok' => false, 'reason' => $wpc_probe ? 'selftest failed — ' . $wpc_probe : 'selftest-failed-reverted'];
         }
@@ -709,10 +709,10 @@ HTACCESS;
         delete_option('wpc_static_serve_failed');
 
 
-        
-        
-        
-        
+        // v7.10.530 — the purge+warm tail is a TRANSITION cost, not a steady-state one. Receipted
+        // firing from admin_init on every admin request (uri=admin-ajax?action=wpc_perf_debug), so
+        // each one wiped the whole HTML tree and fanned out a warm while visitors were rendering.
+        // Only pay it when this call actually flipped the site from off to on.
         if (empty($wpc_was_active530)) {
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
                 try {
@@ -727,15 +727,15 @@ HTACCESS;
         return ['ok' => true];
     }
 
-    
+    /** Remove the static-serve block (revert to PHP serve). */
     public function removeStaticServe()
     {
         $this->htaccessPath = $this->getHtaccessPath();
         delete_option('wpc_static_serve_active');
-        
-        
-        
-        
+        // Any removal (manual toggle-off, self-test rollback, deactivation) also clears the
+        // TTFB auto-arm flag — else the wpc_static_serve filter keeps forcing orphaned mirror
+        // writes for rules that no longer exist, and the actuator's "already armed" gate
+        // blocks self-heal (v7.10.357).
         delete_option('wpc_ttfb_ss_auto');
         if (empty($this->htaccessPath) || !$this->isWriteable($this->htaccessPath)) {
             return;
@@ -748,12 +748,12 @@ HTACCESS;
         $this->fileSystem()->put_contents($this->htaccessPath, $content);
     }
 
-    
-
-
-
-
-
+    /**
+     * Self-test: write a MARKER mirror at a nonce URL that has NO WordPress page, then loopback-fetch it.
+     * Only the static .htaccess rule can produce that marker (WP would 404) — so a marker in the response
+     * proves a zero-PHP static serve is live. Fail-safe: any failure (loopback blocked, no marker, error)
+     * returns false → the caller rolls back. Cleans up the test files either way.
+     */
     public function staticServeSelfTest()
     {
         if (!$this->isApache || !defined('WPS_IC_CACHE') || !function_exists('home_url')) {
@@ -784,9 +784,9 @@ HTACCESS;
         ]);
         $ok = (!is_wp_error($resp) && strpos((string) wp_remote_retrieve_body($resp), $marker) !== false);
 
-        
-        
-        
+        // A proxy front (CF bot filtering, challenges) can eat the public loopback while
+        // the host serves the rules fine — retry against the origin directly before
+        // declaring failure. Marker found = the static serve is real; enable it.
         $wpc_via = '';
         if (!$ok) {
             foreach (['https://127.0.0.1/', 'http://127.0.0.1/'] as $wpc_scheme) {
@@ -821,10 +821,17 @@ HTACCESS;
             if (strpos((string) $this->getContents($this->getHtaccessPath()), '#StartWPC-StaticServe') === false) {
                 $wpc_probe .= ' | rules-block-missing-from-htaccess';
             }
-            
-            
-            $wpc_probe .= ' | srv:' . substr(preg_replace('/[^a-zA-Z0-9 .\/_-]/', '', (string) ($_SERVER['SERVER_SOFTWARE'] ?? '?')), 0, 40)
+            // Host fingerprint: names the server class (LiteSpeed/Apache/…) and whether a
+            // proxy fronts it, so support never has to guess which host family failed.
+            $wpc_srv921 = (string) ($_SERVER['SERVER_SOFTWARE'] ?? '?');
+            $wpc_probe .= ' | srv:' . substr(preg_replace('/[^a-zA-Z0-9 .\/_-]/', '', $wpc_srv921), 0, 40)
                 . (isset($_SERVER['HTTP_CF_RAY']) ? ' cf-fronted' : '');
+            if (stripos($wpc_srv921, 'litespeed') !== false
+                && strpos((string) $this->getContents($this->getHtaccessPath()), '#StartWPC-StaticServe') !== false) {
+                $wpc_probe .= ' | litespeed-family: OpenLiteSpeed loads rewrite rules only at server'
+                    . ' restart — restart (or enable .htaccess auto-reload) and this will pass;'
+                    . ' re-tested daily and enabled automatically';
+            }
             update_option('wpc_static_serve_probe', $wpc_probe, false);
         } else {
             delete_option('wpc_static_serve_probe');
@@ -849,11 +856,11 @@ HTACCESS;
 
     public function sslRewrite()
     {
-        
+        // Redirect non SSL to SSL
         $rules = '';
-        
-        
-        
+        #$rules .= 'RewriteCond %{HTTPS} off' . PHP_EOL;
+        #$rules .= 'RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]' . PHP_EOL;
+        // TODO: Check if this works
         $rules .= 'RewriteCond %{HTTPS} !=on' . PHP_EOL;
         $rules .= 'RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]' . PHP_EOL;
         $rules .= 'RewriteCond %{HTTPS} on [OR]' . PHP_EOL;
@@ -893,7 +900,7 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        
+        // Get Contents
         $this->htaccessContent = $this->getContents($this->htaccessPath);
 
         if (!$this->htaccessContent || empty($this->htaccessContent)) return;
@@ -920,13 +927,13 @@ HTACCESS;
             return;
         }
 
-        
+        // Is the file writeable?
         if ($this->exists($this->configPath) && !$this->isWriteable($this->configPath)) {
             $error = true;
             $this->notice('not-writeable-config');
         }
 
-        
+        // Is the file readable?
         if ($this->exists($this->configPath) && !$this->isReadble($this->configPath)) {
             $error = true;
             $this->notice('not-readable-config');
@@ -934,19 +941,19 @@ HTACCESS;
 
         if (!empty($error)) return;
 
-        
+        // Get Contents
         $configContents = $this->getContents($this->configPath);
 
-        
+        // Cache Status
         $cacheStatus = $status ? 'true' : 'false';
         $this->cacheConstant = str_replace('VALUE', $cacheStatus, $this->cacheConstant);
 
-        
+        // Check if WP_CACHE is defined
         if (!preg_match('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', $configContents)) {
-            
+            // Add definition if missing
             $newContents = preg_replace('/(<\?php)/i', "<?php\r\n{$this->cacheConstant}\r\n", $configContents, 1);
         } else {
-            
+            // Update or remove based on $cacheStatus
             if ($cacheStatus === 'true') {
                 $newContents = preg_replace('/define\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)\s*\);/si', "define('WP_CACHE', true);", $configContents);
             } else {
@@ -955,7 +962,7 @@ HTACCESS;
             }
         }
 
-        
+        // Check if content changed
         if (isset($newContents) && $newContents !== $configContents) {
             file_put_contents($this->configPath, $newContents);
         }
@@ -968,7 +975,7 @@ HTACCESS;
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
 
-        
+        // Remove legacy insecure backup
         $legacy_backup = ABSPATH . 'wp-config-backup.php';
         if (file_exists($legacy_backup)) {
             @unlink($legacy_backup);
@@ -983,20 +990,20 @@ HTACCESS;
         $backup_dir  = WP_CONTENT_DIR . '/.wp-compress-backups';
         $backup_file = $backup_dir . '/wp-config.php';
 
-        
+        // Ensure backup directory exists
         if (!is_dir($backup_dir)) {
             wp_mkdir_p($backup_dir);
             @chmod($backup_dir, 0700);
         }
 
-        
+        // Ensure .htaccess exists to block web access (Apache)
         $htaccess = $backup_dir . '/.htaccess';
         if (!file_exists($htaccess)) {
             file_put_contents($htaccess, "Require all denied\n");
             @chmod($htaccess, 0644);
         }
 
-        
+        // Create backup
         if (!file_exists($backup_file)) {
             if (@copy($config_file, $backup_file)) {
                 @chmod($backup_file, 0600);
@@ -1016,13 +1023,13 @@ HTACCESS;
             return;
         }
 
-        
+        // Is the file writeable?
         if ($this->exists($this->advancedCachePath) && !$this->isWriteable($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-writeable-adv-cache');
         }
 
-        
+        // Is the file readable?
         if ($this->exists($this->advancedCachePath) && !$this->isReadble($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-readable-adv-cache');
@@ -1030,10 +1037,10 @@ HTACCESS;
 
         if ($error) return;
 
-        
+        // Get Contents
         $advancedCacheSample = $this->getContents(WPS_IC_DIR . 'templates/samples/advancedCacheSample.php');
 
-        
+        // Only write if changed
         $currentAdvancedCache = '';
         if (file_exists($this->advancedCachePath)) {
             $currentAdvancedCache = file_get_contents($this->advancedCachePath);
@@ -1048,16 +1055,16 @@ HTACCESS;
                 $cacheLoggedIn = 'true';
             }
 
-            
+            // Set cache logged in const in advanced-cache
             $pattern = "#WPC_CACHE_LOGGED_IN_START\r?\n(.+?)\r?\n#WPC_CACHE_LOGGED_IN_END";
             $replacement = "#WPC_CACHE_LOGGED_IN_START\n define('WPC_CACHE_LOGGED_IN' , $cacheLoggedIn );\n#WPC_CACHE_LOGGED_IN_END";
             $newContents = preg_replace("/$pattern/s", $replacement, $advancedCacheSample);
 
-            
-            
-            
-            
-            
+            // v7.10.743 — the benchmark arms need a signal the DROP-IN can read, and the drop-in
+            // runs before WordPress, so an option is unreadable there. Baked in here instead of
+            // asking for a wp-config edit. Armed ONLY when a tier key already exists, so this one
+            // constant implies both halves of the old two-constant contract; the KEY itself is
+            // never written to a file — it stays an option, read at door time with WP loaded.
             $wpc_tier743 = 'false';
             if (get_option('wpc_tier_cache', '') === '1'
                 && class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'tierKey')
@@ -1068,7 +1075,7 @@ HTACCESS;
             $replacement = "#WPC_TIER_CACHE_START\n define('WPC_TIER_CACHE' , $wpc_tier743 );\n#WPC_TIER_CACHE_END";
             $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
 
-            
+            // Set Developer Mode
             if (!empty($settings['developer_mode']) && $settings['developer_mode'] === '1') {
                 $pattern = "#WPC_CACHE_DEVELOPER_MODE_START\r?\n(.+?)\r?\n#WPC_CACHE_DEVELOPER_MODE_END";
                 $replacement = "#WPC_CACHE_DEVELOPER_MODE_START\n define('DONOTCACHEPAGE', true);\n return;\n#WPC_CACHE_DEVELOPER_MODE_END";
@@ -1079,7 +1086,7 @@ HTACCESS;
                 $newContents = preg_replace("/$pattern/s", $replacement, $newContents);
             }
 
-            
+            // Set cache cookies constant in advanced-cache
             $cookiesConstant = 'false';
             $excludeCookiesConstant = 'false';
             $mandatoryCookiesConstant = 'false';
@@ -1099,7 +1106,7 @@ HTACCESS;
                 }
             }
 
-            
+            // Allow plugins to add/modify cache cookies and exclude cookies via filters
             $cookies_list = apply_filters('wps_ic_cache_cookies', $cookies_list);
             $exclude_cookies_list = apply_filters('wps_ic_exclude_cookies', $exclude_cookies_list);
 
@@ -1117,7 +1124,7 @@ HTACCESS;
                 $excludeCookiesConstant = 'array(' . implode(', ', $excludeCookiesFormatted) . ')';
             }
 
-            
+            // Mandatory cookies - cache is bypassed entirely if any of these are not set
             $mandatory_cookies_list = apply_filters('wps_ic_mandatory_cookies', []);
             if (!empty($mandatory_cookies_list)) {
                 $mandatoryCookiesFormatted = array_map(function ($cookie) {
@@ -1126,23 +1133,23 @@ HTACCESS;
                 $mandatoryCookiesConstant = 'array(' . implode(', ', $mandatoryCookiesFormatted) . ')';
             }
 
-            
+            // Replace cache cookies
             $cookiePattern = "#WPC_CACHE_COOKIES_START\r?\n(.+?)\r?\n#WPC_CACHE_COOKIES_END";
             $cookieReplacement = "#WPC_CACHE_COOKIES_START\ndefine('WPC_CACHE_COOKIES', $cookiesConstant);\n#WPC_CACHE_COOKIES_END";
             $newContents = preg_replace("/$cookiePattern/s", $cookieReplacement, $newContents);
 
-            
+            // Replace exclude cookies
             $excludeCookiePattern = "#WPC_EXCLUDE_COOKIES_START\r?\n(.+?)\r?\n#WPC_EXCLUDE_COOKIES_END";
             $excludeCookieReplacement = "#WPC_EXCLUDE_COOKIES_START\ndefine('WPC_EXCLUDE_COOKIES', $excludeCookiesConstant);\n#WPC_EXCLUDE_COOKIES_END";
             $newContents = preg_replace("/$excludeCookiePattern/s", $excludeCookieReplacement, $newContents);
 
-            
+            // Replace mandatory cookies
             $mandatoryCookiePattern = "#WPC_MANDATORY_COOKIES_START\r?\n(.+?)\r?\n#WPC_MANDATORY_COOKIES_END";
             $mandatoryCookieReplacement = "#WPC_MANDATORY_COOKIES_START\ndefine('WPC_MANDATORY_COOKIES', $mandatoryCookiesConstant);\n#WPC_MANDATORY_COOKIES_END";
             $newContents = preg_replace("/$mandatoryCookiePattern/s", $mandatoryCookieReplacement, $newContents);
 
 
-            
+            // ZERO DB queries (was 2 SELECTs per request). Re-baked here on every settings/excludes save.
             $urlExcludesConstant = 'false';
             $cacheExcludesConstant = 'false';
 
@@ -1185,7 +1192,7 @@ HTACCESS;
         $config_file = ABSPATH . 'wp-content/advanced-cache.php';
 
         if (!file_exists($config_file)) {
-            
+            // Initialize the WP_Filesystem
             global $wp_filesystem;
             WP_Filesystem();
             $wp_filesystem->put_contents($config_file, "", 0644);
@@ -1209,13 +1216,13 @@ HTACCESS;
             return true;
         }
 
-        
+        // Is the file writeable?
         if ($this->exists($this->advancedCachePath) && !$this->isWriteable($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-writeable-adv-cache');
         }
 
-        
+        // Is the file readable?
         if ($this->exists($this->advancedCachePath) && !$this->isReadble($this->advancedCachePath)) {
             $error = true;
             $this->notice('not-readable-adv-cache');
@@ -1235,7 +1242,7 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
-        
+        // Check if WebP rules already exist
         if ($this->hasWebpReplaceRules()) {
             return;
         }

@@ -10,7 +10,7 @@ $live_cdn = false;
 if (!empty($wps_ic::$settings['live-cdn']) && $wps_ic::$settings['live-cdn'] == '1') {
   $live_cdn = true;
 }
-
+// Also check CF CDN setting
 if (!$live_cdn) {
     $cfSettings = get_option(WPS_IC_CF);
     if (!empty($cfSettings['settings']['cdn']) && $cfSettings['settings']['cdn'] == '1') {

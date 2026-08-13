@@ -1,4 +1,4 @@
-
+// IsMobile
 var mobileWidth = 1;
 var wpcIsMobile = false;
 var jsDebug = false;
@@ -22,22 +22,22 @@ var wpcWindowWidth = window.innerWidth;
 
 if (n489D_vars.linkPreload === 'true') {
     document.addEventListener('DOMContentLoaded', function () {
-        const preloadedLinks = new Set(); 
+        const preloadedLinks = new Set(); // To avoid duplicate preloads
 
         document.body.addEventListener('mouseover', function () {
-            
+            // Check if the hovered element is a link
             const link = event.target.closest('a');
-            if (!link || preloadedLinks.has(link.href)) return; 
+            if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
 
-            
-            
-            
-            
+            // Check if the link contains any excluded strings
+            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+            //     link.href.includes(excludeStr)
+            // );
             const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
                 return link.href.indexOf(excludeStr) !== -1;
             });
 
-            
+            // Only preload if link is not excluded and is same origin
             if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
@@ -47,36 +47,36 @@ if (n489D_vars.linkPreload === 'true') {
             const link = event.target.closest('a');
             if (!link || preloadedLinks.has(link.href)) return;
 
-            
-            
-            
-            
+            // Check if the link contains any excluded strings
+            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
+            //     link.href.includes(excludeStr)
+            // );
             const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
                 return link.href.indexOf(excludeStr) !== -1;
             });
 
-            
+            // Only preload if link is not excluded and is same origin
             if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
         });
 
         function preloadLink(url) {
-            preloadedLinks.add(url); 
+            preloadedLinks.add(url); // Mark this URL as preloaded
             fetch(url, {
                 method: 'GET',
                 mode: 'no-cors'
             })
-                .then(function () { 
-                    
+                .then(function () { // Use traditional function syntax
+                    //console.log('Preloaded: ' + url);
                 })
-                .catch(function (err) { 
-                    
+                .catch(function (err) { // Use traditional function syntax
+                    //console.error('Preload failed for: ' + url, err);
                 });
         }
     });
 }
-
+// Lazy
 var lazyImages = [];
 var active;
 var activeRegular;
@@ -149,14 +149,14 @@ function lazyLoad() {
                     }
                 }
 
-                
+                // Integrations
                 masonry = lazyImage.closest(".masonry");
 
                 if (typeof lazyImage.dataset.src !== 'undefined' && typeof lazyImage.dataset.src !== undefined) {
                     lazyImage.src = lazyImage.dataset.src;
                 }
 
-                
+                // Handle <picture> <source> lazy loading
                 var parentPicture = lazyImage.closest('picture');
                 if (parentPicture) {
                     parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
@@ -166,8 +166,8 @@ function lazyLoad() {
                 }
 
                 var imageSrc = lazyImage.src;
-                
-                
+                //imageSrc = imageSrc.replace(/\.jpeg|\.jpg/g, '.webp');
+                //lazyImage.src = imageSrc;
 
                 lazyImage.classList.add("ic-fade-in");
                 lazyImage.classList.remove("wps-ic-lazy-image");

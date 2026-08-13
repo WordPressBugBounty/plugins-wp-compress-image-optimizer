@@ -120,4 +120,4 @@ global $wps_ic;
     </div>
 
 </div>
-<script type="text/javascript" src="<?php echo WPS_IC_URI . 'assets/js/upgrade.js'; ?>"></script>
+<script type="text/javascript" src="<?php echo WPS_IC_URI . 'assets/js/upgrade.js?v=' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1'); ?>"></script>

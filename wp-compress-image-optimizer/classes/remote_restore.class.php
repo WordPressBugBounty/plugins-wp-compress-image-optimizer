@@ -1,9 +1,9 @@
 <?php
 
 
-
-
-
+/**
+ * Class - Remote Restore
+ */
 class wps_ic_remote_restore extends wps_ic
 {
 

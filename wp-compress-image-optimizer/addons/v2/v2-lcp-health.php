@@ -33,7 +33,7 @@ add_action('init', function () {
     $key   = hash_hmac('sha256', 'wpc-lcp-health-v1', $apikey);
     $given = (string) $_GET['wpc_lcp_health'];
 
-    
+    // Admin key retrieval: ?wpc_lcp_health=mykey
     if ($given === 'mykey') {
         if (function_exists('current_user_can') && current_user_can('manage_options')) {
             wpc_lcp_health_json([
@@ -47,7 +47,7 @@ add_action('init', function () {
         wpc_lcp_health_json(['error' => 'bad key (admin: ?wpc_lcp_health=mykey to retrieve it)'], 403);
     }
 
-    
+    // ---- build state ----
     $url     = (isset($_GET['url']) && $_GET['url'] !== '') ? esc_url_raw(urldecode((string) $_GET['url'])) : home_url('/');
     $url_key = class_exists('wps_ic_url_key') ? (new wps_ic_url_key())->setup($url) : '';
     $dir     = (defined('WPS_IC_CRITICAL') ? WPS_IC_CRITICAL : '') . $url_key . '/';
@@ -134,10 +134,10 @@ add_action('init', function () {
             'on_disk'    => $lcp_on_disk,
             'path'       => $lcp_file,
             'mtime'      => $iso($lcp_file),
-            'last_fetch' => is_array($heal_rec) ? $heal_rec : null,   
+            'last_fetch' => is_array($heal_rec) ? $heal_rec : null,   // {at, http_status, wrote}
         ],
         'healer'         => [
-            'give_up_count' => $giveup,   
+            'give_up_count' => $giveup,   // >=15 = gave up (producer never wrote it for this uuid)
             'throttled'     => ($stash_url !== '' && function_exists('get_transient') && get_transient('wpc_lcp_heal_' . md5($dir))) ? true : false,
         ],
         'hints'          => [

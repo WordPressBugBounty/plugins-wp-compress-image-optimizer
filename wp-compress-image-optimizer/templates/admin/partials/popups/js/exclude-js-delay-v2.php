@@ -40,7 +40,7 @@
                 <form method="post" class="wpc-save-popup-data" action="#">
                     <div class="cdn-popup-content-full">
                         <div class="cdn-popup-content-inner">
-                            <textarea name="wpc-excludes[delay_js_v2]" data-setting-name="wpc-excludes" data-setting-subset="delay_js_v2" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__('e.g. analytics.js, /my-plugin/tracking.js, google-tag', WPS_IC_TEXTDOMAIN); ?>"></textarea>
+                            <textarea name="wpc-excludes[delay_js_v2]" data-setting-name="wpc-excludes" data-setting-subset="delay_js_v2" class="exclude-list-textarea-value" placeholder="<?php echo esc_attr__("One pattern per line, e.g.\nanalytics.js\n/my-plugin/tracking.js\ngoogle-tag", WPS_IC_TEXTDOMAIN); ?>"></textarea>
 
                             <div class="wps-empty-row">&nbsp;</div>
 

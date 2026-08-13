@@ -4,7 +4,7 @@ class wps_ic_cname
 {
 	public function __construct()
 	{
-		
+		// Constructor can be empty or add initialization if needed
 	}
 
 	public function add($cname_input = null)
@@ -18,7 +18,7 @@ class wps_ic_cname
 			$options = get_option(WPS_IC_OPTIONS);
 			$apikey = $options['api_key'];
 
-			
+			// TODO is cname valid?
 			$cname = sanitize_text_field($cname_input);
 			$cname = str_replace(['http://', 'https://'], '', $cname);
 			$cname = rtrim($cname, '/');
@@ -35,7 +35,7 @@ class wps_ic_cname
 
 			if (empty($error)) {
 				if (!preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches) && !preg_match('/^([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)\.([a-zA-Z0-9\_\-]+)$/', $cname, $matches)) {
-					
+					// Subdomain is not valid
 					$error = 'This domain is invalid, please link a new domain...';
 					delete_option('ic_custom_cname');
 					$settings = get_option(WPS_IC_SETTINGS);
@@ -43,20 +43,20 @@ class wps_ic_cname
 					update_option(WPS_IC_SETTINGS, $settings);
 					wp_send_json_error('invalid-domain');
 				} else {
-					
-					
-					
-					
+					// v7.10.500 — CF-LINKED SITES DO NOT USE THE ZONE TARGET. add() validated
+					// recordsTarget == $zone_name (the Bunny pull zone), so entering
+					// media.yoursite.com on a CF site was rejected before it could ever be linked.
+					// When CF is connected we create the record ourselves instead of demanding one.
 					$cfa = $this->cf_link_cname($cname, true);
 					if ($cfa['code'] !== 'cf-off') {
 						if (empty($cfa['ok'])) {
 							wp_send_json_error($cfa['code']);
 						}
-						
-						
-						
-						
-						
+						// v7.10.501 — CF hostnames live in WPS_IC_CF_CNAME ONLY (written by the helper).
+						// Writing ic_custom_cname here made a CF host survive a CF disconnect as the
+						// emit target via the zone fallback, bypassing the cf.settings.cdn gate — the
+						// exact "custom cname they never linked" state. On disconnect the site must
+						// fall back to the plain zone host instead.
 						$requests = new wps_ic_requests();
 						$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $apikey,
 							'domain' => site_url(), 'zone_name' => $zone_name, 'time' => microtime(true)]);
@@ -68,7 +68,7 @@ class wps_ic_cname
 						]);
 					}
 
-					
+					// Verify CNAME DNS
 					$requests = new wps_ic_requests();
 					$body = $requests->GET('https://frankfurt.zapwp.net/', ['dnsCheck' => 'true', 'host' => $cname, 'zoneName' => $zone_name, 'hash' => microtime(true)], ['timeout' => 60]);
 
@@ -91,7 +91,7 @@ class wps_ic_cname
 
 								$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'apikey' => $apikey, 'domain' => site_url(), 'zone_name' => $zone_name, 'time' => microtime(true)]);
 
-								
+								// Wait for SSL?
 								wpc_diag_sleep(2, 'cname-add');
 
 								wps_ic_cache_integrations::purgeAll(false, true, false, true, true);
@@ -126,17 +126,17 @@ class wps_ic_cname
 		}
 	}
 
-	
-
-
-
-
-
-	
-
-
-
-
+	/**
+	 * v7.10.500 — ONE CF implementation, shared by add() and retry(). Links $cname to
+	 * cdn-mc.zapwp.net, proxied, and retires a previously-managed hostname when the user changes it.
+	 * Returns ['ok'=>bool, 'code'=>string, 'msg'=>string, 'proxied'=>bool, 'target'=>string].
+	 * 'cf-off' means Cloudflare is not connected — callers fall through to the zone path.
+	 */
+	/**
+	 * v7.10.501 — the hostname we currently manage. CF owns it when CF is connected; otherwise the
+	 * zone custom cname. Mirrors the EMIT precedence in enqueues/combine_css so the UI, Refresh and
+	 * the served host can never disagree.
+	 */
 	private function managed_cname()
 	{
 		$cf = get_option(WPS_IC_CF);
@@ -149,20 +149,20 @@ class wps_ic_cname
 		return trim((string) get_option('ic_custom_cname'));
 	}
 
-	
-
-
-
-
-
-
+	/**
+	 * v7.10.502 — is Cloudflare AUTHORITATIVE for this host's zone? A valid token proves permissions,
+	 * NOT delegation: a zone can sit in Cloudflare as "Pending Nameserver Update" forever, in which
+	 * case API writes succeed, a read-back from the API confirms them, and public DNS never changes —
+	 * so no proxying and no certificate. Verifying via the CF API alone reports false success.
+	 * Returns ['known'=>bool, 'cf'=>bool, 'ns'=>string[]]; known=false means we could not tell (fail open).
+	 */
 	private function zone_ns_is_cloudflare($host)
 	{
 		if (!function_exists('dns_get_record')) {
 			return ['known' => false, 'cf' => false, 'ns' => []];
 		}
 		$labels = explode('.', trim((string) $host, '.'));
-		
+		// Walk up to the zone apex — correct for multi-label TLDs (example.co.uk) too.
 		for ($i = 0; $i < count($labels) - 1; $i++) {
 			$candidate = implode('.', array_slice($labels, $i));
 			$rec = @dns_get_record($candidate, DNS_NS);
@@ -201,7 +201,7 @@ class wps_ic_cname
 				'msg' => 'Could not load the Cloudflare client. Nothing was changed — try again.'];
 		}
 
-		
+		// Delegation gate — before any write, so a pending zone never gets a phantom record.
 		$ns = $this->zone_ns_is_cloudflare($cname);
 		if (!empty($ns['known']) && empty($ns['cf'])) {
 			return ['ok' => false, 'code' => 'cf-not-authoritative', 'proxied' => false, 'target' => $target,
@@ -214,9 +214,9 @@ class wps_ic_cname
 
 		$cfsdk = new WPC_CloudflareAPI($cf['token']);
 
-		
-		
-		
+		// Retire a hostname we previously managed, so changing cdn.x -> media.x does not orphan the
+		// old record. SAFETY: only ever delete a CNAME whose content is OUR target — a record the
+		// customer created for anything else is never touched.
 		$prev = trim((string) get_option(WPS_IC_CF_CNAME));
 		if ($write && $prev !== '' && strcasecmp($prev, $cname) !== 0) {
 			$old = $cfsdk->findDNSRecord($cf['zone'], $prev, 'CNAME');
@@ -235,7 +235,7 @@ class wps_ic_cname
 			}
 		}
 
-		
+		// Verify by RE-READ, never from the write.
 		$rec     = $cfsdk->findDNSRecord($cf['zone'], $cname, 'CNAME');
 		$content = is_array($rec) && isset($rec['content']) ? rtrim((string) $rec['content'], '.') : '';
 		$proxied = is_array($rec) && !empty($rec['proxied']);
@@ -261,8 +261,8 @@ class wps_ic_cname
 			$proxied = is_array($rec) && !empty($rec['proxied']);
 		}
 
-		
-		
+		// The API read-back only proves CF stored it. Confirm a public resolver agrees before
+		// calling this linked — otherwise a pending zone reports success on an invisible record.
 		if (function_exists('dns_get_record')) {
 			$pub = @dns_get_record($cname, DNS_CNAME);
 			$seen = '';
@@ -283,7 +283,7 @@ class wps_ic_cname
 		return ['ok' => true, 'code' => 'cf-ok', 'msg' => '', 'proxied' => $proxied, 'target' => $target];
 	}
 
-	
+	/** Retire the CF record we manage. Only deletes a CNAME whose content is our target. */
 	private function cf_unlink_cname()
 	{
 		$target = (string) apply_filters('wpc_cf_cname_target', 'cdn-mc.zapwp.net');
@@ -305,16 +305,16 @@ class wps_ic_cname
 				$cfsdk->deleteDNSRecord($cf['zone'], $rec['id']);
 			}
 		}
-		
+		// Emit host must not survive removal — enqueues/combine_css/comms read this option.
 		delete_option(WPS_IC_CF_CNAME);
 	}
 
 	public function retry()
 	{
-		
-		
-		
-		
+		// v7.10.498 — refresh used to verify NOTHING: it slept 2s and returned unconditional success,
+		// and its only possible error (retry_count >= 3) made the UI DELETE the CNAME. It now re-runs
+		// the same DNS check add() performs, re-fires provisioning so the cert can be issued, probes
+		// SSL for real, and never returns an error that means "give up" rather than "not ready yet".
 		$cname     = $this->managed_cname();
 		$zone_name = trim((string) get_option('ic_cdn_zone_name'));
 		$options   = get_option(WPS_IC_OPTIONS);
@@ -324,7 +324,7 @@ class wps_ic_cname
 			wp_send_json_error(['code' => 'no-cname', 'retry' => 0,
 				'msg' => 'No linked domain is stored. Add the CNAME again to start over.']);
 		}
-		
+		// Key/zone problems are reported as such — they are not DNS faults and must not read as one.
 		if ($apikey === '') {
 			wp_send_json_error(['code' => 'no-apikey', 'retry' => 1,
 				'msg' => 'Your API key is missing, so the CDN cannot be reconfigured. Reconnect the key, then press Refresh again. Your CNAME has been left in place.']);
@@ -334,16 +334,16 @@ class wps_ic_cname
 				'msg' => 'This site has no CDN zone assigned yet — usually a key that has not finished connecting. Reconnect the key, then press Refresh again.']);
 		}
 
-		
-		
-		
+		// Rate limit, NOT a lockout: each press re-fires provisioning + a purge upstream. A user
+		// waiting on certificate issuance may legitimately need many checks, so this never fails
+		// permanently and never removes anything.
 		$last = (int) get_option('ic_cname_retry_at', 0);
 		$fresh = (time() - $last) >= (int) apply_filters('wpc_cname_retry_min_interval', 10);
 		update_option('ic_cname_retry_at', time(), false);
 		$retry_count = (int) get_option('ic_cname_retry_count', 0);
 		update_option('ic_cname_retry_count', $retry_count + 1);
 
-		
+		// ── CLOUDFLARE PATH (shared helper — one implementation for add() and retry()) ────────
 		$cfr = $this->cf_link_cname($cname, $fresh);
 		if ($cfr['code'] !== 'cf-off') {
 			if (empty($cfr['ok'])) {
@@ -373,10 +373,10 @@ class wps_ic_cname
 			]);
 		}
 
-		
+		// ── ZONE (non-Cloudflare) PATH ───────────────────────────────────────────────────────
 		$requests = new wps_ic_requests();
 
-		
+		// 1) RE-VERIFY DNS for the domain the user actually entered — same checker add() uses.
 		$body = $requests->GET('https://frankfurt.zapwp.net/', ['dnsCheck' => 'true', 'host' => $cname,
 			'zoneName' => $zone_name, 'hash' => microtime(true)], ['timeout' => 30]);
 		if (empty($body) || empty($body->data)) {
@@ -402,7 +402,7 @@ class wps_ic_cname
 				'msg' => '<strong>' . esc_html($cname) . '</strong> points to <strong>' . esc_html($target !== '' ? $target : 'nothing') . '</strong>, but it must point to <strong>' . esc_html($expect) . '</strong>.']);
 		}
 
-		
+		// 2) DNS is correct — re-run provisioning so the zone (re)issues the certificate for this host.
 		if ($fresh) {
 			$requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_setcname', 'apikey' => $apikey,
 				'cname' => $cname, 'zone_name' => $zone_name, 'time' => microtime(true)]);
@@ -410,7 +410,7 @@ class wps_ic_cname
 				'domain' => site_url(), 'zone_name' => $zone_name, 'time' => microtime(true)]);
 		}
 
-		
+		// 3) Probe SSL for real — sslverify is on, so a hostname/cert mismatch fails here.
 		$ssl_ok  = false;
 		$ssl_err = '';
 		$probe = wp_remote_head('https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg',
@@ -431,8 +431,8 @@ class wps_ic_cname
 			delete_option('ic_cname_retry_count');
 		}
 
-		
-		
+		// DNS verified + provisioning re-fired = success, even while the cert is still issuing. The
+		// old code claimed success with nothing checked; this reports which half is outstanding.
 		wp_send_json_success([
 			'image'      => 'https://' . $cname . '/' . WPS_IC_IMAGES . '/fireworks.svg',
 			'configured' => 'Connected Domain: <strong>' . esc_html($cname) . '</strong>',
@@ -455,9 +455,9 @@ class wps_ic_cname
 		delete_option('ic_cname_retry_count');
 		delete_option('ic_cname_retry_at');
 
-		
-		
-		
+		// v7.10.500 — retire the CF record too. remove() left it live AND left
+		// WPS_IC_CF_CNAME set, which enqueues/combine_css/comms read as the emit host:
+		// the site kept emitting from a hostname the UI reported as removed.
 		$this->cf_unlink_cname();
 
 		$requests = new wps_ic_requests();
@@ -474,17 +474,17 @@ class wps_ic_cname
 		$settings['fonts'] = '';
 		update_option(WPS_IC_SETTINGS, $settings);
 
-		
+		// Clear cache.
 		if (function_exists('rocket_clean_domain')) {
 			rocket_clean_domain();
 		}
 
-		
+		// Lite Speed
 		if (defined('LSCWP_V')) {
 			do_action('litespeed_purge_all');
 		}
 
-		
+		// HummingBird
 		if (defined('WPHB_VERSION')) {
 			do_action('wphb_clear_page_cache');
 		}

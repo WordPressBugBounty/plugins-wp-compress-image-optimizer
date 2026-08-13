@@ -1038,3 +1038,394 @@
     opacity: 0.7;
   }
 }
+
+// ─── CF API-Token Permission Grid — elevated card, action-first rows, live states ─
+.wpc-cfperm-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: @font-semibold;
+}
+// Solid soft-tint pills — no outlines, title case (the spec: tint bg + higher-contrast text)
+.wpc-cfperm-pill,
+.wpc-cfperm-tag,
+.wpc-cfperm-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: @font-semibold;
+  font-size: 12px;
+  border-radius: @radius-pill;
+  padding: 4px 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 0;
+  transition: @transition-fast;
+}
+.wpc-cfperm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  // the check is DRAWN (mask), not the '✓' text glyph — Proxima renders that
+  // codepoint thin and serif-ish ("why is the check weird?"); a stroked path is crisp at 10px.
+  &.is-ok::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+    background: currentColor;
+    -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') no-repeat center / contain;
+    mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>') no-repeat center / contain;
+  }
+
+  &.is-ok      { background: @color-success-bg; color: darken(@color-success, 8%); }
+  &.is-warn    { background: lighten(@color-warning, 34%); color: darken(@color-warning, 20%); }
+  &.is-fail    { background: @color-error-bg; color: @color-error-dark; }
+  &.is-unknown { background: @color-ice-muted; color: @color-gray-secondary; }
+}
+.wpc-cfperm-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+
+  &.is-required { background: @color-ice; color: @color-blue-vivid; }
+  &.is-optional { background: @color-ice-muted; color: @color-gray-secondary; }
+}
+.wpc-cfperm-status {
+  min-width: 92px;
+
+  &.is-ok       { background: @color-success-bg; color: darken(@color-success, 8%); }
+  &.is-fail     { background: @color-error-bg; color: @color-error-dark; }
+  &.is-unknown  { background: @color-ice-muted; color: @color-gray-secondary; }
+  &.is-checking { background: @color-ice; color: @color-blue-deep; }
+}
+.wpc-cfperm-spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 2px solid @color-border-blue;
+  border-top-color: @color-primary;
+  border-radius: @radius-circle;
+  animation: spin 0.7s linear infinite;
+}
+// The permissions accordion now wears the SAME chrome as its sibling
+// setup-accordions (the "How To Get Your Cloudflare API Key" box below it) — one consistent
+// bordered card language, no bespoke elevation. The summary becomes a FLEX row so the pill and
+// the disclosure chevron share one vertically-centered line (the generic float:right chevron
+// dropped below the taller pill row).
+#wpc-cfperm-accordion {
+  summary {
+    display: flex;
+    align-items: center;
+
+    &:after {
+      float: none;
+      margin-left: 10px;
+      line-height: 1;
+    }
+  }
+
+  .accordion-body {
+    padding: 4px 14px 14px;
+  }
+}
+.wpc-cfperm-card {
+  padding: 0 2px;
+  margin: 0 0 12px;
+}
+.wpc-cfperm-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
+  border-radius: @radius-lg;
+  transition: @transition-fast;
+
+  & + .wpc-cfperm-row {
+    border-top: 1px solid @color-bg-frost;
+  }
+
+  &:hover {
+    background: @color-bg-neutral;
+  }
+
+  &.is-missing {
+    background: fade(@color-error-bg, 55%);
+
+    &:hover {
+      background: @color-error-bg;
+    }
+  }
+}
+.wpc-cfperm-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+// Action-first hierarchy: bold primary, subordinated path · helper on line two
+.wpc-cfperm-action {
+  display: block;
+  font-family: @font-semibold;
+  font-size: 14px;
+  color: @color-text-heading;
+  line-height: 1.35;
+}
+.wpc-cfperm-path {
+  display: block;
+  font-size: 12px;
+  color: @color-gray-text;
+  margin-top: 2px;
+}
+// Per-row fix hint — appears only on a Missing verdict (the Denied state)
+.wpc-cfperm-fix {
+  display: none;
+  font-size: 12px;
+  color: @color-error-dark;
+  margin-top: 6px;
+
+  code {
+    background: @color-white;
+    border-radius: @radius-sm;
+    padding: 1px 7px;
+    font-family: @font-code;
+    font-size: 11px;
+    color: @color-error-dark;
+  }
+}
+.wpc-cfperm-row.is-missing .wpc-cfperm-fix {
+  display: block;
+}
+.wpc-cfperm-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.wpc-cfperm-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: @color-gray-text;
+  margin: 0 0 4px;
+  padding: 0 8px;
+}
+.wpc-cfperm-recheck {
+  cursor: pointer;
+  font-family: @font-semibold;
+  font-size: 12px;
+  color: @color-blue-deep;
+  background: @color-ice;
+  border: 0;
+  border-radius: @radius-pill;
+  padding: 5px 16px;
+  transition: @transition-fast;
+
+  &:hover {
+    background: @color-ice-deep;
+  }
+  &[disabled] {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+// The guide — a distinct tinted container with icon + scannable bullets, not a text wall
+.wpc-cfperm-guide {
+  display: flex;
+  gap: 12px;
+  background: @color-ice;
+  border-radius: @radius-card;
+  padding: 16px 18px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: @color-text-slate;
+  line-height: 1.7;
+}
+.wpc-cfperm-guide-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: @radius-circle;
+  background: @color-gradient-mid;
+  color: @color-white;
+  font-family: @font-bold;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+.wpc-cfperm-guide-title {
+  font-family: @font-semibold;
+  color: @color-text-navy;
+  margin: 0 0 4px;
+}
+.wpc-cfperm-guide ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  list-style: disc; // WP admin resets ul markers — restore the scannable bullets
+
+  li {
+    list-style: disc;
+    margin: 3px 0;
+
+    strong {
+      font-family: @font-semibold;
+      color: @color-text-navy;
+      font-weight: normal;
+    }
+  }
+}
+.wpc-cfperm-guide code {
+  background: @color-white;
+  border-radius: @radius-sm;
+  padding: 1px 7px;
+  font-family: @font-code;
+  font-size: 11px;
+  color: @color-text-navy;
+  white-space: nowrap;
+}
+.wpc-cfperm-guide-note {
+  font-size: 12px;
+  color: @color-text-secondary;
+  margin: 6px 0 0;
+}
+
+// ─── CF Permission Grid — Mobile ─────────────────────────────────────────────
+@media screen and (max-width: 480px) {
+  .wpc-cfperm-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 14px 12px;
+  }
+  .wpc-cfperm-action {
+    font-size: 14px;
+  }
+  .wpc-cfperm-guide {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .wpc-cfperm-guide code {
+    white-space: normal;
+  }
+}
+
+// ─── Progressive disclosure — all-good collapse, granted fold, link buttons ───────
+.wpc-cfperm-allgood {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 8px 14px;
+}
+.wpc-cfperm-allgood-check {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: @radius-circle;
+  background: @color-success-bg;
+  color: @color-success;
+  font-family: @font-bold;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wpc-cfperm-allgood-title {
+  font-family: @font-semibold;
+  font-size: 15px;
+  color: @color-text-heading;
+  margin: 0;
+}
+.wpc-cfperm-allgood-sub {
+  font-size: 12px;
+  color: @color-gray-text;
+  margin: 2px 0 0;
+}
+.wpc-cfperm-linkbtn {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: @font-semibold;
+  font-size: 12px;
+  color: @color-blue-deep;
+  transition: @transition-fast;
+
+  &:hover { color: @color-blue-vivid; }
+}
+.wpc-cfperm-grantedtoggle {
+  display: none;
+  margin: 2px 8px 10px;
+}
+#wpc-cfperm-accordion {
+  // all-good: ONE green check line and nothing else — the row list adds no information when
+  // every row would read Granted, so the "Show details" affordance is gone entirely (user call,
+  // 2026-07-10). Re-check stays in the header; a live re-check that finds an issue flips the
+  // state class and the missing rows appear on their own.
+  &.is-allgood {
+    .wpc-cfperm-allgood { display: flex; }
+    .wpc-cfperm-card,
+    .wpc-cfperm-guide,
+    .wpc-cfperm-showall { display: none; }
+    &.show-rows .wpc-cfperm-card { display: block; } // unreachable by UI; kept for safety if a hash/debug flow adds the class
+  }
+  // issues: show only what needs attention — granted rows fold behind the toggle
+  &.has-issues {
+    .wpc-cfperm-row.is-granted { display: none; }
+    .wpc-cfperm-grantedtoggle { display: inline-block; }
+    &.show-granted .wpc-cfperm-row.is-granted { display: flex; }
+  }
+}
+
+// ─── header-anchored action, hero glow, receding metadata ──────────────────
+#wpc-cfperm-accordion {
+  summary .wpc-cfperm-summary {
+    flex: 1;          // fill the row; the chevron rides as a centered flex sibling (no width hack)
+    min-width: 0;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  // the PILL anchors the right edge — "✓ Valid" reads as the verdict
+  // where Re-check used to sit; in issues states Re-check clusters right beside it.
+  summary .wpc-cfperm-pill {
+    margin-left: auto;
+  }
+
+  // all-good needs no manual re-check affordance — opening the panel re-verifies on its own
+  // (the 10-min freshness gate); Re-check stays visible in issues states for the fix loop.
+  &.is-allgood summary .wpc-cfperm-recheck {
+    display: none;
+  }
+
+  // open + all-green: the hero state does the talking — the pill is redundant noise
+  &.is-allgood[open] .wpc-cfperm-pill {
+    display: none;
+  }
+}
+.wpc-cfperm-allgood-check {
+  box-shadow: 0 0 12px fade(@color-success, 20%); // soft celebratory glow
+}
+.wpc-cfperm-showall {
+  color: @color-gray-secondary;
+
+  .wpc-cfperm-chev {
+    display: inline-block;
+    font-size: 10px;
+    transition: @transition-transform;
+  }
+
+  &:hover {
+    color: @color-blue-vivid;
+  }
+}
+#wpc-cfperm-accordion.show-rows .wpc-cfperm-showall .wpc-cfperm-chev {
+  transform: rotate(180deg);
+}
+.wpc-cfperm-foot {
+  font-size: 11px;
+  color: @color-gray-muted;
+}

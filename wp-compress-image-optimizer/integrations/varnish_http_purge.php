@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; 
+    exit; // Exit if accessed directly
 }
 
 class wps_ic_varnish_http_purge extends wps_ic_integrations {
@@ -10,11 +10,11 @@ class wps_ic_varnish_http_purge extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        
+        // No specific checks needed
     }
 
     public function fix_setting($setting) {
-        
+        // No specific fixes needed
     }
 
     public function add_admin_hooks() {
@@ -37,7 +37,7 @@ class wps_ic_varnish_http_purge extends wps_ic_integrations {
         $path = '';
         $pregex = '.*';
 
-        
+        // Build a varniship
         if (defined('VHP_VARNISH_IP') && VHP_VARNISH_IP) {
             $varniship = VHP_VARNISH_IP;
         } else {
@@ -50,7 +50,7 @@ class wps_ic_varnish_http_purge extends wps_ic_integrations {
 
         $schema = apply_filters('varnish_http_purge_schema', 'http://');
 
-        
+        // If we made varniship, let it sail
         if (!empty($varniship)) {
             $purgeme = $schema . $varniship . $path . $pregex;
         } else {

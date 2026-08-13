@@ -1892,12 +1892,38 @@
 // the scoped centering missed it (left-aligned spinner in a wide dialog). .cdn-popup-loading is a
 // loading-state-only class, so centering it globally is safe and covers every render path.
 .cdn-popup-loading {
+  // v7.10.09.10 — NO display !important here: it also beat jQuery .hide()'s inline display:none, so
+  // every popup's loading spinner could never be hidden again (stuck spinner above the content — a
+  // real regression report). Centering must survive .show()'s inline display:block WITHOUT owning
+  // the display property: flex when untouched, and the margin-auto/text-align belts below when the
+  // inline block wins. The width:100% chain (swal wrapper rules below) fixes the off-center cause.
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   padding: 48px 32px;
+  width: 100%;
+  box-sizing: border-box;
+
+  // belt: hold centered even if a theme/plugin !importants the display back to block
+  .wpc-cname-spinner {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .wpc-cname-loading-text {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+// v7.10.09.7 — the swal copies #remove-custom-cdn's innerHTML, so .remove-cname-popup lands directly
+// under swal2-html-container; span the full dialog so centering INSIDE it is centering IN the dialog.
+.swal2-container .remove-cname-popup,
+.swal2-container .cdn-popup-inner {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .no-padding-popup-bottom-bg .swal2-popup.popup-remove-custom-cdn,

@@ -1,7 +1,7 @@
 <?php
-
-
-
+/**
+ * Is Live OFF?
+ */
 if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
 $donut_size = 1;
 $savings    = false;
@@ -44,9 +44,9 @@ if (empty($user_savings) || $user_savings == '') {
 <div class="right-side-box">
     <div class="youve-saved">
         <?php
-        
-
-
+        /**
+         * Live Stats Exist OR  Stats Local Exists
+         */
         if ( ! empty($stats_live) || ! empty($stats_local)) { ?>
             <?php
             if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {

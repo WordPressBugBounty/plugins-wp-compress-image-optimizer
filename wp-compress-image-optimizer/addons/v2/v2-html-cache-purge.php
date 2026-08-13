@@ -6,11 +6,11 @@ if (!defined('ABSPATH')) {
 }
 
 if (!function_exists('wpc_v2_should_purge_html')) {
-    
-
-
-
-
+    /**
+     * Kill-switch / gating. Default: enabled when picture_avif or
+     * picture_webp is on (the picture sources benefit from cache purge);
+     * disabled otherwise (no picture HTML → no stale URLs).
+     */
     function wpc_v2_should_purge_html($image_id)
     {
         $image_id = (int) $image_id;
@@ -20,7 +20,7 @@ if (!function_exists('wpc_v2_should_purge_html')) {
         $picture_active = (!empty($settings['picture_avif']) && $settings['picture_avif'] == '1')
                        || (!empty($settings['picture_webp']) && $settings['picture_webp'] == '1');
 
-        
+        // When picture is off, the stale-HTML problem doesn't apply.
         if (!$picture_active) return false;
 
         return (bool) apply_filters('wpc_v2_html_purge_enabled', true, $image_id);
@@ -59,7 +59,7 @@ if (!function_exists('wpc_v2_discover_referencing_posts')) {
             }
         }
 
-        
+        // 2. Featured-image meta. Single integer compare — fast.
         $thumb_ids = $wpdb->get_col($wpdb->prepare(
             "SELECT post_id FROM {$wpdb->postmeta}
               WHERE meta_key = '_thumbnail_id'
@@ -75,11 +75,11 @@ if (!function_exists('wpc_v2_discover_referencing_posts')) {
 
         $post_ids = array_keys($post_ids);
 
-        
-        
+        // Extension point for ACF image fields, custom post builders,
+        // theme-emitted markup that doesn't use the wp-image-N class, etc.
         $post_ids = apply_filters('wpc_v2_referencing_posts', $post_ids, $image_id);
 
-        
+        // Final sanitize.
         $post_ids = array_values(array_unique(array_filter(array_map('intval', (array) $post_ids))));
 
         set_transient($cache_key, $post_ids, 300);
@@ -88,10 +88,10 @@ if (!function_exists('wpc_v2_discover_referencing_posts')) {
 }
 
 if (!function_exists('wpc_v2_fire_clean_post_cache_cascade')) {
-    
-
-
-
+    /**
+     * Per-post cache invalidation cascade. Each step is independent and
+     * silently no-ops if the target plugin isn't installed.
+     */
     function wpc_v2_fire_clean_post_cache_cascade($post_id)
     {
         $post_id = (int) $post_id;
@@ -108,7 +108,7 @@ if (!function_exists('wpc_v2_fire_clean_post_cache_cascade')) {
                     '[WPC HtmlPurge] wps_ic_cache::removeHtmlCacheFiles failed post_id=%d msg=%s',
                     $post_id, $e->getMessage()
                 ));
-                
+                // Fall through to minimal fallback below.
             }
         }
 
@@ -146,7 +146,7 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
         if (get_transient($throttle_key)) {
             return false;
         }
-        
+        // Set throttle BEFORE doing work, so concurrent callbacks race-safe.
         set_transient($throttle_key, 1, $throttle_seconds);
 
         $post_ids = wpc_v2_discover_referencing_posts($image_id);
@@ -173,8 +173,8 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
             }
         }
 
-        
-        
+        // Extension hook for customer integrations (Cloudflare API purge,
+        // custom CDN purge, multisite-network-wide purge, etc.).
         do_action('wpc_variant_landed_purge_html', $image_id, $post_ids, $source);
 
         error_log(sprintf(
@@ -187,17 +187,17 @@ if (!function_exists('wpc_v2_purge_html_for_attachment')) {
 }
 
 if (!function_exists('wpc_v2_purge_html_for_attachment_deferred')) {
-    
-
-
-
-
+    /**
+     * Defer the purge to shutdown so we don't add latency to the callback.
+     * Uses fastcgi_finish_request when available so the encoder gets its
+     * 200 ACK immediately while we do the cache work in the background.
+     */
     function wpc_v2_purge_html_for_attachment_deferred($image_id, $source = 'unknown')
     {
         $image_id = (int) $image_id;
         if ($image_id <= 0) return;
 
-        
+        // Capture for closure.
         $captured_id = $image_id;
         $captured_src = (string) $source;
 
@@ -211,8 +211,8 @@ if (!function_exists('wpc_v2_purge_html_for_attachment_deferred')) {
 }
 
 
-
-
+// Test-only AJAX endpoint — apikey-gated. Lets us verify the cascade
+// manually before relying on Phase B callback wiring. Mirrors the other
 
 
 if (!function_exists('wpc_v2_ajax_lazy_test_purge_html')) {
@@ -227,7 +227,7 @@ if (!function_exists('wpc_v2_ajax_lazy_test_purge_html')) {
             wp_send_json_error(['msg' => 'image_id required'], 400);
         }
 
-        
+        // Force-clear throttle for testing.
         delete_transient('wpc_html_purge_throttle_' . $image_id);
         delete_transient('wpc_html_purge_posts_' . $image_id);
 

@@ -9,26 +9,26 @@ if (!function_exists('wpc_use_v2_protocol')) {
 
 
 if (!defined('WPC_V2_CAPS_CACHE_KEY'))     define('WPC_V2_CAPS_CACHE_KEY',     'wpc_v2_capabilities');
-if (!defined('WPC_V2_CAPS_TTL'))           define('WPC_V2_CAPS_TTL',           86400);   
+if (!defined('WPC_V2_CAPS_TTL'))           define('WPC_V2_CAPS_TTL',           86400);   // 24h
 if (!defined('WPC_V2_CANARY_OPTION_KEY'))  define('WPC_V2_CANARY_OPTION_KEY',  'wpc_v2_canary_pct');
-if (!defined('WPC_V2_CANARY_DEFAULT_PCT')) define('WPC_V2_CANARY_DEFAULT_PCT', 0);       
+if (!defined('WPC_V2_CANARY_DEFAULT_PCT')) define('WPC_V2_CANARY_DEFAULT_PCT', 0);       // 0 until staged rollout begins
 
 
 if (!function_exists('wpc_v2_get_apikey')) {
     function wpc_v2_get_apikey()
     {
-        
+        // 1) Canonical — `wps_ic` option (WPS_IC_OPTIONS).
         $canon = get_option('wps_ic');
         if (is_array($canon) && !empty($canon['api_key'])) {
             return (string) $canon['api_key'];
         }
-        
+        // 2) Migration-staging option `wps_ic_options` (WPS_IC_OPTIONS_V2).
         $migration = get_option('wps_ic_options');
         if (is_array($migration) && !empty($migration['api_key'])) {
             return (string) $migration['api_key'];
         }
-        
-        
+        // 3) Settings option `wps_ic_settings` — `api_key` field is rarely
+        //    populated there but check as last resort.
         $settings = get_option('wps_ic_settings');
         if (is_array($settings) && !empty($settings['api_key'])) {
             return (string) $settings['api_key'];
@@ -37,10 +37,10 @@ if (!function_exists('wpc_v2_get_apikey')) {
     }
 }
 
-
-
-
-
+/**
+ * Authoritative gate. Returns true iff the calling code should use the v2
+ * protocol for outbound POSTs + accept callbacks at /wpc/v2/bg_swap.
+ */
 function wpc_use_v2_protocol()
 {
     static $cached = null;
@@ -137,7 +137,7 @@ function wpc_v2_orchestrator_url()
         return rtrim((string) WPC_V2_ORCHESTRATOR_URL, '/');
     }
 
-    
+    // 2) Filter override.
     $override = apply_filters('wpc_v2_orchestrator_url', '');
     if ($override !== '') return rtrim((string) $override, '/');
 
@@ -148,7 +148,7 @@ function wpc_v2_orchestrator_url()
     $geo = get_option('wps_ic_geo_locate_v2');
     if (is_array($geo) && !empty($geo['server'])) {
         $server = trim((string) $geo['server'], '/');
-        
+        // Strip scheme for the whitelist check; preserve original for return.
         $host_only = preg_replace('#^https?://#i', '', $server);
         if (in_array($host_only, $valid_hosts, true)) {
             if (preg_match('#^https?://#i', $server)) return $server;
@@ -162,10 +162,10 @@ function wpc_v2_orchestrator_url()
     return 'https://local-mc.zapwp.net';
 }
 
-
-
-
-
+/**
+ * Safe fallback when probe fails AND no prior cache exists. Marks v2 as
+ * unavailable so wpc_use_v2_protocol() falls back to v1.
+ */
 function wpc_v2_safe_fallback_caps($reason)
 {
     return [
@@ -185,9 +185,9 @@ function wpc_v2_safe_fallback_caps($reason)
     ];
 }
 
-
-
-
+/**
+ * Admin-side hook: force-refresh on plugin upgrade. Add to upgrader_process_complete.
+ */
 function wpc_v2_invalidate_caps_on_upgrade($upgrader_object, $options)
 {
     if (!is_array($options) || empty($options['action']) || $options['action'] !== 'update') return;
@@ -227,11 +227,11 @@ if (!function_exists('wpc_get_optimization_mode')) {
     }
 }
 
-
-
-
-
-
+/**
+ * True when a `lazy_*` mode is active (lazy_full, lazy_smart, lazy_cdn).
+ * Used to gate the lazy first-view trigger in modern-delivery.
+ * Manual + Legacy modes return FALSE here — neither does lazy first-view encoding.
+ */
 if (!function_exists('wpc_lazy_mode_active')) {
     function wpc_lazy_mode_active()
     {
@@ -239,11 +239,11 @@ if (!function_exists('wpc_lazy_mode_active')) {
     }
 }
 
-
-
-
-
-
+/**
+ * True when auto-on-upload should be disabled. Any mode other than 'legacy'
+ * means the customer opted out of upload-time encoding (manual = nothing
+ * auto; lazy_* = encode on view instead of upload).
+ */
 if (!function_exists('wpc_auto_encoding_disabled')) {
     function wpc_auto_encoding_disabled()
     {
@@ -255,14 +255,14 @@ if (!function_exists('wpc_auto_encoding_disabled')) {
 if (!function_exists('wpc_v2_lazy_cdn_use_original')) {
     function wpc_v2_lazy_cdn_use_original($attachment_id = 0)
     {
-        
+        // Per-attachment override (advanced — for hero/hand-edited images).
         if ($attachment_id > 0) {
             $override = get_post_meta($attachment_id, '_wpc_lazy_use_sub_size', true);
             if ($override === 'yes') {
                 return (bool) apply_filters('wpc_v2_lazy_cdn_use_original', false, $attachment_id);
             }
         }
-        
+        // Global toggle: default ON (best quality).
         $enabled = ((int) get_option('wpc_v2_lazy_cdn_use_original', 1) === 1);
         return (bool) apply_filters('wpc_v2_lazy_cdn_use_original', $enabled, $attachment_id);
     }
@@ -291,8 +291,8 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
                 error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 1 (variants exist count=' . count($variants) . ')');
                 return false;
             }
-            
-            
+            // Mark for the drain's race-protection re-check (separate request) so it also
+            // admits this upgrade instead of skipping on "variants present".
             set_transient('wpc_lazy_v2_full_' . $attachment_id, 1, 600);
             error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' UPGRADE admit (variants=' . count($variants) . ') — full compress queued');
         }
@@ -337,8 +337,8 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             $widths_clean = array_values(array_unique($widths_clean));
             set_transient('wpc_lazy_v2_widths_' . $attachment_id, $widths_clean, 600);
         } else {
-            
-            
+            // Clear any stale per-image widths if this trigger doesn't have any
+            // (avoid a previous trigger's widths leaking into a new lazy run).
             delete_transient('wpc_lazy_v2_widths_' . $attachment_id);
         }
 
@@ -361,8 +361,8 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             $lz_req   = "POST {$lz_path} HTTP/1.1\r\nHost: {$lz_host}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
                       . "Content-Length: " . strlen($lz_body) . "\r\nConnection: close\r\nUser-Agent: WPCLazyDrain/1.0\r\n\r\n" . $lz_body;
 
-            
-            
+            // (v2-pull-manifest.php + v2-direct-entry.php), which both guard this — defends against a
+            // partial-bootstrap context where wps_ic_ajax isn't loaded.
             $lz_fp = (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) ? wps_ic_ajax::wpc_loopback_open_socket($lz_host, $lz_port, $lz_https, 0.2) : false;
             if ($lz_fp) { @stream_set_timeout($lz_fp, 0, 100000); @fwrite($lz_fp, $lz_req); @fclose($lz_fp); }
         }
@@ -373,11 +373,11 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
 
 
 if (!function_exists('wpc_v2_variants_all_lazy')) {
-    
-
-
-
-
+    /**
+     * TRUE when every ic_local_variants entry is a lazy_cdn ingest (the partial
+     * "0J 0W 1A" state: on-demand avif(s) only, no Phase-A jpeg parents). Distinguishes a
+     * lazy partial (upgrade-eligible under CDN-off backfill) from a real compress (never touch).
+     */
     function wpc_v2_variants_all_lazy($variants)
     {
         if (!is_array($variants) || empty($variants)) return false;
@@ -484,20 +484,20 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
 add_action('wp_ajax_wpc_lazy_v2_drain',        'wpc_lazy_v2_drain_ajax');
 add_action('wp_ajax_nopriv_wpc_lazy_v2_drain', 'wpc_lazy_v2_drain_ajax');
 
-
-
-
-
-
-
+/**
+ * Cron handler for the v2 lazy trigger. Calls the same self-contained v2
+ * optimize path the manual Compress button uses (wps_ic_ajax::run_v2_optimize).
+ * The result is returned synchronously to the cron worker — Phase A's parents
+ * write to disk, Phase B callbacks land asynchronously via /wpc/v2/bg_swap.
+ */
 if (!function_exists('wpc_lazy_v2_compress_handler')) {
     function wpc_lazy_v2_compress_handler($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
         if ($attachment_id <= 0) return;
 
-        
-        
+        // Sanity re-check: variants may have landed via another path in the
+        // ~1s between trigger queue and cron fire.
         $variants = get_post_meta($attachment_id, 'ic_local_variants', true);
         if (is_array($variants) && !empty($variants)) {
             error_log('[WPC LazyV2] skipped image=' . $attachment_id . ' — variants now present');
@@ -519,7 +519,7 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
             }
         }
 
-        
+        // Phase 2 smart-lazy: pick up cron-context needed widths too.
         $needed_widths = get_transient('wpc_lazy_v2_widths_' . $attachment_id);
         if (is_array($needed_widths) && !empty($needed_widths)) {
             delete_transient('wpc_lazy_v2_widths_' . $attachment_id);
@@ -580,11 +580,11 @@ function wpc_v2_probe_orchestrator_clock()
     return ['ok' => true, 'skew_s' => $skew_s, 'reason' => ''];
 }
 
-
-
-
-
-
+/**
+ * Daily cron — surface excessive clock skew. >30s warns (HMAC may flake under
+ * load); >60s errors (callbacks WILL 401). Logs to debug.log only; admin
+ * notice is a future-session deliverable.
+ */
 function wpc_v2_clock_check_cron()
 {
     $result = wpc_v2_probe_orchestrator_clock();
@@ -598,7 +598,7 @@ function wpc_v2_clock_check_cron()
     } elseif ($skew > 30) {
         error_log(sprintf('[WPC V2Clock WARN] skew=%.1fs approaching 60s HMAC window', $skew));
     }
-    
+    // Cache last good probe for diagnostics endpoint.
     set_site_transient('wpc_v2_clock_last', [
         'skew_s'  => $skew,
         'checked' => time(),
@@ -606,10 +606,10 @@ function wpc_v2_clock_check_cron()
 }
 add_action('wpc_v2_clock_check', 'wpc_v2_clock_check_cron');
 
-
-
-
-
+/**
+ * Schedule the daily cron if not already armed. Hooks `init` so it lands on
+ * any admin request and self-heals if the cron was cleared.
+ */
 function wpc_v2_clock_check_schedule()
 {
     if (!wp_next_scheduled('wpc_v2_clock_check')) {
@@ -674,12 +674,12 @@ function wpc_v2_head_poll_enabled()
 
 }
 
-
-
-
-
-
-
+// v7.10.644 — ONE APIKEY PER SITE (service: staging AND thepttv each carry two keys;
+// artifacts split across them and neither half is complete). The getter's fallback
+// chain MASKED store divergence instead of healing it: wps_ic, wps_ic_options and
+// wps_ic_settings can each hold a different api_key, and different subsystems read
+// different stores. Canonical is wps_ic; the janitor rewrites the other two to match
+// and journals every heal. Runs on the daily sweep + once per version bump.
 if (!function_exists('wpc_apikey_canonicalize644')) {
     function wpc_apikey_canonicalize644()
     {
@@ -690,7 +690,7 @@ if (!function_exists('wpc_apikey_canonicalize644')) {
             $wpc_canon644 = get_option('wps_ic');
             $wpc_key644 = (is_array($wpc_canon644) && !empty($wpc_canon644['api_key'])) ? (string) $wpc_canon644['api_key'] : '';
             if ($wpc_key644 === '') {
-                return; 
+                return; // no canonical key — never invent one
             }
             $wpc_healed644 = [];
             foreach (['wps_ic_options', 'wps_ic_settings'] as $wpc_opt644) {
@@ -703,9 +703,9 @@ if (!function_exists('wpc_apikey_canonicalize644')) {
                 }
             }
             if (!empty($wpc_healed644) && function_exists('wpc_cache_first_log')) {
-                
-                
-                
+                // v7.10.646 — BOTH fingerprints (service wave-one guard): a heal onto a
+                // key with no dispatch history orphans the site's artifacts; the join
+                // must distinguish "migrated identity" from "layering hurt it".
                 $wpc_healed644['canon'] = substr(md5($wpc_key644), 0, 8);
                 wpc_cache_first_log('apikey-healed', '', '', $wpc_healed644);
             }
@@ -715,12 +715,12 @@ if (!function_exists('wpc_apikey_canonicalize644')) {
     add_action('wpc_autopurge_sweep', 'wpc_apikey_canonicalize644', 5);
 }
 
-
-
-
-
-
-
+// v7.10.650 — DEDICATED CALLBACK SECRET (CVE-2026-18518 structural follow-up).
+// The api_key identifies the site to the CDN and travels widely — dashboards, support
+// tickets, config payloads, and wp_options (readable by any other plugin on the site, or
+// by a SQL-injection in one). Using it as the HMAC secret meant any disclosure of that
+// identifier authorized writing files to disk. This secret does ONE job, is never
+// rendered, never leaves over an unauthenticated channel, and is cheap to rotate.
 if (!function_exists('wpc_v2_callback_secret650')) {
     function wpc_v2_callback_secret650($create = true)
     {
@@ -746,26 +746,26 @@ if (!function_exists('wpc_v2_callback_secret650')) {
         return $s;
     }
 
-    
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * Strict = the api_key is no longer accepted as a signing secret.
+     * Flipped by OBSERVED EFFECT, never by a flag day: a site hardens only once it has
+     * seen the orchestrator sign successfully with the dedicated secret, so an
+     * unmigrated site keeps working and a migrated one stops accepting the old key
+     * without anyone scheduling a cutover.
+     */
+    /**
+     * v7.10.652 — HARDENING NEEDS TWO INDEPENDENT SIGNALS, and the sender's is the
+     * authoritative one. The orchestrator showed that observation alone is unsafe: THREE
+     * services sign bg_swap (orchestrator, jpgwebp pod, avif pod) and the pods learn their
+     * credential from the job envelope, not from /v2/config. Three good orchestrator
+     * callbacks would have hardened a site and then permanently rejected every pod
+     * callback — most of the delivery volume — with no way back.
+     *
+     * Only the sender knows when ALL of its services are migrated, so the sender declares
+     * it: the orchestrator echoes cb_enforce=1 on the config-sync response. The plugin
+     * still refuses to harden until it has ALSO observed the dedicated secret working on a
+     * write route, so a mis-set flag cannot brick callbacks. Both signals, or no hardening.
+     */
     function wpc_v2_callback_strict650()
     {
         if (!apply_filters('wpc_v2_hmac_allow_apikey_fallback', true)) {
@@ -779,11 +779,11 @@ if (!function_exists('wpc_v2_callback_secret650')) {
         if (get_option('wpc_cb_strict650') === '1') {
             return;
         }
-        
+        // Signal 1: the sender declares every one of its services migrated.
         if (get_option('wpc_cb_enforce652') !== '1') {
             return;
         }
-        
+        // Signal 2: this site has actually seen the dedicated secret verify a WRITE.
         $n = (int) get_option('wpc_cb_seen650', 0);
         if ($n < (int) apply_filters('wpc_v2_hmac_strict_after', 3)) {
             return;

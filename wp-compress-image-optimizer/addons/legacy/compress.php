@@ -1,16 +1,16 @@
 <?php
+/**
+ * Local Compress
+ * @since 5.00.59
+ */
 
 
+// 7.01.0 Modern Image Delivery — trigger infrastructure (global helpers)
 
 
-
-
-
-
-
-
-
-
+/**
+ * Rate-limited diagnostic log — ring buffer, 500 entries max, 1 entry/hour/attachment/event (G14)
+ */
 if (!function_exists('wpc_log_trigger')) {
     function wpc_log_trigger($event, $attachmentId = 0, $context = [])
     {
@@ -40,7 +40,7 @@ if (!function_exists('wpc_is_valid_image_bytes')) {
         $len = strlen($bytes);
 
 
-        
+        // URL, response body first 50 bytes, age-since-compress, source attribution.
         $build_log = function ($reason) use ($imageID, $format, $len, $source, $bytes, $context) {
             $size_label = isset($context['size_label']) ? (string) $context['size_label'] : '';
             $url        = isset($context['url']) ? (string) $context['url'] : '';
@@ -66,8 +66,8 @@ if (!function_exists('wpc_is_valid_image_bytes')) {
                 . ' — REJECTED';
         };
 
-        
-        
+        // Minimum size — any real image at meaningful dimensions is at least ~500 bytes.
+        // Observed corrupt placeholders at exactly 678 bytes; this rejects that and similar.
         if ($len < 500) {
             error_log($build_log('too-small'));
             return false;
@@ -98,10 +98,10 @@ if (!function_exists('wpc_is_valid_image_bytes')) {
             return false;
         }
 
-        
-        
-        
-        
+        // v7.10.649 — CVE-2026-18518 (link 4: POLYGLOT BYTES). A 3-byte magic prefix is
+        // not proof of an image: the PoC prefixed \xFF\xD8\xFF to a PHP payload and
+        // passed. Executable markers are rejected outright, and raster formats must
+        // additionally decode as a real image of their claimed type.
         if (stripos($bytes, '<?php') !== false || stripos($bytes, '<?=') !== false
             || stripos($bytes, '<script') !== false || stripos($bytes, '<%') !== false) {
             error_log($build_log('embedded-executable-marker'));
@@ -166,12 +166,12 @@ if (!function_exists('wpc_persist_inline_variants')) {
 
                 $key = ($format === 'jpeg') ? $size_label : ($size_label . '-' . $format);
 
-                
+                // Preserve bg-swap refinements (bg_upgraded) — they're authoritative
                 if (!empty($variants[$key]['bg_upgraded'])) continue;
 
                 if (!isset($variants[$key])) {
-                    
-                    
+                    // New entry. originalSize=0 means downstream readers must derive
+                    // from a same-base sibling — wpc_compute_best_savings handles this.
                     $variants[$key] = [
                         'url'          => $url,
                         'originalSize' => 0,
@@ -192,8 +192,8 @@ if (!function_exists('wpc_persist_inline_variants')) {
             if ($written > 0) {
                 update_post_meta($imageID, 'ic_local_variants', $variants);
 
-                
-                
+                // Trigger the live-update savings recompute helper so the headline
+                // ic_savings reflects newly-landed AVIF entries.
                 if (function_exists('wpc_compute_best_savings')) {
                     $best = wpc_compute_best_savings($variants, $imageID);
                     if ($best['pct'] > 0 && $best['orig'] > 0) {
@@ -258,7 +258,7 @@ if (!function_exists('wpc_purge_variants_for_image')) {
             }
         }
 
-        
+        // Heartbeat transient — clear so card re-renders without stale state
         delete_transient('wps_ic_heartbeat_' . $imageID);
 
         error_log(sprintf(
@@ -295,10 +295,10 @@ if (!function_exists('wpc_compute_best_savings')) {
             $base = preg_replace('/-(avif|webp|jpe?g|png)$/i', '', $key);
 
             if ($can_canonical) {
-                
+                // Canonical 4-tier lookup (matches modal's logic)
                 $orig = WPC_Modern_Delivery::canonical_original_size($imageID, $base, $meta, $variants);
             } else {
-                
+                // Legacy fallback path — read stored, then sibling-derive
                 $orig = (int) ($vdata['originalSize'] ?? 0);
                 if ($orig === 0) {
                     foreach ($variants as $skey => $sdata) {
@@ -327,10 +327,10 @@ if (!function_exists('wpc_compute_best_savings')) {
     }
 }
 
-
-
-
-
+/**
+ * Atomic queue-dedup gate (L7). Uses object-cache ADD semantics when persistent cache is available,
+ * falls back to transient check. Worker-lock (wpc_compress_lock) bounds worst case (G4).
+ */
 if (!function_exists('wpc_atomic_queue_gate')) {
     function wpc_atomic_queue_gate($attachmentId)
     {
@@ -350,27 +350,27 @@ if (!function_exists('wpc_atomic_queue_gate')) {
     }
 }
 
-
-
-
-
-
+/**
+ * Lazy-trigger local-mc optimization on HTML render (Modern Image Delivery).
+ * Multi-gate dedup: already-compressed, permanent-fail cooldown, retry ceiling,
+ * atomic concurrent-visitor dedup, queue-array dedup.
+ */
 if (!function_exists('wpc_maybe_trigger_optimize')) {
     function wpc_maybe_trigger_optimize($attachmentId)
     {
         $attachmentId = (int) $attachmentId;
         if ($attachmentId <= 0) return;
 
-        
+        // Gate 1: already successfully compressed
         if (class_exists('wps_local_compress') && method_exists('wps_local_compress', 'is_already_compressed')) {
             $inst = new wps_local_compress();
             if ($inst->is_already_compressed($attachmentId)) return;
         }
 
-        
+        // Gate 2: permanent-fail cooldown (24h after retry ceiling hit)
         if (get_transient('wpc_failed_' . $attachmentId)) return;
 
-        
+        // Gate 3: retry ceiling
         $attempts = (int) get_post_meta($attachmentId, '_wpc_optimize_attempts', true);
         if ($attempts >= 3) {
             set_transient('wpc_failed_' . $attachmentId, 1, DAY_IN_SECONDS);
@@ -378,10 +378,10 @@ if (!function_exists('wpc_maybe_trigger_optimize')) {
             return;
         }
 
-        
+        // Gate 4: atomic 30-min concurrent-visitor dedup
         if (!wpc_atomic_queue_gate($attachmentId)) return;
 
-        
+        // Gate 5: queue-array dedup (belt-and-suspenders)
         $queue = get_option('wpc_compress_queue', []);
         if (!is_array($queue)) $queue = [];
         if (!in_array($attachmentId, $queue)) {
@@ -391,7 +391,7 @@ if (!function_exists('wpc_maybe_trigger_optimize')) {
 
         wpc_log_trigger('queued_lazy_gen', $attachmentId);
 
-        
+        // Fire non-blocking worker (existing infrastructure, worker-lock already guarded)
         if (class_exists('wps_local_compress')) {
             $inst = isset($inst) ? $inst : new wps_local_compress();
             if (method_exists($inst, 'fireQueueWorker')) {
@@ -418,15 +418,15 @@ if (!function_exists('wpc_backfill_local_variants')) {
         $variants      = [];
         $found_nextgen = false;
 
-        
-        
+        // Locate a variant file on disk, trying both naming conventions.
+        // Returns the relative path (from uploads root) if found, null otherwise.
         $resolve = function ($base_name, $format) use ($base_dir, $rel_dir) {
-            
+            // Convention 1: local-mc strips -scaled (e.g. hero.avif)
             $p = $base_dir . '/' . $rel_dir . '/' . $base_name . '.' . $format;
             if (file_exists($p) && filesize($p) > 0) {
                 return $rel_dir . '/' . $base_name . '.' . $format;
             }
-            
+            // Convention 2: legacy kept -scaled (e.g. hero-scaled.avif)
             $stripped = preg_replace('/-scaled$/', '', $base_name);
             if ($stripped !== $base_name) {
                 $p2 = $base_dir . '/' . $rel_dir . '/' . $stripped . '.' . $format;
@@ -437,7 +437,7 @@ if (!function_exists('wpc_backfill_local_variants')) {
             return null;
         };
 
-        
+        // WP-registered sizes
         foreach ($meta['sizes'] ?? [] as $size_name => $size_info) {
             if (empty($size_info['file'])) continue;
             $size_base = pathinfo($size_info['file'], PATHINFO_FILENAME);
@@ -459,7 +459,7 @@ if (!function_exists('wpc_backfill_local_variants')) {
             $variants[$size_name] = $entry;
         }
 
-        
+        // Scaled / full-size master
         if (!empty($meta['file'])) {
             $file_base = pathinfo($meta['file'], PATHINFO_FILENAME);
             $key       = strpos($file_base, '-scaled') !== false ? 'scaled' : 'full';
@@ -494,21 +494,21 @@ if (!function_exists('wpc_maybe_trigger_ladder_gen')) {
         $attachmentId = (int) $attachmentId;
         if ($attachmentId <= 0 || empty($missing_widths)) return;
 
-        
+        // Gate 1: permanent-fail cooldown (24h after retry ceiling)
         if (get_transient('wpc_failed_ladder_' . $attachmentId)) return;
 
-        
+        // Gate 2: retry ceiling (3 failures per 24h)
         $attempts = (int) get_post_meta($attachmentId, '_wpc_ladder_attempts', true);
         if ($attempts >= 3) {
             set_transient('wpc_failed_ladder_' . $attachmentId, 1, DAY_IN_SECONDS);
             return;
         }
 
-        
+        // Gate 3: atomic 30-min concurrent-visitor dedup
         $gate_key = 'wpc_ladder_queued_' . $attachmentId;
         if (function_exists('wp_cache_add') && function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache()) {
             if (!wp_cache_add($gate_key, time(), 'wpc', 30 * MINUTE_IN_SECONDS)) {
-                
+                // Merge widths into existing queue entry (more widths might have been detected)
                 wpc_merge_ladder_queue_widths($attachmentId, $missing_widths);
                 return;
             }
@@ -521,11 +521,11 @@ if (!function_exists('wpc_maybe_trigger_ladder_gen')) {
             set_transient($gate_key, time(), 30 * MINUTE_IN_SECONDS);
         }
 
-        
+        // Gate 4: queue-array dedup + size cap
         $queue = get_option('wpc_ladder_gen_queue', []);
         if (!is_array($queue)) $queue = [];
 
-        
+        // Soft cap at 1000 attachments — prevents options table bloat on large libraries
         if (count($queue) >= 1000 && !isset($queue[$attachmentId])) {
             if (function_exists('wpc_log_trigger')) {
                 wpc_log_trigger('ladder_queue_full', $attachmentId);
@@ -533,7 +533,7 @@ if (!function_exists('wpc_maybe_trigger_ladder_gen')) {
             return;
         }
 
-        
+        // Merge new widths with any already-queued for this attachment
         $existing_widths = isset($queue[$attachmentId]) ? (array) $queue[$attachmentId] : [];
         $queue[$attachmentId] = array_values(array_unique(array_merge($existing_widths, array_map('intval', $missing_widths))));
         update_option('wpc_ladder_gen_queue', $queue, false);
@@ -543,15 +543,15 @@ if (!function_exists('wpc_maybe_trigger_ladder_gen')) {
             wpc_log_trigger('ladder_queued', $attachmentId, ['widths' => $missing_widths]);
         }
 
-        
+        // Fire non-blocking async worker (primary trigger — Layer 2)
         wpc_fire_ladder_gen_worker();
     }
 }
 
-
-
-
-
+/**
+ * Merge additional widths into an existing queue entry without re-firing the worker.
+ * Called when the atomic gate blocks (another visitor already queued this attachment).
+ */
 if (!function_exists('wpc_merge_ladder_queue_widths')) {
     function wpc_merge_ladder_queue_widths($attachmentId, $widths)
     {
@@ -573,19 +573,19 @@ if (!function_exists('wpc_site_has_basic_auth')) {
         static $cached = null;
         if ($cached !== null) return $cached;
 
-        
+        // Server-level markers
         if (!empty($_SERVER['HTTP_AUTHORIZATION']) && stripos($_SERVER['HTTP_AUTHORIZATION'], 'basic') === 0) {
             return $cached = true;
         }
         if (!empty($_SERVER['PHP_AUTH_USER'])) {
             return $cached = true;
         }
-        
+        // Common .htaccess auth markers
         if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION']) || !empty($_SERVER['HTTP_X_ORIGINAL_AUTHORIZATION'])) {
             return $cached = true;
         }
 
-        
+        // Admin-configured auth (Jetpack staging, WP Engine, Flywheel staging flags)
         if (defined('WPE_ATLAS_STAGING') || defined('IS_STAGING')) {
             return $cached = true;
         }
@@ -594,16 +594,16 @@ if (!function_exists('wpc_site_has_basic_auth')) {
     }
 }
 
-
-
-
-
-
-
+/**
+ * Fire the ladder-gen worker via non-blocking loopback POST (Layer 2 primary trigger).
+ * Uses the same pattern as fireQueueWorker() — proven on shared hosts.
+ *
+ * Skipped on Basic-Auth sites (loopback would 401). Layers 3/4 drain the queue instead.
+ */
 if (!function_exists('wpc_fire_ladder_gen_worker')) {
     function wpc_fire_ladder_gen_worker()
     {
-        
+        // Skip loopback on Basic-Auth sites — will hang/fail. Shutdown + admin hooks handle drain.
         if (wpc_site_has_basic_auth()) return;
 
 
@@ -620,54 +620,54 @@ if (!function_exists('wpc_fire_ladder_gen_worker')) {
     }
 }
 
-
-
-
-
+/**
+ * Detect coexisting image optimization plugins/CDNs that may conflict.
+ * Returns array of detected conflicts with names. Non-blocking — used for admin warnings.
+ */
 if (!function_exists('wpc_detect_image_coexistence')) {
     function wpc_detect_image_coexistence()
     {
         $detected = [];
 
-        
+        // Jetpack Photon (image CDN) — rewrites <img src> to i0.wp.com at render time
         if (class_exists('Jetpack_Photon') || (function_exists('jetpack_is_photon_module_active') && jetpack_is_photon_module_active())) {
             $detected[] = ['key' => 'jetpack_photon', 'name' => 'Jetpack Photon (Image CDN)'];
         }
 
-        
-        
+        // Cloudflare Polish — server-level, detected via response headers (can't check from PHP reliably)
+        // Skip — warn in docs instead.
 
-        
+        // Kinsta CDN (auto-rewrites uploads URLs)
         if (defined('KINSTAMU_VERSION') || !empty($_SERVER['KINSTA_CACHE_ZONE'])) {
             $detected[] = ['key' => 'kinsta_cdn', 'name' => 'Kinsta Cache/CDN'];
         }
 
-        
+        // WP Engine CDN / Image Optimizer
         if (class_exists('WpeCommon') && class_exists('WpeImageProcessor')) {
             $detected[] = ['key' => 'wpe_image_optimizer', 'name' => 'WP Engine Image Optimizer'];
         }
 
-        
+        // ShortPixel Image Optimizer
         if (class_exists('ShortPixelPlugin') || class_exists('WPShortPixel')) {
             $detected[] = ['key' => 'shortpixel', 'name' => 'ShortPixel Image Optimizer'];
         }
 
-        
+        // Imagify
         if (class_exists('Imagify') || class_exists('Imagify_Assets')) {
             $detected[] = ['key' => 'imagify', 'name' => 'Imagify'];
         }
 
-        
+        // Smush (by WPMU DEV) — active as plugin, not checking for S3 specifically
         if (class_exists('WP_Smush') && !class_exists('WDEV_Plugin_Dashboard')) {
             $detected[] = ['key' => 'smush', 'name' => 'Smush Image Compression'];
         }
 
-        
+        // EWWW Image Optimizer
         if (defined('EWWW_IMAGE_OPTIMIZER_VERSION') || class_exists('EWWW_Image_Optimizer')) {
             $detected[] = ['key' => 'ewww', 'name' => 'EWWW Image Optimizer'];
         }
 
-        
+        // Optimole
         if (class_exists('Optml_Main') || defined('OPTML_VERSION')) {
             $detected[] = ['key' => 'optimole', 'name' => 'Optimole'];
         }
@@ -676,10 +676,10 @@ if (!function_exists('wpc_detect_image_coexistence')) {
     }
 }
 
-
-
-
-
+/**
+ * Admin notice when coexistence conflicts detected + Modern Delivery active.
+ * Warns but does NOT block — customer decides whether to disable the other plugin.
+ */
 if (!function_exists('wpc_modern_delivery_coexistence_notice')) {
     function wpc_modern_delivery_coexistence_notice()
     {
@@ -721,7 +721,7 @@ if (!function_exists('wpc_handle_async_ladder_gen')) {
                 return 0;
             }
 
-            
+            // Track max queue depth ever seen (for ops visibility)
             wpc_record_queue_depth(count($queue));
 
             $iterations = 0;
@@ -802,7 +802,7 @@ if (!function_exists('wpc_generate_ladder_widths')) {
 
         if (empty($crops)) return false;
 
-        
+        // Get base params from existing buildOptimizeParams
         $inst = new wps_local_compress();
         if (!method_exists($inst, 'buildOptimizeParams')) return false;
 
@@ -811,8 +811,8 @@ if (!function_exists('wpc_generate_ladder_widths')) {
         $params['filenames'] = wp_json_encode($filenames);
         $params['avif'] = '1';
         $params['webp'] = '1';
-        
-        
+        // Race-guard timestamp; mirror lazy paths so all 3 ladder code paths
+        // send the same body fields. Service uses for stale-callback filtering.
         $params['compressStartedAt'] = (int) round(microtime(true) * 1000);
 
 
@@ -851,7 +851,7 @@ if (!function_exists('wpc_generate_ladder_widths')) {
             return false;
         }
 
-        
+        // Download generated variants to disk — track format counts for telemetry
         $downloaded = 0;
         $widths_delivered = [];
         $formats_delivered = ['avif' => 0, 'webp' => 0, 'jpg' => 0];
@@ -859,13 +859,13 @@ if (!function_exists('wpc_generate_ladder_widths')) {
         $base_dir = rtrim($upload_dir['basedir'], '/');
         $rel_dir = dirname($meta['file']);
         $t_dl_start = microtime(true);
-        
+        // Collect inline-delivered entries for direct ic_local_variants persistence
         $ladder_persist_entries = [];
 
         foreach ($data['optimizedResults'] as $variant) {
 
-            
-            
+            // Plugin must use `bytes` when present, fall back to `url` only when bytes is null.
+            // NEVER URL-fetch when bytes is truthy (avoids redundant network round-trip).
             $has_bytes = !empty($variant['bytes']);
             $has_url   = !empty($variant['url']);
             if (!$has_bytes && !$has_url) continue;
@@ -873,8 +873,8 @@ if (!function_exists('wpc_generate_ladder_widths')) {
             $dest = $base_dir . '/' . $rel_dir . '/' . $variant['fileName'];
             $fmt = strtolower(pathinfo($variant['fileName'], PATHINFO_EXTENSION));
             $w   = (int) ($variant['width'] ?? 0);
-            
-            
+            // Service response omits 'width' — derive from fileName ("hero-480.avif") or sizeLabel ("wpc_480").
+            // Require 3+ digits to avoid matching post-slug dedup suffixes (e.g. "hero-4.jpg").
             if ($w === 0) {
                 if (preg_match('/-(\d{3,})\.(?:avif|webp|jpg|jpeg|png)$/i', $variant['fileName'], $m)) {
                     $w = (int) $m[1];
@@ -899,7 +899,7 @@ if (!function_exists('wpc_generate_ladder_widths')) {
                 continue;
             }
 
-            
+            // Inline-bytes path: prefer bytes when service shipped them (no URL fetch needed)
             if ($has_bytes) {
                 $bytes = base64_decode($variant['bytes'], true);
                 $source_attr = 'ladder_gen_inline';
@@ -916,8 +916,8 @@ if (!function_exists('wpc_generate_ladder_widths')) {
                 $downloaded++;
                 if ($w > 0) $widths_delivered[$w] = true;
                 if (isset($formats_delivered[$fmt])) $formats_delivered[$fmt]++;
-                
-                
+                // Queue this entry for direct ic_local_variants persistence
+                // so we don't depend on bg-swap callback for primary persistence.
                 if (!empty($variant['sizeLabel'])) {
                     $ladder_persist_entries[] = [
                         'size_label' => (string) $variant['sizeLabel'],
@@ -928,8 +928,8 @@ if (!function_exists('wpc_generate_ladder_widths')) {
                 }
             }
         }
-        
-        
+        // Persist inline-delivered entries directly into ic_local_variants
+        // under GET_LOCK + merge. Bg-swap callbacks become refinement-only.
         if (!empty($ladder_persist_entries) && function_exists('wpc_persist_inline_variants')) {
             wpc_persist_inline_variants($attachmentId, $ladder_persist_entries, 'ladder_gen_inline');
         }
@@ -937,7 +937,7 @@ if (!function_exists('wpc_generate_ladder_widths')) {
         $download_ms = (int) round((microtime(true) - $t_dl_start) * 1000);
         $total_ms    = (int) round((microtime(true) - $t_start) * 1000);
 
-        
+        // Rich log entry for per-event analysis (ring buffer, 500 max)
         if (function_exists('wpc_log_variant_gen')) {
             wpc_log_variant_gen($attachmentId, array_map('intval', $widths), array_keys($formats_delivered), [
                 'widths_delivered'  => array_values(array_map('intval', array_keys($widths_delivered))),
@@ -973,18 +973,18 @@ if (!function_exists('wpc_generate_ladder_widths')) {
     }
 }
 
-
-
-
-
-
-
+/**
+ * Layer 3 — Frontend shutdown hook (cron replacement).
+ * Processes 1 queue item per page load. Natural rate limiting via traffic.
+ * WP "shutdown" still holds the visitor's connection AND the FPM worker through the
+ * 120s optimize POST unless the request is detached first — so detach or skip.
+ */
 if (!function_exists('wpc_ladder_shutdown_hook')) {
     function wpc_ladder_shutdown_hook()
     {
         if (!get_option('wpc_ladder_gen_queue_has_items')) return;
         if (is_admin()) return;
-        if (!function_exists('fastcgi_finish_request')) return; 
+        if (!function_exists('fastcgi_finish_request')) return; // no detach → loopback/admin lanes drain instead
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return;
         @fastcgi_finish_request();
         @set_time_limit(150);
@@ -994,22 +994,22 @@ if (!function_exists('wpc_ladder_shutdown_hook')) {
     add_action('shutdown', 'wpc_ladder_shutdown_hook', 1);
 }
 
-
-
-
-
-
+/**
+ * Layer 4 — Admin page hook (parallel drain path).
+ * Every admin page view processes 1-3 queue items.
+ * Customer browsing settings → queue drains naturally.
+ */
 if (!function_exists('wpc_ladder_admin_hook')) {
     function wpc_ladder_admin_hook()
     {
         if (!get_option('wpc_ladder_gen_queue_has_items')) return;
-        
-        
+        // Skip when WE are the ajax action being processed — let the loopback handler own
+        // this execution + attribute it correctly. admin_init fires on admin-ajax.php too.
         if (defined('DOING_AJAX') && DOING_AJAX) {
             $ajax_action = isset($_REQUEST['action']) ? (string) $_REQUEST['action'] : '';
             if ($ajax_action === 'wpc_async_ladder_gen' || $ajax_action === 'wpc_ladder_process_manual') return;
         }
-        
+        // NEVER inline in an admin render: fire the detached loopback worker instead
         if (function_exists('wpc_fire_ladder_gen_worker')) {
             wpc_fire_ladder_gen_worker();
             return;
@@ -1019,8 +1019,8 @@ if (!function_exists('wpc_ladder_admin_hook')) {
     add_action('admin_init', 'wpc_ladder_admin_hook', 99);
 }
 
-
-
+// These endpoints are nopriv because loopbacks carry no cookies/Origin — a short-lived
+// single-use token minted at fire time is the auth. Anonymous calls without it: 403.
 if (!function_exists('wpc_loopback_token_mint')) {
     function wpc_loopback_token_mint($name)
     {
@@ -1043,7 +1043,7 @@ if (!function_exists('wpc_loopback_token_mint')) {
     }
 }
 
-
+// Layer 2 — AJAX handler for loopback POST (primary trigger)
 if (!function_exists('wpc_register_async_ladder_gen_ajax')) {
     function wpc_register_async_ladder_gen_ajax()
     {
@@ -1065,7 +1065,7 @@ if (!function_exists('wpc_register_prewarm_ajax')) {
         if (!wpc_loopback_token_ok('prewarm')) {
             wp_die('', '', ['response' => 403]);
         }
-        
+        // Single-flight: N concurrent fires must never mean N pinned ~90s workers.
         if (get_transient('wpc_prewarm_lock')) {
             wp_die('', '', ['response' => 200]);
         }
@@ -1084,7 +1084,7 @@ if (!function_exists('wpc_register_prewarm_ajax')) {
     add_action('wp_ajax_nopriv_wpc_modern_delivery_prewarm', 'wpc_register_prewarm_ajax');
 }
 
-
+// Layer 5 — Manual "Process Queue" admin button (last resort for stuck queues)
 if (!function_exists('wpc_register_manual_process_ajax')) {
     function wpc_register_manual_process_ajax()
     {
@@ -1101,7 +1101,7 @@ if (!function_exists('wpc_register_manual_process_ajax')) {
     add_action('wp_ajax_wpc_ladder_process_manual', 'wpc_register_manual_process_ajax');
 }
 
-
+// Layer 6 — WP Cron fallback (best-effort — many hosts disable)
 if (!function_exists('wpc_ladder_cron_hook')) {
     function wpc_ladder_cron_hook()
     {
@@ -1115,20 +1115,20 @@ if (!function_exists('wpc_ladder_cron_hook')) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// SECURITY (v7.10.821) — the two legacy loopback workers (wpc_download_variants / wpc_regen_thumbs)
+// registered wp_ajax_nopriv_ handlers that did real work (remote variant fetches, full
+// wp_generate_attachment_metadata thumbnail regen with a raised memory ceiling) on an int-cast
+// imageID. No SQLi, but an UNAUTHENTICATED resource-abuse / DoS trigger: anyone could POST imageIDs
+// and drive image work on the box. These endpoints are ONLY ever hit by our own server-side
+// loopback firer, so they can carry a self-minted token — but a plain wp_create_nonce is wrong
+// here: the firer may run as an admin (bulk compress) or cron, while the cookieless loopback always
+// arrives as uid 0, so a uid-bound nonce would fail to verify and silently break admin-initiated
+// downloads. This token is uid-INDEPENDENT (HMAC over action+id+time-bucket with the site's nonce
+// salt) and binds the imageID, so a captured token cannot be replayed for a different image.
+// NOT the existing wpc_loopback_token_ok() single-use transient: that keys ONE token per action
+// name, so two images firing concurrently (these endpoints run per-image in parallel, unlike the
+// single-flight ladder/prewarm/retry loopbacks) would clobber each other's transient and silently
+// drop a download. This variant is stateless, so concurrent per-image fires never collide.
 if (!function_exists('wpc_loopback_token821')) {
     function wpc_loopback_token821($action, $imageID, $bucket = null)
     {
@@ -1140,8 +1140,8 @@ if (!function_exists('wpc_loopback_token821')) {
     {
         $token = (string) $token;
         if ($token === '' || !function_exists('hash_equals')) { return false; }
-        
-        
+        // Accept the current and previous 5-min bucket so a token minted just before a boundary
+        // still verifies across the loopback's sub-second flight; ~5–10 min total validity.
         $now = (int) floor(time() / 300);
         foreach ([$now, $now - 1] as $b) {
             $expect = wpc_loopback_token821($action, $imageID, $b);
@@ -1157,21 +1157,21 @@ if (!function_exists('wpc_download_variants_hook')) {
         $imageID = (int) $imageID;
         if (!$imageID || get_post_type($imageID) !== 'attachment') return;
 
-        
+        // Concurrency lock — prevents two workers (e.g. loopback + cron) racing same image
         $lock_key = 'wpc_download_lock_' . $imageID;
         if (get_transient($lock_key)) return;
         set_transient($lock_key, 1, 120);
 
         try {
-            
+            // Race-guard: if user restored between Phase A and now, abort without writing files
             if (get_post_meta($imageID, 'ic_status', true) !== 'compressed') {
                 delete_post_meta($imageID, '_wpc_pending_downloads');
                 delete_post_meta($imageID, '_wpc_download_fail_count');
                 return;
             }
 
-            
-            
+            // Persistent failure cap: after 5 total attempts, stop re-scheduling.
+            // Frontend still works via CDN URLs in ic_local_variants; only WP admin previews affected.
             $fail_count = (int) get_post_meta($imageID, '_wpc_download_fail_count', true);
             if ($fail_count >= 5) {
                 delete_post_meta($imageID, '_wpc_pending_downloads');
@@ -1194,7 +1194,7 @@ if (!function_exists('wpc_download_variants_hook')) {
                 delete_post_meta($imageID, '_wpc_pending_downloads');
                 delete_post_meta($imageID, '_wpc_download_fail_count');
             } else {
-                
+                // Actual download failure — increment counter; dispatch layers will retry up to cap.
                 update_post_meta($imageID, '_wpc_download_fail_count', $fail_count + 1);
             }
         } finally {
@@ -1203,9 +1203,9 @@ if (!function_exists('wpc_download_variants_hook')) {
     }
     add_action('wpc_download_variants', 'wpc_download_variants_hook', 10, 1);
 
-    
-    
-    
+    // Layer 1 AJAX endpoint — loopback POST target. Gated on the uid-independent loopback token so
+    // only our own server-side firer (which holds the nonce salt) can trigger it; an external POST
+    // with a bare imageID is rejected before any DB read or file work.
     function wpc_download_variants_ajax()
     {
         $wpc_id821 = (int) ($_REQUEST['imageID'] ?? 0);
@@ -1220,7 +1220,7 @@ if (!function_exists('wpc_download_variants_hook')) {
     add_action('wp_ajax_nopriv_wpc_download_variants', 'wpc_download_variants_ajax');
 }
 
-
+// Layer 1 dispatcher — non-blocking loopback POST (0.1s timeout). Skipped on Basic-Auth sites.
 if (!function_exists('wpc_fire_download_worker')) {
     function wpc_fire_download_worker($imageID)
     {
@@ -1248,16 +1248,16 @@ if (!function_exists('wpc_admin_drain_pending_downloads')) {
     {
         if (!is_admin() || wp_doing_ajax() || (defined('DOING_CRON') && DOING_CRON)) return;
 
-        
+        // Idle throttle (durable): when the last pass found nothing, re-scan at most once/60s
         $wpc_didle99 = (int) get_option('wpc_admin_drain_idle_at');
         if ($wpc_didle99 && (time() - $wpc_didle99) < 60) return;
 
-        
+        // The whole drain (downloads, thumb regens, retries, compression) yields on a hot box
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return;
 
         global $wpdb;
 
-        
+        // Pending variant downloads (from compress Phase B)
         $dl_rows = $wpdb->get_results("
             SELECT post_id FROM {$wpdb->postmeta}
             WHERE meta_key = '_wpc_pending_downloads'
@@ -1267,7 +1267,7 @@ if (!function_exists('wpc_admin_drain_pending_downloads')) {
             wpc_download_variants_hook((int) $row->post_id);
         }
 
-        
+        // Pending thumbnail regens (from restore Phase B)
         $regen_rows = $wpdb->get_results("
             SELECT post_id FROM {$wpdb->postmeta}
             WHERE meta_key = '_wpc_pending_thumb_regen'
@@ -1320,7 +1320,7 @@ if (!function_exists('wpc_admin_drain_pending_downloads')) {
             $wpc_qbusy99 = true;
         }
 
-        
+        // Nothing pending anywhere → arm the 60s idle throttle
         if (empty($dl_rows) && empty($regen_rows) && empty($retry_rows) && !$wpc_qbusy99) {
             update_option('wpc_admin_drain_idle_at', time(), false);
         }
@@ -1334,8 +1334,8 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
     {
         if (empty($_GET['wpc_bg_swap']) || $_GET['wpc_bg_swap'] !== '1') return;
 
-        
-        
+        // ENTRY log: fires BEFORE auth/validation so dropped/rejected
+        // callbacks are still visible to ops. Costs ~1ms per call (file_get_contents
 
 
         $bgswap_entry_t = microtime(true);
@@ -1359,7 +1359,7 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             exit;
         };
 
-        
+        // --- Auth: timing-safe apikey comparison ---
         $provided = isset($_GET['apikey']) ? (string) $_GET['apikey'] : '';
         $options  = get_option(WPS_IC_OPTIONS);
         $expected = is_array($options) && !empty($options['api_key']) ? (string) $options['api_key'] : '';
@@ -1367,14 +1367,14 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             $respond(401, ['error' => 'auth']);
         }
 
-        
+        // --- Validate required query params + post_max_size ---
         $imageID = (int) ($_GET['imageID'] ?? 0);
         if (!$imageID || get_post_type($imageID) !== 'attachment') {
             $respond(404, ['error' => 'unknown_image']);
         }
-        
+        // Defensive max body size — base64 of a single variant should be under ~5MB
         $content_length = isset($_SERVER['CONTENT_LENGTH']) ? (int) $_SERVER['CONTENT_LENGTH'] : 0;
-        if ($content_length > 10485760) { 
+        if ($content_length > 10485760) { // 10 MiB cap
             $respond(413, ['error' => 'body_too_large', 'max' => 10485760]);
         }
 
@@ -1425,8 +1425,8 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
                 ? array_values(array_map('floatval', $body['widenAltKbs']))
                 : [];
 
-            
-            
+            // Race-safe meta tag — same lock pattern as the bytes path. Concurrent bytes
+            // callbacks for sibling variants may be writing simultaneously.
             global $wpdb;
             $ni_lock_name  = 'wpc_bg_meta_' . (int) $imageID;
             $got_ni_lock   = wpc_worker_lock($ni_lock_name);
@@ -1450,8 +1450,8 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
                 $variants_ni = get_post_meta($imageID, 'ic_local_variants', true);
                 if (!is_array($variants_ni)) $variants_ni = [];
                 if (!isset($variants_ni[$lookup_key])) {
-                    
-                    
+                    // No prior entry (fast-path SKIP'd this variant AND bg gave up). Create a
+                    // minimal placeholder so future calls can see the no-improvement state.
                     $variants_ni[$lookup_key] = [
                         'url'          => '',
                         'originalSize' => 0,
@@ -1493,7 +1493,7 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             ]);
         }
 
-        
+        // --- Decode base64 ---
         $bytes = base64_decode($b64, true);
         if ($bytes === false || strlen($bytes) === 0) {
             $respond(400, ['error' => 'decode_fail']);
@@ -1517,8 +1517,8 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             }
             $file_name = basename($variant_url);
         } else {
-            
-            
+            // No body fileName AND no existing entry → can't know where to write.
+            // (Pre-rc10.8.1 bg-swap for a SKIP'd variant — shouldn't happen in practice.)
             $respond(404, ['error' => 'unknown_variant', 'lookup' => $lookup_key]);
         }
         $attached  = get_attached_file($imageID);
@@ -1539,13 +1539,13 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             $respond(400, ['error' => 'invalid_image_bytes']);
         }
 
-        
-        
-        
-        
-        
-        
-        
+        // v7.10.656 — CVE-2026-18518, SECOND INSTANCE. This legacy callback is authorized by
+        // the api_key (the credential that CVE disclosed) and took its destination name from
+        // the request: sanitize_file_name() leaves a SINGLE extension untouched, so
+        // fileName="shell.php" reached disk verbatim. .649 hardened the v2 callback only.
+        // The audited choke point refuses any non-image extension and confines the write to
+        // the uploads root, which closes this path without renaming legitimate variants
+        // (jpeg/jpg/webp/avif are all in the default allow-list).
         if (!function_exists('wpc_v2_store_bytes655')) {
             @include_once __DIR__ . '/../v2/v2-store.php';
         }
@@ -1573,14 +1573,14 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
 
         global $wpdb;
         $mysql_lock_name = 'wpc_bg_meta_' . (int) $imageID;
-        
-        
+        // Lock-acquire timing for diagnostics. Captures real wait time
+        // when 9 simultaneous callbacks for the same imageID serialize behind
 
 
         $bgswap_lock_t0 = microtime(true);
         $got_mysql_lock = wpc_worker_lock($mysql_lock_name);
 
-        
+        // Layer 2 fallback: transient-based lock when GET_LOCK is unavailable
         $lock_key = 'wpc_bg_meta_lock_' . $imageID;
         $got_transient_lock = false;
         $has_obj_cache = function_exists('wp_cache_add') && function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache();
@@ -1595,12 +1595,12 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
                         $got_transient_lock = true;
                     }
                 }
-                if (!$got_transient_lock) usleep(50000); 
+                if (!$got_transient_lock) usleep(50000); // 50ms
             }
         }
         $bgswap_lock_acq_ms = (int) round((microtime(true) - $bgswap_lock_t0) * 1000);
-        
-        
+        // Log lock-acquire wait if non-trivial. Typical is <5ms; >50ms
+        // indicates contention from concurrent callbacks for the same imageID.
         if ($bgswap_lock_acq_ms >= 50) {
             error_log(sprintf(
                 '[WPC BgSwap LOCK] imageID=%d size=%s fmt=%s acq_ms=%d via=%s',
@@ -1610,7 +1610,7 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
         }
         $bgswap_crit_t0 = microtime(true);
         try {
-            
+            // Re-read INSIDE the lock — concurrent callbacks may have committed since our read at line ~1054
             $variants_fresh = get_post_meta($imageID, 'ic_local_variants', true);
             if (!is_array($variants_fresh)) $variants_fresh = [];
 
@@ -1670,8 +1670,8 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
             }
         }
 
-        
-        
+        // Mirror block MOVED OUTSIDE the per-image GET_LOCK so concurrent
+        // bg-swap callbacks for the same imageID don't serialize behind the slow
 
 
         if ($norm_fmt === 'jpeg' && !in_array($sizeLabel, ['original', 'scaled'], true)) {
@@ -1797,8 +1797,8 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
         $imageID = (int) $imageID;
         if (!$imageID || get_post_type($imageID) !== 'attachment') return;
 
-        
-        
+        // Per-image concurrency lock — prevents two workers (e.g. loopback + admin_init drain)
+        // from regenerating the same image's thumbnails simultaneously.
         $lock_key = 'wpc_regen_thumbs_lock_' . $imageID;
         if (get_transient($lock_key)) return;
         set_transient($lock_key, 1, 180);
@@ -1807,16 +1807,16 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
         $cap = defined('WPC_MAX_CONCURRENT_REGEN') ? max(1, (int) WPC_MAX_CONCURRENT_REGEN) : 1;
         $active = (int) get_transient('wpc_regen_active_count');
         if ($active >= $cap) {
-            
-            
+            // At cap. Release per-image lock so a future drain can reacquire.
+            // post_meta `_wpc_pending_thumb_regen` stays set — self-chain or admin_init picks it up.
             delete_transient($lock_key);
             return;
         }
         set_transient('wpc_regen_active_count', $active + 1, 300);
 
         try {
-            
-            
+            // Race-guard: user may have compressed again between restore and this worker firing.
+            // If so, ic_status is no longer 'restored' — abort cleanly without regenerating.
             if (get_post_meta($imageID, 'ic_status', true) !== 'restored') {
                 delete_post_meta($imageID, '_wpc_pending_thumb_regen');
                 return;
@@ -1828,8 +1828,8 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
             $regenSource = $plan['regen_source'] ?? get_attached_file($imageID);
             if (!$regenSource || !file_exists($regenSource)) {
                 delete_post_meta($imageID, '_wpc_pending_thumb_regen');
-                
-                
+                // Unlock the "Restoring..." card UI even if regen aborts due to
+                // missing source. Without this trigger, the card stays locked forever.
                 set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored', 'time' => time()], 60);
                 return;
             }
@@ -1837,8 +1837,8 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
             @set_time_limit(180);
             wp_raise_memory_limit('image');
 
-            
-            
+            // Suppress the on_upload auto-compress hook during regen — we don't want the
+            // just-restored image to immediately re-compress.
             if (class_exists('wps_local_compress')) {
                 $ic = new wps_local_compress();
                 remove_filter('wp_generate_attachment_metadata', [$ic, 'on_upload'], PHP_INT_MAX);
@@ -1869,20 +1869,20 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
             if (!empty($missing)) {
                 $attempts = (int) get_post_meta($imageID, '_wpc_regen_retry_attempts', true);
                 if ($attempts < 1) {
-                    
+                    // First miss — leave _wpc_pending_thumb_regen set so the chain re-fires this image
                     update_post_meta($imageID, '_wpc_regen_retry_attempts', $attempts + 1);
                     error_log('[WPC RegenThumbs] image=' . $imageID . ' duration=' . $regen_duration . 's cap=' . $cap . ' missing=' . implode(',', $missing) . ' retry_queued');
                 } else {
-                    
+                    // Already retried once and still missing — give up gracefully + loud log
                     delete_post_meta($imageID, '_wpc_pending_thumb_regen');
                     delete_post_meta($imageID, '_wpc_regen_retry_attempts');
                     error_log('[WPC RegenThumbs] image=' . $imageID . ' duration=' . $regen_duration . 's cap=' . $cap . ' FAILED after retry, missing=' . implode(',', $missing));
-                    
-                    
+                    // Unlock the "Restoring..." card UI on give-up so the card
+                    // doesn't stay locked forever after a failed regen attempt.
                     set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored', 'time' => time()], 60);
                 }
             } else {
-                
+                // All sizes verified on disk — clean up retry counter + happy log
                 delete_post_meta($imageID, '_wpc_pending_thumb_regen');
                 delete_post_meta($imageID, '_wpc_regen_retry_attempts');
 
@@ -1897,7 +1897,7 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
                 set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored', 'time' => time()], 60);
             }
         } finally {
-            
+            // Decrement counter on EVERY exit (success, race-guard abort, exception).
             $current = (int) get_transient('wpc_regen_active_count');
             set_transient('wpc_regen_active_count', max(0, $current - 1), 300);
             delete_transient($lock_key);
@@ -1910,7 +1910,7 @@ if (!function_exists('wpc_regen_thumbs_hook')) {
     }
     add_action('wpc_regen_thumbs', 'wpc_regen_thumbs_hook', 10, 1);
 
-    
+    // Layer 1 AJAX endpoint — loopback POST target
     function wpc_regen_thumbs_ajax()
     {
         $wpc_rid821 = (int) ($_REQUEST['imageID'] ?? 0);
@@ -1932,7 +1932,7 @@ if (!function_exists('wpc_chain_next_pending_regen')) {
     {
         global $wpdb;
         $just_finished_id = (int) $just_finished_id;
-        
+        // Pick oldest pending regen excluding the one that just finished (safety vs. stuck post_meta).
         $row = $wpdb->get_row($wpdb->prepare("
             SELECT post_id FROM {$wpdb->postmeta}
             WHERE meta_key = '_wpc_pending_thumb_regen' AND post_id != %d
@@ -1952,11 +1952,11 @@ if (!function_exists('wpc_parent_has_backup')) {
         $imageID = (int) $imageID;
         if ($imageID <= 0) return false;
 
-        
+        // (a) Bunny CDN / pointer post_meta — set when service backs up source after first compress
         $backup_path = get_post_meta($imageID, 'wpc_backup_path', true);
         if (!empty($backup_path)) return true;
 
-        
+        // (b) /wpc-backups/<file> local backup folder
         $main = function_exists('get_attached_file') ? get_attached_file($imageID) : '';
         if ($main && defined('WP_CONTENT_DIR')) {
             $upload_dir = function_exists('wp_upload_dir') ? wp_upload_dir() : null;
@@ -1967,7 +1967,7 @@ if (!function_exists('wpc_parent_has_backup')) {
             }
         }
 
-        
+        // (c) Sibling _bkp file (legacy local backup pattern)
         if ($main && file_exists($main)) {
             $info = pathinfo($main);
             $bkp = $info['dirname'] . '/' . $info['filename'] . '_bkp.' . ($info['extension'] ?? 'jpg');
@@ -1994,7 +1994,7 @@ if (!function_exists('wpc_lazy_optimize_parent')) {
         }
 
         $params = wps_local_compress::buildOptimizeParams($imageID);
-        
+        // Parent POST: empty crops (no thumbs in lazy mode), single filenames entry for original
         $params['crops']          = '{}';
         $params['filenames']      = wp_json_encode(['original' => basename($parent_path)]);
         $params['triggerContext'] = 'lazy_fill_parent';
@@ -2016,7 +2016,7 @@ if (!function_exists('wpc_lazy_optimize_parent')) {
         $data = json_decode($body, true);
         if (empty($data['success']) || empty($data['optimizedResults'])) return false;
 
-        
+        // Save inline bytes to disk (atomic tmp + rename)
         $upload_dir = wp_upload_dir();
         $base_dir = rtrim($upload_dir['basedir'], '/') . '/' . dirname(get_post_meta($imageID, '_wp_attached_file', true));
         $written = 0;
@@ -2024,7 +2024,7 @@ if (!function_exists('wpc_lazy_optimize_parent')) {
             if (empty($variant['fileName']) || empty($variant['bytes'])) continue;
             $bytes = base64_decode($variant['bytes'], true);
             if ($bytes === false) continue;
-            
+            // Validate before writing. Determine format from filename extension.
             $fname = basename($variant['fileName']);
             $vfmt = 'jpeg';
             if (strpos($fname, '.avif') !== false) $vfmt = 'avif';
@@ -2059,7 +2059,7 @@ if (!function_exists('wpc_lazy_fill_variant')) {
             $backup_compress->backup_all_sizes($imageID);
         }
 
-        
+        // Write variant bytes to a tmp file for CURLFile upload
         $tmp_dir = function_exists('get_temp_dir') ? rtrim(get_temp_dir(), '/') : sys_get_temp_dir();
         $tmp_path = $tmp_dir . '/wpc_lazy_' . $imageID . '_' . wp_generate_password(8, false) . '_' . $variantFilename;
         if (file_put_contents($tmp_path, $variantBytes) === false) return false;
@@ -2070,7 +2070,7 @@ if (!function_exists('wpc_lazy_fill_variant')) {
         $params['triggerContext']    = 'lazy_fill_variant';
 
         $params['sizeLabel']         = $sizeLabel;
-        $params['skipBackup']        = '1'; 
+        $params['skipBackup']        = '1'; // REQUIRED — service must not back up the variant as if it were the parent
 
 
         $params['parentImageID']     = (string) $imageID;
@@ -2080,8 +2080,8 @@ if (!function_exists('wpc_lazy_fill_variant')) {
         $params['avif']  = '1';
         $params['webp']  = '1';
         $params['level'] = 'intelligent';
-        
-        
+        // Race-guard timestamp (ms since epoch). Service uses this to filter
+        // stale bg-swap callbacks against newer compresses for the same image. Required
 
 
         $params['compressStartedAt'] = (int) round(microtime(true) * 1000);
@@ -2107,7 +2107,7 @@ if (!function_exists('wpc_lazy_fill_variant')) {
             if (empty($variant['fileName']) || empty($variant['bytes'])) continue;
             $bytes = base64_decode($variant['bytes'], true);
             if ($bytes === false) continue;
-            
+            // Validate before writing.
             $fname = basename($variant['fileName']);
             $vfmt = 'jpeg';
             if (strpos($fname, '.avif') !== false) $vfmt = 'avif';
@@ -2177,7 +2177,7 @@ if (!function_exists('wpc_run_lazy_variant_ladder')) {
                     && $unscaled !== $parent_path
                     && file_exists($unscaled)
                     && is_readable($unscaled)) {
-                    
+                    // Probe widths via getimagesize — only swap when unscaled is genuinely larger.
                     $att_info  = @getimagesize($parent_path);
                     $orig_info = @getimagesize($unscaled);
                     $att_w  = is_array($att_info)  ? (int) ($att_info[0]  ?? 0) : 0;
@@ -2188,8 +2188,8 @@ if (!function_exists('wpc_run_lazy_variant_ladder')) {
                 }
             }
 
-            
-            
+            // Step 2: ensure parent is optimized. Check ic_local_variants for the parent's
+            // base format files. If absent, run lazy parent POST first.
             $variants = get_post_meta($attachmentId, 'ic_local_variants', true);
             $parent_has_avif = is_array($variants) && (isset($variants['original-avif']) || isset($variants['scaled-avif']));
             if (!$parent_has_avif) {
@@ -2200,18 +2200,18 @@ if (!function_exists('wpc_run_lazy_variant_ladder')) {
                 }
             }
 
-            
+            // Step 3: resolve each width's sizeLabel + filename, then per-variant POST.
             $delivered = 0;
             $source_width = WPC_Modern_Delivery::get_source_width($attachmentId, $meta);
             foreach ($widths as $w) {
                 $w = (int) $w;
                 if ($w <= 0) continue;
                 $resolved = WPC_Modern_Delivery::resolve_variant_filename($meta, $w, 'jpg', $source_width);
-                if ($resolved === null) continue; 
+                if ($resolved === null) continue; // > source or missing meta
                 $size_label = $resolved['size_label'];
                 $filename   = $resolved['filename'];
 
-                
+                // Local resize (fast: ~100-500ms; ~30-60 MB peak)
                 $bytes = wpc_lazy_resize_to_bytes($parent_path, $w);
                 if (!$bytes) {
                     error_log('[WPC LazyLadder] image=' . $attachmentId . ' resize failed for width=' . $w);
@@ -2251,13 +2251,13 @@ if (!function_exists('wpc_lazy_resize_to_bytes')) {
         if (is_wp_error($editor)) return false;
         $size = $editor->get_size();
         if (!is_array($size) || empty($size['width'])) return false;
-        
+        // Don't upscale — if target ≥ source, return source bytes directly.
         if ($targetWidth >= (int) $size['width']) {
             return file_get_contents($parentPath);
         }
         $resize = $editor->resize($targetWidth, $targetHeight ?: null, false);
         if (is_wp_error($resize)) return false;
-        
+        // Stream to memory via tmp file
         $tmp_dir = function_exists('get_temp_dir') ? rtrim(get_temp_dir(), '/') : sys_get_temp_dir();
         $tmp = $tmp_dir . '/wpc_lazy_resize_' . wp_generate_password(8, false) . '.jpg';
         $saved = $editor->save($tmp, 'image/jpeg');
@@ -2274,12 +2274,12 @@ if (!function_exists('wpc_resolve_size_label_width')) {
     {
         if (empty($size_label) || !is_array($meta)) return 0;
 
-        
+        // 'scaled' — the WP-attached file (post big_image_size_threshold)
         if ($size_label === 'scaled') {
             return (int) ($meta['width'] ?? 0);
         }
 
-        
+        // 'original' — the true unscaled original on disk (may be larger than meta['width'])
         if ($size_label === 'original') {
             if ($imageID && function_exists('wp_get_original_image_path')) {
                 $unscaled = wp_get_original_image_path($imageID);
@@ -2291,26 +2291,26 @@ if (!function_exists('wpc_resolve_size_label_width')) {
             return (int) ($meta['width'] ?? 0);
         }
 
-        
+        // 'wpc_<N>' (legacy ladder convention)
         if (preg_match('/^wpc_(\d+)$/', $size_label, $m)) {
             return (int) $m[1];
         }
 
-        
+        // '<N>w' (newer ladder convention)
         if (preg_match('/^(\d+)w$/', $size_label, $m)) {
             return (int) $m[1];
         }
 
-        
+        // '<N>x<N>' (WP-registered sizes like '2048x2048', '1536x1536')
         if (preg_match('/^(\d+)x(\d+)$/', $size_label, $m)) {
-            
+            // Use registered size first if present (it has the actual aspect-fitted width)
             if (!empty($meta['sizes'][$size_label]['width'])) {
                 return (int) $meta['sizes'][$size_label]['width'];
             }
             return (int) $m[1];
         }
 
-        
+        // WP-registered size by exact label match
         if (!empty($meta['sizes'][$size_label]['width'])) {
             return (int) $meta['sizes'][$size_label]['width'];
         }
@@ -2364,8 +2364,8 @@ if (!function_exists('wpc_backfill_missing_avif')) {
             $coverage[$base][$fmt] = true;
         }
 
-        
-        
+        // Pick base size_labels with WebP or JPEG but no AVIF, then resolve each to a width
+        // that wpc_generate_ladder_widths accepts. Skip widths that exceed our source-on-disk.
         $needs_avif = [];
         foreach ($coverage as $base => $c) {
             if (!$c['avif'] && ($c['webp'] || $c['jpeg'])) {
@@ -2447,7 +2447,7 @@ if (!function_exists('wpc_backfill_missing_avif')) {
     }
 }
 
-
+// Layer 1 dispatcher — non-blocking loopback POST (0.1s timeout). Skipped on Basic-Auth sites.
 if (!function_exists('wpc_fire_regen_thumbs_worker')) {
     function wpc_fire_regen_thumbs_worker($imageID)
     {
@@ -2469,8 +2469,8 @@ if (!function_exists('wpc_fire_regen_thumbs_worker')) {
     }
 }
 
-
-
+// Single-image retry after transient POST failure. Scheduled by wpc_handle_single_compress
+// with exponential backoff (30s → 120s → 300s, max 3 attempts).
 if (!function_exists('wpc_retry_compress_hook')) {
     function wpc_retry_compress_hook($imageID)
     {
@@ -2521,12 +2521,12 @@ if (!function_exists('wpc_fire_retry_compress_worker')) {
     }
 }
 
-
+// AJAX endpoint that the loopback POST hits. Just delegates to the existing hook.
 if (!function_exists('wpc_retry_compress_loopback_ajax')) {
     function wpc_retry_compress_loopback_ajax()
     {
-        
-        
+        // Auth parity with the ladder/prewarm loopbacks: anon without a valid single-use
+        // token gets 403 (this endpoint does heavy blocking compression — no open door).
         if (!function_exists('wpc_loopback_token_ok') || !wpc_loopback_token_ok('retry')) {
             wp_die('', '', ['response' => 403]);
         }
@@ -2544,12 +2544,12 @@ if (!function_exists('wpc_retry_compress_loopback_ajax')) {
     add_action('wp_ajax_nopriv_wpc_retry_compress_loopback', 'wpc_retry_compress_loopback_ajax');
 }
 
-
-
-
-
-
-
+/**
+ * Phase 1 instrumentation — rich log entry per backfill event.
+ * Ring buffer, 500 entries max. Consumed by Debug Tool panel + Phase 2.5 decisions.
+ *
+ * Callers can pass a single width/format or arrays; extras carries richer fields.
+ */
 if (!function_exists('wpc_log_variant_gen')) {
     function wpc_log_variant_gen($attachment_id, $widths_or_width, $formats_or_format, $extras = [])
     {
@@ -2563,13 +2563,13 @@ if (!function_exists('wpc_log_variant_gen')) {
             'f'   => is_array($formats_or_format) ? $formats_or_format : (string) $formats_or_format,
         ];
 
-        
+        // Merge any additional telemetry fields (duration_ms, trigger_source, etc.)
         if (is_array($extras)) {
             foreach ($extras as $k => $v) {
                 if (!isset($entry[$k])) $entry[$k] = $v;
             }
         } elseif (is_string($extras)) {
-            
+            // Legacy callers that passed context string as 4th arg
             $entry['ctx'] = $extras;
         }
 
@@ -2586,7 +2586,7 @@ if (!function_exists('wpc_update_ladder_stats')) {
         $stats = get_option('wpc_ladder_stats', []);
         if (!is_array($stats)) $stats = [];
 
-        
+        // Initialise missing fields so the option stays stable
         $defaults = [
             'fleet' => [
                 'total_backfills_fired'      => 0,
@@ -2601,7 +2601,7 @@ if (!function_exists('wpc_update_ladder_stats')) {
                 'samples'          => 0,
                 'sum_ms'           => 0,
                 'max_ms'           => 0,
-                
+                // 20-sample sliding window for p95 approximation
                 'recent_ms'        => [],
             ],
             'queue' => [
@@ -2619,7 +2619,7 @@ if (!function_exists('wpc_update_ladder_stats')) {
                 'unknown'   => 0,
             ],
         ];
-        
+        // Deep-merge defaults (PHP 7.2+ compatible)
         foreach ($defaults as $section => $fields) {
             if (!isset($stats[$section]) || !is_array($stats[$section])) {
                 $stats[$section] = $fields;
@@ -2647,7 +2647,7 @@ if (!function_exists('wpc_update_ladder_stats')) {
         if (isset($formats['webp'])) $stats['fleet']['total_variants_webp'] += (int) $formats['webp'];
         if (isset($formats['jpg']))  $stats['fleet']['total_variants_jpg']  += (int) $formats['jpg'];
 
-        
+        // Timing — only record non-zero durations
         if ($duration_ms > 0) {
             $stats['timing']['samples']++;
             $stats['timing']['sum_ms'] += $duration_ms;
@@ -2658,7 +2658,7 @@ if (!function_exists('wpc_update_ladder_stats')) {
             }
         }
 
-        
+        // Trigger attribution
         $trigger_key = isset($stats['triggers'][$trigger]) ? $trigger : 'unknown';
         $stats['triggers'][$trigger_key]++;
 
@@ -2666,9 +2666,9 @@ if (!function_exists('wpc_update_ladder_stats')) {
     }
 }
 
-
-
-
+/**
+ * Phase 1 instrumentation — record peak queue depth when worker picks up work.
+ */
 if (!function_exists('wpc_record_queue_depth')) {
     function wpc_record_queue_depth($depth)
     {
@@ -2687,10 +2687,10 @@ if (!function_exists('wpc_record_queue_depth')) {
     }
 }
 
-
-
-
-
+/**
+ * Compute p95 from the rolling 20-sample window (simple sort-and-pick).
+ * Returns int ms or 0 if no samples.
+ */
 if (!function_exists('wpc_ladder_stats_p95')) {
     function wpc_ladder_stats_p95($stats = null)
     {
@@ -2704,10 +2704,10 @@ if (!function_exists('wpc_ladder_stats_p95')) {
     }
 }
 
-
-
-
-
+/**
+ * Restore telemetry — cumulative stats mirroring wpc_ladder_stats structure.
+ * Sources: local_bkp (_bkp files), cloud_bkp (/wpc-backups/), service (local-mc /restore).
+ */
 if (!function_exists('wpc_update_restore_stats')) {
     function wpc_update_restore_stats($event_data)
     {
@@ -2786,10 +2786,10 @@ if (!function_exists('wpc_restore_stats_p95')) {
     }
 }
 
-
-
-
-
+/**
+ * Compress telemetry — cumulative stats for end-to-end singleCompressV4 operations.
+ * Source attribution: upload / single / bulk / retry / unknown.
+ */
 if (!function_exists('wpc_update_compress_stats')) {
     function wpc_update_compress_stats($event_data)
     {
@@ -2869,17 +2869,17 @@ if (!function_exists('wpc_compress_stats_p95')) {
     }
 }
 
-
-
-
-
+/**
+ * Phase 2.5 instrumentation — log variant emission counts per render.
+ * Counts how often each (attachment, width) pair appears in rendered srcset.
+ */
 if (!function_exists('wpc_log_variant_emitted')) {
     function wpc_log_variant_emitted($attachment_id, $widths)
     {
-        
+        // Rate-limit to avoid hammering options table on high-traffic sites
         $rate_key = 'wpc_emit_ratelimit_' . (int) $attachment_id;
         if (get_transient($rate_key)) return;
-        set_transient($rate_key, 1, 300); 
+        set_transient($rate_key, 1, 300); // 5 min per attachment
 
         $counts = get_option('wpc_variant_emit_counts', []);
         if (!is_array($counts)) $counts = [];
@@ -2887,7 +2887,7 @@ if (!function_exists('wpc_log_variant_emitted')) {
             $key = (int) $attachment_id . ':' . (int) $w;
             $counts[$key] = ($counts[$key] ?? 0) + 1;
         }
-        
+        // Cap to 10k keys to prevent options bloat
         if (count($counts) > 10000) {
             $counts = array_slice($counts, -10000, null, true);
         }
@@ -2895,25 +2895,25 @@ if (!function_exists('wpc_log_variant_emitted')) {
     }
 }
 
-
-
-
-
-
+/**
+ * Phase 1 activation pre-warm — homepage + top 5 pages scanned synchronously on toggle-on.
+ * Generates ladder widths for up to 20 "large" images immediately so first visitor sees
+ * optimized output. Bounded: max 20 images, 10s timeout per image.
+ */
 if (!function_exists('wpc_modern_delivery_prewarm')) {
     function wpc_modern_delivery_prewarm()
     {
         @set_time_limit(120);
         update_option('wpc_prewarm_status', ['state' => 'running', 'started_at' => time(), 'prewarmed' => 0], false);
 
-        
-        
+        // Skip on Basic-Auth sites — page fetch will 401 and hang.
+        // Shutdown + admin hook drain the queue as visitors browse instead.
         if (function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth()) {
             update_option('wpc_prewarm_status', ['state' => 'skipped_basic_auth', 'started_at' => time(), 'prewarmed' => 0], false);
             return 0;
         }
 
-        
+        // Pages to scan: homepage + sitemap top 5 (if available)
         $urls = [home_url('/')];
         $urls = array_merge($urls, wpc_get_prewarm_candidate_urls(5));
         $urls = array_unique($urls);
@@ -2928,7 +2928,7 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
             if (time() - $start_time > 90) break;
             if ($failed_pages >= 3) break;
 
-            
+            // Fetch page server-side
             $response = wp_remote_get($url, [
                 'timeout'   => 10,
                 'sslverify' => false,
@@ -2949,13 +2949,13 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
                 continue;
             }
 
-            
+            // Parse <img> tags
             if (!preg_match_all('#<img([^>]+)/?>#i', $html, $matches)) continue;
 
             foreach ($matches[1] as $attrs_str) {
                 if ($prewarmed >= 20) break;
 
-                
+                // Extract src + class
                 $src = '';
                 $class = '';
                 $width = 0;
@@ -2963,16 +2963,18 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
                 if (preg_match('#\bclass\s*=\s*["\']([^"\']+)["\']#i', $attrs_str, $m)) $class = $m[1];
                 if (preg_match('#\bwidth\s*=\s*["\']?(\d+)#i', $attrs_str, $m)) $width = (int) $m[1];
 
-                
+                // Skip small images (never LCP candidates)
                 if ($width > 0 && $width < 400) continue;
                 if (empty($src)) continue;
 
-                
+                // Resolve to attachment ID
                 $aid = 0;
                 if (preg_match('/\bwp-image-(\d+)\b/', $class, $m)) {
                     $aid = (int) $m[1];
                 } else {
-                    $aid = (int) attachment_url_to_postid($src);
+                    $aid = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_att_id'))
+                        ? (int) wps_rewriteLogic::wpc_att_id($src)
+                        : (int) attachment_url_to_postid($src);
                 }
                 if ($aid <= 0 || isset($seen_attachments[$aid])) continue;
                 $seen_attachments[$aid] = true;
@@ -2981,7 +2983,7 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
                 if (empty($meta) || empty($meta['file'])) continue;
                 if ((int) ($meta['width'] ?? 0) < 400) continue;
 
-                
+                // Find missing ladder widths for this attachment
                 $missing_avif = class_exists('WPC_Modern_Delivery')
                     ? WPC_Modern_Delivery::find_missing_ladder_widths($aid, $meta, 'avif')
                     : [];
@@ -2991,7 +2993,7 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
                 $missing = array_unique(array_merge($missing_avif, $missing_webp));
                 if (empty($missing)) continue;
 
-                
+                // Synchronously generate (blocks activation — user expects progress)
                 if (wpc_generate_ladder_widths($aid, $missing, 'prewarm')) {
                     $prewarmed++;
                 }
@@ -3012,15 +3014,15 @@ if (!function_exists('wpc_modern_delivery_prewarm')) {
     }
 }
 
-
-
-
+/**
+ * Get top page URLs for pre-warm — sitemap, front-page children, recent posts.
+ */
 if (!function_exists('wpc_get_prewarm_candidate_urls')) {
     function wpc_get_prewarm_candidate_urls($limit = 5)
     {
         $urls = [];
 
-        
+        // Recent posts (most likely to have hero images and get traffic)
         $posts = get_posts([
             'numberposts' => $limit,
             'post_status' => 'publish',
@@ -3031,7 +3033,7 @@ if (!function_exists('wpc_get_prewarm_candidate_urls')) {
             $urls[] = get_permalink($p->ID);
         }
 
-        
+        // WooCommerce shop page if active
         if (function_exists('wc_get_page_id')) {
             $shop_id = wc_get_page_id('shop');
             if ($shop_id > 0) $urls[] = get_permalink($shop_id);
@@ -3087,9 +3089,9 @@ class wps_local_compress
         self::$options = get_option(WPS_IC_OPTIONS);
         self::$siteUrl = site_url();
 
-        
-
-
+        /**
+         * If backup directories don't exist, create them
+         */
         if (!file_exists(self::$backup_directory)) {
             $made_dir = mkdir(self::$backup_directory, 0755);
             if (!$made_dir) {
@@ -3114,7 +3116,7 @@ class wps_local_compress
 
 
             add_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX, 2);
-            
+            // TODO: Causing problems with showing 0% saved, while actually compressed
         }
 
 
@@ -3184,7 +3186,7 @@ class wps_local_compress
             self::$settings['optimization'] = '';
         }
 
-        
+        // Setup paraams for POST to API
         self::$apiParams = [];
         self::$apiParams['apikey'] = self::$options['api_key'];
         self::$apiParams['quality'] = self::$settings['optimization'];
@@ -3194,10 +3196,10 @@ class wps_local_compress
         self::$apiParams['url'] = '';
     }
 
-    
-
-
-
+    /**
+     * Build optimization params for /optimize and /bulk-start service calls.
+     * Reads all Local Image Optimization settings and resolves Quality Override vs CDN level.
+     */
     public static function buildOptimizeParams($imageID = null, $site_url = null, $settings = null)
     {
         if (!$settings) {
@@ -3216,7 +3218,7 @@ class wps_local_compress
 
         $options = get_option(WPS_IC_OPTIONS);
 
-        
+        // Quality Override: None (0) = use CDN Optimization Level, otherwise use local override
         $local_quality = $settings['local_qualityLevel'] ?? '0';
         $cdn_quality_map = ['1' => 'lossless', '2' => 'intelligent', '3' => 'ultra'];
         $cdn_level = $cdn_quality_map[$settings['qualityLevel'] ?? '2'] ?? 'intelligent';
@@ -3224,7 +3226,7 @@ class wps_local_compress
             ? $cdn_level
             : ($cdn_quality_map[$local_quality] ?? $cdn_level);
 
-        
+        // Hosting detection — shared if low memory or short execution time
         $memory = wp_convert_hr_to_bytes(ini_get('memory_limit'));
         $max_exec = (int) ini_get('max_execution_time');
         $hosting = ($memory < 268435456 || $max_exec < 60) ? 'shared' : 'vps';
@@ -3276,26 +3278,26 @@ class wps_local_compress
         return json_encode($crops);
     }
 
-    
-
-
-
+    /**
+     * Build filenames JSON mapping size labels → local WordPress filenames.
+     * Sent to service so optimized files use the correct WP filenames (not hashes).
+     */
     public static function buildFilenamesJson($imageID) {
         $filenames = [];
 
-        
+        // Unscaled original
         $unscaledPath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : null;
         if ($unscaledPath) {
             $filenames['original'] = basename($unscaledPath);
         }
 
-        
+        // Scaled version (if exists)
         $meta = wp_get_attachment_metadata($imageID);
         if (!empty($meta['file']) && strpos($meta['file'], '-scaled') !== false) {
             $filenames['scaled'] = basename($meta['file']);
         }
 
-        
+        // All registered thumbnail sizes
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $sizeName => $info) {
                 if (!empty($info['file'])) {
@@ -3311,7 +3313,7 @@ class wps_local_compress
     public static function buildSizesJson($imageID) {
         $sizes = [];
 
-        
+        // Unscaled original
         $unscaled = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : null;
         if ($unscaled && file_exists($unscaled)) {
             $sizes['original'] = filesize($unscaled);
@@ -3321,12 +3323,12 @@ class wps_local_compress
         if ($main && file_exists($main)) {
             $meta = wp_get_attachment_metadata($imageID);
 
-            
+            // -scaled.jpg: WP 5.3+ big-image-auto-scale
             if (!empty($meta['file']) && strpos($meta['file'], '-scaled') !== false) {
                 $sizes['scaled'] = filesize($main);
             }
 
-            
+            // Sized crops (thumbnail, medium, medium_large, large, etc.)
             if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
                 $baseDir = dirname($main);
                 foreach ($meta['sizes'] as $sizeName => $info) {
@@ -3364,7 +3366,7 @@ class wps_local_compress
 
         if ($unscaled && $unscaled !== $file_path && file_exists($unscaled) && is_readable($unscaled)) {
             $unscaled_size = filesize($unscaled);
-            if ($unscaled_size >= 10240) { 
+            if ($unscaled_size >= 10240) { // 10 KB minimum — above the corruption threshold
                 $upload_path = $unscaled;
             }
         }
@@ -3374,7 +3376,7 @@ class wps_local_compress
             $upload_path = $params['file_path_override'];
         }
 
-        
+        // Build POST body with file
         $body = [
             'apikey'        => $params['apikey'] ?? '',
             'imageSite'     => $params['imageSite'] ?? '',
@@ -3422,7 +3424,7 @@ class wps_local_compress
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_USERAGENT      => 'WP-Compress/' . WPS_IC_LOCAL_V,
         ];
-        
+        // Staging-only: skip cert hostname check when WPC_IC_LOCAL_OPTIMIZE
 
 
         if (defined('WPC_STAGING') && WPC_STAGING) {
@@ -3435,7 +3437,7 @@ class wps_local_compress
         $headers = [];
 
 
-        if ($mem_bytes === 0 || $mem_bytes === -1 || $mem_bytes >= 134217728) { 
+        if ($mem_bytes === 0 || $mem_bytes === -1 || $mem_bytes >= 134217728) { // 128 MiB or unlimited
             $headers[] = 'X-Plugin-Accepts-Bytes-Inline: 1';
             $headers[] = 'X-Plugin-Accepts-Bg-Swap: 1';
 
@@ -3458,8 +3460,8 @@ class wps_local_compress
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
-        
-        
+        // Capture service TTFB (time-to-first-byte) separately from total round-trip
+        // so we can distinguish service-encoding time from response-body-download time.
         $ttfb_s      = (float) curl_getinfo($ch, CURLINFO_STARTTRANSFER_TIME);
         $total_s     = (float) curl_getinfo($ch, CURLINFO_TOTAL_TIME);
         $size_bytes  = (int) curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
@@ -3474,7 +3476,7 @@ class wps_local_compress
                 $svc_db_writes_ms = (int) round((float) ($decoded->timing->dbWritesMs  ?? 0));
             }
         }
-        
+        // Store for singleCompressV4 to consume in the DETAILED_TIMING log
         update_post_meta($imageID, '_wpc_last_post_timing', [
             'ttfb_ms'         => (int) round($ttfb_s * 1000),
             'total_ms'        => (int) round($total_s * 1000),
@@ -3487,13 +3489,13 @@ class wps_local_compress
         ]);
         curl_close($ch);
 
-        
+        // 403 = auth failure — don't retry, key is invalid
         if ($http_code === 403) {
             return new WP_Error('wpc_not_authorized', 'Local optimization not available on your plan');
         }
 
-        
-        
+        // 404/410 = endpoint deprecated or gone — don't retry, don't queue. Service's GET /optimize
+        // returned 410 pre-rc10.3d, returns 404 after. Either way: plugin/service version mismatch.
         if ($http_code === 404 || $http_code === 410) {
             if (function_exists('wpc_log_trigger')) {
                 wpc_log_trigger('endpoint_gone', $imageID, ['http_code' => $http_code]);
@@ -3523,7 +3525,7 @@ class wps_local_compress
             ]);
         }
 
-        
+        // Clear any stale failure marker on success
         delete_post_meta($imageID, '_wpc_last_post_fail');
 
         return ['body' => $response, 'response' => ['code' => $http_code]];
@@ -3638,7 +3640,7 @@ class wps_local_compress
             'permission_callback' => [$this, 'wpc_permission_api_key'],
         ]);
 
-        
+        // Per-image worker — bypasses global queue/lock, runs one image in parallel with others
         register_rest_route('wpc/v1', '/compress-single', [
             'methods'             => \WP_REST_Server::CREATABLE,
             'callback'            => [$this, 'wpc_handle_single_compress'],
@@ -3666,7 +3668,7 @@ class wps_local_compress
             ));
         });
 
-        
+        // Suppress auto-compress hook to prevent recursion
         remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
 
         $imageID = intval($request->get_param('imageID'));
@@ -3674,25 +3676,25 @@ class wps_local_compress
             return rest_ensure_response(['success' => false, 'reason' => 'no-image-id']);
         }
 
-        
+        // Per-image lock — prevents double-compressing same image
         $perImageLock = 'wpc_compress_lock_' . $imageID;
         if (get_transient($perImageLock)) {
             return rest_ensure_response(['success' => false, 'reason' => 'already-processing']);
         }
 
-        
-        
+        // Concurrency cap — prevents PHP worker pool exhaustion + service overload
+        // Default 2 (safe across all hosting). Override via WPC_MAX_CONCURRENT_COMPRESS constant.
         $maxConcurrent = defined('WPC_MAX_CONCURRENT_COMPRESS') ? max(1, (int) WPC_MAX_CONCURRENT_COMPRESS) : 2;
         $currentCount = (int) get_transient('wpc_single_concurrent');
 
         if ($currentCount >= $maxConcurrent) {
-            
+            // At cap — route to sequential queue instead of running another parallel worker
             $this->routeToQueue($imageID);
             error_log('[WPC Single] image=' . $imageID . ' routed-to-queue (concurrent=' . $currentCount . '/' . $maxConcurrent . ')');
             return rest_ensure_response(['success' => true, 'fallback' => 'queued-cap-reached']);
         }
 
-        
+        // Acquire slot — increment counter (transient TTL is safety valve if worker dies)
         set_transient('wpc_single_concurrent', $currentCount + 1, 300);
         set_transient($perImageLock, time(), 300);
 
@@ -3712,15 +3714,15 @@ class wps_local_compress
                 $instr_t_post_single = microtime(true);
             }
         } finally {
-            
+            // Decrement concurrency counter (with safety floor at 0)
             $now = (int) get_transient('wpc_single_concurrent');
             set_transient('wpc_single_concurrent', max(0, $now - 1), 300);
-            
+            // Release per-image lock
             delete_transient($perImageLock);
         }
         $elapsed = round(microtime(true) - $start, 2);
 
-        
+        // Check if compression actually succeeded
         $newStatus = get_post_meta($imageID, 'ic_status', true);
 
         if ($newStatus === 'compressed') {
@@ -3735,7 +3737,7 @@ class wps_local_compress
             return rest_ensure_response(['success' => true, 'fallback' => 'retry-scheduled']);
         }
 
-        
+        // 404/410 endpoint-gone is terminal — don't queue-retry (same handler, same failure)
         $last_err  = get_post_meta($imageID, '_wpc_last_post_fail', true);
         $http_code = is_array($last_err) ? (int) ($last_err['http_code'] ?? 0) : 0;
         if ($http_code === 404 || $http_code === 410) {
@@ -3746,16 +3748,16 @@ class wps_local_compress
         error_log('[WPC Single] image=' . $imageID . ' time=' . $elapsed . 's status=failed -> routing to queue');
         $this->routeToQueue($imageID);
 
-        
-        
+        // Keep wps_ic_compress_ transient so UI stays on "queued" state during queue retry.
+        // If queue worker also fails, ITS heartbeat fix sets status=restored to clear UI.
 
         return rest_ensure_response(['success' => true, 'fallback' => 'queued-after-failure', 'time' => $elapsed]);
     }
 
-    
-
-
-
+    /**
+     * Add an image to the sequential queue and fire the queue worker.
+     * Used by both the cap-exceeded path and the failure-retry path.
+     */
     private function routeToQueue($imageID) {
         $queue = get_option('wpc_compress_queue', []);
         if (!in_array($imageID, $queue)) {
@@ -3765,15 +3767,15 @@ class wps_local_compress
         $this->fireQueueWorker();
     }
 
-    
-
-
-
+    /**
+     * Sequential queue worker — processes one image at a time, then chains to the next.
+     * Only one worker runs at a time (enforced by wpc_compress_lock transient).
+     */
     public function wpc_handle_async_compress(\WP_REST_Request $request) {
-        
+        // Suppress auto-compress hook to prevent recursion
         remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
 
-        
+        // Acquire lock (5 min TTL — failsafe if worker crashes)
         if (get_transient('wpc_compress_lock')) {
             error_log('[WPC Queue] Worker blocked — lock already held');
             return rest_ensure_response(['success' => false, 'reason' => 'worker-already-running']);
@@ -3786,13 +3788,13 @@ class wps_local_compress
 
 
         try {
-            
+            // Process queue sequentially until empty
             while (true) {
                 wp_cache_delete('wpc_compress_queue', 'options');
                 $queue = get_option('wpc_compress_queue', []);
                 if (empty($queue)) break;
 
-                
+                // Take next image from front of queue
                 $imageID = intval(array_shift($queue));
                 update_option('wpc_compress_queue', $queue, false);
 
@@ -3811,7 +3813,7 @@ class wps_local_compress
 
                 error_log('[WPC Queue] Processing image=' . $imageID . ' position=' . ($processed + 1) . ' remaining=' . $remaining . ' waited=' . $queuedAt . 's');
 
-                
+                // Refresh lock TTL for each image (worker is alive)
                 set_transient('wpc_compress_lock', time(), 300);
 
                 $imgStart = microtime(true);
@@ -3820,8 +3822,8 @@ class wps_local_compress
                     if (!$backupOk) {
                         error_log('[WPC Queue] SKIPPED image=' . $imageID . ' — backup failed, will not compress');
                     } else {
-                        
-                        
+                        // Queue worker handles upload-originated images + single-click concurrency-cap overflow.
+                        // 'upload' is the most common source; rare cap-overflow gets the same attribution (minor).
                         $this->singleCompressV4($imageID, 'silent', true, 'upload');
                     }
                 } catch (\Exception $e) {
@@ -3835,12 +3837,12 @@ class wps_local_compress
                 $savings = get_post_meta($imageID, 'ic_savings', true) ?: '0';
                 error_log('[WPC Queue] Done image=' . $imageID . ' status=' . $status . ' savings=' . $savings . '% time=' . $imgElapsed . 's');
 
-                
+                // Always clean up this image's transients
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);
 
-                
-                
+                // If compression failed, set heartbeat so UI refreshes to uncompressed state
+                // (successful compression already sets this inside singleCompressV4)
                 if ($status !== 'compressed') {
                     set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 300);
                 }
@@ -3848,7 +3850,7 @@ class wps_local_compress
                 $processed++;
             }
         } finally {
-            
+            // Release lock — always, even if loop body threw past the inner catch blocks
             delete_transient('wpc_compress_lock');
         }
 
@@ -3858,11 +3860,11 @@ class wps_local_compress
         return rest_ensure_response(['success' => true, 'processed' => $processed]);
     }
 
-    
-
-
+    /**
+     * Fire the queue worker via non-blocking loopback (if not already running).
+     */
     public function fireQueueWorker() {
-        
+        // Don't fire if worker is already running
         if (get_transient('wpc_compress_lock')) return;
 
         $loopback_status = get_option('wpc_loopback_status', '');
@@ -3896,7 +3898,7 @@ class wps_local_compress
         }
     }
 
-    
+    // ─── Backup image files to /wpc-backups/ before compression ────────
 
 
     public function wait_for_regen_or_clear_stale($imageID, $max_wait_sec = 15)
@@ -3906,13 +3908,13 @@ class wps_local_compress
         $max_wait_sec = max(1, (int) $max_wait_sec);
 
         $start = microtime(true);
-        $poll_interval_us = 250000; 
+        $poll_interval_us = 250000; // 250ms polls
         $checked = 0;
 
         while ((microtime(true) - $start) < $max_wait_sec) {
             $marker = get_post_meta($imageID, '_wpc_pending_thumb_regen', true);
             if (empty($marker)) {
-                
+                // Regen finished (or never had one). Done.
                 if ($checked > 0) {
                     error_log('[WPC RegenWait] image=' . $imageID . ' cleared after ' .
                               round(microtime(true) - $start, 2) . 's');
@@ -3934,8 +3936,8 @@ class wps_local_compress
             usleep($poll_interval_us);
         }
 
-        
-        
+        // Budget exhausted, marker still fresh. Proceed anyway but log loudly so support
+        // can correlate any incomplete-filenames symptom.
         error_log('[WPC RegenWait] image=' . $imageID . ' BUDGET EXHAUSTED after ' .
                   $max_wait_sec . 's, proceeding with current disk state');
         return false;
@@ -3944,27 +3946,27 @@ class wps_local_compress
     public function backup_all_sizes($imageID) {
         $backupMode = self::$settings['backup'] ?? 'full';
 
-        
+        // 'off' = no backup, compression is permanent — proceed without backup
         if ($backupMode === 'off') {
             error_log('[WPC Backup] image=' . $imageID . ' mode=off — skipped');
             return true;
         }
 
-        
+        // 'cloud' = skip local backup — rely on service cloud backup only
         if ($backupMode === 'cloud') {
             update_post_meta($imageID, 'wpc_backup_mode', 'cloud');
             error_log('[WPC Backup] image=' . $imageID . ' mode=cloud — local skipped');
             return true;
         }
 
-        
+        // 'originals' or 'full' or 'local' or 'local-cloud' (legacy values) = local backup
         $backupBase = WP_CONTENT_DIR . '/wpc-backups/';
         $uploadDir = wp_upload_dir()['basedir'];
         $filesCopied = 0;
         $mainBackedUp = false;
         $backupFull = ($backupMode === 'full' || $backupMode === 'local-cloud');
 
-        
+        // Verify backup directory is writable
         $testDir = $backupBase . 'test_' . $imageID;
         if (!wp_mkdir_p($testDir)) {
             error_log('[WPC Backup] FAILED — backup directory not writable: ' . $backupBase);
@@ -3972,7 +3974,7 @@ class wps_local_compress
         }
         @rmdir($testDir);
 
-        
+        // Unscaled original (the real camera file) — ALWAYS backed up for local modes
         $unscaled = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : null;
         if ($unscaled && file_exists($unscaled)) {
             $rel = str_replace($uploadDir . '/', '', $unscaled);
@@ -3992,7 +3994,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Scaled version — backed up for 'full' and 'local'/'local-cloud' modes
         $scaled = get_attached_file($imageID);
         if ($backupFull || $backupMode === 'local') {
             if ($scaled && file_exists($scaled) && $scaled !== $unscaled) {
@@ -4014,7 +4016,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Thumbnails — only for 'full' mode (non-critical, don't block on failure)
         if ($backupFull) {
             $meta = wp_get_attachment_metadata($imageID);
             if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
@@ -4034,7 +4036,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Store backup metadata for restore
         $mainFile = $scaled ?: $unscaled;
         if ($mainFile) {
             update_post_meta($imageID, 'wpc_backup_path', str_replace($uploadDir . '/', '', $mainFile));
@@ -4046,10 +4048,10 @@ class wps_local_compress
     }
 
     public function wpc_permission_api_key(\WP_REST_Request $request) {
-        
+        // Read header-based key (preferred)
         $provided = $request->get_header('x-api-key');
 
-        
+        // Fallback: Authorization: Bearer <key>
         if (!$provided) {
             $auth = $request->get_header('authorization');
             if ($auth && preg_match('/Bearer\s+(.+)/i', $auth, $m)) {
@@ -4069,11 +4071,11 @@ class wps_local_compress
         return true;
     }
 
-    
-
-
-
-
+    /**
+     * Prefer defining the key in wp-config.php:
+     *   define('WPC_API_KEY', 'your-long-random-secret');
+     * Or set an option 'wpc_api_key'.
+     */
     public function wpc_get_expected_api_key($apikey) {
         $options = get_option(WPS_IC_OPTIONS);
          $expected_token = $options['api_key'];
@@ -4087,9 +4089,9 @@ class wps_local_compress
         return $expected_token;
     }
 
-    
-
-
+    /**
+     * Main handler: returns original, thumb, filesizes (and unscaled if present).
+     */
     public function wpc_handle_fetch_image(\WP_REST_Request $request) {
         $image_id = (int) $request->get_param('image_id');
 
@@ -4106,7 +4108,7 @@ class wps_local_compress
             return new \WP_Error('wpc_bad_request', 'Invalid image ID', ['status' => 402]);
         }
 
-        
+        // Save OLD post meta for restore usage (once)
         if (!get_post_meta($image_id, 'wpc_old_meta', true)) {
             $oldMeta = wp_get_attachment_metadata($image_id);
             if (!empty($oldMeta)) {
@@ -4114,34 +4116,34 @@ class wps_local_compress
             }
         }
 
-        
+        // Top-level fields
         $original = wp_get_attachment_url($image_id);
         $thumbArr = wp_get_attachment_image_src($image_id, 'thumbnail');
         $thumb    = is_array($thumbArr) && !empty($thumbArr[0]) ? $thumbArr[0] : '';
 
-        
+        // Build filesizes from attachment metadata (includes all custom sizes)
         $filesizes  = [];
         $meta       = wp_get_attachment_metadata($image_id);
         $uploads    = wp_upload_dir();
 
         if (!empty($meta) && !empty($meta['file'])) {
-            
+            // Base directory like "2025/08"
             $subdir   = ltrim(dirname($meta['file']), './\\');
             $baseUrl  = trailingslashit($uploads['baseurl']) . ($subdir ? trailingslashit($subdir) : '');
 
-            
+            // Every generated intermediate size that exists on disk
             if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
                 foreach ($meta['sizes'] as $sizeName => $info) {
                     if (!empty($info['file'])) {
-                        
+                        // Preserve the size key EXACTLY as stored in metadata (even if it has spaces)
                         $filesizes[$sizeName] = $baseUrl . $info['file'];
                     }
                 }
             }
 
-            
+            // Add "unscaled" if a non -scaled original exists
             if (!empty($original)) {
-                $origRelPath = $meta['file']; 
+                $origRelPath = $meta['file']; // e.g. 2025/08/file-scaled.jpeg
                 if (strpos($origRelPath, '-scaled.') !== false) {
                     $unscaledRel = str_replace('-scaled.', '.', $origRelPath);
                     $unscaledAbs = path_join($uploads['basedir'], $unscaledRel);
@@ -4152,7 +4154,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Ensure "thumbnail" key is present in filesizes (nice to have)
         if ($thumb && !isset($filesizes['thumbnail'])) {
             $filesizes['thumbnail'] = $thumb;
         }
@@ -4173,17 +4175,17 @@ class wps_local_compress
         return $response;
     }
 
-    
-
-
-
+    /**
+     * Function to verify if API Key is set and valid
+     * @return void
+     */
     public function checkAPIKey()
     {
         $options = get_option(WPS_IC_OPTIONS);
         $apikey = sanitize_text_field($_GET['apikey']) ?? '';
         $expected_token = !empty($options['api_key']) ? $options['api_key'] : '';
 
-        
+        // Fallback: if object cache returned empty, read directly from database
         if (empty($expected_token)) {
             global $wpdb;
             $row = $wpdb->get_var("SELECT option_value FROM {$wpdb->options} WHERE option_name = '" . WPS_IC_OPTIONS . "' LIMIT 1");
@@ -4204,10 +4206,10 @@ class wps_local_compress
     }
 
 
-    
-
-
-
+    /**
+     * Raise PHP / Server Limits
+     * @return void
+     */
     public function raiseLimits() {
         wp_raise_memory_limit('image');
         ini_set('memory_limit', '1024M');
@@ -4218,7 +4220,7 @@ class wps_local_compress
     {
         if (isset($_GET['restoreImage'])) {
 
-            
+            // Check if API Key is valid
             $this->checkAPIKey();
 
             if (!function_exists('download_url')) {
@@ -4236,7 +4238,7 @@ class wps_local_compress
                 wp_send_json_error('Invalid image ID', 400);
             }
 
-            
+            // Skip excluded images — still advance bulk counter
             if (get_post_meta($imageID, 'wps_ic_exclude_live', true) === 'true') {
                 $bulkStatus = get_option('wps_ic_BulkStatus');
                 if (empty($bulkStatus['restoredImageCount'])) {
@@ -4261,12 +4263,12 @@ class wps_local_compress
                 require_once(ABSPATH . "wp-admin" . '/includes/media.php');
             }
 
-            
+            // Use same restore logic as single image (restoreV4 approach)
             $restored = false;
             $scaledPath = get_attached_file($imageID);
             $unscaledPath = $scaledPath ? str_replace('-scaled.', '.', $scaledPath) : '';
 
-            
+            // Priority 1: Local _bkp backup
             $localBkpPaths = array_filter([$unscaledPath . '_bkp', $scaledPath . '_bkp']);
             foreach ($localBkpPaths as $bkpPath) {
                 if ($bkpPath && file_exists($bkpPath) && filesize($bkpPath) > 0) {
@@ -4285,7 +4287,7 @@ class wps_local_compress
                 }
             }
 
-            
+            // Priority 2: Download from service (prefer unscaled, fallback original)
             if (!$restored) {
                 $site_url = get_site_url();
                 $request_url = add_query_arg(array('imageID' => $imageID, 'imageSite' => $site_url, 'apikey' => get_option(WPS_IC_OPTIONS)['api_key']), WPC_IC_LOCAL_RESTORE);
@@ -4331,14 +4333,14 @@ class wps_local_compress
                 }
             }
 
-            
+            // Always clean metadata (even if download failed — prevents stuck state)
             if ($restored) {
-                
+                // Clean leftover .webp and .avif files
                 $attachedFile = get_attached_file($imageID);
                 if ($attachedFile) {
                     $dir = dirname($attachedFile);
                     $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
-                    
+                    // Mime-guard: never glob-delete the SOURCE format (webp original + WP thumbs)
                     $wpc_rg2_mime = (string) get_post_mime_type($imageID);
                     if ($wpc_rg2_mime !== 'image/webp') {
                         foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
@@ -4349,10 +4351,10 @@ class wps_local_compress
                 }
             }
 
-            
+            // Mark image as parsed for heartbeat to pick up
             $parsedImages[$imageID] = ['status' => $restored ? 'restored' : 'failed'];
 
-            
+            // Clean all optimization metadata
             delete_post_meta($imageID, 'ic_bulk_running');
             delete_post_meta($imageID, 'ic_compressing');
             delete_post_meta($imageID, 'wpc_images_compressed');
@@ -4368,7 +4370,7 @@ class wps_local_compress
 
             set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
-            
+            // Invalidate local cache for this image.
             if (function_exists('wpc_invalidate_local_cache')) { wpc_invalidate_local_cache(); }
 
 
@@ -4388,15 +4390,15 @@ class wps_local_compress
     }
 
 
-    
-
-
-
+    /**
+     * Get a List of All Images to Compress
+     * @return void
+     */
     public function fetchImages()
     {
         if (isset($_GET['fetchImageByID'])) {
 
-            
+            // Check if API Key is valid
             $this->checkAPIKey();
 
             $image_id = absint($_GET['fetchImageByID']);
@@ -4408,7 +4410,7 @@ class wps_local_compress
                 wp_send_json_error('Invalid image ID', 400);
             }
 
-            
+            // Save OLD post meta for restore usage
             if (!get_post_meta($image_id, 'wpc_old_meta')) {
                 $oldMeta = wp_get_attachment_metadata($image_id);
                 update_post_meta($image_id, 'wpc_old_meta', $oldMeta);
@@ -4427,7 +4429,7 @@ class wps_local_compress
                 }
             }
 
-            
+            // Add real original (unscaled) image if available
             $meta = wp_get_attachment_metadata($image_id);
             $upload_dir = wp_upload_dir();
 
@@ -4435,7 +4437,7 @@ class wps_local_compress
                 $original_path = path_join($upload_dir['basedir'], $meta['file']);
                 $original_url = trailingslashit($upload_dir['baseurl']) . $meta['file'];
 
-                
+                // Add real original (unscaled) image if available
                 if (!empty($original)) {
                     $unscaledFilePath = str_replace('-scaled.', '.', $original_path);
                     $unscaledFileUrl = str_replace('-scaled.', '.', $original_url);
@@ -4450,15 +4452,15 @@ class wps_local_compress
     }
 
 
-    
-
-
-
+    /**
+     * Download Compressed Image from API
+     * @return void
+     */
     public function downloadImages()
     {
         if (isset($_GET['downloadImage'])) {
 
-            
+            // Check if API Key is valid
             $expected_token = $this->checkAPIKey();
 
             require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -4470,7 +4472,7 @@ class wps_local_compress
                 wp_send_json_error('Invalid image ID', 400);
             }
 
-            
+            // Skip excluded images — but still advance bulk counter so progress completes
             if (get_post_meta($imageID, 'wps_ic_exclude_live', true) === 'true') {
                 if ($isBulk) {
                     $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -4482,7 +4484,7 @@ class wps_local_compress
                 die('skipped');
             }
 
-            
+            // Get original image URL to extract filename
             $original_url = wp_get_attachment_url($imageID);
 
             if (empty($original_url) || is_wp_error($original_url)) {
@@ -4491,15 +4493,15 @@ class wps_local_compress
 
             $basename = basename($original_url);
 
-            
+            // Skip the image, some error on API Side Occured
             if (!empty($apiStatus) && $apiStatus == 'skip') {
-                
+                // Stats
                 $stats = [];
                 $stats['original']['original']['size'] = 0;
                 $stats['original']['compressed']['size'] = 0;
                 $stats['original']['compressed']['thumbs'] = 0;
 
-                
+                // Parsed Images Array
                 $parsedImages = get_option('wps_ic_parsed_images');
 
                 if (!$parsedImages) {
@@ -4508,7 +4510,7 @@ class wps_local_compress
                     $parsedImages['total']['compressed'] = 0;
                 }
 
-                
+                // Flag for Bulk Memory
                 if ($isBulk) {
                     $thumbCount = $this->getAllThumbSizes();
                     $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -4519,7 +4521,7 @@ class wps_local_compress
                     $parsedImages[$imageID]['total']['original'] = $parsedImages['total']['original'];
                     $parsedImages[$imageID]['total']['compressed'] = $parsedImages['total']['compressed'];
 
-                    
+                    // Write down last compressed before-after
                     update_option('wps_ic_parsed_images', $parsedImages, false);
 
                     if (!$bulkStatus) {
@@ -4537,14 +4539,14 @@ class wps_local_compress
 
                     update_option('wps_ic_BulkStatus', $bulkStatus);
 
-                    
+                    // Write counter for bulk UI
                     $counter = [];
                     $counter['images'] = $bulkStatus['compressedImageCount'];
                     $counter['imagesAndThumbs'] = $bulkStatus['compressedThumbs'];
                     update_option('wps_ic_bulk_counter', $counter);
                 }
 
-                
+                // Compressing status
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);
 
@@ -4565,14 +4567,14 @@ class wps_local_compress
 
             $api_url = WPC_IC_LOCAL_DOWNLOAD . '?imageID=' . $imageID . '&apikey=' . $expected_token;
 
-            
+            // Retry up to 3 times for bulk reliability
             $response = null;
             for ($attempt = 1; $attempt <= 3; $attempt++) {
                 $response = wp_remote_get($api_url, ['timeout' => 20]);
                 if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) >= 200 && wp_remote_retrieve_response_code($response) < 300) {
                     break;
                 }
-                if ($attempt < 3) usleep(500000); 
+                if ($attempt < 3) usleep(500000); // 0.5s delay between retries
             }
             if (is_wp_error($response)) {
                 wp_die('API call failed: ' . $response->get_error_message());
@@ -4582,21 +4584,21 @@ class wps_local_compress
             $image_data = wp_remote_retrieve_body($response);
 
             if (empty($image_data) || $image_data == 'No optimized images found.') {
-                
+                // No Image Optimized
             } else {
                 $body = json_decode($image_data);
 
-                
+                // Save optimized image in WordPress uploads directory
                 $relative_path = get_post_meta($imageID, '_wp_attached_file', true);
                 $upload_dir = wp_upload_dir();
                 $absolute_path = $upload_dir['basedir'] . '/' . $relative_path;
                 $finalImagePath = str_replace($basename, '', $absolute_path);
 
-                
+                // Flags
                 $errors = false;
                 $done = false;
 
-                
+                // Stats
                 $stats = [];
                 $stats['original']['original']['size'] = 0;
                 $stats['original']['compressed']['size'] = 0;
@@ -4637,7 +4639,7 @@ class wps_local_compress
                     delete_transient('wps_ic_compress_' . $imageID);
                     delete_transient('wps_ic_queue_' . $imageID);
                     if ($isBulk) {
-                        
+                        // Advance bulk counter so a bulk pass doesn't stall on inline-only responses.
                         $bulkStatus = get_option('wps_ic_BulkStatus');
                         if ($bulkStatus) {
                             $bulkStatus['compressedImageCount'] = ($bulkStatus['compressedImageCount'] ?? 0) + 1;
@@ -4650,7 +4652,7 @@ class wps_local_compress
                 if (!empty($body->files)) {
                     foreach ($body->files as $key => $value) {
 
-                        
+                        // Optimized basename
                         $imageSize = $value->label;
                         $originalSize = $value->originalSize;
                         $compressedSize = $value->optimizedSize;
@@ -4673,14 +4675,14 @@ class wps_local_compress
 
                         if (file_exists($optimizedFilePath) || strpos($optimizedBasename, '.webp') !== false || strpos($optimizedBasename, '.avif') !== false) {
 
-                            
+                            // Download optimized
                             $response = wp_remote_get($optimizedUrl);
 
                             if (!is_wp_error($response)) {
                                 $image_data = wp_remote_retrieve_body($response);
 
-                                
-                                
+                                // Content-based validation. Replaces filename-only check
+                                // that allowed 678-byte HTML sentinels with .webp/.avif filenames.
                                 $legacy_fmt = 'jpeg';
                                 if (strpos($optimizedBasename, '.avif') !== false) $legacy_fmt = 'avif';
                                 elseif (strpos($optimizedBasename, '.webp') !== false) $legacy_fmt = 'webp';
@@ -4688,7 +4690,7 @@ class wps_local_compress
                                 $is_valid = wpc_is_valid_image_bytes($image_data, $legacy_fmt, isset($imageID) ? $imageID : 0, 'legacy_url_download', ['size_label' => $optimizedBasename, 'url' => $optimizedUrl]);
                                 if ($is_valid) {
 
-                                    
+                                    // Local backup: copy original to _bkp before overwrite when backup includes local
                                     $backupSetting = isset(self::$settings['backup']) ? self::$settings['backup'] : 'cloud';
                                     if (($backupSetting === 'local' || $backupSetting === 'local-cloud') && file_exists($optimizedFilePath)) {
                                         $pathInfo = pathinfo($optimizedFilePath);
@@ -4698,12 +4700,12 @@ class wps_local_compress
                                         }
                                     }
 
-                                    
+                                    // Remove original file
                                     if (file_exists($optimizedFilePath)) {
                                         unlink($optimizedFilePath);
                                     }
 
-                                    
+                                    // Save the file
                                     file_put_contents($optimizedFilePath, $image_data);
 
                                     echo "Downloaded and replaced: " . $optimizedBasename;
@@ -4721,9 +4723,9 @@ class wps_local_compress
 
                     }
 
-                    
+                    // Proceed if at least one file downloaded — thumbnail errors are non-critical
                     if ($done) {
-                        
+                        // Flag for Bulk Memory
                         if ($isBulk) {
                             $thumbCount = $this->getAllThumbSizes();
                             $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -4734,7 +4736,7 @@ class wps_local_compress
                             $parsedImages[$imageID]['total']['original'] = $parsedImages['total']['original'];
                             $parsedImages[$imageID]['total']['compressed'] = $parsedImages['total']['compressed'];
 
-                            
+                            // Write down last compressed before-after
                             update_option('wps_ic_parsed_images', $parsedImages, false);
 
                             if (!$bulkStatus) {
@@ -4752,14 +4754,14 @@ class wps_local_compress
 
                             update_option('wps_ic_BulkStatus', $bulkStatus);
 
-                            
+                            // Write counter for bulk UI
                             $counter = [];
                             $counter['images'] = $bulkStatus['compressedImageCount'];
                             $counter['imagesAndThumbs'] = $bulkStatus['compressedThumbs'];
                             update_option('wps_ic_bulk_counter', $counter);
                         }
 
-                        
+                        // Compressing status
                         delete_transient('wps_ic_compress_' . $imageID);
                         delete_transient('wps_ic_queue_' . $imageID);
 
@@ -4772,7 +4774,7 @@ class wps_local_compress
                         update_post_meta($imageID, 'ic_stats', $stats);
                         set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
 
-                        
+                        // Reset retry counter + clear dedup transients on success (Phase 3 completion hook)
                         delete_post_meta($imageID, '_wpc_optimize_attempts');
                         delete_transient('wpc_queued_' . $imageID);
                         delete_transient('wpc_failed_' . $imageID);
@@ -4780,7 +4782,7 @@ class wps_local_compress
                             wp_cache_delete('wpc_queued_' . $imageID, 'wpc');
                         }
 
-                        
+                        // Process skippedFormats from service response (L3)
                         $service_skipped = [];
                         if (!empty($body->skippedFormats) && is_array($body->skippedFormats)) {
                             foreach ($body->skippedFormats as $skip) {
@@ -4793,8 +4795,8 @@ class wps_local_compress
                             }
                         }
 
-                        
-                        
+                        // Store variant data for <picture> delivery and savings display
+                        // Schema (L2): 'url','originalSize','size','savings','skipped' (bool regression), 'skipped_formats' (array)
                         $variants = [];
                         foreach ($body->files as $variant) {
                             $orig = intval($variant->originalSize ?? 0);
@@ -4820,8 +4822,8 @@ class wps_local_compress
                         $dl_lock_name = 'wpc_bg_meta_' . (int) $imageID;
                         $dl_locked    = wpc_worker_lock($dl_lock_name);
                         try {
-                            
-                            
+                            // Re-read inside the lock to capture any bg-swap entries that landed
+                            // between this download starting and now.
                             $existing_variants = get_post_meta($imageID, 'ic_local_variants', true);
                             if (is_array($existing_variants) && !empty($existing_variants)) {
                                 foreach ($existing_variants as $existing_key => $existing_entry) {
@@ -4831,11 +4833,11 @@ class wps_local_compress
                                         $variants[$existing_key] = $existing_entry;
                                         continue;
                                     }
-                                    
+                                    // Pre-existing entry that this download didn't touch — keep it.
                                     if (!isset($variants[$existing_key])) {
                                         $variants[$existing_key] = $existing_entry;
                                     }
-                                    
+                                    // Otherwise: this download's fresh entry takes precedence.
                                 }
                             }
                             update_post_meta($imageID, 'ic_local_variants', $variants);
@@ -4854,13 +4856,13 @@ class wps_local_compress
                             update_post_meta($imageID, 'ic_savings_baseline', $best['orig']);
                         }
 
-                        
+                        // Invalidate CDN coexistence cache
                         if (function_exists('wpc_invalidate_local_cache')) {
                             wpc_invalidate_local_cache();
                         }
 
-                        
-                        
+                        // Ovo je radilo probleme jer generira thumbove iz -scaled verzije slike, i onda generira nove thumbove koji su scaled
+                        // Get full image path
                         $relative_path = get_post_meta($imageID, '_wp_attached_file', true);
                         $upload_dir = wp_upload_dir();
                         $file_path = $upload_dir['basedir'] . '/' . $relative_path;
@@ -4881,29 +4883,29 @@ class wps_local_compress
     }
 
 
-    
-
-
-
+    /**
+     * Start the Bulk Process (Restore or Compress)
+     * @return void
+     */
     public function initBulk()
     {
         if (!empty($_GET['getImageList'])) {
 
-            
+            // Check if API Key is valid
             $this->checkAPIKey();
 
             if (empty($_GET['action']) || $_GET['action'] == 'compress') {
-                
+                // Compress
                 $imagesToProcess = $this->getAllImageIDs();
             } else {
-                
+                // Restore
                 $imagesToProcess = $this->getImagesToRestore();
             }
 
-            
+            // Count number of found images
             $countImagesToOptimize = count($imagesToProcess);
 
-            
+            // Multiply by number of thumbnails
             $imageSizes = count($this->getAllThumbSizes());
             $thumbnailCount = $countImagesToOptimize * $imageSizes;
 
@@ -4922,16 +4924,16 @@ class wps_local_compress
     }
 
 
-    
-
-
-
-
+    /**
+     * Get All ImageIDs to Restore
+     * @param $per_page
+     * @return array|int[]|WP_Post[]
+     */
     public function getImagesToRestore($per_page = 100)
     {
         $all_ids = [];
 
-        
+        // List of allowed image MIME types
         $allowed_mimes = function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg', 'image/png', 'image/gif'];
 
         $meta_query = [
@@ -4940,13 +4942,13 @@ class wps_local_compress
             ['key' => 'wps_ic_exclude_live', 'compare' => 'NOT EXISTS'],
         ];
 
-        
+        // First query just to get total count
         $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => $meta_query]);
 
         $total_images = $initial_query->found_posts;
         $total_pages = ceil($total_images / $per_page);
 
-        
+        // Now loop through all pages
         for ($page = 1; $page <= $total_pages; $page++) {
             $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => $meta_query]);
 
@@ -4957,16 +4959,16 @@ class wps_local_compress
     }
 
 
-    
-
-
-
-
+    /**
+     * Get All Image IDs to Compress
+     * @param $per_page
+     * @return array|int[]|WP_Post[]
+     */
     public function getAllImageIDs($per_page = 100)
     {
         $all_ids = [];
 
-        
+        // List of allowed image MIME types
         $allowed_mimes = function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg', 'image/png', 'image/gif'];
 
 
@@ -4981,13 +4983,13 @@ class wps_local_compress
             ['key' => 'wps_ic_exclude_live', 'compare' => 'NOT EXISTS'],
         ];
 
-        
+        // First query just to get total count
         $initial_query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => 1, 'fields' => 'ids', 'meta_query' => $meta_query]);
 
         $total_images = $initial_query->found_posts;
         $total_pages = ceil($total_images / $per_page);
 
-        
+        // Now loop through all pages
         for ($page = 1; $page <= $total_pages; $page++) {
             $query = new WP_Query(['post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => $allowed_mimes, 'posts_per_page' => $per_page, 'paged' => $page, 'fields' => 'ids', 'no_found_rows' => true, 'meta_query' => $meta_query]);
 
@@ -4998,14 +5000,14 @@ class wps_local_compress
     }
 
 
-    
-
-
-
-
+    /**
+     * Delete WebP once Image Gets Deleted
+     * @param $post_id
+     * @return void
+     */
     public function on_delete($post_id)
     {
-        
+        // Delete webP if exists
         $imagesCompressed = get_post_meta($post_id, 'wpc_images_compressed', true);
         if (!empty($imagesCompressed) && is_array($imagesCompressed)) {
             foreach ($imagesCompressed as $image => $data) {
@@ -5015,7 +5017,7 @@ class wps_local_compress
             }
         }
 
-        
+        // AVIF sibling cleanup + trigger-state transient/queue cleanup (G10)
         $variants = get_post_meta($post_id, 'ic_local_variants', true);
         if (!empty($variants) && is_array($variants)) {
             foreach ($variants as $variant) {
@@ -5045,7 +5047,7 @@ class wps_local_compress
         $file_data = get_attached_file($imageID);
         $type = wp_check_filetype($file_data);
 
-        
+        // Is file extension allowed
         if (!in_array(strtolower($type['ext']), self::$allowed_types)) {
             return false;
         } else {
@@ -5062,19 +5064,19 @@ class wps_local_compress
             return true;
         }
 
-        
+        // Image Backup Exists
         if ($this->backup_exists($imageID)) {
             return true;
         }
 
-        
+        // Setup Image Stats
         $stats = [];
         $backup_list = [];
 
-        
+        // Create backup directory
         $this->create_backup_directory();
 
-        
+        // Get filename
         $image = wp_get_original_image_url($imageID);
         $image_url = $image;
         $parsed_url = parse_url($image_url);
@@ -5098,13 +5100,13 @@ class wps_local_compress
             return false;
         }
 
-        
+        // Define original / backup file paths
         $original_file_location = ABSPATH . $parsed_url['path'];
 
-        
+        // Where is backup saved?
         $backup_file_location = $backup_dir . '/' . $filename;
 
-        
+        // Stats
         $stats['original']['original']['size'] = filesize($original_file_location);
 
         copy($original_file_location, $backup_file_location);
@@ -5112,8 +5114,8 @@ class wps_local_compress
         $backup_list['original'] = $backup_file_location;
 
         if (!file_exists($backup_file_location)) {
-            
-            
+            // TODO: What then
+            //wp_send_json_error('failed-to-create-backup');
         }
 
         update_post_meta($imageID, 'ic_stats', $stats);
@@ -5130,7 +5132,7 @@ class wps_local_compress
         if (!empty($backup_exists) && is_array($backup_exists)) {
             foreach ($backup_exists as $filename => $backup_location) {
                 if (!empty($backup_location)) {
-                    
+                    // If backup file exists
                     if (file_exists($backup_location)) {
                         return $backup_location;
                     } else {
@@ -5177,21 +5179,21 @@ class wps_local_compress
             return $data;
         }
 
-        
-        
+        // Pre-empt any pending ladder backfill. The full compress will deliver
+        // every variant the ladder would have backfilled, so the ladder fire is redundant.
         self::preempt_ladder_for($imageID);
 
-        
+        // Save metadata to DB now so the async process can read filenames.
         remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
         wp_update_attachment_metadata($imageID, $data);
         add_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX, 2);
 
         update_post_meta($imageID, 'wpc_old_meta', $data);
 
-        
+        // Mark as queued so media library shows spinner
         set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'queued', 'time' => time()], 300);
 
-        
+        // Add to sequential queue
         $queue = get_option('wpc_compress_queue', []);
         if (!in_array($imageID, $queue)) {
             $queue[] = $imageID;
@@ -5202,7 +5204,7 @@ class wps_local_compress
         $workerRunning = get_transient('wpc_compress_lock') ? 'YES' : 'NO';
         error_log('[WPC Queue] on_upload image=' . $imageID . ' queue_size=' . $queueSize . ' worker_running=' . $workerRunning . ' elapsed=' . round(microtime(true) - $t0, 3) . 's');
 
-        
+        // Start worker if not already running
         $this->fireQueueWorker();
 
         return $data;
@@ -5232,14 +5234,14 @@ class wps_local_compress
             return $data;
         }
 
-        
-        
+        // Auto-optimization must be on for this mode (skips Manual + any kill-switch),
+        // mirroring on_upload's policy so an edit follows the same rule as a fresh upload.
         if (function_exists('wpc_auto_encoding_disabled') && wpc_auto_encoding_disabled()) {
             return $data;
         }
 
-        
-        
+        // Skip mid-restore / post-restore-regen cycles (mirror on_upload's guards) so an
+        // edit triggered by restore thumb-regen does not clobber just-restored pristine bytes.
         if (!empty($_GET['restoreImage'])
             || get_post_meta($attachment_id, '_wpc_pending_thumb_regen', true)
             || get_transient('wpc_post_restore_grace_' . $attachment_id)) {
@@ -5276,7 +5278,7 @@ class wps_local_compress
         }
     }
 
-    
+    // ─── Loopback health check ─────────────────────────────────
 
     private function canLoopback() {
         return get_option('wpc_loopback_status', '') !== 'fail';
@@ -5366,7 +5368,7 @@ class wps_local_compress
 
         update_post_meta($imageID, '_wpc_compress_started_at', time());
 
-        
+        // Is the image type supported
         if (!$this->is_supported($imageID)) {
             delete_transient('wps_ic_compress_' . $imageID);
             delete_transient('wps_ic_queue_' . $imageID);
@@ -5377,7 +5379,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Is the image already Compressed
         if ($this->is_already_compressed($imageID)) {
             delete_transient('wps_ic_compress_' . $imageID);
             delete_transient('wps_ic_queue_' . $imageID);
@@ -5398,7 +5400,7 @@ class wps_local_compress
             && method_exists('wps_ic_ajax', 'run_v2_optimize')) {
             $v2_result = wps_ic_ajax::run_v2_optimize($imageID);
             if (!empty($v2_result['ok'])) {
-                
+                // v2 success. Clear queue transients (we're done with this image).
                 delete_transient('wps_ic_compress_' . $imageID);
                 delete_transient('wps_ic_queue_' . $imageID);
                 error_log('[WPC] singleCompressV4 image=' . $imageID . ' source=' . $source . ' routed to v2 — SUCCESS');
@@ -5412,7 +5414,7 @@ class wps_local_compress
                 return 'success-v2';
             }
             error_log('[WPC] singleCompressV4 image=' . $imageID . ' source=' . $source . ' v2 failed — error=' . ($v2_result['error'] ?? 'unknown') . ' (NOT falling through to v1 — endpoint retired)');
-            
+            // Clean up so the queue worker doesn't loop forever on this image.
             delete_transient('wps_ic_compress_' . $imageID);
             delete_transient('wps_ic_queue_' . $imageID);
             if ($output === 'json') {
@@ -5421,18 +5423,18 @@ class wps_local_compress
             return 'v2-failed';
         }
 
-        
+        // Set the image status (always include time for staleness detection)
         set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'compressing', 'time' => time()], 120);
         set_transient('wps_ic_queue_' . $imageID, ['imageID' => $imageID, 'status' => 'waiting'], 30);
 
-        
+        // Save OLD post meta for restore usage
         if (!get_post_meta($imageID, 'wpc_old_meta')) {
             $oldMeta = wp_get_attachment_metadata($imageID);
             update_post_meta($imageID, 'wpc_old_meta', $oldMeta);
         }
 
-        
-        
+        // Prepare the request params WPC_IC_LOCAL_OPTIMIZE
+        // Site URL — force HTTPS if any SSL indicator is present (fixes HTTP→HTTPS redirect callback issue)
         $site_url = get_site_url();
         if (is_ssl()
             || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
@@ -5442,7 +5444,7 @@ class wps_local_compress
             $site_url = str_replace('http://', 'https://', $site_url);
         }
 
-        
+        // Build params and send image via POST with GET fallback
         $settings = get_option(WPS_IC_SETTINGS);
         $request_params = self::buildOptimizeParams($imageID, $site_url, $settings);
         $t_post = microtime(true);
@@ -5450,12 +5452,12 @@ class wps_local_compress
         $postTime = round(microtime(true) - $t_post, 2);
         error_log('[WPC Timing] image=' . $imageID . ' postOptimize=' . $postTime . 's');
 
-        
+        // Validate response — fail fast instead of leaving image in "compressing" state
         if (is_wp_error($response)) {
             delete_transient('wps_ic_compress_' . $imageID);
             delete_transient('wps_ic_queue_' . $imageID);
 
-            
+            // 403 = plan/auth issue — show specific message
             if ($response->get_error_code() === 'wpc_not_authorized') {
                 if ($output == 'json') {
                     wp_send_json_error(['msg' => 'local-not-authorized']);
@@ -5463,7 +5465,7 @@ class wps_local_compress
                 return;
             }
 
-            
+            // 404/410 = endpoint deprecated — terminal failure, don't retry or queue
             if ($response->get_error_code() === 'wpc_endpoint_gone') {
                 error_log('[WPC] ENDPOINT_GONE for image ' . $imageID . ' — ' . $response->get_error_message());
                 if ($output == 'json') {
@@ -5491,16 +5493,16 @@ class wps_local_compress
                     $delay = [5, 30, 120][$attempts];
                     update_post_meta($imageID, '_wpc_service_retry_attempts', $attempts + 1);
 
-                    
-                    
+                    // Layer 1: instant loopback (sub-second on healthy hosts). The retry
+                    // hook self-locks to prevent racing with layers 2+3.
                     if (function_exists('wpc_fire_retry_compress_worker')) {
                         wpc_fire_retry_compress_worker($imageID);
                     }
-                    
+                    // Layer 2: WP Cron at $delay (safety net for hosts where loopback is blocked)
                     if (!wp_next_scheduled('wpc_retry_compress', [$imageID])) {
                         wp_schedule_single_event(time() + $delay, 'wpc_retry_compress', [$imageID]);
                     }
-                    
+                    // Layer 3: admin_init drain (passive recovery on next admin page view) — registered globally
 
                     error_log('[WPC] image=' . $imageID . ' transient=HTTP' . $err_http . ' retry layers=loopback+cron+admin_init delay=' . $delay . 's attempt=' . ($attempts + 1));
                     if ($output == 'json') {
@@ -5508,7 +5510,7 @@ class wps_local_compress
                     }
                     return;
                 }
-                
+                // Retries exhausted — clean up counter, fall through to terminal failure
                 delete_post_meta($imageID, '_wpc_service_retry_attempts');
             }
 
@@ -5547,11 +5549,11 @@ class wps_local_compress
                     }
                     return;
                 }
-                
+                // Retries exhausted — clean up counter and fall through to terminal failure
                 delete_post_meta($imageID, '_wpc_service_retry_attempts');
             }
 
-            
+            // Compress failure telemetry — only counted once terminal retry path exhausted
             if (function_exists('wpc_update_compress_stats')) {
                 wpc_update_compress_stats([
                     'event'       => 'failed',
@@ -5566,7 +5568,7 @@ class wps_local_compress
             return;
         }
 
-        
+        // Extract AI metadata from POST response for stats modal
         $post_body = json_decode(wp_remote_retrieve_body($response));
         $ai_meta = null;
         if (!empty($post_body->optimizedResults[0]->ai)) {
@@ -5583,7 +5585,7 @@ class wps_local_compress
 
         $dl_files = $post_body->optimizedResults ?? [];
         if (empty($dl_files)) {
-            
+            // Fallback: call /download endpoint for older service versions
             $options = get_option(WPS_IC_OPTIONS);
             $download_url = WPC_IC_LOCAL_DOWNLOAD . '?imageID=' . $imageID . '&apikey=' . ($options['api_key'] ?? '');
             $dl_response = wp_remote_get($download_url, ['timeout' => 30, 'sslverify' => false]);
@@ -5608,17 +5610,17 @@ class wps_local_compress
             return;
         }
 
-        
+        // Backup is handled by backup_all_sizes() in the queue worker BEFORE singleCompressV4 is called
         error_log('[WPC Timing] image=' . $imageID . ' files_to_download=' . count($dl_files));
 
-        
+        // Capture baseline from disk BEFORE download loop overwrites files
         $_orig_path = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : false;
         $_scaled_path = get_attached_file($imageID);
         $_orig_size = ($_orig_path && file_exists($_orig_path)) ? filesize($_orig_path) : 0;
         $_scaled_size = ($_scaled_path && file_exists($_scaled_path)) ? filesize($_scaled_path) : 0;
         $disk_baseline = max($_orig_size, $_scaled_size);
 
-        
+        // Resolve local paths
         $original_url = wp_get_attachment_url($imageID);
         $basename = basename($original_url);
         $relative_path = get_post_meta($imageID, '_wp_attached_file', true);
@@ -5638,9 +5640,9 @@ class wps_local_compress
         $downloads = [];
         $inline_count = 0;
 
-        $variant_timings = []; 
+        $variant_timings = []; // [sizeLabel, fmt, path, bytes, decode_ms, write_ms]
 
-        
+        // First-hour diagnostic logging to confirm handler is firing in real traffic
         $log_until = (int) get_option('wpc_inline_log_until', 0);
         if ($log_until === 0) {
             $log_until = time() + 3600;
@@ -5694,11 +5696,11 @@ class wps_local_compress
             $primary_ext     = strtolower(pathinfo($primary_base, PATHINFO_EXTENSION));
             $primary_fmt     = ($primary_ext === 'avif') ? 'avif' : (($primary_ext === 'webp') ? 'webp' : 'jpeg');
             $size_label      = $value->sizeLabel ?? $value->label ?? pathinfo($primary_base, PATHINFO_FILENAME);
-            
+            // CDN dir only meaningful when url is present (inline-bytes mode → empty)
             $cdn_dir         = !empty($file_url) ? dirname($file_url) : '';
 
-            
-            
+            // Build per-format map. Old shape populates only the primary format from $value->url.
+            // New shape also adds webp/avif from $value->webpInfo->fileName / $value->avifInfo->fileName.
             $formats = [$primary_fmt => ['filename' => $primary_base, 'url' => $file_url]];
             if (!empty($value->webpInfo->fileName) && !isset($formats['webp'])) {
                 $webp_url = !empty($cdn_dir) ? ($cdn_dir . '/' . $value->webpInfo->fileName) : '';
@@ -5718,7 +5720,7 @@ class wps_local_compress
                     continue;
                 }
 
-                
+                // Inline path — rc10.3h.1 shipped with a flat `bytes` field per entry (not the nested
 
 
                 $inline_b64 = null;
@@ -5728,19 +5730,19 @@ class wps_local_compress
                     $inline_b64 = $value->inlineBytes->{$fmt};
                 }
                 if (!empty($inline_b64)) {
-                    
+                    // Capture decode + write time per variant for detailed diagnostics
                     $t_decode_start = microtime(true);
                     $bytes = base64_decode($inline_b64, true);
                     $t_decode_end = microtime(true);
                     if ($bytes !== false && strlen($bytes) > 0) {
-                        
+                        // Content validator: reject corrupt/sentinel bytes BEFORE writing
 
 
                         if (!wpc_is_valid_image_bytes($bytes, $fmt, $imageID, 'phase_a_inline')) {
                             $variant_timings[] = ['size' => $size_label, 'fmt' => $fmt, 'path' => 'inline-corrupt-rejected', 'bytes' => strlen($bytes), 'decode_ms' => (int) round(($t_decode_end - $t_decode_start) * 1000), 'write_ms' => 0];
                             continue;
                         }
-                        
+                        // Size regression guard — don't overwrite smaller existing file with larger optimized
                         $existing_size = file_exists($local_path) ? filesize($local_path) : 0;
                         if ($existing_size > 0 && strlen($bytes) >= $existing_size) {
                             $variant_timings[] = ['size' => $size_label, 'fmt' => $fmt, 'path' => 'inline-skip-regression', 'bytes' => strlen($bytes), 'decode_ms' => (int) round(($t_decode_end - $t_decode_start) * 1000), 'write_ms' => 0];
@@ -5770,7 +5772,7 @@ class wps_local_compress
                     }
                 }
 
-                
+                // URL path — queue for Phase B async download. Existing-file guard preserved from the earlier inline-write version.
                 if (file_exists($local_path) || $fmt === 'webp' || $fmt === 'avif') {
                     $downloads[] = ['url' => $info['url'], 'path' => $local_path, 'basename' => $info['filename']];
                     $variant_timings[] = ['size' => $size_label, 'fmt' => $fmt, 'path' => 'url-queued', 'bytes' => 0, 'decode_ms' => 0, 'write_ms' => 0];
@@ -5784,9 +5786,9 @@ class wps_local_compress
         }
 
 
-        
+        // One line per compress, parseable, includes everything needed to diagnose slow compresses.
 
-        
+        //          Customers can flip WP_DEBUG=true in wp-config.php when actively debugging.
         if (defined('WP_DEBUG') && WP_DEBUG) {
             $post_timing = get_post_meta($imageID, '_wpc_last_post_timing', true);
             $api_options = get_option(WPS_IC_OPTIONS);
@@ -5801,10 +5803,10 @@ class wps_local_compress
             $service_phase1_ms     = is_array($post_timing) ? (int) ($post_timing['phase1_ms'] ?? 0) : 0;
             $service_db_writes_ms  = is_array($post_timing) ? (int) ($post_timing['db_writes_ms'] ?? 0) : 0;
             $plugin_overhead_ms    = max(0, $phase_a_total_ms - $service_total_ms);
-            
+            // Source file size (input to service)
             $input_path = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : get_attached_file($imageID);
             $input_size = ($input_path && file_exists($input_path)) ? filesize($input_path) : 0;
-            
+            // Variant summary
             $inline_paths   = array_filter($variant_timings, function($v) { return $v['path'] === 'inline'; });
             $url_paths      = array_filter($variant_timings, function($v) { return $v['path'] === 'url-queued'; });
             $skip_paths     = array_filter($variant_timings, function($v) { return strpos($v['path'], 'skip') !== false; });
@@ -5853,11 +5855,11 @@ class wps_local_compress
             }
         }
 
-        
+        // Clear the one-shot timing meta now that we've logged it (runs regardless of log gating)
         delete_post_meta($imageID, '_wpc_last_post_timing');
 
-        
-        
+        // ── PHASE A: synchronous metadata write + async dispatch ──
+        // Service-skipped formats (L3) — parsed here so ic_local_variants reflects them immediately
         $service_skipped = [];
         if (!empty($post_body->skippedFormats) && is_array($post_body->skippedFormats)) {
             foreach ($post_body->skippedFormats as $skip) {
@@ -5882,7 +5884,7 @@ class wps_local_compress
                 'size'         => $opt,
                 'savings'      => $variant->savingsPercent ?? 0,
                 'skipped'      => ($orig > 0 && $opt > 0 && $opt >= $orig),
-                'local'        => false, 
+                'local'        => false, // Phase B sets true after successful disk write
             ];
             if (!empty($service_skipped[$label])) $entry['skipped_formats'] = $service_skipped[$label];
             $variants[$label] = $entry;
@@ -5891,8 +5893,8 @@ class wps_local_compress
 
         global $wpdb;
         $phaseA_lock_name = 'wpc_bg_meta_' . (int) $imageID;
-        
-        
+        // Instrumentation: Phase A merge timing splits. Captures lock-acquire wait,
+        // critical-section duration, and post-merge meta writes separately so we
 
 
         $instr_t_lock_start = microtime(true);
@@ -5901,7 +5903,7 @@ class wps_local_compress
         $instr_t_crit_start = microtime(true);
         $instr_merge_write_ms = 0;
         try {
-            
+            // Re-read inside the lock to capture any bg-swap entries that landed mid-flight.
             $existing_variants = get_post_meta($imageID, 'ic_local_variants', true);
             if (is_array($existing_variants) && !empty($existing_variants)) {
                 foreach ($existing_variants as $existing_key => $existing_entry) {
@@ -5911,12 +5913,12 @@ class wps_local_compress
                         $variants[$existing_key] = $existing_entry;
                         continue;
                     }
-                    
-                    
+                    // Pre-existing entry that Phase A didn't produce in this run AND wasn't
+                    // bg-swap-touched — keep it. Rare; usually means an old variant key.
                     if (!isset($variants[$existing_key])) {
                         $variants[$existing_key] = $existing_entry;
                     }
-                    
+                    // Otherwise: Phase A's freshly-encoded entry takes precedence.
                 }
             }
             $instr_t_write_start = microtime(true);
@@ -5950,8 +5952,8 @@ class wps_local_compress
             is_array($existing_variants) ? count($existing_variants) : 0
         ));
 
-        
-        
+        // Use shared live-derive helper with canonical 4-tier
+        // originalSize lookup. Card and modal share this logic so they always agree.
         $best = wpc_compute_best_savings($variants, $imageID);
         if ($best['pct'] > 0 && $best['orig'] > 0) {
             update_post_meta($imageID, 'ic_savings',          round($best['pct'], 1));
@@ -5960,7 +5962,7 @@ class wps_local_compress
             update_post_meta($imageID, 'ic_savings_baseline', $best['orig']);
         }
 
-        
+        // Clear in-progress transients + retry/dedup state (Phase 3 completion hook)
         delete_transient('wps_ic_compress_' . $imageID);
         delete_transient('wps_ic_queue_' . $imageID);
         delete_post_meta($imageID, '_wpc_optimize_attempts');
@@ -5969,7 +5971,7 @@ class wps_local_compress
         if (function_exists('wp_cache_delete')) wp_cache_delete('wpc_queued_' . $imageID, 'wpc');
         set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
 
-        
+        // Compress success telemetry — Phase A duration (service round-trip only, not Phase B)
         if (function_exists('wpc_update_compress_stats')) {
             wpc_update_compress_stats([
                 'event'       => 'success',
@@ -5980,20 +5982,20 @@ class wps_local_compress
 
         if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
 
-        
+        // ── PHASE B dispatch: 3-layer redundancy for shared hosting safety ──
         if (!empty($downloads)) {
             update_post_meta($imageID, '_wpc_pending_downloads', [
                 'downloads'       => $downloads,
                 'service_skipped' => $service_skipped,
                 'scheduled_at'    => time(),
             ]);
-            
+            // Layer 1: non-blocking loopback POST (immediate, sub-second on most hosts)
             if (function_exists('wpc_fire_download_worker')) wpc_fire_download_worker($imageID);
-            
+            // Layer 2: WP Cron in 30s (fallback for Basic-Auth or loopback-blocked hosts)
             if (!wp_next_scheduled('wpc_download_variants', [$imageID])) {
                 wp_schedule_single_event(time() + 30, 'wpc_download_variants', [$imageID]);
             }
-            
+            // Layer 3: admin_init scans pending meta every admin page view (registered globally)
         }
 
         if ($output == 'json') {
@@ -6032,7 +6034,7 @@ class wps_local_compress
                     CURLOPT_SSL_VERIFYPEER => false,
                     CURLOPT_FOLLOWLOCATION => true,
                 ];
-                
+                // Staging-only IP-direct dev pod (see comment at line ~3635).
                 if (defined('WPC_STAGING') && WPC_STAGING) {
                     $dl_opts[CURLOPT_SSL_VERIFYHOST] = 0;
                 }
@@ -6063,7 +6065,7 @@ class wps_local_compress
                     $errors = true; continue;
                 }
 
-                
+                // Size regression guard
                 $original_size  = file_exists($dl['path']) ? filesize($dl['path']) : 0;
                 $optimized_size = strlen($file_data);
                 if ($original_size > 0 && $optimized_size >= $original_size) {
@@ -6075,13 +6077,13 @@ class wps_local_compress
             }
             curl_multi_close($mh);
         } else {
-            
+            // Fallback: sequential via wp_remote_get (same atomic-write pattern)
             foreach ($downloads as $dl) {
                 $resp = wp_remote_get($dl['url'], ['timeout' => 20, 'sslverify' => false]);
                 if (is_wp_error($resp)) { $errors = true; continue; }
                 $file_data = wp_remote_retrieve_body($resp);
                 if (empty($file_data)) { $errors = true; continue; }
-                
+                // Content-based validation (see parallel branch above)
                 $dl_fmt = 'jpeg';
                 if (strpos($dl['basename'], '.avif') !== false) $dl_fmt = 'avif';
                 elseif (strpos($dl['basename'], '.webp') !== false) $dl_fmt = 'webp';
@@ -6112,7 +6114,7 @@ class wps_local_compress
                 if (is_wp_error($resp)) { $errors = true; continue; }
                 $file_data = wp_remote_retrieve_body($resp);
                 if (empty($file_data)) { $errors = true; continue; }
-                
+                // Content-based validation (see parallel branch above)
                 $dl_fmt = 'jpeg';
                 if (strpos($dl['basename'], '.avif') !== false) $dl_fmt = 'avif';
                 elseif (strpos($dl['basename'], '.webp') !== false) $dl_fmt = 'webp';
@@ -6134,8 +6136,8 @@ class wps_local_compress
         $dl_lock_name = 'wpc_bg_meta_' . (int) $imageID;
         $dl_locked = wpc_worker_lock($dl_lock_name);
         try {
-            
-            
+            // Re-read inside the lock — bg-swap may have updated entries since the URL-download
+            // started. The local/skipped fields we set below are safe to overlay onto the latest.
             $variants = get_post_meta($imageID, 'ic_local_variants', true);
             if (is_array($variants)) {
                 foreach ($downloads as $dl) {
@@ -6207,22 +6209,22 @@ class wps_local_compress
             $image['path'] = str_replace($upload_dir['baseurl'] . '/', '', $image[0]);
             $image['path'] = str_replace('./', '', $image['path']);
 
-            
-
-
+            /**
+             * Figure out the actual file path
+             */
             $file_path = get_attached_file($imageID);
             $file_basename = basename($image[0]);
 
-            
+            // Setup POST Params
             $headers = ['timeout' => 300, 'httpversion' => '1.0', 'blocking' => true,];
 
-            
+            // Figure out image type
             $exif = exif_imagetype($file_path);
             $mime = image_type_to_mime_type($exif);
 
             $file_location = WPS_IC_UPLOADS_DIR . '/' . $image['path'];
 
-            
+            // Fetch the image content
             $file_content = $wpc_filesystem->get_contents($file_path);
 
             $post_fields = ['action' => 'compress', 'imageID' => $imageID, 'filename' => $file_basename, 'apikey' => self::$apiParams['apikey'], 'key' => self::$apiParams['apikey'], 'image' => $image[0], 'url' => $image[0], 'exif' => $exif, 'mime' => $mime, 'content' => base64_encode($file_content), 'quality' => self::$apiParams['quality'], 'width' => '1', 'retina' => 'false', 'webp' => 'true'];
@@ -6245,7 +6247,7 @@ class wps_local_compress
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
-                
+                // Content validation before write (was previously unchecked)
                 if (!empty($body) && wpc_is_valid_image_bytes($body, 'webp', isset($imageID) ? $imageID : 0, 'legacy_webp_convert')) {
                     file_put_contents($webp_file_location, $body);
                     clearstatcache();
@@ -6303,14 +6305,14 @@ class wps_local_compress
         $backupBase = WP_CONTENT_DIR . '/wpc-backups/';
         $uploadDir = wp_upload_dir()['basedir'];
 
-        
+        // Check if backup mode was 'off' — compression was permanent
         $backupMode = get_post_meta($imageID, 'wpc_backup_mode', true);
         if ($backupMode === 'off') {
             error_log('[WPC Restore] BLOCKED image=' . $imageID . ' — backup mode was off, compression is permanent');
             return false;
         }
 
-        
+        // Skipped images — just clear metadata
         $skipped = get_post_meta($imageID, 'ic_skipped', true);
         if (!empty($skipped) && $skipped == 'true') {
             $this->cleanRestoreMeta($imageID);
@@ -6318,10 +6320,10 @@ class wps_local_compress
             return true;
         }
 
-        
+        // Suppress on_upload hook during any regeneration in this function
         remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
 
-        
+        // ── PRIORITY 1: New /wpc-backups/ directory ──────────────────
         $backupRel = get_post_meta($imageID, 'wpc_backup_path', true);
         if ($backupRel && file_exists($backupBase . $backupRel)) {
             $restored = $this->restore_from_new_backup($imageID, $backupBase, $uploadDir);
@@ -6331,7 +6333,7 @@ class wps_local_compress
             }
         }
 
-        
+        // ── PRIORITY 2: Legacy backup directory (ic_backup_images meta) ──
         if (!$restored) {
             $legacyBackup = get_post_meta($imageID, 'ic_backup_images', true);
             if (!empty($legacyBackup) && is_array($legacyBackup)) {
@@ -6344,7 +6346,7 @@ class wps_local_compress
                     @copy($legacyPath, $targetPath);
                     @unlink($legacyPath);
 
-                    
+                    // Defer thumbnail regen to async worker (same as /wpc-backups/ path)
                     update_post_meta($imageID, '_wpc_pending_thumb_regen', [
                         'regen_source' => $targetPath,
                         'backup_mode'  => 'legacy',
@@ -6361,7 +6363,7 @@ class wps_local_compress
             }
         }
 
-        
+        // ── PRIORITY 3: Inline _bkp files ────────────────────────────
         if (!$restored) {
             $restored = $this->restore_from_bkp_files($imageID);
             if ($restored) {
@@ -6370,7 +6372,7 @@ class wps_local_compress
             }
         }
 
-        
+        // ── PRIORITY 4: Cloud download from service ──────────────────
         if (!$restored) {
             $restored = $this->restore_from_cloud($imageID);
             if ($restored) {
@@ -6379,7 +6381,7 @@ class wps_local_compress
             }
         }
 
-        
+        // ── PRIORITY 5: Safety net — regenerate from unscaled ────────
         if (!$restored) {
             $restored = $this->regenerate_from_unscaled($imageID);
             if ($restored) {
@@ -6388,8 +6390,8 @@ class wps_local_compress
             }
         }
 
-        
-        
+        // Gate cleanup_backups on actual restore success. If we couldn't
+        // verify a single byte-identical copy, the backup directory is the only
 
         if ($restored) {
             $this->cleanup_backups($imageID, $backupBase, $uploadDir);
@@ -6437,8 +6439,8 @@ class wps_local_compress
             wpc_v2_purge_html_for_attachment((int) $imageID, 'restoreV4');
         }
 
-        
-        
+        // Clear lazy_cdn sha256 dedup transients tied to variants
+        // that just got deleted. Without this, the 10-min dedup TTL would
 
 
         if (function_exists('wpc_v2_lazy_cdn_clear_dedup_transients')) {
@@ -6457,7 +6459,7 @@ class wps_local_compress
         return $restored;
     }
 
-    
+    // ─── Restore sub-functions ──────────────────────────────────────
 
 
     private function verify_restore_atomic($src, $dest, $imageID, $size_label = 'unknown') {
@@ -6542,7 +6544,7 @@ class wps_local_compress
 
         $filesAttempted = 0;
 
-        
+        // Restore unscaled
         if ($unscaled) {
             $rel = str_replace($uploadDir . '/', '', $unscaled);
             $src = $backupBase . $rel;
@@ -6552,7 +6554,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Restore scaled
         if ($scaled && $scaled !== $unscaled) {
             $rel = str_replace($uploadDir . '/', '', $scaled);
             $src = $backupBase . $rel;
@@ -6562,7 +6564,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Restore thumbnails
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             $dir = dirname($scaled ?: $unscaled);
             foreach ($meta['sizes'] as $size => $info) {
@@ -6577,13 +6579,13 @@ class wps_local_compress
             }
         }
 
-        
-        
+        // If any attempted file failed verification, log it explicitly so the gap
+        // between attempted/copied is visible in debug.log.
         if ($filesAttempted > $filesCopied) {
             error_log('[WPC Restore] new_backup PARTIAL_FAIL image=' . $imageID . ' attempted=' . $filesAttempted . ' verified=' . $filesCopied);
         }
 
-        
+        // If backup mode was 'originals', or main file is missing, regenerate from unscaled
         $backupMode = get_post_meta($imageID, 'wpc_backup_mode', true) ?: 'full';
         $needsRegen = ($backupMode === 'originals' || $backupMode === 'local');
         $mainMissing = ($scaled && !file_exists($scaled) && $unscaled && file_exists($unscaled));
@@ -6623,7 +6625,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Also check exact _bkp suffix (e.g. photo-scaled_bkp.jpg)
         $scaledBkp = preg_replace('/\.(jpe?g|png|gif)$/i', '_bkp.$1', $scaled);
         if ($scaledBkp && file_exists($scaledBkp)) {
             if ($this->verify_restore_atomic($scaledBkp, $scaled, $imageID, 'scaled')) {
@@ -6632,7 +6634,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Defer thumbnail regen to async worker
         if ($restored && $scaled && !file_exists($scaled) && $unscaled && file_exists($unscaled) && $unscaled !== $scaled) {
             update_post_meta($imageID, '_wpc_pending_thumb_regen', [
                 'regen_source' => $unscaled,
@@ -6662,13 +6664,13 @@ class wps_local_compress
 
         if (empty($data['backupUrls'])) return false;
 
-        
+        // Collect URLs by label
         $byLabel = [];
         foreach ($data['backupUrls'] as $b) {
             $byLabel[$b['sizeLabel']] = $b['fileUrl'];
         }
 
-        
+        // Try in priority order
         $scaledPath = get_attached_file($imageID);
         $unscaledPath = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : $scaledPath;
         $hasScaled = ($unscaledPath && $unscaledPath !== $scaledPath);
@@ -6689,7 +6691,7 @@ class wps_local_compress
 
 
             if ($label === 'unscaled' && $hasScaled) {
-                
+                // Restore unscaled original, regenerate scaled + thumbnails
                 $ok = $this->verify_restore_atomic($tmp, $unscaledPath, $imageID, 'cloud_unscaled');
                 @unlink($tmp);
                 if (!$ok) {
@@ -6703,7 +6705,7 @@ class wps_local_compress
                 add_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX, 2);
                 if ($newMeta) wp_update_attachment_metadata($imageID, $newMeta);
             } else {
-                
+                // Restore directly to the attached file path
                 $ok = $this->verify_restore_atomic($tmp, $scaledPath, $imageID, 'cloud_' . $label);
                 @unlink($tmp);
                 if (!$ok) {
@@ -6715,7 +6717,7 @@ class wps_local_compress
             return true;
         }
 
-        
+        // Last resort: try first available URL regardless of label
         if (!empty($data['backupUrls'][0]['fileUrl'])) {
             $tmp = download_url($data['backupUrls'][0]['fileUrl'], 60);
             if (!is_wp_error($tmp)) {
@@ -6745,7 +6747,7 @@ class wps_local_compress
             return true;
         }
 
-        
+        // If unscaled == scaled and file exists, it's just a small image — nothing to regenerate
         if ($scaled && file_exists($scaled)) return true;
 
         return false;
@@ -6758,7 +6760,7 @@ class wps_local_compress
         $scaled = get_attached_file($imageID);
         $unscaled = function_exists('wp_get_original_image_path') ? wp_get_original_image_path($imageID) : $scaled;
 
-        
+        // Sub-size backups only — masters are preserved.
         $filesToClean = [];
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             $dir = dirname($scaled ?: $unscaled);
@@ -6772,20 +6774,20 @@ class wps_local_compress
             if (file_exists($backupFile)) @unlink($backupFile);
         }
 
-        
-        
+        // Keep wpc_backup_path meta so restore Priority 1 continues to work for
+        // future restores. The masters are still on disk in wpc-backups/ pointed to by this.
     }
 
-    
+    // ─── End restore sub-functions ──────────────────────────────────
 
 
-    
-
-
-
+    /**
+     * Clean all optimization metadata and variants. Used by every restore exit path.
+     * Guarantees the image is never stuck in a compressed/optimizing state.
+     */
     private function cleanRestoreMeta($imageID) {
-        
-        
+        // Restore finished: release the in-flight micro-lock (every exit path
+        // runs through here). The next render may re-trigger immediately.
         delete_transient('wpc_restoring_' . $imageID);
 
 
@@ -6802,8 +6804,8 @@ class wps_local_compress
         if ($attachedFile) {
             $dir = dirname($attachedFile);
             $baseName = pathinfo(wp_get_original_image_path($imageID) ?: $attachedFile, PATHINFO_FILENAME);
-            
-            
+            // Mime-guard: for a webp SOURCE, {base}*.webp matches the original itself and
+            // WP's own thumbnails — restore must never glob-delete the source format
             $wpc_rg_mime = (string) get_post_mime_type($imageID);
             if ($wpc_rg_mime !== 'image/webp') {
                 foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
@@ -6826,14 +6828,14 @@ class wps_local_compress
         delete_transient('wps_ic_compress_' . $imageID);
         delete_transient('wps_ic_queue_' . $imageID);
 
-        
+        // Modern Image Delivery trigger-state cleanup
         delete_post_meta($imageID, '_wpc_optimize_attempts');
         delete_transient('wpc_queued_' . $imageID);
         delete_transient('wpc_failed_' . $imageID);
         if (function_exists('wp_cache_delete')) {
             wp_cache_delete('wpc_queued_' . $imageID, 'wpc');
         }
-        
+        // Remove from in-flight queue option
         $queue = get_option('wpc_compress_queue', []);
         if (is_array($queue) && in_array($imageID, $queue)) {
             $queue = array_values(array_diff($queue, [$imageID]));
@@ -6860,8 +6862,8 @@ class wps_local_compress
             update_option('wpc_ladder_gen_queue_has_items', !empty($ladder_queue), false);
         }
 
-        
-        
+        // Phase B async-download cleanup: cancel any in-flight variant download
+        // so we don't race-write files to a just-restored attachment
         delete_post_meta($imageID, '_wpc_pending_downloads');
         delete_post_meta($imageID, '_wpc_download_fail_count');
         $next_dl = wp_next_scheduled('wpc_download_variants', [$imageID]);
@@ -6905,7 +6907,7 @@ class wps_local_compress
         if (!empty($backup_images) && is_array($backup_images)) {
             $compressed_images = get_post_meta($imageID, 'ic_compressed_images', true);
 
-            
+            // Remove Generated Images
             if (!empty($compressed_images)) {
 
                 foreach ($compressed_images as $index => $path) {
@@ -6936,24 +6938,24 @@ class wps_local_compress
             if (!$unscaledPath) $unscaledPath = $scaledPath;
             $hasScaledVersion = ($scaledPath !== $unscaledPath);
 
-            
+            // Restore only full (backups stored as 'original' key, legacy used 'full')
             $restore_image_path = isset($backup_images['original']) ? $backup_images['original'] : (isset($backup_images['full']) ? $backup_images['full'] : '');
 
-            
+            // Also check for _bkp file as alternative source
             $scaledBkp = $scaledPath . '_bkp';
             $inlineBkp = preg_replace('/\.(jpe?g|png|gif)$/i', '_bkp.$1', $scaledPath);
 
             if (!empty($restore_image_path) && file_exists($restore_image_path)) {
-                
+                // Backup directory restore
                 if ($hasScaledVersion) {
-                    
+                    // Has separate unscaled — restore to unscaled, regen scaled
                     @copy($restore_image_path, $unscaledPath);
                     if (file_exists($scaledPath)) @unlink($scaledPath);
                     remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
                     $newMeta = wp_generate_attachment_metadata($imageID, $unscaledPath);
                     if ($newMeta) wp_update_attachment_metadata($imageID, $newMeta);
                 } else {
-                    
+                    // No separate unscaled — restore directly to the attached file path
                     @copy($restore_image_path, $scaledPath);
                     remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
                     $newMeta = wp_generate_attachment_metadata($imageID, $scaledPath);
@@ -6961,7 +6963,7 @@ class wps_local_compress
                 }
                 @unlink($restore_image_path);
             } elseif (file_exists($inlineBkp)) {
-                
+                // _bkp inline file restore (e.g. photo-scaled_bkp.jpg)
                 @copy($inlineBkp, $scaledPath);
                 @unlink($inlineBkp);
                 remove_filter('wp_generate_attachment_metadata', [$this, 'on_upload'], PHP_INT_MAX);
@@ -6970,7 +6972,7 @@ class wps_local_compress
 
                 clearstatcache();
 
-                
+                // Remove all compression meta
                 delete_post_meta($imageID, 'ic_stats');
                 delete_post_meta($imageID, 'ic_compressed_images');
                 delete_post_meta($imageID, 'ic_compressed_thumbs');
@@ -6992,7 +6994,7 @@ class wps_local_compress
                 return true;
             }
 
-            
+            // Backup file missing — clean up the stale meta and fall through to newer restore logic
             error_log('[WPC Restore] olderBackup file MISSING image=' . $imageID . ' path=' . $restore_image_path);
             delete_post_meta($imageID, 'ic_backup_images');
             delete_post_meta($imageID, 'ic_compressed_images');
@@ -7024,12 +7026,12 @@ class wps_local_compress
             return true;
         }
 
-        
+        // Is the image in process
         $inProcess = get_post_meta($imageID, 'ic_bulk_running', true);
         if ($inProcess && $inProcess == 'true') {
         }
 
-        
+        // Remote backup?
 
 
         $params = ['timeout' => 300, 'method' => 'POST', 'sslverify' => false, 'body' => ['getS3Backup' => true, 'apikey' => self::$apiParams['apikey'], 'imageID' => $imageID], 'user-agent' => WPS_IC_API_USERAGENT];
@@ -7080,7 +7082,7 @@ class wps_local_compress
                         unset($downloadImage);
 
 
-                        
+                        // Remove meta tags
                         delete_post_meta($imageID, 'wpc_images_compressed');
                         delete_post_meta($imageID, 'ic_stats');
                         delete_post_meta($imageID, 'ic_compressed_images');
@@ -7101,7 +7103,7 @@ class wps_local_compress
                         $oldMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
                         wp_update_attachment_metadata($imageID, $oldMeta);
 
-                        
+                        // Add for heartbeat to pickup
                         set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
                         $this->writeLog('Ended Image ID - restored ' . $imageID);
@@ -7117,7 +7119,7 @@ class wps_local_compress
 
                         $imageUrl = $imageUrl['s3'];
 
-                        
+                        // Image URL was already restored
                         if (in_array($imageUrl, $alreadyRestored)) {
                             $this->writeLog('Image was already restored');
                             $this->writeLog($imageUrl);
@@ -7130,29 +7132,29 @@ class wps_local_compress
                             $originalFilePath = wp_get_original_image_path($imageID);
                             $originalFilename = wp_basename($originalFilePath);
                             $this->pathToDir = str_replace($originalFilename, '', $originalFilePath);
-                            
+                            //
                             $imagePath = wp_get_attachment_image_src($imageID, $imageSize);
                             $imagePath = wp_basename($imagePath[0]);
                             $imagePath = $this->pathToDir . $imagePath;
                         }
 
-                        
+                        // Local Filename
                         $localFilename = wp_basename($imagePath);
 
-                        
+                        // Filename from API
                         $sentFilename = wp_basename($imageUrl);
                         $sentFilename = explode('?', $sentFilename);
                         $sentFilename = $sentFilename[0];
 
                         if ($sentFilename !== $localFilename) {
-                            
+                            // Filename not matching?! Error!
                             $sentFilename = explode('-', $sentFilename);
                             $removed = array_shift($sentFilename);
                             $sentFilename = implode('-', $sentFilename);
                         }
 
                         if ($sentFilename !== $localFilename) {
-                            
+                            // Still not a match
                         } else {
                             $downloadImage = download_url($imageUrl);
 
@@ -7172,7 +7174,7 @@ class wps_local_compress
                             copy($downloadImage, $imagePath);
                             unset($downloadImage);
 
-                            
+                            // Delete webP if exists
                             $imagesCompressed = get_post_meta($imageID, 'wpc_images_compressed', true);
                             foreach ($imagesCompressed as $image => $data) {
                                 if (file_exists($data['webp_path'])) {
@@ -7191,7 +7193,7 @@ class wps_local_compress
 
                     wp_update_attachment_metadata($imageID, $oldMeta);
 
-                    
+                    // Remove meta tags
                     delete_post_meta($imageID, 'wpc_images_compressed');
                     delete_post_meta($imageID, 'ic_stats');
                     delete_post_meta($imageID, 'ic_compressed_images');
@@ -7207,7 +7209,7 @@ class wps_local_compress
                     delete_post_meta($imageID, 'ic_bulk_running');
                     delete_transient('wps_ic_compress_' . $imageID);
 
-                    
+                    // Add for heartbeat to pickup
                     set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
                     $this->writeLog('Ended Image ID - restored ' . $imageID);
@@ -7228,7 +7230,7 @@ class wps_local_compress
             $this->writeLog(print_r(wp_remote_retrieve_body($call), true));
             $this->writeLog('Ended Image ID ' . $imageID);
 
-            
+            // Failure to contact API
             if ($output == 'json') {
                 wp_send_json_error(['msg' => 'unable-to-contact-api']);
             }
@@ -7245,7 +7247,7 @@ class wps_local_compress
         wp_raise_memory_limit('image');
         $settings = get_option(WPS_IC_SETTINGS);
 
-        
+        // Is the image type supported
         if (!$this->is_supported($imageID)) {
             if ($output == 'json') {
                 wp_send_json_error(['msg' => 'file-not-supported']);
@@ -7254,7 +7256,7 @@ class wps_local_compress
             }
         }
 
-        
+        // Is the image already Compressed
         if ($this->is_already_compressed($imageID)) {
             $media_library = new wps_ic_media_library_live();
             $html = $media_library->compress_details($imageID);
@@ -7266,27 +7268,27 @@ class wps_local_compress
             }
         }
 
-        
+        // Set the image status
         set_transient('wps_ic_compress_' . $imageID, ['imageID' => $imageID, 'status' => 'compressing'], 60);
 
-        
+        // Save OLD post meta for restore usage
         if (!get_post_meta($imageID, 'wpc_old_meta')) {
             $oldMeta = wp_get_attachment_metadata($imageID);
             update_post_meta($imageID, 'wpc_old_meta', $oldMeta);
         }
 
-        
+        // Prepare the request params
         $post_fields = ['action' => 'queueSingleImage', 'imageID' => $imageID, 'siteUrl' => self::$siteUrl, 'apikey' => self::$apiParams['apikey'], 'parameters' => ['maxWidth' => WPS_IC_MAXWIDTH, 'quality' => self::$apiParams['quality'], 'retina' => self::$apiParams['retina'], 'webp' => self::$apiParams['webp']],];
 
-        
+        // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL . 'queueManager.php', ['timeout' => 60, 'method' => 'POST', 'sslverify' => false, 'body' => $post_fields, 'user-agent' => WPS_IC_API_USERAGENT]);
 
         if (wp_remote_retrieve_response_code($notify) == 200) {
-            
+            // All good, let's wait for queue
             wp_send_json_success('waiting-queue');
         } else {
             delete_transient('wps_ic_compress_' . $imageID);
-            
+            // We were unable to contact API
             wp_send_json_error(['msg' => 'unable-to-contact-api']);
         }
     }
@@ -7298,7 +7300,7 @@ class wps_local_compress
 
         $bulkStats = get_transient('wps_ic_bulk_stats');
 
-        
+        // Is the image type supported
         if (!$this->is_supported($imageID)) {
             if (!$bulk) {
                 if ($output == 'json') {
@@ -7311,7 +7313,7 @@ class wps_local_compress
             return $bulkStats;
         }
 
-        
+        // Is the image already Compressed
         if ($this->is_already_compressed($imageID)) {
             if (!$bulk) {
                 $media_library = new wps_ic_media_library_live();
@@ -7327,7 +7329,7 @@ class wps_local_compress
             return $bulkStats;
         }
 
-        
+        // Is the image in process
         $inProcess = get_post_meta($imageID, 'ic_bulk_running', true);
         if ($inProcess && $inProcess == 'true') {
             if ($output == 'json') {
@@ -7360,7 +7362,7 @@ class wps_local_compress
             $body = json_decode($body);
 
             if ($body->success == 'true') {
-                
+                // All good
                 if ($output == 'json') {
                     wp_send_json_success([self::$apiURL, $post_fields, $body]);
                 } else {
@@ -7369,7 +7371,7 @@ class wps_local_compress
             } else {
                 delete_transient('wps_ic_compress_' . $imageID);
 
-                
+                // Error?
                 if ($output == 'json') {
                     wp_send_json_error(['msg' => $body->data->msg, 'server' => $body->data->server]);
                 } else {
@@ -7380,7 +7382,7 @@ class wps_local_compress
         } else {
             delete_transient('wps_ic_compress_' . $imageID);
 
-            
+            // We were unable to contact API
             wp_send_json_error(['msg' => 'unable-to-contact-api']);
         }
     }
@@ -7421,9 +7423,9 @@ class wps_local_compress
             }
         }
 
-        
-
-
+        /**
+         * Figure out the actual file path
+         */
         $file_path = get_attached_file($imageID);
         $file_basename = basename($image[0]);
         $file_path = str_replace($file_basename, '', $file_path);
@@ -7448,10 +7450,10 @@ class wps_local_compress
 
             $file_location = $file_path . basename($image_url);
 
-            
+            // Retina File Path
             $retina_file_location = str_replace('.' . $extension, '-x2.' . $extension, $file_location);
 
-            
+            // Enable Retina
             $retinaAPIUrl = str_replace('r:0', 'r:1', $retinaAPIUrl);
             $retinaAPIUrl = str_replace('w:1', 'w:' . $image['width'], $retinaAPIUrl);
 
@@ -7459,7 +7461,7 @@ class wps_local_compress
 
             if (wp_remote_retrieve_response_code($call) == 200) {
                 $body = wp_remote_retrieve_body($call);
-                
+                // Content validation. Determine format from filename extension.
                 $retina_fmt = 'jpeg';
                 if (strpos($retina_file_location, '.avif') !== false) $retina_fmt = 'avif';
                 elseif (strpos($retina_file_location, '.webp') !== false) $retina_fmt = 'webp';
@@ -7515,7 +7517,7 @@ class wps_local_compress
             require_once(ABSPATH . "wp-admin" . '/includes/media.php');
         }
 
-        
+        // Get all thumb sizes
         $upload_dir = wp_get_upload_dir();
         $sizes = get_intermediate_image_sizes();
         foreach ($sizes as $i => $size) {
@@ -7560,19 +7562,19 @@ class wps_local_compress
 
     public function restartCompressWorker()
     {
-        
+        // Prepare the request params
         $post_fields = ['action' => 'restartCompressWorker', 'apikey' => self::$apiParams['apikey'], 'siteurl' => self::$siteUrl,];
 
-        
+        // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL, ['timeout' => 90, 'blocking' => true, 'body' => $post_fields, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     }
 
     public function restartRestoreWorker()
     {
-        
+        // Prepare the request params
         $post_fields = ['action' => 'restartRestoreWorker', 'apikey' => self::$apiParams['apikey'], 'siteurl' => self::$siteUrl,];
 
-        
+        // Notify API to queue to queue the request
         $notify = wp_remote_post(self::$apiURL, ['timeout' => 90, 'blocking' => true, 'body' => $post_fields, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
     }
 

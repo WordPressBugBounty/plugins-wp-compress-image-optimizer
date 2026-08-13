@@ -7,10 +7,10 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_v2_use_sse_events')) {
 
-
-
-
-
+/**
+ * Feature flag. Default OFF — opt-in via site option:
+ *   wp option update wpc_v2_use_sse_events 1
+ */
 function wpc_v2_use_sse_events()
 {
     $opt = get_site_option('wpc_v2_use_sse_events', false);
@@ -51,36 +51,36 @@ function wpc_v2_sse_stream($request)
         exit;
     }
 
-    
+    // Disable PHP buffering layers.
     @ini_set('output_buffering', 'off');
     @ini_set('zlib.output_compression', false);
     while (ob_get_level()) { @ob_end_flush(); }
 
-    
+    // SSE headers.
     header('Content-Type: text/event-stream; charset=UTF-8');
     header('Cache-Control: no-cache, no-store, must-revalidate');
     header('Pragma: no-cache');
     header('Expires: 0');
-    
+    // Prevents nginx (and most reverse proxies) from buffering the stream
 
 
     header('X-Accel-Buffering: no');
     header('Connection: keep-alive');
-    
-    
+    // Disable gzip — gzipped SSE responses don't flush until the gzip window
+    // fills (typically ~8KB), which makes events arrive in batches.
     header('Content-Encoding: identity');
     if (function_exists('apache_setenv')) {
         @apache_setenv('no-gzip', '1');
     }
 
-    
+    // Loosen PHP's wall-clock budget for the long-poll.
     @set_time_limit(75);
     @ignore_user_abort(true);
 
     $start         = time();
     $max_seconds   = 60;
     $idle_close_s  = 8;
-    $tick_us       = 150000; 
+    $tick_us       = 150000; // 150 ms — tight enough that chip catches count=1,2,3… individually
 
     $last_count    = -1;
     $last_change_t = $start;
@@ -88,12 +88,12 @@ function wpc_v2_sse_stream($request)
 
     echo ": " . str_repeat(' ', 16384) . "\n\n";
     @flush();
-    
-    
+    // Hard-flush trick: write an empty SSE comment + flush twice. Some PHP-FPM
+    // configurations require this double-flush to actually push to nginx.
     echo ":\n\n";
     @flush();
 
-    
+    // Initial "open" event so the client knows the stream is live.
     echo "event: ready\ndata: {\"imageID\":" . $imageID . "}\n\n";
     @flush();
 
@@ -107,7 +107,7 @@ function wpc_v2_sse_stream($request)
         $count = 0; $jpeg = 0; $webp = 0; $avif = 0;
         if (is_array($variants)) {
             foreach ($variants as $vkey => $ventry) {
-                
+                // Skip noImprovement records (no bytes on disk).
                 if (!empty($ventry['bg_no_improvement'])) continue;
                 if (empty($ventry['size'])) continue;
                 $count++;
@@ -117,8 +117,8 @@ function wpc_v2_sse_stream($request)
             }
         }
 
-        
-        
+        // Read ic_compressing status too — when it flips to 'compressed' the
+        // client can swap card state immediately, not wait for the main AJAX.
         $ic_compressing = get_post_meta($imageID, 'ic_compressing', true);
         $status = (is_array($ic_compressing) && !empty($ic_compressing['status']))
             ? (string) $ic_compressing['status']
@@ -162,16 +162,16 @@ function wpc_v2_sse_stream($request)
             $last_count    = $count;
             $last_change_t = time();
         } else {
-            
-            
+            // Heartbeat comment every 5 s of stillness so reverse proxies
+            // don't close the connection. SSE clients ignore `:` comments.
             if ((time() - $last_change_t) % 5 === 0) {
                 echo ": ping " . time() . "\n\n";
                 @flush();
             }
         }
 
-        
-        
+        // Auto-close when count has been stable for $idle_close_s AND status
+        // is compressed (drain done from the plugin's view).
         if ($status === 'compressed' && (time() - $last_change_t) >= $idle_close_s) {
             echo "event: done\ndata: {\"count\":" . $count . "}\n\n";
             @flush();

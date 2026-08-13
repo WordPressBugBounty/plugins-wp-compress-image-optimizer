@@ -1,9 +1,9 @@
 <?php
 
 
-
-
-
+/**
+ * Class - Options
+ */
 class wps_ic_options
 {
 
@@ -54,8 +54,8 @@ class wps_ic_options
             'avif-natural-source' => ['html'],
             'force-natural'      => ['html'],
             'static-serve'       => ['html'],
-            'fold-split'         => ['html'], 
-            'single-url-image-format' => ['html'], 
+            'fold-split'         => ['html'], // flipping it re-caches pages wrapped/unwrapped
+            'single-url-image-format' => ['html'], // Regime B: flipping it rewrites every single-URL image href
             'optimize-lcp'       => ['html'],
             'lazy-auto-sizes'    => ['html'],
             'adaptive'           => ['html'],
@@ -86,7 +86,7 @@ class wps_ic_options
 
 
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
@@ -120,6 +120,7 @@ class wps_ic_options
             'js_defer' => 0,
             'delay-js' => 0,
             'delay-js-v2' => 1,
+            'delay-js-v3' => '1',
             'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
@@ -150,7 +151,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -179,13 +180,13 @@ class wps_ic_options
 
 
             'avif-natural-source' => '0',
-            'single-url-image-format' => 'same-ext', 
+            'single-url-image-format' => 'same-ext', // Safe forces the single-URL floor (consistent with avif-natural-source off)
             'fetchpriority-high' => '0',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', 
-            'modern_image_delivery' => '0', 
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
             'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
@@ -240,7 +241,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'backup' => 'local',
             'maxWidth' => '2560',
             'local_qualityLevel' => '0',
@@ -266,13 +267,13 @@ class wps_ic_options
             'retina' => '1',
             'retina-in-srcset' => '0',
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'nativeLazy' => '1',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
-            'optimize-lcp' => '0', 
-            'modern_image_delivery' => '0', 
+            'optimize-lcp' => '0', // BETA: device-independent LCP srcset, available since 7.00.08
+            'modern_image_delivery' => '0', // BETA: native <picture> + srcset, JS-free, available since 7.01.0
             'modern_delivery_prefer_local' => '0',
             'qualityLevel' => '1',
             'optimization' => 'lossless',
@@ -330,7 +331,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -360,7 +361,7 @@ class wps_ic_options
             'retina' => 1,
             'retina-in-srcset' => 1,
             'avif-natural-source' => 1,
-            'single-url-image-format' => 'auto', 
+            'single-url-image-format' => 'auto', // Regime B default
             'lazy' => 0,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
@@ -392,6 +393,7 @@ class wps_ic_options
             'js_defer' => 0,
             'delay-js' => 0,
             'delay-js-v2' => 1,
+            'delay-js-v3' => '1',
             'font-subsetting' => 0,
             'scripts-to-footer' => 0,
             'inline-js' => 0,
@@ -423,7 +425,7 @@ class wps_ic_options
             'htaccess-webp-replace' => '0',
             'disable-logged-in-opt' => '0',
             'eu-routing' => '0',
-            
+            // Local optimization defaults (Smart Optimization preset)
             'picture_avif' => 1,
             'backup' => 'local',
             'maxWidth' => '2560',
@@ -556,16 +558,16 @@ class wps_ic_options
         foreach ($settings as $option_key => $option_value) {
             if (is_array($option_value)) {
                 foreach ($option_value as $sub_key => $sub_value) {
-                    
+                    // Check if the current setting exists and has changed
                     if (isset($currentSettings[$option_key][$sub_key]) && $currentSettings[$option_key][$sub_key] != $sub_value) {
-                        
+                        // Check if the change is relevant for purging
                         if (isset($this->purgeList[$option_key][$sub_key])) {
                             $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key][$sub_key]);
                         }
                     }
                 }
             } else {
-                
+                // For non-array options, check if the setting has changed and is relevant for purging
                 if (isset($currentSettings[$option_key]) && $currentSettings[$option_key] != $option_value && isset($this->purgeList[$option_key])) {
                     $whatToPurge = array_merge($whatToPurge, $this->purgeList[$option_key]);
                 }
@@ -575,9 +577,9 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Save settings
+     */
     public function save_settings()
     {
         if (!empty($_POST)) {
@@ -650,7 +652,7 @@ class wps_ic_options
                 }
             }
 
-            
+            // Sanitize
             foreach ($_POST['wp-ic-setting'] as $key => $value) {
                 $_POST['wp-ic-setting'][$key] = $value;
             }
@@ -660,10 +662,10 @@ class wps_ic_options
     }
 
 
-    
-
-
-
+    /**
+     * Get compress stats (total images, total saved)
+     * @return mixed|void
+     */
     public function get_stats()
     {
         global $wpdb;
@@ -675,9 +677,9 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Update stats
+     */
     public function update_stats($attachment_ID = 1, $saved = '', $action = 'add')
     {
         global $wpdb;
@@ -689,15 +691,15 @@ class wps_ic_options
             $query = $wpdb->prepare("INSERT INTO " . $wpdb->prefix . "ic_compressed (created, attachment_ID, saved, count) VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE created=%s, count=count+1, restored=0", current_time('mysql'), $attachment_ID, $saved, current_time('mysql'), '1');
             $wpdb->query($query);
         } else {
-            
+            //
         }
     }
 
 
-    
-
-
-
+    /**
+     * Get various settings for WP Compress
+     * @return mixed|void
+     */
     public function get_settings()
     {
         $settings = get_option(WPS_IC_SETTINGS);
@@ -711,9 +713,9 @@ class wps_ic_options
     }
 
 
-    
-
-
+    /**
+     * Set recommended options
+     */
     public function set_recommended_options()
     {
         update_option(WPS_IC_SETTINGS, self::$recommendedSettings);
@@ -743,12 +745,12 @@ class wps_ic_options
     }
 
 
-    
-
-
-
-
-
+    /**
+     * Set option with key and value
+     *
+     * @param $key
+     * @param $value
+     */
     public function set_option($key, $value)
     {
         $options = get_option(WPS_IC_OPTIONS);
@@ -756,9 +758,9 @@ class wps_ic_options
         update_option(WPS_IC_OPTIONS, $options);
     }
 
-    
-
-
+    /**
+     * Setup default settings
+     */
     public function set_defaults()
     {
         $this->set_recommended_options();

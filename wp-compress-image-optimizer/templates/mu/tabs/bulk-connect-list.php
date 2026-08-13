@@ -77,7 +77,7 @@ if (empty($mu_settings['autoconnect'])) {
                       <td class="wpc-ic-mu-list-checkbox">';
 
 							echo '<div class="setting-option wpc-checkbox">';
-							
+							//<label for="js-toggle">JavaScript via CDN</label>
 
 							if ( ! empty($options['api_key']) && ! empty($options['response_key'])) {
 								echo '<input type="checkbox" class="wpc-ic-mu-sites-checkbox" name="wpc-ic-mu-sites[]" data-status="connected" value="' . $site->blog_id . '" />';

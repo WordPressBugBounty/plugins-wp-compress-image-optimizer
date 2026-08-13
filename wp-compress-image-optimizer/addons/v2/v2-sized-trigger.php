@@ -56,7 +56,7 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
         $width = (int) $width;
         if ($att <= 0 || $width <= 0) return false;
         if (!apply_filters('wpc_sized_trigger_enabled', true)) return false;
-        
+        // Smart Delivery required: the DELIVERY leg (pull manifest → lazy ingest) only runs in
 
         if (!function_exists('wpc_v2_get_lazy_enabled') || !wpc_v2_get_lazy_enabled()) return false;
 
@@ -66,13 +66,13 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
         $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($att) : false;
         if (!is_array($meta) || empty($meta['file']) || empty($meta['width']) || empty($meta['height'])) return false;
 
-        
+        // CDN flag 3 — cap at the source's natural width (never upscale; collapses small-source DPR rungs).
         $natural = (int) $meta['width'];
         if ($width >= $natural) return false;
 
 
         if (!function_exists('wpc_v2_adaptive_variant_suffix')) return false;
-        $suffix = wpc_v2_adaptive_variant_suffix($width, $meta); 
+        $suffix = wpc_v2_adaptive_variant_suffix($width, $meta); // "-{W}x{H}" (or "-{W}w" if no aspect)
         if ($suffix === '' || strpos($suffix, 'x') === false) return false;
 
 
@@ -95,14 +95,14 @@ if (!function_exists('wpc_v2_sized_trigger_queue')) {
             return false;
         }
 
-        
+        // Skip if the avif is already on disk (idempotent, zero network).
         $up = wp_get_upload_dir();
         if (empty($up['basedir']) || empty($up['baseurl'])) return false;
         $subdir = (strpos($meta['file'], '/') !== false) ? substr($meta['file'], 0, strrpos($meta['file'], '/') + 1) : '';
         $stem   = preg_replace('/(-scaled)?\.[^.]+$/', '', basename((string) $meta['file']));
         if (@file_exists(rtrim($up['basedir'], '/') . '/' . $subdir . $stem . $suffix . '.avif')) return false;
 
-        
+        // Burst guard: one trigger per (attachment, width) per 15 min.
         $guard = 'wpc_szt_' . $att . '_' . $width;
         if (get_transient($guard)) return false;
         set_transient($guard, 1, 15 * MINUTE_IN_SECONDS);

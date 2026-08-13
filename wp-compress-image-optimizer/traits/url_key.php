@@ -1,13 +1,13 @@
 <?php
 
-
-
-
-
-
-
-
-
+// ─── PHP 7.4 POLYFILLS (v7.10.612) ──────────────────────────────────────────────
+// readme.txt declares "Requires PHP: 7.4" and the advanced-cache drop-in admits anything >= 7.2,
+// but nine str_contains/str_starts_with/str_ends_with calls ship across advancedCache.php,
+// fonts.class.php, rewriteLogic.php and integrations/elementor.php with no polyfill anywhere.
+// Those are PHP 8.0+. On 7.4 they are a fatal — and in advancedCache.php that fatal happens in
+// the drop-in, before WordPress loads, on EVERY request: a white screen, not a degraded page.
+// Defined in BOTH defines.php and traits/url_key.php because the drop-in loads url_key.php and
+// never loads defines.php. function_exists-guarded, so double definition is impossible.
 if (!function_exists('str_contains')) {
     function str_contains($haystack, $needle)
     {
@@ -39,19 +39,19 @@ class wps_ic_url_key
     public $trp_settings;
 	private static $url_mappings = [];
 
-    
-
-
-
-
-
+    /**
+     * Captured host+URI from before translation plugins (e.g. Weglot) rewrite
+     * $_SERVER['REQUEST_URI'] to strip the language prefix.  Set once, early,
+     * via captureRequestUrl() and reused by every subsequent setup() call that
+     * has no explicit $url argument.
+     */
     private static $captured_request_url = null;
 
-    
-
-
-
-
+    /**
+     * Lock in the current host + REQUEST_URI.  Call this as early as possible
+     * (e.g. at plugins_loaded priority 1) before any translation plugin has a
+     * chance to modify $_SERVER['REQUEST_URI'].
+     */
     public static function captureRequestUrl()
     {
         if (self::$captured_request_url === null) {
@@ -74,8 +74,8 @@ class wps_ic_url_key
     public function setup($url = '')
     {
       if (empty($url)) {
-          
-          
+          // Use the pre-captured URL if available (prevents translation plugins
+          // that rewrite $_SERVER['REQUEST_URI'] from corrupting the cache key).
           if (self::$captured_request_url !== null) {
               $url = self::$captured_request_url;
           } else {
@@ -108,39 +108,39 @@ class wps_ic_url_key
 
         $this->urlKey = $this->createUrlKey($url);
 
-	    
+	    // Store the mapping
 	    self::$url_mappings[$this->urlKey] = $original_url;
 
         return $this->urlKey;
     }
 
-    
-
-
-
-
-
-
+    /**
+     * v7.10.598 — params this class strips from the cache key. ONE list, exposed statically so
+     * the cache gates can agree with it instead of restating it. Lives here because the
+     * advanced-cache drop-in already include_once's this file (templates/samples/
+     * advancedCacheSample.php:49), so the read gate and the write gate see the same array and
+     * update together — there is no baked copy to drift.
+     */
     public static function trackingParams()
     {
         return ['disable_cache', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id', 'wpc_key'];
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.598 — STRIPPED FROM THE KEY IS NOT THE SAME AS SAFE TO CACHE.
+     *
+     * Two different reasons a param gets stripped above, and only one of them implies the page is
+     * cacheable:
+     *   TRACKING  — the param does not change the response, so the clean page's bytes are correct
+     *               for it. Sharing the key AND caching is right.
+     *   CONTROL   — the param exists to CHANGE behaviour (bypass, debug, force). It is stripped so
+     *               it cannot fragment the key, but serving a cached page for it defeats its whole
+     *               purpose. `disable_cache` and `ao_noptimize` sit in the list above and are
+     *               exactly this.
+     * Also held back: `age-verified` and `cn-reloaded` plausibly gate CONTENT, and `usqp` is a
+     * Google AMP viewer flag — none are pure click IDs, so they stay out of the cacheable set even
+     * though the key ignores them. Widening deliberately and conservatively beats widening whole.
+     */
     public static function controlParams()
     {
         return ['disable_cache', 'ao_noptimize', 'age-verified', 'cn-reloaded', 'usqp',
@@ -155,15 +155,15 @@ class wps_ic_url_key
         return ['control', 'free', 'local', 'edge'];
     }
 
-    
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.743 — the benchmark key, minted per site so an install needs no wp-config edit.
+     *
+     * Lives HERE and not in defines.php because the door runs at wp-compress.php file scope,
+     * before defines.php is included — the drop-in has already loaded this file by then.
+     * Never a shipped literal: a key baked into distributed source would be the same secret on
+     * every install. Never written to a file either — it stays an option, read at door time with
+     * WordPress loaded, so only the non-secret cache flag needs to reach the pre-WP drop-in.
+     */
     public static function tierKey($wpc_mint743 = true)
     {
         if (defined('WPC_TIER_KEY') && (string) WPC_TIER_KEY !== '') {
@@ -188,27 +188,27 @@ class wps_ic_url_key
         return $wpc_k743;
     }
 
-    
-
-
-
-
-
+    /**
+     * v7.10.739 — the benchmark arms measure a COLD render otherwise. ?wpc_tier= sets
+     * DONOTCACHEPAGE, so every arm pays an origin render (~1.2s vs ~0.07s warm on staging) and the
+     * comparison carries a TTFB penalty no production visitor ever sees. Opt-in per site via two
+     * wp-config constants, so no production install changes behaviour by default.
+     */
     public static function tierCacheOn()
     {
-        
-        
-        
+        // The drop-in cannot read an option, so the key cannot be verified here. The constant is
+        // written by setAdvancedCache() ONLY when a key already exists, so it implies both halves.
+        // A wp-config WPC_TIER_KEY still satisfies the same contract on sites that pin one.
         return defined('WPC_TIER_CACHE') && WPC_TIER_CACHE;
     }
 
-    
-
-
-
-
-
-
+    /**
+     * v7.10.739 — READ may be optimistic (a miss costs nothing); WRITE may not. The drop-in read
+     * gate runs before WordPress, so it cannot check a capability — which means an anonymous
+     * ?wpc_tier=edge with no key would render UNTIERED and, with DONOTCACHEPAGE gone, write those
+     * bytes to the edge arm's key. The door defines WPC_TIER_ACTIVE only after it authorises; every
+     * cache writer consults this before storing a tier-keyed render.
+     */
     public static function tierWriteBlocked()
     {
         $wpc_qs739 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
@@ -218,20 +218,20 @@ class wps_ic_url_key
         return !(defined('WPC_TIER_ACTIVE') && WPC_TIER_ACTIVE);
     }
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
+    /**
+     * v7.10.598 — may a response for this query string be written to, or served from, cache?
+     *
+     * THE INVARIANT: if the urlKey strips a param, the gates must allow it — otherwise we share
+     * the clean page's artifacts while refusing to cache, which is the worst of both. Receipted on
+     * production: `?gbraid=…` returned 200 with `plugin_cache=NONE` (a full origin render) while
+     * `?utm_source=…` returned `Advanced Cache - gzip`, because the key strips 61 params and the
+     * gates named only utm_* plus 11. At ~1.0s mean origin work per MISS against 0.10s on a HIT,
+     * that gap is capacity, not milliseconds.
+     *
+     * Costs ZERO extra cache entries: these params are stripped from the key, so every variant
+     * collapses onto the clean URL's existing entry. The "unbounded inodes" the gates were
+     * written to prevent only applies to params the key does NOT strip — those still return false.
+     */
     public static function queryIsCacheable($queryString, $wpc_ctx739 = 'read')
     {
         $queryString = (string) $queryString;
@@ -240,19 +240,19 @@ class wps_ic_url_key
         }
         $wpc_ctrl598 = array_flip(self::controlParams());
         $wpc_ok598 = array_flip(array_map('strtolower', self::trackingParams()));
-        
-        
+        // Legacy allowlist the gates already honoured; keep them even though some are not in the
+        // strip list, because refusing them now would be a REGRESSION in cache coverage.
         foreach (['dclid', 'ref', 'igshid', 'ttclid'] as $wpc_lg598) {
             $wpc_ok598[$wpc_lg598] = 1;
         }
         $wpc_q598 = [];
         parse_str($queryString, $wpc_q598);
-        
-        
-        
-        
-        
-        
+        // v7.10.739 — the tier arms are the one CONTROL family that must be cacheable, because the
+        // whole point is measuring a warm render. Admitted only under the wp-config opt-in, only
+        // for a known tier name, and — on the write side — only once the door has authorised.
+        // wpc_tier stays IN the url key (each arm gets its own path, so no arm can ever be served
+        // to a plain visitor); wpc_key is stripped by trackingParams so the secret never becomes
+        // a directory name on disk.
         if (self::tierCacheOn()) {
             $wpc_tk739 = '';
             foreach ((array) $wpc_q598 as $wpc_qk739 => $wpc_qv739) {
@@ -278,8 +278,8 @@ class wps_ic_url_key
             if (isset($wpc_ctrl598[$wpc_k598])) {
                 return false;
             }
-            
-            
+            // Prefix families: utm_ was already honoured; mtm_ (Matomo) and pk_ (Piwik) are the
+            // same shape and are enumerated in the strip list anyway.
             if (strpos($wpc_k598, 'utm_') === 0 || strpos($wpc_k598, 'mtm_') === 0
                 || strpos($wpc_k598, 'pk_') === 0) {
                 continue;
@@ -301,7 +301,7 @@ class wps_ic_url_key
         $parts = parse_url($url);
 
         if (!isset($parts['query'])) {
-            return $url; 
+            return $url; // No query, nothing to remove
         }
 
         parse_str($parts['query'], $query);
@@ -312,7 +312,7 @@ class wps_ic_url_key
 
         $queryString = http_build_query($query);
 
-        
+        // Rebuild URL safely
         $cleanUrl = '';
 
         if (isset($parts['scheme'])) {
@@ -395,7 +395,7 @@ class wps_ic_url_key
         if ($this->seems_utf8($string)) {
             return strtr($string, $this->utf8_char_map());
         } else {
-            return $string; 
+            return $string; // Basic fallback; your original map can be reused here if needed.
         }
     }
 
@@ -462,7 +462,7 @@ class wps_ic_url_key
 
     private function utf8_char_map()
     {
-        return ['À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Æ' => 'AE', 'Ç' => 'C', 'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I', 'Ð' => 'D', 'Ñ' => 'N', 'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O', 'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U', 'Ý' => 'Y', 'Þ' => 'TH', 'ß' => 's', 'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a', 'æ' => 'ae', 'ç' => 'c', 'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e', 'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i', 'ð' => 'd', 'ñ' => 'n', 'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o', 'ø' => 'o', 'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u', 'ý' => 'y', 'þ' => 'th', 'ÿ' => 'y'
+        return ['À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Æ' => 'AE', 'Ç' => 'C', 'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I', 'Ð' => 'D', 'Ñ' => 'N', 'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O', 'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U', 'Ý' => 'Y', 'Þ' => 'TH', 'ß' => 's', 'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a', 'æ' => 'ae', 'ç' => 'c', 'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e', 'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i', 'ð' => 'd', 'ñ' => 'n', 'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o', 'ø' => 'o', 'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u', 'ý' => 'y', 'þ' => 'th', 'ÿ' => 'y'// Extend with more mappings if needed
         ];
     }
 
@@ -565,7 +565,7 @@ class wps_ic_url_key
         $site_url = str_replace(['https://', 'http://'], '', $site_url);
 
         if (strpos($url, '/') === 0 && strpos($url, '//') === false) {
-            
+            // Absolute
             return false;
         } elseif (strpos($url, $site_url) === false || strpos($url, '//') === 0) {
             return true;
@@ -637,14 +637,14 @@ class wps_ic_url_key
 	}
 
 
-	
-
-
-
-
-
-
-
+	/**
+	 * Is this URL a front-end page, i.e. something a critical-CSS key may exist for?
+	 * setup() falls back to HTTP_HOST.REQUEST_URI when given no argument, so a key minted
+	 * during an admin-ajax/cron/REST request describes an endpoint, not a page — and
+	 * persistKeyUrl() would mkdir a folder for it (…/critical/host-wp-adminadmin-ajax-php/url.txt).
+	 * Tested on the URL, never on the request context: the crit AJAX legitimately persists a
+	 * front-end URL while itself running under DOING_AJAX.
+	 */
 	public static function isPageUrl($url)
 	{
 		$path = (string) parse_url((string) $url, PHP_URL_PATH);
@@ -690,12 +690,12 @@ class wps_ic_url_key
 		return true;
 	}
 
-	
-
-
-
-
-
+	/**
+	 * Validate + normalize a URL for purge use: must parse, must be same-host as home_url
+	 * (www/non-www alias tolerated), reduced to scheme://host/path (query/fragment dropped —
+	 * url_keys strip params anyway; scheme pinned to the site's canonical scheme). Returns ''
+	 * when the URL isn't safe to purge against.
+	 */
 	public static function sanitizeSameHostUrl($url)
 	{
 		$url = trim((string) $url);
