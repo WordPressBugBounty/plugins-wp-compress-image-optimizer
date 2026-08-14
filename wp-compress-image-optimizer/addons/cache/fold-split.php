@@ -1,24 +1,24 @@
 <?php
-/**
- * v7.10.660 — Fold-split cache-write half (spec v2 template mode). This is a VERBATIM port of
- * buildTemplateDocument + its dependency chain from the service planner (fold-split.js @
- * v3.167.0), per docs/buildTemplateDocument-port-reference.md. The service RENDER-VERIFIES the
- * exact split document before it ever publishes the artifact, so the plugin's only job is to
- * reproduce that transform byte-for-byte at cache-write time; a differential test (t660) runs
- * the shipped JS and this port over the same fixtures and asserts identical output.
- *
- * Porting traps honoured:
- *  1. Offsets never cross the wire — strings do. The artifact's numeric fields are advisory;
- *     the contract is the ANCHOR STRING, matched fresh in our own buffer with strpos. Every
- *     position below is a PHP byte offset in OUR buffer. Pure byte functions only — no mb_*.
- *  2. lastIndexOf('</body>') === strrpos().
- *  3. gi => /i; [\s\S]*? => /s with .*?
- *  4. The walk order IS the algorithm — matches processed in document order, forbidden ranges
- *     checked per match BEFORE the depth counter moves. Two passes, not one.
- *  5. Refusals return null / not-ok, never throw. A refused build serves the page as today.
- *  6. The stamper ships as these exact bytes — wpc-rest / wpc-fs / wpc:rest-loaded are grepped
- *     by the fleet monitor; do not reflow or rename.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 if (!defined('ABSPATH')) {
     exit;
@@ -26,19 +26,19 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_fs_stamper_js660')) {
 
-    // OPEN_TAG_RE  sha1:67a2360177e8 — groups: 1=open name, 2=attrs, 3=(/?) self-close, 4=close name
+    
     function wpc_fs_open_tag_re660()
     {
         return '/<(section|main|article|div|aside|nav|footer|header)\b([^>]*?)(\/?)>|<\/(section|main|article|div|aside|nav|footer|header)>/i';
     }
 
-    // CONTAINER_RE  sha1:c75416329d80 — groups: 1=open name, 2=(/?) self-close, 3=close name
+    
     function wpc_fs_container_re660()
     {
         return '/<(section|main|article|div|aside|nav|footer|header)\b[^>]*?(\/?)>|<\/(section|main|article|div|aside|nav|footer|header)>/i';
     }
 
-    // STAMPER_JS  sha1:79218caf8b5c — exact bytes, do not reflow.
+    
     function wpc_fs_stamper_js660()
     {
         return <<<'WPCFS'
@@ -61,7 +61,7 @@ else{
 WPCFS;
     }
 
-    // inRanges  sha1:4f9de7fdb807 — pos strictly inside a range.
+    
     function wpc_fs_in_ranges660($pos, $ranges)
     {
         foreach ($ranges as $r) {
@@ -72,7 +72,7 @@ WPCFS;
         return false;
     }
 
-    // forbiddenRanges  sha1:73c7359024fb — script/style/textarea/comment/pre spans, sorted by start.
+    
     function wpc_fs_forbidden_ranges660($html)
     {
         $out = [];
@@ -94,7 +94,7 @@ WPCFS;
         return $out;
     }
 
-    // fragmentBalance  sha1:3c9b171f1f40 — CONTAINER_RE: g1 open, g2 (/?), g3 close.
+    
     function wpc_fs_fragment_balance660($fragment)
     {
         $forbidden = wpc_fs_forbidden_ranges660($fragment);
@@ -108,12 +108,12 @@ WPCFS;
                 }
                 $g2 = isset($m[2]) && $m[2][1] !== -1 ? $m[2][0] : '';
                 $g3 = isset($m[3]) && $m[3][1] !== -1 ? $m[3][0] : '';
-                if ($g3 !== '') {                       // closing tag
+                if ($g3 !== '') {                       
                     $depth--;
                     if ($depth < $minDepth) {
                         $minDepth = $depth;
                     }
-                } elseif ($g2 !== '/') {                // opening, not self-closed
+                } elseif ($g2 !== '/') {                
                     $depth++;
                 }
             }
@@ -121,7 +121,7 @@ WPCFS;
         return ['depth' => $depth, 'minDepth' => $minDepth, 'balanced' => ($depth === 0 && $minDepth === 0)];
     }
 
-    // templateSegments  sha1:a8cdfe054617 — OPEN_TAG_RE: g1 open, g2 attrs, g3 (/?), g4 close.
+    
     function wpc_fs_template_segments660($fragment)
     {
         if (!is_string($fragment) || $fragment === '') {
@@ -138,7 +138,7 @@ WPCFS;
                 }
                 $g3 = isset($m[3]) && $m[3][1] !== -1 ? $m[3][0] : '';
                 $g4 = isset($m[4]) && $m[4][1] !== -1 ? $m[4][0] : '';
-                if ($g4 !== '') {                       // closing tag
+                if ($g4 !== '') {                       
                     if ($depth === 0) {
                         $orphans[] = ['at' => $index, 'end' => $index + strlen($m[0][0])];
                     } else {
@@ -146,7 +146,7 @@ WPCFS;
                     }
                     continue;
                 }
-                if ($g3 !== '/') {                      // opening, not self-closed
+                if ($g3 !== '/') {                      
                     $depth++;
                 }
             }
@@ -178,15 +178,15 @@ WPCFS;
         return ['ok' => true, 'parts' => $parts, 'orphan_count' => count($orphans)];
     }
 
-    // buildTemplateDocument  sha1:0630200e70f0 — $plan['offset'] is OUR byte offset (from the
-    // anchor), never the artifact's number. Returns null on any refusal (serve the page whole).
+    
+    
     function wpc_fs_build_template_document660($html, $plan)
     {
         if (!is_string($html) || empty($plan) || empty($plan['ok']) || ($plan['mode'] ?? '') !== 'template') {
             return null;
         }
         if (strpos($html, 'template class="wpc-rest"') !== false || strpos($html, 'id="wpc-fs"') !== false) {
-            return null;                                // never double-wrap
+            return null;                                
         }
         $bodyEnd = strrpos($html, '</body>');
         if ($bodyEnd === false || $plan['offset'] >= $bodyEnd) {
@@ -197,7 +197,7 @@ WPCFS;
             return null;
         }
         if ($seg['orphan_count'] !== $plan['orphan_count']) {
-            return null;                                // the document changed since planning
+            return null;                                
         }
         $tpls = 0;
         foreach ($seg['parts'] as $p) {
@@ -225,14 +225,14 @@ WPCFS;
         ];
     }
 
-    // ── integration (spec §9) — fetch the per-URL artifact, match the anchor in OUR buffer,
-    // build. Every failure returns the buffer unchanged (serve the page whole). Behind
-    // wpc_fold_split, default false, so this is a no-op on the fleet until explicitly enabled.
+    
+    
+    
 
     function wpc_fs_artifact_key660()
     {
-        // url_key = host + path, no scheme, no www., no query — then md5. Must match the
-        // service's key derivation exactly, or every fetch 404s.
+        
+        
         $host = strtolower((string) preg_replace('/:\d+$/', '', isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : ''));
         if (strpos($host, 'www.') === 0) {
             $host = substr($host, 4);
@@ -249,13 +249,13 @@ WPCFS;
         $key = wpc_fs_artifact_key660();
         $tk = 'wpc_fs_art_' . $key;
         $cached = get_transient($tk);
-        if ($cached !== false) {                        // 'none' is a cached 404, [] its shape
+        if ($cached !== false) {                        
             return is_array($cached) ? $cached : [];
         }
         $base = (string) apply_filters('wpc_fs_artifact_base', 'https://critical-css-mc.b-cdn.net/foldsplit/');
         $resp = wp_remote_get($base . $key . '.json', ['timeout' => (int) apply_filters('wpc_fs_fetch_timeout', 3)]);
         if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
-            set_transient($tk, 'none', (int) apply_filters('wpc_fs_miss_ttl', 600));   // 404 => serve whole, bounded
+            set_transient($tk, 'none', (int) apply_filters('wpc_fs_miss_ttl', 600));   
             return [];
         }
         $art = json_decode((string) wp_remote_retrieve_body($resp), true);
@@ -267,11 +267,11 @@ WPCFS;
         return $art;
     }
 
-    // Enabled by the 'fold-split' Other-Optimization toggle (wps_ic_settings), OR by the
-    // wpc_fold_split filter which still wins for programmatic control. The toggle drives the
-    // filter's DEFAULT, so a site opts in from the UI and code can still force either way. Even
-    // when ON this is a no-op wherever the service has not published a render-verified artifact
-    // for the URL (404 => serve whole), so the toggle is safe to flip fleet-wide.
+    
+    
+    
+    
+    
     function wpc_fs_enabled660()
     {
         $opt = false;
@@ -286,7 +286,7 @@ WPCFS;
     {
         try {
             if (!wpc_fs_enabled660()) {
-                return $buffer;                         // toggle off + no filter override => inert
+                return $buffer;                         
             }
             if (!is_string($buffer) || $buffer === ''
                 || strpos($buffer, 'template class="wpc-rest"') !== false
@@ -300,18 +300,18 @@ WPCFS;
             $anchor = (string) $art['anchor'];
             $offset = strpos($buffer, $anchor);
             if ($offset === false || strpos($buffer, $anchor, $offset + 1) !== false) {
-                return $buffer;                         // absent or NON-UNIQUE => serve whole (spec R3)
+                return $buffer;                         
             }
             $r = wpc_fs_build_template_document660($buffer, [
                 'ok'           => true,
                 'mode'         => 'template',
-                'offset'       => $offset,               // OUR byte offset, never the artifact's number
+                'offset'       => $offset,               
                 'orphan_count' => (int) ($art['orphan_count'] ?? -1),
                 'templates'    => (int) ($art['templates'] ?? -1),
             ]);
             return ($r !== null && !empty($r['doc'])) ? $r['doc'] : $buffer;
         } catch (\Throwable $e) {
-            return $buffer;                             // spec trap #5 — never throw, serve whole
+            return $buffer;                             
         }
     }
 }

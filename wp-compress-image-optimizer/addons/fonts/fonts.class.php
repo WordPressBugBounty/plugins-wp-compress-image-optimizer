@@ -16,13 +16,13 @@ class wps_ic_fonts
         $mt  = @filemtime(WPS_IC_FONTS_DIR . $rel);
         return $mt ? $url . '?fdv=' . (int) $mt : $url;
     }
-    /** @var string $filename */
+    
     private $filename;
-    /** @var string $path */
+    
     private $path;
     private $response;
     private $foundFonts;
-    private $mimeMap = ['font/woff2' => 'woff2', 'application/font-woff2' => 'woff2', 'font/woff' => 'woff', 'application/font-woff' => 'woff', 'font/ttf' => 'ttf', 'application/x-font-ttf' => 'ttf', 'font/sfnt' => 'ttf', // Can be WOFF2 or TTF, but we pick TTF.
+    private $mimeMap = ['font/woff2' => 'woff2', 'application/font-woff2' => 'woff2', 'font/woff' => 'woff', 'application/font-woff' => 'woff', 'font/ttf' => 'ttf', 'application/x-font-ttf' => 'ttf', 'font/sfnt' => 'ttf', 
         'application/font-sfnt' => 'ttf', 'font/otf' => 'otf', 'application/x-font-opentype' => 'otf', 'application/vnd.ms-fontobject' => 'eot',];
 
 
@@ -36,7 +36,7 @@ class wps_ic_fonts
     public function isActive() {
         $options = get_option(WPS_IC_SETTINGS);
         if (!empty($options) && !empty($options['replace-fonts'])) {
-            // Active, check if local or bunny
+            
             if ($options['replace-fonts'] == 'local') {
                 return 'local';
             } else if ($options['replace-fonts'] == 'bunny') {
@@ -70,7 +70,7 @@ class wps_ic_fonts
                 $replaceUrl = WPS_IC_FONTS_URL . $replaceData['dir'] . '/' . $replaceData['filename'];
                 $styleEncoded = str_replace('&', '&#038;', $style);
 
-                // Try to find encoded and non encoded url
+                
                 $html = str_replace($styleEncoded, $replaceUrl, $html);
                 $html = str_replace($style, $replaceUrl, $html);
             }
@@ -197,8 +197,8 @@ class wps_ic_fonts
             if (stripos($html, (string) WPS_IC_FONTS_URL) === false) {
                 return $html;
             }
-            // TTL belt from the serve path too — an already-localized site never re-runs
-            // saveStylesheet, so the 1y-immutable .htaccess would wait for the next new family.
+            
+            
             if (function_exists('wpc_fonts_htaccess_ensure')) {
                 wpc_fonts_htaccess_ensure(WPS_IC_FONTS_DIR);
             }
@@ -210,47 +210,47 @@ class wps_ic_fonts
             $wpc_out132 = preg_replace_callback(
                 '~<link\b[^>]*href=["\'](' . preg_quote((string) WPS_IC_FONTS_URL, '~') . '[^"\']+?\.css)(?:\?[^"\']*)?["\'][^>]*>~i',
                 function ($m) use ($wpc_max132, $wpc_armed133, &$wpc_deferred_href133, $html) {
-                    if (stripos($m[0], 'wpc-late-stylesheet') !== false) { return $m[0]; } // FA-late stays late
+                    if (stripos($m[0], 'wpc-late-stylesheet') !== false) { return $m[0]; } 
                     if (preg_match('/media\s*=\s*["\']?print/i', $m[0])) { return $m[0]; }
                     if (stripos($m[0], 'as=') !== false && stripos($m[0], 'preload') !== false) { return $m[0]; }
                     $p = str_replace((string) WPS_IC_FONTS_URL, (string) WPS_IC_FONTS_DIR, $m[1]);
                     $css = @file_get_contents($p);
                     if (is_string($css) && $css !== '' && strlen($css) <= $wpc_max132
                         && stripos($css, '</style') === false && stripos($css, '<script') === false) {
-                        // v7.10.529 — ATF-SCOPE THE INLINE FACES. Measured on the flagship: this
-                        // block was 6,232 b of @font-face for Roboto across 9 unicode-range
-                        // subsets, render-blocking in the head — while the ATF glyph set says the
-                        // fold uses only Circular Std (already inlined as base64). Worse, it put a
-                        // Roboto woff2 on the FCP critical path at 1,454 ms for text that is not
-                        // above the fold. Inline only the families the fold actually needs; the
-                        // rest still load, just deferred (and since .528, after LCP has painted).
+                        
+                        
+                        
+                        
+                        
+                        
+                        
                         $wpc_split529 = self::wpc_atf_scope_faces529($css, $html);
                         if ($wpc_split529 !== null) {
-                            // v7.10.577 — DO NOT INLINE A SHEET WE HAVE ALREADY DECIDED TO DEFER.
-                            // When the ATF part is empty, every face here is below the fold, and
-                            // inlining buys nothing: the point of inlining is to remove a request
-                            // from the critical path, and a deferred sheet is not on it. Worse, an
-                            // inline <style> makes the DOCUMENT the initiator of every font it
-                            // references, which is why the deferred Roboto woff2 kept appearing in
-                            // Lighthouse's critical chain hanging directly off the navigation.
-                            // Leaving it as a deferred <link> moves the initiator onto that sheet
-                            // and takes 6,232 b (~1.5 KiB gzip) out of the document at the same
-                            // time. Falls through to the normal inline path whenever any face IS
-                            // fold-critical, so nothing above the fold ever loses its inline copy.
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            
                             if (trim((string) $wpc_split529['atf']) === ''
                                 && apply_filters('wpc_defer_link_over_inline', true)) {
-                                // v7.10.587 — the gfonts converter (rewriteLogic) already stamps
-                                // rel="wpc-mobile-stylesheet" before this filter runs, so testing
-                                // only for rel="stylesheet" missed every converted sheet and fell
-                                // through to inlining one that was ALREADY deferred. Inlining then
-                                // makes the DOCUMENT the initiator of every woff2 it references,
-                                // which is what put the deferred Roboto on Lighthouse's critical
-                                // chain hanging off the navigation. Already deferred => leave it.
-                                // v7.10.589 — the sheet may be deferred, its @font-face may not.
-                                // atf is empty here, so rest holds every face in the sheet; emitting
-                                // them live keeps the declaration present at first paint while the
-                                // sheet's own rules stay deferred. Duplicated when the loader later
-                                // flips the link on, which is idempotent for identical declarations.
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                
+                                
                                 $wpc_lf589 = self::wpc_faces_live589($wpc_split529['rest'], 'wpc-fonts-css-faces');
                                 if (preg_match('/(?<![\w.$])(?:rel|type)\s*=\s*(["\'])wpc-(?:mobile-)?stylesheet\1/i', $m[0])) {
                                     $wpc_deferred_href133 = $m[1];
@@ -272,7 +272,7 @@ class wps_ic_fonts
                         return '<style id="wpc-fonts-css">' . $css . '</style>';
                     }
 
-                    // Attribute position only — never the copy inside an onload handler.
+                    
                     if ($wpc_armed133 && preg_match('/(?<![\w.$])rel\s*=\s*(["\'])stylesheet\1/i', $m[0])) {
                         $wpc_deferred_href133 = $m[1];
                         return (string) preg_replace('/(?<![\w.$])rel\s*=\s*(["\'])stylesheet\1/i', 'rel="wpc-mobile-stylesheet"', $m[0], 1);
@@ -305,19 +305,19 @@ class wps_ic_fonts
     const INLINE_MAP = 'wps_ic_fonts_inline_map';
 
 
-    /**
-     * v7.10.918 — LOCALIZE FONTS DECLARED IN EXTERNAL SHEETS (ticket 11915, Breakdance).
-     * Every localizer lane read the DOCUMENT only; builders like Breakdance declare their
-     * gstatic @font-face inside generated CSS files (uploads/breakdance/css/*), so "local
-     * fonts" never engaged there. Mirror of the .795 bgset pattern: read each SAME-ORIGIN
-     * linked sheet from disk, swap gstatic URLs already localized in INLINE_MAP for their
-     * local copies, rebase relative url()s, and relink to a content-keyed derived copy under
-     * cache/wpc-fontsheet/ only when bytes changed. Verdicts indexed by mtime:size:mapcount
-     * (map growth re-derives). Unmapped gstatic faces found in sheets feed the EXISTING
-     * localizer dispatch, so the map converges without a new fetch pipeline. Derived faces
-     * are stamped font-display:swap, never optional — a sheet loads after the document's
-     * inline subsets, and optional at the tail yanks a family that is already painting.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
     public function wpc_fontsheet_external_sweep($html)
     {
         try {
@@ -502,14 +502,14 @@ class wps_ic_fonts
         }
 
 
-        //      Remove the re-declaration ONLY on an exact family+weight+style match against an
-        //      embedded face — never blind; unmatched blocks keep serving (with swap).
-        //      v7.10.919: base widened from INLINE_DIR to every localized face (family-dir
-        //      sheets, faces_live589 emissions) — those carried baked optional the runtime
-        //      never re-resolved. Plus builder-duplicate removal: a raw gstatic face whose
-        //      exact family|weight|style|range is served by a file-backed LOCAL face in the
-        //      same document is redundant bytes (dalton's triple Poppins stack) — removed
-        //      only on that exact-coverage proof, never blind.
+        
+        
+        
+        
+        
+        
+        
+        
         if (strpos($html, (string) WPS_IC_FONTS_URL) !== false) {
             $wpc_face_key107 = function ($block) {
                 $fam = preg_match('/font-family\s*:\s*[\'"]?([^;\'"}]+)/i', $block, $m1) ? strtolower(trim($m1[1])) : '';
@@ -537,9 +537,9 @@ class wps_ic_fonts
             foreach (array_keys($wpc_embedded107) as $wpc_ek918) {
                 $wpc_embedded_fams918[strtok((string) $wpc_ek918, '|')] = 1;
             }
-            // Pre-scan: every localized face whose first local woff asset EXISTS on disk,
-            // keyed family|weight|style|normalized-range. This is the coverage proof the
-            // gstatic-duplicate removal requires.
+            
+            
+            
             $wpc_local_present919 = [];
             if (preg_match_all('#@font-face\s*\{[^{}]*\}#i', $html, $wpc_all919)) {
                 foreach ($wpc_all919[0] as $wpc_fb919) {
@@ -583,12 +583,12 @@ class wps_ic_fonts
                 $html = $wpc_html107;
             }
         }
-        // Any still-unmapped LATIN inline faces? schedule a bounded background download (throttled).
+        
         $this->maybeScheduleInlineLocalize($html);
         return $html;
     }
 
-    /** Schedule the background download of unmapped latin inline faces via wp-cron. ≤1 scan/hour. */
+    
     protected function maybeScheduleInlineLocalize($html)
     {
         if ($this->isActive() !== 'local' || !apply_filters('wpc_localize_inline_fonts', true)) {
@@ -598,13 +598,13 @@ class wps_ic_fonts
             return;
         }
 
-        // Yield to visitors: the localizer (gstatic HTTP + purge) waits for a calm box
+        
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
             return;
         }
 
-        // Durable single-flight: concurrent renders on a flushed object cache must not
-        // each dispatch a localizer (gstatic HTTP + a FULL HTML-cache purge apiece)
+        
+        
         $wpc_fil330 = (int) get_option('wpc_font_inline_at');
         if (time() - $wpc_fil330 < 15 * MINUTE_IN_SECONDS) {
             return;
@@ -657,7 +657,7 @@ class wps_ic_fonts
                 }
             });
         }
-        // Backstop (also the ONLY path on non-FPM): cron event, if not already queued.
+        
         if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
             && !wp_next_scheduled('wpc_font_inline_localize_cron')) {
             wp_schedule_single_event(time() + ($wpc_can_flush ? 90 : 15), 'wpc_font_inline_localize_cron');
@@ -693,7 +693,7 @@ class wps_ic_fonts
         return array_keys($out);
     }
 
-    /** True if a unicode-range includes any latin-family codepoint (start < U+0370 = below Greek). */
+    
     protected function isLatinRange($range)
     {
         if (!preg_match_all('/U\+([0-9A-Fa-f]{1,6})/', (string) $range, $m)) {
@@ -760,15 +760,15 @@ class wps_ic_fonts
 
         $response = wp_remote_get(add_query_arg(array('url' => esc_url_raw($urlToScan),), WPS_IC_FONTS_SCAN), array('method' => 'POST', 'timeout' => 15, 'headers' => array('Content-Type' => 'application/json',),));
 
-        // Handle errors
+        
         if (is_wp_error($response)) {
             return $response->get_error_message();
         }
 
-        // Get response body
+        
         $body = wp_remote_retrieve_body($response);
 
-        // Decode JSON if API returns JSON
+        
         $data = json_decode($body, true);
         $this->response = $data;
 
@@ -815,14 +815,14 @@ class wps_ic_fonts
             $response = json_decode($response, true);
         }
 
-        // Validate response structure
+        
         if (!is_array($response) || !isset($response['found']) || !is_array($response['found'])) {
             return array();
         }
 
         $found = array();
 
-        // Store google fonts stylesheets if present
+        
         if (!empty($response['found']['googleFontsStylesheets'])) {
             $found['googleFontsStylesheets'] = array_values($response['found']['googleFontsStylesheets']);
         } else {
@@ -844,18 +844,18 @@ class wps_ic_fonts
     {
         if (!empty($array['googleFontsStylesheets'])) {
             foreach ($array['googleFontsStylesheets'] as $font) {
-                // Read CSS Stylesheet
+                
                 $this->stylesheet = null;
                 $download = $this->read($font);
 
-                // A failed or empty fetch must not be written or mapped — the live Google
-                // link keeps serving and the next rescan retries.
+                
+                
                 if (!empty($download['error']) || !is_string($this->stylesheet) || $this->stylesheet === '') {
                     continue;
                 }
 
-                // Every referenced font file must land before the sheet is published;
-                // a partial set would bake remote URLs into the local copy for good.
+                
+                
                 $stylesheetDir = md5($font);
                 $wpc_repl151 = [];
                 $wpc_ok151 = true;
@@ -892,15 +892,15 @@ class wps_ic_fonts
 
     public function read($stylesheet)
     {
-        // Normalize HTML-encoded ampersands (your scan example had &#038;)
+        
         $css_url = str_replace('&#038;', '&', $stylesheet);
 
-        // Support protocol-relative
+        
         if (str_starts_with($css_url, '//')) {
             $css_url = 'https:' . $css_url;
         }
 
-        $response = wp_remote_get($css_url, ['timeout' => 30, 'redirection' => 5, 'headers' => [// Browser-ish headers: helps avoid 403 with Google Fonts sometimes
+        $response = wp_remote_get($css_url, ['timeout' => 30, 'redirection' => 5, 'headers' => [
             'User-Agent' => WPS_IC_API_USERAGENT, 'Accept' => 'text/css,*/*;q=0.1',],]);
 
         if (is_wp_error($response)) {
@@ -919,8 +919,8 @@ class wps_ic_fonts
 
         $this->stylesheet = $css;
 
-        // Find all url(...) occurrences in CSS, tolerate quotes, spaces.
-        // Captures: url( ... )
+        
+        
         preg_match_all('/url\(\s*([\'"]?)([^\'")]+)\1\s*\)/i', $css, $matches);
 
         $urls = [];
@@ -928,17 +928,17 @@ class wps_ic_fonts
             foreach ($matches[2] as $u) {
                 $u = trim($u);
 
-                // Skip data URIs
+                
                 if (str_starts_with($u, 'data:')) {
                     continue;
                 }
 
-                // Protocol-relative inside CSS
+                
                 if (str_starts_with($u, '//')) {
                     $u = 'https:' . $u;
                 }
 
-                // Basic sanitize
+                
                 $u = esc_url_raw($u);
 
                 if ($u) {
@@ -947,10 +947,10 @@ class wps_ic_fonts
             }
         }
 
-        // Unique while preserving order
+        
         $urls = array_values(array_unique($urls));
 
-        // Group by extension (ignoring querystrings)
+        
         $out = ['all' => $urls, 'woff2' => [], 'woff' => [], 'ttf' => [], 'otf' => [], 'eot' => [], 'svg' => [], 'unknown' => [],];
 
         foreach ($urls as $u) {
@@ -989,13 +989,13 @@ class wps_ic_fonts
     {
         $stylesheetPath = WPS_IC_FONTS_DIR . $dir . '/';
 
-        // Encode the filename because of special characters
+        
         $stylesheetFilename = md5(basename($styleSheetURL)) . '.css';
 
-        // Map the stylesheet URL to Filename
+        
         $this->mapStylesheets($styleSheetURL, $dir, $stylesheetFilename);
 
-        // Create directory
+        
         wp_mkdir_p($stylesheetPath);
 
 
@@ -1006,19 +1006,19 @@ class wps_ic_fonts
 
         $fdOpts = function_exists('get_option') ? get_option(WPS_IC_SETTINGS) : [];
         $fd = (is_array($fdOpts) && !empty($fdOpts['font-display'])) ? strtolower((string) $fdOpts['font-display']) : 'swap';
-        // v7.10.401: resolve through the effective value so a validated metrics-matched
-        // fallback upgrades swap -> optional (kills the font-swap CLS on Divi headings).
+        
+        
         if ($fd !== 'off' && function_exists('wpc_font_display_effective')) { $fd = wpc_font_display_effective($fd); }
 
         if ($fd !== 'off') {
             if (!in_array($fd, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) {
                 $fd = 'swap';
             }
-            // v7.10.483 — resolve PER FACE, because 'optional' is only safe for a family that
-            // actually has a metric-matched fallback. Resolving once outside the callback meant
-            // one family's metrics promoted every face on the site (zinsenvergleich: Astra got
-            // optional with no size-adjust and a live network fetch — a glyph that may never
-            // paint). $fdRaw is the setting; the family decides what it resolves to.
+            
+            
+            
+            
+            
             $fdRaw = $fd;
             $baked = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($m) use ($fdRaw) {
                 $fam = preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $m[0], $fm)
@@ -1038,7 +1038,7 @@ class wps_ic_fonts
             }
         }
 
-        // Write CSS content to File
+        
         file_put_contents($stylesheetPath . $stylesheetFilename, $stylesheetCSS, LOCK_EX);
 
 
@@ -1142,21 +1142,21 @@ class wps_ic_fonts
         update_option(WPS_IC_FONTS_MAP, $this->stylesheetMap);
     }
 
-    /**
-     * Split localized @font-face CSS into fold-critical and deferrable (v7.10.529).
-     *
-     * Families the fold needs come from delay.json's atf_glyphs keys ("Family|weight|style"),
-     * i.e. the service's own measurement — never a guess. Returns null (inline everything,
-     * unchanged behaviour) whenever that list cannot be established, so a missing or
-     * old-schema manifest can never strip a face the page needs.
-     */
-    /**
-     * Name the fail-open branch (v7.10.566). This splitter has now been wrong twice in ways that
-     * were invisible from the outside — .529 never ran at all, .562 ran only when the CDN addon
-     * happened to be loaded — because "inline everything" is also the correct behaviour when it
-     * genuinely does not know. Every silent branch now says which one it took. Zero-cost when
-     * the log helper is absent.
-     */
+    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
     private static function wpc_atf_log566($why, $key = '')
     {
         if (function_exists('wpc_cache_first_log')) {
@@ -1164,21 +1164,21 @@ class wps_ic_fonts
         }
     }
 
-    /**
-     * v7.10.589 — an @font-face DECLARATION is never inert.
-     *
-     * type="wpc-mobile-stylesheet" hides a <style> from the browser until the delay loader
-     * flips it on. Correct for layout rules, wrong for @font-face: a hidden declaration means
-     * the family has no usable face, so matching leaves that family and lands on the next
-     * entry in the stack — a system font — for as long as the visitor never interacts.
-     * .529 deferred these to keep a below-fold woff2 off the FCP chain; that bought a
-     * Lighthouse chain item and paid for it in the wrong typeface on every page.
-     *
-     * A live @font-face costs document bytes, not requests: the woff2 is fetched only when a
-     * glyph actually matches the face, so a family this sheet declares but the page never
-     * uses downloads nothing. font-display is forced to swap when the face does not set it,
-     * so a late face can only ever replace fallback text, never hide it.
-     */
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     private static function wpc_faces_live589($wpc_faces589, $wpc_id589)
     {
         $wpc_faces589 = (string) $wpc_faces589;
@@ -1215,14 +1215,14 @@ class wps_ic_fonts
                 return null;
             }
             $wpc_dir529 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_k529 . '/';
-            // v7.10.562 — READ THROUGH THE CANONICAL READER, never a second implementation.
-            // .529 parsed delay.json itself and looked only at the TOP LEVEL, but the live schema
-            // nests the map per device (delay.json -> desktop|mobile -> atf_glyphs), so it
-            // returned null on every real site and .529 never once ran.
-            // v7.10.566 — that reader now lives in defines.php (include_once'd unconditionally).
-            // Routing through wps_rewriteLogic made this depend on the CDN addon, which is
-            // included only from cdn-rewrite.php:43 — on a render without it the class was absent
-            // and every face went back inline. No class dependency here, by construction.
+            
+            
+            
+            
+            
+            
+            
+            
             if (!function_exists('wpc_atf_glyphs_read')) {
                 self::wpc_atf_log566('no-reader');
                 return null;
@@ -1244,7 +1244,7 @@ class wps_ic_fonts
                 self::wpc_atf_log566('empty-family-list', $wpc_k529);
                 return null;
             }
-            // Brace-matched so a nested block can never split a face in half.
+            
             $wpc_atf529 = '';
             $wpc_rest529 = '';
             $wpc_i529 = 0;
@@ -1279,21 +1279,21 @@ class wps_ic_fonts
                 else { $wpc_rest529 .= $wpc_blk529; }
                 $wpc_i529 = $wpc_p2529;
             }
-            // Every face matched => nothing to defer, no split needed. Not a fail-open.
+            
             if (trim($wpc_rest529) === '') {
                 return null;
             }
-            // v7.10.560 — zero matches is TWO different states and .529 collapsed them:
-            //   (a) the matcher disagrees with this stylesheet's spelling  -> must fail open
-            //   (b) the fold's families are simply not in this sheet       -> defer ALL of it
-            // (b) is the case the feature exists for and .529 rejected it. Disambiguate on
-            // evidence: if every ATF family already has an @font-face elsewhere in the document,
-            // the fold is provably covered and this sheet is entirely below it.
+            
+            
+            
+            
+            
+            
             if (!$wpc_any529) {
-                // v7.10.562 — coverage is read from the ARTIFACTS, not only from $html. This runs
-                // inside an output filter whose position relative to crit injection is not
-                // guaranteed, so "is the family declared in the document yet" is a question about
-                // pipeline order, not about the fold. The crit dir answers it order-independently.
+                
+                
+                
+                
                 $wpc_hay560 = (is_string($html) ? $html : '');
                 foreach (['font-subsets.css', 'critical_desktop.css', 'critical_mobile.css'] as $wpc_af560) {
                     if (@is_readable($wpc_dir529 . $wpc_af560)) {
@@ -1341,10 +1341,10 @@ class wps_ic_fonts
 
         wp_mkdir_p($dir);
 
-        // Use the $url passed in (your original code used $this->url)
+        
         $request_url = $url;
 
-        // Handle protocol-relative URLs
+        
         if (str_starts_with($request_url, '//')) {
             $request_url = 'https:' . $request_url;
         }
@@ -1354,11 +1354,11 @@ class wps_ic_fonts
 
         $temp_filename = $dir . $this->filename . '.' . uniqid('', true) . '.tmp';
 
-        // v7.10.525 — 300s to fetch a FONT. Measured payload on a live site: a 32 KB woff2
-        // in 0.57s, so the old ceiling was ~500x the real transfer and any stalled fetch held
-        // an FPM worker for five minutes. 20s keeps ~35x headroom over the measured time while
-        // making a hung CDN cost seconds, not minutes. Streaming to disk is unchanged.
-        $args = ['timeout' => (int) apply_filters('wpc_font_download_timeout', 20), 'redirection' => 5, 'stream' => true, 'filename' => $temp_filename, 'headers' => [// Browser-like headers often prevent Google Fonts 403
+        
+        
+        
+        
+        $args = ['timeout' => (int) apply_filters('wpc_font_download_timeout', 20), 'redirection' => 5, 'stream' => true, 'filename' => $temp_filename, 'headers' => [
             'User-Agent' => 'Mozilla/5.0 (compatible; WordPress; +https://wordpress.org/)', 'Accept' => 'text/css,*/*;q=0.1',],];
 
         $response = wp_remote_get($request_url, $args);
@@ -1377,7 +1377,7 @@ class wps_ic_fonts
                 unlink($temp_filename);
             }
 
-            // Helpful debug info for 403s
+            
             $server_msg = wp_remote_retrieve_header($response, 'status') ?: '';
             return ['error' => true, 'msg' => 'Response code: ' . $code . ' ' . $server_msg];
         }
@@ -1424,7 +1424,7 @@ class wps_ic_fonts
     {
         if (!empty($array['googleFontsStylesheets'])) {
             foreach ($array['googleFontsStylesheets'] as $font) {
-                #echo 'downloading: ' . $font . " -- ";
+                
                 $download = $this->download($font);
                 if (!empty($download) && empty($download['error'])) {
                     echo 'Download successful!' . "\r\n";

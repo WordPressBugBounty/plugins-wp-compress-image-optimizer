@@ -2,7 +2,7 @@
 global $wps_ic, $wpdb;
 
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// For Lite Settings
+
 $settings = get_option(WPS_IC_SETTINGS);
 if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
     if (!empty($settings['generate_adaptive']) || !empty($settings['retina']) || !empty($settings['generate_webp'])) {
@@ -24,7 +24,7 @@ if (empty($settings['imagesPreset']) || empty($settings['cdnAll'])) {
 
     update_option(WPS_IC_SETTINGS, $settings);
 }
-// End
+
 
 
 if (!empty($_GET['resetTest'])) {
@@ -46,11 +46,11 @@ if (!empty($_POST)) {
     $newSettings = $settings;
 
 
-    // v7.10.927 — the simple toggles are the SAME pillars as advanced Optimize CSS/JS, so
-    // they must carry the .825 riders too: the advanced door couples delay-js-v2 with the
-    // v3 ordered-replay engine and critical.css with Used CSS Delivery. This path flipped
-    // only the bare keys, so simple-OFF left used-css/delay-js-v3 armed while the toggle
-    // showed off (and simple-ON never armed them).
+    
+    
+    
+    
+    
     if (!empty($sentSettings['delay-js-v2']) && $sentSettings['delay-js-v2'] == '1' ){
         $newSettings['delay-js-v2'] = '1';
         $newSettings['delay-js'] = '1';
@@ -66,8 +66,8 @@ if (!empty($_POST)) {
         $newSettings['generate_adaptive'] = '1';
         $newSettings['generate_webp'] = '1';
 
-        // Next-Gen control. Writing generate_webp=1 alone made ceiling_from_settings() derive 'webp'
-        // (defaults ship picture_avif=1 → fresh install = avif; this lite path silently dropped to webp).
+        
+        
         $newSettings['picture_webp'] = '1';
         $newSettings['picture_avif'] = '1';
         $newSettings['wpc_nextgen'] = 'auto';
@@ -126,7 +126,7 @@ if (!empty($_POST)) {
 
     $cache = new wps_ic_cache_integrations();
 
-    // Get Purge List
+    
     $options_class = new wps_ic_options();
     $purgeList = $options_class->getPurgeList($options);
 
@@ -167,24 +167,24 @@ if (!empty($_POST)) {
     if (!empty($options['cache']['advanced']) && $options['cache']['advanced'] == '1') {
 
         if (!empty($options['cache']['compatibility']) && $options['cache']['compatibility'] == '1' && $htacces->isApache) {
-            // Modify HTAccess
-            #$htacces->checkHtaccess();
+            
+            
         } else {
             $htacces->removeHtaccessRules();
         }
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(true);
         $htacces->setAdvancedCache();
 
         $this->cacheLogic = new wps_ic_cache();
-        $this->cacheLogic::removeHtmlCacheFiles(0); // Purge & Preload
-        $this->cacheLogic::preloadPage(0); // Purge & Preload
+        $this->cacheLogic::removeHtmlCacheFiles(0); 
+        $this->cacheLogic::preloadPage(0); 
     } else {
-        // Modify HTAccess
+        
         $htacces->removeHtaccessRules();
 
-        // Add WP_CACHE to wp-config.php
+        
         $htacces->setWPCache(false);
         $htacces->removeAdvancedCache();
     }
@@ -447,7 +447,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
 
                             <!-- Stats -->
                             <?php
-                            // Parse the bytes value to extract number and unit
+                            
                             preg_match('/([0-9.,]+)\s*([a-zA-Z]+)/', $apiStats->display->bytes, $bytesMatch);
                             $bytesNum = isset($bytesMatch[1]) ? $bytesMatch[1] : $apiStats->display->bytes;
                             $bytesUnit = isset($bytesMatch[2]) ? $bytesMatch[2] : '';
@@ -571,10 +571,10 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                 <?php } else {
                                     $date = new DateTime();
 
-                                    // Get the WordPress timezone
+                                    
                                     $timezone = get_option('timezone_string');
 
-                                    // Fallback if timezone_string is not set
+                                    
                                     if (!$timezone) {
                                         $gmt_offset = get_option('gmt_offset');
                                         if ($gmt_offset == 0) {
@@ -582,22 +582,22 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                         } else {
                                             $timezone = timezone_name_from_abbr('', $gmt_offset * 3600, 0);
 
-                                            // If timezone_name_from_abbr() fails, set default timezone
+                                            
                                             if (!$timezone) {
-                                                $timezone = 'UTC'; // Default to UTC to prevent errors
+                                                $timezone = 'UTC'; 
                                             }
                                         }
                                     }
 
-                                    // Patch: IF-ovi su losi
+                                    
                                     if (!empty($initialPageSpeedScore)) {
-                                        // Apply the timezone to the DateTime object
+                                        
 
                                         try {
                                             $date->setTimezone(new DateTimeZone($timezone));
                                         } catch (Exception $e) {
-                                            #error_log("Invalid timezone: $timezone - Falling back to UTC");
-                                            $date->setTimezone(new DateTimeZone('UTC')); // Default to UTC
+                                            
+                                            $date->setTimezone(new DateTimeZone('UTC')); 
                                         }
 
                                         $date->setTimestamp($initialPageSpeedScore['lastRun']);
@@ -996,12 +996,12 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
                                     $isPerfect = ($v2_dev['diff'] === esc_html__('Perfect Score', WPS_IC_TEXTDOMAIN));
                                     $beforeScore = round($v2_dev['before'] * 100);
                                     $afterScore = round($v2_dev['after'] * 100);
-                                    // SVG circle math
+                                    
                                     $smSize = 50; $smR = 21; $smStroke = 5; $smCirc = 2 * M_PI * $smR;
                                     $lgSize = 50; $lgR = 21; $lgStroke = 5; $lgCirc = 2 * M_PI * $lgR;
                                     $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
                                     $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
-                                    // Color by score
+                                    
                                     $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
                                     $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
                                     $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');

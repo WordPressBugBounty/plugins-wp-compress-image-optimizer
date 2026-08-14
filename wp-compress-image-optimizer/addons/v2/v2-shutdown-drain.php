@@ -14,17 +14,17 @@ if (!function_exists('wpc_v2_shutdown_drain_should_trigger')) {
         if (defined('DOING_AJAX') && DOING_AJAX) return false;
         if (defined('REST_REQUEST') && REST_REQUEST) return false;
         if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) return false;
-        // Allow customer-side override (e.g. for low-memory hosts that
-        // want to disable the shutdown trigger entirely)
+        
+        
         if (!apply_filters('wpc_v2_shutdown_drain_enabled', true)) return false;
         return true;
     }
 }
 
-/**
- * Register the shutdown function on init. The function itself does the
- * transient-lock + drain-fire dance AFTER the response is sent.
- */
+
+
+
+
 if (!function_exists('wpc_v2_shutdown_drain_register')) {
     function wpc_v2_shutdown_drain_register()
     {
@@ -50,8 +50,8 @@ if (!function_exists('wpc_v2_shutdown_drain_fire')) {
             @litespeed_finish_request();
         }
 
-        // Sanity: drain helper must exist. If it doesn't, this module has
-        // been required before v2-pull-manifest.php somehow — abort cleanly.
+        
+        
         if (!function_exists('wpc_v2_pull_drain_fire')) return;
 
 

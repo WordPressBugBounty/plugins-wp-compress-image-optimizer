@@ -37,7 +37,7 @@ if (!function_exists('wpc_inv2_dir')) {
 		return is_array($j) ? $j : null;
 	}
 
-	/** Atomic write (tmp+rename), creating the parent dir if needed. */
+	
 	function wpc_inv2_put($file, $content)
 	{
 		if ($file === '') { return false; }
@@ -60,7 +60,7 @@ if (!function_exists('wpc_inv2_dir')) {
 	}
 }
 
-// ─── calibration: the per-site empirical noise-exclusion set (applied at COMPARE time) ─────
+
 if (!function_exists('wpc_inv2_calibration')) {
 	function wpc_inv2_calibration()
 	{
@@ -109,10 +109,10 @@ if (!function_exists('wpc_inv2_evidence')) {
 		return ['tokens' => $tokens, 'sels' => $sels, 'epoch' => $epoch];
 	}
 
-	/**
-	 * The residual difference between two evidence sets AFTER the calibration filter.
-	 * @return array{tokens: string[], sels: string[]} empty arrays ⇔ same content.
-	 */
+	
+
+
+
 	function wpc_inv2_residual($a, $b, $cal)
 	{
 		$dTok = [];
@@ -130,7 +130,7 @@ if (!function_exists('wpc_inv2_evidence')) {
 	}
 }
 
-// ─── phase 1: stash — first line of the ob wrappers, on the PRISTINE buffer ────────────────
+
 if (!function_exists('wpc_inv2_stash')) {
 	function wpc_inv2_stash($html)
 	{
@@ -152,7 +152,7 @@ if (!function_exists('wpc_inv2_stash')) {
 
 
 if (!function_exists('wpc_inv2_gate_serve')) {
-	/** @return bool TRUE = block the optimized serve this render (criticalExists must return false). */
+	
 	function wpc_inv2_gate_serve($urlKey)
 	{
 		try {
@@ -169,21 +169,21 @@ if (!function_exists('wpc_inv2_gate_serve')) {
 	function wpc_inv2_verdict($urlKey)
 	{
 		$cal = wpc_inv2_calibration();
-		if (!empty($cal['frozen'])) { return 'fresh'; }                    // CB tripped → today's behavior, flagged
+		if (!empty($cal['frozen'])) { return 'fresh'; }                    
 		$ev     = $GLOBALS['wpc_inv2_ev'];
 		$device = isset($GLOBALS['wpc_inv2_device']) ? $GLOBALS['wpc_inv2_device'] : 'd';
 		$evf    = wpc_inv2_ev_file($urlKey, $device, 'ev');
 		if ($evf === '') { return 'none'; }
 		$stored = wpc_inv2_read_json($evf);
 
-		// ADOPT — no stored evidence (fresh land, or pre-engine backfill): bind crit to this render.
+		
 		if (!is_array($stored) || !isset($stored['tokens'], $stored['sels'])) {
 			wpc_inv2_write_json($evf, $ev);
 			wpc_inv2_log('inv2-adopt', $urlKey, $device . ' t=' . count($ev['tokens']) . ' s=' . count($ev['sels']));
 			return 'fresh';
 		}
 
-		// EPOCH — our own config epoch moved (reserved lever, e.g. a zone-death signal): stale, no cal.
+		
 		if ((string) $stored['epoch'] !== (string) $ev['epoch']) {
 			if (function_exists('wpc_repull_kick_now')) { wpc_repull_kick_now($urlKey); }
 			wpc_inv2_log('inv2-stale', $urlKey, $device . ' epoch ' . $stored['epoch'] . '→' . $ev['epoch']);
@@ -237,8 +237,8 @@ if (!function_exists('wpc_inv2_gate_serve')) {
 			}
 		}
 		wpc_inv2_write_json($pf, ['t' => time(), 'ev' => $ev]);
-		// REGEN-WANT marker: crit exists on disk, so the kick receiver's "wiped store" gen branch
-		// won't fire on its own — this marker tells it a fresh GENERATION (not a repull) is wanted
+		
+		
 
 		wpc_inv2_put(wpc_inv2_ev_file($urlKey, $device, 'want'), (string) time());
 		if (function_exists('wpc_repull_kick_now')) { wpc_repull_kick_now($urlKey); }
@@ -248,7 +248,7 @@ if (!function_exists('wpc_inv2_gate_serve')) {
 	}
 }
 
-// ─── land: crit replaced in place → next render re-adopts against the fresh artifact ───────
+
 if (!function_exists('wpc_inv2_on_land')) {
 	function wpc_inv2_on_land($urlKey)
 	{
@@ -266,9 +266,9 @@ if (!function_exists('wpc_inv2_on_land')) {
 	}
 }
 
-// ─── soft purge: content-change call sites (builder saves) — keep artifact, kick regen ─────
+
 if (!function_exists('wpc_inv2_crit_soft_purge')) {
-	/** @return bool TRUE = handled (caller must SKIP its legacy delete). FALSE when engine off → legacy path. */
+	
 	function wpc_inv2_crit_soft_purge($ctx, $urlKey = '')
 	{
 		try {
@@ -284,7 +284,7 @@ if (!function_exists('wpc_inv2_crit_soft_purge')) {
 	}
 }
 
-// ─── circuit breaker: churn accounting + freeze (event-driven unfreeze only) ────────────────
+
 if (!function_exists('wpc_inv2_churn')) {
 	function wpc_inv2_churn($kind, $urlKey = '')
 	{
@@ -319,7 +319,7 @@ if (!function_exists('wpc_inv2_churn')) {
 		}
 	}
 
-	/** Event-driven reset (explicit crit purge / support action): clean slate, unfrozen. */
+	
 	function wpc_inv2_reset($why = '')
 	{
 		try {

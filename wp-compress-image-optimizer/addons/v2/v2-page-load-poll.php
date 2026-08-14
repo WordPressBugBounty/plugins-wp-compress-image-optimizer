@@ -18,15 +18,15 @@ if (!function_exists('wpc_v2_page_load_drain_tick')) {
 
         if (!function_exists('wpc_v2_pull_drain_fire')) return;
 
-        // Plugin must have an apikey configured — no point firing drain if
-        // we can't authenticate the manifest GET.
+        
+        
         if (function_exists('wpc_v2_get_apikey')) {
             $apikey = wpc_v2_get_apikey();
             if ($apikey === '') return;
         }
 
-        // 5-minute throttle. Last-fired timestamp lives in wp_options
-        // (not transient) because we want this to survive object-cache
+        
+        
 
 
         $now_ms = (int) round(microtime(true) * 1000);

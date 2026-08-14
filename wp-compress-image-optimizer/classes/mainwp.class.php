@@ -27,13 +27,13 @@ class wps_ic_mainwp extends wps_ic
     public static function admin_init_mainwp()
     {
         if (!empty($_GET['force_ic_connect']) && !empty($_GET['apikey'])) {
-            // API Key
+            
             $apikey = sanitize_text_field($_GET['apikey']);
 
             if (empty($apikey)) die('What are you doing?');
 
-            // This endpoint is unauthenticated; never allow it to silently re-key
-            // a site that is already linked to a different API key.
+            
+            
             $options = get_option(WPS_IC_OPTIONS);
             if (!empty($options['api_key']) && $options['api_key'] !== $apikey) {
                 wp_send_json_error('site-already-connected');

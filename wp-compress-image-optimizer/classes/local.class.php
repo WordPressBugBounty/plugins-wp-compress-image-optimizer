@@ -59,15 +59,15 @@ class wps_ic_local
             self::$apiUrl = 'https://' . $local_server . '/local/' . $apiVersion . '/';
         }
 
-        // Define default parameters and their values
+        
         self::$defaultParameters = ['webp' => '0', 'quality' => '2', 'retina' => '0', 'exif' => '0'];
 
-        // Get All Image Sizes
+        
         self::$imageSizes = $this->getAllThumbSizes();
 
-        /**
-         * Is it a multisite?
-         */
+        
+
+
         if (is_multisite()) {
             $current_blog_id = get_current_blog_id();
             switch_to_blog($current_blog_id);
@@ -80,9 +80,9 @@ class wps_ic_local
             self::$parameters = get_option(WPS_IC_SETTINGS);
         }
 
-        /**
-         * Tranlate Parameters to Latest API
-         */
+        
+
+
         self::$parameters = $this->translateParameters(self::$parameters);
 
     }
@@ -158,7 +158,7 @@ class wps_ic_local
 
     public function translateParameters($parameters)
     {
-        // Get defaults
+        
         $translatedParameters = $this->getDefaultParameters();
 
         if (isset($parameters['generate_webp'])) {
@@ -209,10 +209,10 @@ class wps_ic_local
 
     public function sendBulkRestoreToApi()
     {
-        // Build full API URL
+        
         $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RESTORE_START);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
@@ -222,7 +222,7 @@ class wps_ic_local
 
                 $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_RESTORE_RUN);
 
-                // Make the GET request
+                
                 $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
                 if (!is_wp_error($response)) {
@@ -243,13 +243,13 @@ class wps_ic_local
 
     public function sendBulkToApi()
     {
-        // Build params with all local optimization settings
+        
         $params = wps_local_compress::buildOptimizeParams(null, self::$siteUrl);
 
-        // Build full API URL
+        
         $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_START);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 80, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
@@ -259,7 +259,7 @@ class wps_ic_local
 
                 $request_url = add_query_arg($params, WPC_IC_LOCAL_BULK_RUN);
 
-                // Make the GET request
+                
                 $response = wp_remote_get($request_url, array('timeout' => 60, 'sslverify' => false));
 
                 if (!is_wp_error($response)) {
@@ -278,18 +278,18 @@ class wps_ic_local
     }
 
 
-    /**
-     * Send a stream to API
-     * @param $imageArray Array of images
-     * @param $parameters Array of parameters from Settings
-     * @return void
-     */
+    
+
+
+
+
+
     public function sendToAPI($action = '')
     {
-        // Build full API URL
+        
         $request_url = add_query_arg(array('imageSite' => self::$siteUrl, 'apikey' => self::$apikey), WPC_IC_LOCAL_BULK_STOP);
 
-        // Make the GET request
+        
         $response = wp_remote_get($request_url, array('timeout' => 15, 'sslverify' => false));
 
         if (!is_wp_error($response)) {
@@ -300,10 +300,10 @@ class wps_ic_local
         return ['status' => 'success', 'apiUrl' => self::$apiUrl, 'body' => wp_remote_retrieve_body($response)];
     }
 
-    /**
-     * Preparing images for restore to send to API
-     * @return Array Array of images
-     */
+    
+
+
+
     public function prepareRestoreImages()
     {
         global $wpdb;
@@ -317,7 +317,7 @@ class wps_ic_local
         $bulkStatus = get_option('wps_ic_BulkStatus');
         if (!$bulkStatus) $bulkStatus = [];
 
-        // Values to prepare
+        
         $post_type = 'attachment';
         $wpc_mimes_pi = function_exists('wpc_optimizable_mimes')
             ? array_values(wpc_optimizable_mimes())
@@ -325,7 +325,7 @@ class wps_ic_local
         $wpc_mimes_ph = implode(', ', array_fill(0, count($wpc_mimes_pi), '%s'));
 
 
-        // UNCOMPRESSED (exclude excluded images)
+        
         $queryUncompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -352,7 +352,7 @@ class wps_ic_local
             )
         );
 
-        // COMPRESSED (exclude excluded images)
+        
         $queryCompressed = $wpdb->get_results(
             $wpdb->prepare(
                 "
@@ -404,18 +404,18 @@ class wps_ic_local
     }
 
 
-    /**
-     * Preparing images to send to API
-     * @return Array Array of images
-     */
+    
+
+
+
 
     public static function countLibraryImages($fresh = false)
     {
-        // SNAPSHOT-FIRST (never block a render): any existing snapshot serves immediately,
-        // however stale — staleness schedules a detached post-response recompute instead.
-        // The full-library scan (temp table + filesort over all attachment postmeta) runs
-        // inline only on the very first call ever, pre-stamped so concurrent loads can't
-        // stampede it. This was the "bulk page sometimes needs a refresh" root cause.
+        
+        
+        
+        
+        
         $wpc_blc = get_option('wpc_bulk_library_counts_d');
         $wpc_has_snap = is_array($wpc_blc) && isset($wpc_blc['uncompressed'], $wpc_blc['compressed']);
         if (!$fresh && $wpc_has_snap) {
@@ -430,8 +430,8 @@ class wps_ic_local
             ];
         }
         if (!$fresh && !$wpc_has_snap) {
-            // First call ever: pre-stamp BEFORE the scan so a concurrent load returns the
-            // pending placeholder instead of running a second full scan (anti-stampede).
+            
+            
             $wpc_pend = is_array($wpc_blc) && !empty($wpc_blc['pending']);
             if ($wpc_pend && (time() - (int) ($wpc_blc['t'] ?? 0)) < 120) {
                 return ['compressed' => [], 'uncompressed' => []];
@@ -496,8 +496,8 @@ class wps_ic_local
         ];
     }
 
-    // Detached recompute: response flushes first (law 9 — no cron reliance, no admin
-    // wall-time); duplicate scheduling collapsed by a static flag + the pre-stamp above.
+    
+    
     public static function scheduleCountsRefresh()
     {
         static $armed = false;
@@ -507,11 +507,11 @@ class wps_ic_local
             $fin = false;
             if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $fin = true; }
             elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); $fin = true; }
-            if (!$fin) { return; }   // no detach available → next natural first-call recomputes
+            if (!$fin) { return; }   
             if (function_exists('ignore_user_abort')) { ignore_user_abort(true); }
             @set_time_limit(120);
-            // Re-stamp before the scan so overlapping shutdown runners from parallel
-            // requests skip (the 300s staleness check above won't re-arm for 300s).
+            
+            
             $snap = get_option('wpc_bulk_library_counts_d');
             if (is_array($snap)) {
                 $snap['t'] = time();
@@ -530,7 +530,7 @@ class wps_ic_local
             return self::countLibraryImages();
         }
 
-        // Raise resource limits
+        
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '300');
 
@@ -543,12 +543,12 @@ class wps_ic_local
         $offset = 0;
         $bulkStatus = ['foundImageCount' => 0, 'foundThumbCount' => 0,];
 
-        // Both scans below are unbounded batch loops over posts x postmeta whose only
-        // real ceiling was set_time_limit(120). On a 4-worker host one of these can hold
-        // a quarter of the pool for two minutes, so carry a wall budget and stop cleanly.
-        // Checked at the END of a body, so at least one batch always lands and the counts
-        // are never zero; a trip is journaled because a partial count must not read as
-        // "this library is small".
+        
+        
+        
+        
+        
+        
         $wpc_pi514_t0  = microtime(true);
         $wpc_pi514_bud = (float) apply_filters('wpc_prepare_images_budget_s', 20.0);
         $wpc_pi514_cut = false;
@@ -650,7 +650,7 @@ class wps_ic_local
             ]);
         }
 
-        // Save to option if requested
+        
         if ($action === 'compressing' && $process !== 'count') {
             update_option('wps_ic_BulkStatus', $bulkStatus);
         }

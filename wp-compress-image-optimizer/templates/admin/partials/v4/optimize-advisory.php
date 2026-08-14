@@ -71,7 +71,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
 </div>
 
 <style>
-/* Scoped Performance Advisory card. Design-system colors (CLAUDE.md var reference), no leakage. */
+
 .wpc-optimize-advisory{position:relative;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;
   box-shadow:0 4px 6px -1px rgba(0,0,0,.02);padding:22px 24px;margin:0;
   font-family:'proxima_regular',sans-serif;color:#1e293b}
@@ -112,7 +112,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
 .wpc-oa-spin{width:18px;height:18px;border:2px solid #bfdbfe;border-top-color:#4c89eb;border-radius:50%;
   animation:wpcoaspin .7s linear infinite;flex:0 0 auto}
 @keyframes wpcoaspin{to{transform:rotate(360deg)}}
-/* score header */
+
 .wpc-oa-scorewrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-bottom:6px}
 .wpc-oa-score{display:flex;flex-direction:column;align-items:center;justify-content:center;
   width:96px;height:96px;border-radius:50%;flex:0 0 auto}
@@ -126,7 +126,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
 .wpc-oa-chip.g{border-color:#22b73a;background:#effbf1;color:#137a24}
 .wpc-oa-chip.a{border-color:#fbae40;background:#fef7ed;color:#9a6400}
 .wpc-oa-chip.r{border-color:#ef5a5a;background:#fef2f2;color:#991b1b}
-/* recommendation + residual rows */
+
 .wpc-oa-sechead{font-family:'proxima_semibold',sans-serif;font-size:13px;color:#1e293b;margin:18px 0 8px}
 .wpc-oa-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;
   border-radius:8px;margin-bottom:8px;background:#fff}
@@ -151,10 +151,10 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
 .wpc-oa-notes li:before{content:"•";position:absolute;left:2px;color:#a0aab6}
 .wpc-oa-empty{font-size:12px;color:#94a3b8;padding:2px 0}
 .wpc-oa-stamp{font-size:11px;color:#94a3b8;margin-top:12px}
-/* toast */
+
 .wpc-oa-toast{position:absolute;left:24px;right:24px;bottom:14px;background:#1e293b;color:#fff;font-size:13px;
   padding:11px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.18);z-index:5}
-/* Auto Mode toggle + strip */
+
 .wpc-oa-headctas{display:flex;align-items:center;gap:16px;flex:0 0 auto;flex-wrap:wrap}
 .wpc-oa-autowrap{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
 .wpc-oa-autolabel{font-family:'proxima_semibold',sans-serif;font-size:13px;color:#1e293b;display:flex;
@@ -197,14 +197,14 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
     var CFG = {
         ajaxurl: <?php echo wp_json_encode($wpc_oa_ajaxurl); ?>,
         nonce:   <?php echo wp_json_encode($wpc_oa_nonce); ?>,
-        // Agency portal only. Every action below mutates site state, so without this the
-        // portal would run Auto Mode / safe mode against ITSELF instead of the client site.
+
+
         apikey:  <?php echo wp_json_encode($wpc_oa_apikey); ?>,
         pollMs: 4000,
         maxPolls: 30 // ~2 min ceiling; a real run finishes in ~15-20s
     };
-    // rule id -> the wp-admin setting the operator flips (owner:auto only). The tab is DERIVED from the
-    // DOM (walk to .wpc-tab-content), so no brittle tab map — if the setting isn't on the page we toast.
+
+
     var RULE_SETTING = { R2: 'used-css', R3: 'replace-fonts' };
 
     var root = document.getElementById('wpc-optimize-advisory');
@@ -266,7 +266,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         showStatus('<span class="wpc-oa-spin"></span><span>Measuring… (' + (n+1) + ')</span>', false);
         post('wps_ic_optimize_status', { run_id: runId }).then(function(res){
             if (!res || !res.success){
-                // transient/network hiccup → keep trying unless the run is truly gone
+
                 if (res && res.data && res.data.gone){ fail(res.data.msg || 'This run expired — start a new scan.'); return; }
                 return setTimeout(function(){ poll(runId, n+1); }, CFG.pollMs);
             }
@@ -296,7 +296,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         var notes = report.notes || [];
         var html = '';
 
-        // score + metrics header
+
         var sc = scoreColors(scores.mobile);
         html += '<div class="wpc-oa-scorewrap">';
         html += '<div class="wpc-oa-score" style="background:' + sc.bg + ';border:3px solid ' + sc.bd + ';color:' + sc.fg + '">'
@@ -315,7 +315,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         if (m.ttfb != null) html += chip('TTFB', ms(m.ttfb), band(m.ttfb,800,1800));
         html += '</div></div>';
 
-        // recommendations
+
         html += '<div class="wpc-oa-sechead">Recommendations</div>';
         if (!recs.length){
             html += '<div class="wpc-oa-empty">Nothing actionable — this page is already well optimized. 🎉</div>';
@@ -338,7 +338,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
             });
         }
 
-        // residuals
+
         if (resids.length){
             html += '<div class="wpc-oa-sechead">Residuals — owned, not one-click</div>';
             resids.forEach(function(r){
@@ -364,7 +364,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         results.innerHTML = html; results.style.display = 'block';
     }
 
-    // [Apply] — advisory only: deep-link the operator to the named setting (P1 never auto-flips).
+
     function applyRule(rule, action){
         var name = RULE_SETTING[rule];
         var el = name ? (document.querySelector('[name="' + name + '"]') || document.getElementById(name)) : null;
@@ -395,7 +395,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         if (b) applyRule(b.getAttribute('data-rule'), b.getAttribute('data-action') || '');
     });
 
-    // ── Auto Mode  toggle + status strip + journal + revert ──
+
     var autoCb   = document.getElementById('wpc-oa-auto');
     var strip    = document.getElementById('wpc-oa-auto-strip');
     var autoT;
@@ -451,7 +451,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
                 autoCb.checked = false; autoPoll();
             });
         });
-        // keep polling while the loop is live
+
         clearTimeout(autoT);
         if (['starting','arming','measuring','settling','idle'].indexOf(st.status) !== -1){
             autoT = setTimeout(autoPoll, 15000);

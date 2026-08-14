@@ -84,16 +84,16 @@ class wps_criticalCss
         ]);
 
         if (is_wp_error($CSS)) {
-            // Get the error message
+            
             $error_message = $CSS->get_error_message();
 
-            // Optional: Get the error code
+            
             $error_code = $CSS->get_error_code();
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css file: ' . $error_message,
-                'code' => $error_code, // Optional
+                'code' => $error_code, 
                 'url' => $url
             ]);
         }
@@ -458,7 +458,7 @@ class wps_criticalCss
 
         if (is_wp_error($cssContent) || empty($cssContent)) {
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css content - empty API response',
             ]);
@@ -531,16 +531,16 @@ class wps_criticalCss
         ]);
 
         if (is_wp_error($desktop)) {
-            // Get the error message
+            
             $error_message = $desktop->get_error_message();
 
-            // Optional: Get the error code
+            
             $error_code = $desktop->get_error_code();
 
-            // Send a JSON response with the error message and code
+            
             wp_send_json_error([
                 'msg' => 'Error downloading css file: ' . $error_message,
-                'code' => $error_code, // Optional
+                'code' => $error_code, 
                 'url' => $json['desktop']
             ]);
         }
@@ -656,11 +656,11 @@ class wps_criticalCss
 
 
         $args = ['url' => $url];
-        // v7.10.515 — this host BLACK-HOLES: DNS resolves in ~3ms, then the TCP connect
-        // never completes (measured 60s+ with no response). At the old timeout of 300 a
-        // single click pinned an FPM worker for five minutes, and on a 4-worker host two
-        // clicks took out half the pool. Bounded, plus a breaker so repeat clicks during
-        // an outage cost nothing instead of the timeout each.
+        
+        
+        
+        
+        
         if (get_transient('wpc_v1_assets_down515')) {
             return 0;
         }

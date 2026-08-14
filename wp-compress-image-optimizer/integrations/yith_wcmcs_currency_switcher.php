@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_yith_wcmcs_currency_switcher extends wps_ic_integrations {
@@ -12,7 +12,7 @@ class wps_ic_yith_wcmcs_currency_switcher extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No conflicting settings to auto-fix for this plugin
+        
     }
 
     public function fix_setting($setting) {

@@ -1,28 +1,28 @@
 <?php
-/**
- * v7.10.656 — Brotli HTML land handler (spec §3).
- *
- * Lives in its own file for the same two reasons v2-store.php does, both real:
- *
- * 1. SECURITY. The bytes now reach disk through wpc_v2_store_bytes655(), which enforces
- *    containment below a caller-declared root and an extension allow-list. This handler
- *    previously built its own temp name and did its own write+rename, which is a fourth
- *    copy of a sequence that must be identical everywhere. `html_br` is not an image, so
- *    the caller widens the contract EXPLICITLY — the strict image default is never
- *    inherited by accident.
- *
- * 2. FILE-LOCAL DATAFLOW. The decode of a live request body ($_POST['br_b64']) and the
- *    write of those bytes to disk no longer sit in the same file: warm.php keeps its cache
- *    writes and now holds no decode at all, this file holds the decode and no write. That
- *    pairing is what heuristic scanners score as a PHP dropper — Imunify360 emptied
- *    addons/v2/v2-callback.php on customer sites for exactly this shape, silently removing
- *    every route it contained. Brotli is not live yet; landing it as a decode-plus-write
- *    inside warm.php would reintroduce the pattern in the plugin's single most
- *    write-heavy file.
- *
- * Pairing (R1) is enforced by writers + the post-write re-check belt below (a render
- * racing the land invalidates it).
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 if (!defined('ABSPATH')) {
     exit;
@@ -66,8 +66,8 @@ if (!function_exists('wpc_html_br_land647')) {
             if (!function_exists('wpc_v2_store_bytes655')) {
                 wp_send_json_error('write');
             }
-            // html_br is not an image: the image default is widened explicitly, and the
-            // root is pinned to the cache tree so no url_key can place bytes outside it.
+            
+            
             $wpc_put647 = wpc_v2_store_bytes655($wpc_br647, $wpc_dir647 . 'index.html_br', [
                 'root' => WPS_IC_CACHE,
                 'exts' => ['html_br'],
@@ -75,8 +75,8 @@ if (!function_exists('wpc_html_br_land647')) {
             if (empty($wpc_put647['ok'])) {
                 wp_send_json_error('write');
             }
-            // R1 belt: re-check AFTER the write — a render that raced us rewrote the
-            // sidecar; our blob pairs with the OLD html and must not survive.
+            
+            
             if (strtolower(trim((string) @file_get_contents($wpc_dir647 . 'index.html_md5'))) !== $wpc_md647) {
                 @unlink($wpc_dir647 . 'index.html_br');
                 wp_send_json_success(['mode' => 'race-discard']);

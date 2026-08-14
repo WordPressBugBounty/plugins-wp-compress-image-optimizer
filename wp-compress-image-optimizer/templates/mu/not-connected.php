@@ -1,26 +1,26 @@
 <?php
 global $wpc_siteID;
-// Change Active Blog
+
 switch_to_blog($wpc_siteID);
 $current_blog_details = get_blog_details(['blog_id' => $wpc_siteID]);
 
 
-/**
- * Fetch settings, or if save is triggered save them.
- * - If no settings are saved (bug, deleted options..) regenerate recommended
- */
+
+
+
+
 $settings = get_option(WPS_IC_SETTINGS);
 
-/**
- * Quick fix for PHP undefined notices
- */
+
+
+
 $wps_ic_active_settings['optimization']['lossless']    = '';
 $wps_ic_active_settings['optimization']['intelligent'] = '';
 $wps_ic_active_settings['optimization']['ultra']       = '';
 
-/**
- * Decides which setting is active
- */
+
+
+
 if ( ! empty($settings['optimization'])) {
 	if ($settings['optimization'] == 'lossless') {
 		$wps_ic_active_settings['optimization']['lossless'] = 'class="current"';

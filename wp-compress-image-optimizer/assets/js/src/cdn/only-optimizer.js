@@ -19,7 +19,7 @@ function runLazy() {
                 if (entry.isIntersecting) {
                     var lazyImage = entry.target;
 
-                    // Integrations
+                    
                     masonry = lazyImage.closest(".masonry");
                     owlSlider = lazyImage.closest(".owl-carousel");
                     SlickSlider = lazyImage.closest(".slick-slider");
@@ -34,9 +34,9 @@ function runLazy() {
                         console.log(slides);
                     }
 
-                    /**
-                     * Is SlickSlider/List?
-                     */
+                    
+
+
                     if (SlickSlider || SlickList || slides || owlSlider || masonry) {
                         if (typeof lazyImage.dataset.src !== 'undefined' && lazyImage.dataset.src != '') {
                             newApiURL = lazyImage.dataset.src;
@@ -44,7 +44,7 @@ function runLazy() {
                             newApiURL = lazyImage.src;
                         }
 
-                        // Check and update the srcset attribute if data-srcset exists
+                        
                         if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
                             newApiURLSrcset = adaptiveImage.dataset.srcset;
                             adaptiveImage.srcset = newApiURLSrcset;
@@ -56,9 +56,9 @@ function runLazy() {
                         lazyImage.classList.add("wpc-remove-lazy");
                         lazyImage.classList.remove("wps-ic-lazy-image");
 
-                        // Remove Dataset
+                        
                         if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
-                            adaptiveImage.removeAttribute('data-src'); // Remove dataset.src
+                            adaptiveImage.removeAttribute('data-src'); 
                         }
 
                         if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
@@ -93,13 +93,13 @@ function runLazy() {
                         console.log('Image Stuff END');
                     }
 
-                    // if (isMobile) {
-                    //     imgWidth = mobileWidth;
-                    // }
+                    
+                    
+                    
 
-                    /**
-                     * Setup Image SRC only if srcset is empty
-                     */
+                    
+
+
                     if ((typeof lazyImage.dataset.src !== 'undefined' && lazyImage.dataset.src != '')) {
                         newApiURL = lazyImage.dataset.src;
 
@@ -110,9 +110,9 @@ function runLazy() {
                             lazyImage.srcset = lazyImage.dataset.srcset;
                         }
 
-                        // Handle <picture> <source> lazy loading — promote the lazy AVIF/WebP
-                        // <source data-srcset> so the browser self-selects the right format once
-                        // (no eager pre-fetch + no runLazy re-fetch double-load). Mirrors local/lazy.js.
+                        
+                        
+                        
                         var parentPicture = lazyImage.closest('picture');
                         if (parentPicture) {
                             parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
@@ -134,7 +134,7 @@ function runLazy() {
                     lazyImage.classList.add("ic-fade-in");
                     lazyImage.classList.remove("wps-ic-lazy-image");
 
-                    //lazyImage.removeAttribute('data-src'); => Had issues with Woo Zoom
+                    
                     lazyImage.removeAttribute('data-srcset');
 
                     srcSetAPI = '';
@@ -162,7 +162,7 @@ function runLazy() {
                         lazyImage.srcset = newApiURL;
                     }
 
-                    //lazyImage.classList.remove("lazy");
+                    
                     lazyImageObserver.unobserve(lazyImage);
                 }
             });
@@ -177,7 +177,7 @@ function runLazy() {
         });
 
     } else {
-        // Possibly fall back to event handlers here
+        
     }
 }
 
@@ -191,31 +191,31 @@ function onScroll() {
     window.removeEventListener('scroll', onScroll);
 }
 
-// Attach the scroll event listener
+
 window.addEventListener('scroll', onScroll);
 
 const wpcObserver = new MutationObserver(function (mutationsList) {
-    // Iterate over each mutation
+    
     for (var i = 0; i < mutationsList.length; i++) {
         var mutation = mutationsList[i];
 
-        // Check if nodes were added
+        
         if (
             mutation.type === 'childList' &&
             mutation.addedNodes.length > 0 &&
             mutation.addedNodes[0].tagName &&
             mutation.addedNodes[0].tagName.toLowerCase() === 'img'
         ) {
-            // Process the added nodes
+            
             for (var j = 0; j < mutation.addedNodes.length; j++) {
                 var node = mutation.addedNodes[j];
 
-                // Check if the added node is an image
+                
                 if (node.tagName && node.tagName.toLowerCase() === 'img') {
                     adaptiveImage = node;
-                    /**
-                     * Setup Image SRC only if srcset is empty
-                     */
+                    
+
+
                     if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
                         newApiURL = adaptiveImage.dataset.src;
 

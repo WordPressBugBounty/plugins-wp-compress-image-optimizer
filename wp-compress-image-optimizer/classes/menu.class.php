@@ -1,9 +1,9 @@
 <?php
 
 
-/**
- * Class - Menu
- */
+
+
+
 class wps_ic_menu extends wps_ic
 {
 
@@ -25,7 +25,7 @@ class wps_ic_menu extends wps_ic
 
             $this->templates = new wps_ic_templates();
 
-            // API Key is removed!
+            
             if (empty(self::$connected['api_key']) || empty(self::$connected['response_key'])) {
                 $option['hide_compress'] = '0';
                 update_option(WPS_IC_SETTINGS, $option);
@@ -97,7 +97,7 @@ class wps_ic_menu extends wps_ic
         $wpc_page725 = $this->wpc_page_context_725($options);
 
         if (!is_admin() && current_user_can('manage_wpc_purge')) {
-            // Show options in frontend
+            
 
             if ($wpc_page725 !== null) {
                 $this->wpc_add_page_items_725($admin_bar, $options, $wpc_page725);
@@ -107,7 +107,7 @@ class wps_ic_menu extends wps_ic
             $admin_bar->add_menu(['id' => 'wp-compress-view-as-visitor', 'parent' => 'wp-compress', 'title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('View as Visitor', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-view-as-visitor'],]);
 
         } elseif (current_user_can('manage_wpc_settings') ||current_user_can('manage_wpc_purge')) {
-            // Shows if user is logged in!
+            
 
             if ($wpc_page725 !== null) {
                 $this->wpc_add_page_items_725($admin_bar, $options, $wpc_page725);
@@ -122,10 +122,10 @@ class wps_ic_menu extends wps_ic
 
     }
 
-    // v7.10.725 — resolve "this page" for the admin bar. Front end: the URL being viewed.
-    // wp-admin: ONLY the post editor (post.php) resolves, to the edited post's permalink —
-    // every other admin screen has no page context, and a per-page button that silently
-    // targets some other URL is worse than no button. Returns null when there is no page.
+    
+    
+    
+    
     private function wpc_page_context_725($options)
     {
         $wpc_url725 = '';
@@ -176,10 +176,10 @@ class wps_ic_menu extends wps_ic
         ];
     }
 
-    // v7.10.725 — the per-page group: one honest status line + the two per-page actions.
-    // Refresh = the free lane (HTML layers only). Rebuild = the paid lane (one service
-    // generation for THIS url; its HTML purge rides the land, never the click, so the
-    // page keeps serving until the new version actually exists).
+    
+    
+    
+    
     private function wpc_add_page_items_725($admin_bar, $options, $wpc_page725)
     {
         $wpc_u725 = esc_attr(esc_url($wpc_page725['url']));
@@ -220,12 +220,12 @@ class wps_ic_menu extends wps_ic
         }
     }
 
-    // v7.10.725 — site-wide controls ALL live under Advanced (kept builder name for suite
-    // continuity). The primary surface is per-page (wpc_add_page_items_725): every
-    // legitimate site-wide trigger is a hookable event we already automate, so site-wide
-    // purging is the escape hatch, not the front door — cache hit rate and service gens
-    // are the resources the menu shape protects. Handler ids/classes are unchanged, so
-    // existing JS and support flows keep working.
+    
+    
+    
+    
+    
+    
     private function wpc_add_purge_menu_641($admin_bar, $options)
     {
         $wpc_crit641 = !empty($options['critical']['css']) && $options['critical']['css'] == '1';
@@ -244,9 +244,9 @@ class wps_ic_menu extends wps_ic
 
         $admin_bar->add_menu(['id' => 'wp-compress-purge-html-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge & Preload All Pages', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Drop every cached page and re-warm them. Critical CSS and the image CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-html-cache'],]);
 
-        // v7.10.516 — ONE primary intent. Rebuild does the whole correct sequence and is
-        // situational: it purges only layers that are actually stale, and never the
-        // image CDN (re-optimization + origin bandwidth is not collateral we can spend).
+        
+        
+        
         if ($wpc_crit641) {
             $admin_bar->add_menu(['id' => 'wp-compress-pull-latest', 'parent' => 'wp-compress-advanced', 'title' => __('Pull Latest Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Re-fetch the newest cloud artifacts (critical, fonts, used-CSS) without purging. Automation does this on its own — use it to skip the wait.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-pull-latest'],]);
             $admin_bar->add_menu(['id' => 'wp-compress-rebuild', 'parent' => 'wp-compress-advanced', 'title' => __('Rebuild All Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Fetch fresh optimizations for the whole site and drop stale cached pages. Images and the CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild'],]);
@@ -308,7 +308,7 @@ class wps_ic_menu extends wps_ic
             $wpc_menu_name113 = function_exists('wpc_get_plugin_name') ? wpc_get_plugin_name() : __('WP Compress', WPS_IC_TEXTDOMAIN);
             $hook = add_submenu_page('options-general.php', $wpc_menu_name113, $wpc_menu_name113, 'manage_wpc_settings', $this::$slug, [$this, 'render_admin_page_v4']);
 
-            // AFTER registration; persist the final label so top-level mode shows the same brand.
+            
             $wpc_slug113 = $this::$slug;
             add_action('admin_menu', function () use ($wpc_slug113) {
                 global $submenu;
@@ -396,16 +396,16 @@ class wps_ic_menu extends wps_ic
     }
 
 
-    // Add custom menu items under 'My Sites -> Network Admin'
+    
     public function addCustomMUMenuItem($wp_admin_bar)
     {
-        // Check if the current user has the capability to manage the network
+        
         if (!is_user_logged_in() || !is_multisite() || !current_user_can('manage_network')) {
             return;
         }
 
 
-        // Add the custom menu item
+        
         $wp_admin_bar->add_menu(array(
             'parent' => 'network-admin',
             'id' => 'network-admin-child',
@@ -436,16 +436,16 @@ class wps_ic_menu extends wps_ic
     {
         global $wps_ic;
 
-        /**
-         * Reset Debug Log
-         */
+        
+
+
         if (!empty($_GET['reset_debug_log']) && isset($wps_ic->log) && is_object($wps_ic->log) && method_exists($wps_ic->log, 'reset')) {
             $wps_ic->log->reset();
         }
 
-        /**
-         * View Debug Log
-         */
+        
+
+
         if (!empty($_GET['view_debug_log']) && isset($wps_ic->log) && is_object($wps_ic->log) && method_exists($wps_ic->log, 'view')) {
             $wps_ic->log->view();
             die();
@@ -461,7 +461,7 @@ class wps_ic_menu extends wps_ic
             if (!empty($_GET['showAdvanced'])) {
                 $this->templates->get_admin_page('advanced_settings_v4');
             } else {
-                // Lite Version
+                
                 if(get_option('wps_ic_url_changed')){
                     $this->templates->get_admin_page('connect/lite-url-changed');
                 } else {

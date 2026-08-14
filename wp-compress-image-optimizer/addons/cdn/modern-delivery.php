@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 
 class WPC_Modern_Delivery
 {
-    // Request-scoped caches (G11) — reduce N×DB hits to 1 per attachment per request
+    
     private static $attachment_cache = [];
     private static $metadata_cache = [];
     private static $offload_cache = [];
@@ -13,12 +13,12 @@ class WPC_Modern_Delivery
     private static $source_width_cache = [];
     private static $lcp_candidate = null;
     private static $lcp_img_count = 0;
-    private static $serving_base_url_cache = null; // CDN or origin base URL, resolved once per request
+    private static $serving_base_url_cache = null; 
 
-    /**
-     * Is modern mode globally active + context allows rewrite?
-     * Covers S2 + L14 — REST/AMP/admin/feed/cron/ajax bypass with SSR allow-list.
-     */
+    
+
+
+
     public static function is_active()
     {
 
@@ -29,7 +29,15 @@ class WPC_Modern_Delivery
         }
 
 
-        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+        
+        
+        
+        
+        
+        
+        
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()
+            && !apply_filters('wpc_picture_suppressed_floor', true)) {
             return false;
         }
 
@@ -48,17 +56,17 @@ class WPC_Modern_Delivery
             return false;
         }
 
-        // Admin / AJAX / Cron / Feed bypass (S2)
+        
         if (is_admin()) return false;
         if (defined('DOING_AJAX') && DOING_AJAX) return false;
         if (defined('DOING_CRON') && DOING_CRON) return false;
         if (function_exists('is_feed') && is_feed()) return false;
 
-        // AMP bypass
+        
         if (function_exists('is_amp_endpoint') && is_amp_endpoint()) return false;
         if (function_exists('amp_is_request') && amp_is_request()) return false;
 
-        // REST bypass — but allow SSR block renders (L14)
+        
         if (defined('REST_REQUEST') && REST_REQUEST) {
             $route = $_SERVER['REQUEST_URI'] ?? '';
             $is_ssr = strpos($route, '/wp/v2/block-renderer/') !== false;
@@ -73,7 +81,7 @@ class WPC_Modern_Delivery
     {
         if (empty($img_url)) return 0;
 
-        // Fast path: WP convention — class="wp-image-{id}" is authoritative
+        
         if (!empty($class_attr) && preg_match('/\bwp-image-(\d+)\b/', $class_attr, $m)) {
             return (int) $m[1];
         }
@@ -81,8 +89,8 @@ class WPC_Modern_Delivery
         $key = md5($img_url);
         if (!isset(self::$attachment_cache[$key])) {
             $resolve_url = $img_url;
-            // Extract origin from WPC CDN URL pattern: .../u:https://origin/path
-            // Use ~ delimiter to avoid conflict with # inside character class [^?#\s]
+            
+            
             if (strpos($img_url, '/u:') !== false) {
                 if (preg_match('~/u:(https?://[^?#\s]+)~', $img_url, $m)) {
                     $resolve_url = $m[1];
@@ -95,9 +103,9 @@ class WPC_Modern_Delivery
         return self::$attachment_cache[$key];
     }
 
-    /**
-     * Request-scoped metadata resolver (G11).
-     */
+    
+
+
     public static function resolve_metadata($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
@@ -108,26 +116,26 @@ class WPC_Modern_Delivery
         return self::$metadata_cache[$attachment_id];
     }
 
-    /**
-     * Detect offloaded attachments (L12) — S3/R2/Spaces etc.
-     * Returns true if attachment is offloaded (skip modern path).
-     */
+    
+
+
+
     public static function is_offloaded($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
         if ($attachment_id <= 0) return false;
         if (isset(self::$offload_cache[$attachment_id])) return self::$offload_cache[$attachment_id];
 
-        // WP Offload Media (AS3CF)
+        
         if (get_post_meta($attachment_id, 'amazonS3_info', true)) {
             return self::$offload_cache[$attachment_id] = true;
         }
-        // WP Stateless
+        
         if (get_post_meta($attachment_id, 'sm_cloud', true)) {
             return self::$offload_cache[$attachment_id] = true;
         }
-        // Generic: file doesn't exist locally
-        $local = get_attached_file($attachment_id, true); // $unfiltered = true
+        
+        $local = get_attached_file($attachment_id, true); 
         if (!$local || !file_exists($local)) {
             return self::$offload_cache[$attachment_id] = true;
         }
@@ -135,10 +143,10 @@ class WPC_Modern_Delivery
         return self::$offload_cache[$attachment_id] = false;
     }
 
-    /**
-     * Is attachment processable at all for modern mode?
-     * Skips SVG, animated GIF, offloaded.
-     */
+    
+
+
+
     public static function is_processable($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
@@ -151,7 +159,7 @@ class WPC_Modern_Delivery
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         if ($ext === 'svg' || $ext === 'svgz') return false;
 
-        // Animated GIF detection — read first frame count
+        
         if ($ext === 'gif') {
             $bytes = @file_get_contents($file, false, null, 0, 1024 * 1024);
             if ($bytes && preg_match_all('#\x00\x21\xF9\x04#s', $bytes) > 1) {
@@ -162,14 +170,14 @@ class WPC_Modern_Delivery
         return true;
     }
 
-    /**
-     * Force HTTPS on emitted URLs when request is HTTPS (S/G8).
-     */
+    
+
+
     public static function force_https_if_needed($url)
     {
         if (empty($url)) return $url;
-        // Proxy-aware check. This was a bare is_ssl(), which no-ops at the origin
-        // behind Cloudflare/WP Engine exactly when this upgrader is needed.
+        
+        
         if (wpc_request_is_https() && strpos($url, 'http://') === 0) {
             return 'https://' . substr($url, 7);
         }
@@ -190,6 +198,13 @@ class WPC_Modern_Delivery
             return self::$serving_base_url_cache = $origin_base_url;
         }
 
+        
+        
+        
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            return self::$serving_base_url_cache = $origin_base_url;
+        }
+
 
         $custom_cname = get_option('ic_custom_cname');
         $cdn_host = !empty($custom_cname) ? trim($custom_cname) : trim((string) get_option('ic_cdn_zone_name'));
@@ -198,19 +213,19 @@ class WPC_Modern_Delivery
             return self::$serving_base_url_cache = $origin_base_url;
         }
 
-        // Swap the origin scheme+host for the CDN host, keep the path (/wp-content/uploads/...)
+        
         $cdn_base = preg_replace('#^https?://[^/]+#', 'https://' . $cdn_host, $origin_base_url);
         return self::$serving_base_url_cache = $cdn_base;
     }
 
-    /**
-     * URL-encode the filename portion of a natural URL (G9).
-     * Handles spaces, parens, non-ASCII in attachment filenames.
-     */
+    
+
+
+
     public static function encode_url($url)
     {
         if (empty($url)) return $url;
-        // Parse the URL, encode the path per-segment, rebuild
+        
         $parts = parse_url($url);
         if (empty($parts['path'])) return $url;
         $encoded_path = implode('/', array_map('rawurlencode', array_map('rawurldecode', explode('/', $parts['path']))));
@@ -223,9 +238,9 @@ class WPC_Modern_Delivery
         return $rebuilt;
     }
 
-    /**
-     * Append ?v={mtime} cache-bust (S7) using attachment post_modified timestamp.
-     */
+    
+
+
     public static function append_version($url, $attachment_id)
     {
         if (empty($url)) return $url;
@@ -236,12 +251,12 @@ class WPC_Modern_Delivery
         return $url . $sep . 'v=' . $v;
     }
 
-    /**
-     * Compute sizes attribute (G2 precedence):
-     * 1. Preserve existing sizes if set
-     * 2. Infer from attachment width if declared
-     * 3. Default 100vw
-     */
+    
+
+
+
+
+
     public static function resolve_sizes($original_sizes, $declared_width)
     {
         if (!empty($original_sizes)) return $original_sizes;
@@ -252,16 +267,16 @@ class WPC_Modern_Delivery
         return '100vw';
     }
 
-    /**
-     * Build srcset string for a specific format (avif/webp/jpg) from variants + meta.
-     * Returns empty string if no variants available for this format.
-     */
+    
+
+
+
     public static function build_srcset_for_format($attachment_id, $variants, $meta, $format, $upload_url_base)
     {
         $entries = [];
         $upload_dir = wp_upload_dir();
         $origin_base = rtrim($upload_dir['baseurl'], '/');
-        // CDN ON → use CDN hostname; CDN OFF → use origin directly
+        
         $base_url = self::get_serving_base_url($origin_base);
         $base_dir = rtrim($upload_dir['basedir'], '/');
         $rel_dir = !empty($meta['file']) ? dirname($meta['file']) : '';
@@ -276,7 +291,7 @@ class WPC_Modern_Delivery
             if ($format === 'jpg') {
                 $scaled_name = pathinfo($meta['file'], PATHINFO_FILENAME);
             } else {
-                // Strip -scaled suffix — AVIF/WebP at base filename
+                
                 $scaled_name = preg_replace('/-scaled$/', '', pathinfo($meta['file'], PATHINFO_FILENAME));
             }
             $scaled_file = $rel_dir . '/' . $scaled_name . '.' . $ext;
@@ -289,7 +304,7 @@ class WPC_Modern_Delivery
                         self::$file_exists_cache[$disk_path] = file_exists($disk_path);
                     }
                     if (!self::$file_exists_cache[$disk_path]) {
-                        // Fallback: try legacy naming with -scaled preserved
+                        
                         $legacy_base = pathinfo($meta['file'], PATHINFO_FILENAME);
                         $legacy_file = $rel_dir . '/' . $legacy_base . '.' . $format;
                         $legacy_disk = $base_dir . '/' . $legacy_file;
@@ -303,7 +318,7 @@ class WPC_Modern_Delivery
                         }
                     }
                 }
-                // Origin URL when the variant is confirmed local on disk and the setting is on.
+                
                 $scaled_key = 'scaled' . ($format === 'jpg' ? '' : '-' . $format);
                 $scaled_serving = ($prefer_local && !empty($variants[$scaled_key]['local'])) ? $origin_base : $base_url;
                 $scaled_url = self::encode_url($scaled_serving . '/' . $scaled_file);
@@ -315,7 +330,7 @@ class WPC_Modern_Delivery
             skip_scaled:;
         }
 
-        // WP-registered sizes
+        
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $size_name => $size_info) {
                 if (empty($size_info['file']) || empty($size_info['width'])) continue;
@@ -323,7 +338,7 @@ class WPC_Modern_Delivery
                 $size_base = pathinfo($size_info['file'], PATHINFO_FILENAME);
                 $ext = ($format === 'jpg') ? pathinfo($size_info['file'], PATHINFO_EXTENSION) : $format;
                 $size_file = $rel_dir . '/' . $size_base . '.' . $ext;
-                // For AVIF/WebP verify file exists on disk — local-mc may skip thumbnail variants
+                
                 if ($format !== 'jpg') {
                     $disk_path = $base_dir . '/' . $size_file;
                     if (!isset(self::$file_exists_cache[$disk_path])) {
@@ -331,7 +346,7 @@ class WPC_Modern_Delivery
                     }
                     if (!self::$file_exists_cache[$disk_path]) continue;
                 }
-                // Origin URL when the variant is confirmed local on disk and the setting is on.
+                
                 $size_key = $size_name . ($format === 'jpg' ? '' : '-' . $format);
                 $size_serving = ($prefer_local && !empty($variants[$size_key]['local'])) ? $origin_base : $base_url;
                 $size_url = self::encode_url($size_serving . '/' . $size_file);
@@ -348,14 +363,14 @@ class WPC_Modern_Delivery
         ksort($entries);
 
 
-        // <source> srcsets too, so it's uniform across ALL delivery modes. Same gate as negotiated/legacy
+        
 
 
         if ($format !== 'jpg'
             && class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
             && wps_rewriteLogic::src_hint_enabled()) {
             $sh_oe  = !empty($meta['file']) ? strtolower((string) pathinfo((string) $meta['file'], PATHINFO_EXTENSION)) : '';
-            $sh_src = in_array($sh_oe, ['png', 'gif', 'webp', 'jpg', 'jpeg'], true) ? $sh_oe : ''; // literal ext: jpg and jpeg are DISTINCT files at origin
+            $sh_src = in_array($sh_oe, ['png', 'gif', 'webp', 'jpg', 'jpeg'], true) ? $sh_oe : ''; 
             if ($sh_src !== '') {
                 foreach ($entries as $sh_w => $sh_entry) {
                     $sh_sp = strpos($sh_entry, ' ');
@@ -370,10 +385,10 @@ class WPC_Modern_Delivery
         return implode(', ', $entries);
     }
 
-    /**
-     * Extract the largest width descriptor from a srcset string.
-     * Returns 0 if srcset is empty or has no parseable width descriptors.
-     */
+    
+
+
+
     private static function srcset_max_width($srcset)
     {
         if (empty($srcset)) return 0;
@@ -409,7 +424,7 @@ class WPC_Modern_Delivery
 
         if ($width === $meta_width) {
             if ($format === 'jpg') {
-                // Use WP's actual filename (-scaled or plain based on big_image_size_threshold)
+                
                 $filename = basename($meta['file']);
             } else {
 
@@ -422,19 +437,19 @@ class WPC_Modern_Delivery
             ];
         }
 
-        // Case 2: exact match to a WP-registered size → reuse WP's filename.
-        // v7.10.468 — WIDTH ALONE IS NOT A MATCH. A hard-CROPPED registered size has the
-        // right width and the wrong framing: on busyprosai the 1200x950 hero has Divi's
-        // et-pb-portfolio-module-image at 510x382, while the aspect-preserving 510 is
-        // 510x404 (510 * 950/1200 = 403.75). Reusing the crop serves a differently-framed
-        // image under a name that promises a scale — and every other width on that
-        // attachment (412x326, 576x456, 823x652 …) follows the aspect exactly, so the
-        // crop was the sole outlier and it silently won the 510 rung.
+        
+        
+        
+        
+        
+        
+        
+        
         $wpc_mh468 = (int) ($meta['height'] ?? 0);
         $wpc_eh468 = ($meta_width > 0 && $wpc_mh468 > 0)
             ? (int) round($width * $wpc_mh468 / $meta_width) : 0;
-        // Rounding across the ladder is ±1px; a crop differs by far more. 1% with a 1px
-        // floor separates them without inventing a new derivation.
+        
+        
         $wpc_tol468 = max(1, (int) round($wpc_eh468 * (float) apply_filters('wpc_variant_aspect_tolerance', 0.01)));
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $size_label => $info) {
@@ -448,7 +463,7 @@ class WPC_Modern_Delivery
                 if ($format === 'jpg') {
                     $filename = $info['file'];
                 } else {
-                    // e.g. hero-300x200.jpg → hero-300x200.avif
+                    
                     $filename = pathinfo($info['file'], PATHINFO_FILENAME) . '.' . $format;
                 }
                 return [
@@ -478,7 +493,7 @@ class WPC_Modern_Delivery
 
         $max = (int) ($meta['width'] ?? 0);
 
-        // Probe the unscaled original WP stores (may differ from get_attached_file)
+        
         if ($attachment_id > 0 && function_exists('wp_get_original_image_path')) {
             $orig = wp_get_original_image_path($attachment_id);
             if ($orig && file_exists($orig) && is_readable($orig)) {
@@ -487,7 +502,7 @@ class WPC_Modern_Delivery
             }
         }
 
-        // Probe the currently attached file (usually -scaled.jpg when WP scaled)
+        
         if ($attachment_id > 0) {
             $attached = get_attached_file($attachment_id);
             if ($attached && file_exists($attached) && is_readable($attached)) {
@@ -533,7 +548,7 @@ class WPC_Modern_Delivery
         $backup_dir   = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/wpc-backups/' : '';
         $attached_rel = !empty($meta['file']) ? $meta['file'] : '';
 
-        // Tier 1: WPC backup directory (pristine pre-compress) — original/scaled only
+        
         if ($backup_dir !== '') {
             if ($base === 'original' && $wp_orig_path) {
                 $rel = ltrim(str_replace(WP_CONTENT_DIR . '/uploads/', '', $wp_orig_path), '/');
@@ -548,7 +563,7 @@ class WPC_Modern_Delivery
             }
         }
 
-        // Tier 2: WP metadata actual file size (refreshed every regen)
+        
         if ($base === 'original' && $wp_orig_path && file_exists($wp_orig_path)) {
             return (int) filesize($wp_orig_path);
         }
@@ -559,12 +574,12 @@ class WPC_Modern_Delivery
             return (int) $meta['sizes'][$base]['filesize'];
         }
 
-        // Tier 3: stored ic_local_variants originalSize (the drift-prone one)
+        
         if (isset($variants[$base]['originalSize']) && (int) $variants[$base]['originalSize'] > 0) {
             return (int) $variants[$base]['originalSize'];
         }
 
-        // Tier 4: sibling-derive from any same-base entry
+        
         foreach ($variants as $skey => $sdata) {
             $sbase = preg_replace('/-(avif|webp|jpe?g|png)$/i', '', $skey);
             if ($sbase === $base && (int) ($sdata['originalSize'] ?? 0) > 0) {
@@ -581,8 +596,8 @@ class WPC_Modern_Delivery
         $max_width = self::get_source_width($attachment_id, $meta);
         if ($max_width <= 0) return [];
 
-        // Start with WP-existing widths (zero-cost reuse) — clamped to authoritative source
-        // so stale meta['sizes'] entries (e.g. 2048x1366 listed on a 1560w source) don't leak.
+        
+        
         $existing = [$max_width];
         foreach (($meta['sizes'] ?? []) as $size_info) {
             $w = (int) ($size_info['width'] ?? 0);
@@ -593,7 +608,7 @@ class WPC_Modern_Delivery
 
         $final = $existing;
 
-        // LCP-critical widths (only for images large enough to be LCP candidates)
+        
         if ($max_width >= 1200) {
             $lcp_widths = [1280, 1920, 2560];
             foreach ($lcp_widths as $t) {
@@ -604,10 +619,10 @@ class WPC_Modern_Delivery
             }
         }
 
-        // Pixel-exact LCP widths — hit common viewport × DPR combos with zero oversize.
+        
 
-        //  1170 iPhone 14/15           (390 × 3)
-        //  1290 iPhone 14 Pro Max      (430 × 3)
+        
+        
 
 
         if ($max_width >= 700) {
@@ -638,10 +653,10 @@ class WPC_Modern_Delivery
         return array_values($final);
     }
 
-    /**
-     * Check if any width in the array is within threshold ratio of target.
-     * threshold=1.2 means within [target/1.2, target*1.2].
-     */
+    
+
+
+
     private static function has_close_width($widths, $target, $threshold)
     {
         foreach ($widths as $w) {
@@ -699,8 +714,8 @@ class WPC_Modern_Delivery
             $chain = ['jpg'];
         }
 
-        // Iterate the LADDER, not $meta['sizes']. Ladder is capped at authoritative source width
-        // (may exceed $meta['width'] when -scaled.jpg is larger than the "original" on disk).
+        
+        
         $ladder = self::get_optimal_ladder($attachment_id, $meta);
         if (empty($ladder)) return ['srcset' => '', 'widths_emitted' => []];
 
@@ -715,7 +730,7 @@ class WPC_Modern_Delivery
 
         foreach ($ladder as $target_width) {
             $matched = false;
-            // Try each format in the priority chain — disk lookup only
+            
             foreach ($chain as $fmt) {
                 $resolved = self::resolve_variant_filename($meta, $target_width, $fmt, $source_width);
                 if ($resolved === null) continue;
@@ -723,7 +738,7 @@ class WPC_Modern_Delivery
 
                 if (self::variant_was_skipped($variants, $resolved['size_label'], $fmt)) continue;
 
-                // Check file exists on disk (request-scoped cache)
+                
                 $disk_path = $base_dir . '/' . $resolved['rel_path'];
                 if (!isset(self::$file_exists_cache[$disk_path])) {
                     self::$file_exists_cache[$disk_path] = file_exists($disk_path);
@@ -770,8 +785,8 @@ class WPC_Modern_Delivery
             if (!$matched && ($source_format === 'avif' || $source_format === 'webp')) {
                 $origin_file_url = self::get_origin_file_url($meta, $attachment_id);
                 if ($origin_file_url) {
-                    // For lazy_cdn aggressive: emit URL for the source's preferred format.
-                    // For other modes: fall back to webp (always-supported by CDN today).
+                    
+                    
                     $cdn_format = $lazy_cdn_aggressive ? $source_format : 'webp';
                     $url = self::build_ondemand_url($target_width, $origin_file_url, $cdn_format, $attachment_id);
 
@@ -799,7 +814,7 @@ class WPC_Modern_Delivery
             }
 
         }
-        // Re-sort ascending for emission
+        
         ksort($pareto);
 
         $srcset_parts = [];
@@ -815,9 +830,9 @@ class WPC_Modern_Delivery
         ];
     }
 
-    /**
-     * Assemble final variant URL with HTTPS + version token.
-     */
+    
+
+
     private static function build_variant_url($base_url, $relative_path, $attachment_id)
     {
         $url = self::encode_url($base_url . '/' . ltrim($relative_path, '/'));
@@ -826,11 +841,11 @@ class WPC_Modern_Delivery
         return $url;
     }
 
-    /**
-     * Resolve the parent's origin URL for CDN proxy.
-     * Returns the WP-uploaded file URL on the customer's origin domain (NOT the CDN-rewritten URL).
-     * The CDN proxy fetches this origin URL and applies q:i + width resize + format conversion.
-     */
+    
+
+
+
+
     private static function get_origin_file_url($meta, $attachment_id = 0)
     {
 
@@ -845,8 +860,8 @@ class WPC_Modern_Delivery
             if ($orig_url && $orig_path && file_exists($orig_path)) {
                 return self::encode_url($orig_url);
             }
-            // Fallback signal: log once per request per image so admins can
-            // see when always-original is bypassed (deleted original, etc).
+            
+            
             if ($orig_url && (!$orig_path || !file_exists($orig_path))) {
                 static $logged = [];
                 if (!isset($logged[$attachment_id])) {
@@ -871,13 +886,13 @@ class WPC_Modern_Delivery
         $custom_cname = trim((string) get_option('ic_custom_cname'));
         $cdn_zone = $custom_cname ?: trim((string) get_option('ic_cdn_zone_name'));
         if (empty($cdn_zone)) {
-            // CDN OFF — fall back to bare origin URL (browsers fetch unoptimized but works)
+            
             return self::append_version($origin_url, $attachment_id);
         }
-        // Per-format CDN encode parameter (naming corrected per
+        
 
-        //   /wp:0 = JPG passthrough (resize only, no recompress)
-        //   /wp:1 = WebP on-demand encode (verified 2026-04-28: ~37% smaller than wp:0)
+        
+        
 
 
         if ($format === 'avif') {
@@ -893,28 +908,28 @@ class WPC_Modern_Delivery
         return self::append_version($url, $attachment_id);
     }
 
-    /**
-     * Check if service marked this (size, format) as skipped (L3).
-     */
+    
+
+
     private static function variant_was_skipped($variants, $size_label, $format)
     {
         if (empty($variants) || !is_array($variants)) return false;
         if (!isset($variants[$size_label])) return false;
         $entry = $variants[$size_label];
         if (!is_array($entry)) return false;
-        // Size-level regression: whole size skipped
+        
         if (!empty($entry['skipped'])) return true;
-        // Format-level skip (from service skippedFormats)
+        
         if (!empty($entry['skipped_formats']) && is_array($entry['skipped_formats'])) {
             return in_array($format, $entry['skipped_formats'], true);
         }
         return false;
     }
 
-    /**
-     * Decide LCP eligibility for an image (G1 — tighter logo rule).
-     * Count increments per render; first N eligible images get preload treatment.
-     */
+    
+
+
+
     public static function is_lcp_candidate($img_attrs, $meta)
     {
         self::$lcp_img_count++;
@@ -924,23 +939,23 @@ class WPC_Modern_Delivery
         $role = $img_attrs['role'] ?? '';
         $aria_hidden = $img_attrs['aria-hidden'] ?? '';
 
-        // Exclusions (G1)
+        
         if ($role === 'presentation' || $aria_hidden === 'true') return false;
         if (preg_match('/\b(avatar|icon|emoji)\b/i', $class)) return false;
 
-        // Logo rule: name matches 'logo' word boundary AND width < 400
+        
         $width = (int) ($meta['width'] ?? $img_attrs['width'] ?? 0);
         if (preg_match('/\blogo\b/i', $class) && $width > 0 && $width < 400) return false;
 
-        // Width sanity — < 200px is likely a thumbnail/icon
+        
         if ($width > 0 && $width < 200) return false;
 
         return true;
     }
 
-    /**
-     * Capture LCP candidate data for later preload emission in <head>.
-     */
+    
+
+
     public static function set_lcp_candidate($attachment_id, $meta, $variants, $sizes_attr)
     {
         if (self::$lcp_candidate !== null) return;
@@ -952,12 +967,12 @@ class WPC_Modern_Delivery
         ];
     }
 
-    /**
-     * Build <link rel="preload"> string for LCP candidate (G1/L6).
-     * Called from rewrite_buffer() AFTER img processing — not from wp_head.
-     * wp_head fires before the output buffer is processed, so $lcp_candidate is
-     * always null at that point. Injected via str_replace('</head>', ...) instead.
-     */
+    
+
+
+
+
+
     public static function build_lcp_preload_tag()
     {
         if (self::$lcp_candidate === null) return '';
@@ -983,7 +998,7 @@ class WPC_Modern_Delivery
         if (!$format) return '';
 
         $mime = ($format === 'avif') ? 'image/avif' : (($format === 'webp') ? 'image/webp' : 'image/jpeg');
-        // Pick a middle-width entry as the primary href (neither smallest nor largest)
+        
         $entries = array_map('trim', explode(',', $preload_srcset));
         $href_entry = $entries[intval(count($entries) / 2)] ?? $entries[0];
         $href = trim(preg_replace('/\s+\d+w$/', '', $href_entry));
@@ -995,10 +1010,10 @@ class WPC_Modern_Delivery
                " type=\"" . esc_attr($mime) . "\" />\n";
     }
 
-    /**
-     * Build the full <picture> HTML for an <img>. Core of the modern rewrite.
-     * Returns null if modern path doesn't apply (caller should emit legacy).
-     */
+    
+
+
+
     public static function build_picture($img_tag_html, $attachment_id, $original_src, $preserved_attrs, $is_lcp)
     {
         if (!self::is_processable($attachment_id)) return null;
@@ -1037,8 +1052,8 @@ class WPC_Modern_Delivery
         }
 
 
-        // Only original-attr sizes may take auto — invented sizes render the pre-layout
-        // UA fallback (3000px) on CSS-auto themes.
+        
+        
         if (!$is_lcp && ($preserved_attrs['sizes'] ?? '') !== '' && strpos($sizes, 'auto') === false) {
             $sizes = 'auto, ' . $sizes;
         }
@@ -1094,8 +1109,8 @@ class WPC_Modern_Delivery
             }
         }
 
-        // Phase 1: detect ladder widths missing from disk and queue background generation.
-        // Per-attachment batched — all missing widths go in ONE local-mc POST (decoded buffer reuse).
+        
+        
         if (function_exists('wpc_maybe_trigger_ladder_gen')) {
             $missing = [];
             if ($avif_enabled) {
@@ -1121,7 +1136,7 @@ class WPC_Modern_Delivery
             wpc_backfill_local_variants($attachment_id);
         }
 
-        // No next-gen formats found on disk — don't wrap in <picture>
+        
         if (empty($avif_srcset) && empty($webp_srcset)) {
 
 
@@ -1136,7 +1151,7 @@ class WPC_Modern_Delivery
 
         if (empty($jpg_srcset) && empty($avif_srcset) && empty($webp_srcset)) return null;
 
-        // Build preserved attrs string for inner <img> (L13)
+        
         $skip_attrs = ['src', 'srcset', 'sizes', 'data-src', 'data-srcset', 'data-sizes', 'width', 'height', 'loading', 'fetchpriority'];
         $extra_attrs = '';
         foreach ($preserved_attrs as $k => $v) {
@@ -1145,7 +1160,7 @@ class WPC_Modern_Delivery
             $extra_attrs .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
         }
 
-        // Determine <img> fallback src — use a mid-size jpeg variant, or original
+        
         $fallback_src = '';
         if (!empty($jpg_srcset)) {
             $entries = array_map('trim', explode(',', $jpg_srcset));
@@ -1155,11 +1170,11 @@ class WPC_Modern_Delivery
             $fallback_src = $original_src;
         }
 
-        // Loading + fetchpriority
+        
         $loading = $is_lcp ? 'eager' : 'lazy';
         $fetch = $is_lcp ? ' fetchpriority="high"' : '';
 
-        // Capture LCP for preload emission
+        
         if ($is_lcp) {
             self::set_lcp_candidate($attachment_id, $meta, $variants, $sizes);
         }
@@ -1172,13 +1187,13 @@ class WPC_Modern_Delivery
         $wp_native_srcset = $preserved_attrs['srcset'] ?? '';
         $wp_native_sizes  = $preserved_attrs['sizes']  ?? $sizes;
 
-        // If WP-native srcset wasn't captured (stripped by earlier pipeline), fall back to
-        // our JPG gap-fill srcset (which uses WP JPEG files on disk — same end result).
+        
+        
         if (empty($wp_native_srcset) && !empty($jpg_srcset)) {
             $wp_native_srcset = $jpg_srcset;
         }
 
-        // Build <picture> — emit both sources if available, then universal <img>
+        
         $html = '<picture class="wpc-picture modern-delivery">';
         if (!empty($avif_srcset)) {
             $html .= '<source type="image/avif" srcset="' . esc_attr($avif_srcset) . '" sizes="' . esc_attr($sizes) . '">';
@@ -1202,16 +1217,16 @@ class WPC_Modern_Delivery
         return $html;
     }
 
-    /**
-     * Rewrite all <img> tags in a buffer to <picture>.
-     * Called by buffer filter when modern mode is active.
-     */
+    
+
+
+
     public static function rewrite_buffer($buffer)
     {
         if (!self::is_active()) return $buffer;
         if (empty($buffer) || strpos($buffer, '<img') === false) return $buffer;
 
-        // Reset per-request state
+        
         self::$lcp_candidate = null;
         self::$lcp_img_count = 0;
         self::$serving_base_url_cache = null;
@@ -1249,7 +1264,7 @@ class WPC_Modern_Delivery
         if (!apply_filters('wpc_offloaded_picture', $flag_default, $src)) return null;
         if (!is_string($src) || $src === '' || stripos($src, 'data:') === 0) return null;
 
-        // The src may already be a /q:i/.../u:ORIGIN transform (cdn-rewrite ran first) — recover the origin.
+        
         $origin_src = $src;
         if (strpos($src, '/u:') !== false && preg_match('~/u:(https?://[^?#\s"\']+)~', $src, $m)) {
             $origin_src = $m[1];
@@ -1258,12 +1273,12 @@ class WPC_Modern_Delivery
         $ext   = strtolower((string) pathinfo($clean, PATHINFO_EXTENSION));
         if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) return null;
 
-        // SAME-ORIGIN only — never route a foreign host through the zone.
+        
         $origin_host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
         $src_host    = (string) wp_parse_url($clean, PHP_URL_HOST);
         if ($origin_host === '' || $src_host === '' || strcasecmp($src_host, $origin_host) !== 0) return null;
 
-        // Zone host: ic_custom_cname → ic_cdn_zone_name (host only).
+        
         $cdn_host = trim((string) get_option('ic_custom_cname'));
         if ($cdn_host === '') $cdn_host = trim((string) get_option('ic_cdn_zone_name'));
         $cdn_host = rtrim(preg_replace('#^https?://#', '', $cdn_host), '/');
@@ -1272,7 +1287,7 @@ class WPC_Modern_Delivery
 
         $ceiling = class_exists('WPC_Delivery_Resolver')
             ? WPC_Delivery_Resolver::effective_ceiling(get_option(WPS_IC_SETTINGS)) : 'avif';
-        if ($ceiling === 'off') return null; // Next-Gen off → nothing to gain, keep the transform
+        if ($ceiling === 'off') return null; 
         $forced  = function_exists('wpc_force_natural') && wpc_force_natural();
         $avif_ok = ($ceiling === 'avif') && ($forced || (class_exists('wps_rewriteLogic')
             && method_exists('wps_rewriteLogic', 'avif_natural_source_ok') && wps_rewriteLogic::avif_natural_source_ok()));
@@ -1283,18 +1298,18 @@ class WPC_Modern_Delivery
 
         if (strpos($clean, '/wp-content/uploads/') === false) return null;
 
-        // Natural base = host-swap origin → zone (exact origin path preserved). Anchored ext-swap (mangle-safe).
+        
         $zone_base = preg_replace('#^https?://[^/]+#', 'https://' . $cdn_host, $clean);
         $swap = function ($fmt) use ($zone_base) {
             return class_exists('wps_rewriteLogic')
                 ? wps_rewriteLogic::swap_ext_to($zone_base, $fmt)
                 : preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.' . $fmt, $zone_base);
         };
-        // ?src= on-disk-format hint — uniform with the other lanes.
+        
         $hint = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'src_hint_enabled')
-            && wps_rewriteLogic::src_hint_enabled()) ? ('?src=' . $ext) : ''; // literal ext: never normalize jpeg to jpg
+            && wps_rewriteLogic::src_hint_enabled()) ? ('?src=' . $ext) : ''; 
 
-        // Preserve original attrs on the fallback <img> (minus the ones we own).
+        
         $skip = ['src', 'srcset', 'sizes', 'data-src', 'data-srcset', 'loading', 'decoding', 'onerror', 'data-wpc-fb'];
         $extra = '';
         foreach ($attrs as $k => $v) {
@@ -1307,10 +1322,10 @@ class WPC_Modern_Delivery
         if ($avif_ok) $html .= '<source type="image/avif" srcset="' . esc_attr($swap('avif') . $hint) . '">';
         if ($webp_ok) $html .= '<source type="image/webp" srcset="' . esc_attr($swap('webp') . $hint) . '">';
         $html .= '<img src="' . esc_url($zone_base) . '"';
-        $html .= ' data-wpc-fb="' . esc_attr($clean) . '"';      // STATIC onerror (no URL in JS → no injection surface)
+        $html .= ' data-wpc-fb="' . esc_attr($clean) . '"';      
         $html .= ' data-wpc-md="1"';
 
-        // <source> outranks the <img> src forever, so the old fallback never took effect
+        
 
         $html .= ' onerror="this.onerror=null;var p=this.parentNode;if(p&&p.tagName===\'PICTURE\'){var s;while(s=p.getElementsByTagName(\'source\')[0])s.parentNode.removeChild(s);}this.removeAttribute(\'srcset\');this.src=this.getAttribute(\'data-wpc-fb\');"';
         $html .= ' loading="' . $loading . '" decoding="async"';
@@ -1320,35 +1335,35 @@ class WPC_Modern_Delivery
         return $html;
     }
 
-    /**
-     * preg_replace_callback handler for individual <img> tags.
-     */
+    
+
+
     public static function rewrite_img_callback($matches)
     {
         $original_tag = $matches[0];
         $attrs_str = $matches[1];
 
-        // Skip if already inside a <picture> we emitted (nested protection)
-        // Skip if has data-wpc-skip attribute
+        
+        
         if (strpos($attrs_str, 'data-wpc-skip') !== false) return $original_tag;
         if (strpos($attrs_str, 'modern-delivery') !== false) return $original_tag;
 
-        // Parse attrs
+        
         $attrs = self::parse_img_attrs($attrs_str);
         $src = $attrs['src'] ?? $attrs['data-src'] ?? '';
         if (empty($src)) return $original_tag;
 
-        // Resolve attachment (prefers wp-image-{id} class, falls back to URL resolution)
+        
         $attachment_id = self::resolve_attachment_id($src, $attrs['class'] ?? '');
 
         if ($attachment_id <= 0) {
 
-            // (witness-gated; null when it doesn't apply → keep the original transform tag verbatim).
+            
             $off = self::build_picture_offloaded($original_tag, $src, $attrs);
             return $off !== null ? $off : $original_tag;
         }
 
-        // Is this LCP candidate?
+        
         $is_lcp = self::is_lcp_candidate($attrs, self::resolve_metadata($attachment_id));
 
         $picture = self::build_picture($original_tag, $attachment_id, $src, $attrs, $is_lcp);
@@ -1357,9 +1372,9 @@ class WPC_Modern_Delivery
         return $picture;
     }
 
-    /**
-     * Lightweight attr parser for <img> tags.
-     */
+    
+
+
     private static function parse_img_attrs($attrs_str)
     {
         $attrs = [];
@@ -1371,17 +1386,17 @@ class WPC_Modern_Delivery
         return $attrs;
     }
 
-    /**
-     * Bootstrap — register hooks.
-     */
+    
+
+
     public static function init()
     {
 
 
         add_action('wp_head', [__CLASS__, 'emit_picture_css'], 1);
 
-        // Phase 1 — image_downsize filter (covers admin media library, Gutenberg editor, REST API).
-        // Gated on the setting directly (not is_active() which bypasses admin).
+        
+        
         add_filter('image_downsize', [__CLASS__, 'filter_image_downsize'], 10, 3);
     }
 
@@ -1394,16 +1409,16 @@ class WPC_Modern_Delivery
 
     public static function filter_image_downsize($downsize, $attachment_id, $size)
     {
-        // Only engage in Smart mode (local-only). Phase 2/3 will add R2 URL return here.
+        
         $settings = get_option(WPS_IC_SETTINGS);
         if (empty($settings['modern_image_delivery']) || $settings['modern_image_delivery'] != '1') {
             return $downsize;
         }
 
-        // Don't interfere with string sizes that WP resolves itself (small overhead)
+        
         if (!is_string($size)) return $downsize;
 
-        // Skip already-processed (prevent recursion)
+        
         if (!empty(self::$downsize_recursion)) return $downsize;
 
         $meta = self::resolve_metadata($attachment_id);
@@ -1412,17 +1427,17 @@ class WPC_Modern_Delivery
         $size_info = $meta['sizes'][$size] ?? null;
         if (!$size_info || empty($size_info['file'])) return $downsize;
 
-        // Check if the expected file actually exists
+        
         $upload_dir = wp_upload_dir();
         $file_path = $upload_dir['basedir'] . '/' . dirname($meta['file']) . '/' . $size_info['file'];
-        if (file_exists($file_path)) return $downsize; // WP default will work
+        if (file_exists($file_path)) return $downsize; 
 
-        // File missing — triggers ladder gen for this attachment, returns safe URL meanwhile
+        
         if (function_exists('wpc_maybe_trigger_ladder_gen')) {
             wpc_maybe_trigger_ladder_gen($attachment_id, [(int) $size_info['width']]);
         }
 
-        // Return full-size attachment URL as safe fallback (always exists on disk)
+        
         self::$downsize_recursion = true;
         $full_url = wp_get_attachment_url($attachment_id);
         self::$downsize_recursion = false;
@@ -1501,10 +1516,10 @@ class WPC_Modern_Delivery
     }
 
 
-    /** @var array<int, array<string, int>> Request-scoped size backfill queue */
+    
     private static $pending_size_backfill = [];
 
-    /** Default URL stability threshold (5%). Tunable via wpc_byte_optimal_swap_delta. */
+    
     const URL_STABILITY_DELTA_DEFAULT = 0.05;
 
 
@@ -1529,10 +1544,10 @@ class WPC_Modern_Delivery
         ];
     }
 
-    /**
-     * Queue a size-backfill write to be flushed on `shutdown` action.
-     * Avoids per-variant DB writes during render. See plan §Pillar 3.
-     */
+    
+
+
+
     public static function queue_size_backfill($attachment_id, $key, $size)
     {
         $aid = (int) $attachment_id;
@@ -1547,8 +1562,8 @@ class WPC_Modern_Delivery
     public static function flush_size_backfill_on_shutdown()
     {
         if (empty(self::$pending_size_backfill)) return;
-        // Never make a visitor wait on best-effort meta backfill: flush the response to the
-        // client first, then yield entirely under load (the stale-lock sweep cron catches up).
+        
+        
         if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
         if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) { self::$pending_size_backfill = []; return; }
@@ -1559,15 +1574,15 @@ class WPC_Modern_Delivery
             if ($aid <= 0) continue;
 
             $lock_name = 'wpc_bg_meta_' . $aid;
-            // Non-blocking (budget 0 = single attempt, no retry): never pin this visitor's
-            // worker waiting on the shared bg-meta lock. If another writer holds it, skip —
-            // the next render or the stale-lock sweep backfills this size.
+            
+            
+            
             $locked = wpc_worker_lock($lock_name, 0);
             if (!$locked) { continue; }
 
             try {
-                // Re-read inside the lock so we capture any bg-swap writes that
-                // landed between this handler queuing the backfill and now.
+                
+                
                 $variants = get_post_meta($aid, 'ic_local_variants', true);
                 if (!is_array($variants)) continue;
 
@@ -1594,15 +1609,15 @@ class WPC_Modern_Delivery
         self::$pending_size_backfill = [];
     }
 
-    /**
-     * For a single variant entry, return its byte size — backfilling via
-     * filesize() if missing (queued, not written immediately).
-     *
-     * @return int Size in bytes; 0 if cannot determine.
-     */
+    
+
+
+
+
+
     private static function size_or_backfill($attachment_id, $key, array $entry)
     {
-        // Prefer in-memory queued size from earlier same-request lookup
+        
         $aid = (int) $attachment_id;
         if (isset(self::$pending_size_backfill[$aid][$key])) {
             return self::$pending_size_backfill[$aid][$key];
@@ -1611,7 +1626,7 @@ class WPC_Modern_Delivery
         $size = (int) (isset($entry['size']) ? $entry['size'] : 0);
         if ($size > 0) return $size;
 
-        // Try filesize() if URL points at a local file
+        
         if (empty($entry['url'])) return 0;
         $local_path = self::url_to_local_path_safe($entry['url']);
         if ($local_path === '' || !is_file($local_path)) return 0;
@@ -1623,10 +1638,10 @@ class WPC_Modern_Delivery
         return $size;
     }
 
-    /**
-     * Resolve a URL to a local filesystem path IF the URL is in our uploads dir.
-     * Returns empty string for CDN URLs or anything outside uploads.
-     */
+    
+
+
+
     private static function url_to_local_path_safe($url)
     {
         if (empty($url) || !is_string($url)) return '';
@@ -1693,7 +1708,7 @@ class WPC_Modern_Delivery
         $key = (int) $width . '_' . $source_type;
 
         if (!isset($chosen[$key]) || !is_array($chosen[$key]) || empty($chosen[$key]['url'])) {
-            // First-time selection — straight smallest wins.
+            
             $chosen[$key] = ['url' => $smallest['url'], 'size' => $smallest['size']];
             update_post_meta($aid, 'ic_local_variants_chosen', $chosen);
             return $smallest['url'];
@@ -1702,8 +1717,8 @@ class WPC_Modern_Delivery
         $prev = $chosen[$key];
         $prev_size = (int) (isset($prev['size']) ? $prev['size'] : 0);
 
-        // If the previous winner is no longer in the candidate set (file deleted,
-        // variant pruned), fall back to current smallest and update the chosen entry.
+        
+        
         $prev_present = false;
         foreach ($candidates as $c) {
             if ($c['url'] === $prev['url']) {
@@ -1717,28 +1732,28 @@ class WPC_Modern_Delivery
             return $smallest['url'];
         }
 
-        // Stability threshold check.
+        
         $delta = (float) get_option('wpc_byte_optimal_swap_delta', self::URL_STABILITY_DELTA_DEFAULT);
         $delta = ($delta < 0 || $delta > 0.5) ? self::URL_STABILITY_DELTA_DEFAULT : $delta;
         $threshold = $prev_size * (1.0 - $delta);
 
         if ($prev_size > 0 && $smallest['size'] < $threshold) {
-            // New candidate beats threshold — swap.
+            
             $chosen[$key] = ['url' => $smallest['url'], 'size' => $smallest['size']];
             update_post_meta($aid, 'ic_local_variants_chosen', $chosen);
             return $smallest['url'];
         }
 
-        // Keep previous winner.
+        
         return $prev['url'];
     }
 
-    /**
-     * WP-native JPEG sub-size URL closest to the requested width (≤ width when possible).
-     * Used as the JPEG-source fallback when no on-disk JPEG variant matches.
-     *
-     * @return string URL or empty string if attachment has no usable sub-sizes.
-     */
+    
+
+
+
+
+
     public static function nearest_wp_native_jpeg_url($attachment_id, $width)
     {
         $width = (int) $width;
@@ -1752,7 +1767,7 @@ class WPC_Modern_Delivery
             foreach ($meta['sizes'] as $size_name => $info) {
                 $w = (int) (isset($info['width']) ? $info['width'] : 0);
                 if ($w === 0) continue;
-                // Prefer largest width ≤ requested
+                
                 if ($w <= $width && $w > $best_width) {
                     $best_width = $w;
                     $best_size_name = $size_name;
@@ -1765,7 +1780,7 @@ class WPC_Modern_Delivery
             if (is_array($src) && !empty($src[0])) return $src[0];
         }
 
-        // Fallback to full-size URL
+        
         $src = wp_get_attachment_image_src($aid, 'full');
         return (is_array($src) && !empty($src[0])) ? $src[0] : '';
     }
@@ -1773,14 +1788,14 @@ class WPC_Modern_Delivery
 
     public static function resolve_source_srcset_url($attachment_id, $width, $source_type, $origin_url = '')
     {
-        // Strict gate: do nothing on v2_mode='off'. Caller falls back to legacy.
+        
         if (self::v2_mode() === 'off') return '';
 
         $aid = (int) $attachment_id;
         $width = (int) $width;
         if ($aid <= 0 || $width <= 0) return '';
 
-        // Per-render result memoization
+        
         static $resolved = [];
         $cache_key = $aid . '|' . $width . '|' . $source_type;
         if (isset($resolved[$cache_key])) return $resolved[$cache_key];
@@ -1798,12 +1813,12 @@ class WPC_Modern_Delivery
             return $resolved[$cache_key] = $url;
         }
 
-        // No on-disk candidate — fall back per source-type
+        
         if ($source_type === 'jpeg') {
             return $resolved[$cache_key] = self::nearest_wp_native_jpeg_url($aid, $width);
         }
 
-        // AVIF/WebP: on-demand WebP via existing wp:1
+        
         if ($origin_url !== '') {
             return $resolved[$cache_key] = self::build_ondemand_url($width, $origin_url, 'webp', $aid);
         }
@@ -1811,10 +1826,10 @@ class WPC_Modern_Delivery
     }
 
 
-    /** @var array<string, true> Tier 1 dedupe — request-scoped memo */
+    
     private static $backfill_request_memo = [];
 
-    /** Default safety-net TTL for backfill locks (10 min). Tunable via wpc_backfill_lock_ttl. */
+    
     const BACKFILL_LOCK_TTL_DEFAULT = 600;
 
 
@@ -1828,16 +1843,16 @@ class WPC_Modern_Delivery
         $mode = self::v2_mode();
         if ($mode === 'off') return false;
 
-        // Telemetry write (shadow + on)
+        
         self::log_emission_to_table($aid, $width, $format, $page_url);
 
-        // Encode kicks ONLY in 'on' mode
+        
         if ($mode !== 'on') return false;
 
-        // No-op on CDN-OFF sites — they pre-encode everything at upload.
+        
         if (!self::is_cdn_mode_enabled()) return false;
 
-        // Fast path: variant already on disk → no need to encode
+        
         $variants = get_post_meta($aid, 'ic_local_variants', true);
         if (is_array($variants)) {
             foreach (self::lookup_keys_for_width_format($width, $format) as $key) {
@@ -1849,7 +1864,7 @@ class WPC_Modern_Delivery
             }
         }
 
-        // Tier 1: request-scoped dedupe
+        
         $memo_key = $aid . ':' . $width . ':' . $format;
         if (isset(self::$backfill_request_memo[$memo_key])) return false;
         self::$backfill_request_memo[$memo_key] = true;
@@ -1863,27 +1878,27 @@ class WPC_Modern_Delivery
         $now = time();
         $cache_acquired = wp_cache_add($lock_key, $now, 'wpc_backfill', $ttl);
         if (!$cache_acquired) {
-            // Another request holds the lock; skip this enqueue
+            
             return false;
         }
-        // Cross-request fallback: write a transient too. Enables the stale-lock
+        
 
         set_transient($lock_key, $now, $ttl);
 
         $kicked = self::kick_single_variant_encode($aid, $width, $format);
         if (!$kicked) {
-            // Service kick failed — release the lock so a future emission can retry
+            
             self::release_backfill_lock($aid, $size_label, $format);
             return false;
         }
         return true;
     }
 
-    /**
-     * Telemetry write: upsert one (attachment, width, format, page_url_hash) tuple.
-     * Fires whenever v2_mode is 'shadow' OR 'on'. Idempotent: same tuple in same
-     * page bumps `emit_count` and updates `last_seen` only.
-     */
+    
+
+
+
+
     private static $emit_buf = [];
     private static $emit_hooked = false;
 
@@ -1955,7 +1970,7 @@ class WPC_Modern_Delivery
 
     public static function sweep_stale_backfill_locks()
     {
-        // Skip the DB scan entirely on sites where v2 is off — no locks could exist.
+        
         if (self::v2_mode() === 'off') return 0;
 
         global $wpdb;
@@ -1986,10 +2001,10 @@ class WPC_Modern_Delivery
         return $cleared;
     }
 
-    /**
-     * Compose a canonical backfill lock key. Used by both queue_backfill_for_emission
-     * and release_backfill_lock so the same tuple maps to the same lock.
-     */
+    
+
+
+
     private static function backfill_lock_key($attachment_id, $size_label, $format)
     {
         return 'wpc_backfill_lock_' . (int) $attachment_id . '_' . $size_label . '_' . $format;
@@ -2010,22 +2025,22 @@ class WPC_Modern_Delivery
     }
 }
 
-// Bootstrap on plugins_loaded so settings option is available
+
 add_action('plugins_loaded', ['WPC_Modern_Delivery', 'init'], 20);
 
 
-// Idempotent + version-gated so no per-request overhead after first run.
-// Activation hook in wp-compress-core.php also calls this for new installs.
+
+
 add_action('plugins_loaded', ['WPC_Modern_Delivery', 'maybe_create_emissions_table'], 21);
 
 
-// One update_post_meta per attachment regardless of variant count migrated.
-// No-op when queue is empty (vast majority of requests).
+
+
 add_action('shutdown', ['WPC_Modern_Delivery', 'flush_size_backfill_on_shutdown']);
 
 
-// Self-schedules on plugins_loaded if not already scheduled. Fires the
-// `wpc_sweep_stale_backfill_locks` action which clears any backfill lock
+
+
 
 
 add_action('plugins_loaded', function () {

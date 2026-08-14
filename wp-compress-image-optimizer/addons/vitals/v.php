@@ -31,7 +31,7 @@ if ($salt === '' || $tok === '' || !hash_equals(sha1($salt), $tok)) {
     exit;
 }
 
-/** log-ish fixed bucket edges — small where thresholds live, coarse in the tail (30 buckets) */
+
 if (!function_exists('wpc_vitals_bucket')) {
 function wpc_vitals_bucket($v, $edges)
 {
@@ -55,8 +55,8 @@ $flags |= (isset($q['d']) && $q['d'] === 'm') ? 0x01 : 0x00;
 $flags |= (isset($q['h']) && $q['h'] === '1') ? 0x02 : 0x00;
 $flags |= (isset($q['b']) && $q['b'] === '1') ? 0x10 : 0x00;
 
-/** coarse region enum for byte 8 — derived from edge/host geo headers at receive time; the IP
- *  itself is never read into a variable or stored. 0 unknown · 1 NA · 2 EU · 3 APAC · 4 LATAM · 5 MEA */
+
+
 if (!function_exists('wpc_vitals_region')) {
 function wpc_vitals_region()
 {
@@ -84,8 +84,8 @@ function wpc_vitals_region()
 }
 $wpc_region = wpc_vitals_region();
 
-// v7.10.831 — VIEW PING (k=p): a tiny load-time record so views are counted even when the
-// metrics beacon never flushes (tab never hidden, crash, kill). Magic 0xA6, flags only.
+
+
 if (isset($q['k']) && $q['k'] === 'p') {
     $ping = pack('C8', 0xA6, $flags, 255, 255, 255, 255, 255, $wpc_region);
     $day  = $statsDir . gmdate('Ymd') . '.bin';
@@ -113,8 +113,8 @@ $rec = pack(
 
 $day  = $statsDir . gmdate('Ymd') . '.bin';
 $size = @filesize($day);
-if ($size === false || $size < 8388608) { // 8MB/day cap ≈ 1M views — beyond it, accept + drop
-    @file_put_contents($day, $rec, FILE_APPEND); // O_APPEND: atomic for 8-byte writes
+if ($size === false || $size < 8388608) { 
+    @file_put_contents($day, $rec, FILE_APPEND); 
 }
 http_response_code(204);
 exit;

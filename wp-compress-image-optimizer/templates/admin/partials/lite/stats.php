@@ -7,16 +7,16 @@ $stats_live = self::$stats_live;
 $stats_local = self::$stats_local;
 $stats_local_sum = self::$stats_local_sum;
 
-/**
- * Quick fix for PHP undefined notices
- */
+
+
+
 $wps_ic_active_settings['optimization']['lossless'] = '';
 $wps_ic_active_settings['optimization']['intelligent'] = '';
 $wps_ic_active_settings['optimization']['ultra'] = '';
 
-/**
- * Decides which setting is active
- */
+
+
+
 if (!empty($wps_ic::$settings['optimization'])) {
     if ($wps_ic::$settings['optimization'] == 'lossless') {
         $wps_ic_active_settings['optimization']['lossless'] = 'class="current"';
@@ -29,7 +29,7 @@ if (!empty($wps_ic::$settings['optimization'])) {
     $wps_ic_active_settings['optimization']['intelligent'] = 'class="current"';
 }
 
-// Lite
+
 $options = get_option(WPS_IC_OPTIONS);
 $gui = new wpc_gui_v4();
 $stats = new wps_ic_stats();
@@ -45,7 +45,7 @@ $option = get_option(WPS_IC_OPTIONS);
 $warmup_class = new wps_ic_preload_warmup();
 $warmupFailing = $warmup_class->isWarmupFailing();
 
-// ─── V2 Data Setup ───
+
 $v2_gps = get_option(WPS_IC_LITE_GPS);
 $v2_hasGPS = false;
 if (!empty($v2_gps) && !empty($v2_gps['result'])) {
@@ -83,10 +83,10 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
             <?php echo $optimizationStatus; ?>
         </div>
         <?php
-        // Show skeleton placeholders when no meaningful data exists
+        
         $v2_testRunning = !empty(get_transient('wpc_initial_test')) || !empty(get_transient('wpc_test_running'));
         $v2_noTestData = empty(get_option(WPS_IC_TESTS));
-        // Also show skeleton when stats exist but are all zeros (e.g. "0 B", "0.0 kB")
+        
         $v2_pageSizeNum = floatval(preg_replace('/[^0-9.]/', '', $optimizedStats['totalPageSizeAfter']));
         $v2_requestsNum = floatval(preg_replace('/[^0-9.]/', '', $optimizedStats['totalRequestsAfter']));
         $v2_hasZeroData = ($v2_pageSizeNum == 0 || $v2_requestsNum == 0);
@@ -231,12 +231,12 @@ if (!empty($v2_gps) && !empty($v2_gps['result'])) {
                     <?php
                     $beforeScore = round($v2_dev['before'] * 100);
                     $afterScore = round($v2_dev['after'] * 100);
-                    // SVG circle math
+                    
                     $smSize = 50; $smR = 21; $smStroke = 5; $smCirc = 2 * M_PI * $smR;
                     $lgSize = 50; $lgR = 21; $lgStroke = 5; $lgCirc = 2 * M_PI * $lgR;
                     $smOffset = $smCirc - ($smCirc * $v2_dev['before']);
                     $lgOffset = $lgCirc - ($lgCirc * $v2_dev['after']);
-                    // Color by score
+                    
                     $smColor = $beforeScore <= 55 ? '#ef4444' : ($beforeScore <= 89 ? '#f59e0b' : '#22c55e');
                     $smBg = $beforeScore <= 55 ? '#fee2e2' : ($beforeScore <= 89 ? '#fef3c7' : '#dcfce7');
                     $lgColor = $afterScore <= 55 ? '#ef4444' : ($afterScore <= 89 ? '#f59e0b' : '#22c55e');

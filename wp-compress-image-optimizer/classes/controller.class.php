@@ -1,9 +1,9 @@
 <?php
 
 
-/**
- * Class - Controller
- */
+
+
+
 class wps_ic_controller {
 
 	public $options;
@@ -15,11 +15,11 @@ class wps_ic_controller {
 		}
 
 
-		#add_action('admin_notices', array(__CLASS__, 'wps_display_admin_notices'));
+		
 
 
 		if ( get_option( 'wpc_errors' ) ) {
-			#add_action('admin_notices', array(__CLASS__, 'wps_display_admin_errors'));
+			
 		}
 
 	}
@@ -46,10 +46,10 @@ class wps_ic_controller {
 		}
 	}
 
-	/**
-	 * Find other similar plugins for notice
-	 * @return array
-	 */
+	
+
+
+
 	public static function get_conflicts() {
 
 		$conflict_plugins = [
@@ -70,7 +70,7 @@ class wps_ic_controller {
 
 		$found = [];
 
-		// Go through plugin lists
+		
 		foreach ( $conflict_plugins as $name => $path ) {
 			if ( is_plugin_active( $path ) ) {
 				$found[] = ['name' => $name, 'path' => $path];

@@ -13,8 +13,8 @@ if (!function_exists('wpc_v2_natural_url_buffer_cb')) {
                 $n = wps_rewriteLogic::naturalize_asset_urls($html);
                 if (is_string($n)) $out = $n;
             }
-            // Regime-C: apply the onerror->origin failover even when there is no /a: to strip
-            // (the tags may already be natural from the cdnRewriter pass). Idempotent via data-wpc-fb.
+            
+            
             if (method_exists('wps_cdn_rewrite', 'add_asset_failover')) {
                 $fb = wps_cdn_rewrite::add_asset_failover($out);
                 if (is_string($fb) && $fb !== '') $out = $fb;

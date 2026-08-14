@@ -77,10 +77,10 @@ if (!function_exists('wpc_v2_fast404_remove')) {
 }
 
 if (!function_exists('wpc_v2_fast404_sync')) {
-    /**
-     * Write/refresh the mu-plugin when missing or stale (version drift), or remove it when disabled.
-     * Best-effort: a read-only mu-plugins dir just leaves the in-WP early-404 handler as the fallback.
-     */
+    
+
+
+
     function wpc_v2_fast404_sync()
     {
         $file = wpc_v2_fast404_file();
@@ -108,8 +108,8 @@ if (!function_exists('wpc_v2_fast404_sync')) {
     }
 }
 
-// Self-install / keep-fresh on admin loads (re-writes on version drift) + on activation; remove on
-// deactivation. All guarded + best-effort.
+
+
 add_action('admin_init', 'wpc_v2_fast404_sync');
 if (defined('WPC_CC_PLUGIN_FILE')) {
     register_activation_hook(WPC_CC_PLUGIN_FILE, 'wpc_v2_fast404_sync');

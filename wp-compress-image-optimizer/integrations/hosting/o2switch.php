@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_o2switch extends wps_ic_integrations {
@@ -10,11 +10,11 @@ class wps_ic_o2switch extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
     public function do_admin_filters() {
@@ -44,7 +44,7 @@ class wps_ic_o2switch extends wps_ic_integrations {
 
         $headers['X-VC-Purge-Key'] = O2SWITCH_VARNISH_PURGE_KEY;
 
-        // O2Switch uses X-Purge-Regex header instead of regex in URL
+        
         if (isset($headers['X-Purge-Method']) && 'regex' === $headers['X-Purge-Method']) {
             $headers['X-Purge-Regex'] = '.*';
             unset($headers['X-Purge-Method']);
@@ -54,7 +54,7 @@ class wps_ic_o2switch extends wps_ic_integrations {
     }
 
     public function remove_regex_from_url($full_url, $main_url, $regex) {
-        // O2Switch handles regex via headers, not URL
+        
         return $main_url;
     }
 

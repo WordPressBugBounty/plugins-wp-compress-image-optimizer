@@ -1,23 +1,23 @@
 <?php
 
 if (!function_exists('wpc_response_cache_guard')) {
-    // Responses are uncacheable until the finished body proves healthy; the ob tail
-    // upgrades the header. A response that dies early can then never be edge-cached.
+    
+    
     function wpc_response_cache_guard()
     {
         try {
             if (!empty($GLOBALS['wpc_cc_guarded']) || isset($GLOBALS['wpc_cc_skip'])) {
                 return;
             }
-            // Each skip records why, so an "unguarded" response downstream can name its root.
+            
             if (is_admin()) { $GLOBALS['wpc_cc_skip'] = 'admin'; return; }
             if (function_exists('is_user_logged_in') && is_user_logged_in()) { $GLOBALS['wpc_cc_skip'] = 'logged-in'; return; }
             if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] !== 'GET') { $GLOBALS['wpc_cc_skip'] = 'method'; return; }
             if (function_exists('wp_doing_ajax') && wp_doing_ajax()) { $GLOBALS['wpc_cc_skip'] = 'ajax'; return; }
             if (defined('REST_REQUEST') && REST_REQUEST) { $GLOBALS['wpc_cc_skip'] = 'rest'; return; }
-            // No writer, no pin: saveCache's tail is the only upgrader of this header — with
-            // the page-cache pipeline off it never runs and the pin freezes the whole site
-            // no-store, overriding the host's own cache layers (receipt: kalika/LiteSpeed).
+            
+            
+            
             $wpc_cc_set = (defined('WPS_IC_SETTINGS') && function_exists('get_option')) ? get_option(WPS_IC_SETTINGS) : false;
             if (!is_array($wpc_cc_set) || empty($wpc_cc_set['cache']['advanced']) || $wpc_cc_set['cache']['advanced'] == '0') {
                 $GLOBALS['wpc_cc_skip'] = 'cache-off';
@@ -33,20 +33,20 @@ if (!function_exists('wpc_response_cache_guard')) {
         } catch (\Throwable $e) {
         }
     }
-    // The ob call-site provably doesn't run on every render lane (receipt: rebuild renders
-    // shipped PHP-session no-cache headers with X-WPC-CC: unguarded-never-ran). send_headers
-    // fires on every frontend request after auth — the guard arms there unconditionally.
+    
+    
+    
     add_action('send_headers', 'wpc_response_cache_guard', 1);
 }
 
 if (!function_exists('wpc_edge_smaxage')) {
-    // v7.10.670 — SIMPLE + ANTI-FRAGILE. A long edge TTL is safe iff a stale object is
-    // CORRECTABLE, and the wpc-html purge is device-clearing BY CONSTRUCTION (purgeEdgeHtmlUrls
-    // always prefix+tag purges — both evict device variants AND the tagless static mirror on every
-    // CF plan). So the ONLY condition is: is Cloudflare connected. No crit-mode / device-key /
-    // purge-crown gate — those proxy conditions are exactly what silently collapsed the edge TTL
-    // when device-split turned on (wpcompress 99->88). Worst case if a purge ever fails is bounded
-    // staleness (<= this TTL), then the object self-corrects via stale-while-revalidate.
+    
+    
+    
+    
+    
+    
+    
     function wpc_edge_smaxage()
     {
         try {
@@ -65,10 +65,10 @@ if (!function_exists('wpc_edge_smaxage')) {
 }
 
 if (!function_exists('wpc_edge_swr')) {
-    // Independent of the purge crown BY DESIGN: s-maxage is an unbounded hold that needs a
-    // verified purge to correct, stale-while-revalidate is bounded and self-corrects inside one
-    // revalidation cycle. Bundling them handed must-revalidate — a BLOCKING revalidate — to the
-    // origin-serving sites least able to absorb one. Filter to 0 to restore must-revalidate.
+    
+    
+    
+    
     function wpc_edge_swr()
     {
         try {
@@ -80,8 +80,8 @@ if (!function_exists('wpc_edge_swr')) {
 }
 
 if (!function_exists('wpc_cc_freshness')) {
-    // Single formatter for both HTML writers (PHP render + mirror serve) so the two can never
-    // drift apart again.
+    
+    
     function wpc_cc_freshness($maxAge, $sMaxAge, $swr)
     {
         $cc = 'public, max-age=' . (int) $maxAge;
@@ -117,7 +117,7 @@ class wps_cacheHtml
         $this->url_key_class = new wps_ic_url_key();
         $this->urlKey = $this->url_key_class->setup();
 
-        // Append user cookie hash to the cache path if user is logged in
+        
         $user_hash = '';
         if (defined('WPC_CACHE_LOGGED_IN') && WPC_CACHE_LOGGED_IN) {
             foreach ($_COOKIE as $key => $value) {
@@ -129,29 +129,29 @@ class wps_cacheHtml
 
         }
 
-        // Add cookie variation to cache path
+        
         $cookie_string = '';
         if (defined('WPC_CACHE_COOKIES') && WPC_CACHE_COOKIES !== false) {
             $cookie_values = [];
             $cache_cookies = WPC_CACHE_COOKIES;
 
             foreach ($cache_cookies as $cookie_name) {
-                // Check if this is a prefix cookie (ends with _)
+                
                 if (substr($cookie_name, -1) === '_') {
-                    // This is a prefix - find all cookies that start with this prefix
-                    $prefix = $cookie_name; // Keep the underscore for matching
+                    
+                    $prefix = $cookie_name; 
                     foreach ($_COOKIE as $actual_cookie_name => $cookie_value) {
                         if (strpos($actual_cookie_name, $prefix) === 0 && !empty($cookie_value)) {
-                            // Get the suffix (part after the prefix)
+                            
                             $suffix = substr($actual_cookie_name, strlen($prefix));
 
-                            // Create a 7-character hash of the suffix and append to cookie value
+                            
                             $suffix_hash = substr(hash('md5', $suffix), 0, 7);
                             $cookie_values[] = $cookie_value . '_' . $suffix_hash;
                         }
                     }
                 } else {
-                    // Regular cookie - exact match
+                    
                     if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
                         $cookie_values[] = $_COOKIE[$cookie_name];
                     }
@@ -166,10 +166,10 @@ class wps_cacheHtml
         $this->cachePath = WPS_IC_CACHE . $user_hash . $this->urlKey . $cookie_string . '/';
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilder()
     {
         $page_builders = ['run_compress',
@@ -177,7 +177,7 @@ class wps_cacheHtml
             'elementor-preview',
             'fl_builder',
             'et_fb',
-            'preview', //WP Preview
+            'preview', 
             'builder',
             'brizy',
             'fb-edit',
@@ -228,10 +228,10 @@ class wps_cacheHtml
         return false;
     }
 
-    /**
-     * FrontEnd Editors Detection for various page builders
-     * @return bool
-     */
+    
+
+
+
     public static function isPageBuilderFE()
     {
         if (class_exists('BT_BB_Root')) {
@@ -311,7 +311,7 @@ class wps_cacheHtml
             return true;
         }
 
-        // Hours into minutes into seconds
+        
         $expireInterval = $this->options['cache']['expire'] * 60 * 60;
         $fileModifiedTime = filemtime($cacheFile);
 
@@ -348,19 +348,19 @@ class wps_cacheHtml
     }
 
 
-    /**
-     * Just verify it's not some page test as we don't want those to cache HTML
-     * @return void
-     */
+    
+
+
+
     public function pageTest()
     {
         return false;
     }
 
-    // The LCP is often a CSS background whose URL already sits in the inlined crit —
-    // discoverable but queued at low priority (perkzilla receipt: 1,790ms resource
-    // delay, 110ms load). Preload the first ATF background image found in crit with
-    // fetchpriority=high; crit regenerates with the page, so the URL is always live.
+    
+    
+    
+    
     public static function critBgPreload($buffer)
     {
         if (!is_string($buffer) || strpos($buffer, 'wpc-lcp-bg-preload') !== false
@@ -378,9 +378,9 @@ class wps_cacheHtml
         } elseif ($wpc_ph[0] === '/' && !empty($_SERVER['HTTP_HOST'])) {
             $wpc_ph = 'https://' . $_SERVER['HTTP_HOST'] . $wpc_ph;
         }
-        // Same hero, two formats: the atf lane preloads the base url() (.jpg) while THIS lane
-        // preloads the image-set candidate the browser actually paints (.webp) — the atf copy
-        // is then a dead high-priority fetch (PSI: unused preload). Same stem => drop the twin.
+        
+        
+        
         $wpc_stem840 = preg_replace('/\.[a-z0-9]+$/i', '', basename((string) parse_url($wpc_ph, PHP_URL_PATH)));
         if ($wpc_stem840 !== '' && preg_match('/<link\b[^>]*id="wpc-atf-bg-preload"[^>]*>\s*/i', $buffer, $wpc_atfm840)
             && strpos($wpc_atfm840[0], $wpc_stem840 . '.') !== false) {
@@ -390,11 +390,11 @@ class wps_cacheHtml
         return str_replace($wpc_pm[0], $wpc_pt . $wpc_pm[0], $buffer);
     }
 
-    // Bricks marks bg-image elements .bricks-lazy-hidden (background-image:none!important)
-    // and only its JS — which the delay holds — removes the class: ATF backgrounds paint
-    // white until the timer. Re-assert every crit background rule at higher specificity
-    // WITH the class, so ATF paints at first frame; the JS class-removal lands the same
-    // value (no flicker) and below-fold elements stay lazy (their rules aren't in crit).
+    
+    
+    
+    
+    
     public static function bricksAtfUnveil($buffer)
     {
         if (!is_string($buffer) || strpos($buffer, 'bricks-lazy-hidden') === false
@@ -402,9 +402,9 @@ class wps_cacheHtml
             return $buffer;
         }
         if (!preg_match('/<style[^>]*id="wpc-critical-css"[^>]*>(.*?)<\/style>/s', $buffer, $wpc_bm)) {
-            // Critless recovery render: sheets are render-blocking (undefer invariant) and
-            // only the class suppresses backgrounds — no crit to source re-asserts from.
-            // Strip it in markup; the delayed JS class-removal becomes a no-op.
+            
+            
+            
             $wpc_st = preg_replace_callback('/<[a-z][a-z0-9-]*\b[^>]*\bclass=["\'][^"\']*bricks-lazy-hidden[^"\']*["\'][^>]*>/i', function ($m) {
                 return preg_replace('/\s*\bbricks-lazy-hidden\b/', '', $m[0]);
             }, $buffer);
@@ -425,8 +425,8 @@ class wps_cacheHtml
                     if ($wpc_s === '' || $wpc_s[0] === '@') {
                         continue;
                     }
-                    // Tripled class: theme suppressors are compound (.brxe-section.bricks-lazy-hidden
-                    // !important = 0,2,0) and land LATER — a tie loses. 0,4,0 is untieable.
+                    
+                    
                     $wpc_lz = '.bricks-lazy-hidden.bricks-lazy-hidden.bricks-lazy-hidden';
                     if (preg_match('/^(.*?)((?:::?[a-zA-Z-]+(?:\([^()]*\))?)+)$/', $wpc_s, $wpc_pm) && $wpc_pm[1] !== '') {
                         $wpc_sels[] = $wpc_pm[1] . $wpc_lz . $wpc_pm[2];
@@ -451,17 +451,17 @@ class wps_cacheHtml
             }
         }
         if ($wpc_out !== '') {
-            // @layer: the theme suppressor is layered (!important-in-layer beats any unlayered
-            // !important at any specificity); earliest-declared layer wins among importants,
-            // and this style parses before the theme sheet ever applies.
+            
+            
+            
             $buffer = str_replace($wpc_bm[0], $wpc_bm[0] . '<style id="wpc-bricks-unveil">@layer wpc-unveil{' . $wpc_out . '}</style>', $buffer);
         }
         return $buffer;
     }
 
-    // var() in crit resolves only if its definition is present at paint — inline the
-    // custom-property blocks from every deferred local sheet (mtime-cached siblings).
-    // Render-path pass: must run on every crit-bearing buffer, not only cache writes.
+    
+    
+    
     public static function varsGuard($buffer)
     {
         if (!is_string($buffer)
@@ -490,8 +490,8 @@ class wps_cacheHtml
                     continue;
                 }
                 $wpc_vgmt = (int) @filemtime($wpc_vgp);
-                // .vars2: media-AWARE extraction — defs inside @media keep their wrapper
-                // (dm receipt: Elementor's mobile --flex-wrap vars emitted bare broke desktop).
+                
+                
                 $wpc_vgs = $wpc_vgp . '.vars2.css';
                 if (!@is_readable($wpc_vgs) || (int) @filemtime($wpc_vgs) < $wpc_vgmt) {
                     $wpc_vgcss = (string) @file_get_contents($wpc_vgp);
@@ -542,15 +542,15 @@ class wps_cacheHtml
             }
         }
         if ($wpc_vg !== '') {
-            // BEFORE the first deferred-sheet link, never at </head>: the guard is a
-            // fallback layer and must LOSE to the real stylesheets once they go live —
-            // at equal specificity source order decides, and the 16KB extraction cap can
-            // truncate late fluid overrides (clamp/vw), so a guard placed after the links
-            // pins desktop-frozen typography forever (the giant-mobile-h1 class)
+            
+            
+            
+            
+            
             $wpc_vgtag = '<style id="wpc-vars-guard">' . $wpc_vg . '</style>';
-            // The guard is a fallback layer: at equal specificity source order decides, so
-            // it must LOSE to the crit during the crit window AND to the real sheets once
-            // live — insert before whichever of the two appears first in the head
+            
+            
+            
             $wpc_vgat = -1;
             if (preg_match('/<style\b[^>]*id=["\']wpc-critical-css["\']/i', $buffer, $wpc_vgcm, PREG_OFFSET_CAPTURE)) {
                 $wpc_vgat = (int) $wpc_vgcm[0][1];
@@ -568,12 +568,12 @@ class wps_cacheHtml
         return $buffer;
     }
 
-    // SELF-CONSISTENCY INVARIANT: a render may defer CSS only if it carries crit.
-    // Crit missing (hard-purged, mid-regen, first install) → restore every deferred
-    // sheet to render-blocking — the page paints fully styled (no FOUC) and becomes
-    // cacheable, so crit-less periods serve HITs instead of no-store render convoys.
-    // When crit lands, the land purges this URL and crit-full copies take over.
-    // Render-path pass: must run on every render, not only cache writes.
+    
+    
+    
+    
+    
+    
     public static function critlessUndefer($buffer, $ctx = 'render')
     {
         if (!is_string($buffer)
@@ -581,8 +581,8 @@ class wps_cacheHtml
             || !preg_match('/<link\b[^>]*(?:rel|type)=["\']wpc-(?:late-|mobile-)?stylesheet["\']/i', $buffer)) {
             return $buffer;
         }
-        // Scoped to <link> tags only — the loader's inline JS carries these marker
-        // strings as selectors and must never be rewritten.
+        
+        
         $buffer = preg_replace_callback('/<link\b[^>]*>/i', function ($lm) {
             return str_replace(
                 ['rel="wpc-late-stylesheet"', "rel='wpc-late-stylesheet'",
@@ -607,13 +607,13 @@ class wps_cacheHtml
 
     public function saveCache($buffer, $prefix = '')
     {
-        // Mint gate: never create cache/crit state for query URLs beyond marketing params.
-        // v7.10.598 — one predicate, shared with the READ gate in advancedCache::getCache() and
-        // derived from the same list url_key strips, so the two can no longer disagree. They did:
-        // the key stripped 61 params while both gates named utm_* plus 11, so `?gbraid=…` shared
-        // the clean page's artifacts and was still refused a cache entry — a full origin render
-        // on every paid click. Zero extra inodes, because a stripped param collapses onto the
-        // clean URL's key. Falls back to the old inline test if the class is somehow absent.
+        
+        
+        
+        
+        
+        
+        
         $wpc_qs284 = isset($_SERVER['QUERY_STRING']) ? (string) $_SERVER['QUERY_STRING'] : '';
         if ($wpc_qs284 !== '') {
             if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'queryIsCacheable')) {
@@ -633,8 +633,8 @@ class wps_cacheHtml
         }
 
 
-        // Live showed warm-rx (arrival) without variants materializing; every exit below now
-        // says WHICH gate dropped a warm render, and the write itself logs. Warm-only, bounded.
+        
+        
         $wpc_is_warm66 = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) && function_exists('wpc_cache_first_log');
         $wpc_wgate = function ($g, $x = []) use ($wpc_is_warm66, $prefix) {
 
@@ -655,16 +655,16 @@ class wps_cacheHtml
             return $buffer;
         }
 
-        // A page cache file must never hold an empty or truncated document.
+        
         if (!is_string($buffer) || strlen($buffer) < 1024 || stripos($buffer, '</html>') === false) {
             $wpc_wgate('body-floor', ['len' => is_string($buffer) ? strlen($buffer) : -1]);
             return $buffer;
         }
 
-        // v7.10.700 — VERIFIED COPY CONTRACT, Law A: a degraded render serves once and
-        // evaporates. Refusal covers all three memoizers from this one choke point: the
-        // store and mirror (early return) and the CF edge (no-store beats the full-HTML
-        // rule's respect_origin). The visitor still gets the page.
+        
+        
+        
+        
         if (function_exists('wpc_copy_admissible')) {
             $wpc_adm700 = wpc_copy_admissible($buffer, (string) $this->urlKey, (string) $prefix);
             if ($wpc_adm700 !== '') {
@@ -676,8 +676,8 @@ class wps_cacheHtml
             }
         }
 
-        // v7.10.613 — observe only. Exits on the first line of a visitor render; never reads or
-        // writes $buffer beyond a bounded scan on a warm/cron request, at most once a day.
+        
+        
         if (function_exists('wpc_lane_split_detect613')) {
             wpc_lane_split_detect613($buffer);
         }
@@ -686,18 +686,18 @@ class wps_cacheHtml
 
         $buffer = self::varsGuard($buffer);
 
-        // Crit-full pages only; sibling files are mtime-cached.
+        
         if (is_string($buffer)
             && strpos($buffer, 'id="wpc-critical-css"') !== false
             && apply_filters('wpc_late_faces', true)
             && ($wpc_ss210 = (int) get_option('wpc_subsets_seen', 0)) && (time() - $wpc_ss210) < 7 * DAY_IN_SECONDS) {
             $wpc_lfl210 = '';
             $wpc_n210 = 0;
-            // Only families with a metric-pinned fallback (or inline subset) may leave their
-            // sheet — an unpinned family's swap reflows whatever it styles.
+            
+            
             $wpc_pin210 = [];
-            // v7.10.731 — the pin is a DECLARED fallback face, not a stack reference: an
-            // undeclared "<family> Fallback" name in a stack is skipped by the browser.
+            
+            
             if (preg_match_all('/@font-face\s*\{[^{}]*font-family\s*:\s*[\'"]?([^;\'"}]+?) Fallback[\'"]?\s*[;}]/i', $buffer, $wpc_pfm210)) {
                 foreach ($wpc_pfm210[1] as $wpc_pf210) {
                     $wpc_pin210[strtolower(trim($wpc_pf210))] = 1;
@@ -733,12 +733,12 @@ class wps_cacheHtml
                     $mt = (int) @filemtime($path);
                     $sib = preg_replace('/\.css$/', '.nofaces.css', $path);
                     $fsib = preg_replace('/\.css$/', '.faces.css', $path);
-                    // The extracted .faces.css carries the @font-face blocks VERBATIM, including the
-                    // unicode-range remote_range injects. Keying only on pinned families meant a landed
-                    // range never invalidated it — and the source CSS mtime does not move either, so
-                    // neither rebuild condition fired and the stale range served indefinitely (busy kept
-                    // 8de0d6bf's U+0-34, covering U+33, so the 91 KiB icon font stayed on the pipe even
-                    // after .429 unfroze the CSS-file layer one level up). Fold the map into the pf key.
+                    
+                    
+                    
+                    
+                    
+                    
                     $wpc_rr210 = get_option('wpc_font_remote_ranges', []);
                     if (!is_array($wpc_rr210)) { $wpc_rr210 = []; }
                     if (!empty($wpc_rr210)) { ksort($wpc_rr210); }
@@ -748,8 +748,8 @@ class wps_cacheHtml
                     ), 0, 8);
                     if (!@is_readable($sib) || (int) @filemtime($sib) < $mt
                         || strpos((string) @file_get_contents($sib, false, null, 0, 24), $wpc_pfh210) === false) {
-                        // Sibling (re)builds are background-lane work; visitor renders serve the
-                        // original link untouched until a warm builds it.
+                        
+                        
                         if (!((function_exists('wp_doing_ajax') && wp_doing_ajax())
                             || (defined('DOING_CRON') && DOING_CRON)
                             || !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']))) {
@@ -795,9 +795,9 @@ class wps_cacheHtml
                     $base = substr($href, 0, $cp);
                     $newHref = $base . preg_replace('/\.css$/', '.nofaces.css', $rel) . '?nf=' . $mt;
                     $faceHref = $base . preg_replace('/\.css$/', '.faces.css', $rel) . '?nf=' . $mt;
-                    // v7.10.714 — hrefless until the late-CSS flip: even media="not all"
-                    // stylesheets download at low priority, and those fetches sit inside the
-                    // paint-mark windows. The loader attaches the href at flip time.
+                    
+                    
+                    
                     $wpc_lfl210 .= '<link rel="stylesheet" data-wpc-lf-href="' . esc_url($faceHref) . '" media="not all" data-wpc-lf="1" />';
                     return str_replace($hm[1], esc_url($newHref), $lm[0]);
                 },
@@ -808,11 +808,11 @@ class wps_cacheHtml
             }
         }
 
-        // Body proven — upgrade the default-deny header so edges may cache this response.
-        // This is the SINGLE header authority and it judges the FINAL buffer: an update-window
-        // render that isn't armed keeps the guard's no-store (marked for observability).
-        // Every withheld upgrade names its reason: X-WPC-CC header when headers are still
-        // open, journal when they aren't — a no-store response must never be a mystery.
+        
+        
+        
+        
+        
         if (empty($GLOBALS['wpc_cc_guarded'])) {
             if (!headers_sent() && !is_admin() && !(function_exists('is_user_logged_in') && is_user_logged_in())) {
                 header('X-WPC-CC: unguarded-' . (isset($GLOBALS['wpc_cc_skip']) ? (string) $GLOBALS['wpc_cc_skip'] : 'never-ran'));
@@ -836,36 +836,36 @@ class wps_cacheHtml
                 header('X-WPC-CC: window-unarmed-' . $wpc_why195);
                 unset($GLOBALS['wpc_cc_guarded']);
             } else {
-                // A Set-Cookie on a publicly-cacheable page makes CDNs refuse to store it
-                // (cf-cache-status: BYPASS regardless of Cache-Control) — a plugin-started
-                // PHPSESSID on anonymous renders kept the whole site edge-uncacheable. The
-                // guard already limits this lane to anonymous GETs, where a session cookie
-                // is cache-poison by definition.
+                
+                
+                
+                
+                
                 if (function_exists('header_remove') && apply_filters('wpc_strip_setcookie_on_public', true)) {
                     @header_remove('Set-Cookie');
                 }
                 $wpc_hma174 = max(0, (int) apply_filters('wpc_html_max_age', 300));
                 $wpc_sm178  = function_exists('wpc_edge_smaxage') ? wpc_edge_smaxage() : 0;
-                // PHP's session engine auto-sends Pragma: no-cache + a 1981 Expires on any
-                // request where a plugin started a session — both override-purge here or the
-                // edge honors them over our Cache-Control.
+                
+                
+                
                 if (function_exists('header_remove')) {
                     @header_remove('Pragma');
                 }
                 header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $wpc_hma174) . ' GMT');
                 header('Cache-Control: ' . wpc_cc_freshness($wpc_hma174, $wpc_sm178,
                     function_exists('wpc_edge_swr') ? wpc_edge_swr() : 0));
-                // v7.10.683 — RUM cache-layer truth for EDGE hits. A shared cache (CF, host proxy)
-                // stores this render WITH its headers and replays them on every HIT — so a copy
-                // minted by a fresh render carried no wpc-cache marker and every edge HIT counted
-                // as "rendered" forever (the 0%-served-from-cache panel on a CF site whose views
-                // were overwhelmingly edge HITs). Stamp the mint epoch into the frozen headers:
-                // the collector reads it same-origin via the navigation entry and classifies a
-                // replay older than its threshold as cache-served. Fresh renders read as now.
+                
+                
+                
+                
+                
+                
+                
                 header('Server-Timing: wpc-mint;desc=' . time(), false);
-                // Natural-assets verdict for THIS render, riding the same frozen-header channel:
-                // 'natural' when on, else the first refusing gate. One DevTools look answers
-                // "why is this site still on transform URLs" for any site, forever.
+                
+                
+                
                 if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_nat_why808')) {
                     header('Server-Timing: wpc-nat;desc=' . wps_rewriteLogic::wpc_nat_why808(), false);
                 }
@@ -874,9 +874,9 @@ class wps_cacheHtml
         }
 
 
-        // During an update window only UNARMED renders skip the file write — armed copies
-        // get cached locally so window traffic serves from files instead of stampeding
-        // full renders on small pools. The window-end handler purges every layer anyway.
+        
+        
+        
         if (function_exists('wpc_update_window_active') && wpc_update_window_active()
             && function_exists('wpc_render_armed_for_cache') && !wpc_render_armed_for_cache($buffer)) {
             $wpc_wgate('update-window');
@@ -888,9 +888,9 @@ class wps_cacheHtml
             return $buffer;
         }
 
-        // v7.10.520 — the rewrite was shed under pressure, so this buffer is UNOPTIMISED.
-        // Storing it would serve an unoptimised page from cache long after the pressure
-        // cleared, which is worse than not caching at all.
+        
+        
+        
         if (!empty($GLOBALS['wpc_shed520'])) {
             $wpc_wgate('rewrite-shed', []);
             return $buffer;
@@ -912,7 +912,7 @@ class wps_cacheHtml
                 && strpos($buffer, 'id="wpc-critical-css"') === false
                 && apply_filters('wpc_cache_require_crit', true)) {
                 $wpc_cd45 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $this->urlKey . '/';
-                // v7.10.391: bypass-window critless renders are a deliberate cacheable state
+                
                 if (@filesize($wpc_cd45 . 'critical_desktop.css') > 5 && @filesize($wpc_cd45 . 'critical_mobile.css') > 5
                     && !(function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($this->urlKey))) {
                     $wpc_wgate('crit-guard-45');
@@ -979,21 +979,21 @@ class wps_cacheHtml
             }
         }
 
-        // Check for excluded cookies
+        
         if (defined('WPC_EXCLUDE_COOKIES')) {
             if (WPC_EXCLUDE_COOKIES !== false && is_array(WPC_EXCLUDE_COOKIES)) {
                 foreach ($_COOKIE as $cookieName => $cookieValue) {
                     foreach (WPC_EXCLUDE_COOKIES as $excludedCookie) {
 
-                        // Trailing "_" means: treat as wildcard prefix (e.g. "wp-postpass_")
+                        
                         if (substr($excludedCookie, -1) === '_') {
                             if (stripos($cookieName, $excludedCookie) === 0) {
-                                return $buffer; // Don't cache if excluded cookie prefix is detected
+                                return $buffer; 
                             }
                         } else {
-                            // Exact match (case-insensitive)
+                            
                             if (strcasecmp($cookieName, $excludedCookie) === 0) {
-                                return $buffer; // Don't cache if exact excluded cookie is detected
+                                return $buffer; 
                             }
                         }
                     }
@@ -1001,7 +1001,7 @@ class wps_cacheHtml
             }
         }
 
-        // Check mandatory cookies - don't save cache if any required cookie is missing
+        
         if (defined('WPC_MANDATORY_COOKIES') && WPC_MANDATORY_COOKIES !== false && is_array(WPC_MANDATORY_COOKIES)) {
             foreach (WPC_MANDATORY_COOKIES as $mandatoryCookie) {
                 if (substr($mandatoryCookie, -1) === '_') {
@@ -1013,11 +1013,11 @@ class wps_cacheHtml
                         }
                     }
                     if (!$found) {
-                        return $buffer; // Don't save cache if mandatory cookie prefix not present
+                        return $buffer; 
                     }
                 } else {
                     if (empty($_COOKIE[$mandatoryCookie])) {
-                        return $buffer; // Don't save cache if mandatory cookie not set
+                        return $buffer; 
                     }
                 }
             }
@@ -1053,15 +1053,15 @@ class wps_cacheHtml
         }
 
 
-        // v7.10.522 — the webp dimension is dead weight. It only ever built this filename:
-        // is_webp_request() has exactly one caller and it is a prefix builder, and NOTHING
-        // swaps an image URL on the request's Accept (format selection lives in <picture>,
-        // htaccess RewriteCond and CDN edge negotiation — all URL-identical). The proof is
-        // downstream: the htaccess mirror at :1175 ALREADY collapses it
-        // ($htPrefix = strpos($prefix,'mobile') ? 'mobile_' : ''), so zero-PHP static serve
-        // has been handing one file to webp and non-webp clients in production all along.
-        // Splitting it in the PHP cache therefore doubled the cache footprint AND the warm
-        // fan-out (4 renders instead of 2) to store byte-identical copies.
+        
+        
+        
+        
+        
+        
+        
+        
+        
         $wpc_req_webp = (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'image/webp') !== false)
             && apply_filters('wpc_webp_cache_variant', false);
         $prefix = $this->is_mobile() ? ($wpc_req_webp ? 'mobile-webp' : 'mobile') : ($wpc_req_webp ? 'webp' : '');
@@ -1141,17 +1141,17 @@ class wps_cacheHtml
             return false;
         }
 
-        // Primary WordPress recent posts widget identifiers
+        
         $primary_markers = ['widget_recent_entries', 'wp-block-latest-posts', 'class="recent-posts'];
 
-        // Check for definitive recent posts markers first
+        
         foreach ($primary_markers as $marker) {
             if (strpos($buffer, $marker) !== false) {
                 return true;
             }
         }
 
-        // Check for specific shortcodes that display recent posts
+        
         if (strpos($buffer, '[recent_posts') !== false || strpos($buffer, '[display-posts') !== false) {
             return true;
         }
@@ -1161,8 +1161,8 @@ class wps_cacheHtml
 
     public function is_mobile()
     {
-        // v7.10.671 — single shared detector so the cache bucket can never disagree with the
-        // crit device (wps_rewriteLogic::isMobile). Existing broad set kept as fail-open fallback.
+        
+        
         if (function_exists('wpc_ua_is_mobile')) {
             return wpc_ua_is_mobile();
         }
@@ -1190,11 +1190,11 @@ class wps_cacheHtml
         if (!empty($_GET['disable_cache'])) {
             return true;
         }
-        // v7.10.660 (B3) — fold-split wrap at cache-write, behind wpc_fold_split (default false).
-        // The CACHED document is the one that gets split; the §4 stamper restores it in-viewport.
-        // buildTemplateDocument is a byte-verbatim port of the service planner (t660 differential
-        // parity vs the shipped fold-split.js), so the plugin reproduces exactly what the service
-        // render-verified before it published the artifact. Inert by default; fail-open on all.
+        
+        
+        
+        
+        
         if (!function_exists('wpc_fs_maybe_wrap660')) {
             @include_once __DIR__ . '/fold-split.php';
         }
@@ -1210,9 +1210,9 @@ class wps_cacheHtml
 
 
         $final = $this->cachePath . $prefix . 'index.html' . '_gzip';
-        // v7.10.647 — Brotli pairing invariant (R1): the _br sibling dies BEFORE any
-        // html write; it may only be recreated by the land handler against the md5
-        // sidecar written below. br present => paired, structurally.
+        
+        
+        
         @unlink($this->cachePath . $prefix . 'index.html_br');
         $tmp   = $final . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 8);
         $fp = @fopen($tmp, 'w+');
@@ -1248,9 +1248,9 @@ class wps_cacheHtml
         if (!apply_filters('wpc_static_serve', defined('WPC_STATIC_SERVE') && WPC_STATIC_SERVE)) {
             return;
         }
-        // nginx ignores the .htaccess that governs mirror responses, so a mirror file there
-        // serves with NO headers (CF default-caches it ~2h — the white-screen pin vector) and
-        // our PHP read floors never see it. Stand down AND retire any files already written.
+        
+        
+        
         if (stripos((string) ($_SERVER['SERVER_SOFTWARE'] ?? ''), 'nginx') !== false
             && !apply_filters('wpc_mirror_on_nginx', false)) {
             $wpc_mh186 = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : '';
@@ -1265,20 +1265,20 @@ class wps_cacheHtml
             }
             return;
         }
-        // Canonical host (matches the htaccess $http_host = home_url host AND the dual-purge below). Using
-        // the request HTTP_HOST would mis-key alias/www hits vs the fixed htaccess rule.
+        
+        
         $host = function_exists('home_url') ? (string) wp_parse_url(home_url(), PHP_URL_HOST) : (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host === '') {
             return;
         }
         $uri  = strtok((string) ($_SERVER['REQUEST_URI'] ?? '/'), '?');
         $uri  = rtrim($uri, '/');
-        // Security: never let a crafted URI escape the cache dir. A '..' or NUL → skip the mirror
-        // (the request still serves fine via the PHP drop-in). Normal WP paths are unaffected.
+        
+        
         if (strpos($uri, '..') !== false || strpos($uri, "\0") !== false || strpos($host, '/') !== false) {
             return;
         }
-        // Map our variant prefix ('mobile-webp_' | 'mobile_' | 'webp_' | '') → the htaccess variant.
+        
         $htPrefix = (strpos((string) $prefix, 'mobile') !== false) ? 'mobile_' : '';
         $dir = WPS_IC_CACHE . $host . $uri . '/';
         if (!file_exists($dir)) {
@@ -1304,18 +1304,18 @@ class wps_cacheHtml
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
         }
-        // Each mirror dir gets its OWN .htaccess carrying THIS page's per-URL tag, so a per-URL purge
-        // evicts exactly this page and a homepage purge does not over-evict subpages. $uri is
-        // '' for the homepage (host-root dir), '/path' otherwise; the tag ignores the scheme.
+        
+        
+        
         self::ensureStaticMirrorHeaderHtaccess($dir, 'https://' . $host . ($uri === '' ? '/' : $uri . '/'));
     }
 
 
     public static function wpc_mirror_url_tag($url)
     {
-        // MUST equal wpc_cf_url_tag() (the purge side) byte-for-byte, or the crit-land tag purge
-        // misses this mirror-served copy. Delegate to it when loaded (single source of truth); the
-        // fallback replicates its host/path normalization exactly for load-order safety.
+        
+        
+        
         if (function_exists('wpc_cf_url_tag')) {
             return wpc_cf_url_tag($url);
         }
@@ -1338,9 +1338,9 @@ class wps_cacheHtml
         if ($host === '' || strpos($host, '/') !== false) {
             return false;
         }
-        // v7.10.673 — this .htaccess governs ONE mirror dir (the page it was written for), so it
-        // carries THAT page's per-URL tag. Default (no args) = host root = homepage. Each mirror
-        // subdir gets its own .htaccess (see writeStaticMirror), overriding the inherited homepage tag.
+        
+        
+        
         $wpc_murl673 = ($urlOverride !== null && $urlOverride !== '') ? (string) $urlOverride : home_url('/');
         $dir  = ($dirOverride !== null && $dirOverride !== '')
             ? rtrim((string) $dirOverride, '/') . '/'
@@ -1348,24 +1348,24 @@ class wps_cacheHtml
         $file = $dir . '.htaccess';
         $wpc_utag673 = self::wpc_mirror_url_tag($wpc_murl673);
 
-        // Cache-Control pin, so existing mirrors must be REWRITTEN once. Marker bump = one more
-        // rewrite pass, self-healing via the same every-mirror-write ensure.
+        
+        
 
 
-        // REVALIDATED on every hit — where max-age=60 pages served HIT at ~20ms). 60s keeps the
-        // original protection (explicit header still beats a host's blanket month-long expiry;
+        
+        
 
 
-        // v7.10.569 — THE CROWN GOES IN THE MARKER, so the existing write-once ensure becomes the
-        // expiry mechanism. .559 baked s-maxage=0 here on the reasoning that a static file cannot
-        // re-evaluate the purge crown. True, but the file does not have to: fold the crown-derived
-        // value into the marker and a change of crown state no longer matches, which triggers the
-        // same rewrite path that already exists. Crown lapses -> next mirror write emits s-maxage=0.
+        
+        
+        
+        
+        
         $wpc_sm569 = function_exists('wpc_edge_smaxage') ? (int) wpc_edge_smaxage() : 0;
-        // v8 + the per-URL tag in the marker → existing v7 (constant-tag) mirrors rewrite once, and a
-        // dir that somehow held a different URL's tag self-heals on the next write.
-        // v9 (v7.10.683): + Server-Timing wpc-cache;desc=hit — mirror serves are cache serves and
-        // must say so to the RUM collector (zero-PHP path emitted no marker => counted "rendered").
+        
+        
+        
+        
         $wpc_marker = '# wpc-mirror-headers-v9-s' . $wpc_sm569 . '-' . $wpc_utag673;
         if (@file_exists($file) && strpos((string) @file_get_contents($file), $wpc_marker) !== false) {
             return true;
@@ -1378,24 +1378,24 @@ class wps_cacheHtml
 
 
         $wpc_hma = max(0, (int) apply_filters('wpc_html_max_age', 300));
-        // Same formatter and the same crown the PHP writer uses, so the two serve paths can no
-        // longer hand the edge different TTLs for the same page. Measured on the flagship: a
-        // CF object cached from the PHP path carried s-maxage=86400 and was still HIT at age
-        // 13,239 s, while one cached from this path would have expired at 300 s — and a MISS
-        // costs 1.587 s TTFB against 0.096 s on HIT. Which path warmed the edge was a coin flip.
-        // wpc_edge_smaxage() is class_exists-guarded and try/catch'd; absent => 0 => .559 behaviour.
+        
+        
+        
+        
+        
+        
         $wpc_swr = function_exists('wpc_edge_swr') ? (int) wpc_edge_swr() : 0;
         $wpc_cc  = function_exists('wpc_cc_freshness')
             ? wpc_cc_freshness($wpc_hma, $wpc_sm569, $wpc_swr)
             : 'public, max-age=' . $wpc_hma
                 . ($wpc_sm569 > 0 ? ', s-maxage=' . $wpc_sm569 . ', stale-while-revalidate=86400'
                     : ($wpc_swr > 0 ? ', stale-while-revalidate=' . $wpc_swr : ', must-revalidate'));
-        // v7.10.673 — THE MIRROR CARRIES ITS OWN PER-URL TAG. .574 tagged the mirror with only the
-        // CONSTANT wpc-html, reasoning "a per-URL tag needs an md5 no .htaccess can compute" — but it
-        // doesn't: PHP computes wpc_cf_url_tag() at write time and bakes it in as a literal. So a
-        // per-URL crit-land purge now evicts this mirror-served copy directly (the homepage — no path,
-        // so no prefix purge — depended entirely on this), no host-wide widening. It is the SAME tag
-        // the PHP serve path already emits, so every serve path is now purge-identical.
+        
+        
+        
+        
+        
+        
         $c = $wpc_marker . ' — marks + governs responses served straight from this static mirror (zero PHP).' . PHP_EOL
            . '<IfModule mod_headers.c>' . PHP_EOL
            . 'Header set X-Cache-By "Advanced Cache - Static"' . PHP_EOL
@@ -1425,9 +1425,9 @@ class wps_cacheHtml
             $prefix = $prefix . '_';
         }
 
-        // Read-side body floor: the write-path floors can't retire a poisoned file that
-        // landed before them — a sub-floor file here would serve an empty 200 (with public
-        // caching headers) until someone purges. Delete it and fall through to a live render.
+        
+        
+        
         foreach (['index.html_gzip', 'index.html'] as $wpc_cf178) {
             $wpc_cfp178 = $this->cachePath . $prefix . $wpc_cf178;
             if (@file_exists($wpc_cfp178) && (int) @filesize($wpc_cfp178) < 1024) {
@@ -1441,7 +1441,7 @@ class wps_cacheHtml
         if (function_exists('readgzfile')) {
             if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && is_readable($this->cachePath . $prefix . 'index.html' . '_gzip')) {
                 $this->setupCacheHeaders($this->cachePath . $prefix . 'index.html' . '_gzip');
-                // Nginx instantly echoes readgzfile instead of saving it to variable.
+                
                 readgzfile($this->cachePath . $prefix . 'index.html' . '_gzip');
                 die();
             }
@@ -1456,9 +1456,9 @@ class wps_cacheHtml
 
     public function setupCacheHeaders($cache_filepath)
     {
-        // A session cookie (started by any plugin at boot) rides every PHP response and
-        // makes CDNs refuse to store it — cached-file serves are anonymous by definition.
-        // Same for the session engine's auto-sent Pragma: no-cache.
+        
+        
+        
         if (function_exists('header_remove') && apply_filters('wpc_strip_setcookie_on_public', true)) {
             @header_remove('Set-Cookie');
             @header_remove('Pragma');
@@ -1483,7 +1483,7 @@ class wps_cacheHtml
         }
 
 
-        // (stored headers), readable same-origin via the navigation entry's serverTiming.
+        
         header('Server-Timing: wpc-cache;desc=hit', false);
 
         header('X-Cache-By: Advanced Cache - Gzip');
@@ -1496,27 +1496,27 @@ class wps_cacheHtml
         }
 
         if ($post_id == 'all') {
-            // The journal must survive the event it records — a purge that wipes its own
-            // receipt makes every storm undiagnosable. Keep the last 64KB across the wipe.
+            
+            
             $wpc_jf179 = rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl';
             $wpc_jl179 = '';
             if (@is_readable($wpc_jf179)) {
                 $wpc_js179 = (int) @filesize($wpc_jf179);
                 $wpc_jl179 = (string) @file_get_contents($wpc_jf179, false, null, max(0, $wpc_js179 - 65536));
             }
-            // PURGE = page copies only. The derived asset stores (css/js/used-css) are
-            // CONTENT-ADDRESSED (hashed filenames; icv is a query-buster) — deleting them
-            // orphans every asset URL still referenced by LiteSpeed/CF/browser-cached HTML
-            // (naked-page class) and forces a full regeneration herd on a busy origin.
-            // They age out via GC in the deferred post-update handler instead.
+            
+            
+            
+            
+            
             $wpc_keep179 = ['css', 'js', 'wpc-cflog.jsonl'];
             $wpc_root179 = rtrim(WPS_IC_CACHE, '/');
-            // v7.10.530 — RENAME, THEN DELETE. The recursive unlink below blocks every
-            // concurrent render trying to WRITE into the same tree: receipted on the flagship as
-            // requests queueing ~44 s and draining together the instant the purge finished, with
-            // load 0.6 and zero HTTP — I/O contention, not CPU. A directory rename is atomic and
-            // costs microseconds, so renders see an empty tree immediately and the expensive
-            // unlink happens after the response is flushed. Same trick the sane cache layers use.
+            
+            
+            
+            
+            
+            
             $wpc_tomb530 = '';
             if (apply_filters('wpc_purge_rename_first', true)) {
                 foreach ((array) @scandir($wpc_root179) as $wpc_pk530) {
@@ -1535,7 +1535,7 @@ class wps_cacheHtml
                             break;
                         }
                     }
-                    // A failed rename simply leaves it for the ordinary unlink pass below.
+                    
                     @rename($wpc_src530, $wpc_tomb530 . '/' . $wpc_pk530);
                 }
             }
@@ -1544,13 +1544,13 @@ class wps_cacheHtml
                     continue;
                 }
                 if (strpos($wpc_it179, '.purging-') === 0) {
-                    continue; // tombstones are drained post-response, never inline
+                    continue; 
                 }
                 $wpc_ip179 = $wpc_root179 . '/' . $wpc_it179;
                 is_dir($wpc_ip179) ? self::removeDirectory($wpc_ip179) : @unlink($wpc_ip179);
             }
-            // Drain every tombstone (this one and any orphaned by a killed request) after the
-            // response is flushed, so a crash can never leak them permanently.
+            
+            
             if (function_exists('register_shutdown_function')) {
                 register_shutdown_function(function () use ($wpc_root179) {
                     if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
@@ -1589,11 +1589,11 @@ class wps_cacheHtml
                 });
             }
             self::removeDirectory(WP_CONTENT_DIR . '/cache/wp-preload/');
-            // Template-keyed used-css is MUTABLE under the same key (no content version in
-            // the contract yet) — the pickup skips refetch on tpl match, so service-side
-            // artifact fixes never propagate. Purge resets the MARKERS only (files stay so
-            // cached pages keep valid URLs; refetch overwrites in place). hawkeye receipt:
-            // stored blob still pre-fix while service shelf carried the corrected artifact.
+            
+            
+            
+            
+            
             if (defined('WPS_IC_CRITICAL')) {
                 $wpc_ut179 = (array) @glob(rtrim(WPS_IC_CRITICAL, '/') . '/*/used_tpl.txt');
                 $wpc_utn179 = 0;
@@ -1654,10 +1654,10 @@ class wps_cacheHtml
 
         if (!empty($files)) {
             foreach ($files as $file) {
-                // v7.10.530b — the deadline must be honoured INSIDE the recursion, not around it.
-                // critical/ holds ~20,000 files on the flagship, so one call to this function was
-                // the entire drain: a budget checked only between top-level tombstones could never
-                // fire. Leftovers are inert and swept by the next purge.
+                
+                
+                
+                
                 if (!empty($GLOBALS['wpc_rmdl530']) && microtime(true) > $GLOBALS['wpc_rmdl530']) {
                     return;
                 }
@@ -1680,14 +1680,14 @@ class wps_cacheHtml
 
     public function removeCombinedFiles($post_id)
     {
-        // v7.10.644 — OVERWRITE-ONLY (service receipt: 4/16 domains with un-fetchable
-        // combined CSS, 102 domains / 1,178 recorded 404s — cached HTML referenced files
-        // this delete had removed). CSS combine rebuilds every uncached render (its
-        // serve-from-existing gate is hard-disabled), so deleting bought nothing but the
-        // 404 window; files stay and the next render overwrites them, the .642 retention
-        // sweep collects dead keys. JS combine DOES serve-from-existing, so its rebuild
-        // trigger becomes a stale marker (epoch for 'all', per-key file) that the gate
-        // honors — rebuild overwrites in place, no absence window for either lane.
+        
+        
+        
+        
+        
+        
+        
+        
         if ($post_id == 'all') {
             update_option('wpc_combine_stale_epoch', time(), false);
             return;
@@ -1771,7 +1771,7 @@ class wps_cacheHtml
 
     public function recursiveDelete($folder)
     {
-        // Delete all the files in the folder
+        
         $files = glob($folder . '/*');
         foreach ($files as $file) {
             if (is_file($file)) {
@@ -1781,7 +1781,7 @@ class wps_cacheHtml
             }
         }
 
-        // Delete the folder itself
+        
         if (is_dir($folder)) rmdir($folder);
     }
 

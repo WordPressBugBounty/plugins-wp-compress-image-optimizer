@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_optimizepress extends wps_ic_integrations {
@@ -24,7 +24,7 @@ class wps_ic_optimizepress extends wps_ic_integrations {
 				'priority' => 10,
 				'args'     => 2
 			]
-			// ... add other frontend hooks if any
+			
 		];
 	}
 
@@ -35,7 +35,7 @@ class wps_ic_optimizepress extends wps_ic_integrations {
 				'priority' => '',
 				'args'     => ''
 			]
-// ... add other admin hooks if any
+
 		];
 	}
 

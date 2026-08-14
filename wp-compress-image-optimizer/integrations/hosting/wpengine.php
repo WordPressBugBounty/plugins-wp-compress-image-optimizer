@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 class wps_ic_wpengine extends wps_ic_integrations {
@@ -10,11 +10,11 @@ class wps_ic_wpengine extends wps_ic_integrations {
     }
 
     public function do_checks() {
-        // No specific checks needed
+        
     }
 
     public function fix_setting($setting) {
-        // No specific fixes needed
+        
     }
 
     public function add_admin_hooks() {
@@ -24,7 +24,7 @@ class wps_ic_wpengine extends wps_ic_integrations {
                 'priority' => 10,
                 'args' => 1
             ],
-            // When WPE clears their cache, also purge ours
+            
             'wpe_cache_flush' => [
                 'callback' => 'on_wpe_purge',
                 'priority' => 10,
@@ -38,7 +38,7 @@ class wps_ic_wpengine extends wps_ic_integrations {
             return;
         }
 
-        // Only purge HTML cache — critical CSS and CDN are separate concerns
+        
         $cache = new wps_ic_cache_integrations();
         $cache::purgeCacheFiles();
     }

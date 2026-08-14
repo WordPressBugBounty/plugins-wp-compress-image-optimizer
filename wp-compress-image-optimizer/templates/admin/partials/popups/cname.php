@@ -28,9 +28,9 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
-                  // v7.10.501 — instruct for the ACTIVE path. This printed the Bunny pull zone
-                  // unconditionally, so CF-linked sites were told to point at the wrong host — how
-                  // cdn.<domain> ended up CNAME'd at the pull zone with no certificate for it.
+                  
+                  
+                  
                   $wpc_cf501     = get_option(WPS_IC_CF);
                   $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
                   $wpc_target501 = $wpc_cf_on501
@@ -55,7 +55,7 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
-                      // Show the hostname we MANAGE — CF's when CF owns the CDN, else the zone one.
+                      
                       $custom_cname = get_option('ic_custom_cname');
                       if ($wpc_cf_on501) {
                           $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));
@@ -88,9 +88,9 @@
                     </div>
                   <?php
                   $zone_name = get_option('ic_cdn_zone_name');
-                  // v7.10.501 — instruct for the ACTIVE path. This printed the Bunny pull zone
-                  // unconditionally, so CF-linked sites were told to point at the wrong host — how
-                  // cdn.<domain> ended up CNAME'd at the pull zone with no certificate for it.
+                  
+                  
+                  
                   $wpc_cf501     = get_option(WPS_IC_CF);
                   $wpc_cf_on501  = is_array($wpc_cf501) && !empty($wpc_cf501['token']) && !empty($wpc_cf501['zone']);
                   $wpc_target501 = $wpc_cf_on501
@@ -112,7 +112,7 @@
                     </div>
                     <form method="post" action="#" class="wpc-form-inline">
                       <?php
-                      // Show the hostname we MANAGE — CF's when CF owns the CDN, else the zone one.
+                      
                       $custom_cname = get_option('ic_custom_cname');
                       if ($wpc_cf_on501) {
                           $wpc_cfc501 = trim((string) get_option(WPS_IC_CF_CNAME));

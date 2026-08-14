@@ -17,11 +17,11 @@ if (!defined('WPC_V2_AC_INITIAL_CAP_TUNED')) define('WPC_V2_AC_INITIAL_CAP_TUNED
 if (!defined('WPC_V2_AC_FLOOR_TUNED'))       define('WPC_V2_AC_FLOOR_TUNED', 2);
 if (!defined('WPC_V2_AC_CEILING_TUNED'))     define('WPC_V2_AC_CEILING_TUNED', 12);
 
-/**
- * Effective AIMD constants. Returns the tuned set when the
- * wpc_v2_aimd_tuned_enabled flag is on, legacy otherwise. Centralized so
- * every read site (get_cap, set_cap, adjustment math) sees the same view.
- */
+
+
+
+
+
 function wpc_v2_ac_effective_caps() {
     static $cached = null;
     if ($cached !== null) return $cached;
@@ -39,10 +39,10 @@ if (!defined('WPC_V2_AC_RELAXED_MULT'))    define('WPC_V2_AC_RELAXED_MULT', 1.2)
 if (!defined('WPC_V2_AC_UTILIZATION'))     define('WPC_V2_AC_UTILIZATION', 0.7);
 if (!defined('WPC_V2_AC_ADJUST_LOG_SIZE')) define('WPC_V2_AC_ADJUST_LOG_SIZE', 20);
 
-/**
- * Map type string → option suffix. Centralized so a typo can't drift across files.
- * Valid types: 'batch', 'announce', 'single'.
- */
+
+
+
+
 function wpc_v2_ac_valid_type($type) {
     return in_array($type, ['batch', 'announce', 'single'], true);
 }
@@ -65,7 +65,7 @@ function wpc_v2_ac_get_cap($type) {
         return max($caps['floor'], min($caps['ceiling'], (int) $override));
     }
 
-    // Manual admin pin (per-type or all)
+    
     $manual = get_option('wpc_v2_concurrency_manual_' . $type, null);
     if ($manual === null) {
         $manual = get_option('wpc_v2_concurrency_manual_all', null);
@@ -78,10 +78,10 @@ function wpc_v2_ac_get_cap($type) {
     return max($caps['floor'], min($caps['ceiling'], $cap));
 }
 
-/**
- * Compute percentile of an integer array. Simple sort + index; window is
- * small (≤100) so this is microseconds.
- */
+
+
+
+
 function wpc_v2_ac_percentile(array $values, $p) {
     if (empty($values)) return 0.0;
     sort($values);
@@ -99,7 +99,7 @@ function wpc_v2_record_handler_timing($type, $ms) {
     $timings = get_option($opt_timings, []);
     if (!is_array($timings)) $timings = [];
 
-    // Append + trim to window size (deque-style, oldest first)
+    
     $timings[] = (int) round($ms);
     if (count($timings) > WPC_V2_AC_WINDOW_SIZE) {
         $timings = array_slice($timings, -WPC_V2_AC_WINDOW_SIZE);
@@ -115,11 +115,11 @@ function wpc_v2_record_handler_timing($type, $ms) {
     }
 }
 
-/**
- * AIMD step. Compares p95 against baseline×saturation_mult and either
- * (a) backs off cap multiplicatively, (b) grows additively, or (c) holds.
- * Respects 30s cooldown to prevent thrashing on transient spikes.
- */
+
+
+
+
+
 function wpc_v2_ac_maybe_adjust($type, array $timings) {
     if (count($timings) < 10) return;
 
@@ -132,7 +132,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
     $baseline_p20 = wpc_v2_ac_percentile($timings, 20);
     $p95          = wpc_v2_ac_percentile($timings, 95);
 
-    // Persist baseline so admin diagnostic can show it cheaply
+    
     update_option(wpc_v2_ac_opt_name('baseline_ms', $type), $baseline_p20, false);
 
     $cap = wpc_v2_ac_get_cap($type);
@@ -141,7 +141,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
     $direction = 'hold';
     $caps = wpc_v2_ac_effective_caps();
 
-    // Saturation: p95 > baseline × saturation_mult → multiplicative decrease
+    
     if ($baseline_p20 > 0 && $p95 > $baseline_p20 * WPC_V2_AC_SATURATED_MULT) {
         $new_cap = max($caps['floor'], (int) floor($cap * 0.5));
         if ($new_cap !== $cap) {
@@ -167,7 +167,7 @@ function wpc_v2_ac_maybe_adjust($type, array $timings) {
         update_option(wpc_v2_ac_opt_name('concurrency_cap', $type), $cap, false);
         update_option($opt_last_adjust, time(), false);
 
-        // Append to adjust log ring buffer (cap at 20 entries)
+        
         $opt_log = wpc_v2_ac_opt_name('adjust_log', $type);
         $log = get_option($opt_log, []);
         if (!is_array($log)) $log = [];
@@ -215,12 +215,12 @@ function wpc_v2_get_request_origin() {
     return 'web';
 }
 
-/**
- * Admin diagnostic API. Returns the full per-type state — useful for
- * admin UI status panel + WP-CLI inspection.
- *
- * @return array
- */
+
+
+
+
+
+
 function wpc_v2_get_concurrency_state() {
     $out = ['types' => []];
     foreach (['batch', 'announce', 'single'] as $type) {
@@ -245,10 +245,10 @@ function wpc_v2_get_concurrency_state() {
     return $out;
 }
 
-/**
- * Manual override admin AJAX. Customer can pin a value for diagnostic purposes
- * or to work around adaptive misfiring on very-low-traffic sites.
- */
+
+
+
+
 add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     if (!current_user_can('manage_wpc_settings')) {
         wp_send_json_error('forbidden');
@@ -256,7 +256,7 @@ add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
     $type  = isset($_POST['type'])  ? sanitize_key((string) $_POST['type'])  : '';
     $value = isset($_POST['value']) ? (string) $_POST['value'] : '';
 
-    // 'auto' resets to adaptive; a numeric value pins.
+    
     if ($value === 'auto' || $value === '') {
         if ($type === 'all') {
             delete_option('wpc_v2_concurrency_manual_all');
@@ -281,7 +281,7 @@ add_action('wp_ajax_wpc_v2_set_concurrency_manual', function () {
 
 
 function wpc_v2_adaptive_concurrency_enabled() {
-    // Default ENABLED — this is the new normal. Customer can opt out via option.
+    
     $enabled = get_option('wpc_v2_adaptive_concurrency_enabled', 1);
     return (bool) $enabled;
 }

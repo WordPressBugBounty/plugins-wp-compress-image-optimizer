@@ -1,8 +1,8 @@
 <?php
 
-/**
- * Class - Notices
- */
+
+
+
 class wps_ic_notices extends wps_ic {
 
   public static $slug;
@@ -71,10 +71,10 @@ class wps_ic_notices extends wps_ic {
     }
   }
 
-  /**
-   * @return void
-   * Render all notices, can use wherever we want
-   */
+  
+
+
+
   public function render_plugin_notices() {
     foreach (self::$custom_notices as $notice) {
       if ($notice['dismiss_tag'] != '') {
@@ -121,8 +121,8 @@ class wps_ic_admin_notice {
       }
     }
 
-    //Uncomment this to show default wp notices, if you do that, check render_notice() to not show double notices on our page
-    //add_action('admin_notices', [$this, 'render_notice']);
+    
+    
   }
 
   public function render_notice() {

@@ -20,7 +20,7 @@ jQuery(document).ready(function ($) {
                 saveMode(modes_popup);
             },
             onClose: function () {
-                //openConfigurePopup(popup_modal);
+                
             }
         });
     }
@@ -64,23 +64,23 @@ jQuery(document).ready(function ($) {
 
                         },
                         functionBefore: function (instance, helper) {
-                            // Close other tooltips before opening a new one
+                            
                             $.tooltipster.instances().forEach(function (item) {
                                 if (item !== instance) {
                                     item.close();
                                 }
                             });
 
-                            // Get data attributes
+                            
                             var popText = $(helper.origin).data('pop-text');
 
-                            // Clone the HTML of the default tooltip content
+                            
                             var html = $(instance.__Content);
 
-                            // Update HTML based on data-code and data-text
+                            
                             html.find('span.pop-text').html(popText);
 
-                            // Set the updated content for the tooltip
+                            
                             instance.content(html);
 
                             return true;
@@ -89,7 +89,7 @@ jQuery(document).ready(function ($) {
                 }
             },
             onClose: function () {
-                //openConfigurePopup(popup_modal);
+                
             }
         });
 
@@ -115,7 +115,7 @@ jQuery(document).ready(function ($) {
                 if (response.success){
                     location.reload();
                 } else {
-                    //error?
+                    
                 }
             });
 
@@ -124,9 +124,9 @@ jQuery(document).ready(function ($) {
     }
 
 
-    /**
-     * Single Checkbox
-     */
+    
+
+
     function hookCheckbox() {
         $('label', '.swal2-content').on('click', function(){
             var parent = $(this).parent();
@@ -144,11 +144,11 @@ jQuery(document).ready(function ($) {
 
 
             if (beforeValue == 'checked') {
-                // It was already active, remove checked
+                
                 $(this).removeAttr('checked').prop('checked', false);
                 $(parent).removeClass('active');
             } else {
-                // It's not active, activate
+                
                 $(this).attr('checked', 'checked').prop('checked', true);
                 $(parent).addClass('active');
             }
@@ -175,7 +175,7 @@ jQuery(document).ready(function ($) {
             console.log(checked);
 
             if (modeSelect == 'safe') {
-                // Safe mode - turn off CDN
+                
                 $('.form-check-input','.wpc-popup-option-checkbox').removeAttr('checked').prop('checked', false);
             } else {
                 if (!checked) {

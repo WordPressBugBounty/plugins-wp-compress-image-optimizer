@@ -1,7 +1,7 @@
 !function() {
     "use strict";
-    // A keyless Maps loader (key=&) can never initialize — 365KB of dead weight some
-    // form plugins inject at runtime. Refuse the src at set-time; keyed Maps untouched.
+    
+    
     !function() {
         try {
             var mk = function(v) {
@@ -51,9 +51,9 @@
     function a(e) {
         return e && e.tagName && ("SCRIPT" === e.tagName || "LINK" === e.tagName);
     }
-    // Zone failover: delayed srcs may ride the CDN host (cfg.cdnHost). Natural-form zone URLs
-    // carry the origin path verbatim, so recovery is a host swap; legacy /a: URLs embed the
-    // origin outright. One executed-script error flips the whole session to origin-first.
+    
+    
+    
     var wpcCdnH = "", wpcZoneDn = 0;
     try {
         wpcCdnH = window.wpcDelayV3Cfg && window.wpcDelayV3Cfg.cdnHost ? String(window.wpcDelayV3Cfg.cdnHost) : "";
@@ -64,9 +64,9 @@
     function wpcOriginOf(u) {
         if (!wpcCdnH || !u || u.indexOf("//" + wpcCdnH) === -1) return "";
         var p = u.indexOf("//" + wpcCdnH) + 2 + wpcCdnH.length, rest = u.slice(p);
-        // The legacy /a: form is a PREFIX of the zone path, never a substring anywhere in it.
-        // Matching it loose turned a natural URL whose own path contains "/a:" (a plugin dir
-        // literally named a:b) into a wrong origin, so its failover 404'd forever.
+        
+        
+        
         var m = /^\/(?:m:[01]\/|font:true\/)?a:(.+)$/.exec(rest);
         if (m) {
             var o = m[1];
@@ -98,8 +98,8 @@
             if (!o || s.getAttribute("data-wpc-fb")) return p();
             wpcZoneFail();
             var n = s.cloneNode(false);
-            // async/defer are IDL properties here, not content attributes: cloneNode drops the
-            // force-async flag, so the retry would be order-free without this.
+            
+            
             n.async = s.async, n.defer = s.defer,
             n.src = o, n.setAttribute("data-wpc-fb", "1"),
             y.call(n, "load", p, { once: !0 }), y.call(n, "error", p, { once: !0 }),
@@ -160,13 +160,13 @@
             return e("Capturing jQuery ready callback"), m.push(t), this;
         };
     }
-    // THE ONE PRELOAD GATE. Every preload path funnels through w(), so the burst limit lives here
-    // rather than at the call sites: capping only wpcPreloadDelayed left b()'s batch loop still
-    // appending the whole registry in a single tick. A 127-entry registry opened 127 origin
-    // connections at once; eloorac's origin answered every one with ERR_CONNECTION_RESET, so the
-    // delayed chain never arrived and jQuery UI initialised against missing dependencies.
-    // Preloading is advisory — the replay does not depend on it — so the queue drains at cap per
-    // tick and a slow drain costs warmth, never correctness.
+    
+    
+    
+    
+    
+    
+    
     var wpcPlQ = [], wpcPlOn = false, wpcPlIn = 0;
     function wpcPlDone() {
         if (wpcPlIn > 0) { wpcPlIn--; }
@@ -176,10 +176,10 @@
         var c = window.wpcDelayV3Cfg || {};
         var cap = +c.preloadCap > 0 ? +c.preloadCap : 6;
         var gap = +c.preloadGapMs >= 0 ? +c.preloadGapMs : 120;
-        // IN-FLIGHT, not per-tick. Staggering starts alone does not bound concurrency: on a slow
-        // link each preload outlives the gap, so N ticks leave cap*N connections open at once —
-        // measured on the live document, peak in-flight only fell 58 to 46. The counter is
-        // decremented by the link's own load/error, so this is a true ceiling on open connections.
+        
+        
+        
+        
         while (wpcPlIn < cap && wpcPlQ.length) {
             wpcPlIn++;
             try { wpcPlQ.shift()(wpcPlDone, gap); } catch (e) { wpcPlDone(); }
@@ -189,21 +189,21 @@
     function w(e, t, r) {
         if (e) {
             e = wpcJsSrc(e);
-            // Preload would warm a src the set-time gate refuses — skip keyless Maps here too.
+            
             if (/maps\.googleapis\.com\/maps\/api\/js/.test(String(e)) && /[?&]key=(?:&|$)/.test(String(e))) return;
             wpcPlQ.push(function(done, gap) {
                 var n = 'link[rel="' + ("module" === t ? "modulepreload" : "preload") + '"][href="' + e + '"]';
                 if (document.querySelector(n)) { done(); return; }
                 var a = document.createElement("link"), fired = 0;
-                // PER-ITEM belt, never a shared one. A pump-level timeout that reset the counter
-                // stacked one timer per pump call and each reset released another `cap`: measured
-                // peak in-flight 67 at 300ms latency and 224 at 6s, against a cap of 6. The slot
-                // is released by whichever comes first, exactly once, so the ceiling is real.
-                // The belt must outlast any link that is merely SLOW, not hung: releasing a slot
-                // the browser still holds re-opens the same leak in miniature — at an 8s belt a
-                // 12s link measured peak 12, i.e. cap x ceil(latency/belt). At 30s the ceiling
-                // holds exactly through the whole realistic band; beyond that a link is not slow,
-                // it is broken, and preloading is advisory either way.
+                
+                
+                
+                
+                
+                
+                
+                
+                
                 var fin = function() { if (!fired) { fired = 1; done(); } };
                 setTimeout(fin, (+gap >= 0 ? +gap : 120) + 30000);
                 a.rel = "module" === t ? "modulepreload" : "preload", "module" !== t && (a.as = "script"),
@@ -211,8 +211,8 @@
                 a.href = e, r && r.crossorigin && (a.crossOrigin = r.crossorigin), r && r.integrity && (a.integrity = r.integrity),
                 r && r.referrerpolicy && (a.referrerPolicy = r.referrerpolicy), (document.head || document.documentElement).appendChild(a);
             });
-            // Scheduled, never inline: draining on enqueue emptied the queue as fast as the
-            // caller filled it, so every w() drained its own item and the cap never batched.
+            
+            
             if (!wpcPlOn) { wpcPlOn = true; setTimeout(wpcPlPump, 0); }
         }
     }
@@ -230,10 +230,10 @@
             el: a,
             inline: !1
         }) : (r(a, e.attributes), a.text = function(x) {
-            // landing executes synchronously — a syntax error there is uncaught by design;
-            // parse-check first so a broken script lands as a named warn, not a red error.
-            // ONLY SyntaxError skips: strict-CSP sites throw EvalError for EVERY new Function —
-            // those must land unvalidated, not be skipped wholesale
+            
+            
+            
+            
             try {
                 new Function(x);
             } catch (err) {
@@ -252,11 +252,11 @@
         r && r.parentNode ? r.parentNode.replaceChild(e, r) : (document.head || document.body || document.documentElement).appendChild(e);
     }
     function wpcJqGate(t, r) {
-        // A jquery tag can be pending (defer not executed yet / origin-failover in flight)
-        // while a stub/mini-jQuery shadows window.jQuery — landing dependents then binds
-        // them to the shadow and loses the handlers. Gate on REAL capability (fn.on).
-        // On timeout with a provably incapable jQuery, SKIP (named warn): landing would
-        // throw the same lost-handler outcome as an uncaught error instead of a warn.
+        
+        
+        
+        
+        
         if (!/jQuery|\$\s*\(/.test(t || "")) return r(!1);
         if (!document.querySelector('script[src*="jquery"]')) return r(!1);
         var a = Date.now();
@@ -289,7 +289,7 @@
                         o++, c();
                     };
                     if (u) {
-                        // inline: land through the jQuery-capability gate, then resolve
+                        
                         return void wpcJqGate(s.text, (function(k) {
                             k && (s.text = "console.warn('[WPC] delayed inline script skipped: jQuery never became capable — '+" + JSON.stringify(String(a.id || "")) + ");"),
                             C(s, a.id), p();
@@ -394,12 +394,12 @@
                         } catch (e) {}
                         e.target.dispatchEvent(t);
                     }));
-                    // v7.10.648 — POST-PAINT YIELD between the element load-event dispatches
-                    // (whose handlers write DOM) and the window load-listener replay (whose
-                    // handlers read layout). Same task meant every read was a forced layout
-                    // charged to this loader (service trace: one of its two 71ms sites).
-                    // rAF→setTimeout(0) is the house post-paint hook; ordering within the
-                    // replay chain is unchanged — everything downstream rides the same hop.
+                    
+                    
+                    
+                    
+                    
+                    
                     var wpcLoadHop648 = function() {
                         p.load.forEach((function(t) {
                             try {
@@ -548,10 +548,10 @@
                         for (var t = 0; t < wpcScriptRegistry.length; t++) await S(wpcScriptRegistry[t]);
                         return L(), void (i = !1);
                     }
-                    // Zoned registries replay classic batches one-at-a-time: async=false append
-                    // order cannot hold across an origin retry (the failed slot has already been
-                    // released when error fires), so ordering must come from the await, not the DOM.
-                    // wpcJsDecode, NOT t: a later `var t` loop counter hoists over the decoder here.
+                    
+                    
+                    
+                    
                     var wpcZs = !!wpcCdnH && wpcScriptRegistry.some((function(x) {
                         return !!(x && x.src) && wpcJsDecode(x.src, !!x.encoded).indexOf("//" + wpcCdnH) > -1;
                     }));
@@ -569,11 +569,11 @@
                         }));
                         var d = r.classicBatches[l];
                         if (wpcZs) {
-                            // Only SRC entries need the await (a retry must not reorder them).
-                            // Inline entries keep the direct build+land of the normal batch path:
-                            // routing them through S() would send each one into the jQuery
-                            // capability gate, which polls up to 10s EACH — N inline scripts on a
-                            // page whose jQuery is failing would serialize into N x 10s of stall.
+                            
+                            
+                            
+                            
+                            
                             for (var zq = 0; zq < d.length; zq++) {
                                 if (d[zq] && d[zq].src) { await S(d[zq]); }
                                 else { var zi = E(d[zq]); C(zi.el, d[zq].id); o++; }
@@ -642,8 +642,8 @@
                     b(t.moduleChain, "module");
                 } catch (e) {}
             };
-            // Warm only on engagement evidence (referrer/engaged/hover/sensors via engaged()) —
-            // no evidence means no third-party bytes are spent on that pageview.
+            
+            
             window.wpcWarmDelayed = wpcPreSweep;
             var wpcCfgHS = window.wpcDelayV3Cfg || {};
             if (wpcCfgHS.engagementSignals === 0 || wpcCfgHS.engagementSignals === false || wpcCfgHS.humanSignals === 0 || wpcCfgHS.humanSignals === false) {
@@ -657,9 +657,9 @@
                 }));
             }
         } catch (e) {}
-        // pageYOffset is 0 on an unscrolled page and 0 is falsy, so the old `a || b || c || 0`
-        // chain evaluated EVERY branch in the common case — three layout-forcing reads where
-        // one suffices, body.scrollTop the dearest. Read the modern property once.
+        
+        
+        
         if (n = typeof window.pageYOffset === "number" ? window.pageYOffset : (document.documentElement || {}).scrollTop || 0,
         a = typeof window.pageXOffset === "number" ? window.pageXOffset : (document.documentElement || {}).scrollLeft || 0,
         n > 0 || a > 0) return e("Page already scrolled; starting immediately"), T = !0,
@@ -689,7 +689,7 @@
         window.wpcPreloadDelayed = function() {
             try {
                 if (Array.isArray(wpcScriptRegistry)) {
-                    // Enqueues only — w() owns the burst limit for every preload path.
+                    
                     for (var pi = 0; pi < wpcScriptRegistry.length; pi++) {
                         var px = wpcScriptRegistry[pi];
                         if (px && px.src) {
@@ -713,8 +713,8 @@
         booted = true;
         if (wdSent) {
             try {
-                // Late-but-successful boot: RETRACT the strike (b:1) so a slow
-                // network never demotes a healthy site.
+                
+                
                 var rf = new FormData;
                 rf.append("action", "wpc_delay_v3_report");
                 rf.append("payload", JSON.stringify({
@@ -729,10 +729,10 @@
     }), {
         once: true
     });
-    // Boot watchdog: a gesture started the load but boot never completed —
-    // the one aggressive-delay failure the boot-gated beacon can't see.
-    // Armed ONLY on aggressive-default pages (cfg.aggr) so every strike is a
-    // page the demote fixes; deadline scales with registry size; 2g skipped.
+    
+    
+    
+    
     function wpcWatchdog() {
         if (booted || wdSent || !(window.wpcScriptRegistry || []).length) {
             return;
@@ -793,8 +793,8 @@
     window.addEventListener("wpc-scripts-loaded", (function() {
         setTimeout((function() {
             window.removeEventListener("error", rec);
-            // Watchdog already reported this pageview (and the boot listener
-            // retracted) — a second errs send would double-count every error.
+            
+            
             if (wdSent) {
                 return;
             }
@@ -823,8 +823,8 @@
 (function() {
     "use strict";
     var done = false, pending = null;
-    // v7.10.617 — pointer bookkeeping for the parked-hover replay below. Touch input
-    // has no hover concept, so any touchstart stands the whole belt down.
+    
+    
     var wpcPtr617 = null, wpcTouch617 = false;
     try {
         document.addEventListener("mousemove", function(e) {
@@ -835,21 +835,21 @@
             wpcPtr617 = null;
         }, { capture: true, passive: true });
     } catch (e) {}
-    // v7.10.565 — THE FIRST CLICK ON A DROPDOWN PARENT NAVIGATED. A submenu parent is an
-    // <a href>, and the site's own nav script cancels its default action — but that script is
-    // in the delay lane, so the very click that starts the replay finds nothing bound and the
-    // browser follows the link. Receipt: cold first click, WPC off -> submenu opens, no
-    // navigation; WPC on -> navigated to /pricing/. Hold the default action for exactly as
-    // long as it takes the real handler to appear, then hand it the click.
-    // v7.10.608 — every clause above required an <a>, but Elementor's mobile hamburger is
-    // <div class="elementor-menu-toggle" role="button" aria-expanded="false">. It never matched,
-    // so the first tap was neither held nor replayed and the mobile menu simply did nothing.
-    // Verified identical markup across Elementor sites.
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     var wpcTog565 = ".menu-item-has-children > a, li[aria-haspopup] > a, a[aria-haspopup], a[aria-expanded], .elementor-menu-toggle, [role=button][aria-expanded], button[aria-expanded], .menu-toggle, .navbar-toggler";
-    // v7.10.616 — the replay's success observable. aria-expanded alone misses handlers that
-    // toggle only classes, inline styles or hidden on the panel. JS-writable attributes ONLY:
-    // computed styles are excluded because used-css media flips change them in exactly this
-    // window with no handler involved.
+    
+    
+    
+    
     var wpcDone639 = 0;
     var wpcSnap616 = function(t) {
         var s = (t.getAttribute("aria-expanded") || "") + "|" + (t.getAttribute("class") || "");
@@ -867,8 +867,8 @@
         if (done || ev.__wpcReplay) {
             return;
         }
-        // Modified clicks are the user addressing the BROWSER (new tab, download, save) —
-        // never ours to hold.
+        
+        
         if (ev.button || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.defaultPrevented) {
             return;
         }
@@ -878,9 +878,9 @@
         }
         var tog = null;
         try { tog = t.closest(wpcTog565); } catch (e) {}
-        // v7.10.608 — Elementor writes aria-expanded="false" into the SERVER markup, so its
-        // presence proves nothing about binding. Record the VALUE and decide later on whether it
-        // CHANGED — an outcome test, not a capability test.
+        
+        
+        
         var wpcAexp608 = tog ? tog.getAttribute("aria-expanded") : null;
         if (!tog && t.closest("a[href], input, textarea, select, label, [contenteditable]")) {
             return;
@@ -896,34 +896,34 @@
             a: wpcAexp608,
             s: tog ? wpcSnap616(tog) : "",
             c: tog ? (tog.getAttribute("class") || "") : "",
-            // v7.10.636 — a click the page already serviced must not be replayed: thepttv
-            // warm profile, click toggled repeat ON, the +60ms one-shot toggled it OFF.
-            // v7.10.639 — but the .636 discriminator (lane STARTED at capture) over-reached:
-            // the lane starts at load+150ms on evidenced visits while handlers only exist
-            // once it FINISHES, so every fast click in that ~1s gap was captured, stood
-            // down, and LOST (thepttv live receipt: warm click@1030, scripts-loaded@1262,
-            // no replay ever fired). Key on lane COMPLETION: the jQuery-ready replay runs
-            // handlers synchronously in the same task that dispatches wpc-scripts-loaded,
-            // so completed-at-capture proves ready-bound handlers saw the original click.
+            
+            
+            
+            
+            
+            
+            
+            
+            
             j: wpcDone639,
             href: tog ? tog.getAttribute("href") : ""
         };
     }), true);
     window.addEventListener("wpc-scripts-loaded", (function() {
         wpcDone639 = 1;
-        // A toggle replay must never navigate. aria-expanded is written by the nav script when
-        // it binds, so its presence is PROOF a handler owns this anchor and will cancel the
-        // default action. No attribute => never bound => do not replay (pre-.565 behaviour).
-        // Poll because binding can trail the replay event by a few hundred ms.
+        
+        
+        
+        
         var fire = function() {
             done = true;
             if (!pending || !pending.t || !pending.t.isConnected) {
                 pending = null;
                 return;
             }
-            // Non-toggle + page JS was live at capture => the original click was serviced
-            // natively; a replay would run the handler a second time. Toggles are immune
-            // (held via preventDefault + outcome-verified) and keep their path.
+            
+            
+            
             if (!pending.tog && pending.j) {
                 pending = null;
                 return;
@@ -941,17 +941,17 @@
             } catch (e) {}
             pending = null;
         };
-        // v7.10.616 — REPLAY UNTIL OBSERVED EFFECT. wpc-scripts-loaded means the lane
-        // EXECUTED; Elementor binds toggle handlers asynchronously after init, so one timed
-        // replay can land before the handler exists and the tap is swallowed forever
-        // (receipt: lane executed at 260ms, blind fire at 1.76s, menu never opened, 1 run
-        // in 4). Every attempt is verified through wpcSnap616; an unchanged snapshot means
-        // the click hit nothing bound — retry on the ladder. Snapshot movement at ANY point
-        // means a handler acted — stop, never double-toggle.
-        // v7.10.634 — denser mid-window rungs: Pro's nav chunk fetches ~90ms after the
-        // gesture releases the lane and binds ~1.5-2.5s in; the old 1200->2500->4000 gaps
-        // made the OPEN wait up to 2.5s past binding. Same verified-outcome semantics,
-        // worst-case post-bind wait now <=800ms across the whole bind window.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         var wpcReps616 = [250, 450, 700, 1000, 1400, 1900, 2500, 3200];
         var wpcDispatch616 = function() {
             try {
@@ -966,19 +966,19 @@
                 pending.t.dispatchEvent(ev);
             } catch (e) {}
         };
-        // v7.10.635 — EVENT-DRIVEN RUNG. The handler binds moments after its script
-        // (webpack lazy chunk on Elementor Pro) finishes loading; timed rungs left up to
-        // ~800ms between that moment and the next replay. While a replay is owed, every
-        // script that ARRIVES schedules one extra verified attempt 150ms after its load —
-        // the open lands ~150ms after binding regardless of ladder phase. Additive only:
-        // same verified-outcome semantics, ladder unchanged as the fallback.
+        
+        
+        
+        
+        
+        
         var wpcRungMo635 = null;
-        // i=1: entry outcome-check runs first, so once any rung's dispatch was serviced
-        // every later chain halts at its check — single-threaded dispatch means a later
-        // rung always observes an earlier rung's effect, never double-toggles.
+        
+        
+        
         var wpcRung635 = function() {
-            // toggles only — the ladder was toggle-only by construction; a non-toggle
-            // pending is fire()'s single dispatch, never ours to repeat.
+            
+            
             if (!pending || !pending.tog || !pending.t || !pending.t.isConnected) { return; }
             wpcVerify616(1);
         };
@@ -1004,13 +1004,13 @@
                 pending = null;
                 return;
             }
-            // i=0 is entry: the caller already decided a replay is owed (the bind signal
-            // itself moves the snapshot, so an entry check would falsely read "handled").
-            // v7.10.633 — for a toggle that SHIPPED an aria value, success is that VALUE
-            // moving or the toggle's OWN class moving; the panel is bind-noise (SmartMenus
-            // stamps the UL when it binds), so a panel-inclusive snapshot false-succeeded
-            // when the bind landed inside a rung window — the ladder stopped one click
-            // short and the tap was swallowed (hawkeye 2/6, timing-dependent).
+            
+            
+            
+            
+            
+            
+            
             if (i > 0) {
                 if (pending.a !== null) {
                     var wpcAv633v = pending.t.getAttribute("aria-expanded");
@@ -1028,8 +1028,8 @@
                 pending = null;
                 return;
             }
-            // Re-baseline at dispatch time so each verify compares against the state the
-            // click actually landed on.
+            
+            
             pending.s = wpcSnap616(pending.t);
             pending.c = pending.t.getAttribute("class") || "";
             wpcDispatch616();
@@ -1048,23 +1048,23 @@
                 return;
             }
             if (pending.a === null) {
-                // Had none at click time — which PROVES no handler was bound when the user
-                // clicked, so "already serviced" is impossible here and the snapshot check
-                // must not run: the bind itself writes aria and stamps panel classes, which
-                // would read as serviced and swallow the click. Appearance of the attribute
-                // is the bind signal, unchanged from .565 — the replay is now verified.
+                
+                
+                
+                
+                
                 if (pending.t.getAttribute("aria-expanded") !== null) {
                     done = true;
                     wpcVerify616(0);
                     return;
                 }
             } else {
-                // v7.10.633 — serviced is the OUTCOME, never panel decoration. Binding
-                // itself stamps panel classes (SmartMenus decorates the UL), so the old
-                // panel-inclusive snapshot read a mid-window bind as "serviced" and the
-                // tap died with no ladder at all (hawkeye 2/6 opens). A shipped
-                // aria-expanded is MAINTAINED by its handler: serviced = its VALUE moved
-                // (bind rewrites "false" as "false"), or the toggle's OWN class moved.
+                
+                
+                
+                
+                
+                
                 var wpcAv633 = pending.t.getAttribute("aria-expanded");
                 if ((wpcAv633 !== null && wpcAv633 !== pending.a)
                     || (pending.t.getAttribute("class") || "") !== pending.c) {
@@ -1073,18 +1073,18 @@
                     return;
                 }
                 if (n <= 18) {
-                    // Pre-attributed toggle: no navigation to honour and replays are
-                    // verified, so start the ladder at 600ms instead of stranding the tap
-                    // to the deadline.
+                    
+                    
+                    
                     done = true;
                     wpcVerify616(0);
                     return;
                 }
             }
             if (n <= 0) {
-                // Never bound. We cancelled a navigation the user asked for — honour it now
-                // rather than strand them. Same destination, ~1.5 s late, and only on a page
-                // whose nav script never arrived.
+                
+                
+                
                 var href = pending.href;
                 pending = null;
                 done = true;
@@ -1097,31 +1097,31 @@
         };
         wait(30);
 
-        // v7.10.617 — PARKED-POINTER HOVER REPLAY (the hover twin of the click replay).
-        // A first gesture that ENDS on a menu parent is swallowed: the lane executes and
-        // hover handlers bind under a resting cursor, no new mouseenter ever fires, and
-        // the dropdown stays shut until the user leaves and re-enters (receipt 2026-07-30:
-        // parked 8s, never opened; this sequence opened it). Menu parents only; real-mouse
-        // pointers only; every rung re-checks and stops the moment the menu is open. The
-        // small-delta mousemove pair arms SmartMenus' real-mouse detection.
-        // v7.10.618 — MENU REGISTRATION REPLAY. Field fingerprint (staging 2026-07-30,
-        // James's console): Elementor Pro constructed, every chunk fetched, nothing thrown —
-        // but its handler registration missed the one-shot elementor/frontend/init, so the
-        // nav widget never got SmartMenus (menu dead to hover AND click). Outcome gate only:
-        // nav widgets present + SmartMenus lib loaded + init already fired + NO wired menu.
-        // Healthy pages are wired and can never double-fire. Verified live: the replay wired
-        // the actual failing tab. NOTE: the elementsHandlers registry never lists nav-menu
-        // even on healthy loads — it must not be part of any gate.
-        // v7.10.636 — first rung 2500->1200 (hawkeye trace: lane done ~1.3s, then a dead
-        // ~3s gap that was exactly this ladder's first rung; healthy sites are wired well
-        // before 1200 so the ul.sm stop still protects them).
-        // v7.10.637 — first rung 1200->400 (hawkeye floor probe 2026-07-31: gate
-        // preconditions all pass at scripts-loaded+50 and registration wires the menu;
-        // the 1200ms wait was pure designed-in latency for a menu that NEVER self-wires).
-        // 400 is the timing .636 already shipped for a pending tap — same gate, same
-        // exposure; the special case is subsumed by the first rung and removed (two
-        // concurrent attempts at +400 would double-trigger init). A premature attempt
-        // on a slow-booting healthy site is caught by the retry rungs + ul.sm stop.
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         var wpcMenuReps618 = [400, 1200, 2500, 5000, 9000];
         var wpcMenu618 = function(i) {
             var stop = false;
@@ -1152,14 +1152,14 @@
         };
         setTimeout((function() { wpcMenu618(0); }), wpcMenuReps618[0]);
 
-        // v7.10.620 — NEVER-BLANK REVEAL for elementor-invisible. Receipt (staging
-        // 2026-07-31): post-scroll, 22 elements stayed visibility:hidden — content
-        // scrolled past while invisible. elementor-invisible is a deferral whose
-        // undoer (waypoint/animation handler) provably does not run for a subset of
-        // elements once lanes are delayed. Outcome law: an element in or above the
-        // viewport that is still elementor-invisible ~600ms after entry gets revealed —
-        // with its declared animation when parsable, plainly when not. Native reveals
-        // that DO run win the race and leave nothing for this belt to do.
+        
+        
+        
+        
+        
+        
+        
+        
         var wpcReveal620 = function() {
             try {
                 var els = document.querySelectorAll(".elementor-invisible");
@@ -1189,7 +1189,7 @@
                 var io = new IntersectionObserver(function(entries) {
                     for (var i = 0; i < entries.length; i++) {
                         var en = entries[i];
-                        // above-the-viewport counts: it was scrolled past while hidden
+                        
                         if (en.isIntersecting || en.boundingClientRect.bottom < 0) {
                             (function(el) {
                                 setTimeout(function() { reveal(el); }, 600);
@@ -1203,15 +1203,15 @@
         };
         setTimeout(wpcReveal620, 1200);
 
-        // v7.10.826 — NEVER-BLANK REVEAL for Divi et-waypoint, the exact twin of the
-        // elementor-invisible belt above. Divi hides scroll-animated elements with
-        // .et-waypoint:not(.et_pb_counters){opacity:0} and its OWN delayed JS is the only
-        // undoer (adds .et-animated). Receipt (clearconpools/gunite-concrete, 7.10.825):
-        // every Divi frontend script in the delay manifest, blurb icons at opacity:0 with
-        // no revealer until first interaction — and none after it when waypoint init
-        // misses. Outcome law: an et-waypoint element in or above the viewport still
-        // unrevealed ~600ms after entry gets Divi's own reveal class, so its native
-        // et_pb_animation_* animation plays. Native reveals that DO run win the race.
+        
+        
+        
+        
+        
+        
+        
+        
+        
         var wpcReveal826 = function() {
             try {
                 var els = document.querySelectorAll(".et-waypoint:not(.et-animated):not(.et_pb_animation_off)");
@@ -1310,12 +1310,12 @@
                 wpcEng = Date.now();
             }
         } catch (e) {}
-        // v7.10.638 — ONE TIER for engagement-evidenced visits. Referrer / back-forward /
-        // #wpch arrivals used to get warm-only (prefetch, no execution) while stamped
-        // repeat visitors auto-ran; the bandwidth was already being spent on both, only
-        // the CPU was withheld — so referred humans tapped a dead menu the stamp cohort
-        // never saw. Now every evidenced visit auto-runs on the same load-event anchor.
-        // Automated lab loads carry no referrer and no storage: still gated.
+        
+        
+        
+        
+        
+        
         var wpcEvi638 = false;
         try {
             var wpcNav638 = performance.getEntriesByType("navigation")[0] || {};
@@ -1341,7 +1341,7 @@
                     }));
                 }), 50);
             };
-            // Never via window load/readyState — both are trapped until the replay itself.
+            
             var kickT0 = Date.now();
             var kickPoll = function() {
                 var nav = null;
@@ -1370,8 +1370,8 @@
     window.__wpcV3Native = true;
     var wpcSweepArmed = false;
     try {
-        // Eager: replay completion IS engagement evidence (gesture or 60s timeout triggered it) —
-        // a lazy listener inside attempt() can register after the event already fired.
+        
+        
         window.addEventListener("wpc-scripts-loaded", (function() {
             window.__wpcEngaged = 1;
             try {
@@ -1386,12 +1386,12 @@
             return;
         }
         wpcSweepArmed = true;
-        // Crit may only leave after the used.css that replaces it is LOADED and applied —
-        // and never at all if it fails (styled-with-duplication beats naked).
+        
+        
         var sheetOk = function(l) {
-            // Chrome fires load (not error) on HTTP-error stylesheets — .sheet alone
-            // is not proof. Same-origin: require actual rules. Cross-origin: cssRules
-            // throws; presence suffices (non-CSS MIME is rejected, sheet stays null).
+            
+            
+            
             var s = l.sheet;
             if (!s) {
                 return false;
@@ -1420,10 +1420,10 @@
             }
             return true;
         };
-        // Crit-removal authority = LOAD-gate, not flip-gate: every flipped theme link
-        // must have a readable sheet before crit may leave. Cold post-purge ?icv= URLs
-        // load late; removing crit before they land = UA-default flash (thepttv receipt).
-        // Retries exhaust into KEEPING crit — additive-safe, late removal costs nothing.
+        
+        
+        
+        
         var flippedSettled = function() {
             var fl = [].slice.call(document.querySelectorAll('link[data-wpc-flip]'));
             for (var i = 0; i < fl.length; i++) {
@@ -1449,9 +1449,9 @@
                 }
                 return;
             }
-            // Swap only with a visitor present (or after replay): the handoff repaint then
-            // happens mid-engagement where it cannot be perceived.
-            // Crit+used coexisting until then is the cheap, safe state.
+            
+            
+            
 if (!window.__wpcEngaged) {
                 if (!window.__wpcSweepWait) {
                     window.__wpcSweepWait = 1;
@@ -1470,8 +1470,8 @@ if (!window.__wpcEngaged) {
                 requestAnimationFrame((function() {
                     var c = document.getElementById("wpc-critical-css");
                     var fs = document.getElementById("wpc-font-subsets");
-                    // data-wpc-critless (.561) means this block IS the page's only font carrier —
-                    // it is emitted precisely because no crit shipped. Sweeping it is the bug.
+                    
+                    
                     if (fs && fs.getAttribute("data-wpc-v2") !== "1"
                         && fs.getAttribute("data-wpc-critless") !== "1") {
                         fs.remove();
@@ -1479,34 +1479,34 @@ if (!window.__wpcEngaged) {
                     if (!c) {
                         return;
                     }
-                    // Generic canary: crit may leave ONLY if removing it changes nothing
-                    // visible above the fold. Snapshot a style signature of every ATF-region
-                    // element (+ all hidden ones); any drift after removal → restore crit.
-                    // Catches menu pops, button/overlay color shifts, vanished bgs — the whole
-                    // crit-has-it/used-lacks-it class — regardless of which rule the bundle missed.
-                    // v7.10.563 — fontFamily IS part of the signature. Without it the canary was
-                    // blind to the one thing the crit is the sole carrier of: on an Elementor site
-                    // the base64 @font-face blocks live ONLY here, so removing the crit dropped
-                    // every real face and the page fell to its "<Family> Fallback" (= local Arial)
-                    // with display/visibility/colour/background all unchanged. Receipted on the
-                    // flagship as "starts as proper Circular, then swaps to Arial".
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     var sig = function(el, s) {
                         s = s || getComputedStyle(el);
                         return s.display + "|" + s.visibility + "|" + s.backgroundColor + "|" + s.color + "|" + s.backgroundImage + "|" + s.fontFamily;
                     };
                     var watch = [], snap = [];
-                    // v7.10.558 — the snapshot sweep ran synchronously inside this task, after the
-                    // loader's own media flips had invalidated style, so the first
-                    // getBoundingClientRect FORCED a layout (40 ms on a Moto G Power, PSI
-                    // "Forced reflow"). Same reads at a frame boundary are a normal layout the
-                    // browser was going to do anyway. Removal + verify stay inside, so ordering
-                    // (snapshot -> remove -> compare) is unchanged.
+                    
+                    
+                    
+                    
+                    
+                    
                     requestAnimationFrame((function () {
                     try {
-                        // v7.10.389 rect-first: the old order resolved computed style for EVERY
-                        // element (twice for watched ones) — two ~46ms style sweeps on a 2.5k-node
-                        // DOM. Rects are cheap after one layout; style resolves only for ATF-visible
-                        // or zero-size candidates, once, and the scan is bounded.
+                        
+                        
+                        
+                        
                         var vh = (window.innerHeight || 800) * 1.1;
                         var all = document.body ? document.body.getElementsByTagName("*") : [];
                         var lim = Math.min(all.length, 1200);
@@ -1530,10 +1530,10 @@ if (!window.__wpcEngaged) {
                             }
                         }
                     } catch (e) {}
-                    // v7.10.563 — the crit may leave, its @font-face blocks may NOT. They are
-                    // routinely the document's only declaration of the theme's real faces, and a
-                    // face costs nothing to keep (base64: already parsed, no request). Hoisting a
-                    // device-scoped face out of its @media only makes it available, never applied.
+                    
+                    
+                    
+                    
                     try {
                         if (!document.getElementById("wpc-crit-faces")) {
                             var ff = String(c.textContent || "").match(/@font-face\s*\{[^}]*\}/gi);
@@ -1546,12 +1546,12 @@ if (!window.__wpcEngaged) {
                         }
                     } catch (e) {}
                     var par = c.parentNode;
-                    // v7.10.629 — restore is position-EXACT, never appendChild. Crit is a
-                    // flattened union carrying rules that LOST the page's cascade at equal
-                    // specificity; putting it back last promotes every one of them (FA6's
-                    // `.fa:before{content:var(--fa)}` out-ordered FA4's `.fa-thumbs-o-up:before
-                    // {content:"\f087"}` -> undefined var -> content:none -> icon vanishes on
-                    // gesture). Remove+restore must be a cascade no-op.
+                    
+                    
+                    
+                    
+                    
+                    
                     var anc = c.nextSibling;
                     c.remove();
                     requestAnimationFrame((function() {
@@ -1585,19 +1585,19 @@ if (!window.__wpcEngaged) {
         var sel = '[rel="wpc-stylesheet"],[type="wpc-stylesheet"],[rel="wpc-mobile-stylesheet"],[type="wpc-mobile-stylesheet"]';
         var list = [].slice.call(document.querySelectorAll(sel));
         if (!list.length) {
-            // Fully-absorbed pages have no deferred sheets left — the sweep must still arm.
+            
             if (document.querySelector("link[data-wpc-ucss]")) {
                 wpcCritSweep();
             }
             return;
         }
         var okCount = 0, total = list.length;
-        // v7.10.490 — ATOMIC CASCADE. Restoring each sheet's media on its OWN load applied the
-        // deferred sheets one at a time (document.styleSheets 9 -> 34 -> 53), and every intermediate
-        // count is a briefly-valid WRONG cascade: the H1 measured 30 -> 42 -> 30px, +-48px twice,
-        // while the crit carried the correct value throughout. One synchronous restore at the
-        // barrier below = one style recalc. Also fail-OPEN where the per-sheet handler was not: a
-        // sheet that hit its timeout without firing load kept media="print" FOREVER.
+        
+        
+        
+        
+        
+        
         var wpcHeld = [], wpcRestored = 0, wpcHeldStyles = [];
         var wpcRestoreAll = function() {
             if (wpcRestored) {
@@ -1610,8 +1610,8 @@ if (!window.__wpcEngaged) {
                 } catch (e) {}
             }
             wpcHeld = [];
-            // Both carrier classes in ONE pass: the links above and the inline styles this
-            // lane held. Same task = one recalc, and the 10s belt below releases both.
+            
+            
             for (var si = 0; si < wpcHeldStyles.length; si++) {
                 try {
                     wpcHeldStyles[si].removeAttribute("data-wpc-hold-style");
@@ -1620,17 +1620,17 @@ if (!window.__wpcEngaged) {
             }
             wpcHeldStyles = [];
         };
-        // Kill switch: wpcDelayV3Cfg.atomicCascade=0 restores the pre-.490 per-sheet behaviour
-        // without a rebuild. NOT staging-verified yet — this is the escape hatch.
-        // v7.10.504: PHP now emits atomicCascade (default 1). wpc_atomic_cascade => 0 disables.
+        
+        
+        
         var wpcAtomic = !!(window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.atomicCascade === 1);
         if (wpcAtomic) { setTimeout(wpcRestoreAll, 1e4); }
-        // This lane parks its own links (media=print) until wpcRestoreAll, so an inline
-        // style applying before that barrier wins every equal-specificity tie against
-        // sheets that used to override it — the same class as the late lane, one barrier
-        // earlier. Proven by service-side ablation: with the crit bytes emptied the wrong
-        // state still appears (parked=11, inert=0 at 343ms), so the restore lane produces
-        // it unaided. Hold only when links here will actually park.
+        
+        
+        
+        
+        
+        
         var wpcHoldInline = wpcAtomic
             && !(window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.cssBlockingFlip === 1)
             && list.some(function(el) {
@@ -1687,8 +1687,8 @@ if (!window.__wpcEngaged) {
                     once: true
                 });
                 if (el.id && el.id.indexOf("wpc-used-css") === 0) {
-                    // used.css self-applies via its onload media-flip; a deferred rel (stale
-                    // cached HTML) would never load — restore it, and never print-flip it here.
+                    
+                    
                     if (el.getAttribute("rel") !== "stylesheet") {
                         el.setAttribute("rel", "stylesheet");
                     }
@@ -1716,19 +1716,19 @@ if (!window.__wpcEngaged) {
                         el.setAttribute("rel", "stylesheet");
                     }
                 } else if (document.querySelector('link[rel="wpc-late-stylesheet"], link[data-wpc-tm][media="print"]:not([data-wpc-tm="print"])')) {
-                    // Atomic restore: an inline style going live while the late lane is still
-                    // parked lets any rule a parked link used to override win the whole idle
-                    // window (core's dark .wp-block-button__link out-ordered the crit's blue).
-                    // swapLate converts the lane to rel=stylesheet media=print (data-wpc-tm),
-                    // so the parked state must match BOTH shapes — the timer path arrives
-                    // after conversion and saw an empty selector (veltri 796ms tie-inversion).
-                    // Hold the flip; lateCssFinish applies both carriers in ONE pass.
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     el.setAttribute("data-wpc-hold-style", "1");
                     finish(false);
                     return;
                 } else if (wpcHoldInline) {
-                    // Same invariant, this lane's own barrier: released in wpcRestoreAll
-                    // (with the links, one recalc) and by lateCssFinish as a belt.
+                    
+                    
                     el.setAttribute("data-wpc-hold-style", "lane");
                     wpcHeldStyles.push(el);
                     finish(false);
@@ -1741,11 +1741,11 @@ if (!window.__wpcEngaged) {
             }));
         }));
         Promise.all(ps).then((function() {
-            // Unconditional and BEFORE the sweep gate: crit leaving and the real cascade arriving in
-            // the same task is one recalc, and a sheet must never stay inert because the gate failed.
+            
+            
             wpcRestoreAll();
-            // Inline <style> entries never fire load and dilute okCount below the floor;
-            // when used.css links exist THEY are the authority on when crit may leave.
+            
+            
             if (document.querySelector("link[data-wpc-ucss]") || okCount >= Math.ceil(total * .5)) {
                 wpcCritSweep();
             }
@@ -1843,10 +1843,10 @@ if (!window.__wpcEngaged) {
             restoreFrame(el, u);
         }));
     }
-    // Heavy frames a real visitor scrolls toward restore ahead of boot — a
-    // below-fold booking widget loads as they approach (400px margin), while a
-    // no-scroll measurement pass never triggers it. Visible-at-load frames
-    // restore immediately (visible content loads — the honest semantics).
+    
+    
+    
+    
     var frameIO = null;
     function framesIO() {
         var els = [].slice.call(document.querySelectorAll(".wpc-iframe-delay"));
@@ -2008,11 +2008,11 @@ if (!window.__wpcEngaged) {
         } catch (e) {}
     }
     tick();
-    // v7.10.528 — the swap used to fire two frames after FIRST paint, which on a throttled
-    // link is before LCP: 87 KiB of deferred CSS then competed with the LCP image for the same
-    // pipe, and PSI measured exactly that as a 620 ms "resource load delay". Hold the swap until
-    // the LCP element has actually painted. Three independent releases so the CSS can never be
-    // stranded: the LCP entry, any user interaction, or a hard timeout.
+    
+    
+    
+    
+    
     function wpcReleaseStyles528() {
         if (wpcPainted133) return;
         wpcPainted133 = true;
@@ -2032,11 +2032,11 @@ if (!window.__wpcEngaged) {
                 po528.observe({ type: 'largest-contentful-paint', buffered: true });
             } catch (e) {}
         }
-        // Interaction always wins — a user who scrolls or taps must never wait on this.
+        
         ['pointerdown','keydown','touchstart','scroll'].forEach(function (ev) {
             window.addEventListener(ev, wpcReleaseStyles528, { once: true, passive: true });
         });
-        // Backstop: no LCP entry (no PO support, or nothing qualifies) must still style the page.
+        
         setTimeout(wpcReleaseStyles528, (window.wpcDelayV3Cfg && window.wpcDelayV3Cfg.styleHoldMs) || 3000);
         requestAnimationFrame((function() {
             requestAnimationFrame((function() {
@@ -2054,20 +2054,20 @@ if (!window.__wpcEngaged) {
         wpcPainted133 = true;
         tick();
     }), 3e3);
-    // Interaction-gated: native content-visibility:auto already renders sections on scroll
-    // approach; the full un-containment walker exists only to retire per-milestone re-layout
-    // for engaged sessions. A timed reveal would pay the below-fold layout inside the lab's
-    // TBT window on throttled mobile — first gesture (which the lab never sends) is the gate.
+    
+    
+    
+    
     (function() {
         var cvSel = "[data-wpc-cv], section.elementor-top-section, main.elementor-top-section, footer.elementor-top-section, .awb-cv-auto, .wpc-delay-avada";
-        // v7.20.02 — FIRST-VIEWPORT CV RELEASE, no gesture required. hdavid-law (Avada):
-        // the theme declares .fusion-fullwidth.awb-cv-auto{content-visibility:auto} and its
-        // own near-viewport un-hider is DELAYED with the rest of the scripts, so an in-fold
-        // 1px overlap row stayed contained and CLIPPED its overflowing hero content on real
-        // phones (WebKit skips a 1px box as not user-relevant; the banner painted over the
-        // lawyer + counter). IO is the zero-forced-layout in-viewport test: anything
-        // intersecting the first viewport un-contains immediately; everything below keeps
-        // the gesture gate so the lab's TBT window never pays the below-fold layout.
+        
+        
+        
+        
+        
+        
+        
+        
         try {
             if (window.IntersectionObserver) {
                 var cvIo = new IntersectionObserver(function(ents) {
@@ -2093,11 +2093,11 @@ if (!window.__wpcEngaged) {
             try {
                 var cvEls = [].slice.call(document.querySelectorAll(cvSel));
                 var cvIdx = 0;
-                // v7.10.648 — READ PHASE THEN WRITE PHASE per slice (service trace: this
-                // loop was one of the loader's two forced-layout sites — the write to
-                // element N dirtied layout, so the read on element N+1 forced a recalc,
-                // alternating every iteration). All reads land on clean layout now; the
-                // slice writes only after its reads are done.
+                
+                
+                
+                
+                
                 var cvStep = function() {
                     var w = [];
                     while (cvIdx < cvEls.length && w.length < 2) {
@@ -2161,8 +2161,8 @@ if (!window.__wpcEngaged) {
                 }), {
                     once: true
                 });
-                // Atomic apply: load inert (print) and flip every media in ONE pass at the
-                // barrier — sheet-by-sheet application transiently zeroed ATF sections.
+                
+                
                 if (!el.getAttribute("data-wpc-tm")) {
                     el.setAttribute("data-wpc-tm", el.media || "all");
                     el.media = "print";
@@ -2172,9 +2172,9 @@ if (!window.__wpcEngaged) {
             el.setAttribute("type", "text/css");
         }));
     }
-    // Icon faces ride the engagement signal, not the late-css barrier: the inlined crit subset
-    // covers the above-fold glyphs, every remaining one is below the fold. Reuses engaged()
-    // — no listeners of its own (a second capture-phase set costs paint, receipted .433).
+    
+    
+    
     window.wpcIconFaces = function() {
         try {
             var ic = document.getElementById("wpc-icon-faces");
@@ -2203,10 +2203,10 @@ if (!window.__wpcEngaged) {
             if (lf) {
                 lf.setAttribute("type", "text/css");
                 lf.media = "all";
-                // v7.20.03 — the flip alone is not service: the engine does not initiate loads
-                // for faces already-painted text needs (dalton: w800 sat unloaded forever,
-                // headline held the metric fallback). Nudge every declared face, sampling a
-                // codepoint from its own unicode-range so ranged subsets match.
+                
+                
+                
+                
                 try {
                     var lfSheet = lf.sheet;
                     if (lfSheet) {
@@ -2227,14 +2227,14 @@ if (!window.__wpcEngaged) {
                         }
                     }
                 } catch (e) {}
-                // No subset re-declaration here: a subset's unicode-range can exceed its
-                // cmap (measured live: 1.6KB faces declaring U+20-7A), and re-declaring it
-                // after the lane makes every missing glyph fall to the stack fallback
-                // PERMANENTLY. Shadow-during-fetch heals at load; a lying range must not
-                // be made authoritative.
+                
+                
+                
+                
+                
             }
-            // A gesture before this style parsed would have found no element to flip;
-            // the durable flag is the only record of it.
+            
+            
             if (window.__wpcEngaged) {
                 window.wpcIconFaces();
             }
@@ -2249,12 +2249,12 @@ if (!window.__wpcEngaged) {
                     l.media = l.getAttribute("data-wpc-ucss") || "all";
                 }
             }));
-            // Theme sheets flip in at their own DOM position, far below the used-css links.
-            // Cascade follows document order, so a base shorthand (Divi `.et_pb_with_border{
-            // border:0 solid}`) out-orders the module rules used-css extracted out of the
-            // theme's inline block — border-width goes back to 0 and design is lost. Re-append
-            // at THIS barrier: the document is fully parsed, and the media flips above already
-            // force one recalc, so used-css lands last inside that same frame (no extra paint).
+            
+            
+            
+            
+            
+            
             try {
                 var wpcUc = document.querySelectorAll("link[data-wpc-ucss],link[data-wpc-ucss-rest]");
                 for (var wpcI = 0; wpcI < wpcUc.length; wpcI++) {
@@ -2263,19 +2263,19 @@ if (!window.__wpcEngaged) {
                     }
                 }
             } catch (e) {}
-            // v7.10.675 — reveal in-viewport .elementor-invisible via IntersectionObserver, not
-            // a synchronous rect scan. The old post-paint scan read getBoundingClientRect().top
-            // on EVERY .elementor-invisible element; each read forces layout of a DISTINCT
-            // content-visibility:auto section, so the "one clean layout covers all reads"
-            // assumption never held — a ~47-section page spent ~106ms in one post-FCP task
-            // (PSI "Forced reflow" / TBT 109), profiled on the flagship (§9). IO runs the same
-            // in-viewport test off the main thread (zero synchronous layout) and is the proven
-            // reveal path (wpcReveal620): its single initial notification is exactly what reveal
-            // needs — the "no second notification" caveat only bites uses that want a later one.
-            // This tail is the reveal path on lab/no-gesture loads (wpcReveal620 arms only after
-            // wpc-scripts-loaded), so it must never block: IO satisfies both. rootMargin bottom
-            // 25% == the old innerHeight*1.25 window; scroll now reveals below-fold too (a strict
-            // never-blank gain, matching wpcReveal620).
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             try {
                 var wpcInv675 = [].slice.call(document.querySelectorAll(".elementor-invisible"));
                 if (wpcInv675.length && window.IntersectionObserver) {
@@ -2454,7 +2454,7 @@ if (!window.__wpcEngaged) {
                     });
                 });
             };
-            // Unpin during a scroll (anchoring absorbs the correction invisibly); idle backstop.
+            
             var un1 = function() {
                 window.removeEventListener("scroll", un1);
                 unpin();
@@ -2726,8 +2726,8 @@ addEventListener("wpc-scripts-loaded", (function() {
 
 (function() {
     "use strict";
-    // A minted variant can lie (bitmap W×sourceH — ratio ≠ declared); drop the picture
-    // sources so the OTF srcset (ratio-true by construction) serves instead.
+    
+    
     function check(im) {
         try {
             if (!im || !im.naturalWidth || !im.naturalHeight) {
@@ -2754,8 +2754,8 @@ addEventListener("wpc-scripts-loaded", (function() {
     function sweep() {
         try {
             [].slice.call(document.querySelectorAll("picture img")).forEach((function(im) {
-                // Act the moment dimensions are known (header parsed) — earlier than the
-                // load event, so a squished source is swapped before it fully paints.
+                
+                
                 if (im.naturalWidth > 0) {
                     check(im);
                 } else if (!im.__wpcRg) {
@@ -2769,9 +2769,9 @@ addEventListener("wpc-scripts-loaded", (function() {
             }));
         } catch (e) {}
     }
-    // window load / readyState are trapped until replay — poll instead (element-level
-    // load listeners pass through the trap; document-level ones do not). Fast early ticks
-    // catch a squished bitmap's dims before paint; slows once the page settles.
+    
+    
+    
     var rgN = 0;
     var rgTick = function() {
         sweep();
@@ -2787,29 +2787,29 @@ addEventListener("wpc-scripts-loaded", (function() {
 
 (function() {
     "use strict";
-    // REST used-css: href-less until a visitor is present.
-    // A scrolling user must never outrun it, so first scroll attaches unconditionally.
+    
+    
     function attach(l) {
         try {
             if (!l || l.getAttribute("href")) {
                 return;
             }
-            // v7.10.674 (§4): only REST is attached (after load). atf (data-wpc-uhref) is never
-            // fetched — the crit already paints the fold. Do not fall back to the atf href.
+            
+            
             var u = l.getAttribute("data-wpc-rest");
             if (!u) {
                 return;
             }
             l.setAttribute("media", l.getAttribute("data-wpc-ucss-rest") || l.getAttribute("data-wpc-ucss") || "all");
-            // Cascade follows DOM order: used-css sits near <head> top while late-flipped theme
-            // sheets sit far below, so their base shorthands (Divi `border:0 solid`) out-ordered
-            // our module rules and design was lost. Re-append BEFORE setting href — one fetch,
-            // final position, used-css always last.
+            
+            
+            
+            
             try { if (document.head) { document.head.appendChild(l); } } catch (e) {}
             l.setAttribute("href", u);
-            // v7.10.627 — the never-black shape guard exists only to cover the window
-            // before real fill rules land. Retire it once they have, so it can never
-            // outlive its purpose (a deferral whose remover must actually run).
+            
+            
+            
             try {
                 var g627 = document.getElementById("wpc-shape-fill-guard");
                 if (g627) {
@@ -2841,11 +2841,11 @@ addEventListener("wpc-scripts-loaded", (function() {
         } catch (e) {}
     }
     window.wpcRestAttach = rest;
-    // v7.10.628 — retire the never-black shape guard on a path that ALWAYS runs. The
-    // .627 removal lives inside attach(), but REST is now attached at PARSE by the
-    // ucss-boot, so attach() never runs for it — and on pages where used-css stood down
-    // there is no attach() at all. Real CSS is live by load+~200ms (late-swap) at the
-    // latest, so retire shortly after the real load event, however the CSS arrived.
+    
+    
+    
+    
+    
     (function() {
         var done628 = false;
         var drop628 = function() {
@@ -2869,15 +2869,15 @@ addEventListener("wpc-scripts-loaded", (function() {
         };
         setTimeout(poll628, 250);
     })();
-    // v7.10.626 — REST MUST NOT WAIT FOR A GESTURE. Receipt (/pricing/ 2026-07-31): the
-    // black band below the fold is section 671fd764's shape-divider fill, which lives ONLY
-    // in the REST bundle (crit=yes for other rules, atf=NO, rest=YES). Gated on engagement
-    // evidence, a 338KB bundle only STARTS downloading when the visitor scrolls — so they
-    // scroll into an unstyled section and watch the default black SVG fill until it lands
-    // (30s backstop otherwise). Below-fold correctness is not an interaction feature.
-    // First paint is untouched: crit + ATF already cover it and this fires only after
-    // readyState complete + 1.2s, so it never competes with LCP resources. The gesture and
-    // scroll triggers below remain as EARLIER fire paths.
+    
+    
+    
+    
+    
+    
+    
+    
+    
     (function() {
         var fired626 = false;
         var go626 = function() {
@@ -2885,9 +2885,9 @@ addEventListener("wpc-scripts-loaded", (function() {
             fired626 = true;
             try { rest(false); } catch (e) {}
         };
-        // document.readyState is SHADOWED by this loader (held at "loading" until the lane
-        // releases), so a readyState gate here can never fire — proven in test before ship.
-        // Navigation Timing is the real, unshadowed load signal.
+        
+        
+        
         var loaded626 = function() {
             try {
                 var n = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
@@ -2920,12 +2920,12 @@ addEventListener("wpc-scripts-loaded", (function() {
         passive: true,
         capture: true
     });
-    // v7.10.561 — POINTER INTENT, not just scroll. A visitor who clicks without scrolling first
-    // reached the click with this sheet still href-less, so anything styled ONLY by the rest
-    // bundle — runtime-injected UI, i.e. every lightbox/popup/modal — opened unstyled. Measured
-    // on staging: rest attached 520 ms AFTER the click, its fetch 4655 ms into the page.
-    // pointermove/over fire while the cursor travels to the target, which is the head start the
-    // fetch needs; pointerdown/keydown/touchstart are the last-resort catch for a direct hit.
+    
+    
+    
+    
+    
+    
     [ "pointermove", "pointerover", "pointerdown", "keydown", "touchstart" ].forEach((function(ev) {
         window.addEventListener(ev, (function(e) {
             if (e && e.isTrusted === false) {
@@ -3005,11 +3005,11 @@ addEventListener("wpc-scripts-loaded", (function() {
         once: true
     });
 })();
-// LCP preload correctness beacon. A preload is a promise about which element is the LCP; when
-// it names the wrong one it spends the LCP's bandwidth at fetchpriority="high" on the wrong
-// resource, and at fleet scale that is invisible without a signal. Reports ONLY on mismatch and
-// ONLY once per session, so a correct fleet sends nothing. No timers (GESTURE LAW) and no fetch
-// during load — sendBeacon on pagehide costs the page nothing.
+
+
+
+
+
 (function() {
     "use strict";
     var cfg = window.wpcDelayV3Cfg || {};
@@ -3022,8 +3022,8 @@ addEventListener("wpc-scripts-loaded", (function() {
             sent = true;
         }
     } catch (e) {}
-    // Compare on the rung-stripped filename stem: the preload and the <img> legitimately
-    // resolve to different rungs of the SAME file, which is a match, not a mismatch.
+    
+    
     var norm = function(u) {
         if (!u) {
             return "";
@@ -3041,18 +3041,18 @@ addEventListener("wpc-scripts-loaded", (function() {
                 } else if (es[i].element && es[i].element.currentSrc) {
                     lcpUrl = es[i].element.currentSrc;
                 }
-                // A scrolled visitor's LCP is whatever was in THEIR viewport, not the
-                // top-of-page hero the preload targets — comparing the two is meaningless
-                // and reports a mismatch that is not a defect. Read at entry time (no new
-                // listener); scrolling after LCP settles cannot change the verdict.
+                
+                
+                
+                
                 try {
                     if ((typeof window.pageYOffset === "number" ? window.pageYOffset : (document.documentElement || {}).scrollTop || 0) > 0) {
                         scrolledAtLcp = 1;
                     }
-                    // A viewport taller than any real browser window is a full-page capture
-                    // (screenshot tool, headless shot, print). It resizes rather than scrolls,
-                    // so pageYOffset stays 0 while a below-fold image counts as in-view and
-                    // wins LCP — a mismatch against the top-of-page preload that is not a defect.
+                    
+                    
+                    
+                    
                     if ((window.innerHeight || 0) > 2400) {
                         synthViewport = 1;
                     }
@@ -3074,7 +3074,7 @@ addEventListener("wpc-scripts-loaded", (function() {
         }
         var want = norm(lcpUrl), got = "", hit = false;
         for (var i = 0; i < pre.length; i++) {
-            // Only a preload whose media matches THIS viewport was a promise to this browser.
+            
             var mq = pre[i].getAttribute("media");
             if (mq) {
                 try {
@@ -3094,9 +3094,9 @@ addEventListener("wpc-scripts-loaded", (function() {
             }
         }
         if (hit) {
-            // Positive confirmation: without it "no mismatch reported" cannot be told apart
-            // from "never checked", which is the blind spot this beacon exists to close.
-            // 1% sampled and once per browser, so the fleet cost stays negligible.
+            
+            
+            
             try {
                 if (localStorage.getItem("wpcLcpOk") !== "1" && Math.random() < 0.01) {
                     localStorage.setItem("wpcLcpOk", "1");
@@ -3113,8 +3113,8 @@ addEventListener("wpc-scripts-loaded", (function() {
             } catch (e) {}
             return;
         }
-        // Not a defect: the visitor had scrolled, so their LCP is not the element the
-        // top-of-page preload aims at.
+        
+        
         if (scrolledAtLcp || synthViewport) {
             return;
         }

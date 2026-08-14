@@ -16,8 +16,8 @@ class wps_ic_preload_warmup
         self::$warmupVersion = 'v4/';
         $this->getApiUrl();
         $this->logFilePath = WPS_IC_LOG . 'warmup-log.txt';
-        // Lazy-open: this class constructs on every request — opening (and creating) the
-        // log file per request was wasted I/O and blocked plugin folder replacement
+        
+        
         $this->logFile = null;
         $this->get_filesystem();
     }
@@ -115,7 +115,7 @@ class wps_ic_preload_warmup
 
     public static function isFeatureEnabled($featureName)
     {
-        // v7.10.505 — delegate to the single durable reader.
+        
         if (function_exists('wpc_caps_enabled')) {
             return wpc_caps_enabled($featureName);
         }
@@ -128,7 +128,7 @@ class wps_ic_preload_warmup
         $call = wp_remote_post(self::$apiUrl, ['method' => 'POST', 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'body' => ['action' => 'preloadPage', 'apikey' => get_option(WPS_IC_OPTIONS)['api_key'], 'single_url' => $url], 'timeout' => 10]);
     }
 
-    // Filter function to modify search to only search post titles
+    
 
     public function getPagesForFiltering($post_type, $post_status, $page_number, $offset, $search = '')
     {
@@ -190,11 +190,11 @@ class wps_ic_preload_warmup
 
 
                 if ((isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0')) {
-                    // Excluded from Smart Optimizations
+                    
                 } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
                     if (!file_exists($critPath)) {
                         $critGenerated = '0';
-                        //$preloaded = '0';
+                        
                     }
                 }
 
@@ -222,7 +222,7 @@ class wps_ic_preload_warmup
             }
         }
 
-        // Return the total count and the filtered subset of pages
+        
         $return = ['total' => $total_count, 'pages' => $filtered_pages];
 
         return $return;
@@ -241,10 +241,10 @@ class wps_ic_preload_warmup
             $post_type = array_keys(get_post_types(['public' => true]));
             $post_type = array_diff($post_type, ['attachment']);
         } elseif (is_array($post_type)) {
-            // v7.10.594 — attachments are low-value on every other path (.530 keeps them out of
-            // crit generation, wpc_url_is_low_value keeps them out of dispatch), so an explicit
-            // post-type list must not be the one route that still warms them. Arrays only: a
-            // scalar $post_type is passed through untouched so callers keep their type.
+            
+            
+            
+            
             $post_type = array_diff($post_type, ['attachment']);
         }
 
@@ -302,7 +302,7 @@ class wps_ic_preload_warmup
 
         $query = new WP_Query($args);
 
-        // Remove the filter after the query has executed to prevent affecting other queries
+        
         if (!empty($search)) {
             remove_filter('posts_search', [$this, 'search_filter_by_title_only'], 10);
         }
@@ -319,17 +319,17 @@ class wps_ic_preload_warmup
 
             $available_pages[] = $post_info[$post_id];
 
-            // Add errors to the current page, if any
+            
             if (isset($warmup_errors[$post_id])) {
                 $available_pages[count($available_pages) - 1]['errors'] = $warmup_errors[$post_id];
             }
 
             $post_counter++;
 
-            // Update the transient every 2000 posts in case the process dies
+            
             if ($post_counter >= 2000 && $update_transient) {
                 set_transient('wpc-post-info', $post_info, 3600);
-                $post_counter = 0; // Reset counter
+                $post_counter = 0; 
             }
         }
 
@@ -356,7 +356,7 @@ class wps_ic_preload_warmup
 
             foreach ((array)$q['search_terms'] as $term) {
                 $term = esc_sql($wpdb->esc_like($term));
-                // Search title, slug (URL), and post name for smarter URL/page matching
+                
                 $search[] = "{$searchand}($wpdb->posts.post_title LIKE '{$n}{$term}{$n}' OR $wpdb->posts.post_name LIKE '{$n}{$term}{$n}')";
                 $searchand = ' AND ';
             }
@@ -428,11 +428,11 @@ class wps_ic_preload_warmup
 
 
                 if ((isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0')) {
-                    // Excluded from Smart Optimizations
+                    
                 } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
                     if (!file_exists($critPath)) {
                         $critGenerated = '0';
-                        //$preloaded = '0';
+                        
                     }
                 }
 
@@ -564,7 +564,7 @@ class wps_ic_preload_warmup
                   $hasErrorCode = true;
                   break;
                 } else if ($errorType == 'notice' && is_array($errorCode)) {
-                  if (in_array('skip', $errorCode)) {  // Changed 'skipped' to 'skip'
+                  if (in_array('skip', $errorCode)) {  
                     $hasErrorCode = true;
                     break;
                   }
@@ -610,7 +610,7 @@ class wps_ic_preload_warmup
 
                 if ($criticalActive && !file_exists($critPath)) {
                     $critGenerated = '0';
-                    //$preloaded     = '0';
+                    
                 }
 
 
@@ -764,7 +764,7 @@ class wps_ic_preload_warmup
         $enteredApiKey = $options['api_key'];
         if (!empty($enteredApiKey) && $enteredApiKey == $apikey) {
 
-            //Check for cache or crit errors/blocking
+            
             $oldStatus = get_transient('wpc-page-optimizations-status');
 
             if (!empty($oldStatus['id'])) {
@@ -775,7 +775,7 @@ class wps_ic_preload_warmup
                         $localCacheResponse = $this->cacheLocally($oldStatus['id']);
                     }
                     if ($oldPageStatus['critGenerated'] == 0) {
-                        //What to do with crit?
+                        
                     }
                 }
             }
@@ -784,7 +784,7 @@ class wps_ic_preload_warmup
             set_transient('wpc-page-optimizations-status', ['id' => $id, 'status' => 'warmup'], 60 * 5);
 
 
-            //Initialize the return
+            
             $status = $this->isOptimized($id, true);
             $status = array_merge($status, ['oldPageIsOptimized' => $oldPageStatus, 'oldStatus' => $oldStatus, 'cacheLocal' => $localCacheResponse]);
             echo json_encode($status);
@@ -853,7 +853,7 @@ class wps_ic_preload_warmup
 
 
             if (isset($page_excludes['critical_css']) && $page_excludes['critical_css'] == '0') {
-                // Exclude from Smart Optimizations
+                
             } else if (!empty($settings['critical']['css']) && $settings['critical']['css'] == '1') {
                 if (!file_exists($critPath)) {
                     $critGenerated = '0';
@@ -1130,7 +1130,7 @@ class wps_ic_preload_warmup
 
                 set_transient('wpc_test_' . $id, 'started', 60);
                 set_transient('wpc_initial_test', 'running', 5 * 60);
-                //
+                
 
             } else {
 
@@ -1223,7 +1223,7 @@ class wps_ic_preload_warmup
             $decodedBody = json_decode($body, true);
 
             if (!empty($decodedBody['success']) && $decodedBody['success'] == 'true') {
-                // Update the option with new results
+                
                 $results = get_option(WPS_IC_TESTS, []);
                 $results[$urlKey] = $decodedBody['data'];
                 update_option(WPS_IC_TESTS, $results);
@@ -1274,7 +1274,7 @@ class wps_ic_preload_warmup
             $body = wp_remote_retrieve_body($call);
             $decodedBody = json_decode($body, true);
             if (!empty($decodedBody['success']) && $decodedBody['success'] == 'true') {
-                // Update the option with new results
+                
                 $results = get_option(WPS_IC_TESTS, []);
                 $results[$urlKey] = $decodedBody['data'];
 
@@ -1282,45 +1282,45 @@ class wps_ic_preload_warmup
                     $cache = new wps_ic_cache_integrations();
                     $cache::purgeAll($urlKey);
 
-                    // Process desktop preloads
+                    
                     $preloads = get_option('wps_ic_preloads', []);
                     unset($preloads['lcp']);
 
                     $desktopPreload = stripslashes($results[$urlKey]['preloads']['desktop']);
 
-                    #$preloads = array_map('stripslashes', $preloads);
-                    #if (!in_array($desktopPreload, $preloads)) {
+                    
+                    
                     if (!empty($desktopPreload) && $desktopPreload !== 'none') {
                         $preloads['lcp'] = $desktopPreload;
                     }
-                    #}
+                    
 
-                    #$preloadsArray = array_map('trim', $preloads);
-                    // Apply trim using a foreach loop to avoid losing the 'lcp' key
+                    
+                    
                     foreach ($preloads as $key => $value) {
                         if (empty($value)) unset($preloads[$key]);
-                        $preloads[$key] = trim($value); // Trimming values while keeping associative keys
+                        $preloads[$key] = trim($value); 
                     }
                     update_option('wps_ic_preloads', $preloads);
 
-                    // Process mobile preloads
+                    
                     $preloadsMobile = get_option('wps_ic_preloadsMobile', []);
                     unset($preloadsMobile['lcp']);
 
                     $mobilePreload = stripslashes($results[$urlKey]['preloads']['mobile']);
 
                     $preloadsMobile = array_map('stripslashes', $preloadsMobile);
-                    #if (!in_array($mobilePreload, $preloadsMobile)) {
+                    
                     if (!empty($mobilePreload) && $mobilePreload !== 'none') {
                         $preloadsMobile['lcp'] = $mobilePreload;
                     }
-                    #}
+                    
 
-                    #$preloadsArray = array_map('trim', $preloadsMobile);
-                    // Apply trim using a foreach loop to avoid losing the 'lcp' key
+                    
+                    
                     foreach ($preloadsMobile as $key => $value) {
                         if (empty($value)) unset($preloadsMobile[$key]);
-                        $preloadsMobile[$key] = trim($value); // Trimming values while keeping associative keys
+                        $preloadsMobile[$key] = trim($value); 
                     }
                     update_option('wps_ic_preloadsMobile', $preloadsMobile);
 
@@ -1406,9 +1406,9 @@ class wps_ic_preload_warmup
 
     public function startOptimizationsCron()
     {
-        // The AJAX-endpoint body below dies before returning, which terminated the whole cron
-        // pass here. The cron lane does its own bounded work instead: one non-blocking
-        // front-page GET keeps page-cache/crit lanes warm twice daily.
+        
+        
+        
         if (!apply_filters('wpc_cron_preload_warm', true)) {
             return;
         }
@@ -1441,7 +1441,7 @@ class wps_ic_preload_warmup
 
         $response_code = wp_remote_retrieve_response_code($response);
 
-        // Check if the response code is a 3xx (redirection)
+        
         if ($response_code >= 300 && $response_code < 400) {
             return true;
         }
@@ -1481,7 +1481,7 @@ class wps_ic_preload_warmup
 
     public function isWarmupFailing()
     {
-        //Check for 2 consecutiove fails older than 5 minutes with no successful tests done after
+        
         $warmupFailing = false;
         $warmupLog = get_option(WPC_WARMUP_LOG_SETTING, []);
         $fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));

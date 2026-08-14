@@ -72,22 +72,22 @@ if (!function_exists('wpc_vitals_emit')) {
             if (!wpc_vitals_enabled() || (function_exists('is_admin') && is_admin())) {
                 return;
             }
-            // v7.10.906 — logged-in views are the site owner and editors, never "your visitors":
-            // the auth cookie bypasses the page cache, several optimizations stand down for
-            // logged-in requests, and DevTools sessions disable caching entirely — so every
-            // such sample measures the slowest possible path and poisons the real-visitor
-            // lanes (the 7s p25=p50=p75 cohort). Bypass probes (?disableWPC) stay collectable:
-            // they land in the fenced baseline lanes and the silent baseline runner mints them
-            // from the logged-in admin browser on non-credentialless browsers by design.
+            
+            
+            
+            
+            
+            
+            
             if (function_exists('is_user_logged_in') && is_user_logged_in() && empty($_GET['disableWPC'])
                 && !(function_exists('apply_filters') && apply_filters('wpc_vitals_collect_logged_in', false))) {
                 return;
             }
-            // v7.10.701 — warm renders MUST carry the collector: the warmer is a JS-less fetch
-            // (it can never beacon), but the HTML it renders is exactly what gets stored and
-            // replayed to real visitors. Skipping emit here minted the majority copy class
-            // WITHOUT the collector — every visitor served a warm-minted copy was invisible
-            // to RUM, which is what pinned "served from cache" at 0%.
+            
+            
+            
+            
+            
             $cfg = wpc_vitals_config();
             if (!$cfg) {
                 return;
@@ -105,9 +105,9 @@ if (!function_exists('wpc_vitals_emit')) {
             if ($js === '' || stripos($js, '</script') !== false) {
                 return;
             }
-            // dirname(__DIR__) is the ADDONS dir, not the plugin root, so plugins_url() resolved
-            // against addons/ and appended addons/vitals/v.php again -> addons/addons/... 404.
-            // WPS_IC_URI is the URL partner of the WPS_IC_DIR used for $src above.
+            
+            
+            
             $endpoint = defined('WPS_IC_URI')
                 ? WPS_IC_URI . 'addons/vitals/v.php'
                 : plugins_url('addons/vitals/v.php', dirname(__DIR__, 2) . '/wp-compress.php');
@@ -116,15 +116,15 @@ if (!function_exists('wpc_vitals_emit')) {
                 $endpoint = admin_url('admin-ajax.php') . '?action=wpc_v';
             }
             $token    = sha1($cfg['salt']);
-            // m = mint epoch, frozen into the stored copy beside the collector itself. WebKit
-            // never shipped PerformanceServerTiming, so every iOS view is blind to the
-            // wpc-cache/wpc-mint headers — the copy's own age is the one cache signal every
-            // browser can read. A replay >300s after mint is a cache serve by definition.
+            
+            
+            
+            
             $wpc_byp833 = !empty($_GET['disableWPC']) ? ',b:1' : '';
-            // v7.10.926 — the loopback probe can lie (hdavid-law: server-side POST passes the
-            // host's deny rule, every BROWSER POST 403s — verdict stayed 'direct' forever).
-            // The browser is the only honest prober: ship the ajax fallback beside the direct
-            // endpoint so the collector can observe the failure and switch itself.
+            
+            
+            
+            
             $wpc_ajx926 = '';
             if (function_exists('admin_url') && strpos($endpoint, 'admin-ajax.php') === false) {
                 $wpc_ajx926 = ',a:' . wp_json_encode(admin_url('admin-ajax.php') . '?action=wpc_v');
@@ -137,15 +137,15 @@ if (!function_exists('wpc_vitals_emit')) {
     add_action('wp_footer', 'wpc_vitals_emit', 99);
 }
 
-// ─── beacon channel: direct v.php POST is the default (zero WP boot per view), but hardened
-// hosts (nginx deny on wp-content/*.php — hdavid-law + dalton-roofing, 403 on every beacon)
-// never let v.php execute. A 12h-cached self-probe decides the channel. The probe is
-// POST-SHAPED with an invalid token — it exercises the exact method+path+body a real beacon
-// uses (a WAF can pass GET yet block POST, so a GET probe proves nothing) and v.php's token
-// gate turns it into a guaranteed no-write: 204 (or 410 disabled) proves execution -> direct;
-// 403/404/5xx/unreachable -> admin-ajax fallback. Probes run EAGERLY on admin_init (verdict
-// exists before real traffic embeds an endpoint) and lazily at frontend shutdown as backstop;
-// unknown verdict stays direct (fail-open to the cheap channel). ───────────────────────────
+
+
+
+
+
+
+
+
+
 if (!function_exists('wpc_vitals_channel_probe')) {
     function wpc_vitals_channel_probe($endpoint)
     {
@@ -211,10 +211,10 @@ if (!function_exists('wpc_vitals_channel')) {
 if (!function_exists('wpc_vitals_ajax_ingest')) {
     function wpc_vitals_ajax_ingest()
     {
-        // v7.10.926 — a beacon carrying fb=1 arrived here because a real browser watched the
-        // direct v.php POST fail. That observation outranks the loopback probe's verdict:
-        // flip the server channel so freshly-minted HTML embeds admin-ajax directly, and
-        // purge the copies still carrying the dead endpoint.
+        
+        
+        
+        
         $wpc_raw926 = (string) @file_get_contents('php://input');
         if ((strpos($wpc_raw926, 'fb=1') !== false || (isset($_POST['fb']) && $_POST['fb'] === '1'))
             && function_exists('get_transient') && get_transient('wpc_vitals_ch916') !== 'ajax') {
@@ -235,7 +235,7 @@ if (!function_exists('wpc_vitals_ajax_ingest')) {
     }
 }
 
-// ─── shared aggregator: one day-file's raw 8-byte records → the bucketed day aggregate ─────
+
 if (!function_exists('wpc_vitals_agg_bytes')) {
     function wpc_vitals_agg_bytes($bytes)
     {
@@ -248,18 +248,18 @@ if (!function_exists('wpc_vitals_agg_bytes')) {
             'd'  => ['lcp' => [], 'cls' => [], 'inp' => [], 'inp_s' => [], 'ttfb' => [], 'fcp' => []],
             's'  => max(1, (int) get_option('wpc_vitals_sample', 1)),
         ];
-        // v7.10.831 — view pings (0xA6, sent at load) are the view/hit/mob truth when
-        // present: the metrics record (0xA7, flushed at tab-hide) undercounts views by
-        // every session that never hides. On a ping-day, 0xA7 contributes metrics only;
-        // on a legacy day (cached copies still carrying the old collector) 0xA7 counts
-        // views exactly as before — the two rules converge as the page cache re-dresses.
+        
+        
+        
+        
+        
         $wpc_ping831 = ['v' => 0, 'hit' => 0, 'mob' => 0, 'r' => []];
         $agg['bm'] = ['lcp' => []];
         $agg['bd'] = ['lcp' => []];
-        // v7.10.845 — cache-hit LCP cohort (the "fully optimized visit" number) and
-        // coarse-region lanes. Byte 8 = region enum minted at receive time (1 NA · 2 EU
-        // · 3 APAC · 4 LATAM · 5 MEA, 0 unknown); 'rv' = views per region, 'r{n}' =
-        // device-merged LCP buckets per region.
+        
+        
+        
+        
         $agg['hm'] = ['lcp' => [], 'ttfb' => []];
         $agg['hd'] = ['lcp' => [], 'ttfb' => []];
         $agg['rv'] = [];
@@ -267,7 +267,7 @@ if (!function_exists('wpc_vitals_agg_bytes')) {
         for ($i = 0; $i < $n; $i++) {
             $r = array_values(unpack('C8', substr($bytes, $i * 8, 8)));
             if ($r[0] === 0xA6) {
-                if ($r[1] & 0x10) { continue; } // bypass ping: baseline cohort, never a counted view
+                if ($r[1] & 0x10) { continue; } 
                 $wpc_ping831['v']++;
                 if ($r[1] & 0x01) { $wpc_ping831['mob']++; }
                 if ($r[1] & 0x02) { $wpc_ping831['hit']++; }
@@ -280,9 +280,9 @@ if (!function_exists('wpc_vitals_agg_bytes')) {
                 continue;
             }
             if ($r[1] & 0x10) {
-                // v7.10.833 — LIVE BASELINE COHORT: a ?disableWPC=true visit. Its LCP
-                // feeds the without-plugin lanes only — never the optimized p75, never
-                // the view counts.
+                
+                
+                
                 if ($r[2] !== 255) {
                     $wpc_bl833 = ($r[1] & 0x01) ? 'bm' : 'bd';
                     $agg[$wpc_bl833]['lcp'][(int) $r[2]] = ($agg[$wpc_bl833]['lcp'][(int) $r[2]] ?? 0) + 1;
@@ -334,9 +334,9 @@ if (!function_exists('wpc_vitals_agg_bytes')) {
     }
 }
 
-// ─── v7.10.863 — SAME-DAY PARTIAL: today's day-file parsed read-only (the rollup only folds
-//     FINISHED days, which left every fresh install staring at an empty panel for 1–2 days).
-//     The file stays on disk untouched; the daily rollup remains the only writer.
+
+
+
 if (!function_exists('wpc_vitals_today_partial')) {
     function wpc_vitals_today_partial()
     {
@@ -379,7 +379,7 @@ if (!function_exists('wpc_vitals_today_partial')) {
     }
 }
 
-// ─── daily rollup: day-files → bucketed aggregates in ONE autoload=false option ────────────
+
 if (!function_exists('wpc_vitals_rollup')) {
     function wpc_vitals_epoch_guard()
     {
@@ -468,8 +468,8 @@ if (!function_exists('wpc_vitals_rollup')) {
             }
             update_option('wpc_vitals_daily', $kept, false);
 
-            // FIELD BASELINE — first full week's site-wide mobile p75 LCP, captured once: the
-            // "improved X% since optimization" banner compares field-to-field, never lab-to-field.
+            
+            
             if (!get_option('wpc_vitals_baseline') && count($kept) >= 7 && function_exists('wpc_vitals_p75')) {
                 $base  = wpc_vitals_p75(array_slice($kept, -7, null, true), 'm', 'lcp');
                 $baseD = wpc_vitals_p75(array_slice($kept, -7, null, true), 'd', 'lcp');
@@ -477,9 +477,9 @@ if (!function_exists('wpc_vitals_rollup')) {
                     update_option('wpc_vitals_baseline', ['t' => time(), 'lcp_m_p75' => $base, 'lcp_d_p75' => max(0, (int) $baseD)], false);
                 }
             }
-            // v7.10.832 — desktop parity backfill: sites baselined before .832 hold only the
-            // mobile number; fill the desktop leg ONCE from the oldest kept window so the
-            // desktop view gets its band and its since-activation delta too.
+            
+            
+            
             $wpc_vb832 = get_option('wpc_vitals_baseline');
             if (is_array($wpc_vb832) && empty($wpc_vb832['lcp_d_p75']) && count($kept) >= 7 && function_exists('wpc_vitals_p75')) {
                 $wpc_bd832 = (int) wpc_vitals_p75(array_slice($kept, -7, null, true), 'd', 'lcp');
@@ -489,7 +489,7 @@ if (!function_exists('wpc_vitals_rollup')) {
                 }
             }
 
-            // AUTO-SAMPLING — yesterday's volume tunes tomorrow's client-side sample denominator.
+            
             $yv = isset($daily[gmdate('Ymd', time() - 86400)]['v']) ? (int) $daily[gmdate('Ymd', time() - 86400)]['v'] * max(1, (int) get_option('wpc_vitals_sample', 1)) : 0;
             $new = $yv > 250000 ? 25 : ($yv > 50000 ? 10 : 1);
             if ($new !== (int) get_option('wpc_vitals_sample', 1)) {
@@ -513,7 +513,7 @@ if (!function_exists('wpc_vitals_rollup')) {
 
 
 if (!function_exists('wpc_vitals_p75')) {
-    /** Upper edge of the bucket where the 75th percentile falls; ms metrics only unless $cls. */
+    
     function wpc_vitals_bucket_edges($cls = false)
     {
         return $cls
@@ -521,7 +521,7 @@ if (!function_exists('wpc_vitals_p75')) {
             : [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2250, 2500, 2750, 3000, 3500, 4000, 4500, 5000, 6000, 7000, 8500, 10000, 15000, 25000, 40000];
     }
 
-    /** generalized percentile over the same bucket walk — q in (0,1); p75 keeps its own fn */
+    
     function wpc_vitals_pct($days, $device, $metric, $q)
     {
         $buckets = [];
@@ -551,7 +551,7 @@ if (!function_exists('wpc_vitals_p75')) {
         return end($edges);
     }
 
-    /** share of samples at or below $ms (bucket-edge resolution): [share 0..1, samples] */
+    
     function wpc_vitals_share_below($days, $device, $metric, $ms)
     {
         $edges = wpc_vitals_bucket_edges($metric === 'cls');
@@ -645,6 +645,67 @@ if (!function_exists('wpc_vitals_export')) {
         }
     }
 
+
+    
+    
+    
+    
+    
+    function wpc_vitals_sc_sane($r)
+    {
+        if (!is_array($r)) {
+            return null;
+        }
+        $out = ['e' => 1, 't' => 0];
+        $t = isset($r['t']) ? (float) $r['t'] : 0;
+        if ($t < 1 || $t > 4102444800000.0) {
+            return null;
+        }
+        $out['t'] = $t;
+        $legs = 0;
+        foreach (['m', 'd'] as $dv) {
+            if (empty($r[$dv]) || !is_array($r[$dv])) {
+                continue;
+            }
+            $on  = isset($r[$dv]['on']) ? (int) $r[$dv]['on'] : 0;
+            $off = isset($r[$dv]['off']) ? (int) $r[$dv]['off'] : 0;
+            if ($on < 1 || $on > 120000 || $off < 1 || $off > 120000) {
+                continue;
+            }
+            $out[$dv] = ['on' => $on, 'off' => $off];
+            $legs++;
+        }
+        return $legs > 0 ? $out : null;
+    }
+
+    function wpc_vitals_sc_save()
+    {
+        if (!function_exists('current_user_can') || !current_user_can('manage_options')
+            || !function_exists('wp_verify_nonce')
+            || !wp_verify_nonce(isset($_POST['n']) ? (string) $_POST['n'] : '', 'wpc_vp_sc')) {
+            wp_send_json_error('forbidden');
+        }
+        $raw = isset($_POST['r']) ? (string) wp_unslash($_POST['r']) : '';
+        if ($raw === '' || strlen($raw) > 2000) {
+            wp_send_json_error('bad');
+        }
+        $sane = wpc_vitals_sc_sane(json_decode($raw, true));
+        if ($sane === null) {
+            wp_send_json_error('bad');
+        }
+        $prev = get_option('wpc_vitals_sc');
+        
+        
+        if (is_array($prev) && isset($prev['t']) && (float) $prev['t'] >= $sane['t']
+            && isset($prev['d']) && !isset($sane['d'])) {
+            wp_send_json_success('kept');
+        }
+        update_option('wpc_vitals_sc', $sane, false);
+        wp_send_json_success('saved');
+    }
+    if (function_exists('add_action')) {
+        add_action('wp_ajax_wpc_vitals_sc_save', 'wpc_vitals_sc_save');
+    }
 
     function wpc_vitals_export_has_data($export)
     {

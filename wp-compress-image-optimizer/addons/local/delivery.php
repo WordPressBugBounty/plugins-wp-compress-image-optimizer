@@ -51,9 +51,9 @@ class wpc_ic_delivery
 
         $this->checkApiKey();
 
-        /**
-         * Fetch Image data by Image ID
-         */
+        
+
+
         $this->sizes = $this->getAllThumbSizes();
 
         if (!empty($_POST['imageID'])) {
@@ -163,7 +163,7 @@ class wpc_ic_delivery
 
     public function getImageList()
     {
-        // Raise the memory and time limit
+        
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '180');
 
@@ -300,14 +300,14 @@ class wpc_ic_delivery
     public function compress()
     {
         if ($this->type == 'multi') {
-            /**
-             * Bulk Mode
-             */
+            
+
+
             $this->parseImages();
         } else {
-            /**
-             * Single Image Delivery
-             */
+            
+
+
             $this->parseImages('single');
         }
     }
@@ -335,7 +335,7 @@ class wpc_ic_delivery
 
             if (wp_remote_retrieve_response_code($getCompressedImages) == 200) {
 
-                // All is ok
+                
                 $returnedImages = wp_remote_retrieve_body($getCompressedImages);
                 $returnedImages = json_decode($returnedImages);
 
@@ -344,7 +344,7 @@ class wpc_ic_delivery
                     $this->images = $returnedImages->data;
                 }
             } else {
-                // We failed to get the images, try again or error!?
+                
             }
         }
 
@@ -390,7 +390,7 @@ class wpc_ic_delivery
 
             $size_stats = [];
 
-            // Get the clean path without filename
+            
             $originalFilePath = wp_get_original_image_path($imageID);
             $originalFilename = wp_basename($originalFilePath);
             $this->pathToDir = str_replace($originalFilename, '', $originalFilePath);
@@ -400,8 +400,8 @@ class wpc_ic_delivery
                 return false;
             }
 
-            // TODO: You are assuming that the original will be the largest?
-            // TODO: What if the original was optimized but thumbs were not (by some other app)?
+            
+            
             if (empty($image->original)) {
                 $largest = 0;
                 foreach ($image as $imageSize => $imageData) {
@@ -436,7 +436,7 @@ class wpc_ic_delivery
                     $imagesParsed['total']['original'] += $imagesParsed[$imageID][$imageSize]['original'];
                     $imagesParsed['total']['compressed'] += $imagesParsed[$imageID][$imageSize]['compressed'];
 
-                    // Merge stats
+                    
                     $size_stats = array_merge($size_stats, $returnStats);
 
                     if ($size_stats !== false) {
@@ -466,18 +466,18 @@ class wpc_ic_delivery
             if (function_exists('wpc_invalidate_local_cache')) wpc_invalidate_local_cache();
             update_post_meta($imageID, 'ic_stats', $stats);
 
-            // Delete queue
+            
             delete_post_meta($imageID, 'ic_bulk_running');
             delete_transient('wps_ic_compress_' . $imageID);
 
-            // Add for heartbeat to pickup
+            
             set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'compressed'], 60);
 
-            // Edit meta for media gallery
+            
             $meta = get_post_meta($imageID, '_wp_attachment_metadata', true);
 
             if (!empty($meta)) {
-                $meta['filesize'] = $imagesParsed[$imageID]['full']['compressed']; // This is -scaled version of image
+                $meta['filesize'] = $imagesParsed[$imageID]['full']['compressed']; 
                 if (!empty($meta['sizes'])) {
                     foreach ($meta['sizes'] as $size => $data) {
                         $meta['sizes'][$size]['filesize'] = $imagesParsed[$imageID][$size]['compressed'];
@@ -486,13 +486,13 @@ class wpc_ic_delivery
 
                 update_post_meta($imageID, '_wp_attachment_metadata', $meta);
             } else {
-                // Something is broken, please rebuild meta tags
+                
                 $originalFilePath = wp_get_original_image_path($imageID);
                 $meta = wp_generate_attachment_metadata($imageID, $originalFilePath);
                 wp_update_attachment_metadata($imageID, $meta);
             }
 
-            // TODO: Intentionally set here, maybe if it breaks on any specific image we still get the others parsed
+            
             if ($type == 'multi') {
                 update_option('wps_ic_parsed_images', $imagesParsed, false);
                 update_option('wps_ic_BulkStatus', $bulkStatus);
@@ -539,7 +539,7 @@ class wpc_ic_delivery
 
         $stats = array();
 
-        // Get Image Path
+        
         if ($imageSize == 'original') {
             $fileName = wp_get_original_image_path($imageID);
             $fileName = basename($fileName);
@@ -550,7 +550,7 @@ class wpc_ic_delivery
 
         $this->writeLog('Write Image #398 ' . $imageID);
 
-        // Path to the imagesize
+        
         $imagePath = $this->pathToDir . $fileName;
 
         $imagesCompressed = get_post_meta($imageID, 'wpc_images_compressed', true);
@@ -561,20 +561,20 @@ class wpc_ic_delivery
 
         if (!$imagesCompressed) $imagesCompressed = array();
 
-        // TODO: Singapore je vraćao 0 savings zbog ovoga?
+        
 
         if (!empty($this->didImages[$imageID][$sanitizedURL])) {
 
-            // Is original smaller than compressed?
+            
             if ($imagesCompressed[$sanitizedURL]['original'] < $imagesCompressed[$sanitizedURL]['compressed']) {
-                // Compressed bigger than original
+                
                 $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
                 $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['original'];
                 $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
                 $stats['total']['compressed']['size'] += $stats[$imageSize]['original']['size'];
             } else {
-                // Original is bigger than compressed
-                // Get Original Size
+                
+                
                 $stats[$imageSize]['original']['size'] = $imagesCompressed[$sanitizedURL]['original'];
                 $stats[$imageSize]['compressed']['size'] = $imagesCompressed[$sanitizedURL]['compressed'];
                 $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
@@ -587,7 +587,7 @@ class wpc_ic_delivery
             $this->writeLog('$imagesCompressed[$sanitizedURL][url]: ' . print_r($imagesCompressed[$sanitizedURL]['url'], true));
             $this->writeLog('$imageData[url]: ' . print_r($imageData['url'], true));
         } else {
-            // Did we already do the image?
+            
             $this->didImages[$imageID][$sanitizedURL] = $imagePath;
 
             if (!file_exists($imagePath)) {
@@ -597,11 +597,11 @@ class wpc_ic_delivery
 
             $this->writeLog('Write Image #437 ' . $imageID);
 
-            // Get Original Size
+            
             $stats[$imageSize]['original']['size'] = filesize($imagePath);
             $stats['total']['original']['size'] += $stats[$imageSize]['original']['size'];
 
-            // Compare to compressed - FAILSAFE
+            
             if ($imageData['original'] <= $imageData['compressed']) {
                 $this->writeLog('Compressed is bigger than original.');
 
@@ -609,7 +609,7 @@ class wpc_ic_delivery
                 $this->writeLog('Write Image Before Download ' . $imageID);
                 $this->writeLog($imageData['url']);
 
-                // It's an URL
+                
                 $imageDownload = download_url($imageData['url']);
 
                 $this->writeLog('Write Image After Download ' . $imageID);
@@ -620,7 +620,7 @@ class wpc_ic_delivery
                     $this->writeLog(print_r($imageDownload, true));
                 } else {
 
-                    // Verify if the downloaded file is an image
+                    
                     if (function_exists('mime_content_type')) {
                         $mime_type = mime_content_type($imageDownload);
                     } else if (function_exists('finfo_open')) {
@@ -634,14 +634,14 @@ class wpc_ic_delivery
                     if (in_array($mime_type, array_merge(function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg', 'image/png', 'image/gif'], ['image/webp', 'image/avif']))) {
                         $image_size = getimagesize($imageDownload);
                         if ($image_size !== false) {
-                            // File is an image, proceed with your logic
+                            
                         } else {
-                            // File is not a valid image, handle the error
+                            
                             $this->writeLog('Downloaded file is not a valid image.');
                             return false;
                         }
                     } else {
-                        // File MIME type is not an image, handle the error
+                        
                         $this->writeLog('Downloaded file MIME type is not an image.');
                         return false;
                     }
@@ -649,7 +649,7 @@ class wpc_ic_delivery
                     $exif = 'image/jpeg';
                     $mime = 'image/jpeg';
 
-                    // Allowed
+                    
                     $allowed_file_types = array('image/png', 'image/jpeg', 'image/jpg', 'image/webp');
                     $this->writeLog('Allowed types');
                     $this->writeLog(print_r($allowed_file_types, true));
@@ -668,7 +668,7 @@ class wpc_ic_delivery
                         $this->writeLog(in_array($mime, $allowed_file_types));
                     } else {
 
-                        // Check if original is bigger than compressed, failsafe
+                        
                         if ($stats[$imageSize]['original']['size'] > filesize($imageDownload)) {
                             if (file_exists($imagePath)) {
                                 unlink($imagePath);
@@ -696,7 +696,7 @@ class wpc_ic_delivery
 
                 $webpPath = preg_replace('/\.(jpe?g|png)(?=[?#]|$)/', '.webp', (string) $imagePath);
 
-                // It's an URL
+                
                 $imageWebpDownload = download_url($imageData['url_webp']);
 
 
@@ -713,26 +713,26 @@ class wpc_ic_delivery
                 if (in_array($mime_type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'])) {
                     $image_size = getimagesize($imageWebpDownload);
                     if ($image_size !== false) {
-                        // File is an image, proceed with your logic
+                        
                     } else {
-                        // File is not a valid image, handle the error
+                        
                         $this->writeLog('Downloaded file is not a valid image.');
                         return false;
                     }
                 } else {
-                    // File MIME type is not an image, handle the error
+                    
                     $this->writeLog('Downloaded file MIME type is not an image.');
                     return false;
                 }
 
                 $mime = 'image/jpeg';
                 $stats[$imageSize]['webp_path'] = '';
-                // Allowed
+                
                 $allowed_file_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
                 if (!in_array($mime, $allowed_file_types)) {
                     $fileTypeError = true;
                 } else {
-                    // Check if original is bigger than compressed, failsafe
+                    
                     if ($stats[$imageSize]['original']['size'] > filesize($imageWebpDownload)) {
                         if (file_exists($webpPath)) {
                             unlink($webpPath);
@@ -748,7 +748,7 @@ class wpc_ic_delivery
 
 
             if (!$fileTypeError) {
-                // Get Compressed Size
+                
                 $stats[$imageSize]['compressed']['size'] = filesize($imagePath);
                 $stats['total']['compressed']['size'] += $stats[$imageSize]['compressed']['size'];
 
@@ -799,7 +799,7 @@ class wpc_ic_delivery
             return true;
         }
 
-        // Is the image in process
+        
         $inProcess = get_post_meta($imageID, 'ic_bulk_running', true);
         if ($inProcess && $inProcess == 'true') {
         }
@@ -811,7 +811,7 @@ class wpc_ic_delivery
         $downloadImage = download_url($imageURL);
 
         if (is_wp_error($downloadImage)) {
-            // Log and handle the error
+            
             $this->writeLog('Unable to download Image');
             $this->writeLog($imageURL);
             $this->writeLog(print_r($downloadImage, true));
@@ -825,7 +825,7 @@ class wpc_ic_delivery
         } else {
 
 
-            // Verify if the downloaded file is an image
+            
             if (function_exists('mime_content_type')) {
                 $mime_type = mime_content_type($downloadImage);
             } else if (function_exists('finfo_open')) {
@@ -839,14 +839,14 @@ class wpc_ic_delivery
             if (in_array($mime_type, array_merge(function_exists('wpc_optimizable_mimes') ? wpc_optimizable_mimes() : ['image/jpeg', 'image/png', 'image/gif'], ['image/webp', 'image/avif']))) {
                 $imageSize = getimagesize($downloadImage);
                 if ($imageSize !== false) {
-                    // File is an image, proceed with your logic
+                    
                 } else {
-                    // File is not a valid image, handle the error
+                    
                     $this->writeLog('Downloaded file is not a valid image.');
                     return false;
                 }
             } else {
-                // File MIME type is not an image, handle the error
+                
                 $this->writeLog('Downloaded file MIME type is not an image.');
                 return false;
             }
@@ -865,7 +865,7 @@ class wpc_ic_delivery
         copy($downloadImage, $imagePath);
         unset($downloadImage);
 
-        // Delete WebP
+        
         $filename = basename($imagePath);
         $path = str_replace($filename, '', $imagePath);
         $path = rtrim($path, '/');
@@ -899,7 +899,7 @@ class wpc_ic_delivery
         update_option('wps_ic_parsed_images', $imagesParsed, false);
 
 
-        // Remove meta tags
+        
         delete_post_meta($imageID, 'wpc_images_compressed');
         delete_post_meta($imageID, 'ic_stats');
         delete_post_meta($imageID, 'ic_compressed_images');
@@ -909,11 +909,11 @@ class wpc_ic_delivery
         delete_transient('wps_ic_compress_' . $imageID);
 
 
-        // Add for heartbeat to pickup
+        
         set_transient('wps_ic_heartbeat_' . $imageID, ['imageID' => $imageID, 'status' => 'restored'], 60);
 
-        //Moved this to the end because on large images wp_generate_attachment_metadata giver error, even tho it does
-        // regenerate thumbs
+        
+        
         $originalFilePath = wp_get_original_image_path($imageID);
         $oldMeta = wp_generate_attachment_metadata($imageID, $originalFilePath);
         wp_update_attachment_metadata($imageID, $oldMeta);
@@ -965,7 +965,7 @@ class wpc_ic_delivery
 
             if (wp_remote_retrieve_response_code($getCompressedImages) == 200) {
 
-                // All is ok
+                
                 $returnedImages = wp_remote_retrieve_body($getCompressedImages);
                 $returnedImages = json_decode($returnedImages);
 
@@ -974,7 +974,7 @@ class wpc_ic_delivery
                     $this->images = $returnedImages->data;
                 }
             } else {
-                // We failed to get the images, try again or error!?
+                
             }
         }
 
@@ -984,7 +984,7 @@ class wpc_ic_delivery
             self::$local->restore($imageID, false);
             $imagesParsed[$imageID]['restored'] = 'true';
 
-            // Remove meta tags
+            
             delete_post_meta($imageID, 'wpc_images_compressed');
             delete_post_meta($imageID, 'ic_compressing');
             delete_post_meta($imageID, 'ic_stats');

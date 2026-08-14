@@ -19,28 +19,28 @@
     $labels_dates = [];
     $limit = 10;
 
-    // Calculate offset
+    
     $item = 0;
 
-    // Initialize
+    
     $statsclass = new wps_ic_stats();
     $stats = false;
     $use_cloudflare = false;
-    $data_source = 'none'; // For debugging/logging
+    $data_source = 'none'; 
     $is_sample_data = false;
 
-    // Check if Cloudflare is connected
+    
     $cf = get_option(WPS_IC_CF);
     $use_cloudflare = !empty($cf) && !empty($cf['token']);
 
     if ($use_cloudflare) {
 
-        // Try to get Cloudflare stats
+        
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_cloudflare_stats(7);
 
         if (!$stats) {
-            // CF fetch failed, fallback to regular stats
+            
             $use_cloudflare = false;
             if (empty($gui::$stats_live)) {
                 $stats = $statsclass->fetch_sample_stats();
@@ -50,21 +50,21 @@
             }
         }
     } elseif (empty($gui::$stats_live)) {
-        // No CF, use sample data
+        
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
         $is_sample_data = true;
     } else {
-        // Use live stats
+        
         $stats = $gui::$stats_live;
     }
 
-    // Normalize: API returns {success, data: {...}} but sample returns just the data object
+    
     if ($stats && isset($stats->data) && is_object($stats->data)) {
         $stats = $stats->data;
     }
 
-    // If stats is still empty or has no date entries, fall back to sample data
+    
     if (empty($stats) || (is_object($stats) && count((array)$stats) === 0)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
@@ -90,13 +90,13 @@
             }
         }
 
-        // All values are zero — show sample data instead of empty chart
+        
         if (!$has_nonzero) {
             $labels = [];
         }
     }
 
-    // Final safety net — if labels is still empty, always show sample data
+    
     if (empty($labels)) {
         $statsclass = new wps_ic_stats();
         $stats = $statsclass->fetch_sample_stats();
@@ -129,7 +129,7 @@
         $catpercentage = 0.55;
     }
 
-    // Parse to javascript
+    
     $labels_js = '';
     $biggestY = 0;
     if ($labels) {
@@ -154,7 +154,7 @@
         }
     }
 
-    // Calculate Max
+    
     $biggestY = ceil($biggestY);
     $fig = (int)str_pad('1', 2, '0');
     $maxY = ceil((ceil($biggestY * $fig) / $fig));
@@ -189,9 +189,9 @@
     if (wpcSampleBadge) wpcSampleBadge.style.display = '';
     <?php endif; ?>
 
-    // ============================================================
-    // CHART DATA SETUP
-    // ============================================================
+
+
+
     var chartLabels = [];
     var dataBottom  = []; // Bottom stack (darker blue)
     var dataTop     = []; // Top stack (lighter blue)
@@ -216,7 +216,7 @@
 
     if ($stats) {
         foreach ($stats as $date => $value) {
-            // Remove year from date format
+            
             $formatted_date = date('m/d', strtotime($date));
             $chart_labels[] = $formatted_date;
 
@@ -243,22 +243,22 @@
     isCloudflareMode = true;
     <?php } ?>
 
-    // ============================================================
-    // BRAND-AWARE CHART COLOR HELPERS
-    // ============================================================
-    // Read brand color from CSS custom property (set by whitelabel ZIP)
-    // Ignore default plugin blue (#3b82f6) — only override for custom brand colors
+
+
+
+
+
     var wpcBrandRaw = getComputedStyle(document.documentElement).getPropertyValue('--wpc-brand-primary').trim();
     if (wpcBrandRaw === '#3b82f6') wpcBrandRaw = '';
 
-    // Convert hex to RGB components
+
     function hexToRgb(hex) {
         hex = hex.replace('#', '');
         if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
         var n = parseInt(hex, 16);
         return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
     }
-    // Shade a hex color: amount > 0 = lighter, < 0 = darker
+
     function shadeColor(hex, amount) {
         var c = hexToRgb(hex);
         var t = amount > 0 ? 255 : 0;
@@ -269,7 +269,7 @@
             Math.round((t - c.b) * p + c.b) + ')';
     }
 
-    // Dark palette (cached/optimized bars) — brand or solid #2e3caa
+
     var chartDarkBase  = wpcBrandRaw ? wpcBrandRaw : '#2e3caa';
     var chartDarkLight = wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.15) : '#2e3caa';
     var chartDarkMid   = wpcBrandRaw ? wpcBrandRaw : '#2e3caa';
@@ -277,7 +277,7 @@
     var chartDarkHover1= wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.25) : '#232e88';
     var chartDarkHover2= wpcBrandRaw ? shadeColor(wpcBrandRaw, -0.05) : '#232e88';
 
-    // Light palette (non-cached/original bars) — brand tint or solid #51acf6
+
     var chartLightBase = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#51acf6';
     var chartLight1    = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.40) : '#51acf6';
     var chartLightMid  = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#51acf6';
@@ -285,9 +285,9 @@
     var chartLightHov1 = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.35) : '#3d9be8';
     var chartLightHov2 = wpcBrandRaw ? shadeColor(wpcBrandRaw, 0.45) : '#3d9be8';
 
-    // ============================================================
-    // PREMIUM ENTERPRISE CHART CONFIGURATION
-    // ============================================================
+
+
+
     var config = {
         type: 'bar',
         data: {
@@ -368,7 +368,7 @@
                 duration: 900,
                 easing: 'easeInOutCubic',
                 delay: function(context) {
-                    // Stagger all render modes EXCEPT hover — hover must be instant
+
                     if (context.type === 'data' && context.mode !== 'active') {
                         return context.dataIndex * 80 + context.datasetIndex * 40;
                     }
@@ -380,7 +380,7 @@
                     duration: 900,
                     easing: 'easeInOutCubic',
                     from: function(context) {
-                        // Always grow bars from the x-axis baseline
+
                         if (context.chart && context.chart.scales && context.chart.scales.y) {
                             return context.chart.scales.y.getPixelForValue(0);
                         }
@@ -404,7 +404,7 @@
                 tooltip: {
                     enabled: false, // We'll use external tooltip for full control
                     external: function(context) {
-                        // Get or create tooltip element
+
                         let tooltipEl = document.getElementById('wpc-chartjs-tooltip');
 
                         if (!tooltipEl) {
@@ -418,14 +418,14 @@
 
                         const tooltipModel = context.tooltip;
 
-                        // Hide with smooth fade out
+
                         if (tooltipModel.opacity === 0) {
                             tooltipEl.style.opacity = 0;
                             tooltipEl.style.transform = 'translateY(-8px) scale(0.95)';
                             return;
                         }
 
-                        // Get data
+
                         const dataIndex = tooltipModel.dataPoints[0].dataIndex;
                         const trafficTotal = trafficSum.split(',');
                         const original = parseFloat(trafficTotal[dataIndex]);
@@ -436,19 +436,19 @@
                         const originalLabel = isCloudflareMode ? '<?php echo esc_js(__('Total Traffic', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('Original', WPS_IC_TEXTDOMAIN)); ?>';
                         const afterLabel = isCloudflareMode ? '<?php echo esc_js(__('Cached Traffic', WPS_IC_TEXTDOMAIN)); ?>' : '<?php echo esc_js(__('After Optimization', WPS_IC_TEXTDOMAIN)); ?>';
 
-                        // Format date as "Month Day" (e.g., "January 7")
+
                         const rawDate = tooltipModel.title[0];
                         const [month, day] = rawDate.split('/');
                         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                             'July', 'August', 'September', 'October', 'November', 'December'];
                         const formattedDate = `${monthNames[parseInt(month) - 1]} ${parseInt(day)}`;
 
-                        // Prepare formatted strings for Tooltip
+
                         var afterStr    = after >= 1000 ? (after/1000).toFixed(2) + ' GB' : after.toFixed(2) + ' MB';
                         var originalStr = original >= 1000 ? (original/1000).toFixed(2) + ' GB' : original.toFixed(2) + ' MB';
                         var savedStr    = saved >= 1000 ? (saved/1000).toFixed(2) + ' GB' : saved.toFixed(2) + ' MB';
 
-                        // Build HTML
+
                         let innerHtml = `
                             <div class="wpc-tooltip-container">
                                 <div class="wpc-tooltip-header">
@@ -484,7 +484,7 @@
 
                         tooltipEl.innerHTML = innerHtml;
 
-                        // Position tooltip
+
                         const position = context.chart.canvas.getBoundingClientRect();
                         const tooltipWidth = 240;
                         const tooltipHeight = 180;
@@ -492,7 +492,7 @@
                         let left = position.left + window.pageXOffset + tooltipModel.caretX - (tooltipWidth / 2);
                         let top = position.top + window.pageYOffset + tooltipModel.caretY - tooltipHeight - 20;
 
-                        // Keep tooltip in viewport
+
                         if (left < 10) left = 10;
                         if (left + tooltipWidth > window.innerWidth - 10) {
                             left = window.innerWidth - tooltipWidth - 10;
@@ -504,7 +504,7 @@
                             tooltipEl.style.transformOrigin = 'bottom center';
                         }
 
-                        // Show with smooth fade in
+
                         tooltipEl.style.opacity = 1;
                         tooltipEl.style.transform = 'translateY(0) scale(1)';
                         tooltipEl.style.left = left + 'px';
@@ -601,16 +601,16 @@
 <script type="text/javascript">
     jQuery(document).ready(function ($) {
         <?php if (!empty($labels) && !empty($stats)) { ?>
-        // Defer chart creation until dashboard tab is visible
-        // Prevents bars animating from left when initialized while canvas is hidden
+
+
         window.wpcInitChart = function(forceRecreate) {
             var $canvas = $('#wpc-canvas');
             if (!$canvas.length) return;
-            // On advanced settings, defer until the tab is visible; on lite/simple, canvas is always visible
+
             var $tab = $canvas.closest('.wpc-tab-content');
             if ($tab.length && !$tab.is(':visible')) return;
 
-            // Destroy existing chart if forcing recreate (tab switch scenario)
+
             if (forceRecreate && window.myLine) {
                 window.myLine.destroy();
                 window.myLine = null;
@@ -630,11 +630,11 @@
 </script>
 
 <style>
-    /* ============================================================
-       PREMIUM ENTERPRISE TOOLTIP - IMPROVED VERSION
-       ============================================================ */
 
-    /* Data source notice */
+
+
+
+
     .wpc-data-notice {
         display: flex;
         align-items: center;
@@ -653,24 +653,24 @@
         }
     }
 
-    /* Enterprise-grade custom tooltip with subtle gradient */
+
     #wpc-chartjs-tooltip {
         background: linear-gradient(145deg, #ffffff 0%, #fafbfc 100%);
         border: 1px solid rgba(226, 232, 240, 0.5);
         border-radius: 14px;
         padding: 0;
         font-family: 'Proxima Nova', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        /* Softer, more refined shadow */
+
         box-shadow:
                 0 12px 28px rgba(15, 23, 42, 0.08),
                 0 4px 12px rgba(15, 23, 42, 0.04),
                 0 0 0 1px rgba(15, 23, 42, 0.02);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        /* Smooth transitions */
+
         transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
         transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        /* Initial state for animation */
+
         opacity: 0;
         transform: translateY(-8px) scale(0.95);
     }
@@ -680,7 +680,7 @@
         width: 240px;
     }
 
-    /* Tooltip header with subtle gradient */
+
     .wpc-tooltip-header {
         padding: 14px 16px 12px;
         border-bottom: 1px solid rgba(226, 232, 240, 0.5);
@@ -698,7 +698,7 @@
         margin: 0 !important;
     }
 
-    /* Tooltip body with metrics */
+
     .wpc-tooltip-body {
         padding: 12px 16px;
         background: rgba(255, 255, 255, 0.5);
@@ -715,7 +715,7 @@
         margin-bottom: 0;
     }
 
-    /* Premium rounded square badges with subtle glow */
+
     .wpc-tooltip-badge {
         width: 10px;
         height: 10px;
@@ -738,7 +738,7 @@
         background: var(--wpc-brand-primary-light, linear-gradient(135deg, #42a5f5 0%, #64b5f6 50%, #81c9fa 100%));
     }
 
-    /* Content layout */
+
     .wpc-tooltip-content {
         display: flex;
         align-items: baseline;
@@ -765,7 +765,7 @@
         letter-spacing: -0.01em;
     }
 
-    /* Softer divider */
+
     .wpc-tooltip-divider {
         height: 1px;
         background: linear-gradient(90deg,
@@ -777,7 +777,7 @@
         margin: 0 16px;
     }
 
-    /* Footer with savings highlight */
+
     .wpc-tooltip-footer {
         padding: 12px 16px 14px;
         background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(249, 250, 251, 0.6) 100%);
@@ -820,7 +820,7 @@
         font-feature-settings: 'tnum';
     }
 
-    /* Chart canvas */
+
     #wpc-canvas {
         filter: drop-shadow(0 1px 4px rgba(60, 76, 223, 0.06));
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -830,7 +830,7 @@
         filter: drop-shadow(0 3px 8px rgba(60, 76, 223, 0.1));
     }
 
-    /* Chart container */
+
     .wp-compress-chart {
         background: #ffffff;
         border-radius: 8px;
@@ -857,7 +857,7 @@
         left: 100%;
     }
 
-    /* Fade-in animation */
+
     .wp-compress-pre-wrapper-v4 {
         animation: fadeInChart 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -873,7 +873,7 @@
         }
     }
 
-    /* Legend styling */
+
     .wp-compress-pre-subheader {
         margin-bottom: 24px;
         font-family: 'Proxima Nova', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -928,7 +928,7 @@
         color: #475569 !important;
     }
 
-    /* Responsive adjustments */
+
     @media (max-width: 768px) {
         .wp-compress-chart {
             padding: 16px;

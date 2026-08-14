@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+    exit; 
 }
 
 
@@ -58,8 +58,8 @@ if (!function_exists('wpc_customer_purge')) {
 
         $blocking = (bool) $blocking;
 
-        // Build the handles first (no I/O), then collect. This keeps the shape
-        // ready for a curl_multi parallel variant; for now we collect serially.
+        
+        
         $cf_handle   = wpc_purge_cf_async($apikey, $mode, $urls, $blocking);
         $orch_handle = wpc_purge_orch_async($apikey, $mode, $urls, $reason, $blocking);
 
@@ -104,12 +104,12 @@ if (!function_exists('wpc_customer_purge')) {
 
 
 if (!function_exists('wpc_purge_cf_async')) {
-    /**
-     * Build a CF purge handle if the customer's CF integration is connected.
-     * No I/O here — wpc_collect_cf() fires the API call(s).
-     *
-     * @return array handle ['type'=>'cf'|'skipped', ...]
-     */
+    
+
+
+
+
+
     function wpc_purge_cf_async($apikey, $mode, $urls, $blocking = true)
     {
         if (!class_exists('wps_ic_cloudflare') || !class_exists('WPC_CloudflareAPI')) {
@@ -150,7 +150,7 @@ if (!function_exists('wpc_collect_cf')) {
             ];
         }
 
-        // Fire-and-forget path for restore-triggered purges: this never blocks.
+        
         if (empty($handle['blocking'])) {
             $chunks = wpc_cf_fire_nonblocking($handle['token'], $handle['zone'], $handle['mode'], $handle['urls']);
             return [
@@ -189,7 +189,7 @@ if (!function_exists('wpc_collect_cf')) {
                     }
                     $err = wpc_cf_extract_error($resp);
                     $errors[] = $err;
-                    // On a rate-limit error, retry once after a 500ms back-off.
+                    
                     if (wpc_cf_is_rate_limit_error($err)) {
                         usleep(500000);
                         $resp = $cf->purgeFiles($handle['zone'], $chunk);
@@ -217,12 +217,12 @@ if (!function_exists('wpc_collect_cf')) {
 }
 
 if (!function_exists('wpc_cf_fire_nonblocking')) {
-    /**
-     * Fire CF purge_cache fire-and-forget style (blocking=false). This bypasses
-     * the blocking SDK so a restore-triggered purge never waits on CloudFlare.
-     * mode=all sends purge_everything; mode=urls sends one non-blocking POST per
-     * chunk of 30. Returns the number of POSTs fired.
-     */
+    
+
+
+
+
+
     function wpc_cf_fire_nonblocking($token, $zone, $mode, $urls)
     {
         $endpoint = 'https://api.cloudflare.com/client/v4/zones/' . rawurlencode((string) $zone) . '/purge_cache';
@@ -274,11 +274,11 @@ if (!function_exists('wpc_normalize_urls_for_cf')) {
 }
 
 if (!function_exists('wpc_cf_response_ok')) {
-    /**
-     * WPC_CloudflareAPI returns a decoded array on success, or a WP_Error on
-     * HTTP/CF errors (see cf-sdk.php processResponse). A non-error array counts
-     * as success; if a 'success' key is present, honor it.
-     */
+    
+
+
+
+
     function wpc_cf_response_ok($resp)
     {
         if (empty($resp) || (function_exists('is_wp_error') && is_wp_error($resp))) {
@@ -380,7 +380,7 @@ if (!function_exists('wpc_collect_orch')) {
             ];
         }
 
-        // Fire-and-forget path for restore-triggered purges: sign, fire, return.
+        
         if (empty($handle['blocking'])) {
             $ts  = time();
             $sig = hash_hmac('sha256', $ts . '.' . hash('sha256', $body_raw), $apikey);

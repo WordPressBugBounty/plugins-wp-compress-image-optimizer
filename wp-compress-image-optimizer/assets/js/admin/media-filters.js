@@ -29,7 +29,7 @@
     var AttachmentsBrowser = wp.media.view.AttachmentsBrowser;
     wp.media.view.AttachmentsBrowser = wp.media.view.AttachmentsBrowser.extend({
         createToolbar: function() {
-            // Make sure to load the original toolbar
+            
             AttachmentsBrowser.prototype.createToolbar.call( this );
             this.toolbar.set( 'MediaLibraryWpsIcFilter', new MediaLibraryTaxonomyFilter({
                 controller: this.controller,

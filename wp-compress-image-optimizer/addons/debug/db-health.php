@@ -24,7 +24,7 @@ if (!function_exists('wpc_db_health_report')) {
         global $wpdb;
         $out = ['generated' => gmdate('c'), 'plugin_version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '?'];
 
-        // ── Disk (the filesystem WP lives on; on a single-disk box this is the MySQL disk too) ──
+        
         $root = defined('ABSPATH') ? ABSPATH : '/';
         $tot  = @disk_total_space($root);
         $free = @disk_free_space($root);
@@ -35,7 +35,7 @@ if (!function_exists('wpc_db_health_report')) {
             'used_pct'  => $used_pct,
         ];
 
-        // ── Binary-log config + size ──
+        
         $gv = function ($name) use ($wpdb) {
             $v = $wpdb->get_var("SELECT @@GLOBAL." . preg_replace('/[^a-z_]/', '', $name));
             return ($v === null) ? null : (string) $v;
@@ -72,7 +72,7 @@ if (!function_exists('wpc_db_health_report')) {
             'settings_initialized' => (get_option('wpc_settings_initialized') === '1'),
         ];
 
-        // ── DB size + biggest tables ──
+        
         $schema = defined('DB_NAME') ? DB_NAME : '';
         $out['db_total_gb'] = round((float) $wpdb->get_var($wpdb->prepare(
             "SELECT COALESCE(SUM(data_length+index_length),0) FROM information_schema.tables WHERE table_schema=%s", $schema
@@ -83,7 +83,7 @@ if (!function_exists('wpc_db_health_report')) {
              ORDER BY (data_length+index_length) DESC LIMIT 12", $schema
         ), ARRAY_A);
 
-        // ── Options-table bloat (the plugin's known vectors from the FPM audit) ──
+        
         $alloptions = (int) $wpdb->get_var("SELECT COALESCE(SUM(LENGTH(option_value)),0) FROM {$wpdb->options} WHERE autoload='yes'");
         $preloaded  = get_option('wpc-ic-preloaded-pages');
         $out['options_bloat'] = [

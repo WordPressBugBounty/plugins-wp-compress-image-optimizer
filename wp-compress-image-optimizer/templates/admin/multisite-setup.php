@@ -1,13 +1,13 @@
 <?php
 global $wps_ic, $wpdb;
 
-// Vars
+
 $tab = '';
 if (!empty($_GET['tab'])) {
   $tab = $_GET['tab'];
 }
 
-// Menu configuration
+
 $menu_items = [];
 $menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=default-settings'), 'tab' => 'default-settings', 'title' => esc_html__('Default Settings', WPS_IC_TEXTDOMAIN), 'class' => 'wp-mu-default-settings'];
 $menu_items[] = ['url' => network_admin_url('admin.php?page=' . $wps_ic::$slug . '-mu&tab=manage-websites'), 'tab' => 'manage-websites', 'title' => esc_html__('Manage Websites', WPS_IC_TEXTDOMAIN), 'class' => 'wp-mu-manage-websites'];

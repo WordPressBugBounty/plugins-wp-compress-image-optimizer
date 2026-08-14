@@ -10,7 +10,7 @@ jQuery(document).ready(function ($) {
             newUrl += '?wpc_visitor_mode=true';
         }
 
-        // Redirect to the new URL
+        
         window.location.href = newUrl;
     });
 });

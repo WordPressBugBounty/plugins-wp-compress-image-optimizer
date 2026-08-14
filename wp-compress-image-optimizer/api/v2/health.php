@@ -4,7 +4,7 @@
 define('WPC_V2_DIRECT_ENTRY', true);
 define('WPC_V2_SKIP_METHOD_GUARD', true);
 
-// Method preflight (health-specific — POST only, no HMAC required).
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
     header('Content-Type: text/plain; charset=utf-8');
@@ -14,15 +14,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 
 require __DIR__ . '/_shared.php';
 
-// At this point: WordPress is loaded via SHORTINIT, $wpdb is global.
 
-// Read submitted token. Expected as POST body field probe_token.
+
+
 $submitted = '';
 if (isset($_POST['probe_token'])) {
     $submitted = (string) $_POST['probe_token'];
 } else {
-    // Some environments don't auto-populate $_POST for direct-entry requests.
-    // Fall back to parsing the raw body.
+    
+    
     $raw = file_get_contents('php://input');
     if ($raw !== false && $raw !== '') {
         parse_str($raw, $parsed);
@@ -37,8 +37,8 @@ if ($submitted === '' || strlen($submitted) < 8 || strlen($submitted) > 128) {
     exit;
 }
 
-// Read the plugin's expected token from the transient. Plugin set this just
-// before firing the probe; 60s TTL.
+
+
 $expected = '';
 if (function_exists('get_transient')) {
     $val = get_transient('wpc_v2_probe_token');

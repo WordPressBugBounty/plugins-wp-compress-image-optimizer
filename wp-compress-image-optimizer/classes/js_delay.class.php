@@ -12,7 +12,7 @@ class wps_ic_js_delay
     public static $lastLoadScripts = ['scripts.min.js', 'elementor', 'fusion-scripts', 'tracking', 'googletagmanager', 'gtag', 'jquery(document).ready', 'mouse', 'elementskit', 'ekit', 'gtranslate', 'translate', 'globe', 'draggable', 'theme-script', 'jet-', 'sortable', 'usercentric', 'parallax', 'dhvc-woocommerce/assets/js/script.js', 'repeater.js','fitvids', 'fusion', 'avada-scrollspy.js', 'jupiter','sticky','customer-reviews-woocommerce/js/frontend.js','tawk','jnews-main','/plugins/wpdatatables/','/plugins/wdt-powerful-filters/'];
 
 
-    // Todo: Maybe add for newskit plugin "frontend-data-source,nekitWidgetData"
+    
     public static $deferScripts = ['mediaelement', 'fitvid', 'jquery.min.js', 'jquery/ui', 'flexslide'];
 
 
@@ -69,7 +69,7 @@ class wps_ic_js_delay
                 $id = $matches[2];
 
 		            $tagLower = strtolower($fullTag);
-		            // Is the script excluded from DelayJS?
+		            
 		            if (self::$excludes->excludedFromDelay($tagLower)) {
 			            return $fullTag;
 		            }
@@ -102,7 +102,7 @@ class wps_ic_js_delay
 
         $tagLower = strtolower($tag);
 
-        // It's excluded
+        
         if (strpos($tagLower, 'text/javascript-no-delay') !== false) {
             $tag = str_replace('type="text/javascript-no-delay"', 'type="text/javascript"', $tag);
         }
@@ -112,9 +112,9 @@ class wps_ic_js_delay
 
 
     public function isWooCartOrCheckout() {
-        // Check if WooCommerce is active
+        
         if ( class_exists( 'WooCommerce' ) ) {
-            // Check if current page is Cart or Checkout
+            
             if ( is_cart() || is_checkout() ) {
                 return true;
             }
@@ -141,7 +141,7 @@ class wps_ic_js_delay
         $tagLower = strtolower($tag);
 
 
-        // Is the script excluded from DelayJS?
+        
         if (self::$excludes->excludedFromDelay($tagLower)) {
             if (!strpos($tagLower, 'defer') && strpos($tagLower, 'jquery') === false) {
                 $tag = str_replace('<script ', '<script data-wpc-att="excluded" ', $tag);
@@ -152,26 +152,26 @@ class wps_ic_js_delay
 
 
         if ($this->checkKeyword($tagLower, self::$doNotDelay)) {
-            // Do not delay these!!!
+            
             return $tag;
         } else if ($this->checkKeyword($tagLower, self::$deferScripts)) {
 
-            // Required for usercentrics plugin
+            
             if (strpos($tagLower, 'loader.js') !== false || strpos($tagLower, 'uc-block') !== false) {
-                // Find & Replace with defer
+                
                 $tag = preg_replace('/<script/i', '<script defer ', $tag, 1);
                 return $tag;
             } else {
-                // Find & Replace with defer
+                
                 $tag = preg_replace('/<script/i', '<script defer ', $tag, 1);
                 return $tag;
             }
 
         } else if ($this->checkKeyword($tagLower, self::$lastLoadScripts)) {
 
-            // Required for usercentrics plugin
+            
             if (strpos($tagLower, 'loader.js') !== false || strpos($tagLower, 'uc-block') !== false) {
-                // Find & Replace with delay
+                
                 if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
                     $tag = preg_replace('/<script/i', '<script type="wpc-delay-script"', $tag, 1);
                 } else {
@@ -181,9 +181,9 @@ class wps_ic_js_delay
             }
 
 
-            // Patches for scripts that need to run last?
+            
             if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
-                #$tag = preg_replace('/<script/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
+                
                 $tag = preg_replace('/<script(?![^>]*\btype=)/i', '<script type="wpc-delay-last-script" data-from-wpc="128"', $tag, 1);
             } else {
                 $tag = str_replace(['type="text/javascript"', "type='text/javascript'", 'type="application/javascript"', "type='application/javascript'"], 'type="wpc-delay-last-script" data-from-wpc="128"', $tag);
@@ -192,7 +192,7 @@ class wps_ic_js_delay
             return $tag;
         } else {
 
-            // Find & Replace with delay
+            
             if (preg_match('/<script[^>]*>/i', $tagLower, $matches) && strpos($matches[0], 'type=') === false) {
                 $tag = preg_replace('/<script/i', '<script type="wpc-delay-script"', $tag, 1);
             } else {
@@ -210,12 +210,12 @@ class wps_ic_js_delay
         if (!empty($keywordArray)) {
             foreach ($keywordArray as $needle) {
                 if (strpos($tag, $needle) !== false) {
-                    return true; // Match found
+                    return true; 
                 }
             }
         }
 
-        return false; // No match found
+        return false; 
     }
 
 

@@ -5,10 +5,10 @@ function runAdaptive() {
         var adaptiveImage = entry;
 
         if (adaptiveImage.hasAttribute("data-excluded-adaptive")) {
-            return; // skip this image
+            return; 
         }
 
-        // Integrations
+        
         wpc_masonry = adaptiveImage.closest(".masonry");
         wpc_owlSlider = adaptiveImage.closest(".owl-carousel");
         wpc_SlickSlider = adaptiveImage.closest(".slick-slider");
@@ -23,9 +23,9 @@ function runAdaptive() {
             console.log(wpc_slides);
         }
 
-        /**
-         * Is SlickSlider/List?
-         */
+        
+
+
         if (wpc_SlickSlider || wpc_SlickList || wpc_slides || wpc_owlSlider || wpc_masonry) {
             if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
                 newApiURL = adaptiveImage.dataset.src;
@@ -33,7 +33,7 @@ function runAdaptive() {
                 newApiURL = adaptiveImage.src;
             }
 
-            // Check and update the srcset attribute if data-srcset exists
+            
             if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
                 newApiURLSrcset = adaptiveImage.dataset.srcset;
                 adaptiveImage.srcset = newApiURLSrcset;
@@ -46,9 +46,9 @@ function runAdaptive() {
             adaptiveImage.classList.remove("wps-ic-lazy-image");
             adaptiveImage.removeAttribute('data-wpc-loaded');
 
-            // Remove Dataset
+            
             if (typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '') {
-                adaptiveImage.removeAttribute('data-src'); // Remove dataset.src
+                adaptiveImage.removeAttribute('data-src'); 
             }
 
             if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
@@ -81,13 +81,13 @@ function runAdaptive() {
             console.log('Image Stuff END');
         }
 
-        // if (isMobile) {
-        //     imgWidth = mobileWidth;
-        // }
+        
+        
+        
 
-        /**
-         * Setup Image SRC only if srcset is empty
-         */
+        
+
+
         if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
             newApiURL = adaptiveImage.dataset.src;
 
@@ -98,8 +98,8 @@ function runAdaptive() {
                 adaptiveImage.srcset = adaptiveImage.dataset.srcset;
             }
 
-            // Handle <picture> <source> lazy loading — promote lazy AVIF/WebP <source data-srcset>
-            // so the browser self-selects once (no eager pre-fetch + runLazy re-fetch). Mirrors local/lazy.js.
+            
+            
             var parentPicture = adaptiveImage.closest('picture');
             if (parentPicture) {
                 parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
@@ -118,12 +118,12 @@ function runAdaptive() {
             }
         }
 
-        // Wire box-measurement to NATURAL srcsets. SetupNewApiURL only rewrites /w: TRANSFORM
-        // URLs — a no-op now that srcsets are natural (-WxH) — so the natural ladder kept the theme's stale
-        // sizes (e.g. "620px") and the browser over-fetched the biggest rung. Set sizes from the REAL
-        // measured box so the browser picks the right -WxH (DPR-aware → retina still gets 2x). Use a FRESH
-        // measurement (NOT imgWidth — it falls back to window.innerWidth for a 0-width/hidden image, which
-        // would over-fetch); skip unless it's a genuine laid-out width + a width-descriptor srcset is present.
+        
+        
+        
+        
+        
+        
         var wpcBoxW = Math.round(parseInt(window.getComputedStyle(adaptiveImage).width)) || 0;
         if (wpcBoxW > 1
             && !adaptiveImage.classList.contains('wpc-excluded-adaptive')
@@ -172,32 +172,32 @@ document.addEventListener("WPCContentLoaded", function () {
 });
 
 const wpcObserver = new MutationObserver(function (mutationsList) {
-    // Iterate over each mutation
+    
     for (var i = 0; i < mutationsList.length; i++) {
         console.log('running observer');
         var mutation = mutationsList[i];
 
-        // Check if nodes were added
+        
         if (
             mutation.type === 'childList' &&
             mutation.addedNodes.length > 0 &&
             mutation.addedNodes[0].tagName &&
             mutation.addedNodes[0].tagName.toLowerCase() === 'img'
         ) {
-            // Process the added nodes
+            
             for (var j = 0; j < mutation.addedNodes.length; j++) {
                 var node = mutation.addedNodes[j];
 
-                // if (isMobile) {
-                //     imgWidth = mobileWidth;
-                // }
+                
+                
+                
 
-                // Check if the added node is an image
+                
                 if (node.tagName && node.tagName.toLowerCase() === 'img') {
                     adaptiveImage = node;
-                    /**
-                     * Setup Image SRC only if srcset is empty
-                     */
+                    
+
+
                     if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
                         newApiURL = adaptiveImage.dataset.src;
 
@@ -257,5 +257,5 @@ function onScroll() {
     runAdaptive();
 }
 
-// Attach the scroll event listener
+
 window.addEventListener('scroll', onScroll);

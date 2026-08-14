@@ -21,7 +21,7 @@ if (!function_exists('wpc_v2_rw_beacon_receive')) {
             wp_send_json_error('disabled', 403);
         }
 
-        // Light validation only: don't die on a bad/expired nonce (anonymous page caches), just bail.
+        
         if (function_exists('check_ajax_referer') && !check_ajax_referer('wpc_rw_beacon', 'nonce', false)) {
 
         }
@@ -56,7 +56,7 @@ if (!function_exists('wpc_v2_rw_beacon_receive')) {
             }
         }
 
-        // Rolling window (newest last), hard-capped so the option can't grow unbounded.
+        
         if (count($store) > 500) {
             $store = array_slice($store, -500);
         }
@@ -66,7 +66,7 @@ if (!function_exists('wpc_v2_rw_beacon_receive')) {
     }
 }
 
-// Register the endpoint ONLY when enabled (priv + nopriv — most visitors are anonymous).
+
 if (wpc_v2_rendered_width_beacon_enabled()) {
     add_action('wp_ajax_wpc_v2_rw_beacon',        'wpc_v2_rw_beacon_receive');
     add_action('wp_ajax_nopriv_wpc_v2_rw_beacon', 'wpc_v2_rw_beacon_receive');

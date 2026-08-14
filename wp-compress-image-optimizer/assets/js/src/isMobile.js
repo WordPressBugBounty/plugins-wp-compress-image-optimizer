@@ -1,4 +1,4 @@
-// IsMobile
+
 var mobileWidth = 1;
 var wpcIsMobile = false;
 var jsDebug = false;

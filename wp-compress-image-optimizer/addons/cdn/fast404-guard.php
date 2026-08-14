@@ -3,15 +3,15 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * v7.20.18 — uploads fast-404. A request for a missing image under uploads costs a full WP
- * boot before the PHP-level 404 guards answer it; on Apache/LiteSpeed a marker-fenced rule in
- * uploads/.htaccess answers at the server instead. The -WxH rung shape is carved out so those
- * requests still reach WP for wpc_v2_rung_intercept (nearest-rung serve + regen queue). The
- * write is verified by probing a known-missing URL: a 404 WITHOUT the X-WPC-Fast-404 header
- * proves the server answered before PHP; the header present means the rule is ineffective
- * (nginx and friends) — journaled, never retried hot.
- */
+
+
+
+
+
+
+
+
+
 
 if (!function_exists('wpc_fast404_guard_active')) {
     function wpc_fast404_guard_active()
@@ -56,7 +56,7 @@ if (!function_exists('wpc_fast404_guard_write_block')) {
 }
 
 if (!function_exists('wpc_fast404_guard_probe')) {
-    /** 404 without our PHP header = the server answered pre-WP. Returns 'static'|'php'|'other'. */
+    
     function wpc_fast404_guard_probe()
     {
         if (!function_exists('wp_remote_get')) { return 'other'; }
@@ -96,8 +96,8 @@ if (!function_exists('wpc_fast404_guard_tick')) {
                 return true;
             }
             if ($verdict === 'php') {
-                // Rule written but PHP still answers (nginx-class front) — leave the block
-                // (harmless), journal ineffective, back off a week like the CORP guard.
+                
+                
                 update_option('wpc_fast404_state', ['state' => 'ineffective', 'ts' => time()], false);
                 set_transient('wpc_fast404_tick', 1, 7 * DAY_IN_SECONDS);
                 return false;

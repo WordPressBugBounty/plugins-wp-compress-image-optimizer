@@ -11,7 +11,7 @@ if (!function_exists('wpc_v2_wake_register_route')) {
         register_rest_route('wpc/v2', '/wake', [
             'methods'             => 'POST',
             'callback'            => 'wpc_v2_wake_handler',
-            'permission_callback' => '__return_true',  // HMAC is the auth
+            'permission_callback' => '__return_true',  
         ]);
     }
 }
@@ -37,9 +37,9 @@ if (!function_exists('wpc_v2_wake_record_auth_failure')) {
         $counter_key = 'wpc_wake_rl_' . $ip_hash;
         $count = (int) get_transient($counter_key);
         $count++;
-        set_transient($counter_key, $count, 300);  // 5min counter window
+        set_transient($counter_key, $count, 300);  
 
-        // After 3 failures, install hard-block for 5min
+        
         if ($count >= 3) {
             $throttle_key = 'wpc_wake_thr_' . $ip_hash;
             set_transient($throttle_key, 1, 300);
@@ -62,7 +62,7 @@ if (!function_exists('wpc_v2_wake_clear_auth_failures')) {
 
 
 if (!function_exists('wpc_v2_wake_note')) {
-    // Remote wake observability: record the last wake's outcome on the healthcheck.
+    
 
 
     function wpc_v2_wake_note($outcome, $extra = [])
@@ -81,7 +81,7 @@ if (!function_exists('wpc_v2_wake_handler')) {
             ? trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0])
             : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0');
 
-        // Hard-block by IP if previously rate-limited
+        
 
 
         if (wpc_v2_wake_is_rate_limited($ip)) {
@@ -104,7 +104,7 @@ if (!function_exists('wpc_v2_wake_handler')) {
             return new WP_REST_Response(['error' => 'hmac_fail'], 401);
         }
 
-        // Auth success — clear any previous failure counter for this IP
+        
         wpc_v2_wake_clear_auth_failures($ip);
 
 
@@ -121,11 +121,11 @@ if (!function_exists('wpc_v2_wake_handler')) {
             wpc_v2_wake_note('self_heal_pull_enabled');
         }
 
-        // T2 capture for cross-system race verification.
-        //
+        
+        
 
 
-        //
+        
 
 
         $body_parsed = !empty($raw_body) ? json_decode($raw_body, true) : null;
@@ -147,12 +147,12 @@ if (!function_exists('wpc_v2_wake_handler')) {
         } elseif (is_array($body_parsed) && (isset($body_parsed['imageID']) || isset($body_parsed['sizeLabel']))) {
             $wake_items[] = $norm_item($body_parsed);
         }
-        // T2 telemetry reads the first item (back-compat with the prior single-event log line).
+        
         $t2_imageID    = !empty($wake_items) ? $wake_items[0]['imageID']   : '';
         $t2_sizeLabel  = !empty($wake_items) ? $wake_items[0]['sizeLabel'] : '';
         $t2_format     = !empty($wake_items) ? $wake_items[0]['format']    : '';
         $t2_trace_id   = !empty($wake_items) ? $wake_items[0]['trace_id']  : '';
-        $t2_wake_ms    = (int) (microtime(true) * 1000);  // T2 — wall-clock at handler arrival
+        $t2_wake_ms    = (int) (microtime(true) * 1000);  
         $t2_orch_trace = $request->get_header('X-Orch-Trace');
 
 
@@ -171,8 +171,8 @@ if (!function_exists('wpc_v2_wake_handler')) {
         wpc_v2_wake_note('ok', ['dispatched' => $dispatched, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
 
 
-        // $dispatched (= the fsockopen self-POST was at least WRITTEN), but on a host where fsockopen can't
-        // open the loopback socket AT ALL, $dispatched is false — so the fallback meant to cover a dead
+        
+        
 
 
         if (function_exists('wpc_v2_pull_drain_loop_handler')) {
@@ -214,15 +214,15 @@ if (!function_exists('wpc_v2_wake_handler')) {
 
         $wall_ms = (int) round((microtime(true) - $start_t) * 1000);
 
-        // Legacy summary line — keep for back-compat with any log scraping
+        
         error_log(sprintf(
             '[WPC Wake] ok dispatched=%d wall_ms=%d',
             $dispatched ? 1 : 0, $wall_ms
         ));
 
 
-        // T1 (write completion). Diff(T2 - T1) is the cross-system race
-        // window. If T2 < T1 anywhere, the await was bypassed.
+        
+        
         error_log(sprintf(
             '[WPC Wake] T2 wake_ms=%d trace_id=%s imageID=%s sizeLabel=%s format=%s dispatched=%d orch_trace_hdr=%s items=%d%s',
             $t2_wake_ms,

@@ -5,7 +5,7 @@ class wps_ic_bgLazy {
 
 
   public function __construct() {
-    #add_action( 'elementor/frontend/section/before_render', array($this, 'Elementor_addBgLazy') );
+    
   }
 
 

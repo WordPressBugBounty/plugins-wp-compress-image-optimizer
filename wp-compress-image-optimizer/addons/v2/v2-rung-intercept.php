@@ -14,8 +14,8 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         if (!preg_match('#^(.*/)([^/]+)-(\d{2,4})x(\d{2,4})\.(avif|webp|jpe?g|png)$#i', $path, $m)) return;
         if (!apply_filters('wpc_rung_intercept_enabled', true)) return;
 
-        $dir_url  = $m[1];                   // e.g. /wp-content/uploads/2026/05/
-        $stem     = $m[2];                   // e.g. puscas-adryan-..._E-unsplash
+        $dir_url  = $m[1];                   
+        $stem     = $m[2];                   
         $want_w   = (int) $m[3];
         $req_ext  = strtolower($m[5]);
 
@@ -51,8 +51,8 @@ if (!function_exists('wpc_v2_rung_intercept')) {
         $subdir = (strpos($meta['file'], '/') !== false) ? substr($meta['file'], 0, strrpos($meta['file'], '/') + 1) : '';
         $base   = rtrim($up['basedir'], '/') . '/' . $subdir;
 
-        // Candidate widths: registered sizes + the main file + on-disk adaptive names from
-        // ic_local_variants ({W}x{H}[-fmt] labels — the deterministic naming).
+        
+        
         $widths = [];
         if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
             foreach ($meta['sizes'] as $sz) {

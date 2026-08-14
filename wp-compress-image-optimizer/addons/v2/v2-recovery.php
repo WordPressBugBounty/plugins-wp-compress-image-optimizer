@@ -6,24 +6,24 @@ if (!defined('ABSPATH')) {
 }
 
 if (!function_exists('wpc_v2_pull_recover')) {
-    /**
-     * Clear local pull-state and re-point the cursor.
-     *
-     * @param string $mode 'fresh' (skip backlog) | 'resync' (re-pull all)
-     * @return array Summary of what was cleared/changed.
-     */
+    
+
+
+
+
+
     function wpc_v2_pull_recover($mode = 'resync')
     {
         $mode = ($mode === 'fresh') ? 'fresh' : 'resync';
         $out  = ['mode' => $mode];
 
 
-        // 'flag_off' when wpc_v2_pull_enabled() is false (DB wipe cleared the site option /
-        // its zone+cdn inputs). Without this the drain never runs no matter the cursor.
+        
+        
         update_site_option('wpc_v2_pull_enabled', 1);
         $out['pull_flag'] = 'enabled (wpc_v2_pull_enabled=1)';
 
-        // 1) File-based drain journal (queued-for-drain entries). Stale entries
+        
 
         if (function_exists('wpc_v2_journal_list_files')) {
             $deleted = 0;
@@ -35,11 +35,11 @@ if (!function_exists('wpc_v2_pull_recover')) {
             $out['journal_files_deleted'] = $deleted;
         }
 
-        // 2) On-upload compress queue (wpc_compress_queue).
+        
         delete_option('wpc_compress_queue');
 
-        // 3) Pending-variant transients (best effort — they also TTL out, and on
-        //    an external object cache they aren't in the options table).
+        
+        
         global $wpdb;
         $out['pending_transients_deleted'] = (int) $wpdb->query(
             "DELETE FROM {$wpdb->options}
@@ -47,10 +47,10 @@ if (!function_exists('wpc_v2_pull_recover')) {
                  OR option_name LIKE '\\_transient\\_timeout\\_wpc\\_v2\\_pending\\_%'"
         );
 
-        // 4) The cursor — the gate that decides what the NEXT drain pulls.
+        
         if ($mode === 'fresh') {
-            // Jump forward so GET /optimize-v2/manifest?since=<now> returns only
-            // entries created AFTER this reset → the stale backlog is skipped even
+            
+            
 
             $now_ms = (int) round(microtime(true) * 1000);
             update_option('wpc_v2_pull_cursor_ms', $now_ms, false);
@@ -74,10 +74,10 @@ if (!function_exists('wpc_v2_pull_recover')) {
 }
 
 if (!function_exists('wpc_v2_pull_status')) {
-    /**
-     * Read-only snapshot of the local pull-state (diagnostic).
-     * @return array
-     */
+    
+
+
+
     function wpc_v2_pull_status()
     {
         global $wpdb;
@@ -125,7 +125,7 @@ if (!function_exists('wpc_v2_pull_draintest')) {
             return $out;
         }
 
-        // Step 1 — the live manifest GET (since=cursor). Most likely failure point.
+        
         $fetch = wpc_v2_pull_manifest_fetch($cursor, 50, 0);
         $out['manifest_GET'] = [
             'ok'            => !empty($fetch['ok']),
@@ -155,7 +155,7 @@ if (!function_exists('wpc_v2_pull_draintest')) {
                 'failing'         => !empty($failing) ? $failing : '(none — entry is valid; the break is downstream at placement)',
             ];
 
-            // Egress test, now with the CORRECT key.
+            
             $url = isset($v0['fetchUrl']) ? (string) $v0['fetchUrl'] : '';
             if ($url !== '') {
                 $head = wp_remote_head($url, ['timeout' => 8]);
@@ -186,7 +186,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
         $out['drain_running_transient'] = get_transient('wpc_v2_drain_running') ?: 'none';
         $out['cursor_before'] = (int) get_option('wpc_v2_pull_cursor_ms', 0);
 
-        // Resolve the first entry's on-disk target BEFORE, to confirm placement after.
+        
         $target = '';
         if (function_exists('wpc_v2_pull_manifest_fetch')) {
             $f = wpc_v2_pull_manifest_fetch($out['cursor_before'], 5, 0);
@@ -198,12 +198,12 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
         $out['sample_target']        = $target !== '' ? $target : '(could not resolve imageID -> path)';
         $out['sample_target_before'] = ($target !== '' && file_exists($target)) ? 'exists' : 'missing';
 
-        // 1) Tick — GET + queue + journal write (also fires a loopback; harmless here).
+        
         $out['tick_result'] = function_exists('wpc_v2_pull_manifest_tick')
             ? wpc_v2_pull_manifest_tick(50, 0)
             : '(wpc_v2_pull_manifest_tick missing)';
 
-        // 2) Journal drain INLINE — the actual fetch + write, bypassing the loopback.
+        
         if (function_exists('wpc_v2_journal_drain_run')) {
             wpc_v2_journal_drain_run();
             $out['journal_drain'] = 'ran inline';
@@ -211,7 +211,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
             $out['journal_drain'] = '(wpc_v2_journal_drain_run missing)';
         }
 
-        // 3) Did the sample file land?
+        
         $out['sample_target_after'] = $target !== ''
             ? (file_exists($target) ? 'PLACED OK' : 'STILL MISSING')
             : '(n/a)';
@@ -222,7 +222,7 @@ if (!function_exists('wpc_v2_pull_drainrun')) {
     }
 }
 
-// ── Admin URL trigger (manage_options + nonce) ──────────────────────────────
+
 add_action('admin_init', function () {
     if (empty($_GET['wpc_v2_pull_recover'])) {
         return;
@@ -256,7 +256,7 @@ add_action('admin_init', function () {
         }
     }
 
-    // Render status/result + one-click action buttons (the nonce is baked in).
+    
     $base    = admin_url('index.php');
     $nonce   = wp_create_nonce('wpc_v2_pull_recover');
     $u_fresh  = esc_url(add_query_arg(['wpc_v2_pull_recover' => 'fresh',  '_wpcnonce' => $nonce], $base));
@@ -282,7 +282,7 @@ add_action('admin_init', function () {
     wp_die($html, 'WPC Phase-B Recovery', ['response' => 200]);
 });
 
-// ── WP-CLI: wp wpc-v2-recover <fresh|resync|status> ─────────────────────────
+
 if (defined('WP_CLI') && WP_CLI) {
     WP_CLI::add_command('wpc-v2-recover', function ($args) {
         $mode = isset($args[0]) ? (string) $args[0] : 'status';
@@ -312,6 +312,140 @@ add_action('template_redirect', function () {
     if (!function_exists('current_user_can') || !current_user_can('manage_options')) { return; }
 
 
+    
+    
+    
+    
+    
+    
+    
+    if ($_GET['wpc_cdn_debug'] === 'fix') {
+        if (empty($_GET['wps_ic_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['wps_ic_nonce'])), 'wpc_cdn_fix')) {
+            wp_die('WPC: that link expired — reload the debug page and click the button again.');
+        }
+        $steps = array();
+
+        
+        delete_transient('wpc_mc_down');
+        delete_transient('wpc_v2_deferred_sync_lock');
+        delete_option('wpc_v2_selfheal_attempts');
+        delete_transient('wpc_v2_selfheal_backoff');
+        delete_transient('wpc_v2_config_force_backoff');
+        delete_transient('wpc_cf_reverify_bk');
+        update_option('wpc_v2_force_provision', 1, false);
+        $steps['gates cleared'] = 'breaker, sync lock, selfheal backoffs, reverify throttle — all reset; force-provision armed';
+
+        
+        $orch = function_exists('wpc_v2_orchestrator_url') ? (string) wpc_v2_orchestrator_url() : '';
+        if ($orch !== '') {
+            $tp = wp_remote_get(rtrim($orch, '/') . '/v2/config', ['timeout' => 8, 'sslverify' => true]);
+            $steps['orchestrator reachable'] = is_wp_error($tp)
+                ? 'NO — ' . $tp->get_error_message() . '  <- outbound blocked at this host (security plugin / firewall / DNS)'
+                : 'yes (HTTP ' . (int) wp_remote_retrieve_response_code($tp) . ')';
+        } else {
+            $steps['orchestrator reachable'] = '(no orchestrator URL configured)';
+        }
+        $wpc_skew16 = null;
+        $tt = wp_remote_get('https://www.cloudflare.com/cdn-cgi/trace', ['timeout' => 5]);
+        if (!is_wp_error($tt) && preg_match('/^ts=(\d+)/m', (string) wp_remote_retrieve_body($tt), $tm)) {
+            $wpc_skew16 = abs(time() - (int) $tm[1]);
+            $steps['server clock skew'] = $wpc_skew16 . 's' . ($wpc_skew16 > 120 ? '  <- BAD CLOCK: signed syncs 401 (ts_skew) — fix the server time' : ' (fine)');
+        }
+
+        
+        $zid = '';
+        if (function_exists('wpc_v2_get_zone_id')) { $zid = (string) wpc_v2_get_zone_id(); }
+        if ($zid === '') { $zid = trim((string) get_option('ic_custom_cname')); }
+        if ($zid === '') { $zid = trim((string) get_option('ic_cdn_zone_name')); }
+        if ($zid !== '' && function_exists('wpc_v2_config_sync_lazy_enabled')) {
+            $sr = wpc_v2_config_sync_lazy_enabled($zid, function_exists('wpc_v2_get_lazy_enabled') ? wpc_v2_get_lazy_enabled() : false);
+            $steps['config sync'] = !empty($sr['ok'])
+                ? 'LANDED (HTTP ' . (int) ($sr['http_code'] ?? 0) . ') — the service has this site\'s current version + cname now'
+                : 'FAILED — http_code=' . (int) ($sr['http_code'] ?? 0) . ' reason=' . (string) ($sr['reason'] ?? '?')
+                  . '  <- this is the exact thing to fix; nothing downstream can work until it lands';
+        } else {
+            $steps['config sync'] = 'SKIPPED — no zone id or cname configured on this site';
+        }
+
+        
+        if (function_exists('wpc_v2_cf_cname_reverify')) {
+            $rv = wpc_v2_cf_cname_reverify(false);
+            $v16 = get_option('wpc_cf_cname_verified');
+            $steps['cname verification'] = ($v16 === '1' || $v16 === 1)
+                ? 'VERIFIED' . ($rv ? ' (by this probe)' : ' (already, or via the service witness on the sync above)')
+                : 'not verified yet' . (is_array(get_option('wpc_cf_verify_challenged2114')) ? '  <- Cloudflare CHALLENGED the probe — see the notice / trips table' : '');
+        }
+
+        
+        $after = function_exists('wpc_v2_zone_cdn_suppressed') ? (wpc_v2_zone_cdn_suppressed() ? 'STILL SUPPRESSED — read the trips table for the remaining trip' : 'SERVING — suppression lifted') : '(n/a)';
+        if (strpos($after, 'SERVING') === 0 && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+            wps_ic_cache::removeHtmlCacheFiles('all');
+            $after .= '; HTML cache purged';
+        }
+        $steps['RESULT'] = $after;
+
+        $back = esc_url(add_query_arg(array('wpc_cdn_debug' => '1'), home_url('/')));
+        $body16 = '';
+        foreach ($steps as $k => $v) { $body16 .= '<tr><td style="padding:6px 14px 6px 0;white-space:nowrap;vertical-align:top;"><strong>' . esc_html($k) . '</strong></td><td style="padding:6px 0;">' . esc_html($v) . '</td></tr>'; }
+        wp_die('<h2>WP Compress — one-click fix, step by step</h2><table style="font:13px/1.5 -apple-system,sans-serif;border-collapse:collapse;">' . $body16 . '</table><p style="margin-top:16px;"><a href="' . $back . '">&larr; Back to the debug panel</a></p>', 'WPC — fix report', array('response' => 200));
+    }
+
+    
+    
+    
+    if ($_GET['wpc_cdn_debug'] === 'cf') {
+        $cf19 = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
+        if (!is_array($cf19) || empty($cf19['token']) || empty($cf19['zone'])) {
+            wp_die('WPC: no Cloudflare integration credentials stored on this site — the inspector needs the CF token the plugin uses to write rules.');
+        }
+        if (!class_exists('WPC_CloudflareAPI') && defined('WPS_IC_DIR')) { @include_once WPS_IC_DIR . '/addons/cf-sdk/cf-sdk.php'; }
+        $cfc19  = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        $api19  = new WPC_CloudflareAPI((string) $cf19['token']);
+        $ins19  = method_exists($api19, 'wpc_cf_inspect2119') ? $api19->wpc_cf_inspect2119((string) $cf19['zone'], $cfc19) : ['errors' => ['sdk too old']];
+        $dump19 = "WP COMPRESS - CLOUDFLARE INSPECTOR (read-only)\nzone: " . $cf19['zone'] . "  cdn host: " . ($cfc19 === '' ? '(none)' : $cfc19) . "\n\n";
+        $dump19 .= "-- CUSTOM RULES, DEPLOYED ORDER (a skip only protects what runs AFTER it) --\n";
+        if (is_array($ins19['rules']) && $ins19['rules']) {
+            foreach ($ins19['rules'] as $r19) {
+                $dump19 .= sprintf("%s #%d %s [%s]%s%s%s\n",
+                    $r19['ours'] ? '>' : ' ', $r19['pos'], $r19['desc'], $r19['action'],
+                    $r19['enabled'] ? '' : ' DISABLED',
+                    $r19['ruleset'] === 'current' ? ' ruleset:current' : ($r19['ours'] && $r19['action'] === 'skip' ? ' NO-RULESET <- stale shape' : ''),
+                    $r19['phases'] ? ' phases:' . $r19['phases'] : '');
+            }
+        } elseif (is_array($ins19['rules'])) {
+            $dump19 .= "(no custom rules deployed — the Optimizer rules are MISSING; press Refresh Connection)\n";
+        } else {
+            $dump19 .= "(unreadable)\n";
+        }
+        $dump19 .= "\n-- BOT FIGHT / SBFM --\n" . (is_array($ins19['bot']) ? wp_json_encode($ins19['bot']) : '(unreadable — token may lack Bot Management read)') . "\n";
+        $dump19 .= "\n-- SECURITY LEVEL --\n" . ($ins19['seclevel'] !== null ? $ins19['seclevel'] : '(unreadable)') . "\n";
+        $dump19 .= "\n-- LAST FIREWALL EVENTS FOR THE CDN HOST (6h; 'source' NAMES the challenger) --\n";
+        if (is_array($ins19['events']) && $ins19['events']) {
+            foreach ($ins19['events'] as $e19) {
+                $dump19 .= sprintf("%s  %s  source=%s rule=%s  %s  [%s]\n",
+                    isset($e19['datetime']) ? $e19['datetime'] : '?', isset($e19['action']) ? $e19['action'] : '?',
+                    isset($e19['source']) ? $e19['source'] : '?', !empty($e19['ruleId']) ? $e19['ruleId'] : '-',
+                    isset($e19['clientRequestPath']) ? $e19['clientRequestPath'] : '', isset($e19['clientCountryName']) ? $e19['clientCountryName'] : '');
+            }
+            $dump19 .= "\nsource legend: botFight = free-plan Bot Fight Mode (no rule can exempt it — disable in Security > Bots)\n"
+                     . "firewallCustom = a custom rule (the rule id above; ours must sit at #0) · securityLevel/bic = covered products\n";
+        } elseif (is_array($ins19['events'])) {
+            $dump19 .= "(no events in the window — trigger the failing fetch first, then reload this page)\n";
+        } else {
+            $dump19 .= "(unreadable — token may lack Analytics/Logs read)\n";
+        }
+        if (!empty($ins19['errors'])) {
+            $dump19 .= "\n-- API ERRORS --\n" . implode("\n", array_map('strval', (array) $ins19['errors'])) . "\n";
+        }
+        if (!headers_sent()) { header('Content-Type: text/html; charset=utf-8'); }
+        echo '<!doctype html><meta charset="utf-8"><title>WPC CF Inspector</title>'
+           . '<body style="font:13px -apple-system,BlinkMacSystemFont,sans-serif;max-width:900px;margin:28px auto;padding:0 16px;color:#1d2327;">'
+           . '<h2 style="color:#19335b;">WP Compress — Cloudflare Inspector</h2>'
+           . '<pre style="background:#f6f7f7;padding:14px;border:1px solid #ccd0d4;border-radius:6px;white-space:pre-wrap;font:12px/1.5 monospace;">' . esc_html($dump19) . '</pre>'
+           . '<p><a href="' . esc_url(add_query_arg(array('wpc_cdn_debug' => '1'), home_url('/'))) . '">&larr; Back to the debug panel</a></p></body>';
+        exit;
+    }
+
     if ($_GET['wpc_cdn_debug'] === 'clear') {
         if (empty($_GET['_wpcnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpcnonce'])), 'wpc_cdn_clear_overrides')) {
             wp_die('WPC: that link expired — reload the debug page and click the button again.');
@@ -324,7 +458,7 @@ add_action('template_redirect', function () {
             }
             update_option('wpc-excludes', $ex);
         }
-        // Take effect immediately: drop the autoloaded option bucket + the excludes key, purge HTML cache.
+        
         if (function_exists('wp_cache_delete')) { wp_cache_delete('alloptions', 'options'); wp_cache_delete('wpc-excludes', 'options'); }
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) { wps_ic_cache::removeHtmlCacheFiles('all'); }
         $back = esc_url(add_query_arg(array('wpc_cdn_debug' => '1'), home_url('/')));
@@ -341,7 +475,7 @@ add_action('template_redirect', function () {
     $g  = function ($a, $k) { return (is_array($a) && array_key_exists($k, $a)) ? var_export($a[$k], true) : '(unset)'; };
     $on = function ($v) { return in_array($v, array("'1'", '1', 'true', "'on'"), true); };
 
-    // Rewriter's RESOLVED state this request (public statics; may be unset if it didn't init this request).
+    
     $rw_cdn  = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$cdnEnabled)) ? var_export(wps_cdn_rewrite::$cdnEnabled, true) : '(not initialized this request)';
     $rw_set  = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$settings) && is_array(wps_cdn_rewrite::$settings)) ? wps_cdn_rewrite::$settings : null;
     $rw_zone = (class_exists('wps_cdn_rewrite') && isset(wps_cdn_rewrite::$zone_name)) ? (wps_cdn_rewrite::$zone_name === '' ? '(empty/blanked)' : (string) wps_cdn_rewrite::$zone_name) : '(n/a)';
@@ -377,8 +511,49 @@ add_action('template_redirect', function () {
         '-- overrides / forces --' => '',
         'wpc_force_natural()'          => function_exists('wpc_force_natural') ? var_export(wpc_force_natural(), true) : '(n/a)',
         'WPC_FORCE_NATURAL const'      => defined('WPC_FORCE_NATURAL') ? var_export(WPC_FORCE_NATURAL, true) : '(undefined)',
-        'zone suppressed'              => function_exists('wpc_v2_zone_cdn_suppressed') ? (wpc_v2_zone_cdn_suppressed() ? 'yes' : 'no') : '(n/a)',
         'plugin version'               => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '(?)',
+    );
+
+    
+    
+    
+    $wpc_al2115  = function_exists('get_option') ? get_option('wps_ic_allow_live', 'unset') : 'unset';
+    $wpc_env2115 = function_exists('wpc_v2_provision_env_changed') ? wpc_v2_provision_env_changed() : null;
+    $wpc_prf2115 = function_exists('wpc_v2_zone_origin_proved') ? wpc_v2_zone_origin_proved() : null;
+    $wpc_cfc2115 = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+    $wpc_cfs2115 = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
+    $wpc_ver2115 = get_option('wpc_cf_cname_verified', '(unset=legacy, passes)');
+    $wpc_cfw2115 = ($wpc_cfc2115 !== '' && is_array($wpc_cfs2115) && !empty($wpc_cfs2115['settings']['cdn'])
+        && $wpc_ver2115 !== '1' && $wpc_ver2115 !== 1);
+    $wpc_for2115 = function_exists('wpc_cdn_zone_is_foreign') ? wpc_cdn_zone_is_foreign() : null;
+    $wpc_dis2115 = function_exists('wpc_v2_zone_cdn_disabled') ? wpc_v2_zone_cdn_disabled() : null;
+    $wpc_aut2115 = function_exists('wpc_v2_zone_auto_disabled') ? wpc_v2_zone_auto_disabled() : null;
+    $wpc_rsn2115 = function_exists('wpc_v2_cdn_suppression_reason') ? wpc_v2_cdn_suppression_reason() : '';
+    $wpc_wit2115 = get_option('wpc_cf_verify_challenged2114');
+    $wpc_eco2115 = get_option('wpc_v2_last_echo2115');
+    $wpc_yn2115  = function ($v) { return $v === null ? '(n/a)' : ($v ? 'YES <- TRIP' : 'no'); };
+    $rows += array(
+        '-- SUPPRESSION TRIPS (in evaluation order; first YES wins) --' => '',
+        'UMBRELLA verdict'         => function_exists('wpc_v2_zone_cdn_suppressed') ? (wpc_v2_zone_cdn_suppressed() ? 'SUPPRESSED' : 'serving') : '(n/a)',
+        '1 account gate trips'     => ($wpc_al2115 !== 'unset' && !$wpc_al2115) ? 'YES <- TRIP' : 'no',
+        '  wps_ic_allow_live raw'  => var_export($wpc_al2115, true),
+        '2 env-changed trips'      => ($wpc_env2115 === true && $wpc_prf2115 !== true) ? 'YES <- TRIP' : 'no',
+        '  env fingerprint changed' => $wpc_env2115 === null ? '(n/a)' : var_export($wpc_env2115, true),
+        '  origin proof live'      => $wpc_prf2115 === null ? '(n/a)' : var_export($wpc_prf2115, true),
+        '3 cfwait trips'           => $wpc_cfw2115 ? 'YES <- TRIP' : 'no',
+        '  cf cname'               => $wpc_cfc2115 === '' ? '(none)' : $wpc_cfc2115,
+        '  cf settings[cdn]'       => is_array($wpc_cfs2115) ? var_export(isset($wpc_cfs2115['settings']['cdn']) ? $wpc_cfs2115['settings']['cdn'] : '(unset)', true) : '(no cf option)',
+        '  wpc_cf_cname_verified'  => var_export($wpc_ver2115, true),
+        '4 foreign zone trips'     => $wpc_yn2115($wpc_for2115),
+        '5 orch cdn_disabled trips' => $wpc_yn2115($wpc_dis2115),
+        '  auto_disabled trips'    => $wpc_yn2115($wpc_aut2115),
+        '  suppression reason'     => is_array($wpc_rsn2115) ? wp_json_encode($wpc_rsn2115) : '(none)',
+        '-- CF VERIFICATION STATE --' => '',
+        'challenge witness'        => is_array($wpc_wit2115) ? wp_json_encode($wpc_wit2115) : '(none recorded)',
+        'bypass token cached'      => get_option('wpc_cf_bypass_tok2114', '') !== '' ? 'yes' : 'no',
+        '-- LAST SERVICE ECHO (/v2/config, what actually arrived) --' => '',
+        'last echo'                => is_array($wpc_eco2115) ? wp_json_encode($wpc_eco2115) : '(no sync recorded since 7.21.15)',
+        'zone id'                  => function_exists('wpc_v2_get_zone_id') ? (string) wpc_v2_get_zone_id() : '(n/a)',
     );
 
     $dump = "WP COMPRESS - CDN STATE DEBUG\n=============================\n\n";
@@ -389,12 +564,15 @@ add_action('template_redirect', function () {
 
     $nonce     = wp_create_nonce('wpc_cdn_clear_overrides');
     $clear_url = esc_url(add_query_arg(array('wpc_cdn_debug' => 'clear', '_wpcnonce' => $nonce), home_url('/')));
+    $fix_url   = esc_url(add_query_arg(array('wpc_cdn_debug' => 'fix', 'wps_ic_nonce' => wp_create_nonce('wpc_cdn_fix')), home_url('/')));
 
     if (!headers_sent()) { header('Content-Type: text/html; charset=utf-8'); }
     echo '<!doctype html><meta charset="utf-8"><title>WPC CDN Debug</title>';
     echo '<body style="font:13px -apple-system,BlinkMacSystemFont,sans-serif;max-width:800px;margin:28px auto;padding:0 16px;color:#1d2327;">';
     echo '<h2 style="color:#19335b;">WP Compress — CDN State Debug</h2>';
     echo '<pre style="background:#f6f7f7;padding:14px;border:1px solid #ccd0d4;border-radius:6px;white-space:pre-wrap;font:12px/1.5 monospace;">' . esc_html($dump) . '</pre>';
+    echo '<p><a href="' . $fix_url . '" style="display:inline-block;padding:10px 18px;border-radius:5px;background:#2271b1;color:#fff;text-decoration:none;font-weight:600;margin-right:10px;">Run one-click fix (sync now + verify + report each step)</a>'
+       . '<a href="' . esc_url(add_query_arg(array('wpc_cdn_debug' => 'cf'), home_url('/'))) . '" style="display:inline-block;padding:10px 18px;border-radius:5px;background:#50575e;color:#fff;text-decoration:none;font-weight:600;">Cloudflare inspector (rules · bot mode · who challenged)</a></p>';
     echo '<p><a href="' . $clear_url . '" style="display:inline-block;padding:10px 18px;border-radius:5px;background:#d63638;color:#fff;text-decoration:none;font-weight:600;" '
        . 'onclick="return confirm(\'Clear ALL per-page CDN overrides? Every page will then follow the GLOBAL CDN setting. This removes stale per-page include/exclude rules (including the cdn=1 that forced the CDN back on).\')">Clear all per-page CDN overrides</a></p>';
     echo '</body>';

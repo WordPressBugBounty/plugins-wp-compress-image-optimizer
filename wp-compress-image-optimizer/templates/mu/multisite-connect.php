@@ -1,8 +1,8 @@
 <?php
 
-/**
- * GeoLocation Stuff
- */
+
+
+
 switch_to_blog(1);
 
 $multisiteDefaultSettings = get_option('multisite_default_settings');
@@ -27,9 +27,9 @@ if (empty($multisiteDefaultSettings)) {
 
 $settings = $multisiteDefaultSettings;
 
-/**
- * Quick fix for PHP undefined notices
- */
+
+
+
 $wps_ic_active_settings['live-cdn']['local'] = '';
 $wps_ic_active_settings['live-cdn']['live'] = '';
 $wps_ic_active_settings['optimization']['lossless']    = '';
@@ -49,9 +49,9 @@ if (empty($settings['live-cdn'])) {
 	}
 }
 
-/**
- * Decides which setting is active
- */
+
+
+
 if ( ! empty($settings['optimization'])) {
 	if ($settings['optimization'] == 'lossless') {
 		$wps_ic_active_settings['optimization']['lossless'] = 'class="current"';

@@ -30,21 +30,21 @@ $has = function ($needle) use ($warnings) {
     return false;
 };
 
-// ── Derive the card STATE + plain-language copy (never overclaim) ─────────────
+
 $pending    = $has('cdn_pending_verify') || $has('htaccess_pending_verify');
 $optimizing = $has('cdn_pending_orch');
 $degraded   = $has('cdn_verify_failed') || $has('htaccess_verify_failed') || $has('override_');
 $jpeg_forced_off = $has('next_gen_disabled_jpeg_only');
 
-// The sub-line describes the METHOD (the "how"), not the value prop — the hero already states
-// "best format per browser", so repeating it here is just noise.
+
+
 if ($ceiling === 'off') {
     $state = 'off';   $badge = 'Off';        $method = 'Next-gen images are off'; $sub = 'Delivering optimized JPEG/PNG to every visitor.';
 } elseif ($tier === WPC_Delivery_Resolver::TIER_CDN_EDGE) {
     $rt = isset($rv['redirect_target']) ? (string) $rv['redirect_target'] : 'samehost';
     if (!$images_on) {
 
-        // CDN; next-gen is served from origin (path A <picture>). Don't claim CDN/fastest (a lie).
+        
         $state = 'ok';    $badge = '✓ Active';   $method = 'Served from origin';   $sub = 'Images delivery is off — next-gen images are served from your origin, not the CDN.';
     } elseif ($rt === 'origin') {
 
@@ -56,7 +56,7 @@ if ($ceiling === 'off') {
             : 'Next-gen on clean URLs, no picture tags — the edge picks the format, your origin serves the bytes.';
     } elseif ($override === 'edge') {
 
-        // Automatic (CDN), but keep the CHOSEN mode visible so the radio and the status agree.
+        
         $state = 'ok';    $badge = '✓ Verified'; $method = 'Edge negotiate';
         $sub = 'Next-gen on clean URLs, no picture tags — delivered &amp; cached at the edge.';
     } else {
@@ -73,7 +73,7 @@ if ($ceiling === 'off') {
     $sub    = $optimizing
         ? 'Generating optimized versions in the background — switches to faster CDN delivery automatically once ready.'
         : 'Broadly compatible with every theme.';
-} else { // JPEG floor
+} else { 
     $state  = $jpeg_forced_off ? 'warn' : 'off';
     $badge  = $jpeg_forced_off ? '⚠ Heads up' : 'Off';
     $method = $jpeg_forced_off ? 'Next-gen unavailable for visitors' : 'Optimized JPEG/PNG';
@@ -82,7 +82,7 @@ if ($ceiling === 'off') {
 }
 
 
-// Formats the visitor gets when On — the best-first cascade AVIF → WebP → JPEG.
+
 
 
 $formats = ($ceiling === 'off') ? ['JPEG'] : (($ceiling === 'webp') ? ['WebP', 'JPEG'] : ['AVIF', 'WebP', 'JPEG']);
@@ -132,7 +132,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
 
   <div class="wpc-ngd-status">
 
-    <?php // ── HERO — the value prop leads the section: best format per browser, automatically ──
+    <?php 
 
     ?>
       <div class="wpc-ngd-hero"<?php echo $ceiling === 'off' ? ' style="display:none"' : ''; ?> title="<?php echo esc_attr__('Each visitor is served the single best format their browser supports; older browsers automatically fall back to the next one.', WPS_IC_TEXTDOMAIN); ?>">
@@ -220,8 +220,8 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
         .then(function () { if (!data.noReload) window.location.reload(); })
         .catch(function () { if (sp) sp.hidden = true; });
     }
-    // Mirror the segmented choice onto the hidden options[...] checkboxes (source of truth for the
-    // main settings save + the preset JS), fire native change so delegated handlers pick it up.
+
+
     function mirror(mode) {
       var f = card.querySelector('.wpc-ngd-fields');
       if (!f) return;
@@ -231,15 +231,15 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       if (cb[2]) cb[2].checked = (mode === 'auto');
       var ng = f.querySelector('input[name="options[wpc_nextgen]"]'); if (ng) ng.value = mode;
       cb.forEach(function (c) { c.dispatchEvent(new Event('change', {bubbles: true})); });
-      // Live dot state — identical contract to every other settings box (grey off / brand-blue on).
+
       var dot = card.querySelector('.circle-check');
       if (dot) dot.classList.toggle('active', mode !== 'off');
     }
     var sw = card.querySelector('.wpc-ngd-switch-input');
-    // v7.01.22 — optimistic FULL-card preview. The switch used to update only the dot, leaving
-    // the hero/status showing the old state until the post-save reload (a confusing mixed state).
-    // Now the whole card flips to an honest "Unsaved" preview (we can't claim a verified method
-    // until Save runs the verify), and restores the real rendered state if toggled back.
+
+
+
+
     var ngdInit = sw ? {
       on:   sw.checked,
       hero: (function (h) { return h ? h.style.display : ''; })(card.querySelector('.wpc-ngd-hero')),
@@ -263,8 +263,8 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
         return;
       }
       if (hero) hero.style.display = on ? '' : 'none';
-      // The chips were server-rendered for the SAVED state — a card saved Off shows only JPEG,
-      // which contradicts the pending-On headline. Preview the real On cascade.
+
+
       if (on && fmts) {
         fmts.innerHTML = '<span class="wpc-ngd-fmt is-primary">AVIF</span>'
           + '<span class="wpc-ngd-arrow" aria-hidden="true">→</span><span class="wpc-ngd-fmt">WebP</span>'
@@ -276,8 +276,8 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
         ? 'Click Save to apply — the best delivery method is verified automatically.'
         : 'Click Save to apply — visitors will get optimized JPEG/PNG.';
     }
-    // v7.01.22 — cascade entrance: the chips fill in sequentially (AVIF → arrow → WebP → …)
-    // whenever the hero appears: on page load with the card On, and on every flip to On.
+
+
     function cascade() {
       var f = card.querySelector('.wpc-ngd-formats');
       if (!f) return;
@@ -287,9 +287,9 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
     }
     if (sw && sw.checked) cascade();
     if (sw) sw.addEventListener('change', function () {
-      // NATIVE saving: the switch only mirrors onto the hidden options[...] fields; the standard
-      // Save pill detects the diff, persists via the same checkbox-batch endpoint as every other
-      // toggle, and reloads (wpc_nextgen is in its reload-keys list) to render the verified state.
+
+
+
       var mode = sw.checked ? 'auto' : 'off';
       mirror(mode);
       preview(sw.checked);
@@ -297,22 +297,22 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       if (window.checkUnsavedChanges) window.checkUnsavedChanges();
       else if (window.showSaveButton) window.showSaveButton();
     });
-    // v7.01.91 — Advanced-override DEFERS to the Save bar (parity with the switch). On a radio
-    // change we (1) mirror the value into the hidden options[wpc_delivery_override] field the v4
-    // collector reads, (2) move the .is-active pill + show an "Unsaved" preview, (3) raise the
-    // Save bar. NO auto-save: the standard batch save (wps_ic_ajax_v2_checkbox_batch) persists the
-    // override, re-verifies, and reloads (wpc_delivery_override is in tabs.js cfReloadSettings) to
-    // the freshly-verified state. The previous post()→wpc_delivery_save→instant-reload is gone.
+
+
+
+
+
+
     var ovField = card.querySelector('input[name="options[wpc_delivery_override]"]');
     var ovInit  = ovField ? ovField.value : 'auto';
-    // v7.01.92 — STATE-CORRECT preview. The card's method/badge text must reflect the CURRENT
-    // pending state, not the last click. The bug: clicking Picture tags then back to Auto left the
-    // text stuck on "Picture tags — not saved yet" because the old revert branch was gated on the
-    // switch being untouched. Now we recompute from scratch every change: if EITHER the override
-    // OR the switch differs from its saved value → show the honest "<that control> — not saved yet"
-    // / Unsaved preview; if BOTH are back at their saved values → restore the real server-rendered
-    // method + badge. So returning to Auto (the saved override) with the switch untouched fully
-    // clears the unsaved preview.
+
+
+
+
+
+
+
+
     function refreshOverridePreview() {
       var meth  = card.querySelector('.wpc-ngd-method');
       var badge = card.querySelector('.wpc-ngd-badge');
@@ -321,13 +321,13 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       var ovDirty    = (ovNow !== ovInit);
       var switchDirty = !!(sw && ngdInit && sw.checked !== ngdInit.on);
       if (!ovDirty && !switchDirty) {
-        // Nothing pending → restore the real verified card text.
+
         meth.textContent  = ngdInit ? ngdInit.m : meth.textContent;
         badge.textContent = ngdInit ? ngdInit.b : badge.textContent;
         return;
       }
-      // Something is pending → honest unsaved preview. Prefer the override label if the override is
-      // the dirty one; otherwise the switch handler's own preview text already set On/Off — leave it.
+
+
       if (ovDirty) {
         var selLab = card.querySelector('.wpc-ngd-ov.is-active');
         var ovLabel = selLab ? (selLab.textContent || '').trim() : ovNow;
@@ -339,7 +339,7 @@ $nonce = wp_create_nonce('wps_ic_nonce_action');
       r.addEventListener('change', function () {
         if (!r.checked) return;
         if (ovField) ovField.value = r.value;
-        // Move the selected pill highlight to the chosen radio (mirrors the server is-active class).
+
         card.querySelectorAll('.wpc-ngd-ov').forEach(function (lbl) { lbl.classList.remove('is-active'); });
         var lab = r.closest('.wpc-ngd-ov'); if (lab) lab.classList.add('is-active');
         refreshOverridePreview();

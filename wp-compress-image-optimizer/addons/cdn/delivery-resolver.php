@@ -9,30 +9,30 @@ class WPC_Delivery_Resolver
     const TIER_PICTURE  = 2;
     const TIER_JPEG     = 3;
 
-    /** Cached resolution state: ['sig'=>string,'verify'=>array,'at'=>int,'fails'=>int]. */
+    
     const STATE_OPTION = 'wpc_delivery_state';
-    /** Re-verify after this many seconds even if the signature is unchanged. */
-    const VERIFY_TTL = 43200; // 12h
-    /**
-     * Demote-hysteresis: a proven clean-URL tier must not fall back to <picture> on a single
-     * failed re-verify — those are usually transient (cold POP, loopback 502, probe timeout) and
-     * the visitor never sees them. Keep serving the last verified-good tier through this many
-     * CONSECUTIVE failures before demoting. Promote fast, demote slow.
-     */
+    
+    const VERIFY_TTL = 43200; 
+    
+
+
+
+
+
     const VERIFY_FAIL_GRACE = 3;
-    // Cold-miss (no-200 = OTF rendition not warm yet) re-verify attempts before settling to picture.
+    
     const VERIFY_COLD_GRACE = 6;
 
-    /** The ONE user-facing control: 'auto' (best — AVIF→WebP→JPEG) | 'webp' | 'off'. Default auto. */
+    
     const NEXTGEN_OPTION = 'wpc_nextgen';
-    /** Advanced, optional: force a mechanism — 'auto' | 'picture' | 'htaccess' | 'cdn'. */
+    
     const OVERRIDE_OPTION = 'wpc_delivery_override';
-    /**
-     * Byte-source opt-in — decouples "edge negotiates" from "CDN serves bytes". When '1' AND a
-     * zone/CNAME exists but live-cdn is OFF, the resolver still promotes TIER_CDN_EDGE with
-     * redirect_target='origin': the edge does only the per-Accept 302, the local origin serves
-     * the bytes (no CDN bandwidth). Default off → inert (edge stays gated on cdn_on).
-     */
+    
+
+
+
+
+
     const EDGE_ORIGIN_OPTION = 'wpc_edge_origin_bytes';
 
     public static function tier_name($tier)
@@ -47,22 +47,22 @@ class WPC_Delivery_Resolver
     }
 
 
-    //  PURE CORE — no IO, no globals. The brain. Fully unit-testable.
+    
 
 
-    /**
-     * Classify an image by its leading magic bytes. $head = raw bytes (>= 12 recommended).
-     * @return 'avif'|'webp'|'jpeg'|'png'|'gif'|'unknown'
-     */
+    
+
+
+
     public static function classify_format($head)
     {
         if (!is_string($head) || $head === '') return 'unknown';
         $hex = strtoupper(bin2hex(substr($head, 0, 16)));
         if (strncmp($hex, 'FFD8FF', 6) === 0) return 'jpeg';
         if (strncmp($hex, '89504E47', 8) === 0) return 'png';
-        if (strncmp($hex, '47494638', 8) === 0) return 'gif';                       // GIF8
-        if (strncmp($hex, '52494646', 8) === 0 && strpos($hex, '57454250') !== false) return 'webp'; // RIFF…WEBP
-        // ISO-BMFF: bytes 4..7 = 'ftyp', then a brand. AVIF brands: avif / avis / mif1 / msf1.
+        if (strncmp($hex, '47494638', 8) === 0) return 'gif';                       
+        if (strncmp($hex, '52494646', 8) === 0 && strpos($hex, '57454250') !== false) return 'webp'; 
+        
         if (strpos($hex, '66747970') !== false) {
             foreach (['61766966', '61766973', '6D696631', '6D736631'] as $brand) {
                 if (strpos($hex, $brand) !== false) return 'avif';
@@ -92,8 +92,8 @@ class WPC_Delivery_Resolver
         $out = ['ok' => false, 'classes' => [], 'vary' => false, 'detail' => '', 'pending_orch' => false];
         $want = ['avif' => ['avif', 'webp', 'jpeg'], 'webp' => ['webp', 'jpeg'], 'legacy' => ['jpeg', 'png']];
         if (!is_array($probes)) { $out['detail'] = 'no-probes'; return $out; }
-        // Note the interim-AVIF signal (additive — does NOT change pass/fail). Lets the UI
-        // distinguish "edge is generating AVIF in the background" from a genuine miss.
+        
+        
         foreach (['avif', 'webp', 'legacy'] as $pc) {
             if (isset($probes[$pc]['avif_source']) && strpos((string) $probes[$pc]['avif_source'], 'pending') !== false) {
                 $out['pending_orch'] = true; break;
@@ -124,15 +124,15 @@ class WPC_Delivery_Resolver
             foreach (['avif', 'webp', 'legacy'] as $cls) {
                 $p = isset($probes[$cls]) ? $probes[$cls] : null;
                 $code = is_array($p) ? (int) (isset($p['code']) ? $p['code'] : 0) : 0;
-                // Accept a direct 200 (e.g. legacy .jpg served inline) OR a 3xx negotiate redirect.
+                
                 $ok_code = ($code === 200) || ($code >= 300 && $code < 400);
                 if (!is_array($p) || !$ok_code) {
                     $out['classes'][$cls] = 'no-200-no-redirect';
                     $out['detail'] = $cls . ':no-200-no-redirect (302-negotiate)';
                     return $out;
                 }
-                // Reject a same-URL redirect (Location == request URL, sans query/fragment):
-                // an edge that 302s a URL to itself loops the browser.
+                
+                
                 if ($code >= 300 && $code < 400) {
                     $loc = isset($p['location']) ? preg_replace('/[?#].*$/', '', (string) $p['location']) : '';
                     $req = isset($p['url']) ? preg_replace('/[?#].*$/', '', (string) $p['url']) : '';
@@ -183,7 +183,7 @@ class WPC_Delivery_Resolver
             }
             if (!empty($p['vary'])) $vary_seen = true;
         }
-        // Must improve with capability: avif class should not serve a WORSE format than webp class.
+        
         $rank = ['avif' => 3, 'webp' => 2, 'jpeg' => 1, 'png' => 1, 'unknown' => 0];
         if (($rank[$out['classes']['avif']] ?? 0) < ($rank[$out['classes']['webp']] ?? 0)) {
             $out['detail'] = 'avif-class-worse-than-webp';
@@ -200,7 +200,7 @@ class WPC_Delivery_Resolver
             $is_cf    = ($cfc_w !== '' && is_array($cf_set_w) && !empty($cf_set_w['settings']['cdn']));
             if ($distinct_fmts > 1 && !$is_cf) {
                 $vary_seen = true;
-                $out['vary_via'] = 'content-type'; // Bunny strips Vary:Accept; per-Accept Content-Type is the witness
+                $out['vary_via'] = 'content-type'; 
             }
         }
         $out['vary'] = $vary_seen;
@@ -329,8 +329,8 @@ class WPC_Delivery_Resolver
             if (is_array($verify_merged['cdn']) && !empty($verify_merged['cdn']['ok']) && self::redirect_target_ready($rt, $verify_merged['cdn'])) {
                 return self::result(self::TIER_CDN_EDGE, 'cdn-edge verified', $warnings, $rt);
             }
-            // Verified edge, but redirect_target='origin' needs a Mode-B edge this probe didn't
-            // prove → can't origin-redirect yet; fall through (safe).
+            
+            
             if ($rt === 'origin' && is_array($verify_merged['cdn']) && !empty($verify_merged['cdn']['ok']) && empty($verify_merged['cdn']['mode_b'])) {
                 $warnings[] = 'edge_origin_needs_mode_b';
             } elseif (is_array($verify_merged['cdn'])) {
@@ -341,7 +341,7 @@ class WPC_Delivery_Resolver
             if (is_array($verify_merged['cdn']) && !empty($verify_merged['cdn']['pending_orch'])) $warnings[] = 'cdn_pending_orch';
         }
 
-        // TIER 1 — origin .htaccess negotiation. Same promote-on-proof rule.
+        
         if ($caps_merged['is_apache'] && $caps_merged['htaccess_writable']) {
             if (is_array($verify_merged['htaccess']) && !empty($verify_merged['htaccess']['ok'])) {
                 return self::result(self::TIER_HTACCESS, 'htaccess negotiation verified', $warnings);
@@ -350,15 +350,15 @@ class WPC_Delivery_Resolver
             else $warnings[] = 'htaccess_pending_verify';
         }
 
-        // TIER 2 — <picture>. Universal, needs no verification. The next-gen floor.
+        
         if ($caps_merged['has_variants'] && $caps_merged['picture_allowed']) {
             return self::result(self::TIER_PICTURE, 'picture (universal, browser-picks)', $warnings);
         }
 
-        // TIER 3 — optimized jpg/png. Guard against SILENT next-gen loss.
+        
         if ($caps_merged['has_variants'] && !$caps_merged['picture_allowed']) {
-            // Variants exist but the only universal path (picture) is disabled and no verified
-            // clean-URL path is available → visitors get jpg-only. Never silent — warn loudly.
+            
+            
             $warnings[] = 'next_gen_disabled_jpeg_only';
         } elseif (!$caps_merged['generate_webp']) {
             $warnings[] = 'next_gen_not_generated';
@@ -375,11 +375,11 @@ class WPC_Delivery_Resolver
         return ['tier' => $tier, 'tier_name' => self::tier_name($tier), 'reason' => $reason, 'warnings' => $warnings, 'redirect_target' => $redirect_target];
     }
 
-    /**
-     * Is the CDN edge usable for negotiation? True when byte-serving CDN is on, OR a zone exists
-     * and the edge-origin opt-in is set (the "negotiate at the edge, serve bytes from origin"
-     * decouple). Inert by default (opt-in off → same as the cdn_on-only gate).
-     */
+    
+
+
+
+
     private static function edge_usable($caps)
     {
         if (!empty($caps['cdn_on'])) return true;
@@ -387,7 +387,7 @@ class WPC_Delivery_Resolver
     }
 
 
-    /** Where the edge tier serves bytes: 'samehost' (CDN/CF serves) or 'origin' (origin serves). */
+    
     private static function edge_redirect_target($caps)
     {
         return !empty($caps['cdn_on']) ? 'samehost' : 'origin';
@@ -410,12 +410,12 @@ class WPC_Delivery_Resolver
         return $av ? 'avif' : 'webp';
     }
 
-    /**
-     * The legacy keys to WRITE for a chosen ceiling, so every existing reader stays correct.
-     * 'picture_webp' stays on whenever next-gen is on (the universal fallback the resolver leans
-     * on). 'modern_image_delivery' is intentionally NOT set here — it's mechanism-owned by the
-     * resolver, so we leave its stored value untouched for its existing readers.
-     */
+    
+
+
+
+
+
     public static function settings_for_ceiling($ceiling)
     {
         switch ($ceiling) {
@@ -436,16 +436,16 @@ class WPC_Delivery_Resolver
         if (isset($s[self::NEXTGEN_OPTION]) && $s[self::NEXTGEN_OPTION] !== '') {
             $m = strtolower((string) $s[self::NEXTGEN_OPTION]);
             if ($m === 'auto') return 'avif';
-            if ($m === 'webp') return 'webp';   // DELIBERATE webp-only pin — honored forever
+            if ($m === 'webp') return 'webp';   
             if ($m === 'off')  return 'off';
         }
-        // Unset: next-gen ON ⇒ 'avif', OFF ⇒ 'off' (derived from generate_webp). NOT
-        // ceiling_from_settings() — see the docblock (that was the de-sync root cause).
+        
+        
         $gw = !empty($s['generate_webp']) && (string) $s['generate_webp'] === '1';
         return $gw ? 'avif' : 'off';
     }
 
-    /** The advanced mechanism override; 'auto' (resolver decides) unless explicitly forced. */
+    
     public static function override_mechanism($settings)
     {
         $s = is_array($settings) ? $settings : [];
@@ -453,7 +453,7 @@ class WPC_Delivery_Resolver
         return in_array($o, ['picture', 'htaccess', 'cdn', 'edge'], true) ? $o : 'auto';
     }
 
-    /** Stable signature of the inputs that affect tiering → re-verify when it changes. */
+    
     public static function env_signature($caps)
     {
         $c = is_array($caps) ? $caps : [];
@@ -474,17 +474,17 @@ class WPC_Delivery_Resolver
     }
 
 
-    //  IO LAYER — capability detection + live loopback probes. Thin; smoke-tested.
+    
 
 
-    /** Gather environment capabilities (no network). */
+    
     public static function gather_capabilities()
     {
         self::capture_server_software();
         $settings = defined('WPS_IC_SETTINGS') ? get_option(WPS_IC_SETTINGS) : [];
         if (!is_array($settings)) $settings = [];
         $host = function_exists('parse_url') ? (string) parse_url(self::site_url(), PHP_URL_HOST) : '';
-        // ONE control drives format: ceiling = off | webp | avif. Mechanism is resolver-owned.
+        
         $ceiling = self::effective_ceiling($settings);
         $nextgen_on = ($ceiling !== 'off');
         return [
@@ -521,11 +521,11 @@ class WPC_Delivery_Resolver
         return false;
     }
 
-    /**
-     * Is a CDN edge available for NEGOTIATION (independent of byte-serving)? True when a Bunny
-     * zone name or custom CNAME is configured — what makes "edge negotiates, origin serves bytes"
-     * possible with live-cdn off.
-     */
+    
+
+
+
+
     private static function is_edge_available()
     {
         if (!function_exists('get_option')) return false;
@@ -567,19 +567,19 @@ class WPC_Delivery_Resolver
         if ($sw === '' && function_exists('get_option')) {
             $sw = strtolower((string) get_option('wpc_server_software', ''));
         }
-        // LiteSpeed honors .htaccess/mod_rewrite, so it counts as "apache-like" here.
+        
         if (strpos($sw, 'apache') !== false || strpos($sw, 'litespeed') !== false || strpos($sw, 'lsws') !== false) {
             return true;
         }
-        // Some hosts hide SERVER_SOFTWARE; presence of apache_get_modules is a positive signal.
+        
         if (function_exists('apache_get_modules')) return true;
         return false;
     }
 
-    /** Persist SERVER_SOFTWARE from a real web request so CLI/cron can detect the server. */
+    
     private static function capture_server_software()
     {
-        if (empty($_SERVER['SERVER_SOFTWARE'])) return;                 // CLI/cron → nothing to capture
+        if (empty($_SERVER['SERVER_SOFTWARE'])) return;                 
         if (defined('WP_CLI') && WP_CLI) return;
         if (!function_exists('get_option') || !function_exists('update_option')) return;
         $sw = (string) $_SERVER['SERVER_SOFTWARE'];
@@ -595,10 +595,10 @@ class WPC_Delivery_Resolver
         return is_writable(rtrim($root, '/\\'));
     }
 
-    /**
-     * Probe one URL with a given Accept header. Returns a normalized result the PURE
-     * evaluators understand. Uses wp_remote_get (honors WP HTTP stack / proxies).
-     */
+    
+
+
+
     public static function probe($url, $accept)
     {
         $res = ['code' => 0, 'ctype' => '', 'vary' => false, 'fmt' => 'unknown', 'error' => '', 'avif_source' => '', 'location' => '', 'natural_mode' => false, 'url' => (string) $url];
@@ -640,10 +640,10 @@ class WPC_Delivery_Resolver
         return $res;
     }
 
-    /**
-     * Classify image format by URL extension (for 302-negotiate redirect targets,
-     * where there's no body to sniff). Strips any query string first.
-     */
+    
+
+
+
     private static function classify_format_by_ext($url)
     {
         $u = strtolower((string) $url);
@@ -655,7 +655,7 @@ class WPC_Delivery_Resolver
         return 'unknown';
     }
 
-    /** Run the live verifications for whichever optimistic tiers are applicable. */
+    
     public static function run_verifications($caps)
     {
         $verify = ['cdn' => null, 'htaccess' => null];
@@ -669,7 +669,7 @@ class WPC_Delivery_Resolver
 
 
             if (self::edge_redirect_target(is_array($caps) ? $caps : []) === 'origin') {
-                // Mode-B (edge-origin): constant tokens make the edge 302-negotiate per-request (stable key).
+                
                 $probe_url .= (strpos($probe_url, '?') === false ? '?' : '&') . '_wpc_m=r&_redirect_target=origin';
             }
             $verify['cdn'] = self::evaluate_cdn_probes([
@@ -695,10 +695,10 @@ class WPC_Delivery_Resolver
         return $verify;
     }
 
-    /**
-     * Find one real attachment that has the sibling files we need to probe against.
-     * Returns ['origin_jpg_url'=>…, 'cdn_webp_url'=>…] or null. Best-effort, cached per request.
-     */
+    
+
+
+
     public static function pick_test_image()
     {
         static $cache = false;
@@ -783,10 +783,10 @@ class WPC_Delivery_Resolver
     }
 
 
-    /**
-     * Up to $limit probe candidates, newest first. One un-landed upload must never be able to
-     * decide the whole site's delivery — the verify passes if ANY candidate serves next-gen.
-     */
+    
+
+
+
     public static function pick_real_image_probes($limit = 3)
     {
         $out = [];
@@ -860,8 +860,8 @@ class WPC_Delivery_Resolver
             if (!$file || !@file_exists($file)) continue;
             $meta = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata($id) : [];
             if (!is_array($meta) || empty($meta['file'])) continue;
-            // Prefer the SMALLEST registered subsize (-WxH) — always inside the edge OTF budget — over
-            // the full-size original. Fall back to the full natural URL if no subsizes are recorded.
+            
+            
             $sub_file  = basename((string) $meta['file']);
             $best_area = PHP_INT_MAX;
             if (!empty($meta['sizes']) && is_array($meta['sizes'])) {
@@ -888,7 +888,7 @@ class WPC_Delivery_Resolver
         $path = rtrim((string) $ud['basedir'], '/\\') . '/wpc-selftest.png';
         $url  = rtrim((string) $ud['baseurl'], '/')   . '/wpc-selftest.png';
         if (@file_exists($path) && @filesize($path) > 0) return ['path' => $path, 'url' => $url];
-        // Generate it. GD is a WP requirement on virtually all hosts; if absent, fall back to a real image.
+        
         if (!function_exists('imagecreatetruecolor') || !function_exists('imagepng')) return false;
         if (!@is_writable((string) $ud['basedir'])) return false;
         $w = 400; $h = 300;
@@ -906,14 +906,14 @@ class WPC_Delivery_Resolver
     }
 
 
-    //  ORCHESTRATION — cache, re-verify on signature change, public API.
+    
 
 
-    /**
-     * The resolved delivery tier for THIS site (cached). Safe-by-default: if the cache is stale
-     * or the optimistic tiers aren't yet verified, returns the universal fallback and schedules
-     * a verify, so we never serve via an unproven path.
-     */
+    
+
+
+
+
     public static function resolve($force = false)
     {
         $r = self::resolve_verbose($force);
@@ -936,7 +936,7 @@ class WPC_Delivery_Resolver
             $cold_pending = is_array($state) && isset($state['sig']) && $state['sig'] === $sig && !empty($state['cold']);
             if ($force || (self::can_verify_inline() && ($is_cron || !$cold_pending))) {
                 $fresh_verify = self::run_verifications($caps);
-                // Demote-hysteresis: don't drop a proven tier on a single failed probe.
+                
                 $persist = self::persist_after_verify($sig, $state, $fresh_verify);
                 $verify  = $persist['verify'];
                 if (function_exists('update_option')) {
@@ -984,13 +984,13 @@ class WPC_Delivery_Resolver
 
         $prev = get_option('wpc_delivery_applied_fp', null);
         if ($prev === null || $prev === false || $prev === '') {
-            // First observation — record the current mode WITHOUT purging (nothing to invalidate yet).
+            
             update_option('wpc_delivery_applied_fp', $fingerprint, false);
             return;
         }
         if ((string) $prev === $fingerprint) return;
 
-        // Effective delivery mode genuinely changed → emitted markup differs → purge once + record.
+        
         update_option('wpc_delivery_applied_fp', $fingerprint, false);
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all');
@@ -1033,7 +1033,7 @@ class WPC_Delivery_Resolver
                         'cold'   => $cold,
                     ];
                 }
-                // Stayed cold across VERIFY_COLD_GRACE re-verifies → genuinely unservable; fall through.
+                
             }
         }
 
@@ -1061,10 +1061,10 @@ class WPC_Delivery_Resolver
                 ];
             }
 
-            // Conclusive failure of the proven clean-URL tier.
+            
             $fails = (int) (isset($prior_state['fails']) ? $prior_state['fails'] : 0) + 1;
             if ($fails < self::VERIFY_FAIL_GRACE) {
-                // Hold last-good; keep 'at' stale so we keep re-verifying soon (not after the TTL).
+                
                 return [
                     'sig'    => $sig,
                     'verify' => $prior_state['verify'],
@@ -1073,11 +1073,11 @@ class WPC_Delivery_Resolver
                     'held'   => 1,
                 ];
             }
-            // Confirmed broken across VERIFY_FAIL_GRACE consecutive PROBED checks → accept demotion.
+            
             return ['sig' => $sig, 'verify' => $fresh_verify, 'at' => self::now(), 'fails' => $fails];
         }
 
-        // Passing re-verify, first proof, or real env change → take fresh, reset the counter.
+        
         return ['sig' => $sig, 'verify' => $fresh_verify, 'at' => self::now(), 'fails' => 0];
     }
 
@@ -1096,7 +1096,7 @@ class WPC_Delivery_Resolver
         }
     }
 
-    /** Cron/manual hook target: force a fresh verification + cache write. */
+    
     public static function cron_verify()
     {
         self::resolve_verbose(true);
@@ -1110,7 +1110,7 @@ class WPC_Delivery_Resolver
 
 if (function_exists('add_action')) {
     add_action('wpc_delivery_verify', ['WPC_Delivery_Resolver', 'cron_verify']);
-    // Overdue single event: spawn on admin visits, throttled.
+    
     add_action('admin_init', function () {
         $wpc_dvts = function_exists('wp_next_scheduled') ? wp_next_scheduled('wpc_delivery_verify') : false;
         if ($wpc_dvts && $wpc_dvts < time() - 600 && function_exists('spawn_cron') && !get_transient('wpc_dv_spawned')) {

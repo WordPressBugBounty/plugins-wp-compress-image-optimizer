@@ -19,7 +19,7 @@ function wpc_v2_parallel_pull(array $urls, array $meta = [], array $opts = []) {
         return [];
     }
     if (!function_exists('curl_multi_init')) {
-        // Fallback: sequential wp_remote_get. Slow but correct.
+        
         return wpc_v2_pull_sequential_fallback($urls, $meta, $opts);
     }
 
@@ -88,7 +88,7 @@ function wpc_v2_parallel_pull(array $urls, array $meta = [], array $opts = []) {
             continue;
         }
 
-        // Integrity checks against service-advertised size + sha256.
+        
         $exp_size   = isset($meta[$idx]['size'])   ? (int) $meta[$idx]['size']   : null;
         $exp_sha256 = isset($meta[$idx]['sha256']) ? (string) $meta[$idx]['sha256'] : null;
 
@@ -111,11 +111,11 @@ function wpc_v2_parallel_pull(array $urls, array $meta = [], array $opts = []) {
     return $results;
 }
 
-/**
- * Fallback used only when curl_multi is unavailable (extremely rare — every
- * mainstream PHP build has it). Sequential wp_remote_get, no parallelism.
- * Logged as a warning so we can spot hosts that need attention.
- */
+
+
+
+
+
 function wpc_v2_pull_sequential_fallback(array $urls, array $meta = [], array $opts = []) {
     error_log('[wpc_v2_parallel_pull] curl_multi unavailable, falling back to sequential wp_remote_get');
     $total_s = isset($opts['total_timeout_ms']) ? max(1, (int) round($opts['total_timeout_ms'] / 1000)) : 10;

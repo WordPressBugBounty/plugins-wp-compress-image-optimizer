@@ -97,7 +97,7 @@ if (!function_exists('wpc_v2_delivery_config')) {
         $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME)) : '';
         $cfs = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
         if ($cfc !== '' && is_array($cfs) && !empty($cfs['settings']['cdn'])) {
-            $cname = $cfc;                                   // CF-delivered → the real CF emit host
+            $cname = $cfc;                                   
         } else {
             $cname = trim((string) get_option('ic_custom_cname'));
         }
@@ -116,8 +116,8 @@ if (!function_exists('wpc_v2_delivery_config')) {
             'redirect_target' => $redirect_target,
             'nextgen'         => $nextgen,
             'tier'            => $tier,
-            'images_on'       => (bool) $images_on,  // Images tile master switch (intent)
-            'cf_detected'     => (bool) $cf_detected, // CF-fronted (sticky 7d)
+            'images_on'       => (bool) $images_on,  
+            'cf_detected'     => (bool) $cf_detected, 
             'srcx'            => $hints['srcx'],
             'wpsz'            => $hints['wpsz'],
             'lzf'             => $hints['lzf'],
@@ -126,11 +126,11 @@ if (!function_exists('wpc_v2_delivery_config')) {
 }
 
 if (!function_exists('wpc_v2_compute_probe_hints')) {
-    /**
-     * Returns ['srcx'=>csv, 'wpsz'=>csv, 'lzf'=>csv]. Zero scanning — every value is a
-     * known config/registration fact. Filterable so a non-standard-storage host can override.
-     * (Empty srcx is allowed and meaningful — see below.)
-     */
+    
+
+
+
+
     function wpc_v2_compute_probe_hints()
     {
 
@@ -141,7 +141,7 @@ if (!function_exists('wpc_v2_compute_probe_hints')) {
                 if (!empty($sz['width'])) $widths[] = (int) $sz['width'];
             }
         } elseif (function_exists('get_intermediate_image_sizes')) {
-            // Pre-5.3 fallback — derive widths from the global size table.
+            
             global $_wp_additional_image_sizes;
             foreach ((array) get_intermediate_image_sizes() as $name) {
                 $w = (int) get_option($name . '_size_w');
@@ -255,7 +255,7 @@ if (!function_exists('wpc_v2_report_lifecycle_event')) {
         $ts  = time();
         $sig = hash_hmac('sha256', $ts . '.' . hash('sha256', $body_raw), $apikey);
 
-        // No ?sync=1 (don't await provisioning — it's just an event). blocking=false so activate/deactivate
+        
 
         wp_remote_post(rtrim($orch_url, '/') . '/v2/config', [
             'timeout'     => 2,
@@ -272,7 +272,7 @@ if (!function_exists('wpc_v2_report_lifecycle_event')) {
     }
 }
 
-// Lifecycle hooks: report activate/deactivate once, at the moment it happens (precise net activations
+
 
 
 if (defined('WPC_CC_PLUGIN_FILE')) {
@@ -292,25 +292,25 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             return ['ok' => false, 'http_code' => 0, 'reason' => 'no_zones_provided'];
         }
 
-        // v7.10.517 — ADMISSION GUARD at the single chokepoint that makes the blocking
-        // POST to /v2/config?sync=1 (8s cap off-cron). Five admin_init hooks can reach
-        // here and only two checked wp_doing_ajax, so a THIRD-PARTY plugin's AJAX call
-        // paid for our provisioning: measured 1,598ms inside pys_get_pbid, and the two
-        // requests behind it queued at boot:2824 / boot:2761 with no HTTP of their own.
-        // Our own actions still run inline — an operator pressing a button should wait.
-        // Everything else reschedules, so the work still happens, just not on their dime.
+        
+        
+        
+        
+        
+        
+        
         if (!(defined('DOING_CRON') && DOING_CRON)) {
             $wpc_defer517 = false;
             if (function_exists('wp_doing_ajax') && wp_doing_ajax()) {
                 $wpc_act517 = isset($_REQUEST['action']) ? (string) $_REQUEST['action'] : '';
                 $wpc_defer517 = (strpos($wpc_act517, 'wps_ic_') !== 0 && strpos($wpc_act517, 'wpc_') !== 0);
             } else {
-                // v7.10.642 — the update path: a version bump changes the env fingerprint,
-                // and the FIRST admin pageview after updating paid this blocking POST
-                // inline (receipt: cURL 28 after 8002ms, 0 bytes, on staging right after
-                // install). Inline is for explicit WPC interactions only — identified by
-                // our nonce riding the request; a plain pageview reschedules (+5s cron),
-                // so the sync still happens, just never on a pageview's dime.
+                
+                
+                
+                
+                
+                
                 $wpc_defer517 = empty($_REQUEST['wps_ic_nonce']);
             }
             if (!$wpc_defer517 && function_exists('wpc_under_pressure') && wpc_under_pressure()) {
@@ -342,8 +342,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         $img_cfg = wpc_v2_local_image_config();
         $del_cfg = wpc_v2_delivery_config();
 
-        // Normalize entries (zone_id required, lazy_enabled → strict bool) and reject
-        // malformed ones BEFORE signing, so we never sign garbage.
+        
+        
         $clean = [];
         foreach ($zones as $z) {
             if (!is_array($z) || empty($z['zone_id'])) continue;
@@ -360,13 +360,13 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 'redirect_target' => $del_cfg['redirect_target'],
                 'nextgen'         => $del_cfg['nextgen'],
                 'tier'            => $del_cfg['tier'],
-                'images_on'       => $del_cfg['images_on'],       // Images tile master switch (intent)
-                'cf_detected'     => $del_cfg['cf_detected'],     // CF-fronted, sticky 7-day
+                'images_on'       => $del_cfg['images_on'],       
+                'cf_detected'     => $del_cfg['cf_detected'],     
 
 
-                // v7.10.650 — the dedicated bg_swap signing secret, published over this
-                // authenticated HTTPS channel only (never rendered, never in a URL).
-                // Re-sent on every sync so a rotation propagates without a new endpoint.
+                
+                
+                
                 'cb_secret'    => function_exists('wpc_v2_callback_secret650') ? wpc_v2_callback_secret650() : '',
 
                 'srcx'         => isset($del_cfg['srcx']) ? $del_cfg['srcx'] : '',
@@ -413,8 +413,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             $body_payload['wake_url'] = $wake_url;
         }
 
-        // 'cdn_unhealthy_selfcheck' as a PROBE TRIGGER: verify fetch paths, flip the zone's
-        // fetch_path, confirm the CDN host 200s, then un-suppress via the reconcile flow. The class
+        
+        
 
 
         if (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()
@@ -436,8 +436,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         $sig = hash_hmac('sha256', $ts . '.' . hash('sha256', $body_raw), $apikey);
 
 
-        // MC circuit breaker: while the service is dark, skip instantly — a
-        // timing-out sync held ADMIN pages 8s each (staging.wpcompress.com).
+        
+        
         if (function_exists('wpc_mc_up') && !wpc_mc_up()) {
             return ['ok' => false, 'http_code' => 0, 'reason' => 'mc_breaker_open'];
         }
@@ -445,7 +445,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
         $resp = wp_remote_post($url, [
 
 
-            // (off the request) stays patient at 30s.
+            
             'timeout'   => (defined('DOING_CRON') && DOING_CRON) ? 30 : 8,
             'sslverify' => true,
             'headers'   => [
@@ -521,7 +521,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 $code, implode(',', $reasons), $db_deferred ? 'deferred, will retry' : 'reported failure'
             ));
             if ($db_deferred && function_exists('update_option')) {
-                // Persistent pending flag (an option, not a transient) so it survives across admin
+                
 
 
                 update_option('wpc_v2_config_sync_pending', 1, false);
@@ -559,8 +559,55 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
-        // On success, mirror the zone state locally so the admin UI renders without a round-trip.
-        // One option per zone — a typical install has 1, so the option count stays bounded.
+        
+        
+        
+        if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
+            $wpc_eco2115 = ['t' => time(), 'zones' => []];
+            foreach ($rbody['zones'] as $rz) {
+                if (!is_array($rz)) { continue; }
+                $wpc_eco2115['zones'][] = [
+                    'zone_id'        => isset($rz['zone_id']) ? (string) $rz['zone_id'] : '(none)',
+                    'nav'            => array_key_exists('native_accept_vary', $rz) ? ($rz['native_accept_vary'] ? 1 : 0) : 'absent',
+                    'cdn_disabled'   => array_key_exists('cdn_disabled', $rz) ? ($rz['cdn_disabled'] ? 1 : 0) : 'absent',
+                    'cname_verified' => array_key_exists('cname_verified', $rz)
+                        ? ($rz['cname_verified'] === null ? 'null' : ($rz['cname_verified'] ? 1 : 0)) : 'absent',
+                ];
+                if (count($wpc_eco2115['zones']) >= 5) { break; }
+            }
+            update_option('wpc_v2_last_echo2115', $wpc_eco2115, false);
+        }
+
+        
+        
+        
+        
+        
+        if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])
+            && apply_filters('wpc_cf_verified_witness', true)) {
+            $wpc_cfc2114 = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+            $wpc_cur2114 = get_option('wpc_cf_cname_verified');
+            if ($wpc_cfc2114 !== '' && $wpc_cur2114 !== '1' && $wpc_cur2114 !== 1) {
+                foreach ($rbody['zones'] as $rz) {
+                    if (is_array($rz) && !empty($rz['cname_verified'])) {
+                        update_option('wpc_cf_cname_verified', 1, false);
+                        delete_option('wpc_cf_verify_challenged2114');
+                        if (function_exists('site_url')) {
+                            update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
+                        }
+                        if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
+                            wps_ic_cache::removeHtmlCacheFiles('all');
+                        } elseif (function_exists('wpc_foreign_purge610')) {
+                            wpc_foreign_purge610(false, 'config-sync');
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        
+        
         $cdn_disabled_changed = false;
         foreach ($clean as $z) {
             $zid = (string) $z['zone_id'];
@@ -624,10 +671,10 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
-        // v7.10.652 — the sender's migration declaration. The orchestrator sets cb_enforce
-        // once ALL THREE of its bg_swap senders (orch + jpgwebp pod + avif pod) sign with
-        // the dedicated secret. Sticky once true — a later response that omits the field
-        // must not silently un-harden a site — and cleared only by an explicit cb_enforce=0.
+        
+        
+        
+        
         if (is_array($rbody) && array_key_exists('cb_enforce', $rbody)) {
             if (!empty($rbody['cb_enforce'])) {
                 update_option('wpc_cb_enforce652', '1', false);
@@ -640,12 +687,12 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
-        // Ops visibility: log per-zone cdn_disabled values when the field is present.
+        
         if (!empty($cdn_disabled_by_zone)) {
             error_log('[WPC cdn_disabled] /v2/config echoed ' . count($cdn_disabled_by_zone)
                 . ' zone(s): ' . wp_json_encode($cdn_disabled_by_zone));
         }
-        // Ops visibility: log per-zone emit_src_hints values when the field is present (joint-test signal).
+        
         if (!empty($src_hints_by_zone)) {
             error_log('[WPC emit_src_hints] /v2/config echoed ' . count($src_hints_by_zone)
                 . ' zone(s): ' . wp_json_encode($src_hints_by_zone));
@@ -660,8 +707,8 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
-        // Mirror the config we just pushed so the settings-save trigger can detect "already
-        // in sync" and skip redundant POSTs. Site-global, one option.
+        
+        
         update_option(
             'wpc_v2_synced_image_config',
             $img_cfg['local_quality'] . '|' . $img_cfg['local_max_width']
@@ -670,7 +717,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             false
         );
 
-        // Sync succeeded (2xx, no failed[]) — clear any pending-retry flag from a prior deferral.
+        
         if (function_exists('delete_option')) {
             delete_option('wpc_v2_config_sync_pending');
         }
@@ -763,8 +810,8 @@ if (!function_exists('wpc_v2_schedule_config_sync')) {
                 $parts = wp_parse_url($url);
                 if (is_array($parts) && !empty($parts['host'])) {
                     $is_https = (!empty($parts['scheme']) && $parts['scheme'] === 'https');
-                    // Honor an explicit non-standard port from admin_url (proxied/dev/staging), else
-                    // the scheme's standard port.
+                    
+                    
                     $port = !empty($parts['port']) ? (int) $parts['port'] : ($is_https ? 443 : 80);
                     $host = (string) $parts['host'];
 
@@ -781,7 +828,7 @@ if (!function_exists('wpc_v2_schedule_config_sync')) {
                           . "\r\n"
                           . $body;
 
-                    // Connect-only LOCAL-vhost chain (127.0.0.1 → localhost → public host).
+                    
                     $fp = wps_ic_ajax::wpc_loopback_open_socket($host, $port, $is_https, 0.2);
                     if ($fp) {
                         @stream_set_timeout($fp, 0, 100000);
@@ -793,16 +840,16 @@ if (!function_exists('wpc_v2_schedule_config_sync')) {
                     }
                 }
             }
-            // Loopback delivered OR best-effort attempted — cron + the admin_init heartbeat remain
-            // the backstops. Return without running the sync inline on this admin request.
+            
+            
             if ($sent) {
                 return;
             }
-            // Helper/URL unavailable or every local rung missed — fall through to the inline
-            // last-resort below (only runs when wp-cron is also unavailable).
+            
+            
         }
 
-        // No cron API AND no loopback path — run inline so the sync isn't lost (last resort).
+        
         if (!$have_cron) {
             wpc_v2_run_deferred_config_sync();
         }
@@ -847,7 +894,7 @@ if (!function_exists('wpc_v2_run_deferred_config_sync')) {
         $zone_id     = (string) wpc_v2_get_zone_id();
         $has_numeric = ($zone_id !== '' && ctype_digit($zone_id));
 
-        // Fire on apikey, not "numeric Bunny PZ only": a CF-fronted custom CNAME may have no
+        
 
 
         $cname = trim((string) get_option('ic_custom_cname'));
@@ -859,8 +906,8 @@ if (!function_exists('wpc_v2_run_deferred_config_sync')) {
             return;
         }
 
-        // Track success via synced_at (re-stamped only on a 2xx) so we clear force-provision
-        // exactly when the provisioning actually landed.
+        
+        
         $before = (int) get_option('wpc_v2_config_synced_at', 0);
 
         wpc_v2_config_sync_lazy_enabled(
@@ -893,8 +940,8 @@ add_action('wpc_v2_deferred_config_sync', 'wpc_v2_run_deferred_config_sync');
 
 if (!function_exists('wpc_v2_zone_unprovisioned')) {
 
-    // CF-direct (non-numeric cname) zones have no Bunny AVIF-Vary field → never flagged here (they use
-    // the cname-verified lane), so they can't loop.
+    
+    
     function wpc_v2_zone_unprovisioned()
     {
         if (!function_exists('wpc_v2_get_zone_id') || !function_exists('get_option')) return false;
@@ -912,8 +959,8 @@ if (!function_exists('wpc_v2_provision_host_changed')) {
         if (!function_exists('site_url') || !function_exists('get_option')) return false;
         $confirmed = (string) get_option('wpc_v2_provisioned_site_url', '');
         if ($confirmed === '') return false;
-        // Scheme-stable compare: site_url() returns http/https by request context, so a raw compare
-        // false-fires "host changed" between an http cron stamp and an https render.
+        
+        
         return preg_replace('#^https?://#i', '', $confirmed) !== preg_replace('#^https?://#i', '', (string) site_url());
     }
 }
@@ -986,12 +1033,12 @@ if (!function_exists('wpc_v2_provision_ensure_bg')) {
         $attempts = (int) get_option('wpc_v2_selfheal_attempts', 0);
         if ($attempts >= 12) return false;
 
-        // Pace: at most one self-heal sync per 2 min (run_deferred's own 60s lock also guards races).
+        
         if (function_exists('get_transient') && get_transient('wpc_v2_selfheal_backoff')) return false;
         if (function_exists('set_transient')) set_transient('wpc_v2_selfheal_backoff', 1, 120);
 
         if ($moved) {
-            // Host migration/clone: clear the stale confirmed-site stamp so wpc_v2_run_deferred_config_sync
+            
 
 
             if (function_exists('delete_option')) delete_option('wpc_v2_provisioned_site_url');
@@ -1019,10 +1066,10 @@ if (function_exists('add_filter')) {
     }, 10, 2);
 }
 
-// Probe the CF custom cname; if live, PROMOTE the emit-gate (wpc_cf_cname_verified=1) so the front-end
 
 
-// Bounded: 1 probe, 3s, throttled 2 min, no-op once verified.
+
+
 if (!function_exists('wpc_v2_cf_cname_reverify')) {
     function wpc_v2_cf_cname_reverify($throttle = true)
     {
@@ -1032,9 +1079,9 @@ if (!function_exists('wpc_v2_cf_cname_reverify')) {
         $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME)) : '';
         if ($cfc === '') return false;
         $cf = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
-        if (!is_array($cf) || empty($cf['settings']['cdn'])) return false; // CF-delivered zones; token NOT required — verifyCfCnameLive is a pure HTTP probe
+        if (!is_array($cf) || empty($cf['settings']['cdn'])) return false; 
         if ($throttle && function_exists('get_transient') && get_transient('wpc_cf_reverify_bk')) return false;
-        // Durable floor across ALL legs (incl. the externally-drivable healthcheck bypass)
+        
         $wpc_rvat = (int) get_option('wpc_cf_reverify_at');
         if (time() - $wpc_rvat < 120) return false;
         update_option('wpc_cf_reverify_at', time(), false);
@@ -1043,7 +1090,7 @@ if (!function_exists('wpc_v2_cf_cname_reverify')) {
         if (!class_exists('WPC_CloudflareAPI')) return false;
         $api = new WPC_CloudflareAPI(isset($cf['token']) ? $cf['token'] : '');
         if ($api && $api->verifyCfCnameLive($cfc, 1, 3)) {
-            update_option('wpc_cf_cname_verified', 1, false); // PROMOTE — emit-gate now serves the CF cname
+            update_option('wpc_cf_cname_verified', 1, false); 
             if (function_exists('site_url')) update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
 
 
@@ -1065,8 +1112,8 @@ if (function_exists('add_action')) {
             || !function_exists('check_ajax_referer') || !check_ajax_referer('wpc_v2_force_provision_now', '_n', false)) {
             wp_send_json_error('forbidden');
         }
-        // Reset the bounded self-heal gates (a copied/exhausted counter must not block delivery), arm
-        // force, then run the sync synchronously IN THIS BACKGROUND AJAX (the 8s non-cron cap applies).
+        
+        
         if (function_exists('delete_option'))    { delete_option('wpc_v2_selfheal_attempts'); }
         if (function_exists('delete_transient')) { delete_transient('wpc_v2_selfheal_backoff'); delete_transient('wpc_v2_config_force_backoff'); }
         if (function_exists('update_option'))    { update_option('wpc_v2_force_provision', 1, false); }
@@ -1116,12 +1163,12 @@ if (!function_exists('wpc_v2_orch_witness_cname_keys')) {
         if (!function_exists('get_option')) return [];
         $cands = [];
 
-        // CF cname-save identity — the verified CF emit host.
+        
         if (defined('WPS_IC_CF_CNAME')) {
             $cf = trim((string) get_option(WPS_IC_CF_CNAME));
             if ($cf !== '') $cands[] = $cf;
         }
-        // Deferred-sync identity (wpc_v2_run_deferred_config_sync).
+        
         $cc = trim((string) get_option('ic_custom_cname'));
         if ($cc !== '') {
             $cands[] = $cc;
@@ -1140,12 +1187,12 @@ if (!function_exists('wpc_v2_zone_cdn_disabled')) {
     {
         if (!function_exists('get_option') || !function_exists('wpc_v2_get_zone_id')) return false;
         $sk = function_exists('sanitize_key');
-        // PRIMARY: numeric Bunny PZ / legacy zone_id. A numeric-PZ zone matches here and NEVER reaches
-        // the cname fallback. Read returns the stored disabled value.
+        
+        
         $zone = (string) wpc_v2_get_zone_id();
         if ($zone !== '') {
             $v = get_option('wpc_v2_orch_cdn_disabled_' . ($sk ? sanitize_key($zone) : $zone), null);
-            // A present primary witness is authoritative (incl. an explicit '0') — do NOT fall through.
+            
             if ($v !== null) {
                 return ($v === '1' || $v === 1 || $v === true);
             }
@@ -1189,8 +1236,8 @@ if (!function_exists('wpc_v2_zone_src_hints')) {
 if (!function_exists('wpc_v2_auto_disable_enabled')) {
     function wpc_v2_auto_disable_enabled()
     {
-        // Hard opt-out for resource-constrained hosts (tiny VPS, low max_children) — define in
-        // wp-config: define('WPC_DISABLE_AUTO_RESILIENCE', true); kills the probe + override entirely.
+        
+        
         if (defined('WPC_DISABLE_AUTO_RESILIENCE') && WPC_DISABLE_AUTO_RESILIENCE) return false;
         if (!function_exists('get_site_option')) return false;
 
@@ -1200,7 +1247,7 @@ if (!function_exists('wpc_v2_auto_disable_enabled')) {
 }
 
 if (!function_exists('wpc_v2_zone_auto_disabled')) {
-    /** True when the liveness state machine has demoted this zone to origin-only ("down"). */
+    
     function wpc_v2_zone_auto_disabled()
     {
         if (!wpc_v2_auto_disable_enabled() || !function_exists('wpc_v2_get_zone_id')) return false;
@@ -1212,7 +1259,7 @@ if (!function_exists('wpc_v2_zone_auto_disabled')) {
 }
 
 if (!function_exists('wpc_cdn_norm_host')) {
-    /** Normalize a host for cross-site comparison: lowercase, trim, strip a leading "www." */
+    
     function wpc_cdn_norm_host($h)
     {
         $h = strtolower(trim((string) $h));
@@ -1280,23 +1327,23 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
         if ($account_cdn_off) return true;
 
 
-        // Riding the master-kill covers CF + Bunny + transform + fonts on front end + admin in one line.
-        // Cached per request (the fingerprint flips only on a 2xx, in a separate request).
+        
+        
         static $env = null;
         if ($env === null) {
             $env = (function_exists('wpc_v2_provision_env_changed') && wpc_v2_provision_env_changed());
         }
-        // v7.20.11 — the fingerprint is a DECLARATION of "this zone serves this site"; the
-        // origin-proof is a MEASUREMENT of it (an uploads file unique to this origin fetched
-        // through the zone, byte-compared to local disk). During an orchestrator outage the
-        // declaration cannot re-stamp (BunnyDB namespace loss, 2x in four days) but the
-        // measurement still can — and a fresh measured proof outranks unreachable
-        // bookkeeping. env_changed ALONE no longer suppresses while the proof is live;
-        // every other trip (account, cname, foreign, disabled) still wins below.
+        
+        
+        
+        
+        
+        
+        
         if ($env && !(function_exists('wpc_v2_zone_origin_proved') && wpc_v2_zone_origin_proved())) {
             return true;
         }
-        // A CF-direct zone (customer's CDN is their own cdn.* Cloudflare cname) whose cname is not yet
+        
 
 
         static $cfwait = null;
@@ -1320,7 +1367,7 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
 }
 
 if (!function_exists('wpc_v2_zone_origin_proved')) {
-    /** True while a fresh measured serve-proof exists for the CURRENT zone (12h validity). */
+    
     function wpc_v2_zone_origin_proved()
     {
         if (!function_exists('get_option') || !apply_filters('wpc_zone_origin_proof', true)) {
@@ -1339,15 +1386,15 @@ if (!function_exists('wpc_v2_zone_origin_proved')) {
 }
 
 if (!function_exists('wpc_v2_zone_origin_probe_run')) {
-    /**
-     * Measure "this zone serves THIS site's bytes": fetch an uploads file unique to this
-     * origin through the zone's m:0 passthrough form and byte-compare against local disk.
-     * WP-core paths cannot distinguish origins (every site ships the same style.min.css) —
-     * only an uploads asset proves the zone pulls from here, which is exactly the clone/
-     * migration case the env fingerprint exists to catch. Bounded: one fetch, 5s timeout,
-     * 1h throttle, admin/cron contexts only (callers gate). Mints a durable 12h proof on
-     * match; on mismatch or any failure the proof is CLEARED, never left stale.
-     */
+    
+
+
+
+
+
+
+
+
     function wpc_v2_zone_origin_probe_run()
     {
         if (!function_exists('get_option') || !function_exists('wp_remote_get')
@@ -1382,9 +1429,9 @@ if (!function_exists('wpc_v2_zone_origin_probe_run')) {
         if (!is_wp_error($resp) && (int) wp_remote_retrieve_response_code($resp) === 200) {
             $body = (string) wp_remote_retrieve_body($resp);
             $ok = ($body !== '' && sha1($body) === (string) @sha1_file($path));
-            // A 200 with foreign bytes is the clone/migration signature — the only answer
-            // that DISPROVES the binding. Timeouts, 5xx and non-200s are the outage this
-            // proof exists to bridge; they leave the standing proof to its own 12h TTL.
+            
+            
+            
             $wpc_definitive20 = !$ok;
         }
         if ($ok) {
@@ -1426,7 +1473,7 @@ if (!function_exists('wpc_v2_cdn_canary_url')) {
 }
 
 if (!function_exists('wpc_v2_auto_disable_purge')) {
-    /** Reuse WPC's canonical full purge — runs in the admin-ajax handler context. */
+    
     function wpc_v2_auto_disable_purge()
     {
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
@@ -1450,8 +1497,8 @@ if (!function_exists('wpc_v2_record_liveness')) {
         $reason_key  = 'wpc_v2_cdn_suppress_reason_' . $zk;
         $state = get_option($state_key, 'up');
         $now = time();
-        // (OFPR) DEMOTE helper — one place sets state+reason+purge, so the N=1 fast-path and the
-        // N=3 sustained path can't drift. $class is the probe classification (cdn_5xx / cdn_timeout /
+        
+        
 
         $wpc_demote = function () use ($state_key, $flip_key, $fail_key, $reason_key, $now, $zone, $class) {
             if (get_option($state_key, 'up') !== 'up') return;
@@ -1476,7 +1523,7 @@ if (!function_exists('wpc_v2_record_liveness')) {
                     update_option($state_key, 'up', false);
                     update_option($flip_key, $now, false);
                     update_option($ok_key, 0, false);
-                    delete_option($reason_key); // (OFPR) clear the named reason on recovery
+                    delete_option($reason_key); 
                     error_log('[WPC auto-disable] zone ' . $zone . ' RE-PROMOTED (CDN recovered)');
                     wpc_v2_auto_disable_purge();
                 }
@@ -1505,11 +1552,11 @@ if (!function_exists('wpc_v2_record_liveness')) {
 }
 
 if (!function_exists('wpc_v2_cdn_selfcheck_admin_notice')) {
-    /**
-     * (OFPR ask #2) wp-admin notice when the self-check floor has bypassed the CDN. Explains the
-     * state (site working, served origin-local, not broken), that it auto-restores, and the
-     * whitelist/pin path. Admin-only; shown only while actually suppressed via self-check.
-     */
+    
+
+
+
+
     function wpc_v2_cdn_selfcheck_admin_notice()
     {
         if (!function_exists('current_user_can') || !current_user_can('manage_options')) return;
@@ -1531,6 +1578,31 @@ if (!function_exists('wpc_v2_cdn_selfcheck_admin_notice')) {
            . 'If this persists, ask your host to allow outbound requests to the CDN hostname, and check any firewall/security plugin isn\'t challenging image requests.</p></div>';
     }
     add_action('admin_notices', 'wpc_v2_cdn_selfcheck_admin_notice');
+}
+
+if (!function_exists('wpc_cf_verify_challenged_notice2114')) {
+    
+
+
+
+
+    function wpc_cf_verify_challenged_notice2114()
+    {
+        if (!function_exists('current_user_can') || !current_user_can('manage_options')) return;
+        $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
+        if ($cfc === '') return;
+        $v = get_option('wpc_cf_cname_verified');
+        if ($v === '1' || $v === 1) return;
+        $w = get_option('wpc_cf_verify_challenged2114');
+        if (!is_array($w) || empty($w['t']) || (time() - (int) $w['t']) > 48 * 3600) return;
+        $tokened = !empty($w['tokened']);
+        echo '<div class="notice notice-warning"><p><strong>WP Compress:</strong> Cloudflare is challenging our verification of <code>' . esc_html($cfc) . '</code>'
+           . ($tokened
+               ? ', even with the Optimizer Bypass token attached. On a free Cloudflare plan this usually means <strong>Bot Fight Mode</strong> is on (Security &rarr; Bots) &mdash; it honors no exception rules. Disable it, or the site keeps running in origin-fallback mode (pages correct, delivery unoptimized).'
+               : '. Press <strong>Refresh Connection</strong> so the Optimizer Bypass rule is written/repositioned, then verification passes on its own. Until then the site runs in origin-fallback mode (pages correct, delivery unoptimized).')
+           . '</p></div>';
+    }
+    add_action('admin_notices', 'wpc_cf_verify_challenged_notice2114');
 }
 
 if (!function_exists('wpc_v2_cdn_suppression_reason')) {
@@ -1560,12 +1632,12 @@ if (!function_exists('wpc_v2_maybe_probe_cdn_liveness')) {
         $zk = function_exists('sanitize_key') ? sanitize_key($zone) : $zone;
         if (get_transient('wpc_v2_cdn_liveness_check_' . $zk) !== false) return;
 
-        // Yield to visitors: liveness probing can always wait for a calm box
+        
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
             return;
         }
 
-        // Durable belt: visitor path must not stampede probes on a flushed object cache
+        
         $wpc_lva179 = (int) get_option('wpc_v2_liveness_probe_at');
         if (time() - $wpc_lva179 < 300) return;
         update_option('wpc_v2_liveness_probe_at', time(), false);
@@ -1583,8 +1655,8 @@ if (!function_exists('wpc_v2_maybe_probe_cdn_liveness')) {
             $lv_body  = http_build_query(['zone_id' => $zone, 'nonce' => wp_create_nonce('wpc_cdn_liveness')]);
             $lv_req   = "POST {$lv_path} HTTP/1.1\r\nHost: {$lv_host}\r\nContent-Type: application/x-www-form-urlencoded\r\n"
                       . "Content-Length: " . strlen($lv_body) . "\r\nConnection: close\r\nUser-Agent: WPCLiveness/1.0\r\n\r\n" . $lv_body;
-            // (OFPR) class_exists guard so the cron backstop below can call this in a DOING_CRON
-            // context (wp-compress-cron.php loads instead of core) without fataling on an absent class.
+            
+            
             $lv_fp = (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket'))
                 ? wps_ic_ajax::wpc_loopback_open_socket($lv_host, $lv_port, $lv_https, 0.2) : false;
             if ($lv_fp) { @stream_set_timeout($lv_fp, 0, 100000); @fwrite($lv_fp, $lv_req); @fclose($lv_fp); }
@@ -1611,10 +1683,10 @@ if (!function_exists('wpc_v2_cdn_liveness_cron_boot')) {
 }
 
 if (!function_exists('wpc_v2_cdn_liveness_probe_handler')) {
-    /**
-     * admin-ajax handler — runs OFF the visitor render path, so the blocking HEAD (2s cap) never
-     * touches anyone's LCP. HEADs the canary; 5xx/error/timeout = a failure for the state machine.
-     */
+    
+
+
+
     function wpc_v2_cdn_liveness_probe_handler()
     {
         if (!wpc_v2_auto_disable_enabled()) wp_die('', '', ['response' => 200]);
@@ -1662,8 +1734,8 @@ if (!function_exists('wpc_v2_cdn_liveness_probe_handler')) {
             delete_option('wpc_v2_cdn_poison_reason');
         }
 
-        // A 404 means the canary file was deleted (the edge IS up: it answered). Treat as alive, but
-        // re-pick the canary after 3 consecutive 404s so the target self-heals.
+        
+        
         if (!$down && $code === 404) {
             $n404 = (int) get_option('wpc_v2_cdn_canary_404', 0) + 1;
             if ($n404 >= 3) { delete_option('wpc_v2_cdn_canary'); delete_option('wpc_v2_cdn_canary_404'); }
@@ -1673,7 +1745,7 @@ if (!function_exists('wpc_v2_cdn_liveness_probe_handler')) {
         }
 
 
-        // WP_Error / code 0 (connect/timeout) = cdn_timeout. '' when alive.
+        
         $wpc_class = '';
         if ($down) {
             if ($poison !== '')                       $wpc_class = 'cdn_wrong_bytes';
@@ -1710,8 +1782,8 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
     {
         $probe_zone = preg_replace('#/.*$#', '', trim((string) $probe_zone));
         if ($probe_zone === '') {
-            // No server-supplied zone (loopback handler path) → derive from config: CF cname (when CF
-            // CDN on) → custom cname → pod zone. Same chain the render path resolves to.
+            
+            
             $cf_cname  = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
             $cf_set    = defined('WPS_IC_CF') ? get_option(WPS_IC_CF) : false;
             $cf_cdn_on = is_array($cf_set) && !empty($cf_set['settings']['cdn']);
@@ -1721,16 +1793,16 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
             $probe_zone = preg_replace('#/.*$#', '', trim((string) $probe_zone));
         }
         if ($probe_zone === '') { delete_transient('wpc_v2_asset_probe_inflight'); return false; }
-        // GET (not HEAD — pod HEAD handling unverified). 200 + text/css = a converged edge; image/css /
-        // 403 / error = not yet. Body capped at 8KB.
+        
+        
         $probe_r  = wp_remote_get('https://' . $probe_zone . '/wp-includes/css/dist/block-library/style.min.css', ['timeout' => 3, 'sslverify' => false, 'redirection' => 2, 'limit_response_size' => 8192]);
         $probe_ct = is_wp_error($probe_r) ? '' : strtolower((string) wp_remote_retrieve_header($probe_r, 'content-type'));
         $probe_ok = ((int) wp_remote_retrieve_response_code($probe_r) === 200) && (strpos($probe_ct, 'text/css') === 0);
         delete_transient('wpc_v2_asset_probe_inflight');
-        // RECORD THE REFUSAL, not just the verdict. The probe runs from the ORIGIN's egress IP,
-        // which a CF zone may challenge even while every browser gets clean text/css — so "it
-        // works when I curl it" and "the probe refuses" are both true and the difference is
-        // invisible without the actual response. error_log is not readable from the panel.
+        
+        
+        
+        
         if (function_exists('update_option')) {
             update_option('wpc_v2_cf_asset_mime_last', [
                 'at'   => time(),
@@ -1749,9 +1821,9 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
             delete_transient('wpc_v2_cf_asset_mime_retry');
         } else {
             set_transient('wpc_v2_cf_asset_mime_retry', '0', 2 * HOUR_IN_SECONDS);
-            // Revoke a STANDING proof only on a definitive answer from the edge — 4xx/5xx, or a 200
-            // whose body is not CSS. A wp_error (local DNS/socket fault) proves nothing about the
-            // zone and must never revoke. Two consecutive strikes, so one blip cannot flap the shape.
+            
+            
+            
             $probe_code = is_wp_error($probe_r) ? 0 : (int) wp_remote_retrieve_response_code($probe_r);
             $probe_def  = ($probe_code >= 400) || ($probe_code === 200 && strpos($probe_ct, 'text/css') !== 0);
             if ($probe_def && (string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1') {
@@ -1774,16 +1846,16 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
 }
 
 if (!function_exists('wpc_v2_asset_mime_probe_handler')) {
-    /**
-     * admin-ajax handler for the asset-MIME proof — runs in its OWN request (off the visitor render
-     * path), so the ≤3s GET never touches anyone's TTFB. Fired by the non-blocking loopback in
-     * wps_rewriteLogic::fire_asset_mime_probe_loopback() on a cold front-end render. The zone is derived
-     * server-side inside the run fn; no client input is trusted.
-     */
+    
+
+
+
+
+
     function wpc_v2_asset_mime_probe_handler()
     {
         if (!check_ajax_referer('wpc_asset_mime', 'nonce', false)) wp_die('', '', ['response' => 200]);
-        // Reaching here proves PHP-originated loopback to admin-ajax works on this host (ops signal).
+        
         if (get_option('wpc_v2_loopback_ok', '0') !== '1') { update_option('wpc_v2_loopback_ok', '1', false); }
         wpc_v2_asset_mime_probe_run();
         wp_die('', '', ['response' => 200]);
@@ -1855,36 +1927,36 @@ if (!function_exists('wpc_v2_ajax_lazy_cdn_toggle')) {
 }
 
 
-/**
- * WP-CLI command: `wp wpc lazy-cdn enable` / `wp wpc lazy-cdn disable` /
- * `wp wpc lazy-cdn status`. For operators + canary customers + E2E testing
- * before the UI lands fully.
- */
+
+
+
+
+
 if (defined('WP_CLI') && WP_CLI && !class_exists('WPC_V2_LazyCDN_CLI')) {
     class WPC_V2_LazyCDN_CLI
     {
-        /**
-         * Enable lazy_cdn delivery for this site's zone.
-         *
-         * ## EXAMPLES
-         *     wp wpc lazy-cdn enable
-         */
+        
+
+
+
+
+
         public function enable()
         {
             $this->_toggle(true);
         }
 
-        /**
-         * Disable lazy_cdn delivery for this site's zone.
-         */
+        
+
+
         public function disable()
         {
             $this->_toggle(false);
         }
 
-        /**
-         * Show current state.
-         */
+        
+
+
         public function status()
         {
             $zone = wpc_v2_get_zone_id();
@@ -1902,8 +1974,8 @@ if (defined('WP_CLI') && WP_CLI && !class_exists('WPC_V2_LazyCDN_CLI')) {
                 return;
             }
             $enabled = function_exists('wpc_v2_get_lazy_enabled') && wpc_v2_get_lazy_enabled();
-            // Direct blocking POST (CLI has no UI to hang). wpc_v2_config_sync_lazy_enabled sends the
-            // current lazy_enabled AND fires the config_changed apikey-cache purge on a 0→1 flip.
+            
+            
             $res = wpc_v2_config_sync_lazy_enabled($zone, $enabled);
             if (!empty($res['ok'])) {
                 \WP_CLI::success(sprintf(
@@ -1971,7 +2043,7 @@ if (!function_exists('wpc_v2_lazy_cdn_admin_notice')) {
         $allowed_screens = ['dashboard', 'plugins'];
         if (!in_array((string) $screen->id, $allowed_screens, true)) return;
 
-        // Suppress if user has dismissed
+        
         $dismissed = (int) get_user_meta(get_current_user_id(), 'wpc_v2_lazy_cdn_notice_dismissed', true);
         if ($dismissed) return;
 
@@ -1991,7 +2063,7 @@ if (!function_exists('wpc_v2_lazy_cdn_admin_notice')) {
             ? wpc_get_plugin_name()
             : __('WP Compress', 'wp-compress-image-optimizer');
 
-        // Stacked layout (not flex-row) so the title stays width-resilient on narrow admin chrome.
+        
         ?>
         <div class="notice <?php echo esc_attr($css_class); ?> is-dismissible" data-wpc-v2-lazy-cdn-notice style="padding:14px 16px;">
             <div style="margin:0 0 6px;font-size:14px;">
@@ -2066,10 +2138,10 @@ if (!function_exists('wpc_v2_lazy_cdn_admin_notice')) {
 }
 
 
-/**
- * AJAX endpoint for dismissing the lazy_cdn admin notice. Per-user
- * dismissal stored in user_meta so future page loads don't re-show.
- */
+
+
+
+
 if (!function_exists('wpc_v2_ajax_lazy_cdn_notice_dismiss')) {
     function wpc_v2_ajax_lazy_cdn_notice_dismiss()
     {
@@ -2149,8 +2221,8 @@ if (!function_exists('wpc_v2_maybe_sync_image_config')) {
         }
 
 
-        // The scheduled cron performs the same sync (reading the freshly-saved state) so the save returns
-        // immediately, keeping full mirror/pending/retry bookkeeping.
+        
+        
         wpc_v2_schedule_config_sync();
     }
 }
@@ -2172,7 +2244,7 @@ if (!function_exists('wpc_v2_purge_html_on_delivery_change')) {
         }
         $old = is_array($old_value) ? $old_value : [];
 
-        // Keys whose change alters the emitted delivery markup.
+        
         $delivery_keys = [
             'wpc_nextgen', 'picture_webp', 'picture_avif', 'generate_webp', 'generate_adaptive',
             'adaptive', 'live-cdn', 'wpc_optimization_mode', 'modern_image_delivery',
@@ -2185,7 +2257,7 @@ if (!function_exists('wpc_v2_purge_html_on_delivery_change')) {
             $n = array_key_exists($k, $new_value) ? (is_scalar($new_value[$k]) ? (string) $new_value[$k] : wp_json_encode($new_value[$k])) : null;
             if ($o !== $n) { $changed = true; break; }
         }
-        // The 'serve' sub-array (jpg/png/gif/svg/css/js/fonts CDN file-type toggles).
+        
         if (!$changed) {
             $os = isset($old['serve']) ? wp_json_encode($old['serve']) : null;
             $ns = isset($new_value['serve']) ? wp_json_encode($new_value['serve']) : null;
@@ -2203,7 +2275,7 @@ if (!function_exists('wpc_v2_purge_html_on_delivery_change')) {
 
 
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-            if (function_exists('wp_schedule_single_event') && !wp_next_scheduled('wpc_sitechange_trailing')) { wp_schedule_single_event(time() + 8, 'wpc_sitechange_trailing'); } // deferred full purge
+            if (function_exists('wp_schedule_single_event') && !wp_next_scheduled('wpc_sitechange_trailing')) { wp_schedule_single_event(time() + 8, 'wpc_sitechange_trailing'); } 
         } elseif (function_exists('do_action')) {
             wpc_foreign_purge610(false, 'config-sync');
         }
@@ -2218,7 +2290,7 @@ if (defined('WPS_IC_SETTINGS')) {
 if (!function_exists('wpc_v2_resolve_zone_id')) {
     function wpc_v2_resolve_zone_id($force = false)
     {
-        // Already provisioned with a NUMERIC Bunny PZ id → nothing to do. A non-numeric value
+        
 
 
         if (!$force && function_exists('wpc_v2_get_zone_id')) {
@@ -2270,8 +2342,8 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
         $data = json_decode((string) wp_remote_retrieve_body($resp), true);
         $zone_id = '';
         if (is_array($data)) {
-            // /v2/zone is FLAT (no zones[] array) and the id is an INT under zone_id (with zoneId/id
-            // aliases). Cast to string; fall back to a zones[] shape only if a future response uses one.
+            
+            
             foreach (['zone_id', 'zoneId', 'id'] as $zk) {
                 if (!empty($data[$zk])) { $zone_id = (string) $data[$zk]; break; }
             }
@@ -2307,7 +2379,7 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
                 }
             }
         }
-        // Sanitize to the same shape sanitize_key() would accept downstream.
+        
         $zone_id = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $zone_id);
         if ($zone_id === '') { $backoff(); return ''; }
 
@@ -2319,7 +2391,7 @@ if (!function_exists('wpc_v2_resolve_zone_id')) {
 }
 
 
-// The deferred handler self-gates on a numeric zone_id, so it's a safe no-op on sites the healer couldn't fix.
+
 add_action('admin_init', function () {
     if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     $cur = defined('WPC_PLUGIN_VERSION') ? (string) WPC_PLUGIN_VERSION : '';
@@ -2331,27 +2403,27 @@ add_action('admin_init', function () {
     if (!wp_next_scheduled('wpc_v2_deferred_config_sync')) {
         wp_schedule_single_event(time() + 30, 'wpc_v2_deferred_config_sync');
     }
-    // DEFERRED: the post-update purge+flush ran INLINE here and cost the first admin
-    // request after every update minutes on a cold box — it now rides its own event
+    
+    
     if (!wp_next_scheduled('wpc_v2_postupdate_purge')) {
         wp_schedule_single_event(time() + 60, 'wpc_v2_postupdate_purge');
     }
-    // LiteSpeed purge-all is a server flag (cheap) — fire inline so LSCache never serves
-    // pre-update copies through the deferred event's cron lag; FS-heavy purges stay deferred
+    
+    
     if (defined('LSCWP_V')) {
         do_action('litespeed_purge_all');
     }
-    // Kick cron now — non-blocking loopback; without it the purge event waits for organic
-    // traffic (the stale-copy window users hit right after updating)
+    
+    
     if (function_exists('spawn_cron')) {
         wpc_spawn_cron();
     }
-    // No cron reliance: also run the purge in THIS request after the response is flushed —
-    // admin sees zero wall-time; cron/spawn stay as backstop for SAPIs without detach
+    
+    
     add_action('shutdown', 'wpc_v2_postupdate_purge_shutdown', PHP_INT_MAX);
 
 
-    // Drop the stale option once so legacy 'failed' sites stop showing local-mode status display.
+    
     if (function_exists('delete_option')) {
         delete_option('wpc-connectivity-status');
     }
@@ -2364,11 +2436,16 @@ add_action('admin_init', function () {
             update_option(WPS_IC_SETTINGS, $wpc_sh_set);
         }
     }
-    error_log('[WPC ConfigSync] post-update one-shot (v' . $cur . '): healer backoff reset + deferred sync scheduled + html cache flushed + object cache flushed (if persistent) + stale connectivity verdict cleared + src-hints baked-on backfill');
+    
+    
+    error_log('[WPC ConfigSync] post-update one-shot (v' . $cur . '): healer backoff reset + deferred sync scheduled + html cache flushed + object cache flushed (if persistent) + stale connectivity verdict cleared + src-hints baked-on backfill'
+        . sprintf(' [t=%dms peak=%.0fM]',
+            (int) round((microtime(true) - (isset($_SERVER['REQUEST_TIME_FLOAT']) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime(true))) * 1000),
+            memory_get_peak_usage(true) / 1048576));
 }, 19);
 
-// Detached same-request runner: flush the response first, then purge in the dying worker.
-// Only detachable SAPIs take this path — never risk a hanging admin tab elsewhere.
+
+
 if (!function_exists('wpc_v2_postupdate_purge_shutdown')) {
     function wpc_v2_postupdate_purge_shutdown()
     {
@@ -2391,10 +2468,10 @@ if (!function_exists('wpc_v2_postupdate_purge_shutdown')) {
     }
 }
 
-// Post-update purge + cron debloat, OFF the request path
+
 add_action('wpc_v2_postupdate_purge', function () {
     try {
-        // Collapse shutdown-runner + cron-event duplicates (each distinct update still purges)
+        
         $wpc_pp_at = (int) get_option('wpc_v2_pupurge_at', 0);
         if (time() - $wpc_pp_at < 120) {
             return;
@@ -2408,8 +2485,8 @@ add_action('wpc_v2_postupdate_purge', function () {
         if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_flush')) {
             if (function_exists('wpc_object_cache_flush')) { wpc_object_cache_flush('v2-postpurge'); } else { @wp_cache_flush(); }
         }
-        // Foreign page caches keep serving pre-update copies (stale asset URLs) until told;
-        // this deferred path replaced the upgrader route that used to carry the fan-out
+        
+        
         if (defined('LSCWP_V')) {
             do_action('litespeed_purge_all');
         }
@@ -2435,15 +2512,15 @@ add_action('wpc_v2_postupdate_purge', function () {
             && is_callable(['SiteGround_Optimizer\\Supercacher\\Supercacher', 'purge_cache'])) {
             \SiteGround_Optimizer\Supercacher\Supercacher::purge_cache();
         }
-        // Age-GC for the content-addressed asset stores purge now preserves (css/js under
-        // wp-cio): orphans from old icv generations die quietly after 7 days, bounded batch
+        
+        
         if (defined('WPS_IC_CACHE')) {
             $wpc_gc_n = 0;
             foreach (['css', 'js'] as $wpc_gc_d) {
                 $wpc_gc_dir = rtrim(WPS_IC_CACHE, '/') . '/' . $wpc_gc_d;
                 if (!is_dir($wpc_gc_dir)) { continue; }
-                // 14d floor: long-TTL foreign caches (LS/CF) may reference a generation for
-                // days after rotation; one level of subdirs covers js dist/ layouts
+                
+                
                 foreach (array_merge((array) @glob($wpc_gc_dir . '/*'), (array) @glob($wpc_gc_dir . '/*/*')) as $wpc_gc_f) {
                     if ($wpc_gc_n >= 500) { break 2; }
                     if (is_file($wpc_gc_f) && (time() - (int) @filemtime($wpc_gc_f)) > 14 * DAY_IN_SECONDS) {
@@ -2452,18 +2529,18 @@ add_action('wpc_v2_postupdate_purge', function () {
                 }
             }
         }
-        // Cron debloat: drop accumulated per-URL pipeline events (chains re-arm
-        // organically per visit; the cron row must stay small)
+        
+        
         if (function_exists('_get_cron_array') && function_exists('_set_cron_array')) {
-            // ONE read, ONE write: wp_unschedule_event rewrites the whole cron blob per
-            // call — on the bloated arrays this cleans, that was an O(N²) write burst
+            
+            
             $wpc_cron12 = (array) _get_cron_array();
             $wpc_dirty12 = false;
             $wpc_kept_warm = 0;
             foreach ($wpc_cron12 as $wpc_ts => $wpc_hooks) {
                 foreach ((array) $wpc_hooks as $wpc_h => $wpc_events) {
-                    // run_precache_cron_job: recurring event whose handler registration was
-                    // removed (cache_warmup add_hooks is a stub) — fires forever into void
+                    
+                    
                     $wpc_drop_all = in_array($wpc_h, ['wpc_lcp_repull', 'wpc_combine_fonts_fetch', 'wpc_autopurge_check', 'run_precache_cron_job'], true);
                     $wpc_is_warm  = ($wpc_h === 'wpc_url_warm');
                     if (!$wpc_drop_all && !$wpc_is_warm) {
@@ -2497,15 +2574,15 @@ add_action('wpc_v2_postupdate_purge', function () {
 });
 
 
-// Self-provision the zone on admin page loads (admin/admin-ajax context only — never a
-// front-end visitor pageview). No-op the moment a zone_id exists; rate-limited on miss.
+
+
 add_action('admin_init', function () {
 
 
     if (function_exists('wp_doing_ajax') && wp_doing_ajax()) return;
     if (!function_exists('wpc_v2_get_zone_id')) return;
     $z = (string) wpc_v2_get_zone_id();
-    // Resolve when missing OR non-numeric: Bunny PZ ids are integers; a non-numeric value (test-mirror
+    
 
     if ($z === '' || !ctype_digit($z)) {
         wpc_v2_resolve_zone_id();
@@ -2531,10 +2608,10 @@ add_action('admin_init', function () {
 
 add_action('admin_init', function () {
     if (!function_exists('wpc_v2_maybe_sync_image_config')) return;
-    // Persistent pending flag set by a prior db_error deferral; cleared on the next clean success.
+    
     if (!get_option('wpc_v2_config_sync_pending', false)) return;
-    // Rate-limit re-attempts — the pending flag persists across admin loads, so throttle to ~15 min
-    // (the backoff transient expiring just lets the next admin load try again; the flag never expires).
+    
+    
     if (function_exists('get_transient') && get_transient('wpc_v2_config_sync_retry_backoff')) return;
     if (function_exists('set_transient')) {
         set_transient('wpc_v2_config_sync_retry_backoff', 1, defined('MINUTE_IN_SECONDS') ? 15 * MINUTE_IN_SECONDS : 900);
@@ -2546,10 +2623,10 @@ add_action('admin_init', function () {
 add_action('admin_init', function () {
     if (!function_exists('wpc_v2_config_sync_lazy_enabled') || !function_exists('wpc_v2_get_zone_id')) return;
 
-    // Let the deferred-retry hook (priority 21) own the post-db_error case — don't double-POST.
+    
     if (get_option('wpc_v2_config_sync_pending', false)) return;
 
-    // Connected + a resolvable zone identity. Fire on apikey: a numeric Bunny PZ id OR a CF-fronted
+    
 
 
     $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
@@ -2589,7 +2666,7 @@ add_action('admin_init', function () {
         }
     }
 
-    // Force a re-POST (bypasses maybe_sync's unchanged-sig short-circuit). On 2xx it re-stamps
+    
 
 
     wpc_v2_schedule_config_sync();
@@ -2621,15 +2698,15 @@ add_action('admin_init', function () {
     if (!class_exists('WPC_CloudflareAPI')) return;
     $wpc_cf_api = new WPC_CloudflareAPI($cf['token']);
     if ($wpc_cf_api && $wpc_cf_api->verifyCfCnameLive($cfc, 1, 3)) {
-        update_option('wpc_cf_cname_verified', 1, false); // PROMOTE — emit-gate now serves the CF cname
+        update_option('wpc_cf_cname_verified', 1, false); 
         update_option('wpc_v2_force_provision', 1, false);
-        // Stamp the host baseline so a later clone/migration is detectable (CF-clone self-heal above).
+        
         if (function_exists('site_url')) update_option('wpc_v2_provisioned_site_url', (string) site_url(), false);
         if (function_exists('wpc_v2_schedule_config_sync')) {
             wpc_v2_schedule_config_sync();
         }
-        // Purge on CF-cname PROMOTE: the emitted markup flips origin→cname, so the cached HTML must be
-        // invalidated or it keeps serving origin URLs.
+        
+        
         if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
             wps_ic_cache::removeHtmlCacheFiles('all');
         } elseif (function_exists('do_action')) {
@@ -2645,9 +2722,9 @@ add_action('admin_init', function () {
     if (!function_exists('get_option') || !class_exists('WPC_Delivery_Resolver')) return;
     if (get_option('wpc_v2_force_provision', false)) return;
     if (!function_exists('wpc_v2_get_zone_id') || !wpc_v2_get_zone_id()) return;
-    if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::zone_is_cf()) return;   // CF promotes via cname path
+    if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::zone_is_cf()) return;   
     if (class_exists('WPC_Negotiated_Delivery') && WPC_Negotiated_Delivery::is_active()) return;
-    if (function_exists('get_transient') && get_transient('wpc_v2_admin_reverify_bk')) return;   // 60s throttle
+    if (function_exists('get_transient') && get_transient('wpc_v2_admin_reverify_bk')) return;   
     if (method_exists('WPC_Delivery_Resolver', 'resolve_verbose')) {
         $rv = WPC_Delivery_Resolver::resolve_verbose();
         if (isset($rv['tier_name']) && $rv['tier_name'] === 'cdn-edge') return;
@@ -2660,8 +2737,8 @@ add_action('admin_init', function () {
 }, 24);
 
 
-// Provisioning self-heal: a site that fails one verify must never stay suppressed forever.
-// Admin/cron context only (never a visitor request), post-response, single-flight, backed off.
+
+
 if (!function_exists('wpc_v2_provheal_due')) {
     function wpc_v2_provheal_due()
     {
@@ -2680,7 +2757,7 @@ if (!function_exists('wpc_v2_provheal_run')) {
         if (!function_exists('wpc_v2_get_zone_id') || (string) wpc_v2_get_zone_id() === '') return false;
         if (function_exists('wpc_v2_get_apikey') && (string) wpc_v2_get_apikey() === '') return false;
         if (!wpc_v2_provheal_due()) return false;
-        // Yield to visitors, and never let two workers probe at once (GET_LOCK(name,0) — never waits).
+        
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return false;
         if (function_exists('wpc_worker_lock') && !wpc_worker_lock('prov_selfheal', 0)) return false;
 
@@ -2767,8 +2844,8 @@ if (defined('WPC_RENDER_TIMING') && WPC_RENDER_TIMING
     $GLOBALS['wpc_rtime_http'] = null;
     $GLOBALS['wpc_rtime_log']  = [];
 
-    // PHP HTTP requests are synchronous + sequential (one in flight at a time), so a single start
-    // stamp set in http_request_args and read in http_api_debug pairs each request to its duration.
+    
+    
     add_filter('http_request_args', function ($args, $url) {
         $GLOBALS['wpc_rtime_http'] = microtime(true);
         return $args;
@@ -2797,14 +2874,14 @@ if (defined('WPC_RENDER_TIMING') && WPC_RENDER_TIMING
     }, PHP_INT_MAX);
 }
 
-// v7.10.652 — PERIODIC RE-PUBLISH (orchestrator response §3, their preferred option 2).
-// Config sync fires only on change/activation events, so if the sender's copy of a site's
-// cb_secret is lost — they measured a Redis stream reset on a neighbouring key, and their
-// LibSQL token has no DDL grant for a durable column — a hardened site would reject every
-// callback for an UNBOUNDED time, until someone happened to change a setting. A daily
-// re-publish bounds that recovery window to ~24h without them building anything, and it
-// costs one POST per site per day. Recovery is automatic: the secret is re-sent, the
-// sender stores it again, callbacks resume.
+
+
+
+
+
+
+
+
 if (!function_exists('wpc_v2_config_republish652')) {
     function wpc_v2_config_republish652()
     {
@@ -2821,7 +2898,7 @@ if (!function_exists('wpc_v2_config_republish652')) {
                 return;
             }
             update_option('wpc_v2_config_republish_at', time(), false);
-            // Reuse the ordinary deferred path — never inline on a pageview (the .642 law).
+            
             if (function_exists('wpc_v2_schedule_config_sync')) {
                 wpc_v2_schedule_config_sync();
             } elseif (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')

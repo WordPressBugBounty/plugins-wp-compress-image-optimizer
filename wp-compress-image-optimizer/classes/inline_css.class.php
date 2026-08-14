@@ -4,9 +4,9 @@ class wps_ic_inline_css
 {
 
   public static $excludes;
-  /**
-   * @var array|string[]
-   */
+  
+
+
   public $patterns;
 
   public function __construct()
@@ -43,16 +43,16 @@ class wps_ic_inline_css
   {
     preg_match('/href=(["\'])(.*?)\1/is', $tag, $matches);
 
-    // No matches found
+    
     if (!$matches || empty($matches[2])) return $tag;
 
-    // Href value
+    
     $src = $matches[2];
 
-    // Unable to get href?
+    
     if (empty($src)) return $tag;
 
-    // If it has ie9 tag exclude by default
+    
     if (strpos($src, 'ie9') !== false) {
       return $tag;
     }
@@ -61,7 +61,7 @@ class wps_ic_inline_css
       return $tag;
     }
 
-    // Remove the query variable
+    
     $src = explode('?', $src);
     $src = $src[0];
 
@@ -70,8 +70,8 @@ class wps_ic_inline_css
 
     $path = wp_make_link_relative($src);
 
-    #$content = $this->getLocalContent($src);
-    #return print_r(array($path, $src, $content),true);
+    
+    
 
     $check = wp_http_validate_url($src);
     if ($check) {

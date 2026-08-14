@@ -31,7 +31,7 @@ if (!function_exists('wpc_detect_foreign_page_cache')) {
         if (class_exists('SiteGround_Optimizer\\Supercacher\\Supercacher')) {
             return 'sg-optimizer';
         }
-        // A non-WPC advanced-cache.php drop-in = another full-page cache owns the drop-in.
+        
         if (defined('WP_CACHE') && WP_CACHE && defined('WP_CONTENT_DIR') && @is_readable(WP_CONTENT_DIR . '/advanced-cache.php')) {
             $head = @file_get_contents(WP_CONTENT_DIR . '/advanced-cache.php', false, null, 0, 4096);
             if (is_string($head) && $head !== ''
@@ -106,9 +106,9 @@ if (!function_exists('wpc_font_localizer_sheet')) {
 
 if (!function_exists('wpc_font_localizer_faces')) {
 
-    // Option B of the font-map contract (service-accepted 2026-08-06): send the localizer's
-    // @font-face inventory beside html/css in the dispatch. Match key on their side is
-    // family + weight + style (+ unicode-range when present); same-origin remap only.
+    
+    
+    
     function wpc_font_localizer_faces()
     {
         static $wpc_faces794 = null;
@@ -149,13 +149,13 @@ if (!function_exists('wpc_font_localizer_faces')) {
                     }
                     $wpc_u794 = (string) $wpc_src794[1];
                     if (strpos($wpc_u794, '//') === false) {
-                        // Sheet-relative path -> absolute uploads URL beside the sheet.
+                        
                         $wpc_rel794 = ltrim((string) substr(dirname($wpc_s794), strlen(rtrim((string) $wpc_ud794['basedir'], '/'))), '/');
                         $wpc_u794 = rtrim((string) $wpc_ud794['baseurl'], '/') . '/' . ($wpc_rel794 !== '' ? $wpc_rel794 . '/' : '') . ltrim($wpc_u794, './');
                     }
                     $wpc_uh794 = strtolower((string) parse_url($wpc_u794, PHP_URL_HOST));
                     if ($wpc_uh794 !== '' && $wpc_uh794 !== $wpc_home794) {
-                        continue; // same-origin only, per the contract
+                        continue; 
                     }
                     $wpc_e794 = ['family' => trim($wpc_fam794[1]), 'src' => $wpc_u794];
                     if (preg_match('/font-weight\s*:\s*([^;}]+)/i', $wpc_b794, $wpc_w794)) {
@@ -213,8 +213,8 @@ if (!function_exists('wpc_link_preset_levers')) {
 }
 
 if (!function_exists('wpc_apply_link_preset')) {
-    // Non-destructive: sets each lever ONLY when it is currently unset/blank. Existing user values
-    // always win. Returns ['applied'=>[], 'skipped'=>[]] or false if settings unavailable.
+    
+    
     function wpc_apply_link_preset($ctx = 'link')
     {
         if (!defined('WPS_IC_SETTINGS') || !function_exists('get_option')) {
@@ -235,7 +235,7 @@ if (!function_exists('wpc_apply_link_preset')) {
         $applied = [];
         $skipped = [];
 
-        // Flat levers — set-if-unset.
+        
         foreach ((array) $levers['flat'] as $k => $v) {
             if ($k === 'replace-fonts' && function_exists('wpc_font_localizer_present')) {
                 $wpc_fl789 = wpc_font_localizer_present();
@@ -252,7 +252,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             }
         }
 
-        // Critical CSS (nested critical.css) — set the sub-key without touching siblings.
+        
         if (!isset($s['critical']) || !is_array($s['critical'])) {
             $s['critical'] = [];
         }
@@ -263,7 +263,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             $skipped['critical.css'] = $s['critical']['css'];
         }
 
-        // Advanced Cache (nested cache.advanced) — gated on NO foreign page cache. Never two caches.
+        
         if (!isset($s['cache']) || !is_array($s['cache'])) {
             $s['cache'] = [];
         }
@@ -280,7 +280,7 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
 
         update_option(WPS_IC_SETTINGS, $s);
-        update_option('wpc_settings_initialized', '1', false); // P4 latch
+        update_option('wpc_settings_initialized', '1', false); 
         update_option('wpc_link_preset_applied', time(), false);
 
 
@@ -321,7 +321,7 @@ if (!function_exists('wpc_apply_link_preset')) {
         }
 
         if (function_exists('wpc_cohort_beacon')) {
-            wpc_cohort_beacon('linked', ['ctx' => (string) $ctx]); // T0 for the tracker Δt columns
+            wpc_cohort_beacon('linked', ['ctx' => (string) $ctx]); 
         }
 
         wpc_link_preset_journal('preset-apply', ['ctx' => (string) $ctx, 'applied' => $applied, 'skipped' => $skipped]);
@@ -329,7 +329,7 @@ if (!function_exists('wpc_apply_link_preset')) {
             wpc_cohort_beacon('preset_applied', ['applied' => array_keys($applied), 'skipped' => array_keys($skipped)]);
         }
 
-        // Immediate gen dispatch — inline, no cron. One warm fire = one render = one crit dispatch.
+        
         if (function_exists('wpc_warm_url_fire') && function_exists('home_url')) {
             try {
                 wpc_warm_url_fire(home_url('/'));
@@ -345,8 +345,8 @@ if (!function_exists('wpc_apply_link_preset')) {
 }
 
 if (!function_exists('wpc_link_preset_safe_mode')) {
-    // Safe-mode: revert ONLY the preset-managed keys to conservative (off/unset) values, purge once,
-    // journal {from-preset}. NOT a full-blob replace (never wps_ic_set_default_settings).
+    
+    
     function wpc_link_preset_safe_mode()
     {
         if (!defined('WPS_IC_SETTINGS')) {

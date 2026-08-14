@@ -47,8 +47,8 @@ if (!defined('WP_CONTENT_URL') && function_exists('get_option')) {
     define('WP_CONTENT_URL', get_option('siteurl') . '/wp-content');
 }
 
-// At this point: $wpdb is global. get_option works. wp_upload_dir() works (WP_CONTENT_URL ensured above).
-// maybe_unserialize / sanitize_* helpers all available.
+
+
 
 
 function wpc_v2_read_apikey() {
@@ -80,7 +80,7 @@ function wpc_v2_read_apikey() {
 }
 
 
-//
+
 
 
 function wpc_v2_direct_safe_filename($filename) {
@@ -207,15 +207,15 @@ function wpc_v2_journal_dir() {
     return $cached;
 }
 
-/**
- * Ensure the journal dir exists, is writable, and has its own .htaccess.
- * Called from the inbound write path; cheap after first call (transient cache).
- */
+
+
+
+
 function wpc_v2_journal_ensure_dir() {
     $dir = wpc_v2_journal_dir();
     if ($dir === '') return false;
-    // Lightweight check: if dir exists + we wrote .htaccess in a prior request,
-    // we're done. Re-check every 5 min via transient to recover from manual deletes.
+    
+    
     if (get_transient('wpc_v2_journal_dir_ok')) {
         return true;
     }
@@ -224,8 +224,8 @@ function wpc_v2_journal_ensure_dir() {
             return false;
         }
     }
-    // .htaccess deny — defense in depth (uploads dir already restrictive, but
-    // explicit is better than implicit).
+    
+    
     $htaccess = $dir . '/.htaccess';
     if (!is_file($htaccess)) {
         @file_put_contents($htaccess, "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
@@ -250,8 +250,8 @@ function wpc_v2_journal_write($imageID, $jobId, array $entries) {
     $jobId_s   = preg_replace('/[^a-zA-Z0-9_\-]/', '', substr((string) $jobId, 0, 16));
     if ($jobId_s === '') $jobId_s = 'nojob';
     $ms = (int) round(microtime(true) * 1000);
-    // Add a random suffix to absolutely guarantee uniqueness even if two
-    // callbacks for the same image+job arrive in the same millisecond.
+    
+    
     $rand = function_exists('random_int') ? random_int(1000, 9999) : mt_rand(1000, 9999);
     $name = $imageID_i . '-' . $jobId_s . '-' . $ms . '-' . $rand . '.jsonl';
     $final = $dir . '/' . $name;
@@ -278,10 +278,10 @@ function wpc_v2_journal_write($imageID, $jobId, array $entries) {
     return $final;
 }
 
-/**
- * Count current journal files (excludes .tmp in-flight writes). Used by
- * inbound handlers to decide whether to fire a drain loopback.
- */
+
+
+
+
 function wpc_v2_journal_count() {
     $dir = wpc_v2_journal_dir();
     if (!is_dir($dir)) return 0;
@@ -313,7 +313,7 @@ function wpc_v2_journal_fire_loopback() {
         ]);
         return;
     }
-    // Fallback raw curl (works in SHORTINIT context)
+    
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -329,7 +329,7 @@ function wpc_v2_journal_fire_loopback() {
     }
 }
 
-// ─── Restored-image guard (matches REST endpoint behavior) ───────────────
+
 
 function wpc_v2_direct_callbacks_blocked($imageID) {
 
@@ -359,7 +359,7 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw) {
     $dest_dir = dirname($abs_parent);
     $dest     = $dest_dir . '/' . $filename;
 
-    // Idempotency fast-path: same bytes already on disk → no-op.
+    
     if (file_exists($dest) && filesize($dest) === strlen($raw) && hash_file('sha256', $dest) === hash('sha256', $raw)) {
         return ['ok' => true, 'idempotent' => true, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
     }
@@ -376,11 +376,11 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw) {
     return ['ok' => true, 'idempotent' => false, 'path' => $dest, 'bytes_size' => strlen($raw), 'error' => null];
 }
 
-/**
- * Derive variant filename when encoder omits it (mirrors v2-callback.php's
- * wpc_v2_derive_variant_filename). Loaded on demand because it needs post.php
- * for wp_get_attachment_metadata.
- */
+
+
+
+
+
 function wpc_v2_direct_derive_filename($imageID, $size_label, $format) {
     if (!function_exists('wp_get_attachment_metadata')) {
         require_once ABSPATH . WPINC . '/post.php';

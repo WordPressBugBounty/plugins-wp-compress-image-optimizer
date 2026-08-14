@@ -4,22 +4,22 @@ var wpcWindowWidth = window.innerWidth;
 
 if (n489D_vars.linkPreload === 'true') {
     document.addEventListener('DOMContentLoaded', function () {
-        const preloadedLinks = new Set(); // To avoid duplicate preloads
+        const preloadedLinks = new Set(); 
 
         document.body.addEventListener('mouseover', function () {
-            // Check if the hovered element is a link
+            
             const link = event.target.closest('a');
-            if (!link || preloadedLinks.has(link.href)) return; // Skip if not a link or already preloaded
+            if (!link || preloadedLinks.has(link.href)) return; 
 
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
+            
+            
+            
+            
             const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
                 return link.href.indexOf(excludeStr) !== -1;
             });
 
-            // Only preload if link is not excluded and is same origin
+            
             if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
@@ -29,31 +29,31 @@ if (n489D_vars.linkPreload === 'true') {
             const link = event.target.closest('a');
             if (!link || preloadedLinks.has(link.href)) return;
 
-            // Check if the link contains any excluded strings
-            // const isExcluded = n489D_vars.excludeLink.some(excludeStr =>
-            //     link.href.includes(excludeStr)
-            // );
+            
+            
+            
+            
             const isExcluded = n489D_vars.excludeLink.some(function(excludeStr) {
                 return link.href.indexOf(excludeStr) !== -1;
             });
 
-            // Only preload if link is not excluded and is same origin
+            
             if (!isExcluded && link.origin === location.origin) {
                 preloadLink(link.href);
             }
         });
 
         function preloadLink(url) {
-            preloadedLinks.add(url); // Mark this URL as preloaded
+            preloadedLinks.add(url); 
             fetch(url, {
                 method: 'GET',
                 mode: 'no-cors'
             })
-                .then(function () { // Use traditional function syntax
-                    //console.log('Preloaded: ' + url);
+                .then(function () { 
+                    
                 })
-                .catch(function (err) { // Use traditional function syntax
-                    //console.error('Preload failed for: ' + url, err);
+                .catch(function (err) { 
+                    
                 });
         }
     });
@@ -61,10 +61,10 @@ if (n489D_vars.linkPreload === 'true') {
 
 
 window.addEventListener('DOMContentLoaded', function () {
-    //registerEvents();
+    
 });
 
-// Delay JS Script
+
 var wpcEvents = ['keydown', 'mousemove', 'touchmove', 'touchstart', 'touchend', 'wheel', 'visibilitychange', 'resize'];
 function registerEvents() {
     wpcEvents.forEach(function (eventName) {
@@ -96,7 +96,7 @@ function preloadTimeout(event) {
 
         if (event == 'resize') {
             if (wpcWindowWidth === window.innerWidth) {
-                // Nothing changed, ignore the event
+                
                 return false;
             }
         }
@@ -176,7 +176,7 @@ function preloadStyles() {
     Promise.all(customPromiseFlag).then(function () {
         var criticalCss = document.querySelector('#wpc-critical-css');
         if (criticalCss) {
-            //criticalCss.remove();
+            
         }
     }).catch(function () {
         styles.forEach(function (element, index) {
@@ -207,7 +207,7 @@ function preload() {
         console.log(allScripts);
     }
 
-    // Move wp-include scripts into wpScripts array to load them first
+    
     for (var i = 0; i < allScripts.length; i++) {
         var script = allScripts[i];
         if (script.src && script.src.includes('wp-includes')) {
@@ -245,7 +245,7 @@ function preload() {
             newElement.async = false;
             document.head.appendChild(newElement);
         } else {
-            // External script
+            
             var jsBefore = document.getElementById(elementID + '-before');
             var jsAfter = document.getElementById(elementID + '-after');
             var jsExtra = document.getElementById(elementID + '-extra');
@@ -259,8 +259,8 @@ function preload() {
             }
 
             if (jsAfter !== null) {
-                //jsAfter.setAttribute('type', 'text/javascript');
-                // eval(jsAfter.textContent);
+                
+                
             }
 
             if (jsExtra !== null) {
@@ -310,8 +310,8 @@ function preload() {
             }
         }
 
-        // Remove the element from the array
-        //allScripts.splice(index, 1);
+        
+        
     });
 
     allScripts = [];
@@ -357,7 +357,7 @@ function preload() {
     Promise.all(customPromiseFlag).then(function () {
         var criticalCss = document.querySelector('#wpc-critical-css');
         if (criticalCss) {
-            //criticalCss.remove();
+            
         }
     }).catch(function () {
         styles.forEach(function (element, index) {

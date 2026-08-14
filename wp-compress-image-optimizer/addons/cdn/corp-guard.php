@@ -3,20 +3,20 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * v7.10.823 — CORP guard. auktion-orebro: the origin stamped every response — images included —
- * with Cross-Origin-Resource-Policy: same-origin (blanket security config). The CDN pull replays
- * origin headers verbatim, the zone is a different origin, so Chrome blocked every passthrough
- * image with ERR_BLOCKED_BY_RESPONSE.NotSameOrigin. Optimizer-minted variants (our own headers,
- * no CORP) loaded fine, which made it look lazy-vs-eager.
- *
- * The guard probes ONE origin uploads image per tick (cache-busted, so an origin-front cache can
- * never hide the live header), and when the CORP header would block cross-origin replay it writes
- * a marker-fenced override into uploads/.htaccess scoped to image extensions, re-probes to verify
- * the override actually took (nginx ignores .htaccess — that outcome is journaled as ineffective,
- * never retried hot), and purges the receipt URL through the customer-purge pipe once on the
- * not-armed -> armed flip. Zero render-path work; one or two HEAD requests per 6h at most.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 if (!function_exists('wpc_corp_guard_active')) {
     function wpc_corp_guard_active()
@@ -64,7 +64,7 @@ if (!function_exists('wpc_corp_guard_sample_url')) {
 }
 
 if (!function_exists('wpc_corp_probe_header')) {
-    /** Live origin CORP header for $url, cache-busted so a front cache never answers for it. */
+    
     function wpc_corp_probe_header($url, $bust)
     {
         if (!function_exists('wp_remote_head')) { return null; }
@@ -109,8 +109,8 @@ if (!function_exists('wpc_corp_guard_tick')) {
 
             $corp = wpc_corp_probe_header($url, 'a' . time());
             if ($corp === null) { return null; }
-            // A pull replayed cross-origin is blocked by same-origin always, and by same-site
-            // whenever the zone is not a sibling of the site (every *.zapwp.com zone).
+            
+            
             $hazard = in_array($corp, ['same-origin', 'same-site'], true);
 
             if (!$hazard) {
