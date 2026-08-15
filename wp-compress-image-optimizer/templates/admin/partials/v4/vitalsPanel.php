@@ -219,6 +219,22 @@ foreach ($wpc_vp_curM as $wpc_vp_k => $wpc_vp_d) {
 $wpc_vp_share = $wpc_vp_raw28 > 0 ? (int) round($wpc_vp_hits28 / $wpc_vp_raw28 * 100) : 0;
 
 
+
+
+
+$wpc_vp_fmeta = ['m' => ['fn' => 0, 'met' => 0], 'd' => ['fn' => 0, 'met' => 0]];
+foreach ($wpc_vp_curM as $wpc_vp_fd28) {
+    foreach (['m', 'd'] as $wpc_vp_fv28) {
+        foreach (['lcp', 'fcp', 'ttfb'] as $wpc_vp_fm28) {
+            $wpc_vp_fc28 = (!empty($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]) && is_array($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]))
+                ? (int) array_sum($wpc_vp_fd28[$wpc_vp_fv28][$wpc_vp_fm28]) : 0;
+            $wpc_vp_fmeta[$wpc_vp_fv28]['met'] += $wpc_vp_fc28;
+            if ($wpc_vp_fm28 === 'fcp') { $wpc_vp_fmeta[$wpc_vp_fv28]['fn'] += $wpc_vp_fc28; }
+        }
+    }
+}
+
+
 $wpc_vp_cur_lcp_m  = (int) wpc_vitals_p75($wpc_vp_curM, 'm', 'lcp');
 $wpc_vp_banner     = '';
 $wpc_vp_banner_sub = '';
@@ -509,6 +525,10 @@ if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vi
         }
         
         
+        
+        
+        
+        
         $wpc_vp_gfn27 = 0;
         $wpc_vp_gfd27 = 0;
         foreach ($wpc_vp_curM as $wpc_vp_gday27) {
@@ -516,7 +536,10 @@ if (!$wpc_vp_demo && (!function_exists('apply_filters') || apply_filters('wpc_vi
                 ? (int) array_sum($wpc_vp_gday27[$wpc_vp_gdv]['fcp']) : 0;
             if ($wpc_vp_gfc27 > 0) { $wpc_vp_gfn27 += $wpc_vp_gfc27; $wpc_vp_gfd27++; }
         }
-        if (!($wpc_vp_gfn27 >= $wpc_vp_matmin || $wpc_vp_gfd27 >= 5)) {
+        $wpc_vp_gfok28 = ($wpc_vp_gfn27 >= $wpc_vp_matmin || $wpc_vp_gfd27 >= 5)
+            || ($wpc_vp_mat[$wpc_vp_gdv]['n'] < 1
+                && ($wpc_vp_gfn27 >= (int) apply_filters('wpc_vitals_fcp_floor', 12) || $wpc_vp_gfd27 >= 3));
+        if (!$wpc_vp_gfok28) {
             $wpc_vp_gfcnt27 = count($wpc_vp_fcp[$wpc_vp_gdv]);
             $wpc_vp_fcp[$wpc_vp_gdv] = $wpc_vp_gfcnt27 > 0 ? array_fill(0, $wpc_vp_gfcnt27, null) : [];
         }
@@ -560,6 +583,7 @@ $wpc_vp_payload = [
     'rendered' => $wpc_vp_rendered,
     'lcp'      => $wpc_vp_lcp,
     'fcp'      => $wpc_vp_fcp,
+    'fmeta'    => $wpc_vp_fmeta,
     'scr'      => (!$wpc_vp_demo && function_exists('wpc_vitals_sc_sane'))
         ? wpc_vitals_sc_sane(get_option('wpc_vitals_sc')) : null,
     'scn'      => function_exists('wp_create_nonce') ? wp_create_nonce('wpc_vp_sc') : '',
@@ -1227,7 +1251,14 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                         ? '<?php echo esc_js(__('Measuring desktop now — first numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>'
                         : '<?php echo esc_js(__('Running your first speed check — numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>';
                 } else if (maxV > 0) {
-                    em.textContent = '<?php echo esc_js(__('Visitors are landing — speed numbers appear here as they report in.', WPS_IC_TEXTDOMAIN)); ?>';
+                    var wpcFm28 = (VP.fmeta && VP.fmeta[dev]) || null;
+                    if (wpcFm28 && wpcFm28.met < 1) {
+                        em.textContent = '<?php echo esc_js(__('Visitors are landing, but their speed beacons never arrive — a firewall or security rule may be blocking them.', WPS_IC_TEXTDOMAIN)); ?>';
+                    } else if (wpcFm28 && wpcFm28.fn > 0) {
+                        em.textContent = '<?php echo esc_js(__('Collecting speed samples —', WPS_IC_TEXTDOMAIN)); ?> ' + wpcFm28.fn + ' <?php echo esc_js(__('so far. The trend line appears shortly.', WPS_IC_TEXTDOMAIN)); ?>';
+                    } else {
+                        em.textContent = '<?php echo esc_js(__('Visitors are landing — speed numbers appear here as they report in.', WPS_IC_TEXTDOMAIN)); ?>';
+                    }
                 } else {
                     em.textContent = '<?php echo esc_js(__('Measuring real visitor speed — the trend line appears after a few days of traffic.', WPS_IC_TEXTDOMAIN)); ?>';
                 }
@@ -1810,6 +1841,12 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         }
         try {
             var scStored = JSON.parse(localStorage.getItem('wpcVpSC') || 'null');
+
+
+
+
+
+            if (scStored && scStored.e === 1 && (!VP.scr || (VP.scr.t || 0) < (scStored.t || 0))) { scSave(scStored); }
             if (!(scStored && scStored.e === 1) && VP.scr && VP.scr.e === 1) { scStored = VP.scr; }
             if (VP.sc && scStored && scStored.e === 1 && scLeg(scStored, 'm')) { scCard(scStored, false); scInject(scStored); }
             var scFresh = scStored && scStored.e === 1 && (Date.now() - (scStored.t || 0)) <= 24 * 3600 * 1000;

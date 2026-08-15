@@ -1407,7 +1407,7 @@ class wps_ic
 
         
         self::$slug = 'wpcompress';
-        self::$version = '7.21.27';
+        self::$version = '7.21.28';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
