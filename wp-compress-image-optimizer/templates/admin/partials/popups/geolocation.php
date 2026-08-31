@@ -2,7 +2,15 @@
   <div id="cdn-popup-inner" class="ajax-settings-popup bottom-border geo-location-popup">
 
     <div class="cdn-popup-top">
-      <h3><?php echo esc_html__('Site Geo Location', WPS_IC_TEXTDOMAIN); ?></h3>
+      <h3><?php
+
+
+
+
+
+
+
+ echo esc_html__('Site Geo Location', WPS_IC_TEXTDOMAIN); ?></h3>
       <img class="popup-icon" src="<?php
       echo WPS_IC_URI; ?>assets/images/icon-geolocation-popup.svg"/>
     </div>

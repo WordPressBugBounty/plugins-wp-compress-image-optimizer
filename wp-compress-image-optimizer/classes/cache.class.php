@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/cache.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -198,7 +206,14 @@ class wps_ic_cache
                         'fl_builder_cache_cleared',
                         ''];
                     foreach (self::$purge_rules['hooks'] as $hook) {
-                        if (in_array($hook, $full_param_hooks)) {
+                        if ($hook === 'et_core_static_resources_removed') {
+                            
+                            
+                            
+                            
+                            
+                            add_action($hook, ['wps_ic_cache', 'wpc_et_static_purge_throttled78'], 10, 0);
+                        } elseif (in_array($hook, $full_param_hooks)) {
                             self::purgeHook($hook, 1, 1, 1, 1);
                         } else {
                             
@@ -209,6 +224,8 @@ class wps_ic_cache
                     
                     add_action('save_post', ['wps_ic_cache', 'wpc_save_purge_defer920'], 10, 1);
                     add_action('save_post', ['wps_ic_cache', 'resetHashes'], 10, 1);
+                    add_action('customize_save_after', ['wps_ic_cache', 'wpc_template_purge_all312'], 10, 0);
+                    add_action('wpc_tpl_purge_all312_ev', ['wps_ic_cache', 'wpc_template_purge_all_ev312'], 10, 0);
 
                     if (!empty(self::$purge_rules['post-publish'])) {
                         if (!empty(self::$purge_rules['post-publish']['all-pages']) || !empty(self::$purge_rules['post-publish']['home-page']) || !empty(self::$purge_rules['post-publish']['recent-posts-widget']) || !empty(self::$purge_rules['post-publish']['archive-pages'])) {
@@ -233,6 +250,22 @@ class wps_ic_cache
         add_action('untrashed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
         add_action('spammed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
         add_action('unspammed_comment', ['wps_ic_cache', 'purgeOnCommentAction'], 10, 1);
+    }
+
+    public static function wpc_et_static_purge_throttled78()
+    {
+        if (apply_filters('wpc_et_purge_throttle', true) && get_transient('wpc_et_purge_throttle78')) {
+            if (function_exists('wpc_cache_first_log') && !get_transient('wpc_et_purge_thr_log78')) {
+                set_transient('wpc_et_purge_thr_log78', 1, 3600);
+                wpc_cache_first_log('et-purge-throttled', '', '', ['win' => 3600]);
+            }
+            return;
+        }
+        set_transient('wpc_et_purge_throttle78', 1, 3600);
+        self::resetHashes();
+        self::removeHtmlCacheFiles();
+        self::removeCombinedFiles();
+        self::removeCriticalFiles();
     }
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
@@ -710,7 +743,16 @@ class wps_ic_cache
                     
                     
                     
-                    $wpc_esc604 = (!$ok || $wpc_reset105 !== '');
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_esc604 = (!$ok || $wpc_reset105 !== '' || self::cfUntaggedServesPossible());
                     if (!$wpc_esc604 && function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('cf-roothost-skipped', '', '', ['n' => count($wpc_root_hosts105)]);
                     }
@@ -1322,9 +1364,16 @@ class wps_ic_cache
         if (function_exists('wp_is_post_revision') && wp_is_post_revision($post_id)) {
             return;
         }
+        $wpc_pt312 = function_exists('get_post_type') ? (string) get_post_type($post_id) : '';
+        if ($wpc_pt312 !== '' && in_array($wpc_pt312, self::wpc_template_types312(), true)) {
+            self::wpc_template_purge_all312();
+            return;
+        }
         if (function_exists('apply_filters') && !apply_filters('wpc_save_purge_defer', true)) {
             self::removeHtmlCacheFiles($post_id);
+            self::wpc_save_preserve56(true);
             self::removeCriticalFiles($post_id);
+            self::wpc_save_preserve56(false);
             $wpc_u920 = get_permalink($post_id);
             if (!empty($wpc_u920)) {
                 self::purgeEdgeHtmlUrls([$wpc_u920]);
@@ -1332,6 +1381,84 @@ class wps_ic_cache
             return;
         }
         self::wpc_save_purge_queue920($post_id);
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_save_preserve56($on)
+    {
+        static $wpc_cb56 = null;
+        if (!function_exists('add_filter') || !function_exists('apply_filters')
+            || !apply_filters('wpc_save_preserve_measured', true)) {
+            return;
+        }
+        if ($wpc_cb56 === null) {
+            $wpc_cb56 = function ($wpc_keep56) {
+                $wpc_keep56   = (array) $wpc_keep56;
+                $wpc_keep56[] = 'delay.json';
+                $wpc_keep56[] = 'lcp.json';
+                
+                
+                
+                
+                $wpc_keep56[] = 'font-subsets.css';
+                $wpc_keep56[] = 'icon-subsets.css';
+                $wpc_keep56[] = 'fonts_url.txt';
+                return array_values(array_unique($wpc_keep56));
+            };
+        }
+        if ($on) {
+            add_filter('wpc_crit_purge_preserve', $wpc_cb56);
+        } else {
+            remove_filter('wpc_crit_purge_preserve', $wpc_cb56);
+        }
+    }
+
+    public static function wpc_template_types312()
+    {
+        $t = ['et_template', 'et_theme_builder', 'et_header_layout', 'et_body_layout', 'et_footer_layout',
+              'elementor_library', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_block'];
+        return (array) (function_exists('apply_filters') ? apply_filters('wpc_template_post_types312', $t) : $t);
+    }
+
+    public static function wpc_template_purge_all312()
+    {
+        if (function_exists('get_transient') && get_transient('wpc_tpl_purge_damp312')) {
+            if (function_exists('wp_next_scheduled') && function_exists('wp_schedule_single_event')
+                && !wp_next_scheduled('wpc_tpl_purge_all312_ev')) {
+                wp_schedule_single_event(time() + 90, 'wpc_tpl_purge_all312_ev');
+            }
+            return;
+        }
+        if (function_exists('set_transient')) {
+            set_transient('wpc_tpl_purge_damp312', 1, 60);
+        }
+        if (function_exists('wpc_ucss_invalidate313')) {
+            wpc_ucss_invalidate313();
+        }
+        self::wpc_save_purge_queue920(0);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('template-save-purge-all', '', '', []);
+        }
+    }
+
+    public static function wpc_template_purge_all_ev312()
+    {
+        if (function_exists('wpc_ucss_invalidate313')) {
+            wpc_ucss_invalidate313();
+        }
+        self::wpc_save_preserve56(true);
+        self::removeHtmlCacheFiles('all');
+        self::removeCriticalFiles('all');
+        self::wpc_save_preserve56(false);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('template-save-purge-all-trailing', '', '', []);
+        }
     }
 
     public static function wpc_save_purge_queue920($post_id)
@@ -1362,6 +1489,7 @@ class wps_ic_cache
             @set_time_limit(60);
         }
         $wpc_urls920 = [];
+        self::wpc_save_preserve56(true);
         foreach ($wpc_ids920 as $wpc_pid920) {
             if ($wpc_pid920 === 0) {
                 self::removeHtmlCacheFiles('all');
@@ -1376,6 +1504,7 @@ class wps_ic_cache
                 $wpc_urls920[] = $wpc_pu920;
             }
         }
+        self::wpc_save_preserve56(false);
         if (!empty($wpc_urls920)) {
             self::purgeEdgeHtmlUrls(array_values(array_unique($wpc_urls920)));
         }

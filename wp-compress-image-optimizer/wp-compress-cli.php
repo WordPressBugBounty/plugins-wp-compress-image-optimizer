@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: wp-compress-cli.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('WP_CLI') || !WP_CLI) return;

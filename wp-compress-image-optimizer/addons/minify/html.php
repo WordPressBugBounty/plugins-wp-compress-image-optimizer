@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/minify/html.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 class wps_minifyHtml

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/integrations.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 include_once(ABSPATH . 'wp-admin/includes/plugin.php');
 
 spl_autoload_register(function ($class_name) {

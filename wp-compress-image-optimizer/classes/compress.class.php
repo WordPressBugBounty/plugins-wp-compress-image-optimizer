@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/compress.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 

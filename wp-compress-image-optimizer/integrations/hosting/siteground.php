@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: integrations/hosting/siteground.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit; 
 }
@@ -24,6 +32,15 @@ class wps_ic_siteground extends wps_ic_integrations {
 
 
     public static function is_siteground_server() {
+        
+        
+        
+        
+        
+        $wpc_hn177 = (string) @php_uname( 'n' );
+        if ( $wpc_hn177 !== '' && preg_match( '/\.sgvps\.net$/i', $wpc_hn177 ) ) {
+            return true;
+        }
         if ( ! empty( ini_get( 'open_basedir' ) ) ) {
             return false;
         }
@@ -55,7 +72,7 @@ class wps_ic_siteground extends wps_ic_integrations {
         if (function_exists('sg_cachepress_purge_cache')) {
             sg_cachepress_purge_cache();
             self::bust_object_cache();
-            return;
+            return 'sg-plugin-api';
         }
 
         
@@ -64,7 +81,7 @@ class wps_ic_siteground extends wps_ic_integrations {
             method_exists('\SiteGround_Optimizer\Supercacher\Supercacher', 'purge_cache')) {
             \SiteGround_Optimizer\Supercacher\Supercacher::purge_cache();
             self::bust_object_cache();
-            return;
+            return 'supercacher';
         }
 
         
@@ -73,18 +90,19 @@ class wps_ic_siteground extends wps_ic_integrations {
             method_exists($GLOBALS['sg_cachepress_supercacher'], 'purge_cache')) {
             $GLOBALS['sg_cachepress_supercacher']->purge_cache();
             self::bust_object_cache();
-            return;
+            return 'legacy-supercacher';
         }
 
         
         if (self::purge_via_socket()) {
             self::bust_object_cache();
-            return;
+            return 'socket';
         }
 
         
         self::purge_file_cache();
         self::bust_object_cache();
+        return 'file-fallback';
     }
 
 
@@ -106,7 +124,10 @@ class wps_ic_siteground extends wps_ic_integrations {
     private static function purge_via_socket() {
         $socket_file = '/chroot/tmp/site-tools.sock';
 
-        if ( ! @file_exists( $socket_file ) ) {
+        
+        
+        
+        if ( empty( ini_get( 'open_basedir' ) ) && ! @file_exists( $socket_file ) ) {
             return false;
         }
 

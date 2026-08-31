@@ -905,6 +905,18 @@ jQuery(document).ready(function ($) {
             }
             if (attempts++ >= maxAttempts) {
                 delete wpcCardPollers[imageID];
+                
+                
+                
+                $.ajax({
+                    url: ajaxurl, type: 'POST', timeout: 15000,
+                    data: { action: 'wps_ic_get_card', attachment_id: imageID },
+                    success: function (r) {
+                        if (r && r.success && r.data && r.data.html) {
+                            wpcSwapCardWithAnimation(imageID, { html: r.data.html, status: r.data.ic_status });
+                        }
+                    }
+                });
                 return;
             }
             $.ajax({
@@ -918,6 +930,15 @@ jQuery(document).ready(function ($) {
                         return;
                     }
                     var data = response.data;
+                    
+                    
+                    
+                    if (data.failed) {
+                        if (data.html) { wpcSwapCardWithAnimation(imageID, { html: data.html, status: data.ic_status }); }
+                        try { console.warn('[WPC] compress failed for image ' + imageID + ': ' + (data.error || 'unknown')); } catch (e) {}
+                        delete wpcCardPollers[imageID];
+                        return;
+                    }
                     if (data.html) {
                         
                         
@@ -1358,6 +1379,7 @@ jQuery(document).ready(function ($) {
                 attachment_id: attachment_id
             },
             success: function (response) {
+                if (window.wpcDebugLog) { window.wpcDebugLog('compress_live #' + attachment_id + ' response', response); }
                 
                 
                 
@@ -1797,3 +1819,99 @@ window.onbeforeunload = function () {
         return "Data will be lost if you leave the page, are you sure?";
     }
 };
+
+
+
+
+
+
+(function () {
+    'use strict';
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        if (localStorage.getItem('wpc_debug') !== '1') return;
+        if (typeof ajaxurl === 'undefined') return;
+        var TAG = '%c[WPC-DEBUG]';
+        var CSS = 'background:#4c89eb;color:#fff;padding:1px 5px;border-radius:3px';
+        console.log(TAG + ' overlay armed — polling wpc_v2_full_debug every 4s', CSS);
+
+        var box = document.createElement('div');
+        box.id = 'wpc-debug-overlay';
+        box.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:999999;width:420px;max-height:70vh;overflow:auto;'
+            + 'background:#0f172a;color:#e2e8f0;font:11px/1.45 ui-monospace,Menlo,monospace;border:1px solid #334155;'
+            + 'border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.4);padding:10px 12px';
+        box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+            + '<strong style="color:#5cb1ff">WP Compress · Debug</strong>'
+            + '<span id="wpc-dbg-x" style="cursor:pointer;color:#94a3b8">✕</span></div><div id="wpc-dbg-body">loading…</div>';
+        var mount = function () { if (document.body) { document.body.appendChild(box); } else { setTimeout(mount, 200); } };
+        mount();
+        box.querySelector('#wpc-dbg-x').addEventListener('click', function () {
+            localStorage.removeItem('wpc_debug'); box.remove();
+            console.log(TAG + ' overlay disabled', CSS);
+        });
+
+        var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); };
+        var pill = function (ok, t) {
+            var c = ok === true ? '#22c55e' : (ok === false ? '#ef4444' : '#eab308');
+            return '<span style="color:' + c + '">●</span> ' + esc(t);
+        };
+
+        function activeIds() {
+            var ids = [];
+            document.querySelectorAll('[class*="wps-ic-media-actions-"]').forEach(function (el) {
+                var m = (el.className || '').match(/wps-ic-media-actions-(\d+)/);
+                if (m) ids.push(m[1]);
+            });
+            return ids.slice(0, 25).join(',');
+        }
+
+        function render(d) {
+            var b = box.querySelector('#wpc-dbg-body');
+            if (!b) return;
+            var disp = d.dispatch || {};
+            var reach = d.reachability || {};
+            var preach = d.post_reachability || {};
+            var plarge = d.post_reachability_large || {};
+            var lde = disp.last_dispatch_error;
+            var rows = [];
+            rows.push('<div>' + pill(reach.ok, 'GET reach: ' + (reach.reason || '?') + ' (' + (reach.wall_ms || '?') + 'ms)') + '</div>');
+            rows.push('<div>' + pill(preach.ok, 'POST small: ' + (preach.ok === false ? (preach.error || 'FAILED') : ('HTTP ' + (preach.http_code || '?'))) + ' (' + (preach.wall_ms || '?') + 'ms)') + '</div>');
+            rows.push('<div>' + pill(plarge.ok, 'POST ~100KB: ' + (plarge.ok === false ? (plarge.error || 'TIMEOUT') : ('HTTP ' + (plarge.http_code || '?'))) + ' (' + (plarge.wall_ms || '?') + 'ms)') + '</div>');
+            if (plarge.ok === false && plarge.note) rows.push('<div style="color:#fca5a5;margin:2px 0 4px">' + esc(plarge.note) + '</div>');
+            rows.push('<div>' + pill(disp.async_dispatch_ok, 'dispatch mode: ' + (disp.async_dispatch_ok ? 'ASYNC (detached)' : 'SYNC (inline)')
+                + (disp.async_unreliable_since ? ' · auto-switched' : '')
+                + (disp.prefer_source_url ? ' · source.url' : '')) + '</div>');
+            rows.push('<div style="color:#94a3b8">v2=' + disp.v2_protocol + ' pull=' + disp.pull_enabled + ' detach=' + disp.can_detach
+                + ' store_broken=' + disp.store_broken + '</div>');
+            if (lde) rows.push('<div style="color:#fca5a5;margin:4px 0">last dispatch error: ' + esc(lde.err || JSON.stringify(lde)) + '</div>');
+            var bulk = d.bulk || {};
+            var led = bulk.ledger || {};
+            rows.push('<div style="margin-top:4px;color:#cbd5e1">bulk: q=' + (bulk.queue_len || 0) + ' inflight=' + (Array.isArray(bulk.inflight) ? bulk.inflight.length : Object.keys(bulk.inflight || {}).length)
+                + ' | ledger v=' + (led.verified || 0) + ' skip=' + (led.skipped || 0) + ' park=' + (led.parked || 0) + '</div>');
+            (d.images || []).forEach(function (im) {
+                var st = (im.ic_compressing && im.ic_compressing.status) ? im.ic_compressing.status : (im.ic_status || 'idle');
+                var envs = im.last_envelope ? (' env=' + esc(im.last_envelope.transport) + '/' + Math.round((im.last_envelope.bytes||0)/1024) + 'KB') : '';
+                rows.push('<div style="border-top:1px solid #1e293b;margin-top:4px;padding-top:4px">'
+                    + '<strong>#' + im.id + '</strong> ' + esc(im.mime || '') + ' · <span style="color:#fbbf24">' + esc(st) + '</span>'
+                    + ' · v=' + im.variants + ' reached=' + im.worker_reached + envs
+                    + (im.last_error ? '<div style="color:#fca5a5">' + esc(im.last_error) + '</div>' : '') + '</div>');
+            });
+            b.innerHTML = rows.join('');
+        }
+
+        function poll() {
+            var ids = activeIds();
+            var url = ajaxurl + '?action=wpc_v2_full_debug' + (ids ? '&ids=' + encodeURIComponent(ids) : '');
+            fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.success && j.data) { render(j.data); console.log(TAG + ' full_debug', CSS, j.data); }
+                })
+                .catch(function (e) { console.log(TAG + ' poll error', CSS, e); });
+        }
+        poll();
+        setInterval(poll, 4000);
+
+        
+        window.wpcDebugLog = function (label, payload) { console.log(TAG + ' ' + label, CSS, payload); };
+    } catch (e) { try { console.log('[WPC-DEBUG] overlay init error', e); } catch (x) {} }
+})();

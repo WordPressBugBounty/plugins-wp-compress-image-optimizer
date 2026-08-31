@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: integrations/hosting/kinsta.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit; 
 }

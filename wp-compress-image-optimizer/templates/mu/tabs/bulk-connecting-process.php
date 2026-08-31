@@ -6,7 +6,15 @@
       <div class="wpc-ic-mu-site-left-side">
         <div class="wpc-ic-mu-site-name">
           <span class="wpc-ic-mu-site-status-circle"></span>
-          <h3><?php echo 'Bulk Connecting'; ?></h3>
+          <h3><?php
+
+
+
+
+
+
+
+ echo 'Bulk Connecting'; ?></h3>
         </div>
       </div>
       <div class="wpc-ic-mu-site-right-side">

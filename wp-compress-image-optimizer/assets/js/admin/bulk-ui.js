@@ -851,6 +851,30 @@
         
         
         
+        var led = d.ledger || null;
+        var strips = document.querySelectorAll('.wpc-bulk-ledger-strip');
+        if (strips.length && led) {
+            var parts = [];
+            if (led.inflight) parts.push(led.inflight + ' optimizing');
+            parts.push((led.verified || 0) + ' done');
+            if (led.queued) parts.push(led.queued + ' queued');
+            if (led.parked) parts.push(led.parked + ' parked');
+            if (led.skipped) parts.push(led.skipped + ' skipped');
+            var txt = parts.join(' \u00b7 ');
+            if (d.halt && d.halt.store_broken) txt += ' \u00b7 paused: database writes not persisting (see admin notice)';
+            else if (d.halt && d.halt.stop) txt += ' \u00b7 stopping\u2026';
+            if (d.reconcile && d.reconcile.sync === 'syncing') txt += ' \u00b7 syncing\u2026';
+            var age = d.generated_at ? Math.max(0, Math.round(Date.now() / 1000 - Number(d.generated_at))) : null;
+            if (age !== null && age > 5) txt += ' (updated ' + age + 's ago)';
+            for (var si = 0; si < strips.length; si++) {
+                strips[si].textContent = txt;
+                strips[si].setAttribute('data-wpc-run', String(led.run_id || ''));
+            }
+        }
+
+        
+        
+        
         
         
         
@@ -1315,10 +1339,16 @@
 
         
         
-        var processed = Number(d.processed) || prevTally.counter || 0;
-        var variants  = Number(d.variants_total) || prevTally.variants || 0;
+        
+        
+        
+        var processed = (d.processed !== undefined && d.processed !== null) ? (Number(d.processed) || 0) : (prevTally.counter || 0);
+        var variants  = (d.variants_total !== undefined && d.variants_total !== null) ? (Number(d.variants_total) || 0) : (prevTally.variants || 0);
         var bytes     = Number(d.bytes_saved) || prevTally.bytesSaved || 0;
         var pct       = Number(d.savings_pct) || prevTally.pct || 0;
+        var led314     = d.ledger || {};
+        var parked314  = Number(led314.parked) || 0;
+        var skipped314 = Number(led314.skipped) || 0;
 
         function setField(field, val) {
             var nodes = surface.querySelectorAll('[data-field="' + field + '"]');
@@ -1328,6 +1358,18 @@
         setField('final-variants', variants.toLocaleString());
         setField('final-saved',    humanBytes(bytes));
         setField('final-pct',      pct.toFixed(1) + '%');
+
+        var title314 = surface.querySelector('.wpc-bulk-complete-title');
+        var sub314   = surface.querySelector('.wpc-bulk-complete-subtitle');
+        if (title314 && sub314 && processed === 0 && (parked314 + skipped314) > 0) {
+            title314.textContent = 'No images could be optimized this run';
+            var msg314 = [];
+            if (parked314)  msg314.push(parked314 + ' image' + (parked314 > 1 ? 's are' : ' is') + ' parked after repeated failed attempts \u2014 re-optimize them from the Media Library to see the exact error');
+            if (skipped314) msg314.push(skipped314 + ' image' + (skipped314 > 1 ? 's were' : ' was') + ' skipped (retry window or already in flight) \u2014 they retry automatically');
+            sub314.textContent = msg314.join('. ') + '.';
+        } else if (sub314 && (parked314 + skipped314) > 0) {
+            sub314.appendChild(document.createTextNode(' ' + (parked314 + skipped314) + ' image' + ((parked314 + skipped314) > 1 ? 's were' : ' was') + ' skipped this run \u2014 see the Media Library.'));
+        }
 
         
         

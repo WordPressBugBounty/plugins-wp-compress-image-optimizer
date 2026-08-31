@@ -67,31 +67,41 @@ jQuery(document).ready((function($) {
         if (changeKeys.length === 0) return false;
         $btn.addClass("wpc-saving").css("pointer-events", "none");
         $btn.html('<span class="wpc-save-pill-spinner"></span> ' + (wpc_ajaxVar.saving || "Saving..."));
-        var completed = 0;
-        var total = changeKeys.length;
         var hadError = false;
-        changeKeys.forEach((function(settingName) {
-            $.ajax({
-                url: ajaxurl,
-                type: "POST",
-                data: {
-                    action: "wps_ic_ajax_checkbox",
-                    setting_name: settingName,
-                    value: pendingChanges[settingName],
-                    checked: pendingChanges[settingName] === "1" ? "true" : "false",
-                    wps_ic_nonce: wpc_ajaxVar.nonce
-                },
-                success: function() {
-                    completed++;
-                    if (completed === total) onAllSaved();
-                },
-                error: function() {
-                    hadError = true;
-                    completed++;
-                    if (completed === total) onAllSaved();
-                }
-            });
+        
+        
+        
+        
+        
+        var changes = changeKeys.map((function(settingName) {
+            return {
+                name: settingName.replace(/^options\[/, "").replace(/\]/g, "").replace(/\[/g, ","),
+                value: pendingChanges[settingName],
+                checked: pendingChanges[settingName] === "1" ? "true" : "false"
+            };
         }));
+        var purgeKeys = changes.map((function(c) {
+            return c.name;
+        }));
+        $.ajax({
+            url: ajaxurl,
+            type: "POST",
+            timeout: 12e4,
+            data: {
+                action: "wps_ic_ajax_v2_checkbox_batch",
+                changes: JSON.stringify(changes),
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                apikey: wpc_ajaxVar.apikey || ""
+            },
+            success: function(response) {
+                if (!response || response.success === false) hadError = true;
+                onAllSaved();
+            },
+            error: function() {
+                hadError = true;
+                onAllSaved();
+            }
+        });
         function onAllSaved() {
             if (hadError) {
                 $btn.removeClass("wpc-saving").css("pointer-events", "");
@@ -108,6 +118,11 @@ jQuery(document).ready((function($) {
                 initialStates[name] = pendingChanges[name] === "1";
             }));
             pendingChanges = {};
+            $.post(ajaxurl, {
+                action: "wps_ic_purge_after_save",
+                wps_ic_nonce: wpc_ajaxVar.nonce,
+                changed_keys: purgeKeys
+            });
             setTimeout((function() {
                 $pill.css({
                     transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)",

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: traits/excludes.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 class wps_ic_excludes extends wps_ic
 {
@@ -14,6 +22,8 @@ class wps_ic_excludes extends wps_ic
     private static $defaultAdaptiveExcludes;
     private static $excludesDelayJSOption;
     private static $excludesDelayJSOptionV2;
+    private static $excludesDelayJSOptionV3;
+    private static $defaultDelayJSExcludesV3;
     private static $excludesCombineJSOption;
     private static $excludesCombineCSSOption;
     private static $excludesToFooterOption;
@@ -52,6 +62,7 @@ class wps_ic_excludes extends wps_ic
             self::$pageExcludesFiles = !empty(self::$excludesOption['page_excludes_files'][$id]) ? self::$excludesOption['page_excludes_files'][$id] : [];
             self::$excludesDelayJSOption = !empty(self::$excludesOption['delay_js']) ? self::$excludesOption['delay_js'] : [];
             self::$excludesDelayJSOptionV2 = !empty(self::$excludesOption['delay_js_v2']) ? self::$excludesOption['delay_js_v2'] : [];
+            self::$excludesDelayJSOptionV3 = !empty(self::$excludesOption['delay_js_v3']) ? self::$excludesOption['delay_js_v3'] : [];
             self::$excludesCombineJSOption = !empty(self::$excludesOption['combine_js']) ? self::$excludesOption['combine_js'] : [];
             self::$excludesCombineCSSOption = !empty(self::$excludesOption['css_combine']) ? self::$excludesOption['css_combine'] : [];
             self::$excludesCriticalCSSOption = !empty(self::$excludesOption['critical_css']) ? self::$excludesOption['critical_css'] : [];
@@ -451,6 +462,45 @@ class wps_ic_excludes extends wps_ic
 
 
         return false;
+    }
+
+    
+    
+    
+    
+    
+    
+    public function excludedFromDelayV3($tag)
+    {
+        return $this->strInArray($tag, $this->delayJSExcludesV3());
+    }
+
+    public function delayJSExcludesV3()
+    {
+        
+        
+        
+        self::$defaultDelayJSExcludesV3 = array_merge(
+            isset(self::$excludesDelayJSOptionV3) && is_array(self::$excludesDelayJSOptionV3) ? self::$excludesDelayJSOptionV3 : [],
+            isset(self::$pageExcludesFiles['delay_js_v3']) && is_array(self::$pageExcludesFiles['delay_js_v3']) ? self::$pageExcludesFiles['delay_js_v3'] : [],
+            isset(self::$pageExcludesFiles['delay_js_v2']) && is_array(self::$pageExcludesFiles['delay_js_v2']) ? self::$pageExcludesFiles['delay_js_v2'] : []
+        );
+        
+        
+        
+        
+        
+        
+        
+        
+        if ((!function_exists('apply_filters') || apply_filters('wpc_delay_excl_union', true))
+            && isset(self::$excludesDelayJSOptionV2) && is_array(self::$excludesDelayJSOptionV2)) {
+            self::$defaultDelayJSExcludesV3 = array_values(array_unique(array_merge(
+                self::$defaultDelayJSExcludesV3,
+                self::$excludesDelayJSOptionV2
+            )));
+        }
+        return self::$defaultDelayJSExcludesV3;
     }
 
     public function delayJSExcludesV2()

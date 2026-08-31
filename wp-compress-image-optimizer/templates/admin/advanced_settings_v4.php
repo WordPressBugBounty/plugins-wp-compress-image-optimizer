@@ -1,5 +1,13 @@
 <?php
 
+
+
+
+
+
+
+
+
 global $wps_ic, $wpdb;
 if (!defined('ABSPATH')) {
     exit; 
@@ -624,6 +632,9 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
   </button></div>';
                             echo $html;
                         }
+                        
+                        
+                        
 
                         if ($proSite) {
                             echo '<div class="wpc-header-pro-site"><span>' . esc_html__('Unlimited', WPS_IC_TEXTDOMAIN) . '</span></div>';
@@ -1947,6 +1958,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 echo $gui::checkboxDescription_v4(__('Optimize External URLs', WPS_IC_TEXTDOMAIN), '', false, '0', 'external-url', false, 'right', '');
                                                 echo $gui::checkboxDescription_v4(__('Filter Bot Traffic', WPS_IC_TEXTDOMAIN), '', false, '0', 'ga-bot-shield', false, 'right', '');
                                                 echo $gui::checkboxDescription_v4(__('Set Fetch Priority', WPS_IC_TEXTDOMAIN), '', false, false, 'fetchpriority-high', false, 'right', false, false, '');
+                                                echo $gui::checkboxDescription_v4(__('Instant Navigation (prerender)', WPS_IC_TEXTDOMAIN), __('Prerenders likely next pages on hover using the browser Speculation Rules API, making the next click paint near-instantly. Logged-in users, carts, checkouts and any URL with a query string are never prerendered. Unsupported browsers are unaffected.', WPS_IC_TEXTDOMAIN), false, '0', 'speculation-rules', false, 'right', '');
 
 
                                                 if ((defined('WPC_LAB_UI') && WPC_LAB_UI) || (function_exists('wpc_legacy_lever_active') && wpc_legacy_lever_active('force-delay-captcha'))) { 

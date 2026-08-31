@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/js_delay_v2.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -23,6 +31,7 @@ class wps_ic_js_delay_v2
         $this->script_registry = array();
         $this->script_id = 0;
         $this->excludes = ['dark-mode',
+          'wpcJqDef47', 
           'n489D_var', 
           'ngf298gh738qwbdh0s87v_vars', 
           'wpcRunningCritical',
@@ -136,6 +145,14 @@ class wps_ic_js_delay_v2
 
 
                 foreach ($cookieEcosystem as $script) {
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    if ($script === 'jquery.min.js' || $script === 'jquery.js') { continue; }
                     $this->deferPatterns[] = $script;
                 }
 
@@ -153,6 +170,9 @@ class wps_ic_js_delay_v2
                          'js-cookie', 'js.cookie', 'woocommerce.min.js', 'wc-cart-fragments',
                          'wc-add-to-cart', 'wc-checkout'] as $wpc_ws360) {
                 $this->excludes[] = $wpc_ws360;
+                
+                
+                if ($wpc_ws360 === 'jquery.min.js' || $wpc_ws360 === 'jquery.js') { continue; }
                 $this->deferPatterns[] = $wpc_ws360;
             }
         }
@@ -621,7 +641,7 @@ class wps_ic_js_delay_v2
             }
 
             
-            if ($this->userExcludes->excludedFromDelayV2($attributes['src'])) {
+            if ($this->wpc_user_delay_excluded($attributes['src'])) {
                 return true;
             }
         }
@@ -639,11 +659,21 @@ class wps_ic_js_delay_v2
         }
 
         
-        if ($this->userExcludes->excludedFromDelayV2($content)) {
+        if ($this->wpc_user_delay_excluded($content)) {
             return true;
         }
 
         return false;
+    }
+
+    
+    
+    
+    protected function wpc_user_delay_excluded($x)
+    {
+        return is_object($this->userExcludes)
+            && method_exists($this->userExcludes, 'excludedFromDelayV2')
+            && $this->userExcludes->excludedFromDelayV2((string) $x);
     }
 
     protected function should_defer_script($attributes)

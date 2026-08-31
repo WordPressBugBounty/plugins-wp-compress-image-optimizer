@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/cache/advancedCache.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 define('WPS_IC_CACHE', WP_CONTENT_DIR . '/cache/wp-cio/');
 
@@ -10,7 +18,7 @@ if (!function_exists('wpc_edge_swr')) {
     function wpc_edge_swr()
     {
         try {
-            return max(0, (int) apply_filters('wpc_html_swr', 86400));
+            return max(0, (int) apply_filters('wpc_html_swr', 0));
         } catch (\Throwable $e) {
             return 0;
         }
@@ -25,6 +33,28 @@ if (!function_exists('wpc_cc_freshness')) {
             return $cc . ', s-maxage=' . (int) $sMaxAge . ', stale-while-revalidate=86400';
         }
         return $cc . ((int) $swr > 0 ? ', stale-while-revalidate=' . (int) $swr : ', must-revalidate');
+    }
+}
+
+if (!function_exists('wpc_dcv_stale146')) {
+    
+    
+    function wpc_dcv_stale146($file)
+    {
+        try {
+            if (!defined('WPS_IC_CACHE')) {
+                return false;
+            }
+            $wpc_d146 = rtrim(WPS_IC_CACHE, '/') . '/dcv.txt';
+            if (!@file_exists($wpc_d146)) {
+                return false;
+            }
+            $wpc_dm146 = (int) @filemtime($wpc_d146);
+            $wpc_fm146 = (int) @filemtime($file);
+            return $wpc_dm146 > 0 && $wpc_fm146 > 0 && $wpc_fm146 < $wpc_dm146;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
 
@@ -514,6 +544,15 @@ Connection: Close
                 
                 
                 @unlink($this->cachePath . $prefix . 'index.html_br');
+                @unlink($this->cachePath . $prefix . 'index.html_md5');
+            }
+        }
+
+        
+        foreach (['index.html_br', 'index.html_gzip', 'index.html'] as $wpc_cf146) {
+            $wpc_cfp146 = $this->cachePath . $prefix . $wpc_cf146;
+            if (function_exists('wpc_dcv_stale146') && @file_exists($wpc_cfp146) && wpc_dcv_stale146($wpc_cfp146)) {
+                @unlink($wpc_cfp146);
                 @unlink($this->cachePath . $prefix . 'index.html_md5');
             }
         }

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-lazy-cdn.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!function_exists('wpc_v2_att')) {
     function wpc_v2_att($u)
     {

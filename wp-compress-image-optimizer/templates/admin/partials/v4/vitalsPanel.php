@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -86,13 +94,47 @@ foreach (['m' => 'bm', 'd' => 'bd'] as $wpc_vp_bl_dev => $wpc_vp_bl_lane) {
             $wpc_vp_bsamp[$wpc_vp_bl_dev] += array_sum($wpc_vp_bl_d[$wpc_vp_bl_lane]['lcp']);
         }
     }
-    if ($wpc_vp_bsamp[$wpc_vp_bl_dev] >= 8) {
+    
+    
+    
+    if ($wpc_vp_bsamp[$wpc_vp_bl_dev] >= 1) {
         $wpc_vp_blive[$wpc_vp_bl_dev] = (int) wpc_vitals_p75($wpc_vp_cur, $wpc_vp_bl_lane, 'lcp');
     }
 }
 $wpc_vp_base_src = 'firstweek';
+
+
+
+
+
+$wpc_vp_blts96 = time();
+$wpc_vp_bldirty96 = false;
+$wpc_vp_bsamp_raw96 = $wpc_vp_bsamp;
+if (!is_array($wpc_vp_baseline)) { $wpc_vp_baseline = []; }
+foreach (['m', 'd'] as $wpc_vp_bl_dv96) {
+    $wpc_vp_blk96 = 'lcp_' . $wpc_vp_bl_dv96 . '_p75_live';
+    if ($wpc_vp_blive[$wpc_vp_bl_dv96] > 0) {
+        if ((int) ($wpc_vp_baseline[$wpc_vp_blk96] ?? 0) !== $wpc_vp_blive[$wpc_vp_bl_dv96]
+            || (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 0) < (int) $wpc_vp_bsamp[$wpc_vp_bl_dv96]) {
+            $wpc_vp_baseline[$wpc_vp_blk96] = $wpc_vp_blive[$wpc_vp_bl_dv96];
+            $wpc_vp_baseline[$wpc_vp_blk96 . '_ts'] = $wpc_vp_blts96;
+            $wpc_vp_baseline[$wpc_vp_blk96 . '_n'] = max((int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 0), (int) $wpc_vp_bsamp[$wpc_vp_bl_dv96]);
+            $wpc_vp_bldirty96 = true;
+        }
+    } elseif (!empty($wpc_vp_baseline[$wpc_vp_blk96])
+        && ($wpc_vp_blts96 - (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_ts'] ?? 0)) <= 120 * 86400) {
+        $wpc_vp_blive[$wpc_vp_bl_dv96] = (int) $wpc_vp_baseline[$wpc_vp_blk96];
+        $wpc_vp_bsamp[$wpc_vp_bl_dv96] = max((int) $wpc_vp_bsamp[$wpc_vp_bl_dv96], (int) ($wpc_vp_baseline[$wpc_vp_blk96 . '_n'] ?? 8));
+    }
+}
+if ($wpc_vp_bldirty96 && function_exists('update_option')) {
+    update_option('wpc_vitals_baseline', $wpc_vp_baseline, false);
+}
 if ($wpc_vp_blive['m'] > 0) {
     $wpc_vp_base_lcp = $wpc_vp_blive['m'];
+    $wpc_vp_base_src = 'live';
+}
+if ($wpc_vp_blive['d'] > 0 && $wpc_vp_base_src === 'firstweek') {
     $wpc_vp_base_src = 'live';
 }
 
@@ -353,8 +395,10 @@ foreach (['m', 'd'] as $wpc_vp_sd) {
             : ((is_array($wpc_vp_baseline) && !empty($wpc_vp_baseline['lcp_d_p75'])) ? (int) $wpc_vp_baseline['lcp_d_p75'] : 0));
     $wpc_vp_sp75 = (int) wpc_vitals_p75($wpc_vp_curM, $wpc_vp_sd, 'lcp');
     
+    
+    
     $wpc_vp_ghost = 0;
-    if ($wpc_vp_base_src === 'live' && $wpc_vp_bsamp[$wpc_vp_sd] >= 8 && $wpc_vp_sbase > 0 && $wpc_vp_sp75 > 0
+    if ($wpc_vp_base_src === 'live' && $wpc_vp_bsamp[$wpc_vp_sd] >= 1 && $wpc_vp_sbase > 0 && $wpc_vp_sp75 > 0
         && ($wpc_vp_sbase >= $wpc_vp_sp75 * 1.25 || $wpc_vp_sbase - $wpc_vp_sp75 >= 600)) {
         $wpc_vp_ghost = $wpc_vp_sbase;
     }
@@ -565,8 +609,8 @@ $wpc_vp_payload = [
     'have4'  => ['m' => $wpc_vp_have4['m'] ? 1 : 0, 'd' => $wpc_vp_have4['d'] ? 1 : 0],
     'defdev' => $wpc_vp_defdev,
     'bl'     => (!$wpc_vp_demo && function_exists('apply_filters') && apply_filters('wpc_vitals_auto_baseline', true)) ? [
-        'm' => max(0, 8 - (int) $wpc_vp_bsamp['m']),
-        'd' => max(0, 8 - (int) $wpc_vp_bsamp['d']),
+        'm' => max(0, 8 - (int) (isset($wpc_vp_bsamp_raw96) ? $wpc_vp_bsamp_raw96['m'] : $wpc_vp_bsamp['m'])),
+        'd' => max(0, 8 - (int) (isset($wpc_vp_bsamp_raw96) ? $wpc_vp_bsamp_raw96['d'] : $wpc_vp_bsamp['d'])),
         'u' => (function_exists('home_url') ? home_url('/') : '/') . '?disableWPC=true',
     ] : null,
     'sc'     => (function_exists('apply_filters') && apply_filters('wpc_vitals_speed_check', true)) ? [
@@ -634,6 +678,15 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         </div>
     <?php endif; ?>
 
+
+    <div class="wpc-vitals-saved" id="wpc-vp-saved" style="display:none">
+        <div class="wpc-vitals-saved-left">
+            <span class="wpc-vitals-saved-label"><?php echo esc_html__('Time saved for your visitors', WPS_IC_TEXTDOMAIN); ?><span class="wpc-vitals-saved-live" id="wpc-vp-saved-live" style="display:none"><i></i><?php echo esc_html__('Live', WPS_IC_TEXTDOMAIN); ?></span></span>
+            <span class="wpc-vitals-saved-clock" id="wpc-vp-saved-clock" aria-live="off">0s</span>
+            <span class="wpc-vitals-saved-sub" id="wpc-vp-saved-sub"></span>
+        </div>
+        <div class="wpc-vitals-saved-feed" id="wpc-vp-saved-feed" aria-hidden="true"></div>
+    </div>
 
     <div class="wpc-vitals-sc" id="wpc-vp-sc" style="display:none" aria-live="polite">
         <span class="wpc-vitals-sc-dot" id="wpc-vp-sc-dot"></span>
@@ -815,7 +868,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 #wpc-vitals-panel .wpc-vp-sw-line{background:var(--wpc-brand-primary,#3B82F6);height:3px!important;border-radius:2px;vertical-align:2px!important}
 #wpc-vitals-panel .wpc-vp-tlkey .wpc-vp-sw-cache{background:var(--wpc-brand-primary,#3B82F6);opacity:.6}
 #wpc-vitals-panel .wpc-vp-tlkey .wpc-vp-sw-render{background:var(--wpc-brand-primary,#3B82F6);opacity:.16}
-#wpc-vitals-panel .wpc-vp-sw-base{background:transparent;border:0;border-top:2px dashed #94a3b8;height:0!important;border-radius:0;width:14px;vertical-align:2px!important}
+#wpc-vitals-panel .wpc-vp-sw-base{background:repeating-linear-gradient(45deg,rgba(148,163,184,.45) 0 2px,rgba(148,163,184,.08) 2px 6px);border:1px solid #e2e8f0;border-radius:3px;width:14px}
 #wpc-vitals-panel .wpc-vp-nodata{background:#f1f5f9;border:1px solid #e2e8f0}
 #wpc-vitals-panel,#wpc-vitals-panel *{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 #wpc-vitals-panel .wpc-vitals-head{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f1f5f9}
@@ -893,12 +946,72 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         }
         var ACCG = accGrey();
         var NS = 'http://www.w3.org/2000/svg';
+
+
+
+
+
+
+        var wpcMkNS35 = null;
+        function wpcParser36(ns36, n36) {
+            var d36 = document.createElement('div');
+            if (n36 === 'svg') {
+                d36.innerHTML = '<svg></svg>';
+                return d36.firstChild;
+            }
+            d36.innerHTML = '<svg><' + n36 + '></' + n36 + '></svg>';
+            var r36 = d36.firstChild && d36.firstChild.firstChild;
+            return r36 || document.createElementNS(ns36, n36);
+        }
+        var wpcArmSrc37 = '';
+        function wpcArm36() {
+            if (wpcMkNS35) { return; }
+            wpcMkNS35 = wpcParser36;
+            try {
+                wpcArmSrc37 = String(document.createElementNS).replace(/\s+/g, ' ').slice(0, 240);
+                console.warn('WP Compress vitals: createElementNS is returning wrong-namespace elements on this page right now — switched to parser-based SVG creation. Active implementation at that moment: ' + wpcArmSrc37);
+            } catch (z36) {}
+        }
+        setTimeout(function () {
+            try {
+                if (!VP.scn || typeof ajaxurl === 'undefined' || !window.fetch) { return; }
+                var wpcCn37 = 0;
+                var wpcAll37 = document.querySelectorAll('#wpc-vitals-panel svg');
+                for (var i37 = 0; i37 < wpcAll37.length; i37++) {
+                    if (wpcAll37[i37].namespaceURI !== NS) { wpcCn37++; }
+                    var wpcKid37 = wpcAll37[i37].querySelectorAll('*');
+                    for (var k37 = 0; k37 < wpcKid37.length; k37++) {
+                        if (wpcKid37[k37].namespaceURI !== NS) { wpcCn37++; }
+                    }
+                }
+                if (!wpcMkNS35 && wpcCn37 === 0) { return; }
+                var wpcFd37 = new FormData();
+                wpcFd37.append('action', 'wpc_vitals_diag37');
+                wpcFd37.append('n', VP.scn);
+                wpcFd37.append('r', JSON.stringify({ armed: wpcMkNS35 ? 1 : 0, foreign: wpcCn37,
+                    svgs: wpcAll37.length, src: wpcArmSrc37 }));
+                fetch(ajaxurl, { method: 'POST', body: wpcFd37, credentials: 'same-origin' });
+            } catch (z37) {}
+        }, 2500);
+        try {
+            var wpcPr36 = document.createElementNS(NS, 'svg');
+            if (!wpcPr36 || wpcPr36.namespaceURI !== NS || !wpcPr36.style) { wpcArm36(); }
+        } catch (e35) { wpcArm36(); }
         var VPBRAND = '<?php echo esc_js(sprintf(__('Without %s', WPS_IC_TEXTDOMAIN), $wpc_vp_brand)); ?>';
         var VPBRANDU = VPBRAND.toUpperCase();
 
         function fmtMs(v) { return v == null ? '—' : (v < 1000 ? Math.round(v) + 'ms' : (Math.round(v / 100) / 10) + 's'); }
         function esc(t) { var d = document.createElement('span'); d.textContent = t; return d.innerHTML; }
-        function el(n, a) { var e = document.createElementNS(NS, n); for (var k in a) { e.setAttribute(k, a[k]); } return e; }
+        function el(n, a) {
+            var e = wpcMkNS35 ? wpcMkNS35(NS, n) : document.createElementNS(NS, n);
+            if (!e || e.namespaceURI !== NS) {
+                wpcArm36();
+                e = wpcMkNS35(NS, n);
+            }
+            if (e && !e.style) { try { e.style = {}; } catch (z) {} }
+            for (var k in a) { e.setAttribute(k, a[k]); }
+            return e;
+        }
         function smooth(pts) {
             if (pts.length < 2) { return ''; }
             var d = 'M' + pts[0][0] + ',' + pts[0][1];
@@ -1252,7 +1365,7 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                         : '<?php echo esc_js(__('Running your first speed check — numbers land in about a minute.', WPS_IC_TEXTDOMAIN)); ?>';
                 } else if (maxV > 0) {
                     var wpcFm28 = (VP.fmeta && VP.fmeta[dev]) || null;
-                    if (wpcFm28 && wpcFm28.met < 1) {
+                    if (wpcFm28 && wpcFm28.met < 1 && !(wpcFm28.fn > 0)) {
                         em.textContent = '<?php echo esc_js(__('Visitors are landing, but their speed beacons never arrive — a firewall or security rule may be blocking them.', WPS_IC_TEXTDOMAIN)); ?>';
                     } else if (wpcFm28 && wpcFm28.fn > 0) {
                         em.textContent = '<?php echo esc_js(__('Collecting speed samples —', WPS_IC_TEXTDOMAIN)); ?> ' + wpcFm28.fn + ' <?php echo esc_js(__('so far. The trend line appears shortly.', WPS_IC_TEXTDOMAIN)); ?>';
@@ -1273,8 +1386,12 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             var baseKey = document.getElementById('wpc-vp-tlkey-base');
             if (baseKey) {
                 baseKey.style.display = (base > 0) ? '' : 'none';
+
+
+
+
                 var baseKeyLab = document.getElementById('wpc-vp-tlkey-baselabel');
-                if (baseKeyLab) { baseKeyLab.textContent = (VP.base && VP.base.label) || ''; }
+                if (baseKeyLab) { baseKeyLab.textContent = '<?php echo esc_js(__('Time your visitors never waited', WPS_IC_TEXTDOMAIN)); ?>'; }
             }
             function linePts(ser) {
                 var pp = [];
@@ -1513,7 +1630,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
             if (btn) { btn.style.display = vis ? '' : 'none'; }
             if (!vis && view === 'experience') { setView('timeline'); }
         }
-        function render() { drawSpectrum(); drawRegions(); stageVis(); renderChips(); if (view === 'timeline') { drawTimeline(); } else if (view === 'details') { drawMatrix(); } animOn = false; var vpPanel = document.getElementById('wpc-vitals-panel'); if (vpPanel) { vpPanel.className += vpPanel.className.indexOf('wpc-vp-entered') === -1 ? ' wpc-vp-entered' : ''; } }
+        function wpcSafe35(f) { try { f(); } catch (e) { try { console.warn('WP Compress vitals chart error:', e); } catch (z) {} } }
+        function render() { wpcSafe35(drawSpectrum); wpcSafe35(drawRegions); wpcSafe35(stageVis); wpcSafe35(renderChips); if (view === 'timeline') { wpcSafe35(drawTimeline); } else if (view === 'details') { wpcSafe35(drawMatrix); } animOn = false; var vpPanel = document.getElementById('wpc-vitals-panel'); if (vpPanel) { vpPanel.className += vpPanel.className.indexOf('wpc-vp-entered') === -1 ? ' wpc-vp-entered' : ''; } }
 
         document.querySelectorAll('#wpc-vitals-panel .wpc-vitals-toggle button').forEach(function (b) {
             b.addEventListener('click', function () {
@@ -1931,8 +2049,11 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
 
 
 
+
+
+
         try {
-            if ((!VP.sc || !scCred) && VP.bl && (VP.bl.m > 0 || VP.bl.d > 0) && VP.bl.u && document.visibilityState === 'visible') {
+            if (VP.bl && (VP.bl.m > 0 || VP.bl.d > 0) && VP.bl.u && document.visibilityState === 'visible') {
                 var blLast = parseInt(localStorage.getItem('wpcVpBlRun') || '0', 10);
                 if (!(blLast > 0) || (Date.now() - blLast) > 20 * 60 * 1000) {
                     localStorage.setItem('wpcVpBlRun', String(Date.now()));
@@ -1948,8 +2069,8 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
                                 f.setAttribute('tabindex', '-1');
                                 f.style.cssText = 'position:fixed;right:0;bottom:0;width:' + sz[0] + 'px;height:' + sz[1] + 'px;border:0;opacity:.01;transform:scale(.02);transform-origin:bottom right;pointer-events:none';
                                 document.body.appendChild(f);
-                                setTimeout(function () { f.remove(); }, 15000);
-                            }, i * 4000);
+                                setTimeout(function () { f.remove(); }, 25000);
+                            }, i * 5000);
                         });
                     }, 2500);
                 }
@@ -1972,3 +2093,105 @@ $wpc_vp_metric_names = ['lcp' => 'LCP', 'inp' => 'INP', 'cls' => 'CLS', 'ttfb' =
         if (ro) { ro.observe(document.getElementById('wpc-vp-tl')); }
     })();
 </script>
+<script type="application/json" id="wpc-vp-saved-cfg"><?php echo wp_json_encode([
+    'saved'     => (!$wpc_vp_demo && function_exists('wpc_vitals_saved_export312')) ? wpc_vitals_saved_export312() : null,
+    'n'         => function_exists('wp_create_nonce') ? wp_create_nonce('wpc_vp_sc') : '',
+    'i18nMonth' => __('this month', WPS_IC_TEXTDOMAIN),
+    'i18nYear'  => __('this year', WPS_IC_TEXTDOMAIN),
+    'i18nTotal' => __('since activation', WPS_IC_TEXTDOMAIN),
+]); ?></script>
+
+<script>
+    (function () {
+        'use strict';
+        var VPS = null;
+        try { VPS = (typeof VP !== 'undefined') ? VP : null; } catch (e) { VPS = null; }
+        var boxEl = document.getElementById('wpc-vp-saved');
+        var cfgEl = document.getElementById('wpc-vp-saved-cfg');
+        var cfg = null;
+        if (cfgEl) { try { cfg = JSON.parse(cfgEl.textContent || ''); } catch (e) { cfg = null; } }
+        if (!boxEl || !cfg || !cfg.saved) { return; }
+        var sv = cfg.saved;
+        var clockEl = document.getElementById('wpc-vp-saved-clock');
+        var subEl   = document.getElementById('wpc-vp-saved-sub');
+        var liveEl  = document.getElementById('wpc-vp-saved-live');
+        var feedEl  = document.getElementById('wpc-vp-saved-feed');
+        var msMonth = Math.max(0, (sv.ms_month || 0) + (sv.ms_today || 0));
+        var msTotal = Math.max(0, (sv.ms_total || 0) + (sv.ms_today || 0));
+        var msYear  = Math.max(0, (sv.ms_year || 0) + (sv.ms_today || 0));
+        var rate    = Math.max(0, sv.rate_ms_per_s || 0);
+        if (msTotal <= 0 && rate <= 0) { return; }
+        boxEl.style.display = '';
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function fmt(ms) {
+            var s = ms / 1000;
+            if (s < 60) { return s.toFixed(1) + 's'; }
+            var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+                m = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60);
+            var out = '';
+            if (d > 0) { out += d + 'd '; }
+            if (d > 0 || h > 0) { out += h + 'h '; }
+            out += m + 'm ' + (d > 0 ? '' : (ss < 10 ? '0' : '') + ss + 's');
+            return out.replace(/\s+$/, '');
+        }
+        function paint() {
+            clockEl.textContent = fmt(msMonth);
+            subEl.textContent = cfg.i18nMonth + '  ·  ' + fmt(msYear) + ' ' + cfg.i18nYear + '  ·  ' + fmt(msTotal) + ' ' + cfg.i18nTotal;
+        }
+        var last = Date.now();
+        var tick = function () {
+            var now = Date.now();
+            var add = rate * (now - last) / 1000;
+            last = now;
+            if (!document.hidden) {
+                msMonth += add; msTotal += add; msYear += add;
+                paint();
+            }
+            setTimeout(tick, 200);
+        };
+        setTimeout(tick, 200);
+        paint();
+
+        if (!cfg.n || typeof ajaxurl === 'undefined' || !window.fetch) { return; }
+        var off = -1, polling = false;
+        function landed(pts, sample) {
+            var base = { m: sv.base_m || 0, d: sv.base_d || 0 };
+            for (var i = 0; i < pts.length; i++) {
+                var p = pts[i];
+                var b = base[p.d] || 0;
+                var delta = b > p.lcp ? (b - p.lcp) * (sample || 1) : 0;
+                msMonth += delta; msTotal += delta; msYear += delta;
+                if (feedEl && !reduced && i < 6) {
+                    var dot = document.createElement('span');
+                    dot.className = 'wpc-vp-saved-pt' + (p.d === 'm' ? ' is-m' : '');
+                    dot.textContent = delta > 0 ? '+' + (delta / 1000).toFixed(1) + 's' : (p.lcp / 1000).toFixed(1) + 's';
+                    feedEl.appendChild(dot);
+                    (function (el) { setTimeout(function () { if (el.parentNode) { el.parentNode.removeChild(el); } }, 4000); })(dot);
+                }
+            }
+            if (pts.length) { paint(); }
+        }
+        function poll() {
+            if (polling || document.hidden) { return; }
+            polling = true;
+            var fd = new FormData();
+            fd.append('action', 'wpc_vitals_live');
+            fd.append('n', cfg.n);
+            fd.append('o', String(off));
+            fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    polling = false;
+                    if (!j || !j.success || !j.data) { return; }
+                    var first = off < 0;
+                    off = j.data.o || 0;
+                    if (liveEl) { liveEl.style.display = ''; }
+                    if (!first && j.data.pts && j.data.pts.length) { landed(j.data.pts, j.data.sample); }
+                })
+                .catch(function () { polling = false; });
+        }
+        var pollLoop = function () { poll(); setTimeout(pollLoop, 6000); };
+        pollLoop();
+    })();
+</script>
+

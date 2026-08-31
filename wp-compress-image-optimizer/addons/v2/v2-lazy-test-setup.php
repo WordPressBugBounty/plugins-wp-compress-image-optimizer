@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-lazy-test-setup.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -21,6 +29,21 @@ if (!function_exists('wpc_v2_lazy_test_check_apikey')) {
 
         return hash_equals($stored, $provided);
     }
+}
+
+
+
+
+
+
+
+
+
+
+
+if (!((defined('WPC_LAZY_TEST_ENDPOINTS') && WPC_LAZY_TEST_ENDPOINTS)
+    || (function_exists('apply_filters') && apply_filters('wpc_lazy_test_endpoints', false)))) {
+    return;
 }
 
 

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/local/delivery.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 ini_set('log_errors', 1);
 ini_set('error_log', WPS_IC_LOG . 'delivery-log.txt');

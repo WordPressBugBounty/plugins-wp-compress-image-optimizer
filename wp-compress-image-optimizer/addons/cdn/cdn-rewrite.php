@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/cdn/cdn-rewrite.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -85,18 +93,37 @@ if (!function_exists('wpc_face_gate710')) {
         
         
         
-        return '<script id="wpc-lf-flip924">(function(){'
-            . 'var n=function(e){try{var sh=e.sheet;if(!sh){return}var rs=sh.cssRules;var c=0;'
-            . 'for(var i=0;i<rs.length&&c<64;i++){var r=rs[i];if(r.style&&r.style.fontFamily){c++;'
-            . 'var cp=77;var m=(r.style.unicodeRange||"").match(/U\\+([0-9A-Fa-f]+)/);'
-            . 'if(m){var v=parseInt(m[1],16);if(v>=33){cp=v}}'
-            . 'document.fonts.load((r.style.fontStyle||"normal")+" "+(r.style.fontWeight||"400")+" 16px "+r.style.fontFamily,String.fromCodePoint(cp)).catch(function(){})}}}catch(x){}};'
+        return '<script data-nodefer="1" id="wpc-lf-flip924">(function(){var nd=false;var tx=null;'
+            . 'var ts=function(){if(tx)return tx;tx={};try{var t=((document.body&&document.body.textContent)||"").slice(0,20000);'
+            . 'for(var i=0;i<t.length;i++){var c=t.charCodeAt(i);if(c>=48&&!(c>=8192&&c<=8303)&&!(c>=55296&&c<=57343)&&c!==9676&&!(c>=65024&&c<=65039)){tx[c]=1}}}catch(e){}return tx};'
+            . 'var pk=function(rg){if(!rg||rg==="U+0-10FFFF")return 77;var sg=rg.split(",");var st=null;'
+            . 'for(var i=0;i<sg.length&&i<32;i++){var m=sg[i].match(/U\\+([0-9A-Fa-f?]+)(?:-([0-9A-Fa-f]+))?/i);if(!m)continue;'
+            . 'var lo,hi;if(m[1].indexOf("?")>=0){lo=parseInt(m[1].replace(/\\?/g,"0"),16);hi=parseInt(m[1].replace(/\\?/g,"F"),16)}'
+            . 'else{lo=parseInt(m[1],16);hi=m[2]?parseInt(m[2],16):lo}'
+            . 'if(lo>=57344&&(hi<=63743||lo>=983040))return lo;st=st||ts();for(var k in st){k=+k;if(k>=lo&&k<=hi)return k}}return -1};'
+            . 'var ux=null;var us=function(){if(ux)return ux;ux={};try{var e2=document.querySelectorAll("body *");'
+            . 'for(var i=0;i<e2.length&&i<600;i++){var g=getComputedStyle(e2[i]);var sk=(g.fontFamily||"").toLowerCase();var fm=sk.split(",")[0].replace(/["\']/g,"").trim();'
+            . 'if(fm){ux[fm+"|"+g.fontWeight+"|"+g.fontStyle]=sk.indexOf(fm+" fallback")!==-1?2:1}}}catch(e){}return ux};'
+            . 'var wn=function(w){w=String(w||"400").toLowerCase();if(w==="bold")return 700;if(w==="normal")return 400;return parseInt(w,10)||400};'
+            . 'var mu=function(f){var u=us();var fm=String(f.family||"").replace(/["\']/g,"").trim().toLowerCase();'
+            . 'var sp=String(f.weight||"400").toLowerCase().split(/\\s+/);var lo=wn(sp[0]);var hi=wn(sp[sp.length-1]);'
+            . 'for(var k in u){var p=k.split("|");if(p[0]===fm&&p[2]===(f.style||"normal")){var w=wn(p[1]);if(w>=lo-100&&w<=hi+100&&u[k]===2)return true}}return false};'
+            . 'var n=function(e){try{if(nd)return;nd=true;if(!document.fonts||!document.fonts.forEach){nd=false;return}var q=[];'
+            . 'document.fonts.forEach(function(f){try{if(f.status!=="unloaded")return;if((f.display||"")==="optional")return;var cp=pk(f.unicodeRange||"");'
+            . 'if(cp===-1)return;if(cp<57344&&!mu(f))return;q.push(f)}catch(x){}});'
+            . 'var j=0;var step=function(){var e2=Math.min(j+8,q.length);'
+            . 'for(;j<e2;j++){try{q[j].load().catch(function(){})}catch(x){}}'
+            . 'if(j<q.length){setTimeout(step,0)}};step()}catch(x){nd=false}};'
             . 'var f=function(){var e=document.getElementById("wpc-late-faces");'
-            . 'if(e&&e.media!=="all"){e.setAttribute("type","text/css");e.media="all";n(e);}'
+            . 'if(e&&e.media!=="all"){e.setAttribute("type","text/css");e.media="all";setTimeout(function(){n(e)},0);}'
             . 'else if(e){n(e);}};'
-            . 'var a=function(){if(window.wpcSwapLateBarrier){setTimeout(f,4000)}else{f()}};'
+            . 'var hg=false;var hq=[];var hf=function(){if(!hg){hg=true;hq.splice(0).forEach(function(x){try{x()}catch(e){}})}};'
+            . '["pointerdown","keydown","touchstart","wheel","scroll","mousemove"].forEach(function(ev){window.addEventListener(ev,hf,{once:true,passive:true,capture:true})});'
+            . 'var uc=false;var mk=function(){if(!uc){try{uc=!!document.querySelector("link[data-wpc-ucss],link[data-wpc-ucss-rest]")}catch(e){}}};'
+            . 'var gm=function(cb){if(hg||!uc){cb()}else{hq.push(cb)}};'
+            . 'var a=function(){if(window.wpcScriptRegistry){return}mk();if(window.wpcSwapLateBarrier){setTimeout(function(){gm(f)},4000)}else{gm(f)}};'
             . 'if(document.readyState==="complete"){a()}else{window.addEventListener("load",a,{once:true})}'
-            . 'setTimeout(f,12000)})();</script>';
+            . 'setTimeout(function(){if(!window.wpcScriptRegistry){gm(f)}},12000)})();</script>';
     }
 }
 
@@ -187,11 +214,50 @@ if (!function_exists('wpc_face_gate710')) {
         if ($late === '') {
             return $html;
         }
-        $moved = substr_count($late, '@font-face');
-        if (preg_match('/<style\b[^>]*\bid=(["\'])wpc-late-faces\1[^>]*>/i', $html, $lm, PREG_OFFSET_CAPTURE)) {
-            $html = substr_replace($html, $late, $lm[0][1] + strlen($lm[0][0]), 0);
+        if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_host_twin_css42')) {
+            $late = (string) wps_cdn_rewrite::wpc_host_twin_css42($late);
+        }
+        
+        
+        
+        
+        
+        
+        
+        $wpc_key46 = static function ($blk) {
+            $k = function_exists('wpc_font_carrier_key602') ? (string) wpc_font_carrier_key602($blk) : '';
+            preg_match_all('/url\(\s*["\']?([^"\')\s]+)/i', $blk, $wpc_u46);
+            return $k . '|' . md5(strtolower(implode(',', $wpc_u46[1])));
+        };
+        $wpc_dedupe46 = static function ($css) use ($wpc_key46) {
+            $out = '';
+            $seen = [];
+            if (preg_match_all('/@font-face\s*\{[^{}]*\}/is', (string) $css, $m46)) {
+                foreach ($m46[0] as $b46) {
+                    $k46 = $wpc_key46($b46);
+                    if (isset($seen[$k46])) {
+                        continue;
+                    }
+                    $seen[$k46] = 1;
+                    $out .= $b46;
+                }
+            }
+            return $out;
+        };
+        if (preg_match('/<style\b[^>]*\bid=(["\'])wpc-late-faces\1[^>]*>(.*?)<\/style>/is', $html, $lm, PREG_OFFSET_CAPTURE)) {
+            $wpc_exd46 = $wpc_dedupe46($lm[2][0]);
+            $wpc_merged46 = $wpc_dedupe46($wpc_exd46 . $late);
+            $moved = max(0, substr_count($wpc_merged46, '@font-face') - substr_count($wpc_exd46, '@font-face'));
+            $html = substr_replace($html,
+                '<style id="wpc-late-faces" type="wpc/late-faces" media="not all">' . $wpc_merged46 . '</style>',
+                $lm[0][1], strlen($lm[0][0]));
         } else {
-            $lane = '<style id="wpc-late-faces" media="not all">' . $late . '</style>';
+            $late = $wpc_dedupe46($late);
+            if ($late === '') {
+                return $html;
+            }
+            $moved = substr_count($late, '@font-face');
+            $lane = '<style id="wpc-late-faces" type="wpc/late-faces" media="not all">' . $late . '</style>';
             $bp = strripos($html, '</body>');
             $html = ($bp !== false) ? substr_replace($html, $lane, $bp, 0) : $html . $lane;
         }
@@ -1644,6 +1710,11 @@ class wps_cdn_rewrite
         $wpc_hint15 = function ($u) use ($ext) {
             $h = wps_rewriteLogic::src_hint_qs($ext);
             if (!is_string($u) || $u === '' || $h === '') { return $u; }
+            
+            
+            
+            
+            if (preg_match('/[?&]src=/', $u)) { return $u; }
             return $u . (strpos($u, '?') !== false ? '&' . substr($h, 1) : $h);
         };
 
@@ -2250,10 +2321,411 @@ class wps_cdn_rewrite
 
         $html = self::wpc_css_bg_imageset_sweep($html);
         $html = self::wpc_css_bg_external_sweep($html);
+        $html = self::wpc_inline_favicon256($html);
         if (!empty($wpc_pic_blocks)) {
             $html = strtr($html, $wpc_pic_blocks);
         }
+        $html = self::wpc_picture_source_park260($html);
+        $html = self::wpc_carousel_eager_window300($html);
         return $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
+    public static function wpc_carousel_eager_window300($html)
+    {
+        try {
+            if (!is_string($html) || stripos($html, 'image-carousel.default') === false
+                || !apply_filters('wpc_carousel_eager_window', true)) {
+                return $html;
+            }
+            $wpc_mob300 = function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile();
+            $out = $html;
+            if (!preg_match_all('~<div[^>]+data-widget_type="image-carousel\.default"[^>]*>~i', $out, $wpc_wm300, PREG_OFFSET_CAPTURE)) {
+                return $html;
+            }
+            foreach (array_slice($wpc_wm300[0], 0, 6) as $wpc_w300) {
+                $tag = (string) $wpc_w300[0];
+                $off = (int) $wpc_w300[1];
+                $n = 3;
+                if (preg_match('~data-settings="([^"]*)"~i', $tag, $ds)) {
+                    $set = json_decode(html_entity_decode($ds[1], ENT_QUOTES), true);
+                    if (is_array($set)) {
+                        $nD = max(1, (int) (isset($set['slides_to_show']) ? $set['slides_to_show'] : 3));
+                        $nT = max(1, (int) (isset($set['slides_to_show_tablet']) ? $set['slides_to_show_tablet'] : $nD));
+                        $nM = max(1, (int) (isset($set['slides_to_show_mobile']) ? $set['slides_to_show_mobile'] : $nT));
+                        $n = $wpc_mob300 ? $nM : $nD;
+                    }
+                }
+                $seg = substr($out, $off, 40000);
+                $end = stripos($seg, 'data-widget_type=', strlen($tag));
+                if ($end !== false) { $seg = substr($seg, 0, $end); }
+                $wpc_origlen300 = strlen($seg);
+                $wpc_ns300 = [];
+                $seg = (string) preg_replace_callback('/<noscript\b.*?<\/noscript>/is', static function ($nm) use (&$wpc_ns300) {
+                    $wpc_ns300[] = $nm[0];
+                    return "\x01NS300" . (count($wpc_ns300) - 1) . "\x01";
+                }, $seg);
+                $done = 0;
+                $seen = 0;
+                $fix = preg_replace_callback('/<img\b[^>]*>/i', static function ($im) use (&$done, &$seen, $n) {
+                    if ($seen++ >= $n) { return $im[0]; }
+                    $t = (string) $im[0];
+                    if (!preg_match('/\bsrc="data:image\/svg/i', $t)) { return $t; }
+                    if (!preg_match('/\bdata-src="(https?:[^"]+)"/i', $t, $dm)) { return $t; }
+                    $done++;
+                    $t = (string) preg_replace('/\bsrc="data:image\/svg[^"]*"/i', 'src="' . $dm[1] . '"', $t, 1);
+                    if (preg_match('/\bdata-srcset="(https?:[^"]+)"/i', $t, $sm2)) {
+                        $t = (string) str_replace('data-srcset="' . $sm2[1] . '"', 'srcset="' . $sm2[1] . '"', $t);
+                    }
+                    return $t;
+                }, $seg);
+                if (!is_string($fix)) { continue; }
+                
+                
+                $sdone = 0;
+                $fix = preg_replace_callback('/<source\b[^>]*\bdata-srcset="(https?:[^"]+)"[^>]*>/i', static function ($sq) use (&$sdone, $done) {
+                    if ($sdone >= $done) { return $sq[0]; }
+                    $sdone++;
+                    return str_replace('data-srcset="', 'srcset="', $sq[0]);
+                }, $fix);
+                foreach ($wpc_ns300 as $wpc_ni300 => $wpc_nb300) {
+                    $fix = str_replace("\x01NS300" . $wpc_ni300 . "\x01", $wpc_nb300, $fix);
+                }
+                if ($fix === '') { continue; }
+                $out = substr_replace($out, $fix, $off, $wpc_origlen300);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_picture_source_park260($html)
+    {
+        try {
+            if (!is_string($html) || stripos($html, '<picture') === false
+                || !apply_filters('wpc_picture_source_park', true)) {
+                return $html;
+            }
+            
+            
+            
+            
+            
+            if (stripos($html, 'srcset="data:image/svg') !== false) {
+                $html = (string) preg_replace('/<source\b[^>]*\s(?:data-)?srcset="data:image\/svg[^"]*"[^>]*>\s*/i', '', $html);
+            }
+            if (stripos($html, 'srcset="http') === false) {
+                return $html;
+            }
+            $out = preg_replace_callback('#<picture\b[^>]*>.*?</picture>#is', static function ($m) {
+                $blk = (string) $m[0];
+                if (stripos($blk, ' srcset="http') === false) { return $blk; }
+                if (!preg_match('/<img\b[^>]*\bsrc="data:[^"]*"[^>]*\bdata-src=/i', $blk)
+                    && !preg_match('/<img\b[^>]*\bdata-src=[^>]*\bsrc="data:/i', $blk)) {
+                    return $blk;
+                }
+                $fix = preg_replace_callback('/<source\b[^>]*>/i', static function ($sm) {
+                    $t = (string) preg_replace('/\ssrcset="(http[^"]*)"/i', ' data-srcset="$1"', $sm[0]);
+                    return $t !== '' ? $t : $sm[0];
+                }, $blk);
+                return is_string($fix) ? $fix : $blk;
+            }, $html);
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_inline_favicon256($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, 'icon') === false) { return $html; }
+            if (!apply_filters('wpc_inline_favicon', true)) { return $html; }
+            $wpc_fin263 = 0;
+            $out = preg_replace_callback('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*>/i', static function ($m) use (&$wpc_fin263) {
+                $t = (string) $m[0];
+                if (strpos($t, 'data:') !== false) { $wpc_fin263++; return $t; }
+                if (!preg_match('/\bhref=(["\'])([^"\']+)\1/i', $t, $hm)) { return $t; }
+                $d = wps_cdn_rewrite::wpc_favicon_data_uri256((string) $hm[2]);
+                if ($d === '') { return $t; }
+                $wpc_fin263++;
+                return str_replace($hm[0], 'href="' . $d . '"', $t);
+            }, $html);
+            if (!is_string($out)) { return $html; }
+            
+            
+            
+            
+            if ($wpc_fin263 > 0 && preg_match('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*\bhref=(["\'])(?!data:)[^"\']+\2[^>]*>/i', $out)) {
+                $wpc_o263 = preg_replace('/<link\b[^>]*\brel=(["\'])(?:shortcut )?icon\1[^>]*\bhref=(["\'])(?!data:)[^"\']+\2[^>]*>\s*/i', '', $out);
+                if (is_string($wpc_o263) && strpos($wpc_o263, 'data:image/') !== false) { $out = $wpc_o263; }
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_favicon_data_uri256($url)
+    {
+        static $memo = [];
+        if (isset($memo[$url])) { return $memo[$url]; }
+        $memo[$url] = '';
+        try {
+            $u = (string) $url;
+            
+            if (preg_match('~/(?:a|u):(https?://.+)$~i', $u, $am)) { $u = $am[1]; }
+            $path = (string) wp_parse_url($u, PHP_URL_PATH);
+            $wc = strpos($path, '/wp-content/');
+            if ($wc === false || !preg_match('/\.(png|ico|gif|jpe?g|webp|svg)$/i', $path, $em)) { return ''; }
+            $disk = rtrim(ABSPATH, '/') . substr($path, $wc);
+            $sz = @filesize($disk);
+            if (!$sz || $sz > (int) apply_filters('wpc_inline_favicon_cap', 12288)) { return ''; }
+            $cache = get_option('wpc_favicon_inline256');
+            $sig = md5($u) . ':' . $sz . ':' . (int) @filemtime($disk);
+            if (is_array($cache) && ($cache['sig'] ?? '') === $sig && is_string($cache['d'] ?? null) && strpos((string) $cache['d'], 'data:image/') === 0) {
+                return $memo[$url] = (string) $cache['d'];
+            }
+            $bytes = (string) @file_get_contents($disk);
+            if ($bytes === '') { return ''; }
+            $mime = ['png' => 'image/png', 'ico' => 'image/x-icon', 'gif' => 'image/gif',
+                'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
+            $d = 'data:' . $mime[strtolower($em[1])] . ';base64,' . base64_encode($bytes);
+            update_option('wpc_favicon_inline256', ['sig' => $sig, 'd' => $d], false);
+            return $memo[$url] = $d;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_host_twin_css42($css)
+    {
+        try {
+            if (!is_string($css) || $css === '' || stripos($css, 'url(') === false
+                || !function_exists('home_url') || !defined('ABSPATH') || !defined('WP_CONTENT_DIR')
+                || !apply_filters('wpc_host_twin_heal', true)) {
+                return $css;
+            }
+            $wpc_home42 = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+            if ($wpc_home42 === '') {
+                return $css;
+            }
+            $wpc_zone42 = strtolower((string) self::$zone_name);
+            $wpc_n42 = 0;
+            $out = preg_replace_callback('#\burl\(\s*(["\']?)(?:https?:)?//([a-z0-9.\-]+)(?::\d+)?(/[^"\')\s]*)#i',
+                static function ($m) use ($wpc_home42, $wpc_zone42, &$wpc_n42) {
+                    if ($wpc_n42 >= (int) apply_filters('wpc_host_twin_heal_max', 80)) {
+                        return $m[0];
+                    }
+                    $host = strtolower($m[2]);
+                    $path = (string) $m[3];
+                    if ($host === $wpc_home42
+                        || ($wpc_zone42 !== '' && $host === $wpc_zone42)
+                        || strpos($host, 'zapwp') !== false || strpos($host, 'b-cdn.net') !== false
+                        || strpos($host, 'cloudfront.net') !== false) {
+                        return $m[0];
+                    }
+                    $clean = substr($path, 0, strcspn($path, '?#'));
+                    $wc = strpos($clean, '/wp-content/');
+                    $wi = strpos($clean, '/wp-includes/');
+                    if ($wc !== false) {
+                        $disk = rtrim(WP_CONTENT_DIR, '/') . substr($clean, $wc + 11);
+                    } elseif ($wi !== false) {
+                        $disk = rtrim(ABSPATH, '/') . '/wp-includes' . substr($clean, $wi + 12);
+                    } else {
+                        return $m[0];
+                    }
+                    if (!@is_file($disk)) {
+                        return $m[0];
+                    }
+                    $wpc_n42++;
+                    return 'url(' . $m[1] . 'https://' . $wpc_home42 . $path;
+                }, (string) $css);
+            return is_string($out) ? $out : $css;
+        } catch (\Throwable $e) {
+            return $css;
+        }
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_css_host_twin_sweep42($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, '.css') === false
+                || (function_exists('is_admin') && is_admin())
+                || !defined('WP_CONTENT_DIR') || !defined('ABSPATH')
+                || !apply_filters('wpc_host_twin_heal', true)) {
+                return $html;
+            }
+            $wpc_oh42 = (string) wp_parse_url(home_url(), PHP_URL_HOST);
+            if ($wpc_oh42 === '') {
+                return $html;
+            }
+            $wpc_sitep42 = (string) wp_parse_url(site_url('/'), PHP_URL_PATH);
+            $wpc_idx42 = get_option('wpc_hosttwin_idx42');
+            if (!is_array($wpc_idx42)) {
+                $wpc_idx42 = [];
+            }
+            $wpc_dirty42 = false;
+            $wpc_ns42 = 0;
+            $out = preg_replace_callback('/<link\b[^>]*\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1[^>]*>/i',
+                static function ($lm) use ($wpc_oh42, $wpc_sitep42, &$wpc_idx42, &$wpc_dirty42, &$wpc_ns42) {
+                    if ($wpc_ns42 >= (int) apply_filters('wpc_host_twin_sweep_max', 64)) {
+                        return $lm[0];
+                    }
+                    $href = (string) $lm[2];
+                    if (strpos($href, '/cache/wpc-hostfix/') !== false || strpos($href, '/cache/wpc-bgset/') !== false) {
+                        return $lm[0];
+                    }
+                    $bn = strtolower(basename((string) wp_parse_url($href, PHP_URL_PATH)));
+                    if (preg_match('/^(?:wps_|critical_|font-subsets|used)/', $bn)) {
+                        return $lm[0];
+                    }
+                    $h = (string) wp_parse_url($href, PHP_URL_HOST);
+                    if ($h !== '' && strcasecmp($h, $wpc_oh42) !== 0) {
+                        return $lm[0];
+                    }
+                    $path = (string) wp_parse_url($href, PHP_URL_PATH);
+                    if ($path === '' || strpos($path, '/wp-') === false) {
+                        return $lm[0];
+                    }
+                    $rel = $path;
+                    if ($wpc_sitep42 !== '' && $wpc_sitep42 !== '/' && strpos($rel, rtrim($wpc_sitep42, '/') . '/') === 0) {
+                        $rel = substr($rel, strlen(rtrim($wpc_sitep42, '/')));
+                    }
+                    $disk = rtrim(ABSPATH, '/') . $rel;
+                    $wpc_ns42++;
+                    $sz = @filesize($disk);
+                    $mt = @filemtime($disk);
+                    if (!$sz || !$mt || $sz < 64 || $sz > (int) apply_filters('wpc_host_twin_sweep_cap', 1048576)) {
+                        return $lm[0];
+                    }
+                    $key = md5($path);
+                    $sig = $mt . ':' . $sz . ':168';
+                    if (isset($wpc_idx42[$key]) && $wpc_idx42[$key]['sig'] === $sig) {
+                        $o = (string) $wpc_idx42[$key]['out'];
+                        if ($o === '' || !@is_readable(WP_CONTENT_DIR . '/cache/wpc-hostfix/' . $o)) {
+                            return $lm[0];
+                        }
+                        return str_replace($lm[1] . $lm[2] . $lm[1],
+                            $lm[1] . content_url('cache/wpc-hostfix/' . $o) . $lm[1], $lm[0]);
+                    }
+                    $css = (string) @file_get_contents($disk);
+                    $verdict = '';
+                    if ($css !== '') {
+                        $healed = (stripos($css, 'url(') !== false) ? self::wpc_host_twin_css42($css) : $css;
+                        if (!is_string($healed)) {
+                            $healed = $css;
+                        }
+                        
+                        
+                        
+                        
+                        
+                        
+                        if (stripos($healed, 'url(') !== false) {
+                            $wpc_bdir92 = rtrim(dirname($path), '/');
+                            $wpc_abs92 = preg_replace_callback('/url\(\s*(["\']?)(?!https?:|\/\/|\/|data:|#)([^"\')\s]+)\1\s*\)/i', function ($um) use ($wpc_bdir92) {
+                                $wpc_p92 = $wpc_bdir92 . '/' . $um[2];
+                                while (preg_match('#/[^/]+/\.\./#', $wpc_p92)) {
+                                    $wpc_p92 = preg_replace('#/[^/]+/\.\./#', '/', $wpc_p92, 1);
+                                }
+                                return 'url(' . $um[1] . $wpc_p92 . $um[1] . ')';
+                            }, $healed);
+                            if (is_string($wpc_abs92) && $wpc_abs92 !== '') {
+                                $healed = $wpc_abs92;
+                            }
+                        }
+                        
+                        
+                        
+                        
+                        
+                        
+                        if (function_exists('wpc_css_insert_fallbacks')
+                            && stripos($healed, 'font-family') !== false
+                            && apply_filters('wpc_sheet_stack_splice', true)) {
+                            $wpc_sp45 = wpc_css_insert_fallbacks($healed);
+                            if (is_string($wpc_sp45) && $wpc_sp45 !== '') {
+                                $healed = $wpc_sp45;
+                            }
+                        }
+                        if ($healed !== $css) {
+                            $wpc_dd42 = WP_CONTENT_DIR . '/cache/wpc-hostfix';
+                            if (!is_dir($wpc_dd42)) {
+                                @mkdir($wpc_dd42, 0755, true);
+                            }
+                            $stem = preg_replace('/\.css$/', '', basename($path));
+                            $name = $stem . '-' . substr(md5($healed), 0, 10) . '.css';
+                            if (@file_put_contents($wpc_dd42 . '/' . $name, $healed) !== false) {
+                                $wpc_sib42 = (array) @glob($wpc_dd42 . '/' . $stem . '-*.css');
+                                if (count($wpc_sib42) > 3) {
+                                    usort($wpc_sib42, static function ($a, $b) {
+                                        return (int) @filemtime($a) - (int) @filemtime($b);
+                                    });
+                                    foreach (array_slice($wpc_sib42, 0, count($wpc_sib42) - 3) as $old) {
+                                        if (basename($old) !== $name) {
+                                            @unlink($old);
+                                        }
+                                    }
+                                }
+                                $verdict = $name;
+                                if (function_exists('wpc_cache_first_log')) {
+                                    wpc_cache_first_log('host-twin-healed', '', basename($path), ['out' => $name]);
+                                }
+                            }
+                        }
+                    }
+                    $wpc_idx42[$key] = ['sig' => $sig, 'out' => $verdict];
+                    $wpc_dirty42 = true;
+                    if ($verdict === '') {
+                        return $lm[0];
+                    }
+                    return str_replace($lm[1] . $lm[2] . $lm[1],
+                        $lm[1] . content_url('cache/wpc-hostfix/' . $verdict) . $lm[1], $lm[0]);
+                }, $html);
+            if ($wpc_dirty42) {
+                if (count($wpc_idx42) > 80) {
+                    $wpc_idx42 = array_slice($wpc_idx42, -60, null, true);
+                }
+                update_option('wpc_hosttwin_idx42', $wpc_idx42, false);
+            }
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
     }
 
     
@@ -2492,7 +2964,7 @@ class wps_cdn_rewrite
                 
                 if ($wpc_pe15 !== '' && class_exists('wps_rewriteLogic')) {
                     $wpc_h15 = wps_rewriteLogic::src_hint_qs($wpc_pe15);
-                    if ($wpc_h15 !== '') {
+                    if ($wpc_h15 !== '' && !preg_match('/[?&]src=/', $rel)) {
                         $rel .= (strpos($rel, '?') !== false ? '&' . substr($wpc_h15, 1) : $wpc_h15);
                     }
                 }
@@ -2569,6 +3041,7 @@ class wps_cdn_rewrite
             $GLOBALS['wpc_shed520'] = 1;
             return $html;
         }
+        $html = self::wpc_script_swallow_heal50($html);
         
         
         
@@ -2606,14 +3079,32 @@ class wps_cdn_rewrite
         }
         $wpc_in71 = $html;
         try {
+            $html = self::wpc_css_host_twin_sweep42($html);
             $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_eager_nextgen752(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->buffer_local_callback($html))))))));
             $wpc_fb735a = self::add_asset_failover($html);
             if (is_string($wpc_fb735a) && $wpc_fb735a !== '') { $html = $wpc_fb735a; }
             if (class_exists('wps_cacheHtml')) {
                 $html = wps_cacheHtml::critlessUndefer($html);
                 $html = wps_cacheHtml::varsGuard($html);
+                if (method_exists('wps_cacheHtml', 'wpc_css_passthrough_restore88')) {
+                    $html = wps_cacheHtml::wpc_css_passthrough_restore88($html);
+                    if (method_exists('wps_cacheHtml', 'wpc_crit_rearguard326')) {
+                        $html = wps_cacheHtml::wpc_crit_rearguard326($html);
+                    }
+                    if (method_exists('wps_cacheHtml', 'wpc_late_faces_law330')) {
+                        $html = wps_cacheHtml::wpc_late_faces_law330($html);
+                    }
+                    $html = wps_cacheHtml::wpc_trimmed_crit_forfeit85($html, 'cdn-lane');
+                    $html = wps_cacheHtml::typeGuard84($html);
+                }
                 $html = wps_cacheHtml::bricksAtfUnveil($html);
                 $html = wps_cacheHtml::critBgPreload($html);
+                if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_font_face_dedupe180')) {
+                    $html = wps_rewriteLogic::wpc_font_face_dedupe180($html);
+                    if (method_exists('wps_rewriteLogic', 'wpc_gfonts_link_prune184')) {
+                        $html = wps_rewriteLogic::wpc_gfonts_link_prune184($html);
+                    }
+                }
             }
             $html = self::wpc_lazy_srcset_buffer_pass($html);
             $html = self::wpc_srcset_space_encode_pass($html);
@@ -2625,10 +3116,12 @@ class wps_cdn_rewrite
             $html = self::wpc_picture_fidelity_pass($html);
             $html = self::wpc_lcp_img_preload_pass($html);
             $html = self::wpc_embed_facade_pass($html);
+            $html = self::wpc_drop_dashicons65($html);
             $html = self::wpc_rum_beacon_pass($html);
             $html = self::wpc_font_preconnect_pass($html);
             $html = self::wpc_zone_font_preconnect_pass($html);
             $html = self::wpc_fonts_drop_remote_dup($html);
+            $html = self::wpc_fonts_doctor_pass($html);
             $html = self::wpc_zone_preconnect_prune_pass($html);
             $html = self::wpc_svg_dims_pass($html);
             $html = self::wpc_img_aspect_pass($html);
@@ -2732,8 +3225,13 @@ class wps_cdn_rewrite
     
     public static function wpc_slider_settle_pass($html)
     {
+        
+        
+        
+        
+        
         if (!is_string($html) || $html === ''
-            || strpos($html, 'slides_per_view') === false
+            || (strpos($html, 'slides_per_view') === false && strpos($html, 'slides_to_show') === false)
             || stripos($html, 'swiper') === false
             || strpos($html, 'wpc-slider-settle797') !== false
             || stripos($html, '</head>') === false) {
@@ -2750,7 +3248,7 @@ class wps_cdn_rewrite
             if (!$bands) {
                 return $html;
             }
-            if (!preg_match_all('/<div\b[^>]*class="([^"]*\belementor-element-([a-z0-9]+)\b[^"]*)"[^>]*data-settings="([^"]*slides_per_view[^"]*)"/i', $html, $wm, PREG_SET_ORDER)) {
+            if (!preg_match_all('/<div\b[^>]*class="([^"]*\belementor-element-([a-z0-9]+)\b[^"]*)"[^>]*data-settings="([^"]*slides_(?:per_view|to_show)[^"]*)"/i', $html, $wm, PREG_SET_ORDER)) {
                 return $html;
             }
             $css = '';
@@ -2769,6 +3267,14 @@ class wps_cdn_rewrite
                     $nk = ($dev === 'desktop') ? 'slides_per_view' : 'slides_per_view_' . $dev;
                     $gk = ($dev === 'desktop') ? 'space_between' : 'space_between_' . $dev;
                     $n = isset($cfg[$nk]) ? $cfg[$nk] : null;
+                    if ($n === null) {
+                        $wpc_tk183 = ($dev === 'desktop') ? 'slides_to_show' : 'slides_to_show_' . $dev;
+                        $n = isset($cfg[$wpc_tk183]) ? $cfg[$wpc_tk183] : null;
+                        if ($n !== null && !isset($cfg[$gk]['size']) && isset($cfg['image_spacing_custom']['size'])
+                            && is_numeric($cfg['image_spacing_custom']['size'])) {
+                            $cfg[$gk] = ['size' => $cfg['image_spacing_custom']['size']];
+                        }
+                    }
                     if ($n === null && $dev === 'widescreen'
                         && (isset($cfg['space_between_widescreen']) || isset($cfg['slides_to_scroll_widescreen']))) {
                         $n = isset($cfg['slides_per_view']) ? $cfg['slides_per_view'] : null;
@@ -2993,7 +3499,18 @@ class wps_cdn_rewrite
         }
         $wpc_r20 = '';
         if (strpos($html, 'data-wpc-ar') !== false) {
-            $wpc_r20 .= ':where(img[data-wpc-ar]){aspect-ratio:var(--wpc-ar)}';
+            $wpc_r20 .= ':where(img[data-wpc-ar]){aspect-ratio:auto var(--wpc-ar)}';
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        if (strpos($html, 'data-wpc-bf') !== false) {
+            $wpc_r20 .= ':where(img[data-wpc-bf]){height:auto}';
         }
         
         
@@ -3178,7 +3695,12 @@ class wps_cdn_rewrite
                     $h = max(1, (int) round($w * $ar));
                     
                     
-                    $wpc_ins0 = ' height="' . $h . '"';
+                    
+                    
+                    
+                    
+                    
+                    $wpc_ins0 = ' height="' . $h . '" data-wpc-bf="1"';
                     if (preg_match('/\bwidth\s*=\s*["\']?\d{1,4}/i', $m[0])) {
                         $wpc_out923 = (string) preg_replace('/(\bwidth\s*=\s*["\']?\d{1,4}["\']?)/i', '$1' . $wpc_ins0, $m[0], 1);
                     } else {
@@ -3258,6 +3780,7 @@ class wps_cdn_rewrite
         }
         $wpc_in71 = $html;
         try {
+            $html = self::wpc_css_host_twin_sweep42($html);
             $html = self::wpc_collapse_double_ext(self::wpc_asset_naturalize(self::wpc_eager_nextgen752(self::wpc_raster_zoneify(self::wpc_svg_zoneify(self::wpc_raster_naturalize(self::wpc_svg_naturalize($this->cdnRewriter($html))))))));
             $wpc_fb735b = self::add_asset_failover($html);
             if (is_string($wpc_fb735b) && $wpc_fb735b !== '') { $html = $wpc_fb735b; }
@@ -3271,10 +3794,12 @@ class wps_cdn_rewrite
             $html = self::wpc_picture_fidelity_pass($html);
             $html = self::wpc_lcp_img_preload_pass($html);
             $html = self::wpc_embed_facade_pass($html);
+            $html = self::wpc_drop_dashicons65($html);
             $html = self::wpc_rum_beacon_pass($html);
             $html = self::wpc_font_preconnect_pass($html);
             $html = self::wpc_zone_font_preconnect_pass($html);
             $html = self::wpc_fonts_drop_remote_dup($html);
+            $html = self::wpc_fonts_doctor_pass($html);
             $html = self::wpc_zone_preconnect_prune_pass($html);
             $html = self::wpc_svg_dims_pass($html);
             $html = self::wpc_img_aspect_pass($html);
@@ -3287,8 +3812,25 @@ class wps_cdn_rewrite
             if (class_exists('wps_cacheHtml')) {
                 $html = wps_cacheHtml::critlessUndefer($html);
                 $html = wps_cacheHtml::varsGuard($html);
+                if (method_exists('wps_cacheHtml', 'wpc_css_passthrough_restore88')) {
+                    $html = wps_cacheHtml::wpc_css_passthrough_restore88($html);
+                    if (method_exists('wps_cacheHtml', 'wpc_crit_rearguard326')) {
+                        $html = wps_cacheHtml::wpc_crit_rearguard326($html);
+                    }
+                    if (method_exists('wps_cacheHtml', 'wpc_late_faces_law330')) {
+                        $html = wps_cacheHtml::wpc_late_faces_law330($html);
+                    }
+                    $html = wps_cacheHtml::wpc_trimmed_crit_forfeit85($html, 'cdn-lane');
+                    $html = wps_cacheHtml::typeGuard84($html);
+                }
                 $html = wps_cacheHtml::bricksAtfUnveil($html);
                 $html = wps_cacheHtml::critBgPreload($html);
+                if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_font_face_dedupe180')) {
+                    $html = wps_rewriteLogic::wpc_font_face_dedupe180($html);
+                    if (method_exists('wps_rewriteLogic', 'wpc_gfonts_link_prune184')) {
+                        $html = wps_rewriteLogic::wpc_gfonts_link_prune184($html);
+                    }
+                }
             }
             $html = self::wpc_slider_settle_pass($html);
             $html = self::wpc_preload_img_coherence796($html);
@@ -3389,7 +3931,11 @@ class wps_cdn_rewrite
 
         $set   = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : array();
         $la    = (is_array($set) && !empty($set['lazy-auto-sizes'])) ? '1' : '0';
-        $marker = "\n<!-- wpc " . $ver . ' r:' . $now . ' (' . gmdate('Y-m-d H:i:s', $now) . ' UTC) la:' . $la . $fresh . " -->\n";
+        
+        
+        
+        $wpc_pt142 = (function_exists('get_option') && get_option('wpc_css_passthrough') === '1') ? ' pt:1' : '';
+        $marker = "\n<!-- wpc " . $ver . ' r:' . $now . ' (' . gmdate('Y-m-d H:i:s', $now) . ' UTC) la:' . $la . $wpc_pt142 . $fresh . " -->\n";
         return wpc_body_inject809($html, $marker);
     }
 
@@ -3537,25 +4083,139 @@ class wps_cdn_rewrite
             
             
             
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             $wpc_qwjs387 = '<script id="wpc-qw-restore">(function(){var d=false;'
-                . 'function r(){d=true;var i=document.querySelectorAll("img[data-wpc-qw-src]"),n;for(n=0;n<i.length;n++){var e=i[n];'
+                . 'var s15=/Macintosh.*Version\/15\.[0-9.]+ Safari/.test(navigator.userAgent||"");'
+                . 'function rp(e){var fin=function(){(window.requestAnimationFrame||setTimeout)(function(){'
+                . 'try{var p=e.parentNode;if(p)p.replaceChild(e.cloneNode(false),e);}catch(t){}});};'
+                . 'if(e.complete&&e.naturalWidth>0){fin();}else{e.addEventListener("load",fin,{once:true});}}'
+                . 'function r(g){d=true;var i=document.querySelectorAll("img[data-wpc-qw-src]"),n;for(n=0;n<i.length;n++){var e=i[n];'
                 . 'if(!e.getAttribute("data-wpc-qw-src"))continue;'
+                . 'if(e.getAttribute("loading")==="lazy")e.removeAttribute("loading");'
+                . 'if("decoding" in e)e.decoding="sync";'
+                . 'if(g&&e.getAttribute("fetchpriority")==="low"&&window.performance&&performance.timing&&performance.timing.loadEventEnd>0)e.removeAttribute("fetchpriority");'
                 . 'if(e.getAttribute("data-wpc-qw-sizes"))e.setAttribute("sizes",e.getAttribute("data-wpc-qw-sizes"));'
                 . 'if(e.getAttribute("data-wpc-qw-srcset"))e.setAttribute("srcset",e.getAttribute("data-wpc-qw-srcset"));'
-                . 'e.setAttribute("src",e.getAttribute("data-wpc-qw-src"));e.removeAttribute("data-wpc-qw-src");}}'
+                . 'e.setAttribute("src",e.getAttribute("data-wpc-qw-src"));e.removeAttribute("data-wpc-qw-src");'
+                . 'if(s15)rp(e);}}'
                 . 'window.wpcQwRestore=r;'
-                . 'var v=["scroll","wheel","touchstart","keydown","pointerdown"],x=function(){'
-                . 'for(var j=0;j<v.length;j++)window.removeEventListener(v[j],x,{passive:true});r();};'
-                . 'function boot(){'
+                . 'var v=["scroll","wheel","touchstart","keydown","pointerdown","pointermove","mousemove"],x=function(){'
+                . 'for(var j=0;j<v.length;j++)window.removeEventListener(v[j],x,{passive:true});r(1);};'
+                . 'var o=null;function ob(){try{if(!window.IntersectionObserver)return;'
+                . 'if(!o){o=new IntersectionObserver(function(en){'
+                . 'for(var k=0;k<en.length;k++){if(en[k].isIntersecting){r(1);ob();return;}}},{rootMargin:"50px"});}'
+                . 'var m=document.querySelectorAll("img[data-wpc-qw-src]");'
+                . 'if(!m.length){o.disconnect();return;}'
+                . 'for(var q=0;q<m.length;q++)o.observe(m[q]);}catch(e){}}'
+                . 'var mo=null;function mw(){try{if(mo||!window.MutationObserver)return;'
+                . 'mo=new MutationObserver(function(ms){var f=false,a,b;'
+                . 'for(a=0;a<ms.length&&!f;a++){var ns=ms[a].addedNodes;if(!ns)continue;'
+                . 'for(b=0;b<ns.length;b++){var n=ns[b];if(!n||n.nodeType!==1)continue;'
+                . 'if(n.tagName==="IMG"){if(n.getAttribute("data-wpc-qw-src")){f=true;break}}'
+                . 'else if(n.querySelector&&n.querySelector("img[data-wpc-qw-src]")){f=true;break}}}'
+                . 'if(f){if(d)r(1);else ob();}});'
+                . 'mo.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}}'
+                . 'function boot(){mw();'
+                . 'if(s15){r();return;}'
                 . 'if((typeof window.pageYOffset==="number"?window.pageYOffset:(document.documentElement||{}).scrollTop||0)>0){r();return;}'
                 . 'for(var j=0;j<v.length;j++)window.addEventListener(v[j],x,{passive:true});'
-                . 'try{if(window.IntersectionObserver){var o=new IntersectionObserver(function(en){'
-                . 'for(var k=0;k<en.length;k++){if(en[k].isIntersecting){o.disconnect();r();return;}}},{rootMargin:"50px"});'
-                . 'var m=document.querySelectorAll("img[data-wpc-qw-src]");for(var q=0;q<m.length;q++)o.observe(m[q]);}}catch(e){}}'
+                . 'ob();}'
                 . 'if(window.requestAnimationFrame){requestAnimationFrame(boot);}else{boot();}'
-                . 'document.addEventListener("DOMContentLoaded",function(){if(d)r();});'
-                . 'window.addEventListener("pageshow",function(e){if(e&&e.persisted)r();},{once:true});'
+                . 'document.addEventListener("DOMContentLoaded",function(){if(d)r(1);else ob();});'
+                . 'window.addEventListener("pageshow",function(e){if(e&&e.persisted)r(1);},{once:true});'
                 . '})();</script>';
+            
+            
+            
+            
+            
+            
+            
+            if (isset($_GET['wpc_qw_debug'])) {
+                $wpc_qwjs387 .= '<script id="wpc-qw-diag">(function(){'
+                    . 'function S(){var m=document.querySelector(".kb-blocks-advanced-marquee-init,.splide");var L=m?m.querySelector(".splide__list"):null;'
+                    . 'var all=document.images,pl=0,ld=0,uf=0;for(var i=0;i<all.length;i++){var im=all[i];'
+                    . 'if((im.src||"").indexOf("data:")===0)pl++;else if(im.naturalWidth>0)ld++;else uf++;}'
+                    . 'var big=[];for(var q=0;q<all.length;q++){var b=all[q].getBoundingClientRect();'
+                    . 'big.push({im:all[q],a:b.width*b.height,b:b});}'
+                    . 'big.sort(function(p,w){return w.a-p.a;});'
+                    . 'var vs=[];for(var q=0;q<big.length&&vs.length<6;q++){var im=big[q].im,b=big[q].b;'
+                    . 'vs.push(Math.round(b.width)+"x"+Math.round(b.height)+"@"+Math.round(b.top)+" nw"+im.naturalWidth+" op"+getComputedStyle(im).opacity+" dec:"+(im.getAttribute("decoding")||"-")+" "+((im.src||"").slice(-18)));}'
+                    . 'return{v:"' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '') . '",rs:document.readyState,imgs:all.length,placeholder:pl,loaded:ld,unfetched:uf,'
+                    . 'qwPending:document.querySelectorAll("img[data-wpc-qw-src]").length,'
+                    . 'slider:!!m,mounted:!!(m&&m.splideInstance),tf:L?getComputedStyle(L).transform:"",strip:vs,ua:navigator.userAgent};}'
+                    . 'function draw(tag,o){var el=document.getElementById("wpc-qw-diag-box");'
+                    . 'if(!el){el=document.createElement("pre");el.id="wpc-qw-diag-box";'
+                    . 'el.style.cssText="position:fixed;left:8px;bottom:8px;z-index:2147483647;background:#111;color:#3f3;font:11px/1.5 monospace;padding:10px;max-width:92vw;max-height:45vh;overflow:auto;white-space:pre-wrap;border:2px solid #3f3;";'
+                    . '(document.body||document.documentElement).appendChild(el);}'
+                    . 'el.textContent="WPC QW DIAG "+tag+"\n"+JSON.stringify(o,null,1);}'
+                    . 'var t1=null;setTimeout(function(){t1=S();draw("T7",t1);},7000);'
+                    . 'setTimeout(function(){var t2=S();t2.movedSinceT7=!!(t1&&t1.tf!==t2.tf);draw("T15 - SCREENSHOT THIS BOX",t2);},15000);'
+                    . '})();</script>';
+            }
             $html = wpc_body_inject809($html, $wpc_qwjs387);
         }
         
@@ -3567,6 +4227,11 @@ class wps_cdn_rewrite
         
         $wpc_nd788 = apply_filters('wpc_quiet_wire_never_demote',
             ['/jquery.min.js', '/jquery.js', 'jquery-migrate', 'jquery-core', 'jquery-ui']);
+        
+        
+        foreach ((array) get_option('wpc_rootvar_names74', []) as $wpc_rvn90) {
+            if (is_string($wpc_rvn90) && strlen($wpc_rvn90) > 4) { $wpc_nd788[] = $wpc_rvn90; }
+        }
         $out = preg_replace_callback('/<script\b[^>]*\bsrc=[^>]*>/i', function ($m) use ($wpc_nd788) {
             $t = $m[0];
             if (stripos($t, 'fetchpriority') !== false || !preg_match('/\bdefer\b/i', $t)
@@ -3611,6 +4276,213 @@ class wps_cdn_rewrite
             $html = substr($html, 0, $add[$i][0]) . $add[$i][2] . substr($html, $add[$i][0] + $add[$i][1]);
         }
         return $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_script_swallow_heal50($html)
+    {
+        if (!is_string($html) || $html === '' || stripos($html, '<script') === false) return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_swallow_heal', true)) return $html;
+        if (!preg_match_all('/<script\b([^>]*)>(.*?)<\/script>/si', $html, $wpc_m50, PREG_OFFSET_CAPTURE)) return $html;
+        $wpc_edits50 = array();
+        for ($i = 0, $n = count($wpc_m50[0]); $i < $n; $i++) {
+            $attrs = $wpc_m50[1][$i][0];
+            $body = $wpc_m50[2][$i][0];
+            if ($body === '' || preg_match('/\bsrc\s*=\s*["\']/i', $attrs)) continue;
+            $wpc_h50 = stripos($body, '</head');
+            if ($wpc_h50 === false) continue;
+            $wpc_b50 = stripos($body, '<body');
+            if ($wpc_b50 === false || $wpc_b50 < $wpc_h50) continue;
+            if (stripos($body, 'document.write') !== false) continue;
+            
+            $wpc_at50 = $wpc_h50;
+            if (preg_match('/<(?:style|link|meta|title)\b/i', substr($body, 0, $wpc_h50), $wpc_e50, PREG_OFFSET_CAPTURE)) {
+                $wpc_at50 = $wpc_e50[0][1];
+            }
+            if ($wpc_at50 < 1) continue;
+            $wpc_off50 = $wpc_m50[2][$i][1] + $wpc_at50;
+            $wpc_edits50[] = array($wpc_off50, '</script>');
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('swallow-heal', '', '', array('at' => $wpc_at50, 'len' => strlen($body)));
+            }
+        }
+        for ($i = count($wpc_edits50) - 1; $i >= 0; $i--) {
+            $html = substr($html, 0, $wpc_edits50[$i][0]) . $wpc_edits50[$i][1] . substr($html, $wpc_edits50[$i][0]);
+        }
+        return $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_jq_defer47($html)
+    {
+        if (!is_string($html) || $html === '') return $html;
+        if (function_exists('apply_filters') && !apply_filters('wpc_jq_defer', true)) return $html;
+        if (isset($_GET['jqdefer']) && $_GET['jqdefer'] === '0') return $html;
+        if (stripos($html, 'wpcJqDef47') !== false) return $html;
+        if (preg_match('/http-equiv\s*=\s*["\']Content-Security-Policy["\']/i', $html)) return $html;
+        if (function_exists('headers_list')) {
+            foreach ((array) headers_list() as $wpc_h47) {
+                if (stripos((string) $wpc_h47, 'content-security-policy') === 0) return $html;
+            }
+        }
+        
+        
+        
+        
+        
+        
+        if (!preg_match_all('/<script\b([^>]*)>(.*?)<\/script>/si', $html, $wpc_m47, PREG_OFFSET_CAPTURE)) return $html;
+        $wpc_n47 = count($wpc_m47[0]);
+        
+        
+        $wpc_classic48 = function ($attrs) {
+            if (!preg_match('/\btype\s*=\s*["\']?([^"\'\s>]+)/i', $attrs, $t48)) return true;
+            return (bool) preg_match('#^(?:text|application)/(?:x-)?(?:java|ecma)script$#i', $t48[1]);
+        };
+        
+        
+        $wpc_attrword48 = function ($attrs, $words) {
+            $bare = preg_replace('/(["\'])(?:(?!\1).)*\1/s', ' ', $attrs);
+            return (bool) preg_match('/(?<![-\w=])(?:' . $words . ')(?![-\w])/i', (string) $bare);
+        };
+        $wpc_jqAt47 = -1;
+        $wpc_foreign52 = false;
+        for ($i = 0; $i < $wpc_n47; $i++) {
+            $attrs = $wpc_m47[1][$i][0];
+            if (!preg_match('#\bsrc\s*=\s*["\'][^"\']*/jquery(?:\.min)?\.js(?:\?|["\'])#i', $attrs)) continue;
+            if (!$wpc_classic48($attrs)) continue;
+            if ($wpc_attrword48($attrs, 'async')) return $html;
+            if ($wpc_attrword48($attrs, 'defer')) {
+                
+                
+                
+                
+                
+                
+                $wpc_foreign52 = true;
+                $wpc_jqAt47 = $i;
+                break;
+            }
+            $wpc_jqAt47 = $i;
+            break;
+        }
+        if ($wpc_jqAt47 < 0) return $html;
+        if ($wpc_foreign52) {
+            $wpc_mark52 = '<script id="wpc-jqdef47">window.wpcJqDef47={};document.addEventListener("DOMContentLoaded",function(){var m=window.wpcJqDef47;if(m&&!m.r){m.r=1;var c=m.cb,d=m.cb2;m.cb=null;m.cb2=null;try{if(c)c()}catch(e){}try{if(d)d()}catch(e){}}});</script>';
+            $wpc_out52 = preg_replace('/<head\b[^>]*>/i', '$0' . $wpc_mark52, $html, 1);
+            if (!is_string($wpc_out52) || $wpc_out52 === '' || stripos($wpc_out52, 'wpcJqDef47') === false) return $html;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('jq-defer', '', '', array('foreign' => 1));
+            }
+            return $wpc_out52;
+        }
+        $wpc_cap47 = function_exists('apply_filters') ? (int) apply_filters('wpc_jq_defer_inline_cap', 196608) : 196608;
+        $wpc_bytes47 = 0;
+        
+        
+        
+        
+        
+        
+        
+        $wpc_ajq106 = function_exists('get_option') ? get_option('wpc_async_jqdep106') : false;
+        $wpc_ajq106 = is_array($wpc_ajq106) ? $wpc_ajq106 : array();
+        $wpc_ajqdirty106 = false;
+        $wpc_ajqfetch106 = 0;
+        $wpc_edits47 = array();
+        $wpc_ext47 = 0;
+        $wpc_inl47 = 0;
+        for ($i = $wpc_jqAt47; $i < $wpc_n47; $i++) {
+            $tag = $wpc_m47[0][$i][0];
+            $off = $wpc_m47[0][$i][1];
+            $attrs = $wpc_m47[1][$i][0];
+            $body = $wpc_m47[2][$i][0];
+            if (!$wpc_classic48($attrs)) continue;
+            if ($wpc_attrword48($attrs, 'async') && !$wpc_attrword48($attrs, 'defer|nomodule')
+                && (!function_exists('apply_filters') || apply_filters('wpc_async_jqdep', true))
+                && preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $attrs, $wpc_am106)
+                && stripos($attrs, 'data-wpc') === false) {
+                $wpc_ak106 = md5((string) $wpc_am106[1]);
+                if (!array_key_exists($wpc_ak106, $wpc_ajq106) && $wpc_ajqfetch106 < 2
+                    && count($wpc_ajq106) < 48 && function_exists('wp_remote_get')) {
+                    $wpc_ajqfetch106++;
+                    $wpc_ar106 = wp_remote_get(html_entity_decode((string) $wpc_am106[1]), array('timeout' => 3, 'sslverify' => false));
+                    $wpc_ab106 = (!is_wp_error($wpc_ar106) && (int) wp_remote_retrieve_response_code($wpc_ar106) === 200)
+                        ? substr((string) wp_remote_retrieve_body($wpc_ar106), 0, 65536) : '';
+                    $wpc_ajq106[$wpc_ak106] = ($wpc_ab106 !== '' && preg_match('/jQuery|\$\s*[.(]/', $wpc_ab106)) ? 1 : 0;
+                    $wpc_ajqdirty106 = true;
+                }
+                if (!empty($wpc_ajq106[$wpc_ak106])) {
+                    $wpc_anew106 = preg_replace('/\sasync(?:\s*=\s*(?:"async"|\'async\'|async))?(?=[\s>\/])/i', ' defer', $tag, 1);
+                    if (is_string($wpc_anew106) && $wpc_anew106 !== $tag) {
+                        $wpc_edits47[] = array($off, strlen($tag), $wpc_anew106);
+                        $wpc_ext47++;
+                    }
+                }
+                continue;
+            }
+            if ($wpc_attrword48($attrs, 'async|defer|nomodule')) continue;
+            if (stripos($attrs, 'data-nodefer') !== false) continue;
+            if (preg_match('/\bnonce\s*=/i', $attrs)) return $html;
+            if (preg_match('/\bsrc\s*=\s*["\']/i', $attrs)) {
+                if (preg_match('/delay-v3-loader|wpc-yield|inlined-delay/i', $attrs)) continue;
+                $wpc_edits47[] = array($off, strlen($tag), preg_replace('/<script\b/i', '<script defer', $tag, 1));
+                $wpc_ext47++;
+                continue;
+            }
+            $wpc_js47 = trim($body);
+            if ($wpc_js47 === '') continue;
+            if (preg_match('/wpcScriptRegistry|wpcDelayV3|wpcJqDef47|data-wpc-qw-src|__wpcHuman|wpc-late-faces|wpcCheckpoint/i', $attrs . $wpc_js47)) continue;
+            
+            
+            
+            
+            $wpc_scan53 = preg_replace('#/\*.*?\*/#s', '', $wpc_js47);
+            if (stripos(is_string($wpc_scan53) ? $wpc_scan53 : $wpc_js47, 'document.write') !== false) return $html;
+            $wpc_bytes47 += strlen($wpc_js47);
+            if ($wpc_bytes47 > $wpc_cap47) return $html;
+            $wpc_edits47[] = array($off, strlen($tag),
+                '<script' . rtrim($attrs) . ' defer src="data:text/javascript;charset=utf-8;base64,' . base64_encode($wpc_js47) . '"></script>');
+            $wpc_inl47++;
+        }
+        if ($wpc_ajqdirty106 && function_exists('update_option')) {
+            update_option('wpc_async_jqdep106', $wpc_ajq106, false);
+        }
+        if (!count($wpc_edits47)) return $html;
+        for ($i = count($wpc_edits47) - 1; $i >= 0; $i--) {
+            $html = substr($html, 0, $wpc_edits47[$i][0]) . $wpc_edits47[$i][2] . substr($html, $wpc_edits47[$i][0] + $wpc_edits47[$i][1]);
+        }
+        $wpc_mark47 = '<script id="wpc-jqdef47">window.wpcJqDef47={};document.addEventListener("DOMContentLoaded",function(){var m=window.wpcJqDef47;if(m&&!m.r){m.r=1;var c=m.cb,d=m.cb2;m.cb=null;m.cb2=null;try{if(c)c()}catch(e){}try{if(d)d()}catch(e){}}});</script>';
+        $wpc_out47 = preg_replace('/<head\b[^>]*>/i', '$0' . $wpc_mark47, $html, 1);
+        if (!is_string($wpc_out47) || $wpc_out47 === '' || stripos($wpc_out47, 'wpcJqDef47') === false) return $html;
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('jq-defer', '', '', array('ext' => $wpc_ext47, 'inl' => $wpc_inl47));
+        }
+        return $wpc_out47;
     }
 
     
@@ -4576,24 +5448,153 @@ class wps_cdn_rewrite
             elseif (strpos($tok, 'fam:') === 0) { $f = substr($tok, 4); if ($f !== '') $fams[] = $f; }
         }
         if (empty($hrefs) && empty($hosts)) return $html;
-        $out = preg_replace_callback('/<link\b[^>]*>/i', function ($m) use ($hrefs, $hosts, $fams) {
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        $declared = [];
+        if (preg_match_all('/@font-face\s*\{[^{}]*?font-family\s*:\s*["\']?([^"\';}]+)/is', $html, $dfm)) {
+            foreach ($dfm[1] as $dfam) {
+                $dfam = strtolower(trim($dfam));
+                if ($dfam === '' || substr($dfam, -9) === ' fallback') continue;
+                $declared[$dfam] = 1;
+            }
+        }
+        $out = preg_replace_callback('/<link\b[^>]*>/i', function ($m) use ($hrefs, $hosts, $fams, $declared) {
             $tag = $m[0];
             if (!preg_match('/\bhref=(["\'])(.*?)\1/i', $tag, $hm)) return $tag;
             $href = strtolower(html_entity_decode($hm[2]));
-            
-            foreach ($hrefs as $h) { if (strpos($href, $h) !== false) return ''; }
-            
+            $hrefHit = false;
+            foreach ($hrefs as $h) { if (strpos($href, $h) !== false) { $hrefHit = true; break; } }
             $hostHit = false;
             foreach ($hosts as $h) { if (strpos($href, $h) !== false) { $hostHit = true; break; } }
-            if (!$hostHit) return $tag;
-            if (!preg_match('/[?&]family=([^&"\']*)/i', $href, $fm)) return $tag; 
-            foreach (explode('|', urldecode($fm[1])) as $fpart) {
-                $fname = trim(preg_replace('/:.*$/', '', str_replace('+', ' ', $fpart)));
-                if ($fname !== '' && !in_array($fname, $fams, true)) return $tag; 
+            if (!$hrefHit && !$hostHit) return $tag;
+            
+            
+            
+            
+            
+            
+            
+            if (preg_match_all('/[?&]family=([^&"\']*)/i', $href, $fmAll) && !empty($fmAll[1])) {
+                foreach ($fmAll[1] as $fmSeg) {
+                    foreach (explode('|', urldecode($fmSeg)) as $fpart) {
+                        $fname = trim(preg_replace('/:.*$/', '', str_replace('+', ' ', $fpart)));
+                        if ($fname === '') continue;
+                        if (!in_array($fname, $fams, true)) return $tag; 
+                        if (!isset($declared[$fname])) {
+                            
+                            
+                            return (strpos($tag, 'wpc-rdkeep') === false && stripos($tag, 'stylesheet') !== false)
+                                ? $tag . '<!-- wpc-rdkeep:' . preg_replace('/[^a-z0-9 +-]/', '', $fname) . ' -->'
+                                : $tag;
+                        }
+                    }
+                }
+                return '';
             }
-            return '';
+            
+            
+            return $hrefHit ? '' : $tag;
         }, $html);
         return is_string($out) ? $out : $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_fonts_doctor_pass($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || empty($_GET['wpc_fonts_doctor'])
+                || strpos($html, 'WPC-FONTS-DOCTOR') !== false
+                || !function_exists('wpc_perf_debug_allowed741') || !wpc_perf_debug_allowed741()) {
+                return $html;
+            }
+            $decl = []; $fb = [];
+            if (preg_match_all('/@font-face\s*\{[^{}]*?font-family\s*:\s*["\']?([^"\';}]+)/is', $html, $dm)) {
+                foreach ($dm[1] as $f) {
+                    $f = strtolower(trim($f));
+                    if ($f === '') { continue; }
+                    if (substr($f, -9) === ' fallback') { $fb[trim(substr($f, 0, -9))] = 1; } else { $decl[$f] = 1; }
+                }
+            }
+            $used = [];
+            if (preg_match_all('/font-family\s*:\s*([^;}{!]+)/i', $html, $um)) {
+                foreach ($um[1] as $stack) {
+                    $first = strtolower(trim((string) strtok($stack, ','), " \t\"'"));
+                    if ($first === '' || strpos($first, 'var(') !== false || substr($first, -9) === ' fallback'
+                        || strpos($first, '@') !== false || strlen($first) > 64) { continue; }
+                    $used[$first] = 1;
+                }
+            }
+            $generic = ['serif' => 1, 'sans-serif' => 1, 'monospace' => 1, 'system-ui' => 1, 'cursive' => 1,
+                'fantasy' => 1, 'inherit' => 1, 'initial' => 1, 'unset' => 1, 'revert' => 1, '-apple-system' => 1];
+            $gaps = array_keys(array_diff_key($used, $decl, $generic));
+            $links = preg_match_all('/<link\b[^>]*fonts\.(?:googleapis\.com|bunny\.net)\/css[^>]*>/i', $html, $lm) ? $lm[0] : [];
+            $rd = function_exists('get_option') ? get_option('wps_ic_fonts_remote_dup') : null;
+            $map = (function_exists('get_option') && defined('WPS_IC_FONTS_MAP')) ? get_option(WPS_IC_FONTS_MAP) : null;
+            $mapinfo = [];
+            if (is_array($map) && defined('WPS_IC_FONTS_DIR')) {
+                $n = 0;
+                foreach ($map as $mk => $mv) {
+                    if (++$n > 8) { $mapinfo[] = '…' . (count($map) - 8) . ' more'; break; }
+                    $mf = (is_array($mv) && !empty($mv['dir']) && !empty($mv['filename']))
+                        ? WPS_IC_FONTS_DIR . $mv['dir'] . '/' . $mv['filename'] : '';
+                    $ff = [];
+                    $mc = ($mf !== '' && @is_readable($mf)) ? (string) @file_get_contents($mf, false, null, 0, 262144) : '';
+                    if ($mc !== '' && preg_match_all('/@font-face\s*\{[^{}]*?font-family\s*:\s*["\']?([^"\';}]+)/is', $mc, $mm)) {
+                        foreach ($mm[1] as $f) { $ff[strtolower(trim($f))] = 1; }
+                    }
+                    $mapinfo[] = substr((string) $mk, 0, 140) . ' => ' . ($mc === '' ? 'FILE-MISSING' : implode('+', array_keys($ff)));
+                }
+            }
+            $wpc_wg146 = [];
+            if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_font_weight_gaps146')
+                && function_exists('apply_filters')) {
+                $wpc_wt146 = apply_filters('wpc_font_fallback_metrics', []);
+                $wpc_wl146 = [];
+                if (is_array($wpc_wt146)) {
+                    foreach ($wpc_wt146 as $wpc_wk146 => $wpc_wv146) {
+                        if (is_string($wpc_wk146) && $wpc_wk146 !== '' && is_array($wpc_wv146)) {
+                            $wpc_wl146[strtolower($wpc_wk146)] = $wpc_wv146;
+                        }
+                    }
+                }
+                $wpc_wg146 = wps_rewriteLogic::wpc_font_weight_gaps146($html, $wpc_wl146);
+            }
+            $report = [
+                'v'               => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+                'declared_real'   => array_keys($decl),
+                'fallback_only'   => array_keys(array_diff_key($fb, $decl)),
+                'used_inline'     => array_keys($used),
+                'GAPS'            => $gaps,
+                'weight_gaps'     => $wpc_wg146,
+                'fonts_owner'     => (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_fonts_owner151'))
+                    ? ['mobile' => wps_rewriteLogic::wpc_fonts_owner151('mobile'), 'desktop' => wps_rewriteLogic::wpc_fonts_owner151('desktop')]
+                    : null,
+                'provider_links'  => array_map(function ($t) { return substr(html_entity_decode($t, ENT_QUOTES), 0, 220); }, $links),
+                'rdkeep_receipts' => substr_count($html, 'wpc-rdkeep:'),
+                'remote_dup'      => is_array($rd) ? array_values($rd) : [],
+                'localizer_map'   => $mapinfo,
+            ];
+            $json = function_exists('wp_json_encode') ? wp_json_encode($report) : json_encode($report);
+            return $html . "\n<!-- WPC-FONTS-DOCTOR " . str_replace('--', '- -', (string) $json) . " -->";
+        } catch (\Throwable $e) {
+            return $html;
+        }
     }
 
     public static function wpc_font_preconnect_pass($html)
@@ -4665,7 +5666,8 @@ if(navigator.webdriver)return;
 if(Math.random()*__RATE__>=1)return;
 var LS;try{LS=localStorage}catch(e){}
 if(LS&&+(LS.getItem('wpcRumOff')||0)>Date.now())return;
-var atf=[],lcp=null,sent=0;
+var atf=[],lcp=null,sent=0,hu=0;
+['pointerdown','keydown','touchstart','wheel','scroll','mousemove'].forEach(function(ev){addEventListener(ev,function(){hu=1},{once:true,passive:true,capture:true})});
 requestAnimationFrame(function(){var vh=innerHeight,vw=innerWidth,xs=document.images,i,im,r;
 for(i=0;i<xs.length&&atf.length<20;i++){im=xs[i];r=im.getBoundingClientRect();
 if(r.width<24||r.height<24||r.bottom<=0||r.top>=vh||r.left>=vw)continue;
@@ -4674,7 +5676,7 @@ try{new PerformanceObserver(function(l){var e=l.getEntries();if(!e.length)return
 var sel=el?el.tagName.toLowerCase()+(el.className?'.'+String(el.className).split(/\s+/).slice(0,2).join('.'):''):'';
 var rr=el&&el.getBoundingClientRect?el.getBoundingClientRect():{width:0,height:0,x:0,y:0};
 lcp={selector:sel.slice(0,120),url:x.url?String(x.url).slice(0,300):null,rect:{w:Math.round(rr.width),h:Math.round(rr.height),x:Math.round(rr.x),y:Math.round(rr.y)},t_ms:Math.round(x.startTime)}}).observe({type:'largest-contentful-paint',buffered:true})}catch(e){}
-var send=function(){if(sent||(!atf.length&&!lcp))return;sent=1;var b;
+var send=function(){if(!hu||sent||(!atf.length&&!lcp))return;sent=1;var b;
 try{b=JSON.stringify({v:1,url:location.href.split('#')[0].slice(0,500),viewport:{w:innerWidth,h:innerHeight,dpr:devicePixelRatio||1},lcp:lcp,atf_images:atf})}catch(e){return}
 if(b.length>30000)return;
 var ok=navigator.sendBeacon&&navigator.sendBeacon('__AX__?action=wpc_rum_census',new Blob([b],{type:'text/plain'}));
@@ -4685,6 +5687,491 @@ addEventListener('pagehide',send);
 WPCRUMJS;
         $wpc_js775 = str_replace(['__RATE__', '__AX__'], [(string) $wpc_rate775, esc_url_raw($wpc_ax775)], $wpc_js775);
         return wpc_body_inject809($html, '<script id="wpc-rum-beacon">' . $wpc_js775 . '</script>');
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    private static function wpc_sweep21_safe78($css)
+    {
+        try {
+            if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_face_display_sweep21')) {
+                $out = wps_rewriteLogic::wpc_face_display_sweep21($css);
+                return is_string($out) ? $out : $css;
+            }
+        } catch (\Throwable $e) {
+        }
+        return $css;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_faces_inline_data83($css, $html)
+    {
+      try {
+        if (!is_string($css) || $css === '' || stripos($css, '@font-face') === false
+            || !is_string($html) || !function_exists('apply_filters')
+            || !apply_filters('wpc_faces_inline_data', true)) {
+            return $css;
+        }
+        $wpc_up83 = function_exists('wp_upload_dir') ? wp_upload_dir() : [];
+        $wpc_ub83 = !empty($wpc_up83['basedir']) ? rtrim((string) $wpc_up83['basedir'], '/') : '';
+        $wpc_home83 = function_exists('home_url') ? strtolower((string) parse_url(home_url(), PHP_URL_HOST)) : '';
+        $wpc_n83 = 0;
+        $wpc_bytes83 = 0;
+        
+        
+        
+        
+        
+        $wpc_seen95 = [];
+        $wpc_doc95 = preg_replace('/@font-face\s*\{[^{}]*\}/is', '', $html);
+        $wpc_doc95 = is_string($wpc_doc95) ? $wpc_doc95 : $html;
+        $wpc_ital95 = preg_match('/font-style\s*:\s*italic|<(?:i|em)[\s>]/i', $wpc_doc95) === 1;
+        $wpc_loww95 = preg_match('/font-weight\s*:\s*[123]00\b/i', $wpc_doc95) === 1;
+        $wpc_out83 = preg_replace_callback('/@font-face\s*\{[^{}]*\}/is', function ($m) use (&$wpc_n83, &$wpc_bytes83, $html, $wpc_ub83, $wpc_home83, &$wpc_seen95, $wpc_doc95, $wpc_ital95, $wpc_loww95) {
+            $blk = $m[0];
+            $wpc_cap93 = (function_exists('get_option') && get_option('wpc_css_passthrough') === '1') ? 6 : 3;
+            if ($wpc_n83 >= $wpc_cap93 || $wpc_bytes83 >= 196608 || stripos($blk, 'data:') !== false
+                || !preg_match('/font-family\s*:\s*["\']?([^;"\'}]+)/i', $blk, $fa)) {
+                return $blk;
+            }
+            $fam = trim($fa[1]);
+            if ($fam === '' || stripos($fam, 'fallback') !== false) { return $blk; }
+            $wpc_sty95 = preg_match('/font-style\s*:\s*italic/i', $blk) ? 'i' : 'n';
+            $wpc_w95 = preg_match('/font-weight\s*:\s*([0-9]{2,4})\b/i', $blk, $wm95) ? $wm95[1] : '400';
+            $wpc_ur95 = preg_match('/unicode-range\s*:\s*([^;}]+)/i', $blk, $ur95) ? md5(strtolower(preg_replace('/\s+/', '', $ur95[1]))) : '-';
+            $wpc_tup95 = strtolower($fam) . '|' . $wpc_sty95 . '|' . $wpc_w95 . '|' . $wpc_ur95;
+            
+            
+            if (isset($wpc_seen95[$wpc_tup95])) { return ''; }
+            if (stripos($wpc_doc95, $fam) === false) { return $blk; }
+            if ($wpc_sty95 === 'i' && !$wpc_ital95) { return $blk; }
+            if ((int) $wpc_w95 < 400 && !$wpc_loww95) { return $blk; }
+            
+            
+            
+            
+            
+            $wpc_pt93 = function_exists('get_option') && get_option('wpc_css_passthrough') === '1';
+            if (!$wpc_pt93 && stripos($html, $fam . ' Fallback') !== false) { return $blk; }
+            
+            if (preg_match('/font-style\s*:\s*italic/i', $blk) && $wpc_n83 < 1) { return $blk; }
+            if (!preg_match('/url\(["\']?([^"\')]+\.woff2[^"\')]*)["\']?\)/i', $blk, $um)) { return $blk; }
+            $wpc_url83 = html_entity_decode($um[1]);
+            $wpc_host83 = strtolower((string) parse_url($wpc_url83, PHP_URL_HOST));
+            if ($wpc_host83 !== '' && $wpc_host83 !== $wpc_home83) { return $blk; }
+            $wpc_path83 = (string) parse_url($wpc_url83, PHP_URL_PATH);
+            $wpc_file83 = '';
+            if ($wpc_ub83 !== '' && ($wpc_pp83 = strpos($wpc_path83, '/uploads/')) !== false) {
+                $wpc_file83 = $wpc_ub83 . rawurldecode(substr($wpc_path83, $wpc_pp83 + 8));
+            } elseif (defined('WP_CONTENT_DIR') && ($wpc_pc83 = strpos($wpc_path83, '/wp-content/')) !== false) {
+                $wpc_file83 = rtrim(WP_CONTENT_DIR, '/') . rawurldecode(substr($wpc_path83, $wpc_pc83 + 11));
+            }
+            if ($wpc_file83 === '' || strpos($wpc_file83, '..') !== false
+                || !is_readable($wpc_file83) || (int) @filesize($wpc_file83) > 49152) {
+                return $blk;
+            }
+            $wpc_ck83 = 'wpc_fid83_' . md5($wpc_file83 . '|' . (int) @filemtime($wpc_file83));
+            $wpc_b64 = function_exists('get_transient') ? get_transient($wpc_ck83) : false;
+            if (!is_string($wpc_b64) || $wpc_b64 === '') {
+                $wpc_raw83 = (string) @file_get_contents($wpc_file83);
+                if ($wpc_raw83 === '' || substr($wpc_raw83, 0, 4) !== 'wOF2') { return $blk; }
+                $wpc_b64 = base64_encode($wpc_raw83);
+                if (function_exists('set_transient')) { set_transient($wpc_ck83, $wpc_b64, 3600); }
+            }
+            $wpc_new83 = preg_replace('/src\s*:[^;}]+;?/i', '', $blk);
+            if (!is_string($wpc_new83)) { return $blk; }
+            $wpc_new83 = rtrim(rtrim($wpc_new83), '}')
+                . 'src:url(data:font/woff2;base64,' . $wpc_b64 . ') format("woff2");}';
+            $wpc_n83++;
+            $wpc_bytes83 += strlen($wpc_b64);
+            $wpc_seen95[$wpc_tup95] = 1;
+            return $wpc_new83;
+        }, $css);
+        if (is_string($wpc_out83) && $wpc_n83 > 0) {
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_fid83_log')) {
+                set_transient('wpc_fid83_log', 1, 3600);
+                wpc_cache_first_log('faces-inline-data', '', '', ['n' => $wpc_n83, 'b' => $wpc_bytes83]);
+            }
+            return $wpc_out83;
+        }
+        return $css;
+      } catch (\Throwable $wpc_e83) { return $css; }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_live_fonts_absorb76($html)
+    {
+      try {
+        if (!is_string($html) || $html === '' || stripos($html, '<link') === false
+            || !function_exists('apply_filters') || !apply_filters('wpc_live_fonts_absorb', true)
+            || strpos($html, 'wpc-live-faces76') !== false) {
+            return $html;
+        }
+        $wpc_up76 = function_exists('wp_upload_dir') ? wp_upload_dir() : [];
+        $wpc_ub76 = !empty($wpc_up76['basedir']) ? rtrim((string) $wpc_up76['basedir'], '/') : '';
+        $wpc_home76 = function_exists('home_url') ? strtolower((string) parse_url(home_url(), PHP_URL_HOST)) : '';
+        $wpc_n76 = 0;
+        $wpc_bytes76 = 0;
+        $wpc_out76 = preg_replace_callback(
+            '/<link\b[^>]*rel=["\']stylesheet["\'][^>]*>/i',
+            function ($m) use (&$wpc_n76, &$wpc_bytes76, $wpc_ub76, $wpc_home76, $html) {
+                $tag = $m[0];
+                if ($wpc_n76 >= 4 || $wpc_bytes76 >= 98304 || stripos($tag, 'data-wpc') !== false
+                    || !preg_match('/href=["\']([^"\']+\.css[^"\']*)["\']/i', $tag, $h76)) {
+                    return $tag;
+                }
+                $wpc_url76 = html_entity_decode($h76[1]);
+                $wpc_host76 = strtolower((string) parse_url($wpc_url76, PHP_URL_HOST));
+                if ($wpc_host76 !== '' && $wpc_host76 !== $wpc_home76) {
+                    return $tag;
+                }
+                $wpc_path76 = (string) parse_url($wpc_url76, PHP_URL_PATH);
+                $wpc_file76 = '';
+                if ($wpc_ub76 !== '' && ($wpc_pp76 = strpos($wpc_path76, '/uploads/')) !== false) {
+                    $wpc_file76 = $wpc_ub76 . rawurldecode(substr($wpc_path76, $wpc_pp76 + 8));
+                } elseif (defined('WP_CONTENT_DIR') && ($wpc_pc76 = strpos($wpc_path76, '/wp-content/')) !== false) {
+                    $wpc_file76 = rtrim(WP_CONTENT_DIR, '/') . rawurldecode(substr($wpc_path76, $wpc_pc76 + 11));
+                }
+                if ($wpc_file76 === '' || strpos($wpc_file76, '..') !== false
+                    || !is_readable($wpc_file76) || (int) @filesize($wpc_file76) > 131072) {
+                    return $tag;
+                }
+                $wpc_ck76 = 'wpc_lfa76_' . md5($wpc_file76 . '|' . (int) @filemtime($wpc_file76));
+                $wpc_css76 = function_exists('get_transient') ? get_transient($wpc_ck76) : false;
+                if (!is_string($wpc_css76)) {
+                    $wpc_raw76 = (string) @file_get_contents($wpc_file76);
+                    $wpc_css76 = '!';
+                    if ($wpc_raw76 !== '' && stripos($wpc_raw76, '@font-face') !== false) {
+                        $wpc_rest76 = preg_replace('#/\*.*?\*/#s', '', $wpc_raw76);
+                        $wpc_rest76 = preg_replace('/@font-face\s*\{[^{}]*\}/is', '', (string) $wpc_rest76);
+                        if (is_string($wpc_rest76) && trim($wpc_rest76) === '') {
+                            $wpc_css76 = $wpc_raw76;
+                        }
+                    }
+                    if (function_exists('set_transient') && $wpc_raw76 !== '') { set_transient($wpc_ck76, $wpc_css76, 3600); }
+                }
+                if ($wpc_css76 === '!' || $wpc_css76 === '') {
+                    return $tag;
+                }
+                $wpc_faces76 = self::wpc_sweep21_safe78($wpc_css76);
+                if (function_exists('wpc_css_insert_fallbacks')) {
+                    $wpc_faces76 = wpc_css_insert_fallbacks($wpc_faces76);
+                }
+                $wpc_faces76 = self::wpc_faces_inline_data83($wpc_faces76, $wpc_faces76 . $html);
+                $wpc_media76 = '';
+                if (preg_match('/media=["\']([^"\']+)["\']/i', $tag, $mm76)
+                    && !in_array(strtolower(trim($mm76[1])), ['all', 'screen', ''], true)) {
+                    $wpc_media76 = ' media="' . htmlspecialchars($mm76[1], ENT_QUOTES) . '"';
+                }
+                $wpc_n76++;
+                $wpc_bytes76 += strlen($wpc_faces76);
+                return '<style id="wpc-live-faces76-' . $wpc_n76 . '" class="wpc-live-faces76"' . $wpc_media76 . '>' . $wpc_faces76 . '</style>';
+            },
+            $html, 24);
+        if (!is_string($wpc_out76) || $wpc_n76 < 1) {
+            return $html;
+        }
+        if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_lfa76_log')) {
+            set_transient('wpc_lfa76_log', 1, 3600);
+            wpc_cache_first_log('live-fonts-absorb', '', '', ['links' => $wpc_n76]);
+        }
+        return $wpc_out76;
+      } catch (\Throwable $wpc_e78) { return $html; }
+    }
+
+    public static function wpc_missing_face_absorb75($html)
+    {
+      try {
+        if (!is_string($html) || $html === '' || stripos($html, '</head>') === false
+            || !function_exists('apply_filters') || !apply_filters('wpc_missing_face_absorb', true)
+            || strpos($html, 'wpc-missing-faces75') !== false) {
+            return $html;
+        }
+        
+        $wpc_dec75 = [];
+        if (preg_match_all('/@font-face\s*\{[^}]*?font-family\s*:\s*["\']?([^;"\'}]+)/is', $html, $wpc_dm75)) {
+            foreach ((array) $wpc_dm75[1] as $wpc_d75) {
+                $wpc_dec75[strtolower(trim(preg_replace('/\s+fallback(?:\s+\S+)?$/i', '', trim($wpc_d75))))] = 1;
+            }
+        }
+        
+        $wpc_used75 = [];
+        $wpc_generic75 = ['serif' => 1, 'sans-serif' => 1, 'monospace' => 1, 'cursive' => 1, 'fantasy' => 1,
+            'system-ui' => 1, 'inherit' => 1, 'initial' => 1, 'unset' => 1, 'arial' => 1, 'helvetica' => 1,
+            'helvetica neue' => 1, 'georgia' => 1, 'times' => 1, 'times new roman' => 1, 'courier' => 1,
+            'courier new' => 1, 'verdana' => 1, 'tahoma' => 1, 'trebuchet ms' => 1, 'roboto' => 1,
+            '-apple-system' => 1, 'blinkmacsystemfont' => 1, 'segoe ui' => 1, 'etmodules' => 1];
+        
+        
+        
+        $wpc_uraw75 = [];
+        if (preg_match_all('/font-family\s*:\s*(?:var\([^)]*\)\s*,\s*)?["\']?([^;,"\'}<]+)/i', $html, $wpc_um75)) {
+            $wpc_uraw75 = (array) $wpc_um75[1];
+        }
+        if (preg_match_all('/--[a-z0-9_-]*font[a-z0-9_-]*\s*:\s*["\']([^;"\'}]{3,40})["\']/i', $html, $wpc_uv75)) {
+            $wpc_uraw75 = array_merge($wpc_uraw75, (array) $wpc_uv75[1]);
+        }
+        if (!empty($wpc_uraw75)) {
+            foreach ($wpc_uraw75 as $wpc_u75) {
+                $wpc_f75 = strtolower(trim($wpc_u75));
+                if ($wpc_f75 === '' || strlen($wpc_f75) > 40 || isset($wpc_generic75[$wpc_f75])
+                    || strpos($wpc_f75, 'fallback') !== false || strpos($wpc_f75, 'var(') !== false
+                    || strpos($wpc_f75, '--') !== false) {
+                    continue;
+                }
+                $wpc_used75[$wpc_f75] = 1;
+                if (count($wpc_used75) >= 16) { break; }
+            }
+        }
+        $wpc_miss75 = array_slice(array_keys(array_diff_key($wpc_used75, $wpc_dec75)), 0, 4);
+        if (empty($wpc_miss75)) {
+            return $html;
+        }
+        
+        $wpc_up75 = function_exists('wp_upload_dir') ? wp_upload_dir() : [];
+        $wpc_ub75 = !empty($wpc_up75['basedir']) ? rtrim((string) $wpc_up75['basedir'], '/') : '';
+        $wpc_add75 = '';
+        $wpc_found75 = [];
+        if (preg_match_all('/<link\b[^>]*rel=["\']wpc-[a-z-]*stylesheet["\'][^>]*>/i', $html, $wpc_lm75)) {
+            foreach (array_slice((array) $wpc_lm75[0], 0, 24) as $wpc_lt75) {
+                if (count($wpc_found75) >= count($wpc_miss75)) { break; }
+                if (!preg_match('/href=["\']([^"\']+)["\']/i', $wpc_lt75, $wpc_lh75)) { continue; }
+                $wpc_path75 = (string) parse_url(html_entity_decode($wpc_lh75[1]), PHP_URL_PATH);
+                $wpc_file75 = '';
+                if ($wpc_ub75 !== '' && ($wpc_pp75 = strpos($wpc_path75, '/uploads/')) !== false) {
+                    $wpc_file75 = $wpc_ub75 . rawurldecode(substr($wpc_path75, $wpc_pp75 + 8));
+                } elseif (defined('WP_CONTENT_DIR') && ($wpc_pc75 = strpos($wpc_path75, '/wp-content/')) !== false) {
+                    $wpc_file75 = rtrim(WP_CONTENT_DIR, '/') . rawurldecode(substr($wpc_path75, $wpc_pc75 + 11));
+                }
+                if ($wpc_file75 === '' || strpos($wpc_file75, '..') !== false
+                    || !is_readable($wpc_file75) || (int) @filesize($wpc_file75) > 262144) {
+                    continue;
+                }
+                $wpc_ck75 = 'wpc_mfa75_' . md5($wpc_file75 . '|' . (int) @filemtime($wpc_file75));
+                $wpc_faces75 = function_exists('get_transient') ? get_transient($wpc_ck75) : false;
+                if (!is_string($wpc_faces75)) {
+                    $wpc_css75 = (string) @file_get_contents($wpc_file75);
+                    $wpc_faces75 = '';
+                    if ($wpc_css75 !== '' && stripos($wpc_css75, '@font-face') !== false
+                        && preg_match_all('/@font-face\s*\{[^{}]*\}/is', $wpc_css75, $wpc_fb75)) {
+                        $wpc_faces75 = implode('', (array) $wpc_fb75[0]);
+                    }
+                    if (function_exists('set_transient')) { set_transient($wpc_ck75, $wpc_faces75, 3600); }
+                }
+                if ($wpc_faces75 === '') { continue; }
+                foreach ($wpc_miss75 as $wpc_mf75) {
+                    if (isset($wpc_found75[$wpc_mf75])) { continue; }
+                    if (preg_match_all('/@font-face\s*\{[^{}]*?font-family\s*:\s*["\']?' . preg_quote($wpc_mf75, '/') . '["\'\s;][^{}]*\}/is', $wpc_faces75, $wpc_hit75)) {
+                        $wpc_blk75 = implode('', array_slice((array) $wpc_hit75[0], 0, 8));
+                        if (strlen($wpc_add75) + strlen($wpc_blk75) <= 20480) {
+                            $wpc_add75 .= $wpc_blk75;
+                            $wpc_found75[$wpc_mf75] = 1;
+                        }
+                    }
+                }
+            }
+        }
+        if ($wpc_add75 === '') {
+            return $html;
+        }
+        $wpc_add75 = self::wpc_sweep21_safe78($wpc_add75);
+        if (function_exists('wpc_css_insert_fallbacks')) {
+            $wpc_add75 = wpc_css_insert_fallbacks($wpc_add75);
+        }
+        $wpc_add75 = self::wpc_faces_inline_data83($wpc_add75, $wpc_add75 . $html);
+        $wpc_out75 = preg_replace('/<\/head>/i', '<style id="wpc-missing-faces75">' . $wpc_add75 . '</style></head>', $html, 1);
+        if (!is_string($wpc_out75) || $wpc_out75 === '') {
+            return $html;
+        }
+        if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_mfa75_log')) {
+            set_transient('wpc_mfa75_log', 1, 3600);
+            wpc_cache_first_log('missing-face-absorb', implode(',', array_keys($wpc_found75)), '', ['n' => count($wpc_found75)]);
+        }
+        return $wpc_out75;
+      } catch (\Throwable $wpc_e78) { return $html; }
+    }
+
+    public static function wpc_fonts_sheet_absorb71($html)
+    {
+      try {
+        if (!is_string($html) || $html === ''
+            || (stripos($html, '/elementor/google-fonts/css/') === false
+                && stripos($html, 'elementor-gf-local-') === false)
+            || !function_exists('apply_filters') || !apply_filters('wpc_fonts_sheet_absorb', true)
+            || !function_exists('wp_upload_dir')) {
+            return $html;
+        }
+        if (!preg_match('/(<style\b[^>]*\bid=(["\'])wpc-late-faces\2[^>]*>)(.*?)(<\/style>)/is', $html, $wpc_lf71, PREG_OFFSET_CAPTURE)) {
+            return $html; 
+        }
+        $wpc_up71 = wp_upload_dir();
+        if (empty($wpc_up71['basedir'])) {
+            return $html;
+        }
+        $wpc_base71 = rtrim((string) $wpc_up71['basedir'], '/');
+        $wpc_add71 = '';
+        $wpc_n71 = 0;
+        $wpc_out71 = preg_replace_callback(
+            '/<link\b[^>]*href=["\'][^"\']*(?:\/elementor\/google-fonts\/css\/|elementor-gf-local-)[^"\']*["\'][^>]*>/i',
+            function ($m) use (&$wpc_add71, &$wpc_n71, $wpc_base71) {
+                $tag = $m[0];
+                
+                if (!preg_match('/rel=["\']wpc-[a-z-]*stylesheet["\']|type=["\']wpc-stylesheet["\']/i', $tag)) {
+                    return $tag;
+                }
+                if (!preg_match('/href=["\']([^"\']+)["\']/i', $tag, $h71)) {
+                    return $tag;
+                }
+                $wpc_path71 = (string) parse_url(html_entity_decode($h71[1]), PHP_URL_PATH);
+                $wpc_pp71 = strpos($wpc_path71, '/uploads/');
+                if ($wpc_pp71 !== false) {
+                    $wpc_file71 = $wpc_base71 . rawurldecode(substr($wpc_path71, $wpc_pp71 + 8));
+                } elseif (defined('WP_CONTENT_DIR') && ($wpc_pc72 = strpos($wpc_path71, '/wp-content/')) !== false) {
+                    
+                    $wpc_file71 = rtrim(WP_CONTENT_DIR, '/') . rawurldecode(substr($wpc_path71, $wpc_pc72 + 11));
+                } else {
+                    return $tag;
+                }
+                if (strpos($wpc_file71, '..') !== false || !is_readable($wpc_file71) || (int) @filesize($wpc_file71) > 131072) {
+                    return $tag;
+                }
+                $wpc_css71 = (string) @file_get_contents($wpc_file71);
+                if ($wpc_css71 === '') {
+                    return $tag;
+                }
+                
+                $wpc_rest71 = preg_replace('#/\*.*?\*/#s', '', $wpc_css71);
+                $wpc_rest71 = preg_replace('/@font-face\s*\{[^{}]*\}/is', '', (string) $wpc_rest71);
+                if (!is_string($wpc_rest71) || trim($wpc_rest71) !== '') {
+                    return $tag;
+                }
+                $wpc_add71 .= $wpc_css71;
+                $wpc_n71++;
+                return '';
+            },
+            $html, 8);
+        if (!is_string($wpc_out71) || $wpc_add71 === '' || $wpc_n71 < 1) {
+            return $html;
+        }
+        $wpc_faces71 = self::wpc_sweep21_safe78($wpc_add71);
+        if (function_exists('wpc_css_insert_fallbacks')) {
+            $wpc_faces71 = wpc_css_insert_fallbacks($wpc_faces71);
+        }
+        
+        $wpc_out71 = preg_replace_callback('/(<style\b[^>]*\bid=(["\'])wpc-late-faces\2[^>]*>)(.*?)(<\/style>)/is',
+            function ($m) use ($wpc_faces71) {
+                $wpc_body71 = $m[3] . $wpc_faces71;
+                foreach (['wpc_face_self_dedupe', 'wpc_face_tuple_dedupe2113'] as $wpc_dd78) {
+                    if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', $wpc_dd78)) {
+                        $wpc_dr78 = wps_rewriteLogic::$wpc_dd78($wpc_body71);
+                        if (is_string($wpc_dr78)) { $wpc_body71 = $wpc_dr78; }
+                    }
+                }
+                return $m[1] . $wpc_body71 . $m[4];
+            }, $wpc_out71, 1);
+        if (!is_string($wpc_out71) || stripos($wpc_out71, 'wpc-late-faces') === false) {
+            return $html;
+        }
+        if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_fsa71_log')) {
+            set_transient('wpc_fsa71_log', 1, 3600);
+            wpc_cache_first_log('fonts-sheet-absorb', '', '', array('links' => $wpc_n71));
+        }
+        return $wpc_out71;
+      } catch (\Throwable $wpc_e78) { return $html; }
+    }
+
+    public static function wpc_inline_core_ns62($html)
+    {
+        if (!is_string($html) || stripos($html, '/wp-includes/js/dist/') === false
+            || !defined('ABSPATH') || !apply_filters('wpc_inline_core_ns', true)) {
+            return $html;
+        }
+        $out = preg_replace_callback(
+            '/<script\b(?![^>]*\b(?:defer|async)\b)(?![^>]*\b(?:type|nonce|integrity|crossorigin)\s*=)[^>]*\bsrc=["\'][^"\']*\/wp-includes\/js\/dist\/(hooks|i18n)\.min\.js[^"\']*["\'][^>]*>\s*<\/script>/i',
+            function ($m) {
+                $wpc_f62 = rtrim(ABSPATH, '/') . '/wp-includes/js/dist/' . $m[1] . '.min.js';
+                if (!@is_readable($wpc_f62) || (int) @filesize($wpc_f62) > 24576) {
+                    return $m[0];
+                }
+                $wpc_b62 = (string) @file_get_contents($wpc_f62);
+                if ($wpc_b62 === '' || stripos($wpc_b62, '</script') !== false) {
+                    return $m[0];
+                }
+                return '<script id="wp-' . $m[1] . '-js" data-wpc-inlined="1">' . $wpc_b62 . '</script>';
+            },
+            $html
+        );
+        return is_string($out) ? $out : $html;
+    }
+
+    
+    
+    
+    
+    
+    
+    public static function wpc_drop_dashicons65($html)
+    {
+        if (!is_string($html) || stripos($html, 'dashicons') === false
+            || !apply_filters('wpc_drop_unused_dashicons', true)
+            || (function_exists('is_user_logged_in') && is_user_logged_in())) {
+            return $html;
+        }
+        $wpc_links65 = [];
+        $out = preg_replace_callback('/<link\b[^>]*href=["\'][^"\']*\/dashicons[^"\']*\.css[^"\']*["\'][^>]*>\s*/i', function ($m) use (&$wpc_links65) {
+            $wpc_links65[] = $m[0];
+            return "\x01WPCDI" . (count($wpc_links65) - 1) . "\x01";
+        }, $html);
+        if (!is_string($out) || empty($wpc_links65)) {
+            return $html;
+        }
+        $wpc_used65 = stripos($out, 'dashicons') !== false;
+        return (string) preg_replace_callback('/\x01WPCDI(\d+)\x01/', function ($m) use ($wpc_links65, $wpc_used65) {
+            return $wpc_used65 ? $wpc_links65[(int) $m[1]] : '';
+        }, $out);
     }
 
     public static function wpc_embed_facade_pass($html)
@@ -4708,6 +6195,12 @@ WPCRUMJS;
         $hosts = (array) apply_filters('wpc_embed_facade_hosts', [
             'google.com/maps/embed', 'maps.google.com', 'youtube.com/embed', 'youtube-nocookie.com/embed',
             'play.gumlet.io/embed',
+            
+            
+            
+            
+            
+            'iframe.mediadelivery.net/embed',
         ]);
         $count = 0;
         $out = preg_replace_callback('/<iframe\b[^>]*>(?:\s*<\/iframe>)?/is', function ($m) use ($hosts, $wpc_full769, &$count) {
@@ -4720,17 +6213,25 @@ WPCRUMJS;
                 return $tag;
             }
             $isYt = (stripos($hit, 'youtube') !== false);
-            $isVid = $isYt || stripos($hit, 'gumlet') !== false;
+            $isVid = $isYt || stripos($hit, 'gumlet') !== false || stripos($hit, 'mediadelivery') !== false;
             if (!$wpc_full769) {
                 
                 
                 
                 
                 
-                if (stripos($hit, 'gumlet') === false
+                
+                
+                
+                
+                
+                
+                
+                $wpc_ytok262 = $isYt && !preg_match('/\benablejsapi=1\b|\bcontrols=0\b/i', $tag);
+                if ((stripos($hit, 'gumlet') === false && stripos($hit, 'mediadelivery') === false && !$wpc_ytok262)
                     || preg_match('/\b(?:autoplay|background)=(?:true|1)\b/i', $tag)
                     || preg_match('/data-(?:cookieblock|cmplz|borlabs|cookieconsent|consent)|cookiebot/i', $tag)
-                    || !preg_match('/\ssrc=(["\'])[^"\']*' . preg_quote($hit, '/') . '/i', $tag)) {
+                    || !preg_match('/\s(?:src|data-wpc-src)=(["\'])[^"\']*' . preg_quote($hit, '/') . '/i', $tag)) {
                     return $tag;
                 }
             }
@@ -4740,6 +6241,12 @@ WPCRUMJS;
             $ratio = ($w > 0 && $h > 0) ? ($w . ' / ' . $h) : '16 / 9';
             $style = 'position:relative;display:block;width:100%;aspect-ratio:' . $ratio . ';'
                    . 'background:#e8eaed;border-radius:8px;overflow:hidden;cursor:pointer;border:0;padding:0;';
+            
+            
+            
+            if (preg_match('/style=(["\'])([^"\']*position\s*:\s*absolute[^"\']*)\1/i', $tag, $wpc_os60)) {
+                $style = rtrim((string) $wpc_os60[2], '; ') . ';display:block;background:#e8eaed;overflow:hidden;cursor:pointer;border:0;padding:0;';
+            }
             $poster = '';
             if ($isYt && preg_match('#/embed/([A-Za-z0-9_-]{6,})#', $tag, $vm)) {
                 $poster = '<img src="https://i.ytimg.com/vi/' . esc_attr($vm[1]) . '/hqdefault.jpg" alt="" loading="lazy" decoding="async"'
@@ -4753,7 +6260,13 @@ WPCRUMJS;
                   . '<svg width="34" height="34" viewBox="0 0 24 24" fill="#ea4335" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>'
                   . '<span style="background:#fff;border-radius:20px;padding:8px 16px;box-shadow:0 1px 3px rgba(0,0,0,.25);">Load map</span></span>';
             $count++;
-            return '<button type="button" class="wpc-embed-facade" data-wpc-embed="' . base64_encode($tag) . '"'
+            
+            
+            $wpc_live60 = str_replace(['data-wpc-src=', 'wpc-iframe-delay'], ['src=', ''], $tag);
+            if ($isVid && $poster === '') {
+                $style = str_replace('background:#e8eaed;', 'background:#131417;', $style);
+            }
+            return '<button type="button" class="wpc-embed-facade" data-wpc-embed="' . base64_encode($wpc_live60) . '"'
                  . ' aria-label="' . esc_attr($label) . '" style="' . $style . '">' . $poster . $badge . '</button>';
         }, $html, -1, $n);
         if ($out === null || $count === 0) {
@@ -4768,7 +6281,7 @@ WPCRUMJS;
             . 'var f=d.querySelector("iframe");if(!f)return;'
             . 'var s=f.getAttribute("src")||f.getAttribute("data-src")||f.getAttribute("data-wpc-src")||"";'
             . 'if(s&&/youtube(-nocookie)?\\.com\\/embed\\//i.test(s)&&s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=1";}'
-            . 'if(s&&/play\\.gumlet\\.io\\/embed\\//i.test(s)){if(/autoplay=false/i.test(s)){s=s.replace(/autoplay=false/ig,"autoplay=true");}else if(s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=true";}}'
+            . 'if(s&&/(?:play\\.gumlet\\.io|iframe\\.mediadelivery\\.net)\\/embed\\//i.test(s)){if(/autoplay=false/i.test(s)){s=s.replace(/autoplay=false/ig,"autoplay=true");}else if(s.indexOf("autoplay=")===-1){s+=(s.indexOf("?")===-1?"?":"&")+"autoplay=true";}}'
             . 'if(s){f.setAttribute("src",s);}f.removeAttribute("loading");'
             . 'f.style.width="100%";f.style.height="100%";f.style.position="absolute";f.style.inset="0";f.style.border="0";'
             . 'b.style.cursor="default";b.innerHTML="";b.appendChild(f);},true);})();</script>';
@@ -4914,6 +6427,15 @@ WPCRUMJS;
 
             if (self::$fonts == 1) {
                 $html = self::$rewriteLogic->fonts($html);
+            }
+            
+            
+            
+            if (is_callable(['wps_rewriteLogic', 'wpc_srcset_honesty298'])) {
+                $html = wps_rewriteLogic::wpc_srcset_honesty298($html);
+            }
+            if (is_callable(['wps_rewriteLogic', 'wpc_dims_belt305'])) {
+                $html = wps_rewriteLogic::wpc_dims_belt305($html);
             }
 
             $html = preg_replace_callback('/\[script\-wpc\](.*?)\[\/script\-wpc\]/i', [$this, 'local_script_decode'], $html);
@@ -5122,6 +6644,14 @@ WPCRUMJS;
         
         $html = self::$themeIntegrations->getIntegration($html);
 
+        if (class_exists('wps_ic_speculation_rules')
+            && wps_ic_speculation_rules::isActive(self::$settings, self::$page_excludes)
+            && !self::$isAmp->isAmp() && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))
+            && !self::$preloaderAPI) {
+            $wpc_spec129 = new wps_ic_speculation_rules();
+            $html = $wpc_spec129->process_html($html);
+        }
+
         
         if (empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
             $js_delay = new wps_ic_js_delay();
@@ -5149,8 +6679,12 @@ WPCRUMJS;
                     $wpc_delay_v3 = (!isset(self::$settings['delay-js-v3']) || self::$settings['delay-js-v3'] != '0') && class_exists('wps_ic_js_delay_v3');
                     $js_delay = $wpc_delay_v3 ? new wps_ic_js_delay_v3() : new wps_ic_js_delay_v2();
 
-                    if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
+                    if (empty($_GET['disableCritical']) && $delayActive && $delayV2Active && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
                         $html = $js_delay->process_html($html);
+                        if ($wpc_delay_v3) {
+                            $html = self::wpc_jq_defer47($html);
+                            $html = self::wpc_inline_core_ns62($html);
+                        }
                     } else {
                         $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
                     }
@@ -5249,6 +6783,13 @@ WPCRUMJS;
                 wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv711l, 'lane' => 'local-final']);
             }
         }
+
+        
+        
+        
+        $html = self::wpc_fonts_sheet_absorb71($html);
+        $html = self::wpc_live_fonts_absorb76($html);
+        $html = self::wpc_missing_face_absorb75($html);
 
         return $html;
     }
@@ -5592,6 +7133,7 @@ WPCRUMJS;
         
         if (function_exists('is_user_logged_in') && is_user_logged_in()
             && (bool) apply_filters('wpc_logged_in_bypass', true)) {
+            $GLOBALS['wpc_li_gate669'] = 'bypass';
             return true;
         }
 
@@ -5607,6 +7149,17 @@ WPCRUMJS;
             if (!empty($_GET['tatsu']) || !empty($_GET['tatsu-header']) || !empty($_GET['tatsu-footer'])) {
                 return true;
             }
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        if (class_exists('wps_ic_speculation_rules')) {
+            wps_ic_speculation_rules::register_hooks(self::$settings);
         }
 
         $init = $this->mainInit();
@@ -5653,6 +7206,7 @@ WPCRUMJS;
 
 
             if (empty($_GET['wpc_no_buffer'])) {
+                $GLOBALS['wpc_li_gate669'] = 'buffer';
                 ob_start([$this, 'cdnRewriter_wrapped']);
             }
         }
@@ -7336,6 +8890,7 @@ WPCRUMJS;
 
 
         $html = wpc_heal_mixed_content($html);
+        $html = self::wpc_script_swallow_heal50($html);
 
 
         if (class_exists('WPC_Negotiated_Delivery')
@@ -7853,9 +9408,16 @@ WPCRUMJS;
         if (!empty(self::$settings['background-sizing']) && self::$settings['background-sizing'] == 1) {
             $regEx = '/background-image:\s*url\((\'|"|&quot;)(.*?)(\'|"|&quot;)\)/i';
             $html = preg_replace_callback($regEx, function ($matches) {
-                $url = str_replace('&#039;', '', $matches[2]);
-
-                return 'background-image: url(' . $this->cdn_rewrite_url([$url]) . ')';
+                $wpc_body198 = (string) $matches[2];
+                if ($wpc_body198 === '' || stripos($wpc_body198, 'data:') === 0) {
+                    return $matches[0];
+                }
+                $url = str_replace('&#039;', '', $wpc_body198);
+                $wpc_new198 = $this->cdn_rewrite_url([$url]);
+                if (!is_string($wpc_new198) || $wpc_new198 === '') {
+                    return $matches[0];
+                }
+                return 'background-image: url(' . $matches[1] . $wpc_new198 . $matches[3] . ')';
             }, $html);
         }
 
@@ -7918,6 +9480,15 @@ WPCRUMJS;
         if (self::$fonts == 1) {
             $html = self::$rewriteLogic->fonts($html);
         }
+        if (is_callable(['wps_rewriteLogic', 'wpc_cio_fonts_pass291'])) {
+            $html = wps_rewriteLogic::wpc_cio_fonts_pass291($html);
+        }
+        if (is_callable(['wps_rewriteLogic', 'wpc_srcset_honesty298'])) {
+            $html = wps_rewriteLogic::wpc_srcset_honesty298($html);
+        }
+        if (is_callable(['wps_rewriteLogic', 'wpc_dims_belt305'])) {
+            $html = wps_rewriteLogic::wpc_dims_belt305($html);
+        }
 
         if (!empty($_GET['stop_before']) && $_GET['stop_before'] == 'decodeIframe') {
             return $html;
@@ -7969,6 +9540,14 @@ WPCRUMJS;
 
         $html = self::$themeIntegrations->getIntegration($html);
 
+        if (class_exists('wps_ic_speculation_rules')
+                && wps_ic_speculation_rules::isActive(self::$settings, self::$page_excludes)
+                && !self::$isAmp->isAmp() && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))
+                && !self::$preloaderAPI) {
+            $wpc_spec129 = new wps_ic_speculation_rules();
+            $html = $wpc_spec129->process_html($html);
+        }
+
         if ((isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1')
                 || (class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings))) {
             if (!self::$isAmp->isAmp() && empty($_GET['disableDelay']) && empty($_GET['criticalCombine']) && empty(wpcGetHeader('criticalCombine'))) {
@@ -7983,6 +9562,10 @@ WPCRUMJS;
 
                 if (empty($_GET['disableCritical']) && $delayV2Active && !current_user_can('manage_wpc_settings') && !self::$delay_js_override && !self::$preloaderAPI) {
                     $html = $js_delay->process_html($html);
+                    if ($wpc_delay_v3) {
+                        $html = self::wpc_jq_defer47($html);
+                        $html = self::wpc_inline_core_ns62($html);
+                    }
                 } else {
                     $html = preg_replace_callback('/<script\b[^>]*>(.*?)<\/script>/si', [$js_delay, 'removeNoDelay'], $html);
                 }
@@ -8156,6 +9739,11 @@ WPCRUMJS;
                 wpc_cache_first_log('face-gate', '', '', ['moved' => $wpc_fmv711, 'lane' => 'cdn-final']);
             }
         }
+
+        
+        $html = self::wpc_fonts_sheet_absorb71($html);
+        $html = self::wpc_live_fonts_absorb76($html);
+        $html = self::wpc_missing_face_absorb75($html);
 
         return $html;
     }
@@ -8849,7 +10437,7 @@ WPCRUMJS;
         }
 
         
-        $widthHeightStr = 'width="' . round($dimensions[0], 0) . '" height="' . round($dimensions[1], 0) . '"';
+        $widthHeightStr = 'width="' . round($dimensions[0], 0) . '" height="' . round($dimensions[1], 0) . '" data-wpc-bf="1"';
 
         if ($dimensions[0] <= 5 || $dimensions[1] <= 5) {
             $widthHeightStr = '';
@@ -8963,6 +10551,30 @@ WPCRUMJS;
         
         if (self::$rewriteLogic::$pictureWebpEnabled) {
             $inject .= '<style id="wpc-picture-css">picture.wpc-picture:not([data-wpc-mir]){display:contents}picture.wpc-picture source{display:none}</style>';
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_elementor_posts_pair_belt', true)) {
+            $inject .= '<style id="wpc-posts-pair265">.elementor-posts-container:not(.elementor-has-item-ratio) .elementor-post__thumbnail img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transform:none}</style>';
         }
 
         $inject .= $this->get_ga_script();
@@ -9455,6 +11067,17 @@ JS;
         $isLazy = false;
 
         
+        
+        
+        
+        if (strpos($image[0], 'wps-ic-lazy-image') !== false
+            || strpos($image[0], 'data-wpc-fb') !== false
+            || strpos($image[0], 'wps-ic-cdn') !== false
+            || strpos($image[0], 'wps-ic-live-cdn') !== false) {
+            return $image[0];
+        }
+
+        
         if ($this->defaultExcluded($image[0])) {
             return $image[0];
         }
@@ -9521,7 +11144,9 @@ JS;
 
         $size = self::get_image_size($image_source);
 
-        $svgAPI = $source_svg = 'data:image/svg+xml;base64,' . base64_encode('<svg xmlns="http://www.w3.org/2000/svg" width="' . $size[0] . '" height="' . $size[1] . '"><path d="M2 2h' . $size[0] . 'v' . $size[1] . 'H2z" fill="#fff" opacity="0"/></svg>');
+        $svgAPI = $source_svg = 'data:image/svg+xml;base64,' . base64_encode(((int) $size[0] > 0 && (int) $size[1] > 0)
+            ? '<svg xmlns="http://www.w3.org/2000/svg" width="' . $size[0] . '" height="' . $size[1] . '"><path d="M2 2h' . $size[0] . 'v' . $size[1] . 'H2z" fill="#fff" opacity="0"/></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
 
         
         $original_img_src = $image_source;
@@ -9622,7 +11247,10 @@ JS;
 
         if (!empty(self::$settings['fetchpriority-high']) && self::$settings['fetchpriority-high'] == '1') {
             if (!$wpcHidden717 && self::$lazyLoadedImages <= self::$lazyLoadSkipFirstImages) {
-                $image_tag .= ' fetchpriority="high" decoding="async"';
+                $image_tag .= ' fetchpriority="high"';
+                if (strpos($image_tag, 'decoding=') === false) {
+                    $image_tag .= ' decoding="async"';
+                }
             }
         }
 
@@ -9832,12 +11460,20 @@ JS;
         preg_match("/([0-9]+)x([0-9]+)\.[a-zA-Z0-9]+/", $url, $matches);
         if (isset($matches[1]) && isset($matches[2])) {
             return [$matches[1], $matches[2]];
-            $sizes = [$matches[1], $matches[2]];
-        } else {
-            return [1024, 1024];
         }
-
-        return $sizes;
+        
+        
+        
+        
+        
+        
+        if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_true_aspect934')) {
+            $wpc_ta229 = wps_rewriteLogic::wpc_true_aspect934($url);
+            if (is_array($wpc_ta229) && !empty($wpc_ta229['width']) && !empty($wpc_ta229['height'])) {
+                return [(int) $wpc_ta229['width'], (int) $wpc_ta229['height']];
+            }
+        }
+        return [0, 0];
     }
 
     public function rewrite_woo_variation_image_urls($variation, $product, $variation_obj)

@@ -4,6 +4,14 @@
         <div style="padding-bottom:30px;">
             <div class="wps-ic-mu-popup-select-sites">
                 <img src="<?php
+
+
+
+
+
+
+
+
                 echo WPS_IC_URI; ?>assets/images/projected-alert.svg" style="width:160px;"/>
             </div>
             <h3><?php echo esc_html__('You need to insert your CNAME!', WPS_IC_TEXTDOMAIN); ?></h3>

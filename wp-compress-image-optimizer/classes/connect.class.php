@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/connect.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 class wps_ic_connect extends wps_ic
@@ -54,6 +62,9 @@ class wps_ic_connect extends wps_ic
 
 
                 $default_Settings = self::$options->get_preset('lite');
+                if (function_exists('wpc_preset_cache_gate67')) {
+                    $default_Settings = wpc_preset_cache_gate67($default_Settings);
+                }
                 $settings = array_merge($default_Settings, $settings);
 
                 update_option(WPS_IC_SETTINGS, $settings);
@@ -164,6 +175,9 @@ class wps_ic_connect extends wps_ic
 
 
                 $default_Settings = self::$options->get_preset('aggressive');
+                if (function_exists('wpc_preset_cache_gate67')) {
+                    $default_Settings = wpc_preset_cache_gate67($default_Settings);
+                }
                 $settings = array_merge($default_Settings, $settings);
 
                 $settings['live-cdn'] = '1';

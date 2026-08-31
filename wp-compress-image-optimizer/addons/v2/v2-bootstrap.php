@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-bootstrap.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -120,6 +128,9 @@ require_once WPC_V2_DIR . '/v2-shutdown-drain.php';
 
 
 require_once WPC_V2_DIR . '/v2-config-sync.php';
+
+
+require_once WPC_V2_DIR . '/origin-reach.php';
 
 
 require_once WPC_V2_DIR . '/v2-signed-header.php';

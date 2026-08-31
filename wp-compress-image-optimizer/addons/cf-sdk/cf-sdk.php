@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/cf-sdk/cf-sdk.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!function_exists('wpc_cf_permission_rows')) {
     
 
@@ -1771,7 +1779,7 @@ class WPC_CloudflareAPI
 
     private function getBypassRule()
     {
-        return ['ref' => WPC_BYPASS_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Bypass cache for admin/login/commerce', 'enabled' => true, 'expression' => '(http.request.method ne "GET" and http.request.method ne "HEAD") or (starts_with(http.request.uri.path, "/wp-admin") or http.request.uri.path eq "/wp-login.php" or http.request.uri.path contains "/wp-cron.php" or http.request.uri.path contains "/xmlrpc.php" or starts_with(http.request.uri.path, "/wp-json/") or http.request.uri.path contains "/admin-ajax.php" or ends_with(http.request.uri.path, "/cart/") or ends_with(http.request.uri.path, "/checkout/") or starts_with(http.request.uri.path, "/my-account")) or (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "edd_") or (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=")', 'action_parameters' => ['cache' => false]];
+        return ['ref' => WPC_BYPASS_RULE_REF, 'action' => 'set_cache_settings', 'description' => '[DO NOT EDIT] Bypass cache for admin/login/commerce', 'enabled' => true, 'expression' => '(http.request.method ne "GET" and http.request.method ne "HEAD") or (starts_with(http.request.uri.path, "/wp-admin") or http.request.uri.path contains "/wp-login.php" or http.request.uri.path contains "/wp-cron.php" or http.request.uri.path contains "/xmlrpc.php" or starts_with(http.request.uri.path, "/wp-json/") or http.request.uri.path contains "/admin-ajax.php" or http.request.uri.path contains "/cart/" or http.request.uri.path contains "/checkout/" or http.request.uri.path contains "/wc-api/" or http.request.uri.path contains "/my-account") or (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_") or (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=")', 'action_parameters' => ['cache' => false]];
     }
 
 
@@ -1993,7 +2001,12 @@ class WPC_CloudflareAPI
             
             
             
-            $wpc_expr_stale197 = stripos((string) ($rule['expression'] ?? ''), 'tk_ai') !== false;
+            
+            
+            
+            $wpc_expr_stale197 = stripos((string) ($rule['expression'] ?? ''), 'tk_ai') !== false
+                || stripos((string) ($rule['expression'] ?? ''), 'add-to-cart') === false
+                || stripos((string) ($rule['expression'] ?? ''), 'starts_with(http.request.uri.path, "/my-account")') !== false;
             
             
             
@@ -2062,7 +2075,7 @@ class WPC_CloudflareAPI
 
         
         $wpc_bp197 = $this->findCacheRuleByRef($zoneId, WPC_BYPASS_RULE_REF);
-        if ($wpc_bp197 && stripos((string) ($wpc_bp197['expression'] ?? ''), 'tk_ai') !== false && !empty($wpc_bp197['id'])) {
+        if ($wpc_bp197 && (stripos((string) ($wpc_bp197['expression'] ?? ''), 'tk_ai') !== false || stripos((string) ($wpc_bp197['expression'] ?? ''), 'currency=') === false || stripos((string) ($wpc_bp197['expression'] ?? ''), 'starts_with(http.request.uri.path, "/my-account")') !== false) && !empty($wpc_bp197['id'])) {
             $wpc_bt197 = $this->getBypassRule();
             $wpc_bp197['expression'] = $wpc_bt197['expression'];
             $wpc_brs197 = $this->getCacheRulesRulesetId($zoneId);
@@ -2100,7 +2113,7 @@ class WPC_CloudflareAPI
             $host_list = '"' . $domain . '" "' . $www_domain . '"';
         }
 
-        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and http.request.uri.path eq "/" and not starts_with(http.request.uri.path, "/cdn-cgi/") and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "edd_")';
+        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and http.request.uri.path eq "/" and not (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=") and not starts_with(http.request.uri.path, "/cdn-cgi/") and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_")';
 
 
         
@@ -2121,7 +2134,7 @@ class WPC_CloudflareAPI
             $host_list = '"' . $domain . '" "' . $www_domain . '"';
         }
 
-        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and not starts_with(http.request.uri.path, "/cdn-cgi/") and not starts_with(http.request.uri.path, "/wp-admin") and http.request.uri.path ne "/wp-login.php" and not starts_with(http.request.uri.path, "/wp-json/") and (http.request.uri.path.extension eq "" or lower(http.request.uri.path.extension) in {"html" "htm" "xhtml"}) and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "edd_")';
+        $expression = '(http.host in {' . $host_list . '}) and (http.request.method in {"GET" "HEAD"}) and not starts_with(http.request.uri.path, "/cdn-cgi/") and not starts_with(http.request.uri.path, "/wp-admin") and not (http.request.uri.path contains "/wp-login.php") and not starts_with(http.request.uri.path, "/wp-json/") and (http.request.uri.path.extension eq "" or lower(http.request.uri.path.extension) in {"html" "htm" "xhtml"}) and not (lower(http.request.uri.query) contains "nocache=" or lower(http.request.uri.query) contains "no-cache=" or lower(http.request.uri.query) contains "wc-ajax=" or lower(http.request.uri.query) contains "add-to-cart=" or lower(http.request.uri.query) contains "edd_action=" or lower(http.request.uri.query) contains "preview=" or lower(http.request.uri.query) contains "currency=" or lower(http.request.uri.query) contains "wc-api=") and not (http.request.uri.path contains "/cart/" or http.request.uri.path contains "/checkout/" or http.request.uri.path contains "/wc-api/" or http.request.uri.path contains "/my-account" or http.request.uri.path contains "/admin-ajax.php" or http.request.uri.path contains "/wp-cron.php" or http.request.uri.path contains "/xmlrpc.php") and not (http.cookie contains "wordpress_logged_in_" or http.cookie contains "wordpress_sec_" or http.cookie contains "wp-postpass_" or http.cookie contains "woocommerce_cart_hash" or http.cookie contains "woocommerce_items_in_cart" or http.cookie contains "wp_woocommerce_session_" or http.cookie contains "wp_woocs_session_" or http.cookie contains "edd_")';
 
 
         

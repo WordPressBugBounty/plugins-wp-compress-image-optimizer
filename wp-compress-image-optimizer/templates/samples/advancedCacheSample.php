@@ -1,39 +1,47 @@
 <?php
 
+
+
+
+
+
+
+
+
 defined('ABSPATH') || exit;
 define('WP_COMPRESS_ADVANCED_CACHE', true);
 
+#WPC_CACHE_DEVELOPER_MODE_START
+ 
+#WPC_CACHE_DEVELOPER_MODE_END
 
-
-
-
-
+#WPC_CACHE_LOGGED_IN_START
 define('WPC_CACHE_LOGGED_IN', false);
+#WPC_CACHE_LOGGED_IN_END
 
-
-
+#WPC_CACHE_COOKIES_START
 define('WPC_CACHE_COOKIES', false);
+#WPC_CACHE_COOKIES_END
 
-
-
+#WPC_EXCLUDE_COOKIES_START
 define('WPC_EXCLUDE_COOKIES', false);
+#WPC_EXCLUDE_COOKIES_END
 
-
-
+#WPC_MANDATORY_COOKIES_START
 define('WPC_MANDATORY_COOKIES', false);
+#WPC_MANDATORY_COOKIES_END
 
-
-
+#WPC_URL_EXCLUDES_START
 define('WPC_URL_EXCLUDES', false);
+#WPC_URL_EXCLUDES_END
 
-
-
+#WPC_CACHE_EXCLUDES_START
 define('WPC_CACHE_EXCLUDES', false);
+#WPC_CACHE_EXCLUDES_END
 
-
-
+#WPC_TIER_CACHE_START
 define('WPC_TIER_CACHE', false);
-
+#WPC_TIER_CACHE_END
 
 $pluginExists = __DIR__ . '/plugins/wp-compress-image-optimizer/';
 $pluginCachePath = __DIR__ . '/cache/wp-cio/';

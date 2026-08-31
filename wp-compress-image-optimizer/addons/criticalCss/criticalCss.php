@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/criticalCss/criticalCss.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 if (!class_exists('wps_ic_url_key')) {
     include_once WPS_IC_DIR . 'traits/url_key.php';

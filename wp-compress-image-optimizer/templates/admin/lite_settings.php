@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 global $wps_ic, $wpdb;
 
 if (!defined('ABSPATH')) {
@@ -51,75 +59,22 @@ if (!empty($_POST)) {
     
     
     
-    if (!empty($sentSettings['delay-js-v2']) && $sentSettings['delay-js-v2'] == '1' ){
-        $newSettings['delay-js-v2'] = '1';
-        $newSettings['delay-js'] = '1';
-        $newSettings['delay-js-v3'] = '1';
-    } else {
-        $newSettings['delay-js-v2'] = '0';
-        $newSettings['delay-js'] = '0';
-        $newSettings['delay-js-v3'] = '0';
+    
+    $wpc_lite_pillars148 = [
+        'delay-js-v2'  => (!empty($sentSettings['delay-js-v2']) && $sentSettings['delay-js-v2'] == '1') ? '1' : '0',
+        'imagesPreset' => (isset($sentSettings['imagesPreset']) && $sentSettings['imagesPreset'] == '1') ? '1' : '0',
+        'cdnAll'       => (isset($sentSettings['cdnAll']) && $sentSettings['cdnAll'] == '1') ? '1' : '0',
+        'nativeLazy'   => (isset($sentSettings['nativeLazy']) && $sentSettings['nativeLazy'] == '1') ? '1' : '0',
+    ];
+    foreach ($wpc_lite_pillars148 as $wpc_pillarKey148 => $wpc_pillarVal148) {
+        $newSettings = wpc_lite_pillar_riders148($newSettings, $wpc_pillarKey148, $wpc_pillarVal148);
     }
 
-    if (isset($sentSettings['imagesPreset']) && $sentSettings['imagesPreset'] == '1') {
-        $newSettings['retina'] = '1';
-        $newSettings['generate_adaptive'] = '1';
-        $newSettings['generate_webp'] = '1';
+    $newSettings = wpc_lite_pillar_riders148($newSettings, ['critical', 'css'],
+        (isset($sentSettings['critical']['css']) && $sentSettings['critical']['css'] == '1') ? '1' : '0');
 
-        
-        
-        $newSettings['picture_webp'] = '1';
-        $newSettings['picture_avif'] = '1';
-        $newSettings['wpc_nextgen'] = 'auto';
-        $newSettings['imagesPreset'] = '1';
-    } else {
-        $newSettings['retina'] = '0';
-        $newSettings['generate_adaptive'] = '0';
-        $newSettings['generate_webp'] = '0';
-
-
-        $newSettings['picture_webp'] = '0';
-        $newSettings['picture_avif'] = '0';
-        $newSettings['wpc_nextgen'] = 'off';
-        $newSettings['imagesPreset'] = '0';
-    }
-
-    if (isset($sentSettings['cdnAll']) && $sentSettings['cdnAll'] == '1') {
-        $newSettings['live-cdn'] = '1';
-        $newSettings['serve'] = ['jpg' => '1', 'gif' => '1', 'png' => '1', 'svg' => '1'];
-        $newSettings['css'] = '1';
-        $newSettings['js'] = '1';
-        $newSettings['fonts'] = '1';
-        $newSettings['qualityLevel'] = 'intelligent';
-        $newSettings['cdnAll'] = '1';
-    } else {
-        $newSettings['live-cdn'] = '0';
-        $newSettings['serve'] = ['jpg' => '0', 'gif' => '0', 'png' => '0', 'svg' => '0'];
-        $newSettings['css'] = '0';
-        $newSettings['js'] = '0';
-        $newSettings['fonts'] = '0';
-        $newSettings['cdnAll'] = '0';
-    }
-
-    if (isset($sentSettings['critical']['css']) && $sentSettings['critical']['css'] == '1') {
-        $newSettings['critical']['css'] = '1';
-        $newSettings['used-css'] = '1';
-    } else {
-        $newSettings['critical']['css'] = '0';
-        $newSettings['used-css'] = '0';
-    }
-
-    if (isset($sentSettings['nativeLazy']) && $sentSettings['nativeLazy'] == '1') {
-        $newSettings['nativeLazy'] = '1';
-    } else {
-        $newSettings['nativeLazy'] = '0';
-    }
-
-    if (isset($sentSettings['cache']['advanced']) && $sentSettings['cache']['advanced'] == '1') {
-        $newSettings['cache']['advanced'] = '1';
-    } else {
-        $newSettings['cache']['advanced'] = '0';
-    }
+    $newSettings = wpc_lite_pillar_riders148($newSettings, ['cache', 'advanced'],
+        (isset($sentSettings['cache']['advanced']) && $sentSettings['cache']['advanced'] == '1') ? '1' : '0');
 
 
     update_option(WPS_IC_SETTINGS, $newSettings);

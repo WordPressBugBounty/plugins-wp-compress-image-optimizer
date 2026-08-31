@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/options.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -45,6 +53,7 @@ class wps_ic_options
 
 
             'fetchpriority-high' => ['html'],
+            'speculation-rules'  => ['html'], 
             'lazySkipCount'      => ['html'],
             'lazy-load'          => ['html'],
             'native-lazy'        => ['html'],
@@ -87,7 +96,7 @@ class wps_ic_options
 
             'avif-natural-source' => 1,
             'single-url-image-format' => 'auto', 
-            'lazy' => 0,
+            'lazy' => 1,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 0,
@@ -182,6 +191,7 @@ class wps_ic_options
             'avif-natural-source' => '0',
             'single-url-image-format' => 'same-ext', 
             'fetchpriority-high' => '0',
+            'speculation-rules' => '0',
             'lazy' => '0',
             'remove-srcset' => '0',
             'background-sizing' => '0',
@@ -269,7 +279,7 @@ class wps_ic_options
             'avif-natural-source' => 1,
             'single-url-image-format' => 'auto', 
             'nativeLazy' => '1',
-            'lazy' => '0',
+            'lazy' => '1',
             'remove-srcset' => '0',
             'background-sizing' => '0',
             'optimize-lcp' => '0', 
@@ -362,7 +372,7 @@ class wps_ic_options
             'retina-in-srcset' => 1,
             'avif-natural-source' => 1,
             'single-url-image-format' => 'auto', 
-            'lazy' => 0,
+            'lazy' => 1,
             'nativeLazy' => 1,
             'remove-srcset' => 0,
             'background-sizing' => 1,
@@ -718,7 +728,11 @@ class wps_ic_options
 
     public function set_recommended_options()
     {
-        update_option(WPS_IC_SETTINGS, self::$recommendedSettings);
+        $wpc_rec67 = self::$recommendedSettings;
+        if (function_exists('wpc_preset_cache_gate67')) {
+            $wpc_rec67 = wpc_preset_cache_gate67($wpc_rec67);
+        }
+        update_option(WPS_IC_SETTINGS, $wpc_rec67);
 
 
         update_option('wpc_settings_initialized', '1', false);

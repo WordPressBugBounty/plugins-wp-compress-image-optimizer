@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-capabilities.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -269,12 +277,173 @@ if (!function_exists('wpc_v2_lazy_cdn_use_original')) {
 }
 
 
+if (!function_exists('wpc_v2_store_broken_path197')) {
+    function wpc_v2_store_broken_path197()
+    {
+        $up = wp_get_upload_dir();
+        if (empty($up['basedir'])) return '';
+        $dir = rtrim($up['basedir'], '/\\') . '/wpc-cache';
+        if (!is_dir($dir)) {
+            wp_mkdir_p($dir);
+        }
+        return $dir . '/wpc-store-broken.json';
+    }
+
+    function wpc_v2_store_broken_note197($failed)
+    {
+        $p = wpc_v2_store_broken_path197();
+        if ($p === '') return;
+        if (!$failed) {
+            if (@is_file($p)) @unlink($p);
+            return;
+        }
+        $st = ['n' => 0, 'ts' => 0];
+        if (@is_file($p)) {
+            $j = json_decode((string) @file_get_contents($p), true);
+            if (is_array($j)) $st = array_merge($st, $j);
+        }
+        $st['n']  = (int) $st['n'] + 1;
+        $st['ts'] = time();
+        @file_put_contents($p, wp_json_encode($st), LOCK_EX);
+        error_log('[WPC StoreVerify] marker_verify_failed consecutive=' . $st['n']);
+    }
+
+    function wpc_v2_store_broken_active197()
+    {
+        $p = wpc_v2_store_broken_path197();
+        if ($p === '' || !@is_file($p)) return false;
+        $j = json_decode((string) @file_get_contents($p), true);
+        if (!is_array($j)) return false;
+        $n  = isset($j['n']) ? (int) $j['n'] : 0;
+        $ts = isset($j['ts']) ? (int) $j['ts'] : 0;
+        return ($n >= 3 && (time() - $ts) < 12 * HOUR_IN_SECONDS);
+    }
+}
+
+if (!function_exists('wpc_v2_parked_path197')) {
+    function wpc_v2_parked_path197()
+    {
+        $up = wp_get_upload_dir();
+        if (empty($up['basedir'])) return '';
+        $dir = rtrim($up['basedir'], '/\\') . '/wpc-cache';
+        if (!is_dir($dir)) {
+            wp_mkdir_p($dir);
+        }
+        return $dir . '/wpc-parked-images.json';
+    }
+
+    function wpc_v2_parked_list197()
+    {
+        $p = wpc_v2_parked_path197();
+        if ($p === '' || !@is_file($p)) return [];
+        $j = json_decode((string) @file_get_contents($p), true);
+        return is_array($j) ? array_map('intval', array_values($j)) : [];
+    }
+
+    function wpc_v2_parked_set197($id, $add)
+    {
+        $p = wpc_v2_parked_path197();
+        if ($p === '') return;
+        $list = wpc_v2_parked_list197();
+        $id   = (int) $id;
+        if ($add) {
+            if (!in_array($id, $list, true)) $list[] = $id;
+            if (count($list) > 200) $list = array_slice($list, -200);
+        } else {
+            $list = array_values(array_diff($list, [$id]));
+        }
+        if (empty($list)) {
+            if (@is_file($p)) @unlink($p);
+            return;
+        }
+        @file_put_contents($p, wp_json_encode($list), LOCK_EX);
+    }
+}
+
+if (!function_exists('wpc_v2_attempts_admit197')) {
+    function wpc_v2_attempts_admit197($attachment_id)
+    {
+        $attachment_id = (int) $attachment_id;
+        $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
+        $n    = (is_array($a) && isset($a['n']))    ? (int) $a['n']    : 0;
+        $last = (is_array($a) && isset($a['last'])) ? (int) $a['last'] : 0;
+        if ($n <= 0) return true;
+        if ((time() - $last) > 7 * DAY_IN_SECONDS) {
+            delete_post_meta($attachment_id, 'ic_v2_attempts');
+            wpc_v2_parked_set197($attachment_id, false);
+            return true;
+        }
+        $cap = (int) apply_filters('wpc_v2_attempt_cap', 4);
+        if ($n >= $cap) {
+            wpc_v2_parked_set197($attachment_id, true);
+            return 'parked_attempt_cap';
+        }
+        $spacing = apply_filters('wpc_v2_attempt_spacing', [600, 1800, 7200]);
+        $wait    = isset($spacing[$n - 1]) ? (int) $spacing[$n - 1] : 7200;
+        if ((time() - $last) < $wait) {
+            return 'backoff_wait';
+        }
+        return true;
+    }
+
+    function wpc_v2_attempts_bump197($attachment_id, $reason)
+    {
+        $attachment_id = (int) $attachment_id;
+        $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
+        $n = (is_array($a) && isset($a['n'])) ? (int) $a['n'] : 0;
+        $n++;
+        update_post_meta($attachment_id, 'ic_v2_attempts', ['n' => $n, 'last' => time(), 'reason' => (string) $reason]);
+        wp_cache_delete($attachment_id, 'post_meta');
+        $rb = get_post_meta($attachment_id, 'ic_v2_attempts', true);
+        if (!is_array($rb) || (int) ($rb['n'] ?? 0) !== $n) {
+            wpc_v2_store_broken_note197(true);
+        }
+        return $n;
+    }
+
+    function wpc_v2_attempts_reset197($attachment_id)
+    {
+        $attachment_id = (int) $attachment_id;
+        delete_post_meta($attachment_id, 'ic_v2_attempts');
+        wpc_v2_parked_set197($attachment_id, false);
+    }
+}
+
+if (!function_exists('wpc_v2_landing_admin_notice197')) {
+    function wpc_v2_landing_admin_notice197()
+    {
+        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) return;
+        if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
+            echo '<div class="notice notice-error"><p><strong>WP Compress:</strong> database writes are not persisting on this host (optimization markers vanish after saving). Image optimization is paused to prevent an encode loop — please contact your host about database/object-cache write failures.</p></div>';
+        }
+        $parked = function_exists('wpc_v2_parked_list197') ? wpc_v2_parked_list197() : [];
+        if (!empty($parked)) {
+            $show = array_slice($parked, 0, 5);
+            echo '<div class="notice notice-warning"><p><strong>WP Compress:</strong> ' . count($parked) . ' image(s) failed to finish optimizing after 4 attempts and are parked (IDs: ' . esc_html(implode(', ', $show)) . (count($parked) > 5 ? ', …' : '') . '). Re-optimize them from the Media Library once the underlying issue is resolved.</p></div>';
+        }
+    }
+    add_action('admin_notices', 'wpc_v2_landing_admin_notice197');
+}
+
 if (!function_exists('wpc_lazy_trigger_v2')) {
 
-    function wpc_lazy_trigger_v2($attachment_id, array $needed_widths = [], $upgrade_partial_lazy = false)
+    function wpc_lazy_trigger_v2($attachment_id, array $needed_widths = [], $upgrade_partial_lazy = false, array $trigger_opts = [])
     {
         $attachment_id = (int) $attachment_id;
         if ($attachment_id <= 0) return false;
+
+        if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
+            return false;
+        }
+        if (function_exists('wpc_v2_journal_has_image') && wpc_v2_journal_has_image($attachment_id)) {
+            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 1b (journal pending merge — drain owns it)');
+            return false;
+        }
+        $wpc_adm197 = function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($attachment_id) : true;
+        if ($wpc_adm197 !== true) {
+            error_log('[WPC LazyV2 trigger] image=' . $attachment_id . ' bailed Gate 3 (' . $wpc_adm197 . ')');
+            return false;
+        }
 
 
         if (get_transient('wpc_restoring_' . $attachment_id)) {
@@ -341,6 +510,19 @@ if (!function_exists('wpc_lazy_trigger_v2')) {
             
             delete_transient('wpc_lazy_v2_widths_' . $attachment_id);
         }
+
+        $wpc_reason197 = isset($trigger_opts['reason']) && $trigger_opts['reason'] !== '' ? (string) $trigger_opts['reason'] : 'new';
+        $wpc_attempt197 = function_exists('wpc_v2_attempts_bump197')
+            ? wpc_v2_attempts_bump197($attachment_id, $wpc_reason197)
+            : 1;
+        $wpc_ctx197 = [
+            'reason'  => $wpc_reason197,
+            'attempt' => $wpc_attempt197,
+        ];
+        if (!empty($trigger_opts['formats']) && is_array($trigger_opts['formats'])) {
+            $wpc_ctx197['formats'] = array_values(array_map('strval', $trigger_opts['formats']));
+        }
+        set_transient('wpc_lazy_v2_ctx_' . $attachment_id, $wpc_ctx197, 600);
 
         error_log('[WPC LazyV2] queued image=' . $attachment_id . ' mode=' . wpc_get_optimization_mode() . ' smart_widths=' . (empty($widths_clean) ? 'all' : implode(',', $widths_clean)));
 
@@ -450,6 +632,15 @@ if (!function_exists('wpc_lazy_v2_drain_ajax')) {
         } else {
             $option_overrides = [];
         }
+        $wpc_ctx197d = get_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+        if (is_array($wpc_ctx197d)) {
+            delete_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+            if (!empty($wpc_ctx197d['formats']) && is_array($wpc_ctx197d['formats'])) {
+                $option_overrides['formats'] = array_values(array_map('strval', $wpc_ctx197d['formats']));
+            }
+            if (!empty($wpc_ctx197d['reason']))  $option_overrides['resubmit_reason'] = (string) $wpc_ctx197d['reason'];
+            if (!empty($wpc_ctx197d['attempt'])) $option_overrides['attempt']         = (int) $wpc_ctx197d['attempt'];
+        }
 
         $t_start = microtime(true);
         $result  = wps_ic_ajax::run_v2_optimize($attachment_id, $option_overrides);
@@ -526,6 +717,15 @@ if (!function_exists('wpc_lazy_v2_compress_handler')) {
             $option_overrides = ['needed_widths' => array_values(array_map('intval', $needed_widths))];
         } else {
             $option_overrides = [];
+        }
+        $wpc_ctx197c = get_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+        if (is_array($wpc_ctx197c)) {
+            delete_transient('wpc_lazy_v2_ctx_' . $attachment_id);
+            if (!empty($wpc_ctx197c['formats']) && is_array($wpc_ctx197c['formats'])) {
+                $option_overrides['formats'] = array_values(array_map('strval', $wpc_ctx197c['formats']));
+            }
+            if (!empty($wpc_ctx197c['reason']))  $option_overrides['resubmit_reason'] = (string) $wpc_ctx197c['reason'];
+            if (!empty($wpc_ctx197c['attempt'])) $option_overrides['attempt']         = (int) $wpc_ctx197c['attempt'];
         }
 
         $t_start = microtime(true);

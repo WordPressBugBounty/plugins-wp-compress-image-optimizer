@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/mainwp.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 class wps_ic_mainwp extends wps_ic
 {
@@ -27,6 +35,26 @@ class wps_ic_mainwp extends wps_ic
     public static function admin_init_mainwp()
     {
         if (!empty($_GET['force_ic_connect']) && !empty($_GET['apikey'])) {
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            if (!current_user_can('manage_wpc_settings')) {
+                wp_send_json_error('forbidden');
+            }
+            
+            
+            
+            if (isset($_GET['_wpcnonce']) && !wp_verify_nonce(sanitize_text_field($_GET['_wpcnonce']), 'wpc_live_connect')) {
+                wp_send_json_error('forbidden');
+            }
+
             
             $apikey = sanitize_text_field($_GET['apikey']);
 

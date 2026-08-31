@@ -92,6 +92,7 @@ function lazyLoad() {
                 
 
                 lazyImage.classList.add("ic-fade-in");
+                lazyImage.classList.add("wps-ic-loaded");
                 lazyImage.classList.remove("wps-ic-lazy-image");
 
                 lazyImages = lazyImages.filter(function (image) {
@@ -109,3 +110,5 @@ window.addEventListener("resize", lazyLoad);
 window.addEventListener("orientationchange", lazyLoad);
 document.addEventListener("scroll", lazyLoad);
 document.addEventListener("DOMContentLoaded", load);
+
+wpcWatchInjected(load, "img[data-src]");

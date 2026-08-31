@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-direct-entry.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -389,6 +397,16 @@ function wpc_v2_journal_drain_run() {
                         '[wpc_v2_journal_drain] retaining_for_retry imageID=%d files=%d',
                         $imageID, count($group['files'])
                     ));
+                } else {
+                    $total_files_retained += count($group['files']);
+                    foreach ($group['files'] as $wpc_rf197) {
+                        @touch($wpc_rf197);
+                    }
+                    error_log(sprintf(
+                        '[wpc_v2_journal_drain] retaining_after_failure imageID=%d files=%d reason=%s',
+                        $imageID, count($group['files']),
+                        isset($result['reason']) ? (string) $result['reason'] : 'unknown'
+                    ));
                 }
             }
         }
@@ -441,6 +459,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
     }
 
     $merged = 0;
+    $merged_keys197 = [];
     $any_drain_complete_signal = false;
     $any_pull_failed = false;
     try {
@@ -483,6 +502,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                     'bg_upgraded_ms'        => $now_ms,
                 ];
                 $existing[$key] = array_merge($existing[$key] ?? [], $entry);
+                $merged_keys197[] = $key;
                 $any_drain_complete_signal = true;
                 continue;
             }
@@ -493,6 +513,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                     'bg_upgraded'    => $now,
                     'bg_upgraded_ms' => $now_ms,
                 ]);
+                $merged_keys197[] = $key;
                 continue;
             }
 
@@ -622,6 +643,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
             if (isset($e['q']))      $entry['q']      = (int) $e['q'];
             if (isset($e['bumped'])) $entry['bumped'] = (string) $e['bumped'];
             $existing[$key] = array_merge($existing[$key] ?? [], $entry);
+            $merged_keys197[] = $key;
             $merged++;
             $any_drain_complete_signal = true;
 
@@ -745,6 +767,33 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
             }
         }
         update_post_meta($imageID, 'ic_local_variants', $existing);
+
+        if (!empty($merged_keys197)) {
+            wp_cache_delete($imageID, 'post_meta');
+            $wpc_rb197 = get_post_meta($imageID, 'ic_local_variants', true);
+            $wpc_verify197 = is_array($wpc_rb197);
+            if ($wpc_verify197) {
+                foreach ($merged_keys197 as $wpc_mk197) {
+                    if (!isset($wpc_rb197[$wpc_mk197])) { $wpc_verify197 = false; break; }
+                }
+            }
+            if (!$wpc_verify197) {
+                if (function_exists('wpc_v2_store_broken_note197')) {
+                    wpc_v2_store_broken_note197(true);
+                }
+                error_log(sprintf(
+                    '[wpc_v2_journal_merge] marker_verify_failed imageID=%d keys=%d — journal retained for retry',
+                    (int) $imageID, count($merged_keys197)
+                ));
+                return ['ok' => false, 'merged' => 0, 'reason' => 'marker_verify_failed', 'any_pull_failed' => $any_pull_failed];
+            }
+            if (function_exists('wpc_v2_store_broken_note197')) {
+                wpc_v2_store_broken_note197(false);
+            }
+            if (function_exists('wpc_v2_attempts_reset197')) {
+                wpc_v2_attempts_reset197($imageID);
+            }
+        }
 
 
         if ($merged > 0) {

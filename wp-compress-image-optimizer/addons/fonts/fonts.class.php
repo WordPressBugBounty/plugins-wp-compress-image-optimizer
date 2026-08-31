@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/fonts/fonts.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 class wps_ic_fonts
@@ -63,6 +71,16 @@ class wps_ic_fonts
                     continue;
                 }
 
+                
+                
+                
+                
+                
+                if (stripos((string) $style, 'fonts.googleapis.com/css') !== false
+                    || stripos((string) $style, 'fonts.bunny.net/css') !== false) {
+                    continue;
+                }
+
                 if (!file_exists(WPS_IC_FONTS_DIR . $replaceData['dir'] . '/' . $replaceData['filename'])) {
                     continue;
                 }
@@ -98,16 +116,39 @@ class wps_ic_fonts
                 if (!preg_match_all('/family=([^&]+)/i', $u, $fm48)) { return []; }
                 $out = [];
                 foreach ($fm48[1] as $f48) {
-                    $n = strtolower(trim(str_replace('+', ' ', explode(':', urldecode($f48))[0])));
-                    if ($n !== '') { $out[$n] = 1; }
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    foreach (explode('|', urldecode($f48)) as $wpc_seg127) {
+                        $n = strtolower(trim(str_replace('+', ' ', explode(':', $wpc_seg127)[0])));
+                        if ($n !== '') { $out[$n] = 1; }
+                    }
                 }
                 return $out;
             };
             $wpc_entries48 = [];
             foreach ((array) $this->stylesheetMap as $wpc_style48 => $wpc_rd48) {
                 if (empty($wpc_rd48['filename']) || empty($wpc_rd48['dir'])) { continue; }
-                if (!file_exists(WPS_IC_FONTS_DIR . $wpc_rd48['dir'] . '/' . $wpc_rd48['filename'])) { continue; }
-                $wpc_f48 = $wpc_famsOf48($wpc_style48);
+                $wpc_lp133 = WPS_IC_FONTS_DIR . $wpc_rd48['dir'] . '/' . $wpc_rd48['filename'];
+                if (!file_exists($wpc_lp133)) { continue; }
+                
+                
+                
+                
+                
+                $wpc_f48 = [];
+                $wpc_fc133 = (string) @file_get_contents($wpc_lp133, false, null, 0, 262144);
+                if ($wpc_fc133 !== ''
+                    && preg_match_all('/@font-face\s*\{[^{}]*?font-family\s*:\s*["\']?([^"\';}]+)/is', $wpc_fc133, $wpc_fm133)) {
+                    foreach ($wpc_fm133[1] as $wpc_fn133) {
+                        $wpc_fn133 = strtolower(trim($wpc_fn133));
+                        if ($wpc_fn133 !== '') { $wpc_f48[$wpc_fn133] = 1; }
+                    }
+                }
                 if (!empty($wpc_f48)) {
                     $wpc_entries48[] = ['fams' => $wpc_f48, 'url' => self::versionedFontsCssUrl($wpc_rd48['dir'] . '/' . $wpc_rd48['filename'])];
                 }
@@ -413,7 +454,10 @@ class wps_ic_fonts
                                 }
                             }
                             $localBase918 = (string) WPS_IC_FONTS_URL . self::INLINE_DIR . '/';
-                            $stamped = preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($fm) use ($localBase918) {
+                            $wpc_fo135 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+                            $wpc_off135 = is_array($wpc_fo135) && !empty($wpc_fo135['font-display'])
+                                && strtolower((string) $wpc_fo135['font-display']) === 'off';
+                            $stamped = $wpc_off135 ? $swapped : preg_replace_callback('/@font-face\s*\{[^}]*\}/is', function ($fm) use ($localBase918) {
                                 if (stripos($fm[0], $localBase918) === false) {
                                     return $fm[0];
                                 }
@@ -525,7 +569,7 @@ class wps_ic_fonts
                 return strtolower(preg_replace('/\s+/', '', (string) $rm[1]));
             };
             $wpc_embedded107 = [];
-            if (strpos($html, 'wpc-fonts-embedded') !== false
+            if (strpos($html, 'data:font/woff2;base64') !== false
                 && preg_match_all('#@font-face\s*\{[^{}]*data:font/woff2;base64[^{}]*\}#i', $html, $wpc_em107)) {
                 foreach ($wpc_em107[0] as $wpc_eb107) {
                     $wpc_embedded107[$wpc_face_key107($wpc_eb107)] = 1;
@@ -571,12 +615,18 @@ class wps_ic_fonts
                     && !empty($wpc_embedded107) && isset($wpc_embedded107[$wpc_k918])) {
                     return '/*wpc-inline-face-standdown*/';
                 }
+                $wpc_fo313 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+                if (is_array($wpc_fo313) && !empty($wpc_fo313['font-display'])
+                    && strtolower((string) $wpc_fo313['font-display']) === 'off') {
+                    return $m[0];
+                }
                 $wpc_ff210 = preg_replace('/font-display\s*:\s*[^;}]+;?/i', '', $m[0]);
                 $wpc_fam918 = strtok($wpc_k918, '|');
                 $wpc_fd313 = function_exists('wpc_font_display_effective') ? wpc_font_display_effective('swap', $wpc_fam918) : 'swap';
                 if ($wpc_fd313 === 'optional' && isset($wpc_embedded_fams918[$wpc_fam918])) {
                     $wpc_fd313 = 'swap';
                 }
+                if (!in_array($wpc_fd313, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) { $wpc_fd313 = 'swap'; }
                 return preg_replace('/\{/', '{font-display:' . $wpc_fd313 . ';', $wpc_ff210, 1);
             }, $html);
             if (is_string($wpc_html107) && $wpc_html107 !== '') {
@@ -1188,7 +1238,10 @@ class wps_ic_fonts
         if (!apply_filters('wpc_fonts_faces_always_live', true)) {
             return '<style id="' . $wpc_id589 . '" type="wpc-mobile-stylesheet">' . $wpc_faces589 . '</style>';
         }
-        $wpc_sw589 = preg_replace_callback('/@font-face\s*\{[^}]*\}/i', function ($wpc_b589) {
+        $wpc_fo589 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+        $wpc_off589 = is_array($wpc_fo589) && !empty($wpc_fo589['font-display'])
+            && strtolower((string) $wpc_fo589['font-display']) === 'off';
+        $wpc_sw589 = $wpc_off589 ? $wpc_faces589 : preg_replace_callback('/@font-face\s*\{[^}]*\}/i', function ($wpc_b589) {
             return stripos($wpc_b589[0], 'font-display') !== false
                 ? $wpc_b589[0]
                 : preg_replace('/\{/', '{font-display:swap;', $wpc_b589[0], 1);

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/htaccess.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 class wps_ic_htaccess extends wps_ic
 {
@@ -1242,8 +1250,14 @@ HTACCESS;
         $this->htaccessPath = $this->getHtaccessPath();
         if (!$this->htaccessPath) return;
 
+        $this->htaccessContent = $this->getContents($this->htaccessPath);
+
         
-        if ($this->hasWebpReplaceRules()) {
+        
+        
+        
+        if ($this->hasWebpReplaceRules()
+            && strpos((string) $this->htaccessContent, 'Cache-Control "private, max-age=31536000" env=REDIRECT_webp') !== false) {
             return;
         }
 
@@ -1263,6 +1277,58 @@ HTACCESS;
         }
 
         insert_with_markers($this->htaccessPath, self::$webPMarker, self::getWebpReplaceRules());
+    }
+
+    
+    
+    
+    
+    
+    
+    public function applyMissingVariantFallback()
+    {
+        try {
+            $this->htaccessPath = $this->getHtaccessPath();
+            if (empty($this->htaccessPath) || !$this->isApache || !@file_exists($this->htaccessPath)
+                || !$this->isWriteable($this->htaccessPath)
+                || !apply_filters('wpc_missing_variant_fallback', true)) {
+                return false;
+            }
+            $c = (string) $this->getContents($this->htaccessPath);
+            if (strpos($c, 'wpc-mvf-302') !== false) {
+                return true;
+            }
+            if (!function_exists('insert_with_markers')) {
+                require_once ABSPATH . 'wp-admin/includes/misc.php';
+            }
+            return (bool) insert_with_markers($this->htaccessPath, 'WPC Missing Variant Fallback', self::getMissingVariantFallbackRules());
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function getMissingVariantFallbackRules()
+    {
+        $r   = [];
+        $r[] = '<IfModule mod_rewrite.c>';
+        $r[] = 'RewriteEngine On';
+        $r[] = '# wpc-mvf-302: variant file absent, src= names the source';
+        $r[] = 'RewriteCond %{REQUEST_FILENAME} !-f';
+        $r[] = 'RewriteCond %{QUERY_STRING} (?:^|&)src=(jpe?g|png|gif)(?:&|$)';
+        $r[] = 'RewriteRule ^(.*wp-content/uploads/.+)\.(?:avif|webp)$ $1.%1 [R=302,L]';
+        $r[] = '# unhinted: fall to a jpg/png twin when one exists';
+        $r[] = 'RewriteCond %{REQUEST_FILENAME} !-f';
+        $r[] = 'RewriteCond %{REQUEST_URI} ^(.+/wp-content/uploads/.+)\.(?:avif|webp)$ [OR]';
+        $r[] = 'RewriteCond %{REQUEST_URI} ^(/wp-content/uploads/.+)\.(?:avif|webp)$';
+        $r[] = 'RewriteCond %{DOCUMENT_ROOT}%1.jpg -f';
+        $r[] = 'RewriteRule ^ %1.jpg [R=302,L]';
+        $r[] = 'RewriteCond %{REQUEST_FILENAME} !-f';
+        $r[] = 'RewriteCond %{REQUEST_URI} ^(.+/wp-content/uploads/.+)\.(?:avif|webp)$ [OR]';
+        $r[] = 'RewriteCond %{REQUEST_URI} ^(/wp-content/uploads/.+)\.(?:avif|webp)$';
+        $r[] = 'RewriteCond %{DOCUMENT_ROOT}%1.png -f';
+        $r[] = 'RewriteRule ^ %1.png [R=302,L]';
+        $r[] = '</IfModule>';
+        return $r;
     }
 
     private function hasWebpReplaceRules()
@@ -1315,6 +1381,15 @@ HTACCESS;
 
         if ($wpc_avif_ok) {
             $webp_rules .= 'Header append Vary Accept env=REDIRECT_avif'.PHP_EOL;
+        }
+        
+        
+        
+        
+        
+        $webp_rules .= 'Header set Cache-Control "private, max-age=31536000" env=REDIRECT_webp'.PHP_EOL;
+        if ($wpc_avif_ok) {
+            $webp_rules .= 'Header set Cache-Control "private, max-age=31536000" env=REDIRECT_avif'.PHP_EOL;
         }
         $webp_rules .= '</IfModule>'.PHP_EOL;
 

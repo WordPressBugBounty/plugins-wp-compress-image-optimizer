@@ -1,20 +1,26 @@
+
+
+
+var wpcBgObserver = null;
+var wpcLazyObserver = null;
+
 function runLazy() {
-    var lazyImages = [].slice.call(document.querySelectorAll("img[data-wpc-loaded='true']"));
-    var LazyBackgrounds = [].slice.call(document.querySelectorAll(".wpc-bgLazy"));
+    var lazyImages = [].slice.call(document.querySelectorAll("img[data-wpc-loaded='true']:not([data-wpc-lz])"));
+    var LazyBackgrounds = [].slice.call(document.querySelectorAll(".wpc-bgLazy:not([data-wpc-lz])"));
 
     if ("IntersectionObserver" in window) {
-        var LazyBackgroundsObserver = new IntersectionObserver(function (entries, observer) {
+        wpcBgObserver = wpcBgObserver || new IntersectionObserver(function (entries, observer) {
             entries.forEach(function (entry) {
                 if (entry.isIntersecting) {
                     var lazyBGImage = entry.target;
                     lazyBGImage.classList.remove("wpc-bgLazy");
-                    LazyBackgroundsObserver.unobserve(lazyBGImage);
+                    wpcBgObserver.unobserve(lazyBGImage);
                 }
             });
         }, {rootMargin: "800px"});
 
 
-        var lazyImageObserver = new IntersectionObserver(function (entries, observer) {
+        wpcLazyObserver = wpcLazyObserver || new IntersectionObserver(function (entries, observer) {
             entries.forEach(function (entry) {
                 if (entry.isIntersecting) {
                     var lazyImage = entry.target;
@@ -163,17 +169,19 @@ function runLazy() {
                     }
 
                     
-                    lazyImageObserver.unobserve(lazyImage);
+                    wpcLazyObserver.unobserve(lazyImage);
                 }
             });
         }, {rootMargin:"800px"});
 
         LazyBackgrounds.forEach(function (lazyImage) {
-            LazyBackgroundsObserver.observe(lazyImage);
+            lazyImage.setAttribute("data-wpc-lz", "1");
+            wpcBgObserver.observe(lazyImage);
         });
 
         lazyImages.forEach(function (lazyImage) {
-            lazyImageObserver.observe(lazyImage);
+            lazyImage.setAttribute("data-wpc-lz", "1");
+            wpcLazyObserver.observe(lazyImage);
         });
 
     } else {
@@ -194,81 +202,4 @@ function onScroll() {
 
 window.addEventListener('scroll', onScroll);
 
-const wpcObserver = new MutationObserver(function (mutationsList) {
-    
-    for (var i = 0; i < mutationsList.length; i++) {
-        var mutation = mutationsList[i];
-
-        
-        if (
-            mutation.type === 'childList' &&
-            mutation.addedNodes.length > 0 &&
-            mutation.addedNodes[0].tagName &&
-            mutation.addedNodes[0].tagName.toLowerCase() === 'img'
-        ) {
-            
-            for (var j = 0; j < mutation.addedNodes.length; j++) {
-                var node = mutation.addedNodes[j];
-
-                
-                if (node.tagName && node.tagName.toLowerCase() === 'img') {
-                    adaptiveImage = node;
-                    
-
-
-                    if ((typeof adaptiveImage.dataset.src !== 'undefined' && adaptiveImage.dataset.src != '')) {
-                        newApiURL = adaptiveImage.dataset.src;
-
-                        newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
-                        adaptiveImage.src = newApiURL;
-                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
-                            adaptiveImage.srcset = adaptiveImage.dataset.srcset;
-                        }
-                    }
-                    else if (typeof adaptiveImage.src !== 'undefined' && adaptiveImage.src != '') {
-                        newApiURL = adaptiveImage.src;
-
-                        newApiURL = SetupNewApiURL(newApiURL, imgWidth, adaptiveImage);
-
-                        adaptiveImage.src = newApiURL;
-                        if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.src != '') {
-                            adaptiveImage.srcset = adaptiveImage.dataset.srcset;
-                        }
-                    }
-
-                    adaptiveImage.classList.add("ic-fade-in");
-                    adaptiveImage.classList.remove("wps-ic-lazy-image");
-
-                    adaptiveImage.removeAttribute('data-srcset');
-
-                    srcSetAPI = '';
-                    if (typeof adaptiveImage.srcset !== 'undefined' && adaptiveImage.srcset != '') {
-                        srcSetAPI = newApiURL = adaptiveImage.srcset;
-
-                        if (jsDebug) {
-                            console.log('Image has srcset');
-                            console.log(adaptiveImage.srcset);
-                            console.log(newApiURL);
-                        }
-
-                        newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
-                        adaptiveImage.srcset = newApiURL;
-                    }
-                    else if (typeof adaptiveImage.dataset.srcset !== 'undefined' && adaptiveImage.dataset.srcset != '') {
-                        srcSetAPI = newApiURL = adaptiveImage.dataset.srcset;
-                        if (jsDebug) {
-                            console.log('Image does not have srcset');
-                            console.log(newApiURL);
-                        }
-
-                        newApiURL = SetupNewApiURL(newApiURL, 0, adaptiveImage);
-
-                        adaptiveImage.srcset = newApiURL;
-                    }
-                }
-            }
-        }
-    }
-});
+wpcWatchInjected(runLazy, "img[data-wpc-loaded='true']");

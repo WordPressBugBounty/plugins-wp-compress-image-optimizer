@@ -7643,6 +7643,106 @@ label[for="wpc-cf-token"] {
   line-height: 1.5;
   color: #94a3b8;
 }
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 12px;
+  color: #64748b;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #22b73a;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22b73a;
+  animation: wpcVpSavedPulse 2s ease-in-out infinite;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-clock {
+  font-family: 'proxima_bold', sans-serif;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-sub {
+  font-family: 'proxima_regular', sans-serif;
+  font-size: 12px;
+  color: #64748b;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-feed {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: 40%;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-feed .wpc-vp-saved-pt {
+  font-family: 'proxima_semibold', sans-serif;
+  font-size: 11.5px;
+  color: #1376d1;
+  background: #e8f1ff;
+  border-radius: 30px;
+  padding: 3px 9px;
+  animation: wpcVpSavedLand 4s ease-out forwards;
+}
+.wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-saved-feed .wpc-vp-saved-pt.is-m {
+  color: #2563eb;
+}
+@keyframes wpcVpSavedPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes wpcVpSavedLand {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  8% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 .wps_ic_settings_page .wpc-vitals-panel .wpc-vitals-legend {
   display: flex;
   justify-content: flex-end;

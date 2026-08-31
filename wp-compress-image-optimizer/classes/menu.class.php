@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/menu.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -250,6 +258,8 @@ class wps_ic_menu extends wps_ic
         if ($wpc_crit641) {
             $admin_bar->add_menu(['id' => 'wp-compress-pull-latest', 'parent' => 'wp-compress-advanced', 'title' => __('Pull Latest Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Re-fetch the newest cloud artifacts (critical, fonts, used-CSS) without purging. Automation does this on its own — use it to skip the wait.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-pull-latest'],]);
             $admin_bar->add_menu(['id' => 'wp-compress-rebuild', 'parent' => 'wp-compress-advanced', 'title' => __('Rebuild All Optimizations', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Fetch fresh optimizations for the whole site and drop stale cached pages. Images and the CDN are not touched.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-rebuild'],]);
+            $admin_bar->add_menu(['id' => 'wp-compress-purge-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Purge Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Mark every page\'s Critical CSS for regeneration. The current version keeps serving until each fresh one lands — pages never render unstyled.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-purge-critical-css'],]);
+            $admin_bar->add_menu(['id' => 'wp-compress-remove-critical-css', 'parent' => 'wp-compress-advanced', 'title' => __('Remove Critical CSS', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Remove Critical CSS from every page now. Pages render with full theme CSS (correct but slower) until fresh versions land automatically.', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-remove-critical-css'],]);
         }
         if ($wpc_cdn641) {
             $admin_bar->add_menu(['id' => 'wp-compress-clear-cache', 'parent' => 'wp-compress-advanced', 'title' => __('Purge CDN Images', WPS_IC_TEXTDOMAIN), 'href' => '#', 'meta' => ['title' => __('Rarely needed. Re-fetches every optimized image from origin — only use this if IMAGES are wrong, not CSS or HTML', WPS_IC_TEXTDOMAIN), 'target' => '_self', 'class' => 'wp-compress-bar-clear-cache'],]);

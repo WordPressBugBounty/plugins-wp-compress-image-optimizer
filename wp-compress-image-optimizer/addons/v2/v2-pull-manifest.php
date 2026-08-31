@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-pull-manifest.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -11,12 +19,7 @@ if (!function_exists('wpc_v2_pull_enabled')) {
     {
         $opt = get_site_option('wpc_v2_pull_enabled', null);
         if ($opt === null) {
-
-
-            $zone_ok = function_exists('wpc_v2_get_zone_id') && wpc_v2_get_zone_id();
-            $s_pull  = get_option(WPS_IC_SETTINGS);
-            $cdn_on  = is_array($s_pull) && !empty($s_pull['live-cdn']) && (string) $s_pull['live-cdn'] === '1';
-            return (bool) apply_filters('wpc_v2_pull_enabled', (bool) ($zone_ok && $cdn_on));
+            return (bool) apply_filters('wpc_v2_pull_enabled', true);
         }
         return (bool) apply_filters('wpc_v2_pull_enabled', !empty($opt));
     }
@@ -203,6 +206,16 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 
 
         $min_failed_ms   = 0;
+        $failed_entries197 = [];
+        $fail197 = function ($v, $reason) use (&$failed_entries197) {
+            if (count($failed_entries197) >= 50) return;
+            $failed_entries197[] = [
+                'imageID'   => isset($v['imageID'])   ? (string) $v['imageID']   : '',
+                'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
+                'format'    => isset($v['format'])    ? (string) $v['format']    : '',
+                'reason'    => (string) $reason,
+            ];
+        };
 
         foreach ($variants as $v) {
 
@@ -256,6 +269,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
 
                     } else {
                         $lazycdn_failed++;
+                        $fail197($v, 'lazycdn_ingest_failed');
 
                         $f_ms = isset($v['completed_at_ms']) ? (int) $v['completed_at_ms'] : 0;
 
@@ -323,6 +337,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                     $dbg_invalid_dumped++;
                 }
                 $skipped_invalid++;
+                $fail197($v, 'invalid_entry');
                 continue;
             }
 
@@ -337,6 +352,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             $abs_parent = get_attached_file($imageID);
             if (!$abs_parent) {
                 $skipped_invalid++;
+                $fail197($v, 'no_attached_file');
                 continue;
             }
             $dest_dir = dirname($abs_parent);
@@ -385,7 +401,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
                 
                 foreach ($group['entries'] as $entry) {
 
-
+                    $fail197(['imageID' => $imageID, 'sizeLabel' => $entry['sizeLabel'] ?? '', 'format' => $entry['format'] ?? ''], 'journal_write_failed');
                     if (!empty($entry['bytes_sha256'])) {
                         $journal_failed_sha256s[(string) $entry['bytes_sha256']] = true;
                     }
@@ -423,6 +439,7 @@ if (!function_exists('wpc_v2_pull_manifest_queue_for_drain')) {
             'journal_failed_sha256s' => array_keys($journal_failed_sha256s),
             
             'min_failed_completed_ms' => $min_failed_ms,
+            'failed_entries197'       => $failed_entries197,
         ];
     }
 }
@@ -452,9 +469,9 @@ if (!function_exists('wpc_v2_pull_manifest_already_on_disk')) {
 
 
 if (!function_exists('wpc_v2_pull_manifest_ack')) {
-    function wpc_v2_pull_manifest_ack(array $acks)
+    function wpc_v2_pull_manifest_ack(array $acks, array $receipt = [])
     {
-        if (empty($acks)) {
+        if (empty($acks) && empty($receipt)) {
             return true;
         }
         $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
@@ -465,7 +482,11 @@ if (!function_exists('wpc_v2_pull_manifest_ack')) {
 
         
         
-        $body_raw = wp_json_encode(['acks' => array_values($acks)]);
+        $wpc_body197 = ['acks' => array_values($acks)];
+        if (!empty($receipt)) {
+            $wpc_body197['receipt'] = $receipt;
+        }
+        $body_raw = wp_json_encode($wpc_body197);
         $sig_headers = wpc_v2_manifest_sign_body($apikey, $body_raw);
 
         $url = rtrim($orch_url, '/') . '/optimize-v2/manifest/ack?apikey=' . rawurlencode($apikey);
@@ -1158,9 +1179,23 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                 'sha256'    => $sha,
             ];
         }
+        $wpc_failed197 = isset($queue['failed_entries197']) && is_array($queue['failed_entries197'])
+            ? $queue['failed_entries197'] : [];
+        $wpc_rejected_all197 = (count($variants) > 0
+            && (int) $queue['skipped_invalid'] === count($variants)
+            && (int) $queue['queued'] === 0
+            && (int) ($queue['lazycdn_ingested'] ?? 0) === 0);
+        if ($wpc_rejected_all197 && count($wpc_failed197) < 50) {
+            $wpc_failed197[] = ['imageID' => '', 'sizeLabel' => '', 'format' => '', 'reason' => 'all_variants_rejected_cursor_advanced'];
+        }
+        $wpc_receipt197 = [
+            'seen'     => count($variants),
+            'ingested' => (int) $queue['queued'] + (int) ($queue['lazycdn_ingested'] ?? 0),
+            'failed'   => $wpc_failed197,
+        ];
         $t_a0 = microtime(true);
-        if (!empty($acks) && function_exists('wpc_v2_pull_manifest_ack')) {
-            wpc_v2_pull_manifest_ack($acks);
+        if ((!empty($acks) || !empty($wpc_failed197)) && function_exists('wpc_v2_pull_manifest_ack')) {
+            wpc_v2_pull_manifest_ack($acks, $wpc_receipt197);
         }
         $t_ack_ms = (int) round((microtime(true) - $t_a0) * 1000);
 

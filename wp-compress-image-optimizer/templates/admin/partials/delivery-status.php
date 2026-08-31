@@ -1,5 +1,13 @@
 <?php
 
+
+
+
+
+
+
+
+
 if (!defined('ABSPATH')) exit;
 if (!class_exists('WPC_Delivery_Resolver')) return;
 

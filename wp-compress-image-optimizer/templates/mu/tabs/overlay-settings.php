@@ -5,7 +5,15 @@
       <div class="wpc-ic-mu-site-left-side">
         <div class="wpc-ic-mu-site-name">
           <span class="wpc-ic-mu-site-status-circle"></span>
-          <h3><?php echo 'Default Settings'; ?></h3>
+          <h3><?php
+
+
+
+
+
+
+
+ echo 'Default Settings'; ?></h3>
           <h5><?php echo 'setup your default configuration'; ?></h5>
         </div>
         <div style="display: inline-block;vertical-align: middle;margin-left:20px;">

@@ -20,6 +20,14 @@
     var s = Number(C.s) || 1;
     if (s > 1 && Math.random() >= 1 / s) { return; } 
     var M = {}, sent = false;
+    
+    
+    
+    
+    var HU = false;
+    ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll', 'mousemove'].forEach(function (ev) {
+        addEventListener(ev, function () { HU = true; }, { once: true, passive: true, capture: true });
+    });
 
     function nav() {
         try { return performance.getEntriesByType('navigation')[0] || null; } catch (e) { return null; }
@@ -70,6 +78,7 @@
     } catch (e) { }
 
     function flush() {
+        if (!HU) { return; }
         if (sent) { return; }
         sent = true;
         try {

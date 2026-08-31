@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/criticalCss/criticalCss-v2.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 if (!class_exists('wps_ic_url_key')) {
     include_once WPS_IC_DIR . 'traits/url_key.php';
@@ -706,7 +714,11 @@ $return['mobile_path'] = $mobileFilePath;
 
         $uuid     = wp_generate_uuid4();
         $uuid_key = 'wpc_critical_uuid_' . $url_key;
-        set_transient($uuid_key, $uuid, 60 * 5);
+        
+        
+        
+        
+        set_transient($uuid_key, $uuid, 60 * 30);
 
 
         
@@ -862,11 +874,35 @@ $return['mobile_path'] = $mobileFilePath;
         
         
         
+        if (function_exists('home_url')) {
+            $wpc_home167 = parse_url((string) home_url('/'));
+            $wpc_u167 = parse_url((string) $url);
+            if (!empty($wpc_home167['host']) && !empty($wpc_u167['host'])
+                && strtolower($wpc_u167['host']) !== strtolower($wpc_home167['host'])) {
+                $url = (isset($wpc_home167['scheme']) ? $wpc_home167['scheme'] : 'https') . '://' . $wpc_home167['host']
+                    . (isset($wpc_u167['path']) ? $wpc_u167['path'] : '/')
+                    . (isset($wpc_u167['query']) && $wpc_u167['query'] !== '' ? '?' . $wpc_u167['query'] : '');
+            }
+        }
+        
+        
+        
+        
         
         $wpc_human547 = function_exists('wp_doing_ajax') && wp_doing_ajax()
             && function_exists('is_user_logged_in') && is_user_logged_in()
             && function_exists('current_user_can') && current_user_can('manage_options');
-        $timeout = $wpc_human547 ? 5 : 1.5;
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_bg164 = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+            || (function_exists('wp_doing_cron') && wp_doing_cron());
+        $timeout = (float) apply_filters('wpc_push_html_timeout', $wpc_human547 ? 5 : ($wpc_bg164 ? 15 : 1.5));
 
         $response = wp_remote_get($url . '?criticalCombine=true', [
             'timeout'    => $timeout,
@@ -878,6 +914,8 @@ $return['mobile_path'] = $mobileFilePath;
             
             
             
+            $wpc_err1_163 = is_wp_error($response) ? substr((string) $response->get_error_message(), 0, 120)
+                : ('http ' . (int) wp_remote_retrieve_response_code($response));
             $wpc_ip771 = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
             $wpc_host771 = (string) parse_url($url, PHP_URL_HOST);
             if ($wpc_ip771 !== '' && $wpc_host771 !== '' && filter_var($wpc_ip771, FILTER_VALIDATE_IP)
@@ -893,6 +931,9 @@ $return['mobile_path'] = $mobileFilePath;
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('push-html-direct', '', (string) $url, [
                         'code' => is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response),
+                        'err'  => is_wp_error($response) ? substr((string) $response->get_error_message(), 0, 120) : '',
+                        'err1' => $wpc_err1_163,
+                        'ip'   => $wpc_ip771,
                     ]);
                 }
             }
@@ -902,6 +943,7 @@ $return['mobile_path'] = $mobileFilePath;
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('push-html-failed', '', (string) $url, [
                     'code' => is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response),
+                    'err'  => is_wp_error($response) ? substr((string) $response->get_error_message(), 0, 120) : '',
                 ]);
             }
             return null;
@@ -1313,7 +1355,15 @@ $return['mobile_path'] = $mobileFilePath;
     {
 
 
-        if (function_exists('wpc_gen_backoff_active') && wpc_gen_backoff_active()) {
+        
+        
+        
+        
+        
+        
+        
+        $wpc_human98 = !empty($_GET['forceCritical']) || !empty($GLOBALS['wpc_gen_force496']);
+        if (!$wpc_human98 && function_exists('wpc_gen_backoff_active') && wpc_gen_backoff_active()) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('gen-backoff-deferred', (string) $this->urlKey, '', ['path' => 'kick']);
             }
@@ -1321,7 +1371,7 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        if (empty($_GET['forceCritical']) && function_exists('wpc_gen_landless_parked') && wpc_gen_landless_parked((string) $this->urlKey)) {
+        if (!$wpc_human98 && function_exists('wpc_gen_landless_parked') && wpc_gen_landless_parked((string) $this->urlKey)) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('gen-parked-deferred', (string) $this->urlKey, '', ['path' => 'kick']);
             }
@@ -1329,7 +1379,7 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
 
-        if (empty($_GET['forceCritical']) && function_exists('wpc_land_cooldown_active') && wpc_land_cooldown_active($this->urlKey)) {
+        if (!$wpc_human98 && function_exists('wpc_land_cooldown_active') && wpc_land_cooldown_active($this->urlKey)) {
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('land-cooldown-deferred', (string) $this->urlKey, '', ['path' => 'kick']);
             }
@@ -1343,7 +1393,7 @@ $return['mobile_path'] = $mobileFilePath;
             $wpc_crit_here123b = (@filesize($wpc_cd123b . 'critical_desktop.css') > 5) || (@filesize($wpc_cd123b . 'critical_mobile.css') > 5);
         }
         $wpc_gsp2 = (int) apply_filters('wpc_gen_global_spacing', 45);
-        if ($wpc_gsp2 > 0 && $wpc_crit_here123b && apply_filters('wpc_gen_single_flight', true) && empty($_GET['forceCritical'])) {
+        if ($wpc_gsp2 > 0 && $wpc_crit_here123b && apply_filters('wpc_gen_single_flight', true) && !$wpc_human98) {
             if (!add_option('wpc_gen_sf_global', time(), '', 'no')) {
                 $wpc_gsf2 = (int) get_option('wpc_gen_sf_global');
                 if ($wpc_gsf2 && (time() - $wpc_gsf2) < $wpc_gsp2) {
@@ -1361,7 +1411,7 @@ $return['mobile_path'] = $mobileFilePath;
             $wpc_ksf = 'wpc_gen_sf_' . $this->urlKey;
             if (!add_option($wpc_ksf, time(), '', 'no')) {
                 $wpc_ksf_at = (int) get_option($wpc_ksf);
-                if ($wpc_ksf_at && (time() - $wpc_ksf_at) < 120) {
+                if ($wpc_ksf_at && (time() - $wpc_ksf_at) < ($wpc_human98 ? 15 : 120)) {
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('gen-single-flight', (string) $this->urlKey, '', ['path' => 'kick', 'skip' => 1]);
                     }
@@ -1451,11 +1501,18 @@ $return['mobile_path'] = $mobileFilePath;
         if (empty($args['html']) && apply_filters('wpc_push_corpus_ajax', true)) {
             $wpc_curl794 = !empty($args['url']) ? (string) $args['url'] : urldecode((string) $this->serverRequest);
             $wpc_h794 = $this->fetchCriticalCombineHtml(strtok($wpc_curl794, '?'));
-            if ($wpc_h794) {
+            
+            
+            
+            
+            
+            
+            $wpc_ccap169 = (int) apply_filters('wpc_push_corpus_cap', 8388608);
+            if ($wpc_h794 && strlen($wpc_h794) <= $wpc_ccap169) {
                 $args['html'] = $wpc_h794;
                 if (apply_filters('wpc_push_css_corpus', true)) {
                     $wpc_c794 = $this->fetchCriticalCombineCss($wpc_h794);
-                    if ($wpc_c794 !== '') { $args['css'] = $wpc_c794; }
+                    if ($wpc_c794 !== '' && strlen($wpc_h794) + strlen($wpc_c794) <= $wpc_ccap169) { $args['css'] = $wpc_c794; }
                 }
             }
         }
@@ -1494,6 +1551,39 @@ $return['mobile_path'] = $mobileFilePath;
             ]);
         }
 
+        
+        
+        
+        
+        
+        if (!is_wp_error($call) && empty($args['html']) && apply_filters('wpc_gen_corpus_retry', true)) {
+            $wpc_nc169 = json_decode((string) $body, true);
+            if (is_array($wpc_nc169) && !empty($wpc_nc169['needs_corpus'])) {
+                $wpc_cu169 = !empty($args['url']) ? (string) $args['url'] : urldecode((string) $this->serverRequest);
+                $wpc_h169 = $this->fetchCriticalCombineHtml(strtok($wpc_cu169, '?'));
+                $wpc_ccap169r = (int) apply_filters('wpc_push_corpus_cap', 8388608);
+                if ($wpc_h169 && strlen($wpc_h169) <= $wpc_ccap169r) {
+                    $args['html'] = $wpc_h169;
+                    if (apply_filters('wpc_push_css_corpus', true)) {
+                        $wpc_c169 = $this->fetchCriticalCombineCss($wpc_h169);
+                        if ($wpc_c169 !== '' && strlen($wpc_h169) + strlen($wpc_c169) <= $wpc_ccap169r) { $args['css'] = $wpc_c169; }
+                    }
+                    $call = wp_remote_post(self::$API_URL, ['timeout' => $wpc_dtimeout, 'body' => $args, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]);
+                    $body = wp_remote_retrieve_body($call);
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('gen-corpus-retry', (string) $this->urlKey, '', [
+                            'code'   => is_wp_error($call) ? 0 : (int) wp_remote_retrieve_response_code($call),
+                            'html_b' => strlen((string) $args['html']),
+                            'css_b'  => isset($args['css']) ? strlen((string) $args['css']) : 0,
+                        ]);
+                    }
+                } elseif (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('gen-corpus-retry-miss', (string) $this->urlKey, '', [
+                        'have' => $wpc_h169 ? strlen((string) $wpc_h169) : 0,
+                    ]);
+                }
+            }
+        }
         if (function_exists('wpc_gen_landless_note')) {
             wpc_gen_landless_note((string) $this->urlKey);
         }
@@ -1580,7 +1670,7 @@ $return['mobile_path'] = $mobileFilePath;
         $wpc_srvu218 = is_array($wpc_ack218) && !empty($wpc_ack218['uuid'])
             ? preg_replace('/[^A-Za-z0-9-]/', '', (string) $wpc_ack218['uuid']) : '';
         if ($wpc_srvu218 !== '' && !empty($this->urlKey)) {
-            set_transient('wpc_critical_uuid_' . $this->urlKey, $wpc_srvu218, 60 * 5);
+            set_transient('wpc_critical_uuid_' . $this->urlKey, $wpc_srvu218, 60 * 30);
             if (defined('WPS_IC_CRITICAL')) {
                 $wpc_ud218 = WPS_IC_CRITICAL . $this->urlKey . '/';
                 if (!is_dir($wpc_ud218)) {
@@ -1622,7 +1712,7 @@ $return['mobile_path'] = $mobileFilePath;
     
     
     
-    private function fetchLatestPointerUuid($urlKey)
+    public function fetchLatestPointerUuid($urlKey)
     {
         if (!function_exists('get_option') || !defined('WPS_IC_OPTIONS')) {
             return '';
@@ -1711,6 +1801,77 @@ $return['mobile_path'] = $mobileFilePath;
             }
             return '';
         }
+        
+        
+        
+        
+        
+        
+        try {
+            $wpc_art212 = (isset($j['artifacts']) && is_array($j['artifacts'])) ? $j['artifacts'] : [];
+            $wpc_ucu212 = '';
+            $wpc_tpl212 = '';
+            foreach ([$wpc_art212, $j] as $wpc_srcj212) {
+                foreach (['used_css_url', 'used_css', 'usedCss', 'used_css_atf'] as $wpc_k212) {
+                    if ($wpc_ucu212 === '' && !empty($wpc_srcj212[$wpc_k212]) && is_string($wpc_srcj212[$wpc_k212])) {
+                        $wpc_ucu212 = trim($wpc_srcj212[$wpc_k212]);
+                    }
+                }
+                foreach (['tpl_key', 'tplKey', 'used_tpl'] as $wpc_k212) {
+                    if ($wpc_tpl212 === '' && !empty($wpc_srcj212[$wpc_k212]) && is_string($wpc_srcj212[$wpc_k212])) {
+                        $wpc_tpl212 = trim($wpc_srcj212[$wpc_k212]);
+                    }
+                }
+            }
+            
+            
+            if ($wpc_tpl212 === '' && $wpc_ucu212 !== '' && function_exists('wpc_dispatch_tpl_key')) {
+                $wpc_tpl212 = (string) wpc_dispatch_tpl_key($urlKey);
+                if ($wpc_tpl212 !== '' && function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('pointer-tpl-from-local', (string) $urlKey, '', ['tpl' => $wpc_tpl212]);
+                }
+            }
+            if ($wpc_ucu212 !== '' && $wpc_tpl212 !== '' && defined('WPS_IC_CRITICAL')
+                && function_exists('wpc_used_css_key_valid') && wpc_used_css_key_valid($wpc_tpl212)
+                && function_exists('wpc_used_css_fetch') && function_exists('wpc_crit_meta_write')) {
+                $wpc_cd212   = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+                $wpc_prev212 = trim((string) @file_get_contents($wpc_cd212 . 'used_css_url.txt'));
+                $wpc_have212 = function_exists('wpc_used_css_path') && @is_readable(wpc_used_css_path($wpc_tpl212));
+                if (($wpc_prev212 !== $wpc_ucu212 || !$wpc_have212) && !get_transient('wpc_ucptr212_' . md5((string) $urlKey))) {
+                    set_transient('wpc_ucptr212_' . md5((string) $urlKey), 1, 300);
+                    if (!is_dir($wpc_cd212) && function_exists('wp_mkdir_p')) { @wp_mkdir_p($wpc_cd212); }
+                    wpc_crit_meta_write($wpc_cd212 . 'used_css_url.txt', $wpc_ucu212);
+                    wpc_crit_meta_write($wpc_cd212 . 'used_tpl.txt', $wpc_tpl212);
+                    foreach (['mobile', 'desktop'] as $wpc_dv212) {
+                        foreach ([$wpc_art212, $j] as $wpc_srcj212) {
+                            $wpc_dk212 = 'used_css_' . $wpc_dv212 . '_url';
+                            if (!empty($wpc_srcj212[$wpc_dk212]) && is_string($wpc_srcj212[$wpc_dk212])) {
+                                wpc_crit_meta_write($wpc_cd212 . $wpc_dk212 . '.txt', trim($wpc_srcj212[$wpc_dk212]));
+                                break;
+                            }
+                        }
+                    }
+                    foreach ([$wpc_art212, $j] as $wpc_srcj212) {
+                        if (!empty($wpc_srcj212['used_css_sheets_url']) && is_string($wpc_srcj212['used_css_sheets_url'])) {
+                            wpc_crit_meta_write($wpc_cd212 . 'used_css_sheets_url.txt', trim($wpc_srcj212['used_css_sheets_url']));
+                            break;
+                        }
+                    }
+                    if (wpc_used_css_fetch($wpc_ucu212, $wpc_tpl212)) {
+                        if (function_exists('wpc_used_css_scoped_purge')) { wpc_used_css_scoped_purge($wpc_tpl212); }
+                        if (function_exists('wpc_used_css_sheets_land')) { wpc_used_css_sheets_land($wpc_cd212, $wpc_tpl212); }
+                        if (function_exists('wpc_cache_first_log')) {
+                            wpc_cache_first_log('pointer-usedcss-landed', (string) $urlKey, '', ['tpl' => $wpc_tpl212]);
+                        }
+                    }
+                }
+            } elseif (!empty($wpc_art212) && ($wpc_ucu212 === '' || $wpc_tpl212 === '') && function_exists('wpc_cache_first_log')
+                && !get_transient('wpc_ucptr212diag')) {
+                set_transient('wpc_ucptr212diag', 1, 3600);
+                wpc_cache_first_log('pointer-artifacts-unmatched', (string) $urlKey, '', ['keys' => implode(',', array_slice(array_keys($wpc_art212), 0, 12))]);
+            }
+        } catch (\Throwable $e) {
+        }
         return preg_replace('/[^a-f0-9-]/i', '', (string) ($j['crit_uuid'] ?? ''));
     }
 
@@ -1718,7 +1879,7 @@ $return['mobile_path'] = $mobileFilePath;
     
     
     
-    public function pullDerivedArtifacts($urlKey = '', $uuid = '', $force = false)
+    public function pullDerivedArtifacts($urlKey = '', $uuid = '', $force = false, $rev = 0)
     {
         if (empty($urlKey)) {
             $urlKey = (string) $this->urlKey;
@@ -1759,9 +1920,15 @@ $return['mobile_path'] = $mobileFilePath;
             }
         }
         
+        
+        
+        
+        
+        
         if ($force && !@is_file($cd . 'stale.txt')
             && @filesize($cd . 'critical_desktop.css') > 64 && @filesize($cd . 'critical_mobile.css') > 64
-            && trim((string) @file_get_contents($cd . 'land_uuid.txt')) === $uuid) {
+            && trim((string) @file_get_contents($cd . 'land_uuid.txt')) === $uuid
+            && (int) $rev <= max(1, (int) @file_get_contents($cd . 'land_rev.txt'))) {
             return true;
         }
         
@@ -1825,8 +1992,19 @@ $return['mobile_path'] = $mobileFilePath;
         $this->saveCriticalCss($urlKey, [
             'url'  => ['desktop' => $base . '-desktop.css' . $wpc_cb179, 'mobile' => $base . '-mobile.css' . $wpc_cb179],
             'uuid' => $uuid,
+            'wire_rev' => (int) $rev,
         ], 'meta');
-        return @filesize($cd . 'critical_desktop.css') > 64;
+        $wpc_ok188 = @filesize($cd . 'critical_desktop.css') > 64;
+        if ($wpc_ok188 && !@is_readable($cd . 'used_tpl.txt')
+            && function_exists('wpc_lcp_repull_handler') && function_exists('get_transient')
+            && !get_transient('wpc_ucbf188_' . md5((string) $urlKey))) {
+            set_transient('wpc_ucbf188_' . md5((string) $urlKey), 1, 60);
+            try {
+                wpc_lcp_repull_handler((string) $urlKey, 1);
+            } catch (\Throwable $e) {
+            }
+        }
+        return $wpc_ok188;
     }
 
     public function saveCriticalCss($urlKey, $CSS, $type = 'meta', $pageUrl = '')
@@ -1923,6 +2101,11 @@ $return['mobile_path'] = $mobileFilePath;
             if (wpc_crit_meta_write($wpc_tmp, $wpc_w[1]) !== false) {
                 if (!@rename($wpc_tmp, $critical_path . $wpc_w[0])) {
                     @unlink($wpc_tmp);
+                } elseif (hash('sha256', (string) @file_get_contents($critical_path . $wpc_w[0])) !== hash('sha256', (string) $wpc_w[1])) {
+                    @unlink($critical_path . $wpc_w[0]);
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('crit-save-sha-mismatch', (string) $urlKey, '', ['f' => $wpc_w[0]]);
+                    }
                 }
             }
         }
@@ -2035,6 +2218,8 @@ $return['mobile_path'] = $mobileFilePath;
                 if ($wpc_uid_fresh !== '') {
                     wpc_crit_meta_write($critical_path . 'land_uuid.txt', preg_replace('/[^A-Za-z0-9-]/', '', $wpc_uid_fresh));
                 }
+                wpc_crit_meta_write($critical_path . 'land_rev.txt',
+                    (string) max(1, (int) (isset($json['wire_rev']) ? $json['wire_rev'] : (isset($json['rev']) ? $json['rev'] : 1))));
                 if ($wpc_dts179 > 0 && function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('crit-land-latency', (string) $urlKey, (string) $pageUrl, ['s' => max(0, time() - $wpc_dts179)]);
                 }

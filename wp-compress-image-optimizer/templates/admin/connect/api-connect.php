@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 global $wps_ic;
 ?>
 <div class="wps-ic-connect-form" style="display: none;">

@@ -1,5 +1,13 @@
 <?php
 
+
+
+
+
+
+
+
+
 if (function_exists('apply_filters') && !apply_filters('wpc_optimize_advisory_card', true)) {
     return;
 }
@@ -34,7 +42,7 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
     <div class="wpc-oa-head">
         <div class="wpc-oa-titlewrap">
             <h3 class="wpc-oa-title"><span class="wpc-oa-ic" aria-hidden="true"><svg width="16" height="13" viewBox="0 0 640 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Pro 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2026 Fonticons, Inc. --><path fill="currentColor" d="M288 112l-24-56-56-24 56-24 24-56 24 56 56 24-56 24-24 56zM492-21.9c2.1 2.1 31.8 31.8 89 89l17 17-17 17-416 416-17 17c-2.1-2.1-31.8-31.8-89-89l-17-17 17-17 416-416 17-17zM109.9 428L148 466.1 386.1 228 348 189.9 109.9 428zM492 45.9L381.9 156 420 194.1 530.1 84 492 45.9zM96 96l32-80 32 80 80 32-80 32-32 80-32-80-80-32 80-32zM384 400l80-32 32-80 32 80 80 32-80 32-32 80-32-80-80-32z"/></svg></span><?php echo esc_html__('Auto Mode', WPS_IC_TEXTDOMAIN); ?>
-                <span class="wpc-oa-beta">BETA</span></h3>
+                <span class="wpc-oa-beta">BETA</span><button type="button" class="wpc-oa-refresh" id="wpc-refresh-auto-mode" title="<?php echo esc_attr__('Refresh Auto Mode — re-apply current optimization doctrine, clear stale kill-switches, purge and re-measure', WPS_IC_TEXTDOMAIN); ?>" aria-label="<?php echo esc_attr__('Refresh Auto Mode', WPS_IC_TEXTDOMAIN); ?>"><svg width="13" height="13" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M463.5 224l8.5 0c13.3 0 24-10.7 24-24l0-128c0-9.7-5.8-18.5-14.8-22.2S461.9 48.1 455 55l-41.6 41.6c-87.6-86.5-228.7-86.2-315.8 1-87.5 87.5-87.5 229.3 0 316.8s229.3 87.5 316.8 0c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0c-62.5 62.5-163.8 62.5-226.3 0s-62.5-163.8 0-226.3c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2s12.5 14.8 22.2 14.8l119.5 0z"/></svg></button></h3>
         </div>
         <div class="wpc-oa-headctas">
             <label class="wpc-oa-autowrap" title="<?php echo esc_attr__('Measure, apply safe recommendations (Used CSS, local fonts), verify, re-measure — hands-free. Every change is journaled and one click reverts them all.', WPS_IC_TEXTDOMAIN); ?>">
@@ -155,6 +163,18 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
 .wpc-oa-toast{position:absolute;left:24px;right:24px;bottom:14px;background:#1e293b;color:#fff;font-size:13px;
   padding:11px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.18);z-index:5}
 
+.wpc-oa-refresh{opacity:0;transition:opacity .15s ease;background:none;border:0;padding:2px 4px;margin-left:6px;
+  cursor:pointer;color:#64748b;vertical-align:middle;line-height:1}
+.wpc-oa-head:hover .wpc-oa-refresh,.wpc-oa-refresh:focus{opacity:.65}
+.wpc-oa-refresh:hover{opacity:1;color:#1e293b}
+.wpc-oa-refresh svg{transition:transform .12s ease}
+.wpc-oa-refresh:active svg{transform:scale(.8)}
+.wpc-oa-refresh.wpc-oa-busy{opacity:1}
+.wpc-oa-refresh.wpc-oa-busy svg{display:none}
+.wpc-oa-refresh.wpc-oa-busy::after{content:'';display:inline-block;width:11px;height:11px;
+  border:2px solid #cbd5e1;border-top-color:#4c89eb;border-radius:50%;vertical-align:middle;
+  animation:wpcoaspin .7s linear infinite}
+
 .wpc-oa-headctas{display:flex;align-items:center;gap:16px;flex:0 0 auto;flex-wrap:wrap}
 .wpc-oa-autowrap{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
 .wpc-oa-autolabel{font-family:'proxima_semibold',sans-serif;font-size:13px;color:#1e293b;display:flex;
@@ -226,6 +246,15 @@ if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
         if (s >= 50) return {bg:'#fef7ed', fg:'#9a6400', bd:'#fbae40'};
         return {bg:'#fef2f2', fg:'#991b1b', bd:'#ef5a5a'};
     }
+    (function(){var rb=document.getElementById('wpc-refresh-auto-mode');if(!rb)return;
+        rb.addEventListener('click',function(){if(rb.classList.contains('wpc-oa-busy'))return;rb.classList.add('wpc-oa-busy');
+            var fd=new FormData();fd.append('action','wpc_refresh_auto_mode');fd.append('nonce',(window.wpc_ajaxVar&&wpc_ajaxVar.nonce)||'');
+            fetch(ajaxurl,{method:'POST',credentials:'same-origin',body:fd}).then(function(r){return r.json();}).then(function(r){
+                rb.classList.remove('wpc-oa-busy');rb.blur();
+                toast(r&&r.success?('Auto Mode refreshed: '+(((r.data||{}).did)||[]).join(', ')):'Refresh failed.');
+            }).catch(function(){rb.classList.remove('wpc-oa-busy');rb.blur();toast('Refresh failed.');});
+        });
+    })();
     function toast(msg){
         toastEl.textContent = msg; toastEl.style.display = 'block';
         clearTimeout(toastT); toastT = setTimeout(function(){ toastEl.style.display = 'none'; }, 4200);

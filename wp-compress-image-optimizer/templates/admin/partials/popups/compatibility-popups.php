@@ -2,7 +2,15 @@
     <div id="cdn-popup-inner" class="ic-compress-all-popup ic-lazy-compatibility-popup">
 
         <div class="cdn-popup-top">
-            <img class="popup-icon" src="<?php echo WPS_IC_URI; ?>assets/images/compatibility.svg"/>
+            <img class="popup-icon" src="<?php
+
+
+
+
+
+
+
+ echo WPS_IC_URI; ?>assets/images/compatibility.svg"/>
         </div>
 
         <div class="cdn-popup-content">

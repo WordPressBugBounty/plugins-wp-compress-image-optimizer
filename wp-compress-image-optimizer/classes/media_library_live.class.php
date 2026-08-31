@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/media_library_live.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -1209,7 +1217,11 @@ class wps_ic_media_library_live extends wps_ic
         }
 
 
-        set_transient('wps_ic_compress_queue', ['total_images' => count($uncompressed_images), 'queue' => $uncompressed_images], 1800);
+        if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_bulk_queue_write199')) {
+            wps_ic_ajax::wpc_bulk_queue_write199(['total_images' => count($uncompressed_images), 'queue' => $uncompressed_images]);
+        } else {
+            set_transient('wps_ic_compress_queue', ['total_images' => count($uncompressed_images), 'queue' => $uncompressed_images], 1800);
+        }
 
         return $uncompressed_images;
 

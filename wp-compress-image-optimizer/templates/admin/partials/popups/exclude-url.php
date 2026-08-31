@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 if ($option = 'exclude-url-from-all'){
 	$current_option = 'exclude-url-from-all';
 } else {

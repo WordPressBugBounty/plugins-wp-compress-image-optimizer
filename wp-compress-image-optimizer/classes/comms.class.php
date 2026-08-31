@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/comms.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 class wps_ic_comms extends wps_ic
@@ -865,6 +873,9 @@ class wps_ic_comms extends wps_ic
         $wpc_excludes['delay_js'] = [];
         update_option('wpc-excludes', $wpc_excludes);
 
+        if (function_exists('wpc_preset_cache_gate67')) {
+            $settings = wpc_preset_cache_gate67($settings);
+        }
 
         update_option(WPS_IC_SETTINGS, $settings);
         update_option(WPS_IC_PRESET, $preset);
@@ -886,7 +897,7 @@ class wps_ic_comms extends wps_ic
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
-        } else {
+        } elseif (!empty($settings['cache']['advanced'])) {
             
             
             $htaccess->setWPCache(true);
@@ -930,6 +941,16 @@ class wps_ic_comms extends wps_ic
 
         $cf = get_option(WPS_IC_CF) ?: [];
         $cf_cname = get_option(WPS_IC_CF_CNAME) ?: '';
+
+        
+        
+        
+        
+        
+        
+        $custom_cname   = (string) get_option('ic_custom_cname');
+        $cdn_zone_name  = (string) get_option('ic_cdn_zone_name');
+
         wp_send_json_success([
             'settings'       => $options,
             'excludes'       => $excludes,
@@ -943,6 +964,8 @@ class wps_ic_comms extends wps_ic
             'fonts_map'      => $fonts_map,
             'cf'             => $cf,
             'cf_cname'       => $cf_cname,
+            'custom_cname'   => $custom_cname,
+            'cdn_zone_name'  => $cdn_zone_name,
             'site_url'       => site_url(),
             'home_url'       => home_url(),
             'active_plugins' => (function () {

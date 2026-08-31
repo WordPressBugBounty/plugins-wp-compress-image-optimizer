@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 global $wps_ic, $wpdb;
 ?>
 <table id="information-table" class="wp-list-table widefat fixed striped posts">

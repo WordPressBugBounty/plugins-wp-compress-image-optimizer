@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-journal.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -100,6 +108,16 @@ function wpc_v2_journal_write_batch($imageID, $jobId, array $entries, $flush_rea
         return false;
     }
     return true;
+}
+
+
+function wpc_v2_journal_has_image($imageID) {
+    $imageID = (int) $imageID;
+    if ($imageID <= 0) return false;
+    $dir = wpc_v2_journal_dir();
+    if ($dir === '') return false;
+    $g = glob($dir . '/*-' . $imageID . '-*.jsonl');
+    return is_array($g) && !empty($g);
 }
 
 

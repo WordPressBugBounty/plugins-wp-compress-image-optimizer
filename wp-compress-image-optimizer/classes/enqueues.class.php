@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/enqueues.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -524,7 +532,12 @@ JS;
                     }
                 }
 
-                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct') {
+                
+                
+                
+                
+                if (!empty($_GET['dbg']) && $_GET['dbg'] == 'direct'
+                    && function_exists('wpc_cdn_debug_allowed649') && wpc_cdn_debug_allowed649()) {
                     if (!empty($_GET['webp']) && $_GET['webp'] == 'true') {
                         $webp = 'true';
                     } else {
@@ -546,7 +559,15 @@ JS;
                 }
 
 
-                wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'api_url' => 'https://' . self::$zone_name . '/', 'quality' => self::$quality, 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'background_sizing' => $background_sizing, 'lazy_enabled' => $lazy, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
+                
+                
+                
+                
+                $wpc_zoff227 = true;
+                foreach (['jpg', 'png', 'gif', 'svg'] as $wpc_zk227) {
+                    if (!empty(self::$settings['serve'][$wpc_zk227]) && self::$settings['serve'][$wpc_zk227] == '1') { $wpc_zoff227 = false; break; }
+                }
+                wp_localize_script($this::$slug . '-aio', 'ngf298gh738qwbdh0s87v_vars', ['zoneName' => $wpc_zoff227 ? '' : get_option('ic_cdn_zone_name'), 'siteurl' => site_url(), 'api_url' => $wpc_zoff227 ? '' : ('https://' . self::$zone_name . '/'), 'quality' => self::$quality, 'lazyMargin' => (int) apply_filters('wpc_lazy_margin_px', 120), 'ajaxurl' => admin_url('admin-ajax.php'), 'spinner' => WPS_IC_URI . 'assets/images/spinner.svg', 'background_sizing' => $background_sizing, 'lazy_enabled' => $lazy, 'webp_enabled' => $webp, 'retina_enabled' => $retina, 'force_retina' => $force_retina, 'exif_enabled' => $exif, 'adaptive_enabled' => $adaptive, 'js_debug' => self::$js_debug, 'slider_compatibility' => self::$slider_compatibility, 'triggerDomEvent' => self::$settings['disable-trigger-dom-event']]);
             } else {
 
                 if (self::$settings['css'] == 0 && self::$settings['js'] == 0 && self::$settings['serve']['jpg'] == 0 && self::$settings['serve']['png'] == 0 && self::$settings['serve']['gif'] == 0 && self::$settings['serve']['svg'] == 0) {

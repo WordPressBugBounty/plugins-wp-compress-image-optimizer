@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/js_delay_v3.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 {
@@ -57,6 +65,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         
         $this->excludes = array_values(array_unique(array_merge([
             
+            'wpcJqDef47',
             'n489D_var',
             'ngf298gh738qwbdh0s87v_vars',
             'wpcRunningCritical',
@@ -106,6 +115,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
             'form_embed', 'msgsndr', 'leadconnectorhq', 'hsforms', 'hbspt',
             'calendly', 'typeform', 'jotform',
+
+            'ameliaShortcodeData',
 
             'dark-mode', 'SR7.',
             
@@ -533,6 +544,181 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     }
 
 
+    
+    
+    
+    
+    protected $wpc_form_tokens31 = null;
+    protected function wpc_form_family_tokens31()
+    {
+        if ($this->wpc_form_tokens31 === null) {
+            $wpc_t = apply_filters('wpc_form_family_handles',
+                ['jet-form-builder', 'jetformbuilder', 'jet-fb', 'jet-plugins', 'intl-tel-input',
+                 'jet-appointments', 'jet-ab-', 'jet-apb']);
+            $wpc_o = [];
+            foreach ((array) $wpc_t as $wpc_ti) {
+                $wpc_ti = strtolower((string) $wpc_ti);
+                if ($wpc_ti !== '') { $wpc_o[] = $wpc_ti; }
+            }
+            $this->wpc_form_tokens31 = $wpc_o;
+        }
+        return $this->wpc_form_tokens31;
+    }
+
+    
+    
+    
+    public static function wpc_loader_probe_verdict159($code)
+    {
+        $code = (int) $code;
+        if ($code >= 200 && $code < 300) {
+            return 'ok';
+        }
+        if ($code >= 400 && $code < 500) {
+            return 'down';
+        }
+        return null;
+    }
+
+    
+    
+    
+    
+    
+    protected $wpc_form_keepset31 = null;
+    protected function wpc_form_keepset31()
+    {
+        if ($this->wpc_form_keepset31 !== null) {
+            return $this->wpc_form_keepset31;
+        }
+        $set = [];
+        $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
+            ? $GLOBALS['wp_scripts'] : null;
+        if ($ws) {
+            $toks = $this->wpc_form_family_tokens31();
+            foreach (array_keys($ws->registered) as $wpc_h) {
+                $wpc_hl = strtolower((string) $wpc_h);
+                $wpc_fam = false;
+                foreach ($toks as $wpc_tk) {
+                    if ($wpc_tk !== '' && strpos($wpc_hl, $wpc_tk) !== false) { $wpc_fam = true; break; }
+                }
+                if (!$wpc_fam) { continue; }
+                $set[$wpc_hl] = true;
+                $stack = [$wpc_h]; $seen = [$wpc_h => true]; $n = 0;
+                while (!empty($stack) && $n++ < 200) {
+                    $cur = array_pop($stack);
+                    if (empty($ws->registered[$cur])) { continue; }
+                    foreach ((array) $ws->registered[$cur]->deps as $d) {
+                        if (isset($seen[$d])) { continue; }
+                        $seen[$d] = true;
+                        $set[strtolower((string) $d)] = true;
+                        $stack[] = $d;
+                    }
+                }
+            }
+        }
+        $this->wpc_form_keepset31 = $set;
+        return $set;
+    }
+
+    
+    protected function wpc_user_delay_excluded($x)
+    {
+        return is_object($this->userExcludes)
+            && method_exists($this->userExcludes, 'excludedFromDelayV3')
+            && $this->userExcludes->excludedFromDelayV3((string) $x);
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    protected $wpc_user_excl_keepset55 = null;
+    protected function wpc_user_excl_keepset55()
+    {
+        if ($this->wpc_user_excl_keepset55 !== null) {
+            return $this->wpc_user_excl_keepset55;
+        }
+        $set = [];
+        $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
+            ? $GLOBALS['wp_scripts'] : null;
+        $pats = [];
+        if (is_object($this->userExcludes) && method_exists($this->userExcludes, 'delayJSExcludesV3')) {
+            foreach ((array) $this->userExcludes->delayJSExcludesV3() as $wpc_p55) {
+                $wpc_p55 = strtolower(trim((string) $wpc_p55));
+                if ($wpc_p55 !== '' && strlen($wpc_p55) > 2) { $pats[] = $wpc_p55; }
+            }
+        }
+        if ($ws && !empty($pats) && apply_filters('wpc_user_excl_closure', true)) {
+            foreach ($ws->registered as $wpc_h55 => $wpc_r55) {
+                $wpc_hl55 = strtolower((string) $wpc_h55);
+                $wpc_s55 = !empty($wpc_r55->src) ? strtolower((string) $wpc_r55->src) : '';
+                $wpc_hit55 = false;
+                foreach ($pats as $wpc_pp55) {
+                    if (strpos($wpc_hl55, $wpc_pp55) !== false || ($wpc_s55 !== '' && strpos($wpc_s55, $wpc_pp55) !== false)) {
+                        $wpc_hit55 = true;
+                        break;
+                    }
+                }
+                if (!$wpc_hit55) { continue; }
+                $stack = [$wpc_h55]; $seen = [$wpc_h55 => true]; $n = 0;
+                while (!empty($stack) && $n++ < 200) {
+                    $cur = array_pop($stack);
+                    if (empty($ws->registered[$cur])) { continue; }
+                    foreach ((array) $ws->registered[$cur]->deps as $d) {
+                        if (isset($seen[$d])) { continue; }
+                        $seen[$d] = true;
+                        $set[strtolower((string) $d)] = true;
+                        $stack[] = $d;
+                    }
+                }
+            }
+        }
+        $this->wpc_user_excl_keepset55 = $set;
+        return $set;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    protected $wpc_handle_map95 = null;
+    protected function wpc_handle_from_src95($src)
+    {
+        if ($this->wpc_handle_map95 === null) {
+            $this->wpc_handle_map95 = [];
+            $ws = (!empty($GLOBALS['wp_scripts']) && !empty($GLOBALS['wp_scripts']->registered))
+                ? $GLOBALS['wp_scripts'] : null;
+            if ($ws && apply_filters('wpc_srcless_id_resolve', true)) {
+                foreach ($ws->registered as $wpc_h95 => $wpc_r95) {
+                    if (empty($wpc_r95->src) || !is_string($wpc_r95->src)) {
+                        continue;
+                    }
+                    $wpc_p95 = strtolower((string) parse_url($wpc_r95->src, PHP_URL_PATH));
+                    if ($wpc_p95 === '' || substr($wpc_p95, -3) !== '.js') {
+                        continue;
+                    }
+                    $this->wpc_handle_map95['/' . ltrim($wpc_p95, '/')] = strtolower((string) $wpc_h95);
+                }
+            }
+        }
+        if (empty($this->wpc_handle_map95)) {
+            return '';
+        }
+        $wpc_sp95 = strtolower((string) parse_url(html_entity_decode((string) $src), PHP_URL_PATH));
+        if ($wpc_sp95 === '') {
+            return '';
+        }
+        $wpc_sp95 = '/' . ltrim($wpc_sp95, '/');
+        return isset($this->wpc_handle_map95[$wpc_sp95]) ? $this->wpc_handle_map95[$wpc_sp95] : '';
+    }
+
     protected function should_exclude_script($attributes, $content = '')
     {
 
@@ -540,6 +726,52 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         $wpc_type = isset($attributes['type']) ? strtolower(trim((string) $attributes['type'])) : '';
         if ($wpc_type !== '' && strpos($wpc_type, 'javascript') === false) {
             return true;
+        }
+
+        
+        
+        $wpc_kid55 = isset($attributes['id']) ? strtolower(preg_replace('/-js$/', '', (string) $attributes['id'])) : '';
+        if ($wpc_kid55 !== '') {
+            $wpc_ks55 = $this->wpc_user_excl_keepset55();
+            if (isset($wpc_ks55[$wpc_kid55])) {
+                return true;
+            }
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_form_family_id_keep', true)) {
+            $wpc_fid31  = isset($attributes['id']) ? strtolower((string) $attributes['id']) : '';
+            $wpc_fsrc31 = isset($attributes['src']) ? strtolower(html_entity_decode((string) $attributes['src'])) : '';
+            if ($wpc_fid31 !== '' || $wpc_fsrc31 !== '') {
+                foreach ($this->wpc_form_family_tokens31() as $wpc_ff31) {
+                    if ($wpc_ff31 !== ''
+                        && (strpos($wpc_fid31, $wpc_ff31) !== false || strpos($wpc_fsrc31, $wpc_ff31) !== false)) {
+                        return true;
+                    }
+                }
+            }
+            if ($wpc_fid31 !== '' && substr($wpc_fid31, -3) === '-js') {
+                $wpc_ks31 = $this->wpc_form_keepset31();
+                if (isset($wpc_ks31[substr($wpc_fid31, 0, -3)])) {
+                    return true;
+                }
+            }
         }
 
         
@@ -641,8 +873,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             && $this->checkKeyword(strtolower(html_entity_decode((string) $attributes['src'])), $this->wpc_lane_force_delay)
             && !$this->checkKeyword(strtolower((string) $attributes['src']
                 . (apply_filters('wpc_keep_match_id', false) && !empty($attributes['id']) ? ' ' . (string) $attributes['id'] : '')), $this->excludes)
-            && !(is_object($this->userExcludes) && method_exists($this->userExcludes, 'excludedFromDelayV2')
-                && $this->userExcludes->excludedFromDelayV2((string) $attributes['src']))) {
+            && !$this->wpc_user_delay_excluded((string) $attributes['src'])) {
             return false;
         }
 
@@ -669,8 +900,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             && (empty($attributes['data-priority']) || $attributes['data-priority'] !== 'high')
             && !$this->checkKeyword(strtolower((string) $attributes['src']
                 . (apply_filters('wpc_keep_match_id', false) && !empty($attributes['id']) ? ' ' . (string) $attributes['id'] : '')), $this->excludes)
-            && !(is_object($this->userExcludes) && method_exists($this->userExcludes, 'excludedFromDelayV2')
-                && $this->userExcludes->excludedFromDelayV2((string) $attributes['src']))) {
+            && !$this->wpc_user_delay_excluded((string) $attributes['src'])) {
             $wpc_lfsrc356 = strtolower(html_entity_decode((string) $attributes['src']));
             $wpc_lfh356 = strtolower((string) parse_url($wpc_lfsrc356, PHP_URL_HOST));
             if ($wpc_lfh356 !== '' && !$this->wpc_is_own_host($wpc_lfh356)
@@ -749,6 +979,9 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
 
 
         if (isset($matches[0]) && strpos($matches[0], 'wpc-arm-sentinel') !== false) {
+            return $matches[0];
+        }
+        if (isset($matches[0]) && strpos($matches[0], 'wpc-rootvar-early') !== false) {
             return $matches[0];
         }
         
@@ -874,6 +1107,47 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         return $out;
     }
 
+    
+    
+    
+    protected function wpc_keep_dep_closure56($wpc_excluded_ids, $wpc_seen_src_ids)
+    {
+        $wpc_out56 = [];
+        if (empty($wpc_excluded_ids) || !apply_filters('wpc_keep_dep_closure', true)
+            || empty($GLOBALS['wp_scripts']) || empty($GLOBALS['wp_scripts']->registered)) {
+            return $wpc_out56;
+        }
+        $wpc_reg56 = $GLOBALS['wp_scripts']->registered;
+        $wpc_stack56 = array_keys((array) $wpc_excluded_ids);
+        $wpc_seen56 = [];
+        $wpc_n56 = 0;
+        while (!empty($wpc_stack56) && $wpc_n56 < 400) {
+            $wpc_n56++;
+            $wpc_kid56 = (string) array_pop($wpc_stack56);
+            $wpc_h56 = preg_replace('/-js$/', '', $wpc_kid56);
+            if ($wpc_h56 === '' || isset($wpc_seen56[$wpc_h56]) || !isset($wpc_reg56[$wpc_h56])) {
+                continue;
+            }
+            $wpc_seen56[$wpc_h56] = true;
+            $wpc_deps56 = isset($wpc_reg56[$wpc_h56]->deps) ? (array) $wpc_reg56[$wpc_h56]->deps : [];
+            foreach ($wpc_deps56 as $wpc_d56) {
+                $wpc_d56 = (string) $wpc_d56;
+                if ($wpc_d56 === '') {
+                    continue;
+                }
+                $wpc_did56 = $wpc_d56 . '-js';
+                
+                
+                $wpc_stack56[] = $wpc_did56;
+                if (isset($wpc_seen_src_ids[$wpc_did56]) && !isset($wpc_excluded_ids[$wpc_did56])
+                    && !isset($wpc_out56[$wpc_did56])) {
+                    $wpc_out56[$wpc_did56] = true;
+                }
+            }
+        }
+        return array_keys($wpc_out56);
+    }
+
     public function process_html($html)
     {
         if (defined('WPS_IC_AGENCY') && WPS_IC_AGENCY) {
@@ -881,6 +1155,142 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
 
         $this->wpc_sync_jquery = (bool) preg_match('/<script\b[^>]*\bsrc=["\'][^"\']*(?:wpbf|page-builder-framework)[^"\']*\.js/i', $html);
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (strpos($html, 'bricks-lazy-hidden') !== false
+            && apply_filters('wpc_bricks_swapper_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
+                'bricks.min.js',
+            ])));
+        }
+
+        
+        
+        
+        
+        
+        
+        if ((strpos($html, '/themes/Divi/') !== false || strpos($html, 'et_pb_') !== false)
+            && apply_filters('wpc_divi_runtime_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
+                'theme-scripts-library-base.js',
+                'theme-scripts-library-scroll-to-top.js',
+                'script-library-frontend-global-functions.js',
+                'script-library-frontend-scripts.js',
+                'script-library-ext-waypoint.js',
+                'script-library-menu.js',
+                'script-library-animation.js',
+                'script-library-multi-view.js',
+                'script-library-link.js',
+                'theme-scripts-library.js',
+            ])));
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_rootvar_keep', true)
+            && preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']*\/themes\/[^"\']+\.js[^"\']*)["\'][^>]*>/i', $html, $wpc_rv74)) {
+            $wpc_rvmap74 = get_option('wpc_rootvar_setters74');
+            $wpc_rvmap74 = is_array($wpc_rvmap74) ? $wpc_rvmap74 : [];
+            $wpc_snips94 = get_option('wpc_rootvar_snips94');
+            $wpc_snips94 = is_array($wpc_snips94) ? $wpc_snips94 : [];
+            $wpc_snipdirty94 = false;
+            $wpc_hoist94 = [];
+            $wpc_rvdirty74 = false;
+            $wpc_rvfetched74 = 0;
+            foreach (array_slice(array_unique((array) $wpc_rv74[1]), 0, 12) as $wpc_rvsrc74) {
+                $wpc_rvk74 = md5((string) $wpc_rvsrc74);
+                $wpc_body94 = '';
+                if (!array_key_exists($wpc_rvk74, $wpc_rvmap74)) {
+                    if ($wpc_rvfetched74 >= 2) {
+                        continue; 
+                    }
+                    $wpc_rvfetched74++;
+                    $wpc_rvv74 = 0;
+                    if (count($wpc_rvmap74) < 48 && function_exists('wp_remote_get')) {
+                        $wpc_rvr74 = wp_remote_get(html_entity_decode((string) $wpc_rvsrc74), ['timeout' => 3, 'sslverify' => false]);
+                        $wpc_rvb74 = (!is_wp_error($wpc_rvr74) && (int) wp_remote_retrieve_response_code($wpc_rvr74) === 200)
+                            ? substr((string) wp_remote_retrieve_body($wpc_rvr74), 0, 65536) : '';
+                        if ($wpc_rvb74 !== '' && preg_match('/\.style\.setProperty\(\s*["\']--/', $wpc_rvb74)) {
+                            $wpc_rvv74 = 1;
+                            $wpc_body94 = $wpc_rvb74;
+                        }
+                    }
+                    $wpc_rvmap74[$wpc_rvk74] = $wpc_rvv74;
+                    $wpc_rvdirty74 = true;
+                }
+                if (!empty($wpc_rvmap74[$wpc_rvk74])) {
+                    $wpc_rvbn74 = basename((string) parse_url((string) $wpc_rvsrc74, PHP_URL_PATH));
+                    if ($wpc_rvbn74 !== '' && strlen($wpc_rvbn74) > 4) {
+                        $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [$wpc_rvbn74])));
+                        
+                        
+                        $wpc_rvn90 = (array) get_option('wpc_rootvar_names74', []);
+                        if (!in_array($wpc_rvbn74, $wpc_rvn90, true) && count($wpc_rvn90) < 24) {
+                            $wpc_rvn90[] = $wpc_rvbn74;
+                            update_option('wpc_rootvar_names74', $wpc_rvn90, false);
+                        }
+                        if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rv74_log')) {
+                            set_transient('wpc_rv74_log', 1, 3600);
+                            wpc_cache_first_log('rootvar-keep', $wpc_rvbn74, '', []);
+                        }
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        if (!array_key_exists($wpc_rvk74, $wpc_snips94)) {
+                            if ($wpc_body94 === '' && $wpc_rvfetched74 < 2 && function_exists('wp_remote_get')) {
+                                $wpc_rvfetched74++;
+                                $wpc_rvr94 = wp_remote_get(html_entity_decode((string) $wpc_rvsrc74), ['timeout' => 3, 'sslverify' => false]);
+                                if (!is_wp_error($wpc_rvr94) && (int) wp_remote_retrieve_response_code($wpc_rvr94) === 200) {
+                                    $wpc_body94 = substr((string) wp_remote_retrieve_body($wpc_rvr94), 0, 65536);
+                                }
+                            }
+                            if ($wpc_body94 !== '' && count($wpc_snips94) < 24) {
+                                $wpc_snips94[$wpc_rvk74] = self::wpc_rootvar_extract94($wpc_body94);
+                                $wpc_snipdirty94 = true;
+                            }
+                        }
+                        if (!empty($wpc_snips94[$wpc_rvk74])) {
+                            $wpc_hoist94[] = (string) $wpc_snips94[$wpc_rvk74];
+                        }
+                    }
+                }
+            }
+            if ($wpc_rvdirty74) {
+                update_option('wpc_rootvar_setters74', $wpc_rvmap74, false);
+            }
+            if ($wpc_snipdirty94) {
+                update_option('wpc_rootvar_snips94', $wpc_snips94, false);
+            }
+            if (!empty($wpc_hoist94) && apply_filters('wpc_rootvar_early', true)
+                && strpos($html, 'wpc-rootvar-early') === false) {
+                $wpc_early94 = '<script id="wpc-rootvar-early">try{' . implode("\n", array_slice($wpc_hoist94, 0, 2)) . '}catch(wpcE94){}</script>';
+                if (preg_match('/<head(\s[^>]*)?>/i', $html, $wpc_hm94, PREG_OFFSET_CAPTURE)) {
+                    $wpc_hp94 = (int) $wpc_hm94[0][1] + strlen($wpc_hm94[0][0]);
+                    $html = substr($html, 0, $wpc_hp94) . $wpc_early94 . substr($html, $wpc_hp94);
+                }
+            }
+        }
 
         
         
@@ -1191,6 +1601,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             $wpc_form_fams = apply_filters('wpc_delay_v3_form_families', [
                 'jetformbuilder', 'jet-form-builder', 'wpforms', 'gravityforms', 'ninja-forms',
                 'fluentform', 'formidable', 'forminator', 'happyforms', 'everest-forms', 'ws-form',
+                'jet-appointments', 'jet-ab-', 'jet-apb',
             ]);
             $wpc_is_form = function ($id) use ($wpc_page_srcs, $wpc_form_fams) {
                 $s = strtolower((isset($wpc_page_srcs[$id]) ? (string) $wpc_page_srcs[$id] : '') . '|' . $id);
@@ -1427,6 +1838,26 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if (preg_match_all('/<script\b[^>]*\bsrc=[^>]*>/i', $html, $wpc_srctags)) {
             foreach ($wpc_srctags[0] as $wpc_t) {
                 $wpc_a = $this->parse_script_attributes($wpc_t);
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                if (empty($wpc_a['id']) && !empty($wpc_a['src'])) {
+                    $wpc_hid95 = $this->wpc_handle_from_src95((string) $wpc_a['src']);
+                    if ($wpc_hid95 !== '') {
+                        $wpc_a['id'] = $wpc_hid95 . '-js';
+                    }
+                }
                 if (empty($wpc_a['id'])) {
                     continue;
                 }
@@ -1525,6 +1956,25 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
 
 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        foreach ($this->wpc_keep_dep_closure56($wpc_excluded_ids, $wpc_seen_src_ids747) as $wpc_did56) {
+            $this->companion_ids[$wpc_did56]      = true;
+            $this->wpc_family_keep747[$wpc_did56] = true;
+            $wpc_excluded_ids[$wpc_did56]         = true;
+            $wpc_dh56 = preg_replace('/-js$/', '', $wpc_did56);
+            foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf56) {
+                $this->companion_ids[$wpc_dh56 . $wpc_suf56] = true;
+            }
+        }
+
         $this->parse_time_src_ids = $wpc_excluded_ids;
 
         $this->script_registry = array();
@@ -1595,6 +2045,10 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 '/widget/booking/', '/widget/form/', '/widget/quiz/', '/widget/survey/',
                 'player.vimeo.com', 'youtube.com/embed/', 'youtube-nocookie.com/embed/',
                 'fast.wistia.',
+                
+                
+                
+                'iframe.mediadelivery.net',
             ])),
 
 
@@ -1623,6 +2077,8 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             
             
             'lateCssTimer' => (int) apply_filters('wpc_delay_latecss_timer', 2500),
+            'lateCssLcp' => (int) apply_filters('wpc_delay_latecss_lcp', 2000),
+            'lateCssCap' => (int) apply_filters('wpc_delay_latecss_cap', 7000),
 
 
             'conceal' => array_values(array_filter(
@@ -1726,8 +2182,45 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                             }
                         }
                     }
-                    if (@file_exists($wpc_dir107 . $wpc_name107) && @filesize($wpc_dir107 . $wpc_name107) > 0) {
-                        $wpc_loader_src = rtrim($wpc_ud107['baseurl'], '/') . '/wpc-assets/' . $wpc_name107;
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    $wpc_uurl159 = rtrim($wpc_ud107['baseurl'], '/') . '/wpc-assets/' . $wpc_name107;
+                    if (@file_exists($wpc_dir107 . $wpc_name107) && @filesize($wpc_dir107 . $wpc_name107) > 0
+                        && function_exists('get_option') && function_exists('get_transient')) {
+                        $wpc_pv159 = get_option('wpc_loader_probe159');
+                        $wpc_fresh159 = is_array($wpc_pv159) && isset($wpc_pv159['ver'], $wpc_pv159['state'])
+                            && (string) $wpc_pv159['ver'] === (string) $wpc_ver107;
+                        if (!$wpc_fresh159 && function_exists('wp_remote_head') && function_exists('add_action')
+                            && !get_transient('wpc_loader_probe_lock159')) {
+                            set_transient('wpc_loader_probe_lock159', 1, 300);
+                            add_action('shutdown', function () use ($wpc_uurl159, $wpc_ver107) {
+                                $wpc_r159 = wp_remote_head($wpc_uurl159, array('timeout' => 5, 'redirection' => 2, 'sslverify' => false));
+                                if (is_wp_error($wpc_r159)) {
+                                    return;
+                                }
+                                $wpc_v159 = self::wpc_loader_probe_verdict159((int) wp_remote_retrieve_response_code($wpc_r159));
+                                if ($wpc_v159 !== null) {
+                                    update_option('wpc_loader_probe159', array('ver' => (string) $wpc_ver107, 'state' => $wpc_v159, 't' => time()), false);
+                                    if ($wpc_v159 === 'down' && function_exists('wpc_cache_first_log')) {
+                                        wpc_cache_first_log('loader-probe-down', '', $wpc_uurl159);
+                                    }
+                                }
+                            });
+                        }
+                        if ($wpc_fresh159 && (string) $wpc_pv159['state'] === 'down') {
+                            $wpc_uurl159 = '';
+                        }
+                    } else {
+                        $wpc_uurl159 = '';
+                    }
+                    if ($wpc_uurl159 !== '') {
+                        $wpc_loader_src = $wpc_uurl159;
                         
                         
                         $wpc_set107 = get_option(WPS_IC_SETTINGS);
@@ -1776,9 +2269,20 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 }
             }
         }
+        
+        
+        
+        
+        
+        $wpc_fb155 = $wpc_loader_base . $wpc_loader_file . '?v=' . (defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '1');
+        $wpc_on155 = '';
+        if ($wpc_loader_src !== $wpc_fb155) {
+            $wpc_on155 = ' data-wpc-lfb="' . esc_url($wpc_fb155) . '"'
+                . ' onerror="if(!this.dataset.wpcLfbDone){this.dataset.wpcLfbDone=1;var s=document.createElement(\'script\');s.src=this.dataset.wpcLfb;s.async=true;s.id=\'wpc-delay-v3-loader\';document.head.appendChild(s);}"';
+        }
         $delay_script .= ($wpc_inl109 !== '')
             ? $wpc_inl109
-            : '<script id="wpc-delay-v3-loader" src="' . esc_url($wpc_loader_src) . '" async></script>';
+            : '<script id="wpc-delay-v3-loader" src="' . esc_url($wpc_loader_src) . '" async' . $wpc_on155 . '></script>';
 
         
         
@@ -1943,10 +2447,82 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             if ($wpc_split564 < 0) {
                 return $html;
             }
-            return str_replace(' defer data-wpc-defer="1"', '', substr($html, 0, $wpc_split564))
-                . substr($html, $wpc_split564);
+            
+            
+            
+            
+            
+            
+            
+            $wpc_head564 = preg_replace_callback('/<script\b[^>]*>/i', function ($wpc_t564) {
+                if (strpos($wpc_t564[0], ' defer data-wpc-defer="1"') === false
+                    || stripos($wpc_t564[0], 'data-wp-strategy="defer"') !== false
+                    || stripos($wpc_t564[0], "data-wp-strategy='defer'") !== false) {
+                    return $wpc_t564[0];
+                }
+                return str_replace(' defer data-wpc-defer="1"', '', $wpc_t564[0]);
+            }, substr($html, 0, $wpc_split564));
+            if (!is_string($wpc_head564)) {
+                $wpc_head564 = str_replace(' defer data-wpc-defer="1"', '', substr($html, 0, $wpc_split564));
+            }
+            return $wpc_head564 . substr($html, $wpc_split564);
         } catch (\Throwable $e) {
             return $html;
+        }
+    }
+
+    
+    
+    
+    
+    protected static function wpc_rootvar_extract94($wpc_body94)
+    {
+        try {
+            $wpc_out94 = [];
+            $wpc_off94 = 0;
+            while (count($wpc_out94) < 2 && preg_match('/\(\s*function\b/', $wpc_body94, $wpc_m94, PREG_OFFSET_CAPTURE, $wpc_off94)) {
+                $wpc_st94 = (int) $wpc_m94[0][1];
+                $wpc_off94 = $wpc_st94 + 1;
+                $wpc_depth94 = 0;
+                $wpc_end94 = -1;
+                $wpc_len94 = min(strlen($wpc_body94), $wpc_st94 + 4096);
+                for ($wpc_i94 = $wpc_st94; $wpc_i94 < $wpc_len94; $wpc_i94++) {
+                    $wpc_c94 = $wpc_body94[$wpc_i94];
+                    if ($wpc_c94 === '(') {
+                        $wpc_depth94++;
+                    } elseif ($wpc_c94 === ')') {
+                        $wpc_depth94--;
+                        if ($wpc_depth94 === 0) {
+                            $wpc_end94 = $wpc_i94;
+                            break;
+                        }
+                    }
+                }
+                if ($wpc_end94 < 0) {
+                    continue;
+                }
+                $wpc_tail94 = substr($wpc_body94, $wpc_end94 + 1, 24);
+                if (!preg_match('/^\s*\(\s*[\w.]*\s*\)\s*;?/', $wpc_tail94, $wpc_t94)) {
+                    continue;
+                }
+                $wpc_blk94 = substr($wpc_body94, $wpc_st94, ($wpc_end94 + 1 + strlen($wpc_t94[0])) - $wpc_st94);
+                if (!preg_match('/\.style\.setProperty\(\s*["\']--/', $wpc_blk94)) {
+                    continue;
+                }
+                if (preg_match('/jQuery|\$\s*\(|document\.write|<\/script|fetch\s*\(|XMLHttpRequest|localStorage|innerHTML|appendChild|createElement/i', $wpc_blk94)) {
+                    continue;
+                }
+                if (substr_count($wpc_blk94, '{') !== substr_count($wpc_blk94, '}')
+                    || substr_count($wpc_blk94, '{') === 0) {
+                    continue;
+                }
+                $wpc_out94[] = $wpc_blk94;
+                $wpc_off94 = $wpc_end94 + 1;
+            }
+            $wpc_joined94 = implode("\n", $wpc_out94);
+            return strlen($wpc_joined94) <= 6144 ? $wpc_joined94 : '';
+        } catch (\Throwable $e) {
+            return '';
         }
     }
 }

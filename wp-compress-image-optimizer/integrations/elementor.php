@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: integrations/elementor.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit; 
 }
@@ -202,15 +210,21 @@ class wps_ic_elementor
         
         $html = str_replace('</head>', '<style>.wpc-delay-elementor{content-visibility:auto;contain-intrinsic-size:auto 900px;}</style></head>', $html);
 
+        
+        
+        
+        
+        
+        
         $html = preg_replace(
-            '/(<footer[^>]*class="[^"]*)"/i',
+            '/(<footer(?=[\s>\/])[^>]*class="[^"]*)"/i',
             '$1 wpc-delay-elementor"',
             $html
         );
 
         
         $html = preg_replace(
-            '/(<footer)(?![^>]*class="[^"]*")/i',
+            '/(<footer(?=[\s>\/]))(?![^>]*class="[^"]*")/i',
             '$1 class="wpc-delay-elementor"',
             $html
         );

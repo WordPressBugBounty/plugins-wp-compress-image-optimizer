@@ -1,6 +1,14 @@
 <script type="text/javascript">
 
     <?php
+
+
+
+
+
+
+
+
     $labels = [];
     $in_traffic_sum = '';
     $in_traffic = '';

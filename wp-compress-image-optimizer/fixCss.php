@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: fixCss.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 global $zoneName, $cssUrlPath, $cssUrl, $zoneName, $cssPath, $dirName, $siteUrl;
 
 $debug = false;

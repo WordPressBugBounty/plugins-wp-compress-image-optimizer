@@ -2,6 +2,14 @@
 
 
 
+
+
+
+
+
+
+
+
 if (empty($wps_ic::$settings['live-cdn']) || $wps_ic::$settings['live-cdn'] == '0') {
 $donut_size = 1;
 $savings    = false;

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/vitals/vitals.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -429,6 +437,11 @@ if (!function_exists('wpc_vitals_rollup')) {
                 }
                 $agg = wpc_vitals_agg_bytes((string) @file_get_contents($f));
                 $daily[$day] = $agg;
+                if (function_exists('wpc_vitals_saved_add312')) {
+                    wpc_vitals_saved_add312($day,
+                        wpc_vitals_saved_day_ms312($agg, $daily),
+                        (int) $agg['v'] * max(1, (int) get_option('wpc_vitals_sample', 1)));
+                }
                 @unlink($f);
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('vitals-rollup', '', '', ['day' => $day, 'views' => $agg['v'], 'hit' => $agg['hit']]);
@@ -470,11 +483,19 @@ if (!function_exists('wpc_vitals_rollup')) {
 
             
             
-            if (!get_option('wpc_vitals_baseline') && count($kept) >= 7 && function_exists('wpc_vitals_p75')) {
+            
+            
+            
+            $wpc_vb96 = get_option('wpc_vitals_baseline');
+            $wpc_vb96 = is_array($wpc_vb96) ? $wpc_vb96 : [];
+            if (empty($wpc_vb96['lcp_m_p75']) && count($kept) >= 7 && function_exists('wpc_vitals_p75')) {
                 $base  = wpc_vitals_p75(array_slice($kept, -7, null, true), 'm', 'lcp');
                 $baseD = wpc_vitals_p75(array_slice($kept, -7, null, true), 'd', 'lcp');
                 if ($base > 0) {
-                    update_option('wpc_vitals_baseline', ['t' => time(), 'lcp_m_p75' => $base, 'lcp_d_p75' => max(0, (int) $baseD)], false);
+                    $wpc_vb96['t'] = time();
+                    $wpc_vb96['lcp_m_p75'] = $base;
+                    $wpc_vb96['lcp_d_p75'] = max(0, (int) $baseD);
+                    update_option('wpc_vitals_baseline', $wpc_vb96, false);
                 }
             }
             
@@ -639,6 +660,7 @@ if (!function_exists('wpc_vitals_export')) {
                 'baseline' => get_option('wpc_vitals_baseline'),
                 'sample'   => max(1, (int) get_option('wpc_vitals_sample', 1)),
                 'enabled'  => function_exists('wpc_vitals_enabled') ? (bool) wpc_vitals_enabled() : false,
+                'saved'    => function_exists('wpc_vitals_saved_export312') ? wpc_vitals_saved_export312() : null,
             ];
         } catch (\Throwable $e) {
             return $empty;
@@ -678,6 +700,36 @@ if (!function_exists('wpc_vitals_export')) {
         return $legs > 0 ? $out : null;
     }
 
+    function wpc_vitals_diag37()
+    {
+        if (!function_exists('current_user_can') || !current_user_can('manage_options')
+            || !function_exists('wp_verify_nonce')
+            || !wp_verify_nonce(isset($_POST['n']) ? (string) $_POST['n'] : '', 'wpc_vp_sc')) {
+            wp_send_json_error('forbidden');
+        }
+        $raw = isset($_POST['r']) ? (string) wp_unslash($_POST['r']) : '';
+        if ($raw === '' || strlen($raw) > 1200) {
+            wp_send_json_error('bad');
+        }
+        $j = json_decode($raw, true);
+        if (!is_array($j)) {
+            wp_send_json_error('bad');
+        }
+        $rec = [
+            'armed'   => !empty($j['armed']) ? 1 : 0,
+            'foreign' => isset($j['foreign']) ? max(0, min(9999, (int) $j['foreign'])) : 0,
+            'svgs'    => isset($j['svgs']) ? max(0, min(99, (int) $j['svgs'])) : 0,
+            'src'     => isset($j['src']) ? substr(preg_replace('/[^\x20-\x7E]/', '', (string) $j['src']), 0, 240) : '',
+            'ua'      => isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 120) : '',
+            't'       => time(),
+        ];
+        update_option('wpc_vp_diag37', $rec, false);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('vp-diag37', '', '', $rec);
+        }
+        wp_send_json_success('ok');
+    }
+
     function wpc_vitals_sc_save()
     {
         if (!function_exists('current_user_can') || !current_user_can('manage_options')
@@ -705,6 +757,8 @@ if (!function_exists('wpc_vitals_export')) {
     }
     if (function_exists('add_action')) {
         add_action('wp_ajax_wpc_vitals_sc_save', 'wpc_vitals_sc_save');
+        add_action('wp_ajax_wpc_vitals_diag37', 'wpc_vitals_diag37');
+        add_action('wp_ajax_wpc_vitals_live', 'wpc_vitals_live312');
     }
 
     function wpc_vitals_export_has_data($export)
@@ -728,5 +782,157 @@ if (!function_exists('wpc_vitals_export')) {
             }
         }
         return false;
+    }
+}
+
+
+if (!function_exists('wpc_vitals_base_p75_312')) {
+    function wpc_vitals_base_p75_312($daily, $device)
+    {
+        $bk = 'b' . $device;
+        $merged = [];
+        $n = 0;
+        $i = 0;
+        foreach ((array) $daily as $k => $v) {
+            if (strpos((string) $k, 'w:') === 0) { continue; }
+            if ($i >= 28) { break; }
+            $i++;
+            foreach ((array) (isset($v[$bk]['lcp']) ? $v[$bk]['lcp'] : []) as $b => $c) {
+                $merged[(int) $b] = (isset($merged[(int) $b]) ? $merged[(int) $b] : 0) + (int) $c;
+                $n += (int) $c;
+            }
+        }
+        if ($n >= (int) apply_filters('wpc_vitals_base_min_samples', 30)) {
+            ksort($merged);
+            $edges = wpc_vitals_bucket_edges(false);
+            $need = 0.75 * $n;
+            $run = 0;
+            foreach ($merged as $b => $c) {
+                $run += $c;
+                if ($run >= $need) {
+                    return isset($edges[$b]) ? (int) $edges[$b] : (int) end($edges);
+                }
+            }
+        }
+        $fb = get_option('wpc_vitals_baseline');
+        $key = 'lcp_' . $device . '_p75';
+        return (is_array($fb) && !empty($fb[$key])) ? (int) $fb[$key] : 0;
+    }
+
+    function wpc_vitals_saved_day_ms312($agg, $daily)
+    {
+        if (!is_array($agg)) { return 0.0; }
+        $sample = max(1, (int) get_option('wpc_vitals_sample', 1));
+        $vm = (int) (isset($agg['mob']) ? $agg['mob'] : 0);
+        $views = ['m' => $vm, 'd' => max(0, (int) (isset($agg['v']) ? $agg['v'] : 0) - $vm)];
+        $ms = 0.0;
+        foreach (['m', 'd'] as $dv) {
+            if ($views[$dv] <= 0) { continue; }
+            $base = wpc_vitals_base_p75_312($daily, $dv);
+            if ($base <= 0) { continue; }
+            $day = (int) wpc_vitals_p75(['x' => $agg], $dv, 'lcp');
+            if ($day <= 0) { continue; }
+            $ms += (float) ($base - $day) * $views[$dv] * $sample;
+        }
+        return $ms;
+    }
+
+    function wpc_vitals_saved_add312($day, $ms, $views)
+    {
+        $day = (string) $day;
+        $s = get_option('wpc_vitals_saved');
+        if (!is_array($s)) {
+            $s = ['ms_total' => 0.0, 'views' => 0, 'months' => [], 'days' => [], 'since' => time()];
+        }
+        if (!isset($s['days']) || !is_array($s['days'])) { $s['days'] = []; }
+        if (isset($s['days'][$day])) { return $s; }
+        $s['days'][$day] = 1;
+        if (count($s['days']) > 90) { krsort($s['days']); $s['days'] = array_slice($s['days'], 0, 90, true); }
+        $mkey = substr($day, 0, 6);
+        $s['ms_total'] = (float) $s['ms_total'] + (float) $ms;
+        $s['views']    = (int) $s['views'] + (int) $views;
+        if (!isset($s['months'][$mkey]) || !is_array($s['months'][$mkey])) {
+            $s['months'][$mkey] = ['ms' => 0.0, 'views' => 0];
+        }
+        $s['months'][$mkey]['ms']    = (float) $s['months'][$mkey]['ms'] + (float) $ms;
+        $s['months'][$mkey]['views'] = (int) $s['months'][$mkey]['views'] + (int) $views;
+        if (count($s['months']) > 24) { krsort($s['months']); $s['months'] = array_slice($s['months'], 0, 24, true); ksort($s['months']); }
+        update_option('wpc_vitals_saved', $s, false);
+        return $s;
+    }
+
+    function wpc_vitals_saved_export312()
+    {
+        $out = ['ms_total' => 0.0, 'ms_month' => 0.0, 'ms_year' => 0.0, 'ms_today' => 0.0,
+                'views' => 0, 'since' => 0, 'rate_ms_per_s' => 0.0, 'base_m' => 0, 'base_d' => 0,
+                'sample' => max(1, (int) get_option('wpc_vitals_sample', 1))];
+        $s = get_option('wpc_vitals_saved');
+        if (is_array($s)) {
+            $out['ms_total'] = (float) (isset($s['ms_total']) ? $s['ms_total'] : 0);
+            $out['views']    = (int) (isset($s['views']) ? $s['views'] : 0);
+            $out['since']    = (int) (isset($s['since']) ? $s['since'] : 0);
+            $mkey = gmdate('Ym');
+            $y    = gmdate('Y');
+            foreach ((array) (isset($s['months']) ? $s['months'] : []) as $k => $v) {
+                if (!is_array($v)) { continue; }
+                if ((string) $k === $mkey) { $out['ms_month'] += (float) $v['ms']; }
+                if (strpos((string) $k, $y) === 0) { $out['ms_year'] += (float) $v['ms']; }
+            }
+        }
+        $daily = get_option('wpc_vitals_daily', []);
+        $daily = is_array($daily) ? $daily : [];
+        $out['base_m'] = (int) wpc_vitals_base_p75_312($daily, 'm');
+        $out['base_d'] = (int) wpc_vitals_base_p75_312($daily, 'd');
+        $tp = function_exists('wpc_vitals_today_partial') ? wpc_vitals_today_partial() : null;
+        if (is_array($tp)) {
+            $out['ms_today'] = wpc_vitals_saved_day_ms312($tp, $daily);
+        }
+        $win_ms = 0.0; $win_from = 0;
+        if (is_array($s) && !empty($s['months']) && is_array($s['months'])) {
+            $mk = array_keys($s['months']);
+            rsort($mk);
+            foreach (array_slice($mk, 0, 2) as $k) {
+                $win_ms += (float) $s['months'][$k]['ms'];
+                $t = strtotime(substr((string) $k, 0, 4) . '-' . substr((string) $k, 4, 2) . '-01');
+                if ($t && ($win_from === 0 || $t < $win_from)) { $win_from = $t; }
+            }
+            if ($out['since'] > $win_from) { $win_from = $out['since']; }
+        }
+        $r1 = ($win_from > 0 && $win_ms > 0) ? $win_ms / max(86400, time() - $win_from) : 0.0;
+        $sod = strtotime(gmdate('Y-m-d') . ' 00:00:00');
+        $r2 = ($out['ms_today'] > 0) ? $out['ms_today'] / max(600, time() - $sod) : 0.0;
+        $out['rate_ms_per_s'] = max(0.0, $r1, $r2);
+        return $out;
+    }
+
+    function wpc_vitals_live312()
+    {
+        if (!function_exists('current_user_can')
+            || (!current_user_can('manage_wpc_settings') && !current_user_can('manage_options'))
+            || !function_exists('wp_verify_nonce')
+            || !wp_verify_nonce(isset($_POST['n']) ? (string) $_POST['n'] : '', 'wpc_vp_sc')) {
+            wp_send_json_error('forbidden');
+        }
+        $off = isset($_POST['o']) ? max(-1, (int) $_POST['o']) : -1;
+        $cfg = wpc_vitals_config();
+        $out = ['o' => 0, 'pts' => [], 'sample' => max(1, (int) get_option('wpc_vitals_sample', 1))];
+        if (!$cfg) { wp_send_json_success($out); }
+        $f  = $cfg['dir'] . gmdate('Ymd') . '.bin';
+        $sz = @is_readable($f) ? (int) @filesize($f) : 0;
+        $sz = intdiv($sz, 8) * 8;
+        $out['o'] = $sz;
+        if ($off < 0 || $off > $sz || $sz <= $off) { wp_send_json_success($out); }
+        $read = intdiv(min($sz - $off, 1600), 8) * 8;
+        $bytes = (string) @file_get_contents($f, false, null, $sz - $read, $read);
+        $edges = wpc_vitals_bucket_edges(false);
+        for ($i = 0; $i + 8 <= strlen($bytes); $i += 8) {
+            $r = array_values(unpack('C8', substr($bytes, $i, 8)));
+            if ($r[0] !== 0xA7 || ($r[1] & 0x10) || $r[2] === 255) { continue; }
+            $lcp = isset($edges[(int) $r[2]]) ? (int) $edges[(int) $r[2]] : 0;
+            if ($lcp <= 0) { continue; }
+            $out['pts'][] = ['d' => ($r[1] & 0x01) ? 'm' : 'd', 'lcp' => $lcp, 'hit' => ($r[1] & 0x02) ? 1 : 0];
+            if (count($out['pts']) >= 200) { break; }
+        }
+        wp_send_json_success($out);
     }
 }

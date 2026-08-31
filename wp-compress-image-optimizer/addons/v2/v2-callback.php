@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-callback.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -240,7 +248,25 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
         }
     }
 
-    $resp = new WP_REST_Response([
+    
+    
+    
+    
+    
+    
+    
+    
+    $hc_full = (function_exists('current_user_can') && current_user_can('manage_options'));
+    if (!$hc_full) {
+        $hc_sig = (string) $request->get_header('x_wpc_sig');
+        if ($hc_sig !== '') {
+            $hc_v = wpc_v2_verify_hmac($hc_sig, (string) $request->get_body(), 300, '');
+            $hc_full = !empty($hc_v['ok']);
+        }
+    }
+    $hc_full = (bool) apply_filters('wpc_hc_full_anon', $hc_full);
+
+    $hc_arr = [
         'plugin_version'          => $plugin_version,
         'supports_bg_swap_single' => $supports_lazy_cdn,
         'supports_lazy_cdn'       => $supports_lazy_cdn,
@@ -361,7 +387,11 @@ function wpc_v2_handle_healthcheck(WP_REST_Request $request)
         'images_on'               => (bool) $images_on_hc,
         'cf_detected'             => (bool) $cf_detected,
         'time'                    => time(),
-    ], 200);
+    ];
+    if (!$hc_full) {
+        unset($hc_arr['apikey_fp'], $hc_arr['debug']);
+    }
+    $resp = new WP_REST_Response($hc_arr, 200);
     $resp->header('Cache-Control', 'no-store, max-age=0');
     $resp->header('X-Wpc-Plugin-Version', $plugin_version);
     return $resp;
@@ -454,6 +484,45 @@ function wpc_v2_handle_fetch_variant(WP_REST_Request $request)
 
 
 
+if (!function_exists('wpc_v2_bare_alias274')) {
+    
+    
+    
+    
+    
+    
+    
+    
+    function wpc_v2_bare_alias274($imageID, $dest, $format, $raw)
+    {
+        try {
+            $fmt274 = strtolower((string) $format);
+            if ($fmt274 !== 'avif' && $fmt274 !== 'webp') { return false; }
+            if (!apply_filters('wpc_bare_full_alias', true)) { return false; }
+            if (!preg_match('/-(\d+)x(\d+)\.(avif|webp)$/i', (string) $dest, $m274)) { return false; }
+            $meta274 = function_exists('wp_get_attachment_metadata') ? wp_get_attachment_metadata((int) $imageID) : null;
+            $fw274 = (is_array($meta274) && !empty($meta274['width'])) ? (int) $meta274['width'] : 0;
+            $fh274 = (is_array($meta274) && !empty($meta274['height'])) ? (int) $meta274['height'] : 0;
+            if ($fw274 <= 0 || (int) $m274[1] !== $fw274 || (int) $m274[2] !== $fh274) { return false; }
+            $att274 = function_exists('get_attached_file') ? (string) get_attached_file((int) $imageID) : '';
+            if ($att274 === '') { return false; }
+            $bn274 = basename($att274);
+            $dot274 = strrpos($bn274, '.');
+            if ($dot274 === false) { return false; }
+            $bare274 = dirname((string) $dest) . '/' . substr($bn274, 0, $dot274) . '.' . strtolower($m274[3]);
+            if ($bare274 === (string) $dest) { return false; }
+            if (function_exists('wpc_v2_dest_ext_ok649') && !wpc_v2_dest_ext_ok649($bare274)) { return false; }
+            $put274 = function_exists('wpc_v2_store_bytes655') ? wpc_v2_store_bytes655($raw, $bare274) : ['ok' => false];
+            if (!empty($put274['ok'])) {
+                @chmod($bare274, 0644);
+                return true;
+            }
+            return false;
+        } catch (\Throwable $e274) {
+            return false;
+        }
+    }
+}
 if (!function_exists('wpc_v2_safe_variant_filename649')) {
     function wpc_v2_ext_for_format649($format)
     {
@@ -729,6 +798,9 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
             '[WPC V2Callback] chmod_failed imageID=%d dest_tail=%s msg=%s (may still be served if umask/inherited perms OK)',
             (int) $imageID, substr($dest, -60), $err['message'] ?? '-'
         ));
+    }
+    if (function_exists('wpc_v2_bare_alias274')) {
+        wpc_v2_bare_alias274($imageID, $dest, $format, $raw);
     }
 
 
@@ -1636,6 +1708,9 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
                 '[WPC V2Batch] chmod_failed imageID=%d dest_tail=%s msg=%s',
                 (int) $imageID, substr($dest, -60), $err['message'] ?? '-'
             ));
+        }
+        if (function_exists('wpc_v2_bare_alias274')) {
+            wpc_v2_bare_alias274($imageID, $dest, $fmt, $raw);
         }
 
         

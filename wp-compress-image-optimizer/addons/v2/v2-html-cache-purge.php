@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-html-cache-purge.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -242,8 +250,14 @@ if (!function_exists('wpc_v2_ajax_lazy_test_purge_html')) {
         ]);
     }
 }
-add_action('wp_ajax_wpc_v2_lazy_test_purge_html',        'wpc_v2_ajax_lazy_test_purge_html');
-add_action('wp_ajax_nopriv_wpc_v2_lazy_test_purge_html', 'wpc_v2_ajax_lazy_test_purge_html');
+
+
+
+if ((defined('WPC_LAZY_TEST_ENDPOINTS') && WPC_LAZY_TEST_ENDPOINTS)
+    || (function_exists('apply_filters') && apply_filters('wpc_lazy_test_endpoints', false))) {
+    add_action('wp_ajax_wpc_v2_lazy_test_purge_html',        'wpc_v2_ajax_lazy_test_purge_html');
+    add_action('wp_ajax_nopriv_wpc_v2_lazy_test_purge_html', 'wpc_v2_ajax_lazy_test_purge_html');
+}
 
 
 add_action('delete_option', function ($option_name) {

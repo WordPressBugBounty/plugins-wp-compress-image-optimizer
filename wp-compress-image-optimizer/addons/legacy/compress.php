@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/legacy/compress.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -5274,7 +5282,7 @@ class wps_local_compress
                     $bk->backup_all_sizes($attachment_id);
                 }
             }
-            wps_ic_ajax::run_v2_optimize($attachment_id);
+            wps_ic_ajax::run_v2_optimize($attachment_id, ['resubmit_reason' => 'user_recompress']);
         }
     }
 

@@ -17,6 +17,58 @@ function checkMobile() {
 
 checkMobile();
 
+
+
+
+
+
+
+
+
+
+
+
+
+var wpcInjectedObserver = null;
+
+function wpcWatchInjected(rescan, sel) {
+    try {
+        if (wpcInjectedObserver || !window.MutationObserver) {
+            return;
+        }
+        wpcInjectedObserver = new MutationObserver(function (mutations) {
+            var found = false, m, n, node, added;
+            for (m = 0; m < mutations.length && !found; m++) {
+                added = mutations[m].addedNodes;
+                if (!added) {
+                    continue;
+                }
+                for (n = 0; n < added.length; n++) {
+                    node = added[n];
+                    if (!node || node.nodeType !== 1) {
+                        continue;
+                    }
+                    if (node.tagName === "IMG") {
+                        if (node.matches && node.matches(sel)) {
+                            found = true;
+                            break;
+                        }
+                    } else if (node.querySelector && node.querySelector(sel)) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found) {
+                rescan();
+            }
+        });
+        wpcInjectedObserver.observe(document.documentElement, {childList: true, subtree: true});
+    } catch (e) {
+    }
+}
+
+
 (function (w) {
     
     
@@ -88,7 +140,11 @@ var activeRegular;
 var browserWidth;
 var jsDebug = 0;
 
+["pointerdown", "keydown", "touchstart", "wheel", "scroll", "mousemove"].forEach(function (ev) {
+    addEventListener(ev, function () { window.__wpcHumanSeen = 1; }, { once: true, passive: true, capture: true });
+});
 function load() {
+    window.__wpcPixelAlive = 1;
     browserWidth = window.innerWidth;
     lazyImages = [].slice.call(document.querySelectorAll("img"));
     elementorInvisible = [].slice.call(document.querySelectorAll("section.elementor-invisible"));
@@ -124,9 +180,30 @@ function lazyLoad() {
                 return;
             }
 
-            if ((lazyImage.getBoundingClientRect().top <= window.innerHeight + 1000
+            if ((lazyImage.getBoundingClientRect().top <= window.innerHeight + (window.wpcLazyMargin || (ngf298gh738qwbdh0s87v_vars.lazyMargin ? +ngf298gh738qwbdh0s87v_vars.lazyMargin : 120))
                     && lazyImage.getBoundingClientRect().bottom >= 0)
                 && getComputedStyle(lazyImage).display !== "none") {
+
+                
+                
+                
+                
+                
+                if (!window.__wpcHumanSeen) {
+                    var wpcT251 = Math.round(lazyImage.getBoundingClientRect().top / 8);
+                    if (lazyImage.__wpcSeen251 === undefined || (lazyImage.__wpcSeen251 !== wpcT251)
+                        || (performance.now() - (lazyImage.__wpcSeenAt251 || 0)) < 200) {
+                        if (lazyImage.__wpcSeen251 !== wpcT251) {
+                            lazyImage.__wpcSeen251 = wpcT251;
+                            lazyImage.__wpcSeenAt251 = performance.now();
+                        }
+                        if (!window.__wpcRescan251) {
+                            window.__wpcRescan251 = 1;
+                            setTimeout(function () { window.__wpcRescan251 = 0; lazyLoad(); }, 260);
+                        }
+                        return;
+                    }
+                }
 
                 imageExtension = '';
                 imageFilename = '';
@@ -175,6 +252,7 @@ function lazyLoad() {
                 
 
                 lazyImage.classList.add("ic-fade-in");
+                lazyImage.classList.add("wps-ic-loaded");
                 lazyImage.classList.remove("wps-ic-lazy-image");
 
                 lazyImages = lazyImages.filter(function (image) {
@@ -191,4 +269,20 @@ function lazyLoad() {
 window.addEventListener("resize", lazyLoad);
 window.addEventListener("orientationchange", lazyLoad);
 document.addEventListener("scroll", lazyLoad);
-document.addEventListener("DOMContentLoaded", load);
+function wpcLoadWhenStyled() {
+    var wpcUcl = document.getElementById('wpc-used-css');
+    if (wpcUcl && !document.documentElement.classList.contains('wpc-css-live')) {
+        var wpcN = 0;
+        var wpcT = setInterval(function () {
+            if (document.documentElement.classList.contains('wpc-css-live') || ++wpcN > 40) {
+                clearInterval(wpcT);
+                load();
+            }
+        }, 100);
+    } else {
+        load();
+    }
+}
+if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", wpcLoadWhenStyled); } else { wpcLoadWhenStyled(); }
+
+wpcWatchInjected(load, "img[data-src]");

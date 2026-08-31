@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-config-sync.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -559,6 +567,16 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
+        $wpc_or_by_zone68 = [];
+        if (is_array($rbody) && !empty($rbody['zones']) && is_array($rbody['zones'])) {
+            foreach ($rbody['zones'] as $rz) {
+                if (is_array($rz) && !empty($rz['zone_id']) && !empty($rz['origin_reach'])
+                    && in_array((string) $rz['origin_reach'], ['ok', 'cf_challenged', 'waf_403', 'blocked'], true)) {
+                    $wpc_or_by_zone68[(string) $rz['zone_id']] = (string) $rz['origin_reach'];
+                }
+            }
+        }
+
         
         
         
@@ -668,6 +686,31 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 update_option($sh_key, reset($src_hints_by_zone) ? '1' : '0', false);
             } elseif (function_exists('delete_option')) {
                 delete_option($sh_key);
+            }
+        
+            
+            
+            
+            
+            $wpc_or_key68 = 'wpc_v2_origin_reach_' . sanitize_key($zid);
+            $wpc_or_new68 = null;
+            if (array_key_exists($zid, $wpc_or_by_zone68)) {
+                $wpc_or_new68 = $wpc_or_by_zone68[$zid];
+            } elseif (count($clean) === 1 && count($wpc_or_by_zone68) === 1) {
+                $wpc_or_new68 = reset($wpc_or_by_zone68);
+            }
+            if ($wpc_or_new68 !== null) {
+                $wpc_or_old68 = get_option($wpc_or_key68);
+                update_option($wpc_or_key68, ['v' => $wpc_or_new68, 't' => time()], false);
+                $wpc_or_oldv68 = is_array($wpc_or_old68) ? (string) ($wpc_or_old68['v'] ?? '') : '';
+                if ($wpc_or_new68 !== 'ok' && $wpc_or_oldv68 !== $wpc_or_new68
+                    && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_origin_reach_act')) {
+                    wp_schedule_single_event(time() + 30, 'wpc_origin_reach_act');
+                }
+                if ($wpc_or_new68 === 'ok' && function_exists('wpc_origin_reach_recovered68')) {
+                    wpc_origin_reach_recovered68();
+                }
             }
         }
 
@@ -1797,7 +1840,13 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
         
         $probe_r  = wp_remote_get('https://' . $probe_zone . '/wp-includes/css/dist/block-library/style.min.css', ['timeout' => 3, 'sslverify' => false, 'redirection' => 2, 'limit_response_size' => 8192]);
         $probe_ct = is_wp_error($probe_r) ? '' : strtolower((string) wp_remote_retrieve_header($probe_r, 'content-type'));
-        $probe_ok = ((int) wp_remote_retrieve_response_code($probe_r) === 200) && (strpos($probe_ct, 'text/css') === 0);
+        
+        
+        
+        
+        $probe_body = is_wp_error($probe_r) ? '' : (string) wp_remote_retrieve_body($probe_r);
+        $probe_css  = strlen($probe_body) >= 256 && strpos($probe_body, '{') !== false;
+        $probe_ok = ((int) wp_remote_retrieve_response_code($probe_r) === 200) && (strpos($probe_ct, 'text/css') === 0) && $probe_css;
         delete_transient('wpc_v2_asset_probe_inflight');
         
         
@@ -1811,6 +1860,7 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
                 'ct'   => $probe_ct,
                 'err'  => is_wp_error($probe_r) ? substr((string) $probe_r->get_error_message(), 0, 120) : '',
                 'srv'  => is_wp_error($probe_r) ? '' : substr((string) wp_remote_retrieve_header($probe_r, 'server'), 0, 40),
+                'len'  => strlen($probe_body),
                 'ok'   => $probe_ok ? 1 : 0,
             ], false);
         }
@@ -1825,7 +1875,7 @@ if (!function_exists('wpc_v2_asset_mime_probe_run')) {
             
             
             $probe_code = is_wp_error($probe_r) ? 0 : (int) wp_remote_retrieve_response_code($probe_r);
-            $probe_def  = ($probe_code >= 400) || ($probe_code === 200 && strpos($probe_ct, 'text/css') !== 0);
+            $probe_def  = ($probe_code >= 400) || ($probe_code === 200 && (strpos($probe_ct, 'text/css') !== 0 || !$probe_css));
             if ($probe_def && (string) get_option('wpc_v2_cf_asset_mime_ok', '') === '1') {
                 $wpc_str735 = (int) get_option('wpc_v2_cf_asset_mime_strikes', 0) + 1;
                 if ($wpc_str735 >= (int) apply_filters('wpc_natural_proof_strikes', 2)) {

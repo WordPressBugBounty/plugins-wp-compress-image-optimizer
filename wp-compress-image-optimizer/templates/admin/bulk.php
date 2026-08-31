@@ -1,5 +1,13 @@
 <?php
 
+
+
+
+
+
+
+
+
 global $wps_ic;
 
 if (!empty($_GET['reset'])) {
@@ -323,6 +331,7 @@ if (!$live_cdn) {
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="wpc-bulk-ledger-strip" style="font-size:12px;opacity:.75;margin:4px 0 8px;"></div>
                                     <div class="wpc-bulk-summary-stats">
                                         <div class="wpc-stat-tile">
                                             <div class="wpc-prep-skel-line wpc-prep-skel-line--value" style="width: 72px;"></div>
@@ -795,6 +804,7 @@ if (!$live_cdn) {
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="wpc-bulk-ledger-strip" style="font-size:12px;opacity:.75;margin:4px 0 8px;"></div>
                                     <div class="wpc-bulk-summary-stats">
                                         <div class="wpc-stat-tile">
                                             <div class="wpc-stat-value"><span class="wpc-bulk-counter">0 / 0</span></div>

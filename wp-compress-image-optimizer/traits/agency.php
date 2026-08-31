@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: traits/agency.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 trait wps_ic_agency_trait
 {
@@ -43,6 +51,12 @@ trait wps_ic_agency_trait
         $fontsMap    = $remoteSettings['fonts_map']        ?? false;
         $cf          = $remoteSettings['cf']               ?? [];
         $cfCname     = $remoteSettings['cf_cname']         ?? '';
+        
+        
+        
+        
+        $customCname = (string) ($remoteSettings['custom_cname']  ?? '');
+        $cdnZoneName = (string) ($remoteSettings['cdn_zone_name'] ?? '');
         $remoteSiteUrl  = $remoteSettings['site_url']     ?? '';
         $remoteHomeUrl  = $remoteSettings['home_url']     ?? $remoteSiteUrl;
 
@@ -60,6 +74,10 @@ trait wps_ic_agency_trait
         add_filter('pre_option_' . WPS_IC_FONTS_MAP,  function() use ($fontsMap)    { return $fontsMap; });
         add_filter('pre_option_' . WPS_IC_CF,            function() use ($cf)            { return $cf ?: false; });
         add_filter('pre_option_' . WPS_IC_CF_CNAME,      function() use ($cfCname)       { return $cfCname; });
+        
+        
+        add_filter('pre_option_ic_custom_cname',         function() use ($customCname)   { return $customCname; });
+        add_filter('pre_option_ic_cdn_zone_name',        function() use ($cdnZoneName)   { return $cdnZoneName; });
         add_filter('pre_option_wpc_remote_site_url',     function() use ($remoteSiteUrl) { return $remoteSiteUrl; });
         add_filter('pre_option_wpc_remote_home_url',     function() use ($remoteHomeUrl) { return $remoteHomeUrl; });
         

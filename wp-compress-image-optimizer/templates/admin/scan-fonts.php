@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 global $wps_ic, $wpdb;
 $gui = new wpc_gui_v4();
 $fontSettings = get_option(WPS_IC_SETTINGS);
@@ -88,7 +96,28 @@ if (!empty($_GET['purgeFontCache']) && !$wps_ic->isAgencyPortal()) {
             'bunny' => esc_html__('Bunny Fonts (GDPR + CDN)', WPS_IC_TEXTDOMAIN),
         ));
 
-        echo $gui::buttonAction(esc_html__('Purge & Rescan Font Cache', WPS_IC_TEXTDOMAIN), esc_html__('Clear the font cache and re-scan your homepage to detect newly added or removed fonts.', WPS_IC_TEXTDOMAIN), esc_html__('Purge', WPS_IC_TEXTDOMAIN), '', admin_url('options-general.php?page=' . $wps_ic::$slug . '&purgeFontCache=true'));
+        
+        
+        
+        
+        echo $gui::buttonAction(esc_html__('Purge & Rescan Font Cache', WPS_IC_TEXTDOMAIN), esc_html__('Clear the font cache and re-scan your homepage to detect newly added or removed fonts.', WPS_IC_TEXTDOMAIN), esc_html__('Purge', WPS_IC_TEXTDOMAIN), '', '#', 'wpc-purge-font-cache');
+        ?>
+        <script type="text/javascript">
+        jQuery(function ($) {
+            $(document).on('click', '[data-action-call="wpc-purge-font-cache"]', function (e) {
+                e.preventDefault();
+                var b = $(this); b.prop('disabled', true).css('opacity', .6);
+                $.post((window.wpc_ajaxVar && wpc_ajaxVar.ajaxurl) || ajaxurl, {
+                    action: 'wpsPurgeFontCache',
+                    nonce: (window.wpc_ajaxVar && wpc_ajaxVar.nonce) || '',
+                    apikey: (window.wpc_ajaxVar && wpc_ajaxVar.apikey) || ''
+                }, null, 'json').always(function () {
+                    window.location.reload();
+                });
+            });
+        });
+        </script>
+        <?php
         ?>
     </div>
 </div>

@@ -1,4 +1,12 @@
-<?php if (!defined('WPS_IC_TEXTDOMAIN')) return; ?>
+<?php
+
+
+
+
+
+
+
+ if (!defined('WPS_IC_TEXTDOMAIN')) return; ?>
 <div id="select-mode" style="display: none;">
     <div id="select-mode-popup-inner" class="ajax-settings-popup bottom-border">
 
@@ -161,10 +169,27 @@
                                  data-pop-text="<?php echo esc_attr__("<i class='wpc-sparkle-icon'></i> Optimize Plan Required", WPS_IC_TEXTDOMAIN); ?>">
                                 <?php
                                  ?>
+                                <?php
+                                $wpc_set41 = get_option(WPS_IC_SETTINGS);
+                                $wpc_cdn_on41 = !is_array($wpc_set41) || !isset($wpc_set41['live-cdn']);
+                                if (!$wpc_cdn_on41 && !empty($wpc_set41['live-cdn']) && $wpc_set41['live-cdn'] == '1') {
+                                    $wpc_cdn_on41 = true;
+                                }
+                                if (!$wpc_cdn_on41 && !empty($wpc_set41['serve']) && is_array($wpc_set41['serve'])) {
+                                    foreach ($wpc_set41['serve'] as $wpc_sv41) {
+                                        if ($wpc_sv41 == '1') { $wpc_cdn_on41 = true; break; }
+                                    }
+                                }
+                                foreach (['css', 'js', 'fonts'] as $wpc_k41) {
+                                    if (!$wpc_cdn_on41 && !empty($wpc_set41[$wpc_k41]) && $wpc_set41[$wpc_k41] == '1') {
+                                        $wpc_cdn_on41 = true;
+                                    }
+                                }
+                                ?>
                                 <div class="wpc-cdn-mode-enabled">
                                     <input class="form-check-input checkbox mt-0" data-for-div-id="mode-options"
                                            type="checkbox" value="1" id="mode-options" name="mode-options"
-                                           checked="checked">
+                                           <?php echo $wpc_cdn_on41 ? 'checked="checked"' : ''; ?>>
                                     <label class="with-label" for="mode-options"><span></span></label>
                                 </div>
                                 <?php ?>

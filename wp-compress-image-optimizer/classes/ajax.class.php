@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/ajax.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 
@@ -94,6 +102,13 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wpc_ic_setupCF');
                 $this->add_ajax('wps_ic_save_cf_cdn');
                 $this->add_ajax('wps_ic_get_cf_cdn');
+                
+                
+                
+                
+                $this->add_ajax('wps_ic_cname_add');
+                $this->add_ajax('wps_ic_cname_retry');
+                $this->add_ajax('wps_ic_remove_cname');
                 $this->add_ajax('wps_ic_get_purge_rules');
                 $this->add_ajax('wps_ic_save_purge_hooks_settings');
                 $this->add_ajax('wps_ic_get_cache_cookies');
@@ -118,6 +133,7 @@ class wps_ic_ajax extends wps_ic
                 
                 $this->add_ajax('wpsRemoveFont');
                 $this->add_ajax('wpsScanFonts');
+                $this->add_ajax('wpsPurgeFontCache');
 
                 
                 $this->add_ajax('wpc_ic_checkCFToken');
@@ -164,6 +180,10 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax_nopriv('wpc_bulk_v2_restore_drain_loop');
                 $this->add_ajax('wpc_bulk_v2_drain_loop');               
                 $this->add_ajax_nopriv('wpc_bulk_v2_drain_loop');
+                $this->add_ajax('wpc_bulk_ledger_dump');
+                $this->add_ajax('wpc_v2_compress_probe');
+                $this->add_ajax('wpc_v2_full_debug');
+                $this->add_ajax('wpc_wire_doctor');
                 $this->add_ajax('wps_ic_bulkCompressCleanup');
                 $this->add_ajax('wps_ic_bulkRestoreCleanup');
                 $this->add_ajax('wps_ic_media_library_bulk_heartbeat');
@@ -1678,20 +1698,27 @@ class wps_ic_ajax extends wps_ic
         preg_match_all('/\[([^\]]+)\]/', $setting_name, $matches);
         $keys = !empty($matches[1]) ? $matches[1] : [$setting_name];
 
-        if (count($keys) === 2) {
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        $wpc_pillar148 = (count($keys) === 2) ? [$keys[0], $keys[1]] : $keys[0];
+        if (function_exists('wpc_lite_pillar_riders148')) {
+            $settings = wpc_lite_pillar_riders148($settings, $wpc_pillar148, $value);
+        } elseif (count($keys) === 2) {
             $settings[$keys[0]][$keys[1]] = $value;
         } else {
             $settings[$keys[0]] = $value;
-        }
-
-        
-        
-        
-        
-        if (count($keys) === 2 && $keys[0] === 'critical' && $keys[1] === 'css') {
-            $settings['used-css'] = $value;
-        } elseif (count($keys) === 1 && $keys[0] === 'delay-js-v2') {
-            $settings['delay-js-v3'] = $value;
         }
 
         if ($settings['live-cdn'] == '0') {
@@ -2159,11 +2186,29 @@ class wps_ic_ajax extends wps_ic
                 if (!empty($cf)) {
                     $cf['settings'][$optionName[1]] = $optionValue;
                 }
+            } elseif (count($optionName) > 1 && function_exists('wpc_lite_is_pillar148')
+                      && wpc_lite_is_pillar148([$optionName[0], $optionName[1]])) {
+                
+                
+                
+                
+                $options = wpc_lite_pillar_riders148($options, [$optionName[0], $optionName[1]], $optionValue);
             } elseif (count($optionName) > 1) {
                 $options[$optionName[0]][$optionName[1]] = $optionValue;
                 if ($optionName[0] === 'serve') {
                     $serveChanged = true;
                     if (isset($optionName[1]) && $optionName[1] === 'jpg') $imagesChanged = true;
+                }
+            } elseif (function_exists('wpc_lite_is_pillar148') && wpc_lite_is_pillar148($optionName[0])) {
+                $options = wpc_lite_pillar_riders148($options, $optionName[0], $optionValue);
+                if ($optionName[0] === 'cdnAll') {
+                    
+                    
+                    $serveChanged = true;
+                    $assetChanged = true;
+                }
+                if ($optionName[0] === 'imagesPreset') {
+                    $nextgenChanged = true; 
                 }
             } else {
                 $name = $optionName[0];
@@ -2380,9 +2425,15 @@ class wps_ic_ajax extends wps_ic
             'minify,html', 'minify,css', 'minify,js',
             
             'cf,cdn', 'cf,assets', 'eu-routing',
+            
+            
+            
+            
+            'imagesPreset', 'cdnAll', 'cache,advanced',
         ];
         
-        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css'];
+        $critPurgeKeys = ['replace-fonts', 'font-display', 'icon-font-display', 'preload-crit-fonts', 'css', 'fonts', 'minify,css', 'critical,css',
+            'imagesPreset', 'cdnAll'];
 
         $changedKeys = !empty($_POST['changed_keys']) ? array_map('sanitize_text_field', (array) $_POST['changed_keys']) : [];
 
@@ -3053,6 +3104,27 @@ class wps_ic_ajax extends wps_ic
         
         
         
+        $wpc_op179 = ['hook' => false, 'sg' => ''];
+        if (function_exists('wpc_foreign_purge610')) {
+            
+            
+            $wpc_op179['hook'] = (bool) wpc_foreign_purge610(false, 'cf-doctor-control');
+        }
+        if (class_exists('wps_ic_siteground')) {
+            try {
+                $wpc_sg179 = new wps_ic_siteground();
+                $wpc_op179['sg'] = $wpc_sg179->is_active()
+                    ? (string) $wpc_sg179->purge_cache()
+                    : 'inactive';
+            } catch (\Throwable $wpc_e179) {
+                $wpc_op179['sg'] = 'err:' . substr($wpc_e179->getMessage(), 0, 60);
+            }
+        }
+        
+        
+        
+        
+        
         
         
         $wpc_s0575 = (string) ($hit['stamp'] ?? '');
@@ -3118,6 +3190,7 @@ class wps_ic_ajax extends wps_ic
         }
         return [
             'url'          => $url,
+            'origin_purge' => $wpc_op179,
             'stamp_before' => $s0,
             'stamp_after'  => $s1,
             'stamp_refill' => $s2,
@@ -3408,6 +3481,8 @@ class wps_ic_ajax extends wps_ic
                 $out['verdict'] = 'EVICTED — Cache-Tag purge works on this zone (crown stored: wpc_cf_purge_verified).';
             } elseif ($out['control']['verdict'] === 'NOT EVICTED') {
                 $out['verdict'] = 'NOT EVICTED — tag purge failed: check tag_emission below (origin must send Cache-Tag) and rules_snapshot; a fill served by a header-stripping page cache carries no tag.';
+            } elseif (strpos((string) $out['control']['verdict'], 'STALE-REFILL') === 0) {
+                $out['verdict'] = 'STALE-REFILL — Cloudflare purged but the ORIGIN re-served old bytes: a hosting-layer cache (see control.origin_purge for which purge strategies fired). On SiteGround, verify the socket purge armed; otherwise purge the hosting panel cache and re-run.';
             } else {
                 $out['verdict'] = 'INCONCLUSIVE — control URL did not cache (rule/bypass matched it, or the self-fetch bypassed Cloudflare — no cf-cache-status). Test from a browser and re-run.';
             }
@@ -3418,6 +3493,33 @@ class wps_ic_ajax extends wps_ic
                 'untagged_serve_risk' => (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfUntaggedServesPossible')) ? wps_ic_cache::cfUntaggedServesPossible() : null,
             ];
             $out['purge_verified'] = get_option('wpc_cf_purge_verified');
+            
+            
+            
+            
+            $out['fetch_skip'] = (function () use ($sdk, $cf) {
+                try {
+                    if (!method_exists($sdk, 'wpc_find_bypass_rule740')) {
+                        return 'n/a (sdk)';
+                    }
+                    $wpc_loc189 = $sdk->wpc_find_bypass_rule740($cf['zone']);
+                    if (empty($wpc_loc189['rule'])) {
+                        return $wpc_loc189['legacy']
+                            ? 'LEGACY-API rule only — press Refresh Auto Mode to re-provision the phased skip'
+                            : 'MISSING — service fetches face challenges; press Refresh Auto Mode to re-provision';
+                    }
+                    $wpc_ap189 = isset($wpc_loc189['shape']['action_parameters']) && is_array($wpc_loc189['shape']['action_parameters'])
+                        ? $wpc_loc189['shape']['action_parameters'] : [];
+                    return [
+                        'rule'    => 'present',
+                        'phases'  => !empty($wpc_ap189['phases']) ? $wpc_ap189['phases'] : 'MISSING (products-only skip: managed challenges still fire)',
+                        'ruleset' => !empty($wpc_ap189['ruleset']) ? $wpc_ap189['ruleset'] : 'MISSING (customer custom rules still run first)',
+                        'header'  => strpos((string) $wpc_loc189['expression'], 'x-origin-auth') !== false ? 'x-origin-auth' : 'UNEXPECTED-EXPRESSION',
+                    ];
+                } catch (\Throwable $e) {
+                    return 'ERROR: ' . $e->getMessage();
+                }
+            })();
             
             $wpc_rules = method_exists($sdk, 'listCacheRules') ? $sdk->listCacheRules($cf['zone']) : null;
             if (is_wp_error($wpc_rules)) {
@@ -3584,7 +3686,7 @@ class wps_ic_ajax extends wps_ic
             @set_time_limit(120);
             status_header(200);
             header('Content-Type: application/json; charset=utf-8');
-            echo wp_json_encode(['success' => true, 'data' => ['mode' => $wpc_hard73 ? ($wpc_nuke391 ? 'hard-deleted:detached' : 'bypass-wave:detached') : 'stale-marked:detached']]);
+            echo wp_json_encode(['success' => true, 'data' => ['mode' => $wpc_hard73 ? 'hard-deleted:detached' : 'stale-marked:detached']]);
             @fastcgi_finish_request();
             $wpc_detached111 = true;
         }
@@ -3618,15 +3720,17 @@ class wps_ic_ajax extends wps_ic
             
             
             $wpc_purge_mode111 = ($wpc_soft_n111 > 0) ? 'stale-marked:' . (int) $wpc_soft_n111 : 'nothing-to-mark';
-        } elseif ($wpc_hard73 && !$wpc_nuke391 && function_exists('wpc_crit_soft_purge_all') && function_exists('wpc_crit_bypass_start')) {
+        } elseif ($wpc_hard73 && !$wpc_nuke391 && function_exists('wpc_crit_delete_files196')) {
             
             
             
             
-            $wpc_soft_n111 = wpc_crit_soft_purge_all();
-            wpc_crit_bypass_start();
+            
+            
+            
+            $wpc_del196 = wpc_crit_delete_files196();
+            set_transient('wpc_ptick_hold196', 1, 600);
             update_option('wpc_crit_soft_purge_at', time(), false);
-            
             
             
             
@@ -3636,7 +3740,7 @@ class wps_ic_ajax extends wps_ic
             if (function_exists('wpc_delay_manifest_reset')) {
                 wpc_delay_manifest_reset('crit-hard-purge');
             }
-            $wpc_purge_mode111 = 'bypass-wave:' . (int) $wpc_soft_n111;
+            $wpc_purge_mode111 = 'hard-deleted:files:' . (int) $wpc_del196;
         } else {
             $cache::purgeCriticalFiles();
             delete_option('wpc_crit_soft_purge_at');
@@ -4123,6 +4227,15 @@ class wps_ic_ajax extends wps_ic
 
         $active_raw_fast = isset($_POST['active']) ? $_POST['active'] : [];
         $has_active = is_array($active_raw_fast) && !empty($active_raw_fast);
+        
+        
+        
+        if ($has_active && method_exists(__CLASS__, 'wpc_v2_stale_compress_watchdog')) {
+            foreach ((array) $active_raw_fast as $wpc_aw314) {
+                $wpc_aid314 = is_array($wpc_aw314) ? (int) ($wpc_aw314['id'] ?? 0) : (int) $wpc_aw314;
+                if ($wpc_aid314 > 0) { self::wpc_v2_stale_compress_watchdog($wpc_aid314); }
+            }
+        }
         if (!$has_active) {
             
             $like_fast = $wpdb->esc_like('_transient_wps_ic_heartbeat_') . '%';
@@ -4886,7 +4999,7 @@ class wps_ic_ajax extends wps_ic
 
         $_wpc_hb_start_t = microtime(true);
         $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
-        $queue_data  = get_transient('wps_ic_compress_queue') ?: ['queue' => [], 'total_images' => 0];
+        $queue_data  = self::wpc_bulk_queue_read199() ?: ['queue' => [], 'total_images' => 0];
         $total       = (int) ($queue_data['total_images'] ?? (count($session_ids) + count($queue_data['queue'])));
 
         $cumulative_orig = 0;
@@ -5329,14 +5442,39 @@ class wps_ic_ajax extends wps_ic
             count($active), count($completed), count($new_variants)
         );
 
+        if (!empty($queue_data['queue']) && empty(self::wpc_bulk_inflight199())
+            && !get_transient('wpc_bulk_stop_signal')
+            && !get_transient('wpc_bulk_compress_draining')
+            && !(function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197())) {
+            self::wpc_bulk_v2_fire_loopback();
+        }
+        $wpc_led204 = self::wpc_bulk_ledger_summary202();
+        $wpc_total204 = $wpc_led204
+            ? ($wpc_led204['queued'] + $wpc_led204['inflight'] + $wpc_led204['verified'] + $wpc_led204['parked'] + $wpc_led204['skipped'])
+            : 0;
+        $wpc_slots204 = self::wpc_bulk_inflight199();
+        if ($wpc_led204 && !empty($wpc_slots204) && !empty($active)) {
+            $active = array_values(array_filter($active, function ($a) use ($wpc_slots204) {
+                return is_array($a) && isset($a['id']) && isset($wpc_slots204[(int) $a['id']]);
+            }));
+        }
+
         wp_send_json_success([
             
             'driver'          => 'v2',
-            'total'           => $total,
-            'processed'       => count($completed),
+            'total'           => $wpc_total204 > 0 ? $wpc_total204 : $total,
+            'processed'       => $wpc_led204 ? (int) $wpc_led204['verified'] : count($completed),
 
 
             'pending_drain'   => count($active) + $pending_drain_in_completed,
+            'inflight'        => count(self::wpc_bulk_inflight199()),
+            'ledger'          => self::wpc_bulk_ledger_summary202(),
+            'halt'            => [
+                'stop'         => (bool) get_transient('wpc_bulk_stop_signal'),
+                'store_broken' => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+            ],
+            'reconcile'       => self::wpc_bulk_reconcile202(),
+            'generated_at'    => time(),
             'cumulative_orig' => $cumulative_orig,
             'cumulative_now'  => $cumulative_now,
             'bytes_saved'     => $bytes_saved,
@@ -5513,13 +5651,16 @@ class wps_ic_ajax extends wps_ic
             delete_transient('wpc_v2_pending_' . (int) $sid);
         }
 
+        self::wpc_bulk_ledger_close202();
         
         delete_option('wps_ic_parsed_images');
         delete_option('wps_ic_BulkStatus');
         delete_option('wps_ic_bulk_process');
         set_transient('wps_ic_bulk_done', true, 60);
 
-        delete_transient('wps_ic_compress_queue');
+        self::wpc_bulk_queue_write199(null);
+        delete_option('wpc_bulk_inflight199');
+        delete_option('wpc_bulk_counted201');
         delete_transient('wps_ic_restore_queue');
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_running');
@@ -5774,7 +5915,7 @@ class wps_ic_ajax extends wps_ic
 
 
         if ($driver === 'sequential') {
-            $queue_data = get_transient('wps_ic_compress_queue');
+            $queue_data = self::wpc_bulk_queue_read199();
             $remaining = (is_array($queue_data) && !empty($queue_data['queue']))
                 ? array_values(array_map('intval', $queue_data['queue']))
                 : [];
@@ -6017,11 +6158,28 @@ class wps_ic_ajax extends wps_ic
             wp_send_json_error(['msg' => 'no-images-found']);
         }
 
-        
-        set_transient('wps_ic_compress_queue', [
+        if (function_exists('wpc_v2_attempts_admit197')) {
+            $wpc_adm314 = false;
+            foreach ($image_ids as $wpc_id314) {
+                if (wpc_v2_attempts_admit197((int) $wpc_id314) === true) {
+                    $wpc_adm314 = true;
+                    break;
+                }
+            }
+            if (!$wpc_adm314) {
+                delete_transient('wpc_bulk_start_inflight');
+                error_log('[WPC Bulk] start refused - none of ' . $total . ' remaining image(s) admissible (parked/backoff)');
+                wp_send_json_error(['msg' => 'all-parked', 'count' => $total]);
+            }
+        }
+
+        self::wpc_bulk_queue_write199([
             'queue' => array_values($image_ids),
             'total_images' => $total,
-        ], 3600);
+        ]);
+        delete_option('wpc_bulk_inflight199');
+        delete_option('wpc_bulk_counted201');
+        self::wpc_bulk_ledger_init202(array_values($image_ids));
 
         
         update_option('wps_ic_BulkStatus', [
@@ -6035,7 +6193,7 @@ class wps_ic_ajax extends wps_ic
         $is_v2 = function_exists('wpc_use_v2_protocol') && wpc_use_v2_protocol() && class_exists('WPS_LocalV2');
 
 
-        $sequential = (bool) get_option('wpc_bulk_sequential', 1);
+        $sequential = (bool) get_option('wpc_bulk_sequential', 0);
         $driver = $sequential ? 'sequential' : ($is_v2 ? 'v2' : 'v1');
 
         update_option('wps_ic_bulk_process', [
@@ -6102,7 +6260,7 @@ class wps_ic_ajax extends wps_ic
 
         $bulkRunning = get_option('wps_ic_bulk_process');
         if (!empty($bulkRunning['driver']) && $bulkRunning['driver'] === 'v2') {
-            $queue = get_transient('wps_ic_compress_queue');
+            $queue = self::wpc_bulk_queue_read199();
             $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
             $any_active = false;
             foreach ($session_ids as $sid) {
@@ -6128,9 +6286,10 @@ class wps_ic_ajax extends wps_ic
         ini_set('memory_limit', '2024M');
         ini_set('max_execution_time', '180');
 
-        $queue_data = get_transient('wps_ic_compress_queue');
+        $queue_data = self::wpc_bulk_queue_read199();
         if (empty($queue_data['queue'])) {
             
+            self::wpc_bulk_ledger_close202();
             delete_option('wps_ic_bulk_process');
             delete_transient('wps_ic_bulk_running');
             set_transient('wps_ic_bulk_done', true, 60);
@@ -6141,7 +6300,7 @@ class wps_ic_ajax extends wps_ic
         $imageID = intval($queue_data['queue'][0]);
         unset($queue_data['queue'][0]);
         $queue_data['queue'] = array_values($queue_data['queue']);
-        set_transient('wps_ic_compress_queue', $queue_data, 3600);
+        self::wpc_bulk_queue_write199($queue_data);
 
 
         $compress = new wps_local_compress();
@@ -6257,8 +6416,9 @@ class wps_ic_ajax extends wps_ic
     public static function wpc_bulk_v2_fire_loopback()
     {
         
-        $q = get_transient('wps_ic_compress_queue');
-        if (empty($q['queue'])) { return false; }
+        $q = self::wpc_bulk_queue_read199();
+        if (empty($q['queue'])
+            && !(get_option('wps_ic_bulk_process') && !empty(self::wpc_bulk_inflight199()))) { return false; }
         
         
         if (($lock_ts = (int) get_transient('wpc_bulk_compress_draining')) > 0) {
@@ -6343,13 +6503,14 @@ class wps_ic_ajax extends wps_ic
             return;
         }
 
-        $batch_K       = defined('WPC_BULK_K') ? max(1, (int) WPC_BULK_K) : 3;
+        $wpc_depth199 = max(1, (int) apply_filters('wpc_bulk_depth', defined('WPC_BULK_DEPTH') ? WPC_BULK_DEPTH : 4));
+        $batch_K       = defined('WPC_BULK_K') ? max(1, (int) WPC_BULK_K) : $wpc_depth199;
 
 
-        $wall_budget_s = 8.0;
+        $wall_budget_s = 45.0;
 
 
-        $sequential = (bool) get_option('wpc_bulk_sequential', 1);
+        $sequential = (bool) get_option('wpc_bulk_sequential', 0);
         if ($sequential) {
             $batch_K = 1;
 
@@ -6376,21 +6537,45 @@ class wps_ic_ajax extends wps_ic
                     error_log('[WPC Bulk] drain slice mem-cap break usage=' . memory_get_usage(true) . ' limit=' . $mem_limit);
                     break;
                 }
-                $queue_data = get_transient('wps_ic_compress_queue');
+                if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
+                    set_transient('wpc_bulk_stop_signal', 1, 600);
+                    error_log('[WPC Bulk] HALT — broken-store flag armed (DB writes not persisting); bulk stopped, admin notice live');
+                    break;
+                }
+                $queue_data = self::wpc_bulk_queue_read199();
                 if (empty($queue_data['queue'])) {
 
-
+                    if (!$sequential && !empty(self::wpc_bulk_inflight199())) {
+                        if (!self::wpc_bulk_pipeline_drain199()) {
+                            break;
+                        }
+                        continue;
+                    }
+                    self::wpc_bulk_status_count201();
+                    self::wpc_bulk_ledger_close202();
                     delete_option('wps_ic_bulk_process');
                     delete_transient('wps_ic_bulk_running');
                     delete_transient('wpc_bulk_library_counts');
+                    delete_option('wpc_bulk_inflight199');
+                    delete_option('wpc_bulk_counted201');
                     set_transient('wps_ic_bulk_done', true, 60);
                     break;
                 }
 
+                $wpc_slots199 = $batch_K;
+                if (!$sequential) {
+                    $wpc_slots199 = $wpc_depth199 - count(self::wpc_bulk_inflight199());
+                    if ($wpc_slots199 <= 0) {
+                        if (!self::wpc_bulk_pipeline_drain199()) {
+                            break;
+                        }
+                        continue;
+                    }
+                }
                 
-                $batch = array_map('intval', array_slice($queue_data['queue'], 0, $batch_K));
+                $batch = array_map('intval', array_slice($queue_data['queue'], 0, min($batch_K, $wpc_slots199)));
                 $queue_data['queue'] = array_values(array_slice($queue_data['queue'], count($batch)));
-                set_transient('wps_ic_compress_queue', $queue_data, HOUR_IN_SECONDS);
+                self::wpc_bulk_queue_write199($queue_data);
 
                 
                 $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
@@ -6407,23 +6592,68 @@ class wps_ic_ajax extends wps_ic
 
                     if (get_post_meta($id, 'wps_ic_exclude_live', true) === 'true') {
                         error_log('[WPC Bulk] SKIPPED image=' . $id . ' — excluded mid-bulk');
+                        self::wpc_bulk_ledger_mark202($id, 'skipped');
+                        continue;
+                    }
+                    $wpc_adm199 = function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($id) : true;
+                    if ($wpc_adm199 !== true) {
+                        error_log('[WPC Bulk] SKIPPED image=' . $id . ' — ' . $wpc_adm199 . ' (queue flows around it)');
+                        if ($wpc_adm199 === 'parked_attempt_cap') {
+                            self::wpc_bulk_ledger_mark202($id, 'parked');
+                        } else {
+                            self::wpc_bulk_ledger_mark202($id, 'skipped');
+                        }
+                        continue;
+                    }
+                    wp_cache_delete($id, 'post_meta');
+                    $wpc_pend309 = get_transient('wpc_v2_pending_' . $id);
+                    $wpc_icc309  = get_post_meta($id, 'ic_compressing', true);
+                    $wpc_iccs309 = is_array($wpc_icc309) && !empty($wpc_icc309['status']) ? (string) $wpc_icc309['status'] : '';
+                    $wpc_icct309 = is_array($wpc_icc309) ? (int) ($wpc_icc309['time'] ?? 0) : 0;
+                    if (!empty($wpc_pend309['pending'])
+                        || (($wpc_iccs309 === 'optimizing' || $wpc_iccs309 === 'queueing')
+                            && $wpc_icct309 > 0 && (time() - $wpc_icct309) < (int) apply_filters('wpc_bulk_inflight_grace', 900))) {
+                        error_log('[WPC Bulk] SKIPPED image=' . $id . ' — already in flight server-side (no attempt burned; results land via pull)');
+                        self::wpc_bulk_ledger_mark202($id, 'skipped');
                         continue;
                     }
                     $backupOk = $compress->backup_all_sizes($id);
                     if (!$backupOk) {
                         error_log('[WPC Bulk] SKIPPED image=' . $id . ' — backup failed');
+                        if (function_exists('wpc_v2_attempts_bump197')) { wpc_v2_attempts_bump197($id, 'backup_failed'); }
+                        self::wpc_bulk_ledger_mark202($id, 'skipped');
                         continue;
                     }
-                    $prep = self::prepare_v2_optimize($id, ['triggerContext' => 'bulk-compress']);
+                    $wpc_att199 = function_exists('wpc_v2_attempts_bump197') ? wpc_v2_attempts_bump197($id, 'new') : 1;
+                    $wpc_led202 = self::wpc_bulk_ledger_get202();
+                    $prep = self::prepare_v2_optimize($id, [
+                        'triggerContext'  => 'bulk-compress',
+                        'resubmit_reason' => $wpc_att199 > 1 ? 'retry_' . $wpc_att199 : 'new',
+                        'attempt'         => $wpc_att199,
+                        'run_id'          => $wpc_led202 !== false ? (string) $wpc_led202['run_id'] : '',
+                    ]);
                     if (!empty($prep['ok'])) {
                         $preps[$id] = $prep;
                     } else {
                         error_log('[WPC Bulk] PREP_FAILED image=' . $id . ' — ' . ($prep['error'] ?? 'unknown'));
+                        self::wpc_bulk_ledger_mark202($id, 'skipped');
                     }
                 }
 
                 if (!empty($preps)) {
-                    self::wpc_bulk_v2_dispatch_batch($preps);
+                    $wpc_sent309 = self::wpc_bulk_v2_dispatch_batch($preps);
+                    if (!is_array($wpc_sent309)) { $wpc_sent309 = array_map('intval', array_keys($preps)); }
+                    $wpc_im199 = get_option('wpc_bulk_inflight199');
+                    if (!is_array($wpc_im199)) { $wpc_im199 = []; }
+                    foreach (array_keys($preps) as $wpc_ii199) {
+                        if (!in_array((int) $wpc_ii199, $wpc_sent309, true)) {
+                            self::wpc_bulk_ledger_mark202((int) $wpc_ii199, 'skipped');
+                            continue;
+                        }
+                        $wpc_im199[(int) $wpc_ii199] = time();
+                        self::wpc_bulk_ledger_mark202((int) $wpc_ii199, 'inflight');
+                    }
+                    update_option('wpc_bulk_inflight199', $wpc_im199, false);
 
 
                     if (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled()) {
@@ -6438,28 +6668,14 @@ class wps_ic_ajax extends wps_ic
                     }
 
 
-                    $bulkStatus = get_option('wps_ic_BulkStatus') ?: [];
-                    foreach (array_keys($preps) as $id) {
-                        $status = get_post_meta($id, 'ic_status', true);
-                        if ($status === 'compressed') {
-                            $bulkStatus['compressedImageCount'] = ($bulkStatus['compressedImageCount'] ?? 0) + 1;
-                            $variants = get_post_meta($id, 'ic_local_variants', true);
-                            $bulkStatus['compressedThumbs'] = ($bulkStatus['compressedThumbs'] ?? 0) + (is_array($variants) ? count($variants) : 0);
-                            
-                            if (is_array($variants)) {
-                                foreach ($variants as $v) {
-                                    if (!is_array($v)) continue;
-                                    $bulkStatus['total']['original']['size'] = ($bulkStatus['total']['original']['size'] ?? 0) + (int) ($v['originalSize'] ?? 0);
-                                    $bulkStatus['total']['compressed']['size'] = ($bulkStatus['total']['compressed']['size'] ?? 0) + (int) ($v['size'] ?? 0);
-                                }
-                            }
-                        }
-                    }
-                    update_option('wps_ic_BulkStatus', $bulkStatus);
+                    self::wpc_bulk_status_count201();
                 }
                 $iter_count++;
 
 
+                if (!$sequential && !empty($preps)) {
+                    self::wpc_bulk_pipeline_drain199();
+                }
                 
                 if ($sequential && !empty($preps)) {
                     $wait_img_id    = (int) array_keys($preps)[0];
@@ -6489,14 +6705,15 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        $queue_data = get_transient('wps_ic_compress_queue');
+        $queue_data = self::wpc_bulk_queue_read199();
         $redrain    = (int) get_transient('wpc_bulk_compress_redrain_pending') > 0;
         if ($redrain) { delete_transient('wpc_bulk_compress_redrain_pending'); }
 
 
         $wpc_bchain75_ok = true;
         if (!empty($queue_data['queue']) && is_array($queue_data['queue'])) {
-            $wpc_bsig75 = md5((string) $queue_data['queue'][0] . ':' . count($queue_data['queue']));
+            $wpc_bsig75 = md5((string) $queue_data['queue'][0] . ':' . count($queue_data['queue'])
+                . ':' . count(self::wpc_bulk_inflight199()));
             $wpc_bsf75  = '';
             $wpc_bup75  = wp_get_upload_dir();
             if (!empty($wpc_bup75['basedir'])) {
@@ -6515,7 +6732,9 @@ class wps_ic_ajax extends wps_ic
                 }
             }
         }
-        if (($wpc_bchain75_ok && !empty($queue_data['queue'])) || $redrain) {
+        $wpc_tail199 = empty($queue_data['queue']) && get_option('wps_ic_bulk_process')
+            && !empty(self::wpc_bulk_inflight199());
+        if (($wpc_bchain75_ok && !empty($queue_data['queue'])) || $redrain || $wpc_tail199) {
             self::wpc_bulk_v2_fire_loopback();
         }
 
@@ -6524,9 +6743,745 @@ class wps_ic_ajax extends wps_ic
     }
 
 
+    public static function wpc_bulk_queue_read199()
+    {
+        $o = get_option('wpc_bulk_queue199');
+        if (is_array($o) && isset($o['queue'])) {
+            return $o;
+        }
+        $t = get_transient('wps_ic_compress_queue');
+        return (is_array($t) && isset($t['queue'])) ? $t : false;
+    }
+
+    public static function wpc_bulk_queue_write199($data)
+    {
+        if (!is_array($data)) {
+            delete_option('wpc_bulk_queue199');
+            delete_transient('wps_ic_compress_queue');
+            return;
+        }
+        update_option('wpc_bulk_queue199', $data, false);
+        set_transient('wps_ic_compress_queue', $data, HOUR_IN_SECONDS);
+    }
+
+    public static function wpc_bulk_inflight199()
+    {
+        $m = get_option('wpc_bulk_inflight199');
+        if (!is_array($m)) {
+            $m = [];
+        }
+        $out = [];
+        foreach ($m as $id => $ts) {
+            $id = (int) $id;
+            if ($id <= 0 || (time() - (int) $ts) > (int) apply_filters('wpc_bulk_slot_ttl', 120)) {
+                continue;
+            }
+            wp_cache_delete($id, 'post_meta');
+            $st = get_post_meta($id, 'ic_compressing', true);
+            $sv = is_array($st) && !empty($st['status']) ? (string) $st['status'] : '';
+            if ($sv !== 'optimizing' && $sv !== 'queueing') {
+                continue;
+            }
+            $exp = is_array($st) ? (int) ($st['expected_variants'] ?? 0) : 0;
+            if ($exp > 0) {
+                $vs = get_post_meta($id, 'ic_local_variants', true);
+                $acc = 0;
+                if (is_array($vs)) {
+                    foreach ($vs as $v) {
+                        if (is_array($v) && (!empty($v['size']) || !empty($v['bg_no_improvement']))) $acc++;
+                    }
+                }
+                if ($acc >= $exp) {
+                    update_post_meta($id, 'ic_compressing', ['status' => 'compressed']);
+                    update_post_meta($id, 'ic_status', 'compressed');
+                    error_log('[WPC Bulk] slot released on accounting imageID=' . $id . ' acc=' . $acc . '/' . $exp . ' (status flip was transient-held)');
+                    continue;
+                }
+            }
+            $out[$id] = (int) $ts;
+        }
+        if ($out !== $m) {
+            update_option('wpc_bulk_inflight199', $out, false);
+        }
+        return $out;
+    }
+
+    public static function wpc_bulk_ledger_get202()
+    {
+        $l = get_option('wpc_bulk_run_ledger');
+        return (is_array($l) && !empty($l['run_id'])) ? $l : false;
+    }
+
+    public static function wpc_bulk_ledger_init202(array $ids)
+    {
+        $l = [
+            'run_id'  => 'r' . dechex(time()) . substr(md5(uniqid('', true)), 0, 6),
+            'started' => time(),
+            'images'  => [],
+        ];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $l['images'][$id] = ['st' => 'queued', 'ts' => time()];
+            }
+        }
+        update_option('wpc_bulk_run_ledger', $l, false);
+        if (defined('WPC_BULK_DEBUG') && WPC_BULK_DEBUG) {
+            error_log('[WPC BulkLedger] init run=' . $l['run_id'] . ' images=' . count($l['images']));
+        }
+        return $l['run_id'];
+    }
+
+    public static function wpc_bulk_ledger_mark202($id, $st)
+    {
+        $id = (int) $id;
+        if ($id <= 0 || !in_array($st, ['queued', 'inflight', 'verified', 'parked', 'skipped'], true)) {
+            return;
+        }
+        $l = self::wpc_bulk_ledger_get202();
+        if ($l === false) {
+            return;
+        }
+        $prev = isset($l['images'][$id]['st']) ? (string) $l['images'][$id]['st'] : '';
+        if ($prev === $st || $prev === 'verified') {
+            return;
+        }
+        $l['images'][$id] = ['st' => $st, 'ts' => time()];
+        update_option('wpc_bulk_run_ledger', $l, false);
+        if (defined('WPC_BULK_DEBUG') && WPC_BULK_DEBUG) {
+            error_log('[WPC BulkLedger] image=' . $id . ' ' . ($prev === '' ? '(new)' : $prev) . '->' . $st . ' run=' . $l['run_id']);
+        }
+    }
+
+    public static function wpc_bulk_ledger_summary202()
+    {
+        $l = self::wpc_bulk_ledger_get202();
+        if ($l === false) {
+            return null;
+        }
+        $c = ['queued' => 0, 'inflight' => 0, 'verified' => 0, 'parked' => 0, 'skipped' => 0];
+        foreach ($l['images'] as $row) {
+            $st = is_array($row) && isset($row['st']) ? (string) $row['st'] : '';
+            if (isset($c[$st])) {
+                $c[$st]++;
+            }
+        }
+        $c['run_id']  = (string) $l['run_id'];
+        $c['started'] = (int) $l['started'];
+        $c['at']      = time();
+        return $c;
+    }
+
+    public static function wpc_bulk_ledger_close202()
+    {
+        $l = self::wpc_bulk_ledger_get202();
+        if ($l === false) {
+            return 0;
+        }
+        $n = 0;
+        foreach ($l['images'] as $lid => $row) {
+            $lst = is_array($row) && isset($row['st']) ? (string) $row['st'] : '';
+            if ($lst === 'queued' || $lst === 'inflight') {
+                $l['images'][(int) $lid] = ['st' => 'skipped', 'ts' => time()];
+                $n++;
+            }
+        }
+        if ($n > 0) {
+            update_option('wpc_bulk_run_ledger', $l, false);
+            error_log('[WPC BulkLedger] run closed — ' . $n . ' unfinished image(s) marked skipped (retry on next bulk run)');
+        }
+        return $n;
+    }
+
+    public static function wpc_bulk_run_summary_fetch202($run_id)
+    {
+        $orch_url = function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '';
+        $apikey   = function_exists('wpc_v2_get_apikey') ? wpc_v2_get_apikey() : '';
+        $run_id   = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $run_id);
+        if ($orch_url === '' || $apikey === '' || $run_id === '') {
+            return ['ok' => false, 'reason' => 'no_orch_or_run'];
+        }
+        $canonical = 'apikey=' . $apikey . '&run=' . $run_id;
+        $resp = wp_remote_get(rtrim($orch_url, '/') . '/optimize-v2/run-summary?apikey=' . rawurlencode($apikey) . '&run=' . rawurlencode($run_id), [
+            'timeout' => 6,
+            'headers' => [
+                'Accept'          => 'application/json',
+                'X-WPC-Sig'       => hash_hmac('sha256', $canonical, $apikey),
+                'X-WPC-Timestamp' => (string) time(),
+            ],
+        ]);
+        if (is_wp_error($resp) || (int) wp_remote_retrieve_response_code($resp) !== 200) {
+            return ['ok' => false, 'reason' => is_wp_error($resp) ? 'http_error' : ('http_' . wp_remote_retrieve_response_code($resp))];
+        }
+        $j = json_decode((string) wp_remote_retrieve_body($resp), true);
+        if (!is_array($j)) {
+            return ['ok' => false, 'reason' => 'bad_json'];
+        }
+        return ['ok' => true, 'summary' => $j];
+    }
+
+    public static function wpc_bulk_reconcile202()
+    {
+        $led = self::wpc_bulk_ledger_summary202();
+        if ($led === null) {
+            return null;
+        }
+        if ((time() - (int) get_option('wpc_bulk_recon_at202', 0)) < 30) {
+            $last = get_option('wpc_bulk_recon_last202');
+            return is_array($last) ? $last : null;
+        }
+        update_option('wpc_bulk_recon_at202', time(), false);
+        $r = self::wpc_bulk_run_summary_fetch202($led['run_id']);
+        if (empty($r['ok'])) {
+            $out = ['sync' => 'unavailable', 'reason' => (string) ($r['reason'] ?? ''), 'at' => time()];
+            update_option('wpc_bulk_recon_last202', $out, false);
+            return $out;
+        }
+        $svc = $r['summary'];
+        $svc_images = 0;
+        if (isset($svc['image_count'])) {
+            $svc_images = (int) $svc['image_count'];
+        } elseif (isset($svc['images']) && is_array($svc['images'])) {
+            $svc_images = count($svc['images']);
+        }
+        $mismatch = ($svc_images > 0 && $svc_images > ($led['verified'] + $led['inflight']));
+        $out = ['sync' => $mismatch ? 'syncing' : 'ok', 'service_images' => $svc_images, 'at' => time()];
+        if ($mismatch) {
+            error_log('[WPC BulkLedger] reconcile mismatch run=' . $led['run_id']
+                . ' service_images=' . $svc_images . ' ledger_verified=' . $led['verified'] . ' inflight=' . $led['inflight']);
+        }
+        update_option('wpc_bulk_recon_last202', $out, false);
+        return $out;
+    }
+
+    public static function wpc_wire_doctor_report($urlKey, $html)
+    {
+        $lanes = [];
+        $set = get_option(WPS_IC_SETTINGS);
+        $set = is_array($set) ? $set : [];
+        $cd = defined('WPS_IC_CRITICAL') ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/' : '';
+
+        foreach (['desktop', 'mobile'] as $dv) {
+            $crit_head = $cd !== '' ? (string) @file_get_contents($cd . 'critical_' . $dv . '.css', false, null, 0, 700) : '';
+            if (!preg_match('/wpc-budget-final:\s*(?:mobile\s+|desktop\s+)?(over|ok)\s+out=(\d+)\s+cap=(\d+)[^*]*/', $crit_head, $cm)) {
+                $lanes['crit_' . $dv] = ['verdict' => strlen($crit_head) > 64 ? 'WARN' : 'FAIL',
+                    'detail' => strlen($crit_head) > 64 ? 'crit present, no stamp parsed' : 'no crit artifact on disk',
+                    'fix' => 'Refresh Auto Mode / wait for land'];
+                continue;
+            }
+            $stamp   = $cm[0];
+            $cap     = max(1, (int) $cm[3]);
+            $x       = preg_match('/\bx=([0-9.]+)/', $stamp, $xm) ? (float) $xm[1] : ((int) $cm[2] / $cap);
+            $wok     = preg_match('/\bwave_ok=([01])\b/', $stamp, $wm) ? (int) $wm[1] : null;
+            $newfmt  = strpos($stamp, 'fonts=') !== false;
+            $markers = preg_match('/\b(?:still-over|rescope-abort|lossy)\b/', $stamp) === 1;
+            $grace   = (float) apply_filters('wpc_forfeit_over_grace', 1.15);
+            if ($cm[1] === 'ok') {
+                $lossy = !$newfmt && (int) $cm[2] >= (int) floor($cap * (float) apply_filters('wpc_trim_forfeit_ratio', 0.97));
+                $why   = $lossy ? 'ok-but-trimmed-to-fit (old format, out>=97% cap)' : 'ok';
+            } elseif ($wok === 1) {
+                $lossy = false; $why = 'over but WAVE-LICENSED (wave_ok=1) — parks per .172 ladder';
+            } elseif ($wok === 0) {
+                $lossy = true; $why = 'over, service says NOT wave-servable (wave_ok=0)';
+            } else {
+                $lossy = !($newfmt && !$markers && $x <= $grace);
+                $why   = 'over, no wave token — graded: newfmt=' . (int) $newfmt . ' markers=' . (int) $markers . ' x=' . $x . ' grace=' . $grace;
+            }
+            $fst = json_decode((string) @file_get_contents($cd . 'forfeit_state_' . $dv . '.json'), true);
+            $lanes['crit_' . $dv] = [
+                'verdict' => $lossy ? 'FAIL' : 'PASS',
+                'detail'  => $cm[1] . ' x=' . $x . ' wave_ok=' . ($wok === null ? 'absent' : $wok)
+                    . ' | forfeit-computed=' . ($lossy ? 'STANDDOWN' : 'park') . ' (' . $why . ')'
+                    . ' | state=' . (is_array($fst) && isset($fst['mode']) ? (string) $fst['mode'] : 'none'),
+            ];
+            if ($lossy) {
+                $lanes['crit_' . $dv]['fix'] = $wok === 0 ? 'service: wave-license or trim' : 'service trim under cap OR ship wave_ok=1 on this leg';
+            }
+        }
+        if (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) {
+            $lanes['crit_desktop']['detail'] = (isset($lanes['crit_desktop']['detail']) ? $lanes['crit_desktop']['detail'] : '') . ' | BYPASS WINDOW ACTIVE';
+        }
+
+        $ucs_on = !empty($set['used-css']) && $set['used-css'] == '1';
+        $tpl = $cd !== '' ? trim((string) @file_get_contents($cd . 'used_tpl.txt')) : '';
+        
+        
+        
+        
+        if ($tpl === '' && function_exists('wpc_dispatch_tpl_key')) {
+            $tpl222 = (string) wpc_dispatch_tpl_key($urlKey);
+            if ($tpl222 !== '' && function_exists('wpc_used_css_path') && @is_readable(wpc_used_css_path($tpl222))) {
+                $tpl = $tpl222;
+                if ($cd !== '' && function_exists('wpc_crit_meta_write')) {
+                    wpc_crit_meta_write($cd . 'used_tpl.txt', $tpl);
+                }
+            }
+        }
+        $ucs_file = ($tpl !== '' && function_exists('wpc_used_css_path')) ? wpc_used_css_path($tpl) : '';
+        $crit_on199 = !empty($set['critical']['css']) && $set['critical']['css'] == '1';
+        if (!$ucs_on && $crit_on199 && !isset($set['used-css'])) {
+            $lanes['used_css'] = ['verdict' => 'FAIL',
+                'detail' => 'PILLAR DRIFT: Optimize CSS is ON but the used-css rider is unset (saved pre-.148)',
+                'fix' => 'toggle Optimize CSS off/on (rewrites the .825 rider), then Refresh'];
+        } elseif (!$ucs_on) {
+            $lanes['used_css'] = ['verdict' => 'FAIL', 'detail' => 'setting OFF — originals restore post-paint (~30-40 rows)', 'fix' => 'enable Used CSS (Optimize CSS pillar) + Refresh'];
+        } elseif ($ucs_file !== '' && @is_readable($ucs_file)) {
+            $lanes['used_css'] = ['verdict' => 'PASS', 'detail' => 'tpl ' . $tpl . ' landed'];
+            
+            
+            
+            if (function_exists('wpc_css_host_twin_heal231')) {
+                $th232 = 0; $tf232 = 0;
+                foreach (['', 'desktop', 'mobile'] as $dv232) {
+                    $fp232 = wpc_used_css_path($tpl, $dv232);
+                    if ($fp232 === '' || !@is_readable($fp232)) { continue; }
+                    $cb232 = (string) @file_get_contents($fp232);
+                    if ($cb232 === '') { continue; }
+                    $hb232 = wpc_css_host_twin_heal231($cb232);
+                    if (function_exists('wpc_used_css_strip_faces245')) { $hb232 = wpc_used_css_strip_faces245($hb232); }
+                    if (function_exists('wpc_used_css_bg_park255')) { $hb232 = wpc_used_css_bg_park255($hb232); }
+                    if (is_string($hb232) && $hb232 !== $cb232
+                        && @file_put_contents($fp232 . '.tmp', $hb232, LOCK_EX) !== false
+                        && @rename($fp232 . '.tmp', $fp232)) {
+                        $tf232++;
+                        $th232 += substr_count($cb232, '://') - substr_count($hb232, '://');
+                    }
+                }
+                if ($tf232 > 0) {
+                    $lanes['used_css']['twin_heal'] = 'healed ' . $tf232 . ' stored file(s) - purge HTML cache so the mint links the new ?uv=';
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('doctor-twin-healed', (string) $urlKey, '', ['files' => $tf232, 'tpl' => $tpl]);
+                    }
+                } else {
+                    $fr232 = 0;
+                    foreach (['', 'desktop', 'mobile'] as $dv232) {
+                        $fp232 = wpc_used_css_path($tpl, $dv232);
+                        if ($fp232 !== '' && @is_readable($fp232)) {
+                            $fb232 = (string) @file_get_contents($fp232);
+                            if (preg_match_all('#url\(\s*["\']?https?://([^/"\')\s]+)/wp-content/#i', $fb232, $fm232)) {
+                                foreach ($fm232[1] as $fh232) {
+                                    if (strcasecmp($fh232, (string) parse_url(home_url('/'), PHP_URL_HOST)) !== 0) { $fr232++; }
+                                }
+                            }
+                        }
+                    }
+                    $lanes['used_css']['twin_heal'] = $fr232 > 0
+                        ? 'FOREIGN RESIDUE: ' . $fr232 . ' foreign-host urls remain (no local twin or serve-on)'
+                        : 'clean (no foreign-host urls in stored css)';
+                }
+            }
+            if (function_exists('wpc_used_css_sheets_land') && function_exists('wpc_used_css_load_sheets')) {
+                if (!wpc_used_css_load_sheets($tpl)) {
+                    $lanes['used_css']['sheets'] = wpc_used_css_sheets_land($cd, $tpl) ? 'landed-now (droplist arms on next mint - purge HTML cache)' : 'NO MANIFEST (originals will restore; droplist inert)';
+                } else {
+                    $sh225 = wpc_used_css_load_sheets($tpl);
+                    $lanes['used_css']['sheets'] = count($sh225) < 3
+                        ? 'THIN manifest (n=' . count($sh225) . ') - service sheets enumeration incomplete; droplist cannot drop; combine lane covers the restore'
+                        : 'present (droplist active, n=' . count($sh225) . ')';
+                }
+            }
+        } else {
+            $lanes['used_css'] = ['verdict' => 'PENDING', 'detail' => 'setting on, no template landed (tpl=' . ($tpl === '' ? 'none' : $tpl) . ')',
+                'fix' => 'pointer artifacts{} consume lands it on the next tick; check log pointer-usedcss-landed / pointer-artifacts-unmatched'];
+            
+            
+            if (defined('WPS_IC_CRITICAL_API_URL') && function_exists('home_url')) {
+                $opt217 = (array) get_option(defined('WPS_IC_OPTIONS') ? WPS_IC_OPTIONS : 'wps_ic');
+                if (!empty($opt217['api_key'])) {
+                    $lr217 = wp_remote_get(str_replace('/generate', '/v2/latest', WPS_IC_CRITICAL_API_URL)
+                        . '?url=' . urlencode(home_url('/')) . '&apikey=' . urlencode((string) $opt217['api_key']), ['timeout' => 6]);
+                    $lc217 = !is_wp_error($lr217) ? (int) wp_remote_retrieve_response_code($lr217) : 0;
+                    $ld217 = $lc217 === 200 ? json_decode((string) wp_remote_retrieve_body($lr217), true) : null;
+                    if (is_array($ld217)) {
+                        $a217 = isset($ld217['artifacts']) && is_array($ld217['artifacts']) ? $ld217['artifacts'] : [];
+                        $lanes['used_css']['latest_probe'] = [
+                            'ready'          => (int) !empty($ld217['ready']),
+                            'artifact_keys'  => implode(',', array_slice(array_keys($a217), 0, 14)),
+                            'used_css_url'   => !empty($a217['used_css']) ? 'present' : 'ABSENT',
+                            'tpl_derivable'  => (!empty($a217['tpl_key']) || !empty($ld217['tpl_key'])
+                                || (!empty($a217['used_css_mobile']) && strpos((string) $a217['used_css_mobile'], 'tpl-') !== false)) ? 'yes'
+                                : ((function_exists('wpc_dispatch_tpl_key') && wpc_dispatch_tpl_key($urlKey) !== '') ? 'local-tpl' : 'NO-and-no-local-tpl-yet'),
+                        ];
+                        
+                        
+                        
+                        
+                        $du220 = '';
+                        foreach ([$a217, $ld217] as $ds220) {
+                            foreach (['used_css_url', 'used_css', 'usedCss'] as $dk220) {
+                                if ($du220 === '' && !empty($ds220[$dk220]) && is_string($ds220[$dk220])
+                                    && strpos($ds220[$dk220], 'http') === 0) {
+                                    $du220 = trim($ds220[$dk220]);
+                                }
+                            }
+                        }
+                        $dt220 = function_exists('wpc_dispatch_tpl_key') ? (string) wpc_dispatch_tpl_key($urlKey) : '';
+                        if ($du220 !== '' && $dt220 !== '' && function_exists('wpc_used_css_fetch')
+                            && function_exists('wpc_used_css_path') && !@is_readable(wpc_used_css_path($dt220))) {
+                            if (function_exists('wpc_crit_meta_write') && $cd !== '') {
+                                wpc_crit_meta_write($cd . 'used_css_url.txt', $du220);
+                                wpc_crit_meta_write($cd . 'used_tpl.txt', $dt220);
+                            }
+                            $dw221 = '';
+                            $dl220 = wpc_used_css_fetch($du220, $dt220, '', $dw221);
+                            if ($dl220 && function_exists('wpc_used_css_scoped_purge')) { wpc_used_css_scoped_purge($dt220); }
+                            if ($dl220 && function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('doctor-usedcss-landed', (string) $urlKey, '', ['tpl' => $dt220]);
+                            }
+                            if ($dl220 && function_exists('wpc_used_css_sheets_land')) {
+                                $dsu223 = '';
+                                foreach ([$a217, $ld217] as $ds223) {
+                                    if ($dsu223 === '' && !empty($ds223['used_css_sheets']) && is_string($ds223['used_css_sheets'])
+                                        && strpos($ds223['used_css_sheets'], 'http') === 0) {
+                                        $dsu223 = trim($ds223['used_css_sheets']);
+                                    }
+                                }
+                                $lanes['used_css']['latest_probe']['sheets'] = wpc_used_css_sheets_land($cd, $dt220, $dsu223) ? 'landed' : 'no-manifest';
+                            }
+                            $lanes['used_css']['latest_probe']['landed_now'] = $dl220 ? 'yes'
+                                : 'fetch-failed:' . ($dw221 !== '' ? $dw221 : 'unknown') . ' url=' . substr($du220, 0, 120);
+                            if ($dl220) {
+                                $lanes['used_css']['verdict'] = 'PASS';
+                                $lanes['used_css']['detail']  = 'landed by doctor from /v2/latest (tpl ' . $dt220 . ')';
+                                $lanes['used_css']['fix']     = '';
+                            }
+                        }
+                    } else {
+                        $lanes['used_css']['latest_probe'] = ['http' => $lc217, 'body' => 'not-json-or-error'];
+                    }
+                }
+            }
+        }
+
+        
+        
+        
+        try {
+            $wpc_lf278 = defined('WPS_IC_CACHE') ? rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl' : '';
+            if ($wpc_lf278 !== '' && @is_readable($wpc_lf278)) {
+                $wpc_sz278 = (int) @filesize($wpc_lf278);
+                $wpc_fh278 = @fopen($wpc_lf278, 'r');
+                $wpc_rows278 = [];
+                if ($wpc_fh278) {
+                    if ($wpc_sz278 > 65536) { @fseek($wpc_fh278, -65536, SEEK_END); @fgets($wpc_fh278); }
+                    while (($wpc_ln278 = fgets($wpc_fh278)) !== false) {
+                        if (strpos($wpc_ln278, 'critcombine-receipt') === false
+                            && strpos($wpc_ln278, 'crit-sanity-') === false
+                            && strpos($wpc_ln278, 'crit-blind-served') === false) { continue; }
+                        $wpc_j278 = json_decode(trim($wpc_ln278), true);
+                        if (is_array($wpc_j278)) {
+                            $wpc_rows278[] = gmdate('H:i:s', (int) ($wpc_j278['t'] ?? 0)) . 'Z '
+                                . json_encode($wpc_j278['layers'] ?? []);
+                        }
+                    }
+                    @fclose($wpc_fh278);
+                }
+                if (!empty($wpc_rows278)) {
+                    $lanes['critcombine'] = ['verdict' => 'INFO', 'receipts' => array_slice($wpc_rows278, -6)];
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $wpc_nl = !empty($set['nativeLazy']) && $set['nativeLazy'] == '1';
+        $wpc_vl = !empty($set['lazy']) && $set['lazy'] == '1';
+        $lanes['images_lazy'] = [
+            'verdict' => ($wpc_nl || $wpc_vl) ? 'PASS' : 'FAIL',
+            'detail'  => 'nativeLazy=' . (int) $wpc_nl . ' viewportLazy=' . (int) $wpc_vl
+                . ($wpc_nl && !$wpc_vl ? ' — NOTE: native lazy still fetches near-viewport images in lab runs (huge Chrome threshold); Viewport mode parks BTF for the clean wire' : ''),
+            'fix' => ($wpc_nl || $wpc_vl) ? '' : 'enable Native Lazy or Lazy by Viewport',
+        ];
+
+        $delay_on = class_exists('wps_ic_js_delay_v3') && is_callable(['wps_ic_js_delay_v3', 'wpc_delay_master_on'])
+            ? (bool) wps_ic_js_delay_v3::wpc_delay_master_on($set) : false;
+        $lanes['js_delay'] = ['verdict' => $delay_on ? 'PASS' : 'FAIL', 'detail' => $delay_on ? 'delay master on' : 'delay OFF'];
+
+        
+        
+        
+        
+        try {
+            $cdn226 = [];
+            foreach (['lazy', 'live-cdn', 'css', 'js', 'fonts'] as $ck226) {
+                $cdn226[$ck226] = isset($set[$ck226]) ? (string) $set[$ck226] : 'unset';
+            }
+            foreach (['jpg', 'png', 'gif', 'svg'] as $sk226) {
+                $cdn226['serve.' . $sk226] = isset($set['serve'][$sk226]) ? (string) $set['serve'][$sk226] : 'unset';
+            }
+            $cdn226['ic_custom_cname'] = (string) get_option('ic_custom_cname', '');
+            $cdn226['ic_cdn_zone_name'] = (string) get_option('ic_cdn_zone_name', '');
+            $cdn226['suppressed'] = (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) ? 1 : 0;
+            $mintApi226 = '';
+            if (is_string($html) && $html !== '' && preg_match('/"api_url":"([^"]+)"/', $html, $am226)) {
+                $mintApi226 = stripslashes($am226[1]);
+            }
+            $cdn226['mint_api_url'] = $mintApi226 !== '' ? $mintApi226 : 'absent';
+            $servesOn226 = 0;
+            foreach (['jpg', 'png', 'gif', 'svg'] as $sk226) {
+                if (isset($set['serve'][$sk226]) && $set['serve'][$sk226] == '1') { $servesOn226++; }
+            }
+            $leak226 = ($cdn226['suppressed'] === 1 || $servesOn226 === 0) && $mintApi226 !== '';
+            $lanes['cdn'] = [
+                'verdict' => $leak226 ? 'FAIL' : 'INFO',
+                'detail'  => ($leak226 ? 'CDN RESURRECTION: zone emitted while CDN is off - lazy runtime re-fetches images through the zone (dup downloads). ' : '')
+                    . 'state: ' . json_encode($cdn226),
+            ];
+            if ($leak226) { $lanes['cdn']['fix'] = 'strip api_url when suppressed/all-serve-off (plugin) + purge; verify which key still reads on'; }
+        } catch (\Throwable $e) {
+        }
+        if (is_string($html) && $html !== '') {
+            if (preg_match('/delay-v3-loader-([0-9.]+)\.min\.js/', $html, $vm)) {
+                $cur = defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '';
+                $lanes['cache_freshness'] = $vm[1] === $cur
+                    ? ['verdict' => 'PASS', 'detail' => 'mint carries current loader ' . $vm[1]]
+                    : ['verdict' => 'FAIL', 'detail' => 'STALE MINT: cached page carries loader ' . $vm[1] . ' vs installed ' . $cur, 'fix' => 'purge HTML cache'];
+            } else {
+                $lanes['cache_freshness'] = ['verdict' => 'WARN', 'detail' => 'no loader in cached copy'];
+            }
+            if (strpos($html, 'KGZ1bmN0aW9uKCl7dmFyIG5kPWZhbHNl') !== false) {
+                $lanes['frozen_backstop'] = ['verdict' => 'FAIL',
+                    'detail' => 'delay registry carries a FROZEN font backstop (pre-nodefer mint) — replays old font code every view',
+                    'fix' => 'purge HTML cache'];
+            } elseif (strpos($html, 'id="wpc-lf-flip924"') !== false
+                && strpos($html, 'data-nodefer="1" id="wpc-lf-flip924"') === false) {
+                $lanes['frozen_backstop'] = ['verdict' => 'FAIL', 'detail' => 'backstop tag without data-nodefer (pre-.212 mint)', 'fix' => 'purge HTML cache'];
+            } else {
+                $lanes['frozen_backstop'] = ['verdict' => 'PASS', 'detail' => 'no swallowed font scripts'];
+            }
+            if (preg_match('/wpcDelayV3Cfg=\{"timeout":(\d+),"aggr":(\d+)/', $html, $tm)) {
+                $lanes['js_delay']['detail'] .= $tm[1] === '0'
+                    ? ' | interaction-only (lab-clean)' : ' | timed fallback ' . $tm[1] . 's (unmeasured page)';
+            }
+            
+            
+            
+            
+            
+            if (preg_match_all('/<script\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $wpc_sm262)) {
+                $wpc_eag262 = [];
+                foreach ($wpc_sm262[0] as $wpc_i262 => $wpc_st262) {
+                    if (stripos($wpc_st262, 'wpc-delayed') !== false || stripos($wpc_st262, 'text/wpc') !== false) { continue; }
+                    
+                    
+                    if (stripos($wpc_sm262[1][$wpc_i262], 'data:') === 0) { continue; }
+                    $wpc_bn262 = basename((string) parse_url($wpc_sm262[1][$wpc_i262], PHP_URL_PATH));
+                    if ($wpc_bn262 === '' || stripos($wpc_bn262, 'delay-v3-loader') !== false
+                        || stripos($wpc_bn262, 'local-lazy') !== false) { continue; }
+                    $wpc_eag262[] = $wpc_bn262;
+                }
+                if (!empty($wpc_eag262)) {
+                    $lanes['js_delay']['eager_js'] = count($wpc_eag262) . ' eager: '
+                        . implode(',', array_slice($wpc_eag262, 0, 14))
+                        . (count($wpc_eag262) > 14 ? ',+' . (count($wpc_eag262) - 14) : '');
+                    if (count($wpc_eag262) > 6) {
+                        $lanes['js_delay']['fix'] = 'keep closure is broad - name the member that NEEDS eager and cut the rest';
+                    }
+                }
+            }
+            $wpc_imt227 = substr_count($html, '<img');
+            $wpc_imp227 = substr_count($html, 'src="data:image/svg+xml');
+            $lanes['images_lazy']['detail'] .= ' | mint imgs: ' . $wpc_imt227 . ', true-parked: ' . $wpc_imp227
+                . ($wpc_imp227 === 0 && $wpc_imt227 > 12 ? ' (NOT PARKED - every src fetches in lab)' : '');
+            $lanes['fonts'] = [
+                'verdict' => 'INFO',
+                'detail' => '@font-face in mint: ' . substr_count($html, '@font-face')
+                    . ' | inline data: subsets: ' . substr_count($html, 'url(data:font')
+                    . ' | late-faces: ' . (strpos($html, 'id="wpc-late-faces"') !== false ? 'present' : 'absent'),
+            ];
+        } else {
+            
+            
+            $wpc_cw287 = [];
+            $wpc_set287 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+            
+            
+            $wpc_cw287[] = 'setting=' . ((is_array($wpc_set287) && !empty($wpc_set287['cache']['advanced']) && $wpc_set287['cache']['advanced'] == '1') ? 'on' : 'OFF');
+            $wpc_cw287[] = 'wp_cache=' . ((defined('WP_CACHE') && WP_CACHE) ? '1' : '0');
+            $wpc_ac287 = defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/advanced-cache.php' : '';
+            $wpc_cw287[] = 'dropin=' . (($wpc_ac287 !== '' && @is_file($wpc_ac287))
+                ? ((strpos((string) @file_get_contents($wpc_ac287), 'wpc') !== false || strpos((string) @file_get_contents($wpc_ac287), 'WPC') !== false) ? 'ours' : 'FOREIGN')
+                : 'MISSING');
+            if (function_exists('wpc_cache_dir_for')) {
+                $wpc_cd287 = (string) wpc_cache_dir_for($urlKey);
+                $wpc_cw287[] = 'dir=' . ($wpc_cd287 !== '' && is_dir($wpc_cd287) ? (is_writable($wpc_cd287) ? 'writable' : 'READONLY') : 'absent');
+            } elseif (defined('WPS_IC_CACHE')) {
+                $wpc_cw287[] = 'dir=' . (is_dir(WPS_IC_CACHE) ? (is_writable(WPS_IC_CACHE) ? 'writable' : 'READONLY') : 'ABSENT');
+            }
+            
+            
+            
+            $wpc_lw288 = function_exists('get_option') ? get_option('wpc_cache_lastwrite288') : null;
+            $wpc_cw287[] = 'lastwrite=' . (is_array($wpc_lw288)
+                ? ((time() - (int) $wpc_lw288['t']) . 's-ago ' . $wpc_lw288['variant'] . ' ' . $wpc_lw288['bytes'] . 'b [' . $wpc_lw288['key'] . ']')
+                : 'NEVER');
+            if (defined('WPS_IC_CACHE') && !empty($urlKey)) {
+                foreach (['index.html', 'index.html_gzip', 'mobile_index.html', 'mobile_index.html_gzip'] as $wpc_pv288) {
+                    $wpc_fp288 = WPS_IC_CACHE . $urlKey . '/' . $wpc_pv288;
+                    $wpc_cw287[] = $wpc_pv288 . '=' . (@is_file($wpc_fp288)
+                        ? ((int) @filesize($wpc_fp288) . 'b/' . (time() - (int) @filemtime($wpc_fp288)) . 's')
+                        : 'ABSENT');
+                }
+                $wpc_cw287[] = 'key=' . $urlKey;
+            }
+            if ($wpc_ac287 !== '' && @is_file($wpc_ac287)
+                && preg_match('/Version:\s*([0-9.]+)/', (string) @file_get_contents($wpc_ac287), $wpc_avm288)) {
+                $wpc_cw287[] = 'dropin_v=' . $wpc_avm288[1];
+            }
+            $lanes['cache_freshness'] = ['verdict' => 'WARN',
+                'detail' => 'no cached copy found (uncached or purged) | ' . implode(' ', $wpc_cw287)];
+        }
+        
+        
+        
+        
+        try {
+            $rh238 = [];
+            $rh238['under_pressure'] = (function_exists('wpc_under_pressure') && wpc_under_pressure()) ? 1 : 0;
+            $rh238['loadavg'] = function_exists('sys_getloadavg') ? implode(',', array_map(function ($v) { return round($v, 2); }, (array) sys_getloadavg())) : 'n/a';
+            $rh238['update_window_until'] = (int) get_option('wpc_update_window_until', 0) - time();
+            $rh238['crit_bypass'] = (function_exists('wpc_crit_bypass_active') && wpc_crit_bypass_active($urlKey)) ? 1 : 0;
+            $rh238['kick_dead'] = (function_exists('wpc_kick_is_dead') && wpc_kick_is_dead($urlKey)) ? 1 : 0;
+            $rh238['kick_budget_ok'] = (function_exists('wpc_kick_budget_ok') && !wpc_kick_budget_ok()) ? 0 : 1;
+            foreach (['upgrade', 'all'] as $sk238) {
+                $sv238 = (int) get_transient('wpc_crit_stale_' . md5($sk238));
+                if ($sv238 > 0) { $rh238['stale_mark_' . $sk238] = (time() - $sv238) . 's ago'; }
+            }
+            if ($cd !== '') {
+                foreach (['critical_desktop.css', 'critical_mobile.css', 'tpl.txt'] as $cf238) {
+                    $rh238[$cf238] = @is_readable($cd . $cf238)
+                        ? (int) @filesize($cd . $cf238) . 'b/' . (time() - (int) @filemtime($cd . $cf238)) . 's'
+                        : 'ABSENT';
+                }
+            }
+            
+            
+            
+            
+            $rh238['combined_on'] = (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_combined_crit_on'))
+                ? (int) (bool) wps_rewriteLogic::wpc_combined_crit_on() : -1;
+            $rh238['cf_fronted_seen'] = (int) !empty(get_option('wpc_cf_fronted_seen', 0));
+            $dk242 = get_option('wpc_cf_devkey_verified');
+            $rh238['devkey'] = is_array($dk242)
+                ? (!empty($dk242['devkey']) ? 'yes/src=' . (isset($dk242['src']) ? (string) $dk242['src'] : '') : 'no')
+                : 'absent';
+            $rh238['combined_artifact'] = ($cd !== '' && @is_readable($cd . 'critical_combined.css'))
+                ? (int) @filesize($cd . 'critical_combined.css') . 'b' : 'ABSENT';
+            if (is_string($html) && $html !== '' && preg_match('/id="wpc-critical-css" class="([^"]+)"/', $html, $cc242)) {
+                $rh238['mint_crit_class'] = $cc242[1];
+            }
+            if ($rh238['cf_fronted_seen'] === 1 && $rh238['devkey'] !== 'yes/src=readback'
+                && $rh238['combined_on'] !== 1) {
+                $rh238['VERDICT'] = 'DEVICE-SPLIT ON A DEVICE-BLIND EDGE - floor failed to hold';
+            }
+            $lanes['render_health'] = [
+                'verdict' => ($rh238['under_pressure'] || $rh238['crit_bypass']) ? 'WARN' : 'INFO',
+                'detail'  => json_encode($rh238),
+            ];
+        } catch (\Throwable $e) {
+        }
+        return $lanes;
+    }
+
+    public function wpc_wire_doctor()
+    {
+        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+            wp_send_json_error('forbidden');
+        }
+        $urlKey = class_exists('wps_ic_url_key') ? (string) (new wps_ic_url_key())->setup(home_url('/')) : '';
+        if (!empty($_GET['url']) && class_exists('wps_ic_url_key')) {
+            $urlKey = (string) (new wps_ic_url_key())->setup(esc_url_raw((string) $_GET['url']));
+        }
+        $html = '';
+        if (defined('WPS_IC_CACHE')) {
+            foreach ([WPS_IC_CACHE . $urlKey . '/index.html', WPS_IC_CACHE . $urlKey . '/mobile_index.html'] as $f) {
+                if (@is_readable($f)) { $html = (string) @file_get_contents($f); break; }
+            }
+            if ($html === '' && @is_readable(WPS_IC_CACHE . $urlKey . '/index.html_gzip') && function_exists('gzdecode')) {
+                $html = (string) @gzdecode((string) @file_get_contents(WPS_IC_CACHE . $urlKey . '/index.html_gzip'));
+            }
+        }
+        wp_send_json_success([
+            'url_key' => $urlKey,
+            'version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+            'lanes'   => self::wpc_wire_doctor_report($urlKey, $html),
+        ]);
+    }
+
+    public function wpc_bulk_ledger_dump()
+    {
+        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+            wp_send_json_error('forbidden');
+        }
+        wp_send_json_success([
+            'ledger'    => self::wpc_bulk_ledger_get202(),
+            'summary'   => self::wpc_bulk_ledger_summary202(),
+            'reconcile' => get_option('wpc_bulk_recon_last202'),
+            'inflight'  => self::wpc_bulk_inflight199(),
+            'counted'   => get_option('wpc_bulk_counted201'),
+        ]);
+    }
+
+    public static function wpc_bulk_status_count201()
+    {
+        $session_ids = get_transient('wpc_bulk_session_ids') ?: [];
+        if (!is_array($session_ids) || empty($session_ids)) {
+            return;
+        }
+        $counted = get_option('wpc_bulk_counted201');
+        if (!is_array($counted)) {
+            $counted = [];
+        }
+        $bs = get_option('wps_ic_BulkStatus') ?: [];
+        $new = 0;
+        foreach (array_values(array_unique(array_map('intval', $session_ids))) as $id) {
+            if ($id <= 0 || isset($counted[$id])) {
+                continue;
+            }
+            wp_cache_delete($id, 'post_meta');
+            if (get_post_meta($id, 'ic_status', true) !== 'compressed') {
+                continue;
+            }
+            $counted[$id] = 1;
+            $new++;
+            self::wpc_bulk_ledger_mark202($id, 'verified');
+            $bs['compressedImageCount'] = ($bs['compressedImageCount'] ?? 0) + 1;
+            $variants = get_post_meta($id, 'ic_local_variants', true);
+            if (is_array($variants)) {
+                $bs['compressedThumbs'] = ($bs['compressedThumbs'] ?? 0) + count($variants);
+                foreach ($variants as $v) {
+                    if (!is_array($v)) continue;
+                    $bs['total']['original']['size']   = ($bs['total']['original']['size'] ?? 0) + (int) ($v['originalSize'] ?? 0);
+                    $bs['total']['compressed']['size'] = ($bs['total']['compressed']['size'] ?? 0) + (int) ($v['size'] ?? 0);
+                }
+            }
+        }
+        if ($new > 0) {
+            update_option('wpc_bulk_counted201', $counted, false);
+            update_option('wps_ic_BulkStatus', $bs);
+            delete_transient('wpc_bulk_library_counts');
+        }
+    }
+
+    public static function wpc_bulk_pipeline_drain199()
+    {
+        if (!function_exists('wpc_v2_pull_enabled') || !wpc_v2_pull_enabled()) {
+            return false;
+        }
+        if (function_exists('wpc_v2_pull_manifest_tick')) {
+            $wpc_wait199 = max(0, (int) apply_filters('wpc_bulk_longpoll_ms', 25000));
+            wpc_v2_pull_manifest_tick(100, $wpc_wait199);
+        }
+        if (function_exists('wpc_v2_journal_drain_run')) {
+            try { wpc_v2_journal_drain_run(); } catch (\Throwable $e) {}
+        }
+        self::wpc_bulk_status_count201();
+        return true;
+    }
+
     public static function wpc_bulk_v2_dispatch_batch(array $preps)
     {
-        if (empty($preps)) return;
+        $wpc_sent309 = [];
+        if (empty($preps)) return $wpc_sent309;
 
         
         if (function_exists('curl_multi_init') && function_exists('curl_multi_exec') && count($preps) > 1) {
@@ -6574,12 +7529,14 @@ class wps_ic_ajax extends wps_ic
                 if (empty($result['ok'])) {
                     error_log(sprintf('[WPC Bulk] FAILED image=%d wall=%dms err=%s',
                         $id, $wall_ms, $result['error'] ?? 'unknown'));
+                } else {
+                    $wpc_sent309[] = (int) $id;
                 }
                 curl_multi_remove_handle($mh, $h['ch']);
                 curl_close($h['ch']);
             }
             curl_multi_close($mh);
-            return;
+            return $wpc_sent309;
         }
 
         
@@ -6587,8 +7544,11 @@ class wps_ic_ajax extends wps_ic
             $result = $p['client']->optimize($id, $p['variants'], $p['options']);
             if (empty($result['ok'])) {
                 error_log('[WPC Bulk] FAILED image=' . $id . ' — ' . ($result['error'] ?? 'unknown'));
+            } else {
+                $wpc_sent309[] = (int) $id;
             }
         }
+        return $wpc_sent309;
     }
 
     
@@ -6849,10 +7809,46 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['ok' => true, 'cleaned' => count($restore_ids)]);
     }
 
+    
+
+
+
+
+
+
+
+
+    private function agencyCnameRelay($method, $cname = '')
+    {
+        global $api;
+
+        $apikey = sanitize_text_field($_POST['apikey'] ?? '');
+        if (empty($apikey)) {
+            wp_send_json_error(['msg' => 'No site selected for this action.']);
+        }
+        if (empty($api) || empty($api::$comms) || !method_exists($api::$comms, $method)) {
+            wp_send_json_error(['msg' => 'Agency comms unavailable — update the agency API plugin.']);
+        }
+
+        if ($method === 'cnameRemove') {
+            $api::$comms->cnameRemove($apikey);
+        } else {
+            $api::$comms->$method($apikey, $cname);
+        }
+
+        
+        wp_send_json_error(['msg' => 'The site did not answer.']);
+    }
+
     public function wps_ic_remove_cname()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings'))
+            || !wp_verify_nonce($_POST['wps_ic_nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
+        }
+
+        if ($this->isAgencyPortal()) {
+            $this->agencyCnameRelay('cnameRemove');
         }
 
         $cname_class = new wps_ic_cname();
@@ -6861,8 +7857,15 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_cname_retry()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings'))
+            || !wp_verify_nonce($_POST['wps_ic_nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
+        }
+
+        if ($this->isAgencyPortal()) {
+            
+            
+            $this->agencyCnameRelay('cnameRetry', sanitize_text_field($_POST['cname'] ?? ''));
         }
 
         $cname_class = new wps_ic_cname();
@@ -6890,6 +7893,9 @@ class wps_ic_ajax extends wps_ic
         $options = new wps_ic_options();
         $preset = sanitize_text_field($_POST['value']);
         $configuration = $options->get_preset($preset);
+        if (function_exists('wpc_preset_cache_gate67')) {
+            $configuration = wpc_preset_cache_gate67($configuration);
+        }
         update_option(WPS_IC_SETTINGS, $configuration);
         wp_send_json_success($configuration);
     }
@@ -6908,11 +7914,23 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_cname_add()
     {
-        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'], 'wps_ic_nonce_action')) {
+        if ((!$this->isAgencyPortal() && !current_user_can('manage_wpc_settings'))
+            || !wp_verify_nonce($_POST['wps_ic_nonce'] ?? '', 'wps_ic_nonce_action')) {
             wp_send_json_error('Forbidden.');
         }
 
         $cname_input = !empty($_POST['cname']) ? $_POST['cname'] : null;
+
+        if ($this->isAgencyPortal()) {
+            $cname_remote = sanitize_text_field((string) $cname_input);
+            
+            
+            
+            if ($cname_remote === '') {
+                wp_send_json_error(['msg' => 'Enter the domain you have pointed at the CDN.']);
+            }
+            $this->agencyCnameRelay('cnameAdd', $cname_remote);
+        }
 
         $cname_class = new wps_ic_cname();
         $cname_class->add($cname_input);
@@ -7595,12 +8613,304 @@ class wps_ic_ajax extends wps_ic
         wp_send_json_success(['cleared' => true, 'imageID' => $imageID]);
     }
 
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_v2_stale_compress_watchdog($imageID)
+    {
+        $imageID = (int) $imageID;
+        if ($imageID <= 0) return false;
+        wp_cache_delete($imageID, 'post_meta');
+        $ic = get_post_meta($imageID, 'ic_compressing', true);
+        $st = is_array($ic) && !empty($ic['status']) ? (string) $ic['status'] : '';
+        if ($st !== 'queueing' && $st !== 'optimizing') return false;
+        $started = is_array($ic) ? (int) ($ic['time'] ?? 0) : 0;
+        if ($started <= 0) return false;
+        $deadline = (int) apply_filters('wpc_v2_compress_stall_seconds', 90, $imageID);
+        if ((time() - $started) < $deadline) return false;
+        
+        if (!empty(get_transient('wpc_v2_pending_' . $imageID))) return false;
+        $vs = get_post_meta($imageID, 'ic_local_variants', true);
+        if (is_array($vs) && !empty($vs)) return false;
+        
+        delete_post_meta($imageID, 'ic_compressing');
+        delete_transient('wps_ic_compress_' . $imageID);
+        delete_transient('wpc_v2_pending_' . $imageID);
+        delete_transient('wpc_lazy_v2_trigger_' . $imageID);
+        
+        
+        
+        
+        $worker_reached = !empty(get_transient('wpc_v2_worker_reached_' . $imageID));
+        if (!$worker_reached) {
+            update_option('wpc_v2_async_unreliable', time(), false);
+            $reason = 'the background optimization worker did not survive on this host (dispatch never left the server) — future optimizes will run synchronously; re-optimize this image to complete it';
+            error_log('[WPC Watchdog] imageID=' . $imageID . ' DETACH-DEATH (no worker breadcrumb) — async marked unreliable, sync forced site-wide');
+        } else {
+            $reason = 'no_variants_after_' . $deadline . 's — the worker dispatched but the service returned no result (service-side); re-optimize to retry';
+            error_log('[WPC Watchdog] imageID=' . $imageID . ' worker reached dispatch but no variants — service-side, NOT blaming detach');
+        }
+        delete_transient('wpc_v2_worker_reached_' . $imageID);
+        set_transient('wpc_v2_compress_failed_' . $imageID, $reason, 900);
+        wp_cache_delete($imageID, 'post_meta');
+        return true;
+    }
+
+    
+    
+    
+    
+    public function wpc_v2_compress_probe()
+    {
+        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+            wp_send_json_error('forbidden');
+        }
+        $imageID = absint($_REQUEST['attachment_id'] ?? 0);
+        $out = [
+            'plugin_version' => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+            'orchestrator'   => function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '',
+            'has_apikey'     => function_exists('wpc_v2_get_apikey') ? (wpc_v2_get_apikey() !== '') : null,
+            'v2_protocol'    => function_exists('wpc_use_v2_protocol') ? (bool) wpc_use_v2_protocol() : null,
+            'pull_enabled'   => function_exists('wpc_v2_pull_enabled') ? (bool) wpc_v2_pull_enabled() : null,
+            'async_enabled'  => (bool) apply_filters('wpc_v2_async_dispatch_enabled', true),
+            'can_detach'     => function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'),
+            'store_broken'   => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+            'async_dispatch_ok' => self::wpc_v2_async_dispatch_ok(),
+            'async_unreliable_since' => (int) get_option('wpc_v2_async_unreliable', 0),
+            'last_dispatch_error' => get_option('wpc_v2_last_dispatch_error', null),
+        ];
+        
+        if (function_exists('wpc_v2_pull_manifest_fetch')) {
+            $t0 = microtime(true);
+            $r  = wpc_v2_pull_manifest_fetch(0, 1, 0);
+            $out['reachability'] = [
+                'ok'      => !empty($r['ok']),
+                'reason'  => isset($r['error']) ? (string) $r['error'] : (empty($r['ok']) ? 'unknown' : 'reached'),
+                'wall_ms' => (int) round((microtime(true) - $t0) * 1000),
+                'note'    => !empty($r['ok'])
+                    ? 'outbound apikey-signed call reached the service — egress OK; the stall is NOT connectivity'
+                    : 'outbound call did NOT reach the service — host egress/firewall/DNS to the orchestrator is the stall cause',
+            ];
+        } else {
+            $out['reachability'] = ['ok' => null, 'reason' => 'manifest_fetch_unavailable'];
+        }
+        $out['post_reachability'] = self::wpc_v2_probe_post();
+        
+        $out['loopback'] = ['admin_ajax' => admin_url('admin-ajax.php')];
+        if ($imageID > 0) {
+            wp_cache_delete($imageID, 'post_meta');
+            $ic = get_post_meta($imageID, 'ic_compressing', true);
+            $out['image'] = [
+                'id'             => $imageID,
+                'ic_status'      => get_post_meta($imageID, 'ic_status', true),
+                'ic_compressing' => is_array($ic) ? $ic : $ic,
+                'attempts'       => get_post_meta($imageID, 'ic_v2_attempts', true),
+                'pending'        => !empty(get_transient('wpc_v2_pending_' . $imageID)),
+                'last_error'     => get_transient('wpc_v2_compress_failed_' . $imageID),
+                'admit'          => function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($imageID) : null,
+                'variants'       => is_array(get_post_meta($imageID, 'ic_local_variants', true)) ? count(get_post_meta($imageID, 'ic_local_variants', true)) : 0,
+                'worker_reached' => !empty(get_transient('wpc_v2_worker_reached_' . $imageID)),
+                'last_envelope'  => get_transient('wpc_v2_last_envelope_' . $imageID),
+            ];
+        }
+        wp_send_json_success($out);
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_v2_probe_post($force = false)
+    {
+        if (!function_exists('wpc_v2_orchestrator_url') || !function_exists('wp_remote_post')) {
+            return ['ok' => null, 'reason' => 'unavailable'];
+        }
+        if (!$force) {
+            $c = get_transient('wpc_v2_probe_small_cache');
+            if (is_array($c)) { $c['cached'] = true; return $c; }
+        }
+        $url = rtrim((string) wpc_v2_orchestrator_url(), '/') . '/optimize-v2/manifest';
+        $apikey = function_exists('wpc_v2_get_apikey') ? (string) wpc_v2_get_apikey() : '';
+        $t0 = microtime(true);
+        $resp = wp_remote_post($url, [
+            'timeout'     => (int) apply_filters('wpc_v2_probe_post_timeout', 8),
+            'redirection' => 0,
+            'blocking'    => true,
+            'headers'     => ['Content-Type' => 'application/json', 'Accept' => 'application/json',
+                              'X-WPC-Probe' => '1', 'X-WPC-Apikey-Present' => ($apikey !== '' ? '1' : '0')],
+            'body'        => wp_json_encode(['probe' => 1]),
+        ]);
+        $ms = (int) round((microtime(true) - $t0) * 1000);
+        if (is_wp_error($resp)) {
+            $out = ['ok' => false, 'http_code' => 0, 'wall_ms' => $ms,
+                'error' => $resp->get_error_code() . ': ' . $resp->get_error_message(),
+                'note'  => 'POST to the service FAILED (GET works, POST does not) — a proxy/WAF is holding or blocking outbound POST from this host; that is why the encode dispatch hangs'];
+            set_transient('wpc_v2_probe_small_cache', $out, 300);
+            return $out;
+        }
+        $code = (int) wp_remote_retrieve_response_code($resp);
+        $out = ['ok' => true, 'http_code' => $code, 'wall_ms' => $ms,
+            'note' => 'POST reached the service (HTTP ' . $code . ' in ' . $ms . 'ms) — outbound POST is NOT the blocker; any non-2xx here is just the endpoint rejecting a probe body'];
+        set_transient('wpc_v2_probe_small_cache', $out, 300);
+        return $out;
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_v2_probe_post_large($force = false)
+    {
+        if (!function_exists('wpc_v2_orchestrator_url') || !function_exists('wp_remote_post')) {
+            return ['ok' => null, 'reason' => 'unavailable'];
+        }
+        
+        if (!$force) {
+            $cached = get_transient('wpc_v2_probe_large_cache');
+            if (is_array($cached)) { $cached['cached'] = true; return $cached; }
+        }
+        $url = rtrim((string) wpc_v2_orchestrator_url(), '/') . '/optimize-v2';
+        $pad = str_repeat('x', 100 * 1024); 
+        $body = wp_json_encode(['apikey' => 'invalid-probe-key-0000', 'imageID' => '0', 'probe' => 1, 'pad' => $pad]);
+        $t0 = microtime(true);
+        $resp = wp_remote_post($url, [
+            'timeout'     => (int) apply_filters('wpc_v2_probe_post_timeout', 15),
+            'redirection' => 0,
+            'blocking'    => true,
+            'headers'     => ['Content-Type' => 'application/json', 'X-WPC-Probe' => 'large'],
+            'body'        => $body,
+        ]);
+        $ms = (int) round((microtime(true) - $t0) * 1000);
+        if (is_wp_error($resp)) {
+            
+            
+            
+            $err_code = $resp->get_error_code();
+            $timed_out = stripos((string) $resp->get_error_message(), 'timed out') !== false
+                || stripos((string) $resp->get_error_message(), 'cURL error 28') !== false
+                || $err_code === 'http_request_failed';
+            if ($timed_out && !self::wpc_v2_prefer_source_url()) {
+                update_option('wpc_v2_prefer_source_url', time(), false);
+                error_log('[WPC ProbeLarge] large-body blackhole detected — armed source.url dispatch proactively (no 30s click-wait)');
+            }
+            $out = ['ok' => false, 'bytes' => strlen($body), 'wall_ms' => $ms,
+                'error' => $err_code . ': ' . $resp->get_error_message(),
+                'armed_source_url' => self::wpc_v2_prefer_source_url(),
+                'note'  => 'LARGE POST body did NOT arrive (small probe does) — this host blackholes large outbound POST bodies (MSS/PMTUD or an outbound security appliance). THIS is why encode dispatch times out. Auto-armed source.url (~1KB envelope) so optimizes dodge it now; fix host-side to restore inline.'];
+            set_transient('wpc_v2_probe_large_cache', $out, 300);
+            return $out;
+        }
+        $code = (int) wp_remote_retrieve_response_code($resp);
+        $out = ['ok' => true, 'http_code' => $code, 'bytes' => strlen($body), 'wall_ms' => $ms,
+            'note' => 'large body arrived (HTTP ' . $code . ' in ' . $ms . 'ms) — the ~100KB path is NOT blackholed; the encode timeout is elsewhere'];
+        set_transient('wpc_v2_probe_large_cache', $out, 300);
+        return $out;
+    }
+
+    
+    
+    
+    
+    public function wpc_v2_full_debug()
+    {
+        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+            wp_send_json_error('forbidden');
+        }
+        $ids = [];
+        if (!empty($_REQUEST['ids'])) {
+            foreach (explode(',', (string) $_REQUEST['ids']) as $wpc_id) {
+                $wpc_id = (int) trim($wpc_id);
+                if ($wpc_id > 0) $ids[] = $wpc_id;
+            }
+        }
+        $reach = null;
+        if (function_exists('wpc_v2_pull_manifest_fetch')) {
+            $t0 = microtime(true);
+            $r  = wpc_v2_pull_manifest_fetch(0, 1, 0);
+            $reach = ['ok' => !empty($r['ok']), 'reason' => isset($r['error']) ? (string) $r['error'] : 'reached', 'wall_ms' => (int) round((microtime(true) - $t0) * 1000)];
+        }
+        $post_reach = self::wpc_v2_probe_post();
+        $post_reach_large = self::wpc_v2_probe_post_large();
+        $out = [
+            'plugin_version'         => defined('WPC_PLUGIN_VERSION') ? WPC_PLUGIN_VERSION : '',
+            'at'                     => time(),
+            'orchestrator'           => function_exists('wpc_v2_orchestrator_url') ? wpc_v2_orchestrator_url() : '',
+            'has_apikey'             => function_exists('wpc_v2_get_apikey') ? (wpc_v2_get_apikey() !== '') : null,
+            'reachability'           => $reach,
+            'post_reachability'      => $post_reach,
+            'post_reachability_large'=> $post_reach_large,
+            'dispatch' => [
+                'v2_protocol'        => function_exists('wpc_use_v2_protocol') ? (bool) wpc_use_v2_protocol() : null,
+                'pull_enabled'       => function_exists('wpc_v2_pull_enabled') ? (bool) wpc_v2_pull_enabled() : null,
+                'async_enabled'      => (bool) apply_filters('wpc_v2_async_dispatch_enabled', true),
+                'async_dispatch_ok'  => self::wpc_v2_async_dispatch_ok(),
+                'async_unreliable_since' => (int) get_option('wpc_v2_async_unreliable', 0),
+                'prefer_source_url'  => self::wpc_v2_prefer_source_url(),
+                'prefer_source_url_since' => (int) get_option('wpc_v2_prefer_source_url', 0),
+                'can_detach'         => function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'),
+                'last_dispatch_error'=> get_option('wpc_v2_last_dispatch_error', null),
+                'store_broken'       => function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197(),
+                'store_broken_note'  => get_option('wps_ic', null) ? null : null,
+            ],
+            'bulk' => [
+                'process'            => get_option('wps_ic_bulk_process', null),
+                'heartbeat'          => (int) get_transient('wpc_bulk_heartbeat'),
+                'queue_len'          => (function () { $q = self::wpc_bulk_queue_read199(); return is_array($q) && isset($q['queue']) ? count($q['queue']) : 0; })(),
+                'inflight'           => self::wpc_bulk_inflight199(),
+                'ledger'             => self::wpc_bulk_ledger_summary202(),
+                'draining'           => (int) get_transient('wpc_bulk_compress_draining'),
+                'stop_signal'        => (bool) get_transient('wpc_bulk_stop_signal'),
+                'sequential'         => (bool) get_option('wpc_bulk_sequential', 0),
+            ],
+            'server' => [
+                'php'                => PHP_VERSION,
+                'memory_limit'       => (string) @ini_get('memory_limit'),
+                'max_execution_time' => (string) @ini_get('max_execution_time'),
+                'admin_ajax'         => admin_url('admin-ajax.php'),
+                'curl'               => function_exists('curl_init'),
+            ],
+            'images' => [],
+        ];
+        foreach ($ids as $imageID) {
+            wp_cache_delete($imageID, 'post_meta');
+            self::wpc_v2_stale_compress_watchdog($imageID);
+            wp_cache_delete($imageID, 'post_meta');
+            $ic = get_post_meta($imageID, 'ic_compressing', true);
+            $vs = get_post_meta($imageID, 'ic_local_variants', true);
+            $out['images'][] = [
+                'id'             => $imageID,
+                'exists'         => get_post_type($imageID) === 'attachment',
+                'mime'           => get_post_mime_type($imageID),
+                'ic_status'      => get_post_meta($imageID, 'ic_status', true),
+                'ic_compressing' => is_array($ic) ? $ic : $ic,
+                'attempts'       => get_post_meta($imageID, 'ic_v2_attempts', true),
+                'admit'          => function_exists('wpc_v2_attempts_admit197') ? wpc_v2_attempts_admit197($imageID) : null,
+                'pending'        => !empty(get_transient('wpc_v2_pending_' . $imageID)),
+                'worker_reached' => !empty(get_transient('wpc_v2_worker_reached_' . $imageID)),
+                'last_error'     => get_transient('wpc_v2_compress_failed_' . $imageID),
+                'last_envelope'  => get_transient('wpc_v2_last_envelope_' . $imageID),
+                'variants'       => is_array($vs) ? count($vs) : 0,
+                'excluded'       => get_post_meta($imageID, 'wps_ic_exclude_live', true) === 'true',
+            ];
+        }
+        wp_send_json_success($out);
+    }
+
     public function wps_ic_get_card()
     {
         $imageID = absint($_POST['attachment_id'] ?? 0);
         if ($imageID <= 0) {
             wp_send_json_error(['msg' => 'invalid-id']);
         }
+        self::wpc_v2_stale_compress_watchdog($imageID);
+        $wpc_fail315 = get_transient('wpc_v2_compress_failed_' . $imageID);
         global $wps_ic;
         if (!$wps_ic || !$wps_ic->media_library) {
             wp_send_json_error(['msg' => 'not-ready']);
@@ -7615,11 +8925,14 @@ class wps_ic_ajax extends wps_ic
             !empty(get_post_meta($imageID, '_wpc_pending_thumb_regen', true))
         );
 
+        if (!empty($wpc_fail315)) { $pending = false; }
         wp_send_json_success([
             'html'      => $html,
             'pending'   => $pending,
             'imageID'   => $imageID,
             'ic_status' => get_post_meta($imageID, 'ic_status', true),
+            'failed'    => !empty($wpc_fail315),
+            'error'     => $wpc_fail315 ? (string) $wpc_fail315 : '',
         ]);
     }
 
@@ -7683,9 +8996,12 @@ class wps_ic_ajax extends wps_ic
         if (function_exists('wpc_use_v2_protocol') && wpc_use_v2_protocol() && class_exists('WPS_LocalV2')) {
             
             
+            
+            
+            
+            $wpc_async_ok314 = self::wpc_v2_async_dispatch_ok();
 
-
-            if (self::dispatch_async_loopback('wpc_async_phase_a', $imageID)) {
+            if ($wpc_async_ok314 && self::dispatch_async_loopback('wpc_async_phase_a', $imageID)) {
 
 
                 $expected_seed = function_exists('wpc_v2_compute_expected_variants')
@@ -7718,7 +9034,7 @@ class wps_ic_ajax extends wps_ic
             }
 
 
-            if (!self::claim_async_token_for_sync('wpc_async_phase_a', $imageID)) {
+            if ($wpc_async_ok314 && !self::claim_async_token_for_sync('wpc_async_phase_a', $imageID)) {
                 global $wps_ic;
                 wp_cache_delete($imageID, 'post_meta');
                 $inflight_html = (isset($wps_ic) && isset($wps_ic->media_library))
@@ -7733,7 +9049,12 @@ class wps_ic_ajax extends wps_ic
                     wp_send_json_error(['msg' => 'backup-failed']);
                 }
             }
-            $v2_result = self::run_v2_optimize($imageID);
+            
+            
+            
+            
+            set_transient('wpc_v2_worker_reached_' . $imageID, time(), 600);
+            $v2_result = self::run_v2_optimize($imageID, ['resubmit_reason' => 'user_recompress']);
             if (!empty($v2_result['ok'])) {
                 global $wps_ic;
 
@@ -7769,6 +9090,47 @@ class wps_ic_ajax extends wps_ic
                 substr((string) ($v2_result['detail'] ?? ''), 0, 200),
                 (int) ($v2_result['wall_ms'] ?? 0)
             ));
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            $wpc_transport317 = empty($v2_result['ok'])
+                && (($v2_result['error'] ?? '') === 'transport'
+                    || (int) ($v2_result['http_code'] ?? 0) === 0
+                    || stripos((string) ($v2_result['detail'] ?? ''), 'timed out') !== false
+                    || stripos((string) ($v2_result['detail'] ?? ''), 'cURL error 28') !== false);
+            if ($wpc_transport317 && !self::wpc_v2_prefer_source_url()) {
+                update_option('wpc_v2_prefer_source_url', time(), false);
+                error_log('[WPC V2Route] imageID=' . $imageID . ' TRANSPORT TIMEOUT with inline body — host blackholes large POST; switched to source.url dispatch, retrying inline-free');
+                $wpc_retry317 = self::run_v2_optimize($imageID, ['resubmit_reason' => 'source_url_retry', 'force_url_source' => true]);
+                if (!empty($wpc_retry317['ok'])) {
+                    global $wps_ic;
+                    wp_cache_delete($imageID, 'post_meta');
+                    $wpc_rhtml317 = (isset($wps_ic) && isset($wps_ic->media_library)) ? $wps_ic->media_library->compress_details($imageID) : '';
+                    set_transient('wpc_v2_phase_a_done_' . $imageID, time(), 3600);
+                    error_log('[WPC V2Route] imageID=' . $imageID . ' source.url retry SUCCESS');
+                    wp_send_json_success(['html' => $wpc_rhtml317, 'immediate' => true, 'v2' => true, 'source_url_retry' => true, 'jobId' => $wpc_retry317['jobId'] ?? null]);
+                }
+                $v2_result = $wpc_retry317; 
+            }
+            if (empty($v2_result['ok']) && ($v2_result['error'] ?? '') !== 'already_in_flight') {
+                $wpc_de314 = 'dispatch to the optimization service failed: ' . (string) ($v2_result['error'] ?? 'unknown')
+                    . ' (http ' . (int) ($v2_result['http_code'] ?? 0) . ')'
+                    . (($v2_result['detail'] ?? '') !== '' ? ' — ' . substr((string) $v2_result['detail'], 0, 240) : '');
+                set_transient('wpc_v2_compress_failed_' . $imageID, $wpc_de314, 900);
+                update_option('wpc_v2_last_dispatch_error', ['id' => $imageID, 'err' => $wpc_de314, 't' => time()], false);
+                $wpc_icn314 = get_post_meta($imageID, 'ic_compressing', true);
+                if (is_array($wpc_icn314) && in_array(($wpc_icn314['status'] ?? ''), ['optimizing', 'queueing'], true)) {
+                    delete_post_meta($imageID, 'ic_compressing');
+                }
+                delete_transient('wps_ic_compress_' . $imageID);
+                error_log('[WPC V2Route] imageID=' . $imageID . ' dispatch error surfaced + optimizing state cleared: ' . $wpc_de314);
+            }
 
 
             wp_cache_delete('_transient_wps_ic_compress_' . $imageID, 'options');
@@ -8125,6 +9487,7 @@ class wps_ic_ajax extends wps_ic
             'formats'        => $env_formats,
             'triggerContext' => 'media-library-click',
             'callback_url'   => rest_url('wpc/v2/bg_swap'),
+            'force_url_source' => self::wpc_v2_prefer_source_url(),
         ], $option_overrides);
 
         return [
@@ -8668,6 +10031,9 @@ class wps_ic_ajax extends wps_ic
         $wpc_excludes['delay_js'] = [];
         update_option('wpc-excludes', $wpc_excludes);
 
+        if (function_exists('wpc_preset_cache_gate67')) {
+            $settings = wpc_preset_cache_gate67($settings);
+        }
 
         update_option(WPS_IC_SETTINGS, $settings);
         update_option(WPS_IC_PRESET, $preset);
@@ -8688,7 +10054,7 @@ class wps_ic_ajax extends wps_ic
             $htaccess->removeHtaccessRules();
             $htaccess->removeAdvancedCache();
             $htaccess->setWPCache(false);
-        } else {
+        } elseif (!empty($settings['cache']['advanced'])) {
             
             
             $htaccess->setWPCache(true);
@@ -8696,7 +10062,7 @@ class wps_ic_ajax extends wps_ic
         }
 
         $cache = new wps_ic_cache_integrations();
-        $cache::purgeAll();
+        $cache::purgeAll(false, true, false, true, true);
 
         if (!empty($_POST['activation']) && $_POST['activation']) {
             $warmup_class = new wps_ic_preload_warmup();
@@ -9887,6 +11253,9 @@ class wps_ic_ajax extends wps_ic
         update_option('wps_ic_purge_rules', $purge_rules, false);
 
         $configuration = $options->get_preset('aggressive');
+        if (function_exists('wpc_preset_cache_gate67')) {
+            $configuration = wpc_preset_cache_gate67($configuration);
+        }
         update_option(WPS_IC_SETTINGS, $configuration);
         update_option(WPS_IC_PRESET, 'aggressive');
 
@@ -10276,6 +11645,25 @@ class wps_ic_ajax extends wps_ic
     }
 
 
+    public static function wpc_v2_prefer_source_url()
+    {
+        
+        
+        
+        
+        
+        $t = (int) get_option('wpc_v2_prefer_source_url', 0);
+        return $t > 0 && (time() - $t) < 7 * DAY_IN_SECONDS;
+    }
+
+    public static function wpc_v2_async_dispatch_ok()
+    {
+        if (!apply_filters('wpc_v2_async_dispatch_enabled', true)) return false;
+        $un = (int) get_option('wpc_v2_async_unreliable', 0);
+        if ($un > 0 && (time() - $un) < 7 * DAY_IN_SECONDS) return false; 
+        return true;
+    }
+
     public static function dispatch_async_loopback($action, $imageID)
     {
         if (!function_exists('wp_remote_post')) return false;
@@ -10515,6 +11903,12 @@ class wps_ic_ajax extends wps_ic
 
         
         
+        
+        
+        
+        
+        
+        set_transient('wpc_v2_worker_reached_' . $imageID, time(), 600);
         $outcome = 'unknown';
         if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'run_v2_optimize')) {
             $result = wps_ic_ajax::run_v2_optimize($imageID);

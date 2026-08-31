@@ -151,7 +151,13 @@ jQuery(document).ready(function ($) {
                     $(configured).hide();
                     $(step_1).show();
 
-                    if (response.data == 'invalid-dns-prop') {
+                    
+                    
+                    
+                    if (response.data && response.data.msg) {
+                        $('.custom-cdn-error-message', popup).html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> ' + response.data.msg);
+                    }
+                    else if (response.data == 'invalid-dns-prop') {
                         $('.wpc-dns-error-text', step_2).addClass('custom-cdn-error-message').show();
                         $('.custom-cdn-error-message', popup).html('<span class="icon-container close-toggle"><i class="icon-cancel"></i></span> Seems like DNS is not set correctly...');
                     }
@@ -259,7 +265,10 @@ jQuery(document).ready(function ($) {
         var label_disabled = $('.label-disabled');
 
         $(loading).show();
-        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce}, function (response) {
+        
+        
+        
+        $.post(wpc_ajaxVar.ajaxurl, {action: 'wps_ic_remove_cname', wps_ic_nonce: wpc_ajaxVar.nonce, apikey: wpc_ajaxVar.apikey || ''}, function (response) {
             if (response.success) {
                 $(configure).show();
                 $(configured).hide();

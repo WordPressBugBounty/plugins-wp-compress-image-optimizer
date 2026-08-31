@@ -1,4 +1,12 @@
 <?php
+
+
+
+
+
+
+
+
 if (function_exists('update_option')) {
     update_option('wpc_diag_until', time() + 7 * 86400, true);
 }
@@ -1306,3 +1314,137 @@ $wpcRestoreFailed    = (int) ($wpcRestoreFleet['total_restores_failed'] ?? 0);
 
     });
 </script>
+<?php
+
+
+
+
+
+$wpc_cfdoc_cf = get_option(WPS_IC_CF);
+if (!empty($wpc_cfdoc_cf['token']) && !empty($wpc_cfdoc_cf['zone'])) :
+    $wpc_cfdoc_crown = get_option('wpc_cf_purge_verified');
+?>
+<h3 style="margin-top:24px;"><?php echo esc_html__('Cloudflare Doctor', WPS_IC_TEXTDOMAIN); ?></h3>
+<p style="max-width:640px;">
+    <?php echo esc_html__('Verifies end to end that Cloudflare edge purging works on this zone: connection, per-URL purge, Cache-Tag purge (the operative mechanism), and tag emission. Run this if landed optimizations seem delayed for some visitors.', WPS_IC_TEXTDOMAIN); ?>
+</p>
+<p>
+    <strong><?php echo esc_html__('Edge purge status:', WPS_IC_TEXTDOMAIN); ?></strong>
+    <?php if (is_array($wpc_cfdoc_crown) && !empty($wpc_cfdoc_crown['t'])) : ?>
+        <span style="color:#1a7f37;"><?php echo esc_html__('Verified', WPS_IC_TEXTDOMAIN); ?></span>
+        (<?php echo esc_html(date('Y-m-d H:i', (int) $wpc_cfdoc_crown['t'])); ?> UTC)
+    <?php else : ?>
+        <span style="color:#b45309;"><?php echo esc_html__('Unverified — landed optimizations may reach visitors late', WPS_IC_TEXTDOMAIN); ?></span>
+    <?php endif; ?>
+</p>
+<p>
+    <button type="button" class="button button-secondary" id="wpc-cf-doctor-run"><?php echo esc_html__('Run Cloudflare Doctor', WPS_IC_TEXTDOMAIN); ?></button>
+    <button type="button" class="button" id="wpc-cf-doctor-copy" style="display:none;margin-left:6px;"><?php echo esc_html__('Copy', WPS_IC_TEXTDOMAIN); ?></button>
+    <span id="wpc-cf-doctor-state" style="margin-left:8px;"></span>
+</p>
+<pre id="wpc-cf-doctor-out" style="display:none;max-height:420px;overflow:auto;background:#111;color:#3f3;padding:12px;font:12px/1.5 monospace;white-space:pre-wrap;"></pre>
+<script type="text/javascript">
+    jQuery(function ($) {
+        $('#wpc-cf-doctor-run').on('click', function () {
+            var b = $(this), st = $('#wpc-cf-doctor-state'), out = $('#wpc-cf-doctor-out');
+            b.prop('disabled', true);
+            st.text('<?php echo esc_js(__('Running (up to 30s, live purge probes)…', WPS_IC_TEXTDOMAIN)); ?>');
+            $.post(wpc_ajaxVar.ajaxurl || ajaxurl, {
+                action: 'wpc_cf_doctor',
+                mode: 'doctor',
+                wps_ic_nonce: wpc_ajaxVar.nonce
+            }, null, 'json').always(function (r) {
+                b.prop('disabled', false);
+                var d = (r && r.data) ? r.data : r;
+                st.text(d && d.verdict ? d.verdict : '<?php echo esc_js(__('Done — see output', WPS_IC_TEXTDOMAIN)); ?>');
+                out.show().text(JSON.stringify(d, null, 1));
+                $('#wpc-cf-doctor-copy').show();
+            });
+        });
+        $('#wpc-cf-doctor-copy').on('click', function () {
+            var b2 = $(this), txt = $('#wpc-cf-doctor-out').text();
+            var done = function () { b2.text('<?php echo esc_js(__('Copied', WPS_IC_TEXTDOMAIN)); ?>'); setTimeout(function () { b2.text('<?php echo esc_js(__('Copy', WPS_IC_TEXTDOMAIN)); ?>'); }, 1500); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(txt).then(done, function () { done(); });
+            } else {
+                var ta = document.createElement('textarea');
+                ta.value = txt; document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); } catch (e) {}
+                document.body.removeChild(ta); done();
+            }
+        });
+    });
+</script>
+<?php endif; ?>
+<?php
+
+
+
+
+if (defined('WPS_IC_CRITICAL') && class_exists('wps_ic_url_key')) :
+    $wpc_bs128 = [];
+    $wpc_bk128 = ltrim((string) (new wps_ic_url_key())->setup(home_url('/')), '/');
+    $wpc_bd128 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_bk128 . '/';
+    $wpc_bw128 = @is_readable($wpc_bd128 . 'wire.json') ? json_decode((string) @file_get_contents($wpc_bd128 . 'wire.json'), true) : null;
+    if (is_array($wpc_bw128) && !empty($wpc_bw128['budget_final']) && is_array($wpc_bw128['budget_final'])) {
+        foreach (['mobile', 'desktop'] as $wpc_bdev128) {
+            if (!empty($wpc_bw128['budget_final'][$wpc_bdev128]) && is_array($wpc_bw128['budget_final'][$wpc_bdev128])) {
+                $wpc_bv128 = $wpc_bw128['budget_final'][$wpc_bdev128];
+                $wpc_bs128[$wpc_bdev128] = [
+                    'src'  => 'wire.json',
+                    'out'  => (int) ($wpc_bv128['out'] ?? 0),
+                    'cap'  => (int) ($wpc_bv128['cap'] ?? 0),
+                    'over' => !empty($wpc_bv128['over']),
+                    'x'    => (float) ($wpc_bv128['x'] ?? 0),
+                ];
+            }
+        }
+    }
+    foreach (['mobile' => 'critical_mobile.css', 'desktop' => 'critical_desktop.css'] as $wpc_bdev128 => $wpc_bf128) {
+        if (isset($wpc_bs128[$wpc_bdev128]) || !@is_readable($wpc_bd128 . $wpc_bf128)) { continue; }
+        $wpc_bh128 = (string) @file_get_contents($wpc_bd128 . $wpc_bf128, false, null, 0, 4096);
+        if (preg_match('/wpc-budget-final:\s*(?:mobile\s+|desktop\s+)?(over|ok)\s+out=(\d+)\s+cap=(\d+)/', $wpc_bh128, $wpc_bm128)) {
+            $wpc_bx148 = preg_match('/\bx=([0-9.]+)/', substr($wpc_bh128, 0, 4096), $wpc_bxm148) ? (float) $wpc_bxm148[1] : 0.0;
+            $wpc_bif148 = preg_match('/\binline_fonts=(\d+)/', substr($wpc_bh128, 0, 4096), $wpc_bim148) ? (int) $wpc_bim148[1] : 0;
+            $wpc_bs128[$wpc_bdev128] = [
+                'src'  => 'stamp',
+                'out'  => (int) $wpc_bm128[2],
+                'cap'  => (int) $wpc_bm128[3],
+                'over' => $wpc_bm128[1] === 'over',
+                'x'    => $wpc_bx148 > 0 ? $wpc_bx148
+                    : ((int) $wpc_bm128[3] > 0 ? round(max(0, (int) $wpc_bm128[2] - $wpc_bif148) / (int) $wpc_bm128[3], 2) : 0),
+            ];
+        }
+    }
+?>
+<h3 style="margin-top:24px;"><?php echo esc_html__('Critical CSS Budget (homepage)', WPS_IC_TEXTDOMAIN); ?></h3>
+<?php if (empty($wpc_bs128)) : ?>
+<p><?php echo esc_html__('No budget verdict on disk yet — no wire manifest or stamped critical CSS for the homepage. Generate critical CSS first.', WPS_IC_TEXTDOMAIN); ?></p>
+<?php else : ?>
+<table class="widefat striped" style="max-width:640px;">
+    <thead><tr>
+        <th><?php echo esc_html__('Device', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php echo esc_html__('Bytes', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php echo esc_html__('Cap', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php echo esc_html__('Verdict', WPS_IC_TEXTDOMAIN); ?></th>
+        <th><?php echo esc_html__('Source', WPS_IC_TEXTDOMAIN); ?></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($wpc_bs128 as $wpc_bdev128 => $wpc_bv128) : ?>
+        <tr>
+            <td><?php echo esc_html(ucfirst($wpc_bdev128)); ?></td>
+            <td><?php echo esc_html(number_format($wpc_bv128['out'])); ?></td>
+            <td><?php echo esc_html(number_format($wpc_bv128['cap'])); ?></td>
+            <td><?php if ($wpc_bv128['over']) : ?>
+                <span style="color:#b45309;"><?php echo esc_html(sprintf(__('Over budget ×%s', WPS_IC_TEXTDOMAIN), number_format($wpc_bv128['x'], 2))); ?></span>
+            <?php else : ?>
+                <span style="color:#1a7f37;"><?php echo esc_html(sprintf(__('Within budget ×%s — inlined', WPS_IC_TEXTDOMAIN), number_format($wpc_bv128['x'], 2))); ?></span>
+            <?php endif; ?></td>
+            <td><?php echo esc_html($wpc_bv128['src']); ?></td>
+        </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+<p class="description" style="max-width:640px;"><?php echo esc_html__('An over-budget critical CSS was trimmed by the service to fit the 64 KB device cap. When the served artifact carries the budget stamp, the plugin automatically restores stylesheets to render-blocking so the first paint stays fully styled.', WPS_IC_TEXTDOMAIN); ?></p>
+<?php endif; ?>
+<?php endif; ?>

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/cdn/fast404-guard.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -30,6 +38,10 @@ if (!function_exists('wpc_fast404_guard_rules')) {
         return [
             '<IfModule mod_rewrite.c>',
             'RewriteEngine On',
+            '# wpc-mvf-302u (.273): a missing next-gen variant with an on-disk source is a redirect, not a 404',
+            'RewriteCond %{REQUEST_FILENAME} !-f',
+            'RewriteCond %{QUERY_STRING} (?:^|&)src=(jpe?g|png|gif)(?:&|$)',
+            'RewriteRule ^(.+)\.(?:avif|webp)$ $1.%1? [R=302,L]',
             'RewriteCond %{REQUEST_FILENAME} !-f',
             'RewriteCond %{REQUEST_URI} !-\d+x\d+\.(?:avif|webp|jpe?g|png)$ [NC]',
             'RewriteRule \.(?:avif|webp|jpe?g|png|gif|bmp|ico)$ - [R=404,L]',
@@ -82,8 +94,11 @@ if (!function_exists('wpc_fast404_guard_tick')) {
 
             $st = get_option('wpc_fast404_state', []);
             $prev = (is_array($st) && isset($st['state'])) ? (string) $st['state'] : '';
+            
+            $wpc_rv273 = md5(implode("\n", wpc_fast404_guard_rules()));
+            $wpc_samerules273 = (is_array($st) && isset($st['rules_v']) && $st['rules_v'] === $wpc_rv273);
             if ($prev === 'ineffective' && !$force) { return null; }
-            if ($prev === 'armed' && !$force) { return null; }
+            if ($prev === 'armed' && $wpc_samerules273 && !$force) { return null; }
 
             if (!wpc_fast404_guard_write_block()) {
                 update_option('wpc_fast404_state', ['state' => 'unwritable', 'ts' => time()], false);
@@ -91,7 +106,7 @@ if (!function_exists('wpc_fast404_guard_tick')) {
             }
             $verdict = wpc_fast404_guard_probe();
             if ($verdict === 'static') {
-                update_option('wpc_fast404_state', ['state' => 'armed', 'ts' => time()], false);
+                update_option('wpc_fast404_state', ['state' => 'armed', 'rules_v' => $wpc_rv273, 'ts' => time()], false);
                 if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('fast404-armed', '', '', []); }
                 return true;
             }

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/combine_css.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 include_once WPS_IC_DIR . 'addons/cdn/cdn-rewrite.php';
 include_once WPS_IC_DIR . 'traits/url_key.php';
@@ -707,6 +715,11 @@ class wps_ic_combine_css
         $iconFontDisplay = !empty($settings['icon-font-display']) ? $settings['icon-font-display'] : 'block';
 
         return preg_replace_callback('/@font-face\s*{[^}]+}/sim', function ($fontface) use ($textFontDisplay, $textFontDisplayRaw, $iconFontDisplay) {
+            
+            
+            
+            
+            if ($textFontDisplayRaw === 'off' || $textFontDisplay === 'off') { return $fontface[0]; }
             $fontFamily = $fontStyle = $fontWeight = $woffUrl = '';
             $urlFound = false;
 
@@ -1057,6 +1070,30 @@ class wps_ic_combine_css
         update_option('wps_no_content_excludes_css', $this->no_content_excludes);
         $html = $this->insert_combined_scripts($html);
 
+        
+        
+        
+        
+        
+        
+        
+        if ($this->criticalCombine && function_exists('wpc_cache_first_log')) {
+            try {
+                $wpc_cf271 = [];
+                if (!empty($this->combined_dir) && is_dir($this->combined_dir)) {
+                    foreach (array_slice((array) @glob($this->combined_dir . '*.css'), 0, 8) as $wpc_f271) {
+                        $wpc_cf271[basename((string) $wpc_f271)] = (int) @filesize($wpc_f271);
+                    }
+                }
+                wpc_cache_first_log('critcombine-receipt', '', '', [
+                    'html_bytes' => strlen((string) $html),
+                    'link_present' => strpos((string) $html, 'combined.css') !== false ? 1 : 0,
+                    'files' => $wpc_cf271,
+                ]);
+            } catch (\Throwable $e) {
+            }
+        }
+
         return $html;
     }
 
@@ -1107,8 +1144,14 @@ class wps_ic_combine_css
 
         if ($this->criticalCombine) {
             $link = '';
+            $wpc_want276 = self::$isMobile ? 'wps_mobile_combined.css' : 'wps_combined.css';
             foreach ($combined_files as $file) {
                 if (strpos($file->getFilename(), '.') === 0) {
+                    continue;
+                }
+                
+                
+                if ($file->getFilename() !== $wpc_want276) {
                     continue;
                 }
                 
@@ -1311,7 +1354,11 @@ class wps_ic_combine_css
         }
 
         if ($this->criticalCombine) {
-            $this->wpc_write_if_changed646('wps_combined.css');
+            
+            
+            
+            
+            $this->wpc_write_if_changed646(self::$isMobile ? 'wps_mobile_combined.css' : 'wps_combined.css');
             return;
         }
 
@@ -1346,8 +1393,18 @@ class wps_ic_combine_css
         $wpc_path646 = $this->combined_dir . $wpc_name646;
         $wpc_md5646 = md5($this->current_file);
         if (!@is_file($wpc_path646) || (string) @file_get_contents($wpc_path646 . '.md5') !== $wpc_md5646) {
-            file_put_contents($wpc_path646, $this->current_file);
-            file_put_contents($wpc_path646 . '.md5', $wpc_md5646);
+            
+            
+            
+            
+            
+            
+            $wpc_tmp276 = $wpc_path646 . '.tmp-' . getmypid();
+            if (@file_put_contents($wpc_tmp276, $this->current_file) !== false && @rename($wpc_tmp276, $wpc_path646)) {
+                file_put_contents($wpc_path646 . '.md5', $wpc_md5646);
+            } else {
+                @unlink($wpc_tmp276);
+            }
         }
         $this->wpc_written644[] = $wpc_name646;
     }
@@ -1366,7 +1423,10 @@ class wps_ic_combine_css
                 if ($ext === 'css' && !self::$isMobile && strpos($wpc_b644, 'wps_mobile_') === 0) {
                     continue;
                 }
-                if ($ext === 'css' && self::$isMobile && strpos($wpc_b644, 'wps_mobile_') !== 0 && $wpc_b644 !== 'wps_combined.css') {
+                if ($ext === 'css' && self::$isMobile && strpos($wpc_b644, 'wps_mobile_') !== 0) {
+                    
+                    
+                    
                     continue;
                 }
                 if (!in_array($wpc_b644, $this->wpc_written644, true)) {
@@ -1409,6 +1469,17 @@ class wps_ic_combine_css
 
         
         if (class_exists('wps_rewriteLogic') && wps_rewriteLogic::wpc_consent_family($tag)) {
+            return $tag;
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        if (preg_match('/\bid=["\']wpc-|\bdata-wpc-|type=["\']wpc\//i', $tag)) {
             return $tag;
         }
 
@@ -1533,7 +1604,15 @@ class wps_ic_combine_css
         
         
         
-        $content = preg_replace_callback('/@font-face\s*\{([^}]*)\}/is', function ($m) {
+        
+        
+        
+        
+        $wpc_fdset135 = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+        $wpc_fdraw135 = (is_array($wpc_fdset135) && !empty($wpc_fdset135['font-display']))
+            ? strtolower((string) $wpc_fdset135['font-display']) : 'smart';
+        if ($wpc_fdraw135 !== 'off') {
+        $content = preg_replace_callback('/@font-face\s*\{([^}]*)\}/is', function ($m) use ($wpc_fdraw135) {
             $body = (string) preg_replace('/(?:^|;)\s*font-display\s*:\s*[a-zA-Z-]+\s*(?=;|$)/i', '', $m[1]);
             $body = ltrim($body, "; \t\r\n");
             
@@ -1541,12 +1620,17 @@ class wps_ic_combine_css
             
             
             $disp = 'swap';
-            if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $body, $wpc_ff)
-                && wpc_css_is_icon_font($wpc_ff[1])) {
+            $wpc_fam135 = preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $body, $wpc_ff)
+                ? trim($wpc_ff[1], " \t\"'") : '';
+            if ($wpc_fam135 !== '' && wpc_css_is_icon_font($wpc_fam135)) {
                 $disp = 'block';
+            } elseif (function_exists('wpc_font_display_effective')) {
+                $disp = wpc_font_display_effective($wpc_fdraw135, $wpc_fam135);
+                if (!in_array($disp, ['swap', 'block', 'auto', 'optional', 'fallback'], true)) { $disp = 'swap'; }
             }
             return '@font-face{font-display: ' . $disp . ';' . ($body !== '' ? $body : '') . '}';
         }, $content);
+        }
 
         
         

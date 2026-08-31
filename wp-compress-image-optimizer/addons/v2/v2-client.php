@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-client.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -98,6 +106,17 @@ class WPS_LocalV2
         $has_b64  = !empty($src_obj['bytesB64']);
         $has_url  = !empty($src_obj['url']);
         $transport = $has_b64 ? ($has_url ? 'both' : 'inline') : 'url';
+
+        
+        
+        
+        if (function_exists('set_transient')) {
+            set_transient('wpc_v2_last_envelope_' . (int) $imageID, [
+                'transport' => $transport,
+                'bytes'     => strlen($body_json),
+                't'         => time(),
+            ], 3600);
+        }
 
         return [
             'ok'         => true,
@@ -448,7 +467,8 @@ class WPS_LocalV2
 
                 'deliveryMode'   => (function_exists('wpc_v2_pull_delivery_enabled')
                                     && wpc_v2_pull_delivery_enabled()
-                                    && function_exists('curl_multi_init'))
+                                    && function_exists('wpc_v2_pull_enabled')
+                                    && wpc_v2_pull_enabled())
                                     ? (string) apply_filters('wpc_v2_pull_delivery_mode', 'ping_pull')
                                     : null,
             ],
@@ -460,7 +480,13 @@ class WPS_LocalV2
                                 ? wpc_v2_get_request_origin()
                                 : 'web',
             'triggerContext' => isset($options['triggerContext']) ? (string) $options['triggerContext'] : 'unknown',
+            'resubmit_reason' => isset($options['resubmit_reason']) && $options['resubmit_reason'] !== ''
+                                ? (string) $options['resubmit_reason'] : 'new',
+            'attempt'         => isset($options['attempt']) ? max(1, (int) $options['attempt']) : 1,
         ];
+        if (!empty($options['run_id']) && is_string($options['run_id'])) {
+            $body['run_id'] = preg_replace('/[^A-Za-z0-9_-]/', '', $options['run_id']);
+        }
 
 
         if ($body['callback']['maxConcurrent'] === null) {

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/cache/link-preset.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -46,6 +54,30 @@ if (!function_exists('wpc_detect_foreign_page_cache')) {
     }
 }
 
+if (!function_exists('wpc_preset_cache_gate67')) {
+    
+    
+    
+    function wpc_preset_cache_gate67($settings)
+    {
+        if (!apply_filters('wpc_preset_cache_gate', true)) {
+            return $settings;
+        }
+        if (!is_array($settings) || empty($settings['cache']['advanced'])) {
+            return $settings;
+        }
+        $wpc_f67 = wpc_detect_foreign_page_cache();
+        if ($wpc_f67 === false) {
+            return $settings;
+        }
+        $settings['cache']['advanced'] = 0;
+        if (function_exists('wpc_link_preset_journal')) {
+            wpc_link_preset_journal('cache-gate', ['foreign' => $wpc_f67]);
+        }
+        return $settings;
+    }
+}
+
 if (!function_exists('wpc_font_localizer_present')) {
 
 
@@ -62,6 +94,7 @@ if (!function_exists('wpc_font_localizer_present')) {
                 'local-google-fonts' => 'local-google-fonts',
                 'embed-google-fonts' => 'embed-google-fonts',
                 'omgf-pro'           => 'omgf-pro',
+                'dp-divi-dsgvo'      => 'dp-divi-dsgvo',
             ]);
             $wpc_ap789 = (array) get_option('active_plugins', []);
             if (function_exists('get_site_option')) {
@@ -94,7 +127,7 @@ if (!function_exists('wpc_font_localizer_sheet')) {
             return false;
         }
         $wpc_tk789 = apply_filters('wpc_font_localizer_sheet_tokens',
-            ['omgf', 'local-google-fonts', 'embed-google-fonts']);
+            ['omgf', 'local-google-fonts', 'embed-google-fonts', 'gfonts_local', 'dp-divi-dsgvo']);
         foreach ((array) $wpc_tk789 as $wpc_t789) {
             if ($wpc_t789 !== '' && stripos($wpc_tag789, (string) $wpc_t789) !== false) {
                 return true;

@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: classes/cache-integrations.class.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 include_once __DIR__ . '/../traits/url_key.php';
 include_once __DIR__ . '/../defines.php';

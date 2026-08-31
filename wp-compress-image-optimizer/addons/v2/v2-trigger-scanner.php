@@ -1,4 +1,12 @@
 <?php
+/**
+ * WP Compress — Instant Performance & Speed Optimization.
+ * File: addons/v2/v2-trigger-scanner.php
+ *
+ * @package wp-compress-image-optimizer
+ * @version 7.21.337
+ */
+
 
 
 if (!defined('ABSPATH')) {
@@ -7,7 +15,7 @@ if (!defined('ABSPATH')) {
 
 if (!function_exists('wpc_v2_defer_lazy_trigger')) {
 
-    function wpc_v2_defer_lazy_trigger($id, $widths = [], $upgrade_partial = false, $release_sig = '')
+    function wpc_v2_defer_lazy_trigger($id, $widths = [], $upgrade_partial = false, $release_sig = '', array $trigger_opts = [])
     {
         global $wpc_v2_deferred_triggers;
         if (!is_array($wpc_v2_deferred_triggers)) {
@@ -15,7 +23,7 @@ if (!function_exists('wpc_v2_defer_lazy_trigger')) {
             add_action('shutdown', 'wpc_v2_run_deferred_lazy_triggers', PHP_INT_MAX);
         }
         
-        $wpc_v2_deferred_triggers[(int) $id] = [(int) $id, (array) $widths, (bool) $upgrade_partial, (string) $release_sig];
+        $wpc_v2_deferred_triggers[(int) $id] = [(int) $id, (array) $widths, (bool) $upgrade_partial, (string) $release_sig, (array) $trigger_opts];
     }
 
     function wpc_v2_run_deferred_lazy_triggers()
@@ -40,7 +48,7 @@ if (!function_exists('wpc_v2_defer_lazy_trigger')) {
         $fired = 0;
         foreach ($batch as $t) {
             try {
-                if (wpc_lazy_trigger_v2($t[0], $t[1], $t[2])) {
+                if (wpc_lazy_trigger_v2($t[0], $t[1], $t[2], isset($t[4]) && is_array($t[4]) ? $t[4] : [])) {
                     $fired++;
                 } elseif ($t[3] !== '') {
 
@@ -155,6 +163,8 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
         $skipped   = 0;
         foreach ($ids as $id) {
             $wpc_upgrade_partial = false;
+            $wpc_reason197s      = 'new';
+            $wpc_fill_fmts197    = [];
             if ($skip_if_compressed) {
                 $variants = get_post_meta($id, 'ic_local_variants', true);
                 if (is_array($variants) && !empty($variants)) {
@@ -162,6 +172,7 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
 
                     if ($wpc_llb_full_ladder && function_exists('wpc_v2_variants_all_lazy') && wpc_v2_variants_all_lazy($variants)) {
                         $wpc_upgrade_partial = true;
+                        $wpc_reason197s      = 'missing_variant';
                     } else {
 
 
@@ -188,6 +199,9 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
                         }
                         if ($fmt_gap) {
                             $wpc_upgrade_partial = true;
+                            $wpc_reason197s      = 'format_fill';
+                            if ($want_w_fg && !$have_w_fg) $wpc_fill_fmts197[] = 'webp';
+                            if ($want_a_fg && !$have_a_fg) $wpc_fill_fmts197[] = 'avif';
                         } else {
                             $skipped++;
                             continue;
@@ -203,8 +217,12 @@ if (!function_exists('wpc_v2_scan_html_for_lazy_triggers')) {
             
 
 
+            $wpc_topts197 = ['reason' => $wpc_reason197s];
+            if (!empty($wpc_fill_fmts197)) {
+                $wpc_topts197['formats'] = array_values(array_unique($wpc_fill_fmts197));
+            }
             wpc_v2_defer_lazy_trigger($id, $needed_widths, $wpc_upgrade_partial,
-                (!empty($sig_fg) && $fmt_gap) ? $sig_fg : '');
+                (!empty($sig_fg) && $fmt_gap) ? $sig_fg : '', $wpc_topts197);
             $triggered++;
         }
 

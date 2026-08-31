@@ -1,5 +1,13 @@
 <?php
 
+
+
+
+
+
+
+
+
 global $wps_ic;
 
 $user_credits = self::$user_credits;
