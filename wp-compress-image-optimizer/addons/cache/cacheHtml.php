@@ -4,7 +4,7 @@
  * File: addons/cache/cacheHtml.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -37,6 +37,11 @@ if (!function_exists('wpc_response_cache_guard')) {
             }
             if (!apply_filters('wpc_response_cache_guard', true)) { $GLOBALS['wpc_cc_skip'] = 'filter'; return; }
             header('Cache-Control: no-store, max-age=0');
+            
+            
+            
+            
+            header('Expires: ' . gmdate('D, d M Y H:i:s') . ' GMT');
             $GLOBALS['wpc_cc_guarded'] = true;
         } catch (\Throwable $e) {
         }
@@ -1636,11 +1641,15 @@ class wps_cacheHtml
         }
         if (!empty($GLOBALS['wpc_cc_guarded']) && !headers_sent()) {
             if (function_exists('wpc_render_armed_for_cache') && !wpc_render_armed_for_cache($buffer)) {
+                
+                
+                
+                
                 $wpc_why195 = 'crit-missing';
                 if (strpos((string) $buffer, 'id="wpc-arm-sentinel"') !== false) { $wpc_why195 = 'collecting'; }
                 if (!is_string($buffer) || $buffer === '') { $wpc_why195 = 'empty-buffer'; }
                 elseif (!empty($_GET['criticalCombine'])) { $wpc_why195 = 'combine-param'; }
-                elseif (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) { $wpc_why195 = 'cdn-suppressed'; }
+                if (!empty($GLOBALS['wpc_unarmed_why342'])) { $wpc_why195 = (string) $GLOBALS['wpc_unarmed_why342']; }
                 header('X-WPC-Update-Window: degraded');
                 header('X-WPC-CC: window-unarmed-' . $wpc_why195);
                 unset($GLOBALS['wpc_cc_guarded']);

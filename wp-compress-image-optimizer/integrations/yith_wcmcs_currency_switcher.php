@@ -4,7 +4,7 @@
  * File: integrations/yith_wcmcs_currency_switcher.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 if (!defined('ABSPATH')) {

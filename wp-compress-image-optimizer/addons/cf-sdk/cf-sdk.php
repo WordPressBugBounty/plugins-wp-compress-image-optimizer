@@ -4,7 +4,7 @@
  * File: addons/cf-sdk/cf-sdk.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 if (!function_exists('wpc_cf_permission_rows')) {

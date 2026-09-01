@@ -4,7 +4,7 @@
  * File: classes/ajax.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -6641,6 +6641,9 @@ class wps_ic_ajax extends wps_ic
                 }
 
                 if (!empty($preps)) {
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('bulk-batch', '', '', ['n' => count($preps), 'ids' => implode(',', array_slice(array_keys($preps), 0, 12))]);
+                    }
                     $wpc_sent309 = self::wpc_bulk_v2_dispatch_batch($preps);
                     if (!is_array($wpc_sent309)) { $wpc_sent309 = array_map('intval', array_keys($preps)); }
                     $wpc_im199 = get_option('wpc_bulk_inflight199');
@@ -7510,6 +7513,15 @@ class wps_ic_ajax extends wps_ic
                     CURLOPT_USERAGENT      => 'WPCompress/7.02 bulk-multi',
                 ]);
                 curl_multi_add_handle($mh, $ch);
+                
+                
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('media-wire-out', (string) $id, '', [
+                        'transport' => (string) ($env['headers']['X-WPC-Source-Transport'] ?? '?'),
+                        'bytes'     => strlen((string) $env['body_json']),
+                        'lane'      => 'bulk',
+                    ]);
+                }
                 $handles[$id] = ['ch' => $ch, 'client' => $p['client'], 't0' => $p['t0']];
             }
 
@@ -7525,6 +7537,12 @@ class wps_ic_ajax extends wps_ic
                 $body_raw  = curl_multi_getcontent($h['ch']);
                 $http_code = (int) curl_getinfo($h['ch'], CURLINFO_HTTP_CODE);
                 $wall_ms   = (int) round((microtime(true) - $h['t0']) * 1000);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('media-wire-in', (string) $id, '', [
+                        'code' => $http_code, 'len' => strlen((string) $body_raw),
+                        'ms' => $wall_ms, 'curl' => (string) curl_error($h['ch']), 'lane' => 'bulk',
+                    ]);
+                }
                 $result    = $h['client']->process_response($id, $http_code, $body_raw);
                 if (empty($result['ok'])) {
                     error_log(sprintf('[WPC Bulk] FAILED image=%d wall=%dms err=%s',
@@ -9012,6 +9030,19 @@ class wps_ic_ajax extends wps_ic
                     'expected_variants' => $expected_seed,
                     'time'              => time(),
                 ]);
+                
+                
+                
+                
+                
+                
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('media-async-handoff', (string) $imageID, '', []);
+                }
+                if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+                    && !wp_next_scheduled('wpc_async_verify353', [(int) $imageID])) {
+                    wp_schedule_single_event(time() + 20, 'wpc_async_verify353', [(int) $imageID]);
+                }
 
 
                 if (function_exists('wpc_v2_pull_enabled') && wpc_v2_pull_enabled()) {
@@ -9445,9 +9476,26 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wpc_v2_callbacks_blocked_' . $imageID);
 
 
+        
+        
+        
+        
+        
+        
+        
+        $env_formats = ['jpeg', 'webp', 'avif'];
+        if (apply_filters('wpc_envelope_formats_v2', (string) get_option('wpc_envelope_formats_v2', '1') === '1')) {
+            $s_fmt    = get_option(WPS_IC_SETTINGS);
+            $s_fmt    = is_array($s_fmt) ? $s_fmt : [];
+            $ceil_fmt = class_exists('WPC_Delivery_Resolver') ? WPC_Delivery_Resolver::effective_ceiling($s_fmt) : 'avif';
+            $env_formats = ['jpeg'];
+            if ($ceil_fmt === 'webp' || $ceil_fmt === 'avif' || !empty($s_fmt['generate_webp'])) $env_formats[] = 'webp';
+            if ($ceil_fmt === 'avif' || !empty($s_fmt['picture_avif'])) $env_formats[] = 'avif';
+        }
+        $wpc_fmts350 = is_array($option_overrides['formats'] ?? null) ? $option_overrides['formats'] : $env_formats;
         $expected_now = 0;
-        if (!empty($variants) && is_array($dispatch_options['formats'] ?? null)) {
-            $expected_now = count($variants) * max(1, count($dispatch_options['formats']));
+        if (!empty($variants)) {
+            $expected_now = count($variants) * max(1, count($wpc_fmts350));
         }
         update_post_meta($imageID, 'ic_compressing', [
             'status'            => 'optimizing',
@@ -9455,6 +9503,11 @@ class wps_ic_ajax extends wps_ic
             'time'              => time(),
         ]);
         wp_cache_delete($imageID, 'post_meta');
+        
+        
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('media-dispatch', (string) $imageID, '', ['ctx' => (string) ($option_overrides['triggerContext'] ?? 'single'), 'ev' => $expected_now, 'vc' => is_array($variants) ? count($variants) : -1, 'fmts' => implode(',', (array) $wpc_fmts350)]);
+        }
 
         $t0 = microtime(true);
 
@@ -9470,16 +9523,6 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wpc_v2_bg_retry_count_' . $imageID);
         delete_transient('wpc_v2_bg_retry_fired_' . $imageID);
 
-
-        $env_formats = ['jpeg', 'webp', 'avif'];
-        if (apply_filters('wpc_envelope_formats_v2', (string) get_option('wpc_envelope_formats_v2', '1') === '1')) {
-            $s_fmt    = get_option(WPS_IC_SETTINGS);
-            $s_fmt    = is_array($s_fmt) ? $s_fmt : [];
-            $ceil_fmt = class_exists('WPC_Delivery_Resolver') ? WPC_Delivery_Resolver::effective_ceiling($s_fmt) : 'avif';
-            $env_formats = ['jpeg'];
-            if ($ceil_fmt === 'webp' || $ceil_fmt === 'avif' || !empty($s_fmt['generate_webp'])) $env_formats[] = 'webp';
-            if ($ceil_fmt === 'avif' || !empty($s_fmt['picture_avif'])) $env_formats[] = 'avif';
-        }
 
         $client = new WPS_LocalV2($apikey, $orchestrator_url);
         $dispatch_options = array_merge([

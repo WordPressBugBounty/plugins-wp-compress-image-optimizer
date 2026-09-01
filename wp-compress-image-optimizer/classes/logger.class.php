@@ -4,7 +4,7 @@
  * File: classes/logger.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 class wps_ic_logger

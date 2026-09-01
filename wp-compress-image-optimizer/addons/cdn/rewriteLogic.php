@@ -4,7 +4,7 @@
  * File: addons/cdn/rewriteLogic.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -3848,34 +3848,65 @@ SCRIPT;
                 if (isset($wpc_set293['image_spacing_custom']['size']) && is_numeric($wpc_set293['image_spacing_custom']['size'])) {
                     $wpc_sp293 = (int) $wpc_set293['image_spacing_custom']['size'];
                 }
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                $wpc_nL340 = isset($wpc_set293['slides_to_show_laptop']) && (int) $wpc_set293['slides_to_show_laptop'] > 0
+                    ? (int) $wpc_set293['slides_to_show_laptop'] : 0;
+                $wpc_spW340 = -1;
+                if (isset($wpc_set293['image_spacing_custom_widescreen']['size'])
+                    && is_numeric($wpc_set293['image_spacing_custom_widescreen']['size'])) {
+                    $wpc_spW340 = (int) $wpc_set293['image_spacing_custom_widescreen']['size'];
+                }
                 $wpc_inner293 = isset($wpc_sel293map[$wpc_ci293]) ? $wpc_sel293map[$wpc_ci293]
                     : '.elementor-image-carousel-wrapper:not(.swiper-initialized) .swiper-slide';
                 if (strpos($wpc_inner293, '.e-n-carousel') !== false) { $wpc_ncused293 = true; }
                 $wpc_sel293 = '.elementor-element-' . $wpc_id293 . ' ' . ltrim($wpc_inner293);
-                $wpc_w293 = function ($n) use ($wpc_sp293) {
-                    return $wpc_sp293 > 0
-                        ? 'width:calc((100% - ' . (($n - 1) * $wpc_sp293) . 'px)/' . $n . ');margin-right:' . $wpc_sp293 . 'px'
+                
+                
+                
+                
+                
+                
+                
+                $wpc_gap343 = strpos($wpc_inner293, '.e-n-carousel') !== false;
+                $wpc_w293 = function ($n, $sp = null) use ($wpc_sp293, $wpc_gap343) {
+                    $sp = $sp === null ? $wpc_sp293 : (int) $sp;
+                    if ($sp > 0 && $wpc_gap343) {
+                        return 'width:calc((100% - ' . (($n - 1) * $sp) . 'px)/' . $n . ')';
+                    }
+                    return $sp > 0
+                        ? 'width:calc((100% - ' . (($n - 1) * $sp) . 'px)/' . $n . ');margin-right:' . $sp . 'px'
                         : 'width:calc(100%/' . $n . ')';
                 };
                 $wpc_pg293 .= $wpc_sel293 . '{' . $wpc_w293($wpc_nM293) . '}'
                     . '@media(min-width:768px){' . $wpc_sel293 . '{' . $wpc_w293($wpc_nT293) . '}}'
-                    . '@media(min-width:1025px){' . $wpc_sel293 . '{' . $wpc_w293($wpc_nD293) . '}}';
+                    . '@media(min-width:1025px){' . $wpc_sel293 . '{' . $wpc_w293($wpc_nL340 > 0 ? $wpc_nL340 : $wpc_nD293) . '}}'
+                    . ($wpc_nL340 > 0 ? '@media(min-width:1367px){' . $wpc_sel293 . '{' . $wpc_w293($wpc_nD293) . '}}' : '')
+                    . ($wpc_spW340 >= 0 && $wpc_spW340 !== $wpc_sp293 ? '@media(min-width:2400px){' . $wpc_sel293 . '{' . $wpc_w293($wpc_nD293, $wpc_spW340) . '}}' : '');
                 
                 
                 
-                if ($wpc_sp293 > 0) {
+                if (!$wpc_gap343 && ($wpc_sp293 > 0 || $wpc_spW340 > 0)) {
                     $wpc_pg293 .= $wpc_sel293 . ':last-child{margin-right:0}';
                 }
             }
             if ($wpc_pg293 !== '') {
                 $wpc_pg293 = '.elementor-image-carousel-wrapper:not(.swiper-initialized){overflow:hidden}'
-                    . '.elementor-image-carousel-wrapper:not(.swiper-initialized) .swiper-wrapper{display:flex;align-items:center}'
+                    . '.elementor-image-carousel-wrapper:not(.swiper-initialized) .swiper-wrapper{display:flex;flex-wrap:nowrap;align-items:center}'
                     . ($wpc_ncused293
                         
                         
                         
                         ? '.e-n-carousel:not(.swiper-initialized){overflow:hidden}'
-                          . '.e-n-carousel:not(.swiper-initialized) .swiper-wrapper{display:flex;align-items:stretch}'
+                          . '.e-n-carousel:not(.swiper-initialized) .swiper-wrapper{display:flex;flex-wrap:nowrap;align-items:stretch}'
                           . '.e-n-carousel:not(.swiper-initialized) .swiper-slide{height:auto}'
                         : '') . $wpc_pg293;
                 $criticalCss .= "\r\n" . '<style id="wpc-swiper-preinit-guard">' . $wpc_pg293 . '</style>';
@@ -9628,6 +9659,18 @@ SCRIPT;
             && preg_match('/<style\b[^>]*>(.*?)<\/style>/is', $fullTag, $wpc_gb60)
             && preg_match('/(?:^|[,{}\s])#(?:section|row|col|text|image|banner|gap|btn|video|title|divider)[_-]\d/i', (string) $wpc_gb60[1])
             && preg_match('/\b(?:padding|margin|min-height|height|width|top|bottom|left|right|flex-basis|line-height|font-size)(?:-[a-z]+)?\s*:/i', (string) $wpc_gb60[1])) {
+            return $fullTag;
+        }
+
+        
+        
+        
+        
+        
+        
+        if ((stripos($fullTag, 'sb-youtube') !== false || stripos($fullTag, 'sby_styles') !== false
+                || stripos($fullTag, 'sby-styles') !== false)
+            && apply_filters('wpc_keep_sby_family', true)) {
             return $fullTag;
         }
 

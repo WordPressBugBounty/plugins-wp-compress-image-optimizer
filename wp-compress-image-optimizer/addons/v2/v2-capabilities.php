@@ -4,7 +4,7 @@
  * File: addons/v2/v2-capabilities.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -364,6 +364,25 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
     function wpc_v2_attempts_admit197($attachment_id)
     {
         $attachment_id = (int) $attachment_id;
+        
+        
+        
+        
+        
+        $wpc_ic349 = get_post_meta($attachment_id, 'ic_compressing', true);
+        if (is_array($wpc_ic349) && !empty($wpc_ic349['status'])
+            && ($wpc_ic349['status'] === 'optimizing' || $wpc_ic349['status'] === 'queueing')
+            && !empty($wpc_ic349['time'])
+            && (time() - (int) $wpc_ic349['time']) > (int) apply_filters('wpc_v2_inflight_stale_secs', 7200)) {
+            if (function_exists('wpc_v2_ic_compressing_set_status')) {
+                wpc_v2_ic_compressing_set_status($attachment_id, 'failed');
+            } else {
+                update_post_meta($attachment_id, 'ic_compressing', ['status' => 'failed', 'time' => time()]);
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-stale-inflight-clear', (string) $attachment_id, '', ['age' => time() - (int) $wpc_ic349['time']]);
+            }
+        }
         $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
         $n    = (is_array($a) && isset($a['n']))    ? (int) $a['n']    : 0;
         $last = (is_array($a) && isset($a['last'])) ? (int) $a['last'] : 0;
@@ -376,11 +395,17 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
         $cap = (int) apply_filters('wpc_v2_attempt_cap', 4);
         if ($n >= $cap) {
             wpc_v2_parked_set197($attachment_id, true);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-admit', (string) $attachment_id, '', ['v' => 'parked_attempt_cap', 'n' => $n]);
+            }
             return 'parked_attempt_cap';
         }
         $spacing = apply_filters('wpc_v2_attempt_spacing', [600, 1800, 7200]);
         $wait    = isset($spacing[$n - 1]) ? (int) $spacing[$n - 1] : 7200;
         if ((time() - $last) < $wait) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-admit', (string) $attachment_id, '', ['v' => 'backoff_wait', 'n' => $n, 'wait_left' => $wait - (time() - $last)]);
+            }
             return 'backoff_wait';
         }
         return true;
@@ -392,6 +417,9 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
         $a = get_post_meta($attachment_id, 'ic_v2_attempts', true);
         $n = (is_array($a) && isset($a['n'])) ? (int) $a['n'] : 0;
         $n++;
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('media-attempt', (string) $attachment_id, '', ['n' => $n, 'why' => (string) $reason]);
+        }
         update_post_meta($attachment_id, 'ic_v2_attempts', ['n' => $n, 'last' => time(), 'reason' => (string) $reason]);
         wp_cache_delete($attachment_id, 'post_meta');
         $rb = get_post_meta($attachment_id, 'ic_v2_attempts', true);

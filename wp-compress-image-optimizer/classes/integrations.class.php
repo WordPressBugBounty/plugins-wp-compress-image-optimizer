@@ -4,7 +4,7 @@
  * File: classes/integrations.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 include_once(ABSPATH . 'wp-admin/includes/plugin.php');

@@ -4,7 +4,7 @@
  * File: addons/vitals/v.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 

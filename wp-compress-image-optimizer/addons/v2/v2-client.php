@@ -4,7 +4,7 @@
  * File: addons/v2/v2-client.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -47,6 +47,16 @@ class WPS_LocalV2
             return $env;
         }
 
+        
+        
+        
+        
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('media-wire-out', (string) $imageID, '', [
+                'transport' => (string) ($env['headers']['X-WPC-Source-Transport'] ?? '?'),
+                'bytes'     => strlen((string) $env['body_json']),
+            ]);
+        }
         $response = wp_remote_post($env['url'], [
             'method'    => 'POST',
             'timeout'   => self::TRANSPORT_TIMEOUT_S,
@@ -55,6 +65,11 @@ class WPS_LocalV2
             'headers'   => $env['headers'],
             'body'      => $env['body_json'],
         ]);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('media-wire-in', (string) $imageID, '', is_wp_error($response)
+                ? ['err' => (string) $response->get_error_code(), 'msg' => substr((string) $response->get_error_message(), 0, 120)]
+                : ['code' => (int) wp_remote_retrieve_response_code($response), 'len' => strlen((string) wp_remote_retrieve_body($response))]);
+        }
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -79,10 +94,24 @@ class WPS_LocalV2
     {
         $body = $this->build_request_body($imageID, $variants, $options);
         if (empty($body)) {
+            
+            
+            if (function_exists('wpc_cache_first_log')) {
+                $wpc_af351 = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
+                $wpc_op351 = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
+                wpc_cache_first_log('media-env-fail', (string) $imageID, '', [
+                    'why'      => $body === null ? 'animated_webp' : 'file_missing',
+                    'attached' => basename($wpc_af351) . ':' . (($wpc_af351 && @file_exists($wpc_af351)) ? 1 : 0),
+                    'original' => basename($wpc_op351) . ':' . (($wpc_op351 && @file_exists($wpc_op351)) ? 1 : 0),
+                ]);
+            }
             return ['ok' => false, 'error' => 'request_build_failed'];
         }
         $body_json = wp_json_encode($body);
         if ($body_json === false) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-env-fail', (string) $imageID, '', ['why' => 'json_encode_failed']);
+            }
             return ['ok' => false, 'error' => 'json_encode_failed'];
         }
 
@@ -173,6 +202,27 @@ class WPS_LocalV2
             return ['ok' => false, 'error' => 'write_failed', 'detail' => $write['detail'] ?? '', 'parsed' => $parsed];
         }
 
+        
+        
+        
+        
+        
+        if (function_exists('wpc_v2_parked_list197') && function_exists('wpc_v2_attempts_reset197')
+            && !get_transient('wpc_v2_unpark_sweep352')) {
+            $wpc_pk352 = wpc_v2_parked_list197();
+            if (!empty($wpc_pk352)) {
+                set_transient('wpc_v2_unpark_sweep352', 1, 600);
+                foreach ($wpc_pk352 as $wpc_pid352) {
+                    wpc_v2_attempts_reset197((int) $wpc_pid352);
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('media-unpark-sweep', '', '', ['n' => count($wpc_pk352)]);
+                }
+            }
+        }
+        if (function_exists('wpc_v2_attempts_reset197')) {
+            wpc_v2_attempts_reset197((int) $imageID);
+        }
         return ['ok' => true, 'parsed' => $parsed, 'write' => $write, 'jobId' => $jobId];
     }
 

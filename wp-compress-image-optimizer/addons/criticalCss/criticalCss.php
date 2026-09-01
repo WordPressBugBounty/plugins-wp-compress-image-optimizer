@@ -4,7 +4,7 @@
  * File: addons/criticalCss/criticalCss.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 

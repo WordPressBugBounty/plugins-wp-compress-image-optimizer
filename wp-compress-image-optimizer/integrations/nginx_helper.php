@@ -4,7 +4,7 @@
  * File: integrations/nginx_helper.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 if (!defined('ABSPATH')) {

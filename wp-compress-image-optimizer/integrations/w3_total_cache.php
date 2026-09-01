@@ -4,7 +4,7 @@
  * File: integrations/w3_total_cache.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 if (!defined('ABSPATH')) {

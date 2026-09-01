@@ -4,7 +4,7 @@
  * File: wp-compress-cron.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -83,13 +83,30 @@ class wps_ic_cron
             $time = $purge_rules['scheduled'];
 
             
-            wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
-
+            
+            
+            
+            
+            
+            
             $date = new DateTime('today ' . $time, wp_timezone());
             $timestamp = $date->getTimestamp();
-
-            
-            wp_schedule_event($timestamp, 'daily', 'wps_ic_scheduled_purge_hook');
+            if ($timestamp <= time()) {
+                $timestamp += DAY_IN_SECONDS;
+            }
+            $wpc_next345 = (int) wp_next_scheduled('wps_ic_scheduled_purge_hook');
+            $wpc_keep345 = false;
+            if ($wpc_next345 > time()) {
+                try {
+                    $wpc_tod345 = (new DateTime('@' . $wpc_next345))->setTimezone(wp_timezone())->format('H:i');
+                    $wpc_keep345 = ($wpc_tod345 === $date->format('H:i'));
+                } catch (\Throwable $e) {
+                }
+            }
+            if (!$wpc_keep345) {
+                wp_clear_scheduled_hook('wps_ic_scheduled_purge_hook');
+                wp_schedule_event($timestamp, 'daily', 'wps_ic_scheduled_purge_hook');
+            }
         }
 
         

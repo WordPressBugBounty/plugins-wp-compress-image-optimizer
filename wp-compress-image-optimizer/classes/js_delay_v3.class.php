@@ -4,7 +4,7 @@
  * File: classes/js_delay_v3.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -552,9 +552,15 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     protected function wpc_form_family_tokens31()
     {
         if ($this->wpc_form_tokens31 === null) {
+            
+            
+            
+            
+            
+            
             $wpc_t = apply_filters('wpc_form_family_handles',
                 ['jet-form-builder', 'jetformbuilder', 'jet-fb', 'jet-plugins', 'intl-tel-input',
-                 'jet-appointments', 'jet-ab-', 'jet-apb']);
+                 'jet-appointments', 'jet-ab-', 'jet-apb', 'sb-youtube', 'sby-scripts']);
             $wpc_o = [];
             foreach ((array) $wpc_t as $wpc_ti) {
                 $wpc_ti = strtolower((string) $wpc_ti);
@@ -791,6 +797,15 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if ($content !== ''
             && (strpos($content, 'jqueryParams') !== false || strpos($content, 'customHeadScripts') !== false)
             && apply_filters('wpc_keep_jquery_stub', true)) {
+            return true;
+        }
+
+        
+        
+        
+        if ($content !== ''
+            && (strpos($content, 'sbyOptions') !== false || strpos($content, 'sbyajaxurl') !== false)
+            && apply_filters('wpc_keep_sby_family', true)) {
             return true;
         }
 
@@ -1154,7 +1169,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             return $html;
         }
 
-        $this->wpc_sync_jquery = (bool) preg_match('/<script\b[^>]*\bsrc=["\'][^"\']*(?:wpbf|page-builder-framework)[^"\']*\.js/i', $html);
+        $this->wpc_sync_jquery = (bool) preg_match('/<script\b[^>]*\bsrc=["\'][^"\']*(?:wpbf|page-builder-framework|sb-youtube)[^"\']*\.js/i', $html);
 
         
         

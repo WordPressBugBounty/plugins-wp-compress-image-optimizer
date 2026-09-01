@@ -4,7 +4,7 @@
  * File: addons/cache/warm.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 if (!defined('ABSPATH')) {
@@ -11561,6 +11561,13 @@ if (!function_exists('wpc_update_window_active')) {
     function wpc_update_window_active()
     {
         $until = (int) get_option('wpc_update_window_until', 0);
+        
+        
+        
+        if ($until > time() + 3600) {
+            delete_option('wpc_update_window_until');
+            return false;
+        }
         return $until > 0 && time() < $until;
     }
 
@@ -11702,6 +11709,29 @@ if (!function_exists('wpc_update_window_active')) {
         }
     }
     add_action('wpc_update_window_end', 'wpc_update_window_end_handler');
+    
+    
+    
+    
+    
+    add_action('wpc_async_verify353', function ($imageID) {
+        try {
+            $imageID = (int) $imageID;
+            if ($imageID <= 0) { return; }
+            if (get_transient('wpc_v2_worker_reached_' . $imageID)) { return; }
+            $wpc_ic353 = get_post_meta($imageID, 'ic_compressing', true);
+            $wpc_st353 = is_array($wpc_ic353) && !empty($wpc_ic353['status']) ? (string) $wpc_ic353['status'] : '';
+            if ($wpc_st353 !== 'queueing') { return; }
+            update_option('wpc_v2_async_unreliable', time(), false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-detach-death', (string) $imageID, '', ['heal' => 'sync-rerun']);
+            }
+            if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'run_v2_optimize')) {
+                wps_ic_ajax::run_v2_optimize($imageID, ['resubmit_reason' => 'detach_death_sync']);
+            }
+        } catch (\Throwable $e) {
+        }
+    });
     add_action('wpc_cf_allhtml_delayed', function () {
         try {
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'cfPurgeAllHtml')) {
@@ -11714,11 +11744,39 @@ if (!function_exists('wpc_update_window_active')) {
 
     function wpc_render_armed_for_cache($buffer)
     {
+        
+        
+        
+        
+        
+        
+        $GLOBALS['wpc_unarmed_why342'] = '';
         try {
-            if (!is_string($buffer) || $buffer === '') { return false; }
-            if (!empty($_GET['criticalCombine'])) { return false; }
-            if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) { return false; }
+            if (!is_string($buffer) || $buffer === '') { $GLOBALS['wpc_unarmed_why342'] = 'empty-buffer'; return false; }
+            if (!empty($_GET['criticalCombine'])) { $GLOBALS['wpc_unarmed_why342'] = 'combine-param'; return false; }
             $set = (function_exists('get_option') && defined('WPS_IC_SETTINGS')) ? get_option(WPS_IC_SETTINGS) : [];
+            
+            
+            
+            
+            
+            
+            $wpc_zexp339 = is_array($set) && !empty($set['live-cdn']) && $set['live-cdn'] == '1';
+            if ($wpc_zexp339 && function_exists('get_option')) {
+                
+                
+                
+                
+                $wpc_al339 = get_option('wps_ic_allow_live', 'unset');
+                if ($wpc_al339 !== 'unset' && !$wpc_al339) {
+                    $wpc_zexp339 = false;
+                }
+            }
+            if ($wpc_zexp339
+                && function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+                $GLOBALS['wpc_unarmed_why342'] = 'cdn-suppressed';
+                return false;
+            }
             $critOn = is_array($set) && !empty($set['critical']['css']) && $set['critical']['css'] == '1';
             if ($critOn && strpos($buffer, 'id="wpc-critical-css"') === false && strpos($buffer, "id='wpc-critical-css'") === false) {
                 
@@ -11732,15 +11790,18 @@ if (!function_exists('wpc_update_window_active')) {
                 
                 
                 if (strpos($buffer, 'id="wpc-arm-sentinel"') !== false) {
+                    $GLOBALS['wpc_unarmed_why342'] = 'collecting';
                     return false;
                 }
                 if (!preg_match('/<link\b[^>]*(?:rel|type)=["\']wpc-(?:late-|mobile-)?stylesheet["\']/i', $buffer)) {
                     return true;
                 }
+                $GLOBALS['wpc_unarmed_why342'] = 'crit-missing-parked-sheets';
                 return false;
             }
             return true;
         } catch (\Throwable $e) {
+            $GLOBALS['wpc_unarmed_why342'] = 'exception';
             return false;
         }
     }

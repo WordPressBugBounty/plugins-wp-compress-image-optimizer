@@ -4,7 +4,7 @@
  * File: addons/cache/link-preset.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.21.353
  */
 
 if (!defined('ABSPATH')) {

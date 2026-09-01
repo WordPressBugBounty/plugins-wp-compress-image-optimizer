@@ -4,7 +4,7 @@
  * File: addons/v2/v2-callback.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.337
+ * @version 7.22.01
  */
 
 
@@ -611,6 +611,11 @@ function wpc_v2_handle_bg_swap(WP_REST_Request $request)
         $sig_hdr !== '' ? 'yes' : 'no',
         substr((string) $body_peek, 0, 200)
     ));
+    
+    
+    if (function_exists('wpc_cache_first_log')) {
+        wpc_cache_first_log('media-land-rx', '', '', ['len' => strlen((string) $body_peek), 'sig' => $sig_hdr !== '' ? 1 : 0]);
+    }
 
     
     $body_raw = $body_peek;
