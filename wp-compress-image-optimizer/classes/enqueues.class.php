@@ -4,7 +4,7 @@
  * File: classes/enqueues.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -109,6 +109,7 @@ class wps_ic_enqueues extends wps_ic
         
         
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
+        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_reachable117') && !wpc_cdn_cname_reachable117($custom_cname)) { $custom_cname = ''; }
         if (!empty($custom_cname)) {
             self::$zone_name = $custom_cname;
         }

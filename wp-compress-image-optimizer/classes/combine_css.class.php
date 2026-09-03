@@ -4,7 +4,7 @@
  * File: classes/combine_css.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -89,6 +89,7 @@ class wps_ic_combine_css
         $cf = get_option(WPS_IC_CF);
         $cfCname = get_option(WPS_IC_CF_CNAME);
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok())) ? $cfCname : get_option('ic_custom_cname');
+        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_reachable117') && !wpc_cdn_cname_reachable117($custom_cname)) { $custom_cname = ''; }
         if (empty($custom_cname) || !$custom_cname) {
             $this->zone_name = get_option('ic_cdn_zone_name');
         } else {

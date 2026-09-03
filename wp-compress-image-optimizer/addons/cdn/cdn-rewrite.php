@@ -4,7 +4,7 @@
  * File: addons/cdn/cdn-rewrite.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -4562,6 +4562,172 @@ class wps_cdn_rewrite
         return is_string($out) ? $out : $html;
     }
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_atf_unlazy37($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, 'data-src=') === false
+                || (function_exists('apply_filters') && !apply_filters('wpc_atf_unlazy', true))) {
+                return $html;
+            }
+            $map = self::wpc_afold_sizes_map();
+            if (empty($map)) {
+                return $html;
+            }
+            $slots = 0;
+            $named = [];
+            foreach ($map as $stem => $w) {
+                if (preg_match('/^(?:data|svg%3e|%3csvg|svg)/i', (string) $stem) || strpos((string) $stem, '%3c') !== false) {
+                    $slots++;
+                } else {
+                    $named[$stem] = $w;
+                }
+            }
+            if (!preg_match_all('/<img\b[^>]*>/i', $html, $im)) {
+                return $html;
+            }
+            $done = 0;
+            $best = null;
+            $out = $html;
+            foreach ($im[0] as $tag) {
+                if (!preg_match('/\ssrc=(["\'])(data:image\/(?:svg\+xml|gif)[^"\']*)\1/i', $tag)
+                    || !preg_match('/\sdata-src=(["\'])([^"\']+)\1/i', $tag, $ds)) {
+                    continue;
+                }
+                $real = html_entity_decode($ds[2]);
+                if (!preg_match('#^(?:https?:)?//#', $real) && strpos($real, '/') !== 0) {
+                    continue;
+                }
+                $stem = strtolower(preg_replace('/(-\d+x\d+|-scaled)?\.[^.]+$/', '', basename(strtok($real, '?#'))));
+                $known = $stem !== '' && isset($named[$stem]);
+                $w = preg_match('/\swidth=(["\']?)(\d{2,5})\1/i', $tag, $wm) ? (int) $wm[2] : 0;
+                if (!$known && ($slots <= $done || $w < 400)) {
+                    continue;
+                }
+                $new = $tag;
+                $new = preg_replace('/\ssrc=(["\'])data:image\/[^"\']*\1/i', ' src="' . esc_attr($real) . '"', $new, 1);
+                $srcset = '';
+                if (preg_match('/\sdata-srcset=(["\'])([^"\']+)\1/i', $new, $ss)) {
+                    $srcset = $ss[2];
+                    $new = preg_replace('/\sdata-srcset=(["\'])[^"\']*\1/i', '', $new, 1);
+                    if (!preg_match('/\ssrcset=/i', $new)) {
+                        $new = preg_replace('/<img\b/i', '<img srcset="' . $srcset . '"', $new, 1);
+                    }
+                }
+                $sizes = '';
+                if ($known) {
+                    $mW = (int) $named[$stem]['m']; $dW = (int) $named[$stem]['d'];
+                    if ($mW > 0 && $dW > 0) { $sizes = '(max-width: 768px) ' . $mW . 'px, ' . $dW . 'px'; }
+                    elseif ($dW > 0) { $sizes = $dW . 'px'; }
+                    elseif ($mW > 0) { $sizes = $mW . 'px'; }
+                }
+                if (preg_match('/\sdata-sizes=(["\'])([^"\']+)\1/i', $new, $dz)) {
+                    if ($sizes === '') { $sizes = $dz[2]; }
+                    $new = preg_replace('/\sdata-sizes=(["\'])[^"\']*\1/i', '', $new, 1);
+                }
+                if ($sizes !== '' && $srcset !== '' && !preg_match('/\ssizes=/i', $new)) {
+                    $new = preg_replace('/<img\b/i', '<img sizes="' . esc_attr($sizes) . '"', $new, 1);
+                }
+                $new = preg_replace('/\sdata-src=(["\'])[^"\']*\1/i', '', $new, 1);
+                $new = preg_replace_callback('/\sclass=(["\'])([^"\']*)\1/i', function ($c) {
+                    $cls = trim(preg_replace('/\s+/', ' ', preg_replace('/(?:^|\s)(?:bricks-lazy-hidden|lazyload|lazy|b-lazy)(?=\s|$)/i', ' ', ' ' . $c[2] . ' ')));
+                    return $cls === '' ? '' : ' class=' . $c[1] . $cls . $c[1];
+                }, $new, 1);
+                $new = preg_replace('/\sloading=(["\'])[^"\']*\1/i', '', $new, 1);
+                $new = preg_replace('/<img\b/i', '<img loading="eager"', $new, 1);
+                $out = str_replace($tag, $new, $out);
+                $done++;
+                if ($best === null || $w > $best['w']) {
+                    $best = ['w' => $w, 'src' => $real, 'srcset' => $srcset, 'sizes' => $sizes, 'tag' => $new];
+                }
+                if ($done >= 3) {
+                    break;
+                }
+            }
+            if (!$done) {
+                return $html;
+            }
+            if ($best !== null && stripos($best['tag'], 'fetchpriority=') === false) {
+                $hi = preg_replace('/<img\b/i', '<img fetchpriority="high"', $best['tag'], 1);
+                $out = str_replace($best['tag'], $hi, $out);
+                if (stripos($out, 'id="wpc-lcp-img-preload"') === false && stripos($out, 'id="wpc-atf-unlazy-preload"') === false) {
+                    $pre = '<link rel="preload" as="image" fetchpriority="high" id="wpc-atf-unlazy-preload" href="' . esc_attr($best['src']) . '"'
+                        . ($best['srcset'] !== '' ? ' imagesrcset="' . esc_attr($best['srcset']) . '"' : '')
+                        . ($best['srcset'] !== '' && $best['sizes'] !== '' ? ' imagesizes="' . esc_attr($best['sizes']) . '"' : '') . '>';
+                    if (function_exists('wpc_ua_is_mobile') && wpc_ua_is_mobile()) {
+                        $out = preg_replace('/<link\b[^>]*id="wpc-header-logo-preload"[^>]*>/i', '', $out, 1);
+                    }
+                    $out = preg_match('/<\/head>/i', $out) ? preg_replace('/<\/head>/i', $pre . '</head>', $out, 1) : $out;
+                }
+            }
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_unlazy37_log')) {
+                set_transient('wpc_unlazy37_log', 1, 600);
+                wpc_cache_first_log('atf-unlazy', '', '', ['n' => $done, 'slots' => $slots, 'named' => count($named)]);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    
+    
+    
+    public static function wpc_hoist_lcp_preloads38($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, 'as="image"') === false
+                || (function_exists('apply_filters') && !apply_filters('wpc_hoist_lcp_preloads', true))) {
+                return $html;
+            }
+            if (!preg_match('/<head\b[^>]*>/i', $html, $hm, PREG_OFFSET_CAPTURE)) {
+                return $html;
+            }
+            $headAt = $hm[0][1] + strlen($hm[0][0]);
+            $ids = 'wpc-lcp-img-preload|wpc-atf-unlazy-preload|wpc-header-logo-preload|wpc-crit-bg-preload';
+            if (!preg_match_all('/<link\b[^>]*\bid=(["\'])(?:' . $ids . ')\1[^>]*>/i', $html, $lm, PREG_OFFSET_CAPTURE)) {
+                return $html;
+            }
+            $tags = [];
+            $out = $html;
+            foreach (array_reverse($lm[0]) as $one) {
+                if ($one[1] < $headAt) {
+                    continue;
+                }
+                array_unshift($tags, $one[0]);
+                $out = substr($out, 0, $one[1]) . substr($out, $one[1] + strlen($one[0]));
+            }
+            if (empty($tags)) {
+                return $html;
+            }
+            $ins = $headAt;
+            $probe = substr($out, $headAt, 4096);
+            if (preg_match('/<meta\b[^>]*(?:\bcharset\b|http-equiv=["\']content-type)[^>]*>/i', $probe, $cm, PREG_OFFSET_CAPTURE)) {
+                $ins = $headAt + $cm[0][1] + strlen($cm[0][0]);
+            }
+            if (preg_match('/^(?:\s*<meta\b[^>]*>)+/i', substr($out, $ins, 600), $mm)) {
+                $ins += strlen($mm[0]);
+            }
+            $out = substr($out, 0, $ins) . implode('', $tags) . substr($out, $ins);
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
     public static function wpc_lcp_hint_pass($html)
     {
         if (!is_string($html) || $html === '' || stripos($html, '<img') === false) return $html;
@@ -6609,9 +6775,23 @@ WPCRUMJS;
                             
                             
                             
-                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\']/i', $html)) {
+                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\'][^>]*>\s*(?!<\/style)\S/i', $html)) {
                                 $html = self::$rewriteLogic->lazyCSS($html);
                             }
+                            if (method_exists('wps_rewriteLogic', 'wpc_no_crit_no_defer22')) {
+                                $html = wps_rewriteLogic::wpc_no_crit_no_defer22($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_unbacked_sweep23')) {
+                                $html = wps_rewriteLogic::wpc_unbacked_sweep23($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_devmode_belt33')) {
+                                $html = wps_rewriteLogic::wpc_devmode_belt33($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_crit_vars_belt35')) {
+                                $html = wps_rewriteLogic::wpc_crit_vars_belt35($html);
+                            }
+                            $html = self::wpc_atf_unlazy37($html);
+                            $html = self::wpc_hoist_lcp_preloads38($html);
                             
                             
                             
@@ -6631,6 +6811,20 @@ WPCRUMJS;
                         } else {
 
                             $html = self::$rewriteLogic->wpc_arm_sentinel_tag($html);
+                            if (method_exists('wps_rewriteLogic', 'wpc_no_crit_no_defer22')) {
+                                $html = wps_rewriteLogic::wpc_no_crit_no_defer22($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_unbacked_sweep23')) {
+                                $html = wps_rewriteLogic::wpc_unbacked_sweep23($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_devmode_belt33')) {
+                                $html = wps_rewriteLogic::wpc_devmode_belt33($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_crit_vars_belt35')) {
+                                $html = wps_rewriteLogic::wpc_crit_vars_belt35($html);
+                            }
+                            $html = self::wpc_atf_unlazy37($html);
+                            $html = self::wpc_hoist_lcp_preloads38($html);
                         }
                     }
                 }
@@ -7509,6 +7703,7 @@ WPCRUMJS;
 
         $cfVerified = wpc_cf_cname_verified_ok();
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && $cfVerified) ? $cfCname : get_option('ic_custom_cname');
+        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_reachable117') && !wpc_cdn_cname_reachable117($custom_cname)) { $custom_cname = ''; }
 
         if (empty($custom_cname) || !$custom_cname) {
             self::$zone_name = get_option('ic_cdn_zone_name');
@@ -9346,9 +9541,23 @@ WPCRUMJS;
                             
                             
                             
-                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\']/i', $html)) {
+                            if (preg_match('/<style[^>]*id=["\']wpc-critical-css["\'][^>]*>\s*(?!<\/style)\S/i', $html)) {
                                 $html = self::$rewriteLogic->lazyCSS($html);
                             }
+                            if (method_exists('wps_rewriteLogic', 'wpc_no_crit_no_defer22')) {
+                                $html = wps_rewriteLogic::wpc_no_crit_no_defer22($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_unbacked_sweep23')) {
+                                $html = wps_rewriteLogic::wpc_unbacked_sweep23($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_devmode_belt33')) {
+                                $html = wps_rewriteLogic::wpc_devmode_belt33($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_crit_vars_belt35')) {
+                                $html = wps_rewriteLogic::wpc_crit_vars_belt35($html);
+                            }
+                            $html = self::wpc_atf_unlazy37($html);
+                            $html = self::wpc_hoist_lcp_preloads38($html);
                             
                             
                             
@@ -9368,6 +9577,20 @@ WPCRUMJS;
                         } else {
 
                             $html = self::$rewriteLogic->wpc_arm_sentinel_tag($html);
+                            if (method_exists('wps_rewriteLogic', 'wpc_no_crit_no_defer22')) {
+                                $html = wps_rewriteLogic::wpc_no_crit_no_defer22($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_unbacked_sweep23')) {
+                                $html = wps_rewriteLogic::wpc_unbacked_sweep23($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_devmode_belt33')) {
+                                $html = wps_rewriteLogic::wpc_devmode_belt33($html);
+                            }
+                            if (method_exists('wps_rewriteLogic', 'wpc_crit_vars_belt35')) {
+                                $html = wps_rewriteLogic::wpc_crit_vars_belt35($html);
+                            }
+                            $html = self::wpc_atf_unlazy37($html);
+                            $html = self::wpc_hoist_lcp_preloads38($html);
                         }
                     }
                 }

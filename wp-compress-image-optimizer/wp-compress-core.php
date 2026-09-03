@@ -4,7 +4,7 @@
  * File: wp-compress-core.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 global $ic_running;
@@ -1466,7 +1466,7 @@ class wps_ic
 
         
         self::$slug = 'wpcompress';
-        self::$version = '7.22.01';
+        self::$version = '7.22.38';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {
@@ -3047,6 +3047,18 @@ class wps_ic
 
             if (file_exists(WPS_IC_COMBINE)) {
                 $cacheLogic::deleteFolder(WPS_IC_COMBINE);
+            }
+            
+            
+            
+            
+            
+            
+            try {
+                if (method_exists('wps_ic_cache', 'purgeOtherCache')) {
+                    wps_ic_cache::purgeOtherCache(false);
+                }
+            } catch (\Throwable $e) {
             }
 
             
@@ -5371,6 +5383,12 @@ function wpc_delete_and_remove_data()
     if (file_exists(WPS_IC_COMBINE)) {
         $cacheLogic::deleteFolder(WPS_IC_COMBINE);
     }
+    try {
+        if (method_exists('wps_ic_cache', 'purgeOtherCache')) {
+            wps_ic_cache::purgeOtherCache(false);
+        }
+    } catch (\Throwable $e) {
+    }
 
     
     delete_transient('wps_ic_live_stats');
@@ -5704,8 +5722,13 @@ if (!function_exists('wpc_delay_v3_report_handler')) {
         $wpc_lcpmx440 = is_array($data) && !empty($data['lcpmx']);
         $wpc_lcpok447 = is_array($data) && !empty($data['lcpok']);
         $wpc_lcptr452 = is_array($data) && !empty($data['lcptrace']);
+        
+        
+        
+        
+        $wpc_dur36 = is_array($data) && isset($data['d']) && (int) $data['d'] > 0 && (int) $data['d'] < 60000;
         if (!is_array($data) || ((empty($data['e']) || !is_array($data['e']))
-            && !$wpc_bootfail360 && !$wpc_bootretr360 && !$wpc_lcpmx440 && !$wpc_lcpok447 && !$wpc_lcptr452)) {
+            && !$wpc_bootfail360 && !$wpc_bootretr360 && !$wpc_lcpmx440 && !$wpc_lcpok447 && !$wpc_lcptr452 && !$wpc_dur36)) {
             wp_send_json_error('bad-payload');
         }
         if (!isset($data['e']) || !is_array($data['e'])) {
@@ -5994,9 +6017,17 @@ if (!function_exists('wpc_delay_v3_report_handler')) {
     }
     add_action('wp_ajax_wpc_delay_v3_report', 'wpc_delay_v3_report_handler');
     add_action('wp_ajax_nopriv_wpc_delay_v3_report', 'wpc_delay_v3_report_handler');
+    
+    
+    
     add_action('admin_notices', function () {
         $base = get_transient('wpc_delay_v3_autotune_notice');
         if (empty($base)) {
+            return;
+        }
+        if (!apply_filters('wpc_delay_admin_notices', false)) {
+            if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('delay-notice-muted', '', '', ['kind' => 'autotune', 'base' => substr((string) $base, 0, 80)]); }
+            delete_transient('wpc_delay_v3_autotune_notice');
             return;
         }
         echo '<div class="notice notice-info is-dismissible"><p><strong>WP Compress — JavaScript delay self-tuned:</strong> visitors repeatedly hit errors from <code>'
@@ -6008,12 +6039,20 @@ if (!function_exists('wpc_delay_v3_report_handler')) {
         if (empty($wpc_pb)) {
             return;
         }
+        if (!apply_filters('wpc_delay_admin_notices', false)) {
+            if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('delay-notice-muted', '', '', ['kind' => 'manifest', 'base' => substr((string) $wpc_pb, 0, 80)]); }
+            delete_transient('wpc_delay_v3_manifest_notice');
+            return;
+        }
         echo '<div class="notice notice-info is-dismissible"><p><strong>WP Compress — JavaScript delay self-healed:</strong> visitors hit errors from <code>'
             . esc_html($wpc_pb) . '</code> after the render analysis moved it earlier in the load, so this site was automatically reverted to the standard (safe) delay behavior and the page cache was refreshed. It re-evaluates automatically after the next page analysis; nothing needs your attention.</p></div>';
         delete_transient('wpc_delay_v3_manifest_notice');
     });
     add_action('admin_notices', function () {
         if (!get_option('wpc_delay_aggr_off') || !current_user_can('manage_options')) {
+            return;
+        }
+        if (!apply_filters('wpc_delay_admin_notices', false)) {
             return;
         }
         echo '<div class="notice notice-info"><p><strong>WP Compress — instant-boot mode paused:</strong> visitor reports showed delayed scripts failing to finish booting on a few pages, so this site was automatically switched back to the standard (timed) delay behavior. It re-arms on the next optimization refresh; nothing needs your attention.</p></div>';

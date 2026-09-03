@@ -4,7 +4,7 @@
  * File: traits/url_key.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -128,6 +128,28 @@ class wps_ic_url_key
 
 
 
+
+    
+    
+    
+    
+    
+    public static function cleanRequestKey()
+    {
+        try {
+            $url = self::$captured_request_url;
+            if ($url === null) {
+                $url = ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
+            }
+            $url = (string) $url;
+            if ($url === '' || strpos($url, '?') === false) {
+                return '';
+            }
+            return (string) (new self())->setup(strtok($url, '?'));
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
 
     public static function trackingParams()
     {

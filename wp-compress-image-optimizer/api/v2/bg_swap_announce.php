@@ -4,7 +4,7 @@
  * File: api/v2/bg_swap_announce.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

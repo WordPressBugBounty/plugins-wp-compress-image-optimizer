@@ -4,7 +4,7 @@
  * File: classes/meta_box.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

@@ -4,7 +4,7 @@
  * File: addons/v2/v2-rendered-width-beacon.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

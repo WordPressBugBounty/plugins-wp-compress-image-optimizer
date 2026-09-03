@@ -4,7 +4,7 @@
  * File: addons/cache/invalidation.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.21.353
+ * @version 7.22.38
  */
 
 

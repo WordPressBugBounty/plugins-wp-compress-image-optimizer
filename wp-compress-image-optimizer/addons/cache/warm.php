@@ -4,7 +4,7 @@
  * File: addons/cache/warm.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 if (!defined('ABSPATH')) {
@@ -3383,7 +3383,12 @@ if (!function_exists('wpc_land_purge_coalesced')) {
         $now = time();
         if (!is_array($c) || ($now - (int) ($c['t'] ?? 0)) > 240) {
             update_option($k, ['t' => $now, 'dirty' => 0, 'u' => (string) $url], false);
-            wps_ic_cache_integrations::purgeUrlHtml($urlKey, $url, ['context' => $context]);
+            
+            
+            
+            
+            
+            wps_ic_cache_integrations::purgeUrlHtml($urlKey, $url, ['context' => $context, 'warm' => true]);
             return;
         }
         $c['dirty'] = 1;
@@ -3406,7 +3411,7 @@ if (!function_exists('wpc_land_purge_coalesced')) {
         delete_option($k);
         if (is_array($c) && !empty($c['dirty'])
             && class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
-            wps_ic_cache_integrations::purgeUrlHtml((string) $urlKey, (string) ($c['u'] ?? ''), ['context' => 'land-finalize']);
+            wps_ic_cache_integrations::purgeUrlHtml((string) $urlKey, (string) ($c['u'] ?? ''), ['context' => 'land-finalize', 'warm' => true]);
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('land-finalize', (string) $urlKey, '', []);
             }
@@ -4332,7 +4337,18 @@ if (!function_exists('wpc_compute_tpl_key')) {
         }
         $tk = trim((string) @file_get_contents(rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/tpl.txt'));
         if ($tk === '') {
-            return '';
+            
+            
+            
+            
+            
+            if (function_exists('wpc_compute_tpl_key') && function_exists('did_action') && did_action('template_redirect')
+                && !(function_exists('is_admin') && is_admin())) {
+                try { $tk = trim((string) wpc_compute_tpl_key()); } catch (\Throwable $e) { $tk = ''; }
+            }
+            if ($tk === '') {
+                return '';
+            }
         }
         if (function_exists('wpc_used_css_key_valid')) {
             return wpc_used_css_key_valid($tk) ? $tk : '';
@@ -5029,6 +5045,29 @@ if (!function_exists('wpc_repull_kick_now')) {
     function wpc_repull_kick_receiver()
     {
         try {
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            if (function_exists('wpc_under_pressure') && wpc_under_pressure()
+                && apply_filters('wpc_kick_pressure_gate', true)) {
+                $wpc_pk360 = isset($_GET['k']) ? sanitize_text_field((string) $_GET['k']) : '';
+                
+                
+                if (function_exists('set_transient') && $wpc_pk360 !== '') {
+                    set_transient('wpc_kick_pressure360_' . md5($wpc_pk360), 1,
+                        (int) apply_filters('wpc_kick_pressure_backoff', 90));
+                }
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('kick-pressure-deferred', $wpc_pk360, '', []);
+                }
+                wp_die('', '', ['response' => 200]);
+            }
             if (function_exists('wpc_bg_slot_take') && !wpc_bg_slot_take('kick')) {
                 return;
             }
@@ -5037,7 +5076,8 @@ if (!function_exists('wpc_repull_kick_now')) {
             if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
             if (function_exists('set_time_limit')) { @set_time_limit(120); }
             $k = isset($_GET['k']) ? sanitize_text_field((string) $_GET['k']) : '';
-            if ($k === '' || get_transient('wpc_repull_kick_' . md5($k)) || wpc_kick_recent($k, 120)) {
+            if ($k === '' || get_transient('wpc_repull_kick_' . md5($k)) || wpc_kick_recent($k, 120)
+                || get_transient('wpc_kick_pressure360_' . md5($k))) {
                 wp_die('', '', ['response' => 200]);
             }
             set_transient('wpc_repull_kick_' . md5($k), 1, 120);
@@ -11778,7 +11818,7 @@ if (!function_exists('wpc_update_window_active')) {
                 return false;
             }
             $critOn = is_array($set) && !empty($set['critical']['css']) && $set['critical']['css'] == '1';
-            if ($critOn && strpos($buffer, 'id="wpc-critical-css"') === false && strpos($buffer, "id='wpc-critical-css'") === false) {
+            if ($critOn && !preg_match('/<style\b[^>]*id=(["\'])wpc-critical-css\1[^>]*>\s*(?!<\/style)\S/i', $buffer)) {
                 
                 
                 

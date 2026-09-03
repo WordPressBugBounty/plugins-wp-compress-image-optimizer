@@ -4,7 +4,7 @@
  * File: classes/cache-integrations.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -225,6 +225,14 @@ class wps_ic_cache_integrations
         
         wpc_foreign_purge610($url_key, 'integrations');
 
+        
+        
+        
+        
+        
+        
+        
+        if (method_exists(__CLASS__, 'wpc_purge_wpe116')) { self::wpc_purge_wpe116($url_key); }
 
         if ($varnish) {
             self::purgeVarnish(0, ($url_key === false));
@@ -232,6 +240,40 @@ class wps_ic_cache_integrations
 
         
         do_action('wps_ic_purge_all_complete', $url_key, $varnish, $critSave, $purgeJS);
+    }
+
+    public static function wpc_purge_wpe116($url_key = false)
+    {
+        try {
+            if (!class_exists('WpeCommon') || !apply_filters('wpc_purge_wpe', true)) {
+                return;
+            }
+            if ($url_key === false) {
+                if (function_exists('get_transient') && get_transient('wpc_wpe_flush116')) {
+                    return;
+                }
+                if (function_exists('set_transient')) { set_transient('wpc_wpe_flush116', 1, 60); }
+                if (method_exists('WpeCommon', 'purge_memcached'))     { WpeCommon::purge_memcached(); }
+                if (method_exists('WpeCommon', 'purge_varnish_cache')) { WpeCommon::purge_varnish_cache(); }
+                if (method_exists('WpeCommon', 'clear_cdn_cache'))     { WpeCommon::clear_cdn_cache(); }
+                if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('wpe-purge', 'all', '', []); }
+                return;
+            }
+            $pid = 0;
+            if (class_exists('wps_ic_url_key') && method_exists('wps_ic_url_key', 'getUrlFromKey') && function_exists('url_to_postid')) {
+                $u = (string) wps_ic_url_key::getUrlFromKey((string) $url_key);
+                if ($u !== '') { $pid = (int) url_to_postid($u); }
+                if ($pid === 0 && function_exists('home_url') && function_exists('get_option')
+                    && rtrim($u, '/') === rtrim((string) home_url('/'), '/')) {
+                    $pid = (int) get_option('page_on_front');
+                }
+            }
+            if ($pid > 0 && method_exists('WpeCommon', 'purge_varnish_cache')) {
+                WpeCommon::purge_varnish_cache($pid);
+                if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('wpe-purge', (string) $url_key, '', ['pid' => $pid]); }
+            }
+        } catch (\Throwable $e) {
+        }
     }
 
     public static function purgeCriticalFiles($url_key = false)
@@ -280,7 +322,7 @@ class wps_ic_cache_integrations
     public static function wipeCriticalPreservingStores($dir)
     {
         $dir  = rtrim((string) $dir, '/');
-        $keep = (array) apply_filters('wpc_crit_wipe_preserve', ['used-css', 'inv2', '.kicklocks']);
+        $keep = (array) apply_filters('wpc_crit_wipe_preserve', ['used-css', 'inv2', '.kicklocks', 'sidecar']);
         if (empty($keep)) {
             self::removeDirectory($dir);
             return;

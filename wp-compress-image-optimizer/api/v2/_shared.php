@@ -4,7 +4,7 @@
  * File: api/v2/_shared.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

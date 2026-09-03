@@ -4,7 +4,7 @@
  * File: addons/criticalCss/criticalCss-v2.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -280,7 +280,15 @@ class wps_criticalCss
                         'stall' => $wpc_stall622,
                     ]);
                 }
-                return false;
+                
+                
+                
+                
+                
+                
+                if ($wpc_stall622 < 2 || !apply_filters('wpc_crit_serve_after_stall', true)) {
+                    return false;
+                }
             }
 
             
@@ -323,6 +331,14 @@ $return['mobile_path'] = $mobileFilePath;
 
     public function initCritical($postID, $url, $url_key, $type, $timeout = 120, $skipCap = false)
     {
+        
+        
+        
+        if (defined('WPC_PLUGIN_VERSION') && function_exists('get_option')
+            && empty($_GET['forceCritical']) && empty($GLOBALS['wpc_gen_force496'])
+            && get_option('wpc_gen_unretryable_' . WPC_PLUGIN_VERSION)) {
+            return true;
+        }
 
         if (function_exists('is_404') && function_exists('did_action') && did_action('template_redirect') && is_404()) {
             return true;
@@ -779,6 +795,14 @@ $return['mobile_path'] = $mobileFilePath;
             $wpc_pm = wpc_dispatch_post_mtime($postID, $url);
             if ($wpc_pm !== '') { $args['post_modified'] = $wpc_pm; }
         }
+        
+        
+        
+        if (function_exists('wpc_visitor_kind111') && apply_filters('wpc_send_visitor_fields', true)) {
+            $args['visitor']   = wpc_visitor_kind111();
+            $args['views_24h'] = function_exists('wpc_views_24h111')
+                ? wpc_views_24h111(isset($url_key) ? (string) $url_key : (string) $this->urlKey) : 0;
+        }
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('gen-dispatch', (string) $url_key, (string) $url, [
                 'path'     => 'initCritical',
@@ -798,8 +822,22 @@ $return['mobile_path'] = $mobileFilePath;
             
             $pushFailedKey = 'wpc_push_nope2_' . $url_key;
             $wpc_pushAdmin = wp_doing_ajax() && function_exists('current_user_can') && current_user_can('manage_options');
-            $wpc_pushNopeAt = (int) get_option($pushFailedKey, 0);
-            if ($wpc_pushAdmin || (time() - $wpc_pushNopeAt) > 86400) {
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            $wpc_bg111 = !empty($_SERVER['HTTP_X_WPC_CACHE_WARM']) || (function_exists('wp_doing_cron') && wp_doing_cron());
+            $wpc_np111 = get_option($pushFailedKey, 0);
+            $wpc_npAt111 = is_array($wpc_np111) ? (int) ($wpc_np111['t'] ?? 0) : (int) $wpc_np111;
+            $wpc_npBg111 = is_array($wpc_np111) ? !empty($wpc_np111['bg']) : true;
+            $wpc_npTtl111 = $wpc_npBg111 ? 86400 : 3600;
+            $wpc_npLive111 = $wpc_npAt111 > 0 && (time() - $wpc_npAt111) <= $wpc_npTtl111 && !($wpc_bg111 && !$wpc_npBg111);
+            if ($wpc_pushAdmin || !$wpc_npLive111) {
                 $html = $this->fetchCriticalCombineHtml($url);
                 if ($html) {
                     $args['html'] = $html;
@@ -809,14 +847,18 @@ $return['mobile_path'] = $mobileFilePath;
                             $args['css'] = $wpc_css763;
                         }
                     }
+                } elseif (!$wpc_pushAdmin) {
+                    update_option($pushFailedKey, ['t' => time(), 'bg' => $wpc_bg111 ? 1 : 0], false);
+                    if (function_exists('wpc_cache_first_log')) {
+                        wpc_cache_first_log('push-nope-armed', (string) $url_key, (string) $url, ['bg' => $wpc_bg111 ? 1 : 0]);
+                    }
                 }
                 if (function_exists('wpc_font_localizer_faces')) {
                     $wpc_ff794 = wpc_font_localizer_faces();
                     if (!empty($wpc_ff794)) { $args['fonts'] = $wpc_ff794; }
-                } elseif (!$wpc_pushAdmin) {
-                    
-                    update_option($pushFailedKey, time(), false);
                 }
+            } elseif (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('push-skipped-nope', (string) $url_key, (string) $url, ['age' => time() - $wpc_npAt111, 'bg' => $wpc_bg111 ? 1 : 0]);
             }
         }
 
@@ -907,7 +949,7 @@ $return['mobile_path'] = $mobileFilePath;
         $response = wp_remote_get($url . '?criticalCombine=true', [
             'timeout'    => $timeout,
             'cookies'    => [],
-            'user-agent' => 'WP-Compress/CriticalCSS-Push',
+            'user-agent' => self::wpc_push_ua111(),
         ]);
 
         if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
@@ -925,7 +967,7 @@ $return['mobile_path'] = $mobileFilePath;
                     'timeout'    => $timeout,
                     'cookies'    => [],
                     'sslverify'  => false,
-                    'user-agent' => 'WP-Compress/CriticalCSS-Push',
+                    'user-agent' => self::wpc_push_ua111(),
                     'headers'    => ['Host' => $wpc_host771],
                 ]);
                 if (function_exists('wpc_cache_first_log')) {
@@ -958,7 +1000,38 @@ $return['mobile_path'] = $mobileFilePath;
         $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
         $html = preg_replace('/(<img[^>]+)\bsrc=["\'][^"\']*["\']/i', '$1src=""', $html);
 
+        
+        
+        
+        
+        
+        
+        if (function_exists('wpc_cache_first_log')) {
+            try {
+                wpc_cache_first_log('push-html-shape', '', (string) $url, [
+                    'bytes'    => strlen((string) $html),
+                    'sections' => preg_match_all('/data-element_type="(?:section|container)"/', (string) $html),
+                    'pa_yes'   => substr_count((string) $html, 'pa-display-conditions-yes'),
+                    'sha'      => substr(sha1((string) $html), 0, 12),
+                    'cf'       => substr((string) wp_remote_retrieve_header($response, 'cf-cache-status'), 0, 12),
+                    'ua'       => 'browser',
+                ]);
+            } catch (\Throwable $e) {
+            }
+        }
+
         return $html;
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_push_ua111()
+    {
+        return (string) apply_filters('wpc_push_html_ua',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 WP-Compress/CriticalCSS-Push');
     }
 
 
@@ -1353,6 +1426,14 @@ $return['mobile_path'] = $mobileFilePath;
 
     public function generateCriticalAjax($sync = false)
     {
+        
+        
+        
+        if (defined('WPC_PLUGIN_VERSION') && function_exists('get_option')
+            && empty($_GET['forceCritical']) && empty($GLOBALS['wpc_gen_force496'])
+            && get_option('wpc_gen_unretryable_' . WPC_PLUGIN_VERSION)) {
+            return;
+        }
 
 
         
@@ -1466,6 +1547,14 @@ $return['mobile_path'] = $mobileFilePath;
         if (function_exists('wpc_dispatch_post_mtime') && apply_filters('wpc_send_post_modified', true)) {
             $wpc_pm2 = wpc_dispatch_post_mtime(0, urldecode($this->serverRequest));
             if ($wpc_pm2 !== '') { $args['post_modified'] = $wpc_pm2; }
+        }
+        
+        
+        
+        if (function_exists('wpc_visitor_kind111') && apply_filters('wpc_send_visitor_fields', true)) {
+            $args['visitor']   = wpc_visitor_kind111();
+            $args['views_24h'] = function_exists('wpc_views_24h111')
+                ? wpc_views_24h111(isset($url_key) ? (string) $url_key : (string) $this->urlKey) : 0;
         }
 
 
@@ -1630,19 +1719,47 @@ $return['mobile_path'] = $mobileFilePath;
             }
             
             
-            if (($wpc_dcode >= 500 || $wpc_dcode === 429 || (is_wp_error($call) && !$wpc_is_timeout))
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            $wpc_rb111 = is_wp_error($call) ? null : json_decode((string) wp_remote_retrieve_body($call), true);
+            $wpc_et111 = is_array($wpc_rb111) && !empty($wpc_rb111['error_type']) ? (string) $wpc_rb111['error_type'] : '';
+            $wpc_unret111 = is_array($wpc_rb111) && array_key_exists('retryable', $wpc_rb111) && !$wpc_rb111['retryable'];
+            if ($wpc_unret111 && function_exists('update_option') && defined('WPC_PLUGIN_VERSION')) {
+                update_option('wpc_gen_unretryable_' . WPC_PLUGIN_VERSION, ['t' => time(), 'type' => substr($wpc_et111, 0, 32)], false);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('dispatch-unretryable', (string) $this->urlKey, '', ['code' => $wpc_dcode, 'type' => substr($wpc_et111, 0, 32)]);
+                }
+            }
+            if (!$wpc_unret111
+                && ($wpc_dcode >= 500 || $wpc_dcode === 429 || (is_wp_error($call) && !$wpc_is_timeout))
                 && !empty($this->urlKey) && function_exists('wpc_pl_sched')
                 && function_exists('wp_next_scheduled') && !wp_next_scheduled('wpc_crit_redispatch', [(string) $this->urlKey])) {
                 $wpc_ra179 = is_wp_error($call) ? 0 : (int) wp_remote_retrieve_header($call, 'retry-after');
-                if ($wpc_ra179 <= 0 && !is_wp_error($call)) {
+                if ($wpc_ra179 <= 0 && is_array($wpc_rb111) && !empty($wpc_rb111['retry_after'])) {
                     
-                    $wpc_rb179 = json_decode((string) wp_remote_retrieve_body($call), true);
-                    if (is_array($wpc_rb179) && !empty($wpc_rb179['retry_after'])) {
-                        $wpc_ra179 = (int) $wpc_rb179['retry_after'];
-                    }
+                    $wpc_ra179 = (int) $wpc_rb111['retry_after'];
                 }
-                wpc_pl_sched(time() + min(3600, max(60, $wpc_ra179 ?: 300)), 'wpc_crit_redispatch', [(string) $this->urlKey]);
-                wpc_spawn_cron();
+                if ($wpc_et111 === 'fleet_queued') {
+                    
+                    if (!wp_next_scheduled('wpc_crit_collect', [(string) $this->urlKey, 9])) {
+                        wpc_pl_sched(time() + min(600, max(45, $wpc_ra179 ?: 45)), 'wpc_crit_collect', [(string) $this->urlKey, 9]);
+                        wpc_spawn_cron();
+                    }
+                } else {
+                    $wpc_cap111 = ($wpc_et111 === 'demand_deferred' || $wpc_et111 === 'refusal_storm') ? 2 * DAY_IN_SECONDS : 3600;
+                    wpc_pl_sched(time() + min($wpc_cap111, max(60, $wpc_ra179 ?: 300)), 'wpc_crit_redispatch', [(string) $this->urlKey]);
+                    wpc_spawn_cron();
+                }
+                if (function_exists('wpc_cache_first_log') && $wpc_et111 !== '') {
+                    wpc_cache_first_log('dispatch-refusal', (string) $this->urlKey, '', ['code' => $wpc_dcode, 'type' => substr($wpc_et111, 0, 32), 'ra' => $wpc_ra179]);
+                }
             }
         }
 
@@ -2235,7 +2352,7 @@ $return['mobile_path'] = $mobileFilePath;
                 }
                 if (function_exists('wpc_cache_first_enabled') && wpc_cache_first_enabled()
                     && method_exists('wps_ic_cache_integrations', 'purgeUrlHtml')) {
-                    function_exists('wpc_land_purge_coalesced') ? wpc_land_purge_coalesced($urlKey, $pageUrl, 'crit-land') : wps_ic_cache_integrations::purgeUrlHtml($urlKey, $pageUrl, ['context' => 'crit-land']);
+                    function_exists('wpc_land_purge_coalesced') ? wpc_land_purge_coalesced($urlKey, $pageUrl, 'crit-land') : wps_ic_cache_integrations::purgeUrlHtml($urlKey, $pageUrl, ['context' => 'crit-land', 'warm' => true]);
                 } else {
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('land-purge-legacy', (string) $urlKey, (string) $pageUrl, []);

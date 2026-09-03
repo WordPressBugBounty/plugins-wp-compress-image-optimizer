@@ -4,7 +4,7 @@
  * File: classes/cache.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -265,7 +265,15 @@ class wps_ic_cache
         self::resetHashes();
         self::removeHtmlCacheFiles();
         self::removeCombinedFiles();
-        self::removeCriticalFiles();
+        
+        
+        
+        
+        
+        
+        if (!self::wpc_save_crit_stale354('all')) {
+            self::removeCriticalFiles();
+        }
     }
 
     public static function purgeHook($hook, $cache = 1, $combined = 0, $critical = 0, $hash = 0)
@@ -585,7 +593,9 @@ class wps_ic_cache
         if ($post_id !== 0 && function_exists('get_post_type') && get_post_type($post_id) === 'elementor_library') {
             if (function_exists('apply_filters') && !apply_filters('wpc_save_purge_defer', true)) {
                 $cacheHtml->removeCacheFiles('all');
-                $cacheHtml->removeCriticalFiles('all');
+                if (!self::wpc_save_crit_stale354('all')) {
+                    $cacheHtml->removeCriticalFiles('all');
+                }
                 self::purgeEdgeHtmlUrls([home_url('/')]);
                 return;
             }
@@ -1273,7 +1283,15 @@ class wps_ic_cache
         self::resetHashes();
         self::removeHtmlCacheFiles();
         self::removeCombinedFiles();
-        self::removeCriticalFiles();
+        
+        
+        
+        
+        
+        
+        if (!self::wpc_save_crit_stale354('all')) {
+            self::removeCriticalFiles();
+        }
     }
 
     public static function resetHashes()
@@ -1372,7 +1390,9 @@ class wps_ic_cache
         if (function_exists('apply_filters') && !apply_filters('wpc_save_purge_defer', true)) {
             self::removeHtmlCacheFiles($post_id);
             self::wpc_save_preserve56(true);
-            self::removeCriticalFiles($post_id);
+            if (!self::wpc_save_crit_stale354((string) get_permalink($post_id))) {
+                self::removeCriticalFiles($post_id);
+            }
             self::wpc_save_preserve56(false);
             $wpc_u920 = get_permalink($post_id);
             if (!empty($wpc_u920)) {
@@ -1454,7 +1474,9 @@ class wps_ic_cache
         }
         self::wpc_save_preserve56(true);
         self::removeHtmlCacheFiles('all');
-        self::removeCriticalFiles('all');
+        if (!self::wpc_save_crit_stale354('all')) {
+            self::removeCriticalFiles('all');
+        }
         self::wpc_save_preserve56(false);
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('template-save-purge-all-trailing', '', '', []);
@@ -1470,6 +1492,38 @@ class wps_ic_cache
             }
         }
         $GLOBALS['wpc_savepurge920'][(int) $post_id] = 1;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    private static function wpc_save_crit_stale354($url_or_all)
+    {
+        if (!apply_filters('wpc_save_crit_serve_stale', true)) {
+            return false;
+        }
+        if (!function_exists('wpc_crit_mark_stale_instead')) {
+            return false;
+        }
+        $wpc_key354 = 'all';
+        if ($url_or_all !== '' && $url_or_all !== 'all' && class_exists('wps_ic_url_key')) {
+            $wpc_uk354 = new wps_ic_url_key();
+            $wpc_k354  = ltrim((string) $wpc_uk354->setup($url_or_all), '/');
+            if ($wpc_k354 !== '') {
+                $wpc_key354 = $wpc_k354;
+            }
+        }
+        $wpc_ok354 = (bool) wpc_crit_mark_stale_instead($wpc_key354);
+        if ($wpc_ok354 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('save-crit-stale', $wpc_key354, '', []);
+        }
+        return $wpc_ok354;
     }
 
     public static function wpc_save_purge_run920()
@@ -1493,13 +1547,17 @@ class wps_ic_cache
         foreach ($wpc_ids920 as $wpc_pid920) {
             if ($wpc_pid920 === 0) {
                 self::removeHtmlCacheFiles('all');
-                self::removeCriticalFiles('all');
+                if (!self::wpc_save_crit_stale354('all')) {
+                    self::removeCriticalFiles('all');
+                }
                 $wpc_urls920[] = home_url('/');
                 continue;
             }
             self::removeHtmlCacheFiles($wpc_pid920);
-            self::removeCriticalFiles($wpc_pid920);
             $wpc_pu920 = get_permalink($wpc_pid920);
+            if (!self::wpc_save_crit_stale354((string) $wpc_pu920)) {
+                self::removeCriticalFiles($wpc_pid920);
+            }
             if (!empty($wpc_pu920)) {
                 $wpc_urls920[] = $wpc_pu920;
             }

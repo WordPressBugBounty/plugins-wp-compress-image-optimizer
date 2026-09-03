@@ -4,7 +4,7 @@
  * File: addons/v2/v2-pull-manifest.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -892,6 +892,22 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
             if ($restoring > 0) {
                 update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
                 error_log(sprintf('[WPC PullDrain] yield_to_restore restoring=%d queued_total=%d — defer (deadline bumped)', $restoring, $total_queued));
+                delete_transient('wpc_v2_drain_running');
+                exit;
+            }
+            
+            
+            
+            
+            
+            
+            if (apply_filters('wpc_drain_pressure_gate', true)
+                && function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+                update_option('wpc_v2_drain_alive_until_ms', (int) (microtime(true) * 1000) + 60000, false);
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('drain-pressure-yield', '', '', ['iter' => $polls, 'queued' => $total_queued]);
+                }
+                error_log(sprintf('[WPC PullDrain] yield_to_pressure iter=%d queued_total=%d — defer (deadline bumped)', $polls, $total_queued));
                 delete_transient('wpc_v2_drain_running');
                 exit;
             }

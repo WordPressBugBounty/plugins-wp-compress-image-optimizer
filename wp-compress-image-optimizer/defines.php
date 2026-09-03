@@ -4,7 +4,7 @@
  * File: defines.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 define('WPS_IC_TEXTDOMAIN', 'wp-compress-image-optimizer');
@@ -1478,11 +1478,74 @@ if (!function_exists('wpc_font_carrier_key602')) {
     }
 }
 
+
+
+
+
+
+
+
+if (!function_exists('wpc_font_carrier_host_ok22')) {
+    function wpc_font_carrier_host_ok22($url)
+    {
+        $h = strtolower((string) parse_url((string) $url, PHP_URL_HOST));
+        if ($h === '') { return true; }
+        static $ok = null;
+        if ($ok === null) {
+            $ok = [];
+            if (function_exists('home_url')) {
+                $ok[strtolower((string) parse_url(home_url('/'), PHP_URL_HOST))] = 1;
+            }
+            if (function_exists('get_option')) {
+                foreach (['ic_custom_cname', 'ic_cdn_zone_name'] as $k) {
+                    $v = strtolower(trim((string) get_option($k)));
+                    if ($v !== '') { $ok[$v] = 1; }
+                }
+            }
+            unset($ok['']);
+        }
+        if (isset($ok[$h]) || substr($h, -10) === '.zapwp.com') { return true; }
+        if (isset($ok['www.' . $h]) || (strpos($h, 'www.') === 0 && isset($ok[substr($h, 4)]))) { return true; }
+        return (bool) apply_filters('wpc_font_carrier_thirdparty', false, $h);
+    }
+}
+if (!function_exists('wpc_font_carrier_filter22')) {
+    function wpc_font_carrier_filter22($css)
+    {
+        if (!is_string($css) || $css === '' || stripos($css, 'url(') === false) { return $css; }
+        $dropped = 0;
+        $out = preg_replace_callback('/@font-face\s*\{[^{}]*\}/is', function ($m) use (&$dropped) {
+            if (preg_match_all('/url\(\s*["\']?(https?:\/\/[^)"\'\s]+)/i', $m[0], $u)) {
+                foreach ($u[1] as $one) {
+                    if (!wpc_font_carrier_host_ok22($one)) {
+                        $dropped++;
+                        if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $m[0], $f)) {
+                            $GLOBALS['wpc_fc_tp_fams22'][strtolower(trim($f[1]))] = 1;
+                        }
+                        return '';
+                    }
+                }
+            }
+            return $m[0];
+        }, $css);
+        if (!is_string($out)) { return $css; }
+        if ($dropped > 0 && function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_fc_tp22')) {
+            set_transient('wpc_fc_tp22', 1, 600);
+            wpc_cache_first_log('font-carrier-thirdparty-dropped', '', '', ['n' => $dropped]);
+        }
+        return $out;
+    }
+}
+
 if (!function_exists('wpc_font_carrier_record602')) {
     function wpc_font_carrier_record602($css)
     {
         try {
             if (!is_string($css) || $css === '' || stripos($css, '@font-face') === false) { return false; }
+            if (function_exists('wpc_font_carrier_filter22')) {
+                $css = wpc_font_carrier_filter22($css);
+                if (!is_string($css) || stripos($css, '@font-face') === false) { return false; }
+            }
             $file = wpc_font_carrier_file602();
             if ($file === '') { return false; }
             if (!apply_filters('wpc_font_carrier_record', true)) { return false; }
@@ -1573,8 +1636,14 @@ if (!function_exists('wpc_font_preload_postpaint_tag')) {
         foreach ((array) $entries as $e) {
             $u = is_array($e) ? (string) ($e[0] ?? '') : (string) $e;
             $t = is_array($e) && !empty($e[1]) ? (string) $e[1] : 'font/woff2';
+            
+            
+            
+            
+            
+            $f = is_array($e) && !empty($e[2]) ? strtolower(trim((string) $e[2], " \t\"'")) : '';
             if ($u === '' || stripos($u, 'http') !== 0) { continue; }
-            $list[$u] = [$u, $t];
+            $list[$u] = $f !== '' ? [$u, $t, $f] : [$u, $t];
         }
         if (!$list) { return ''; }
         $json = wp_json_encode(array_values(array_slice($list, 0, 6)), JSON_UNESCAPED_SLASHES);
@@ -1603,7 +1672,8 @@ if (!function_exists('wpc_font_preload_postpaint_tag')) {
             $wpc_late716 = false;
         }
         $wpc_g716 = 'var g=function(){window.__wpcFPB=window.__wpcFPB||{};'
-            . 'for(var i=0;i<u.length;i++){if(window.__wpcFPB[u[i][0]])continue;window.__wpcFPB[u[i][0]]=1;'
+            . 'var used=null,uf=function(f){if(used===null){used={};try{var els=document.querySelectorAll("body *"),n=0;for(var k=0;k<els.length&&n<400;k++){var r=els[k].getBoundingClientRect();if(!r.width||r.top>innerHeight*2)continue;n++;var ff=getComputedStyle(els[k]).fontFamily.split(",")[0].replace(/["\']/g,"").trim().toLowerCase();if(ff)used[ff]=1}}catch(x){used=false}}return used===false||!f||!!used[f]};'
+            . 'for(var i=0;i<u.length;i++){if(window.__wpcFPB[u[i][0]])continue;if(!uf(u[i][2]))continue;window.__wpcFPB[u[i][0]]=1;'
             . 'var l=document.createElement("link");l.rel="preload";l.as="font";l.type=u[i][1];'
             . 'l.crossOrigin="anonymous";l.href=u[i][0];document.head.appendChild(l)}};';
         if ($wpc_late716) {
@@ -1716,6 +1786,10 @@ if (!function_exists('wpc_font_carrier_emit602')) {
             if ($file === '' || !@is_readable($file)) { return; }
             $css = (string) @file_get_contents($file);
             if ($css === '' || stripos($css, '@font-face') === false) { return; }
+            if (function_exists('wpc_font_carrier_filter22')) {
+                $css = (string) wpc_font_carrier_filter22($css);
+                if ($css === '' || stripos($css, '@font-face') === false) { return; }
+            }
             if (class_exists('wps_cdn_rewrite') && method_exists('wps_cdn_rewrite', 'wpc_host_twin_css42')) {
                 $css = (string) wps_cdn_rewrite::wpc_host_twin_css42($css);
                 if ($css === '') { return; }
@@ -1748,8 +1822,18 @@ if (!function_exists('wpc_font_carrier_emit602')) {
             
             
             
-            if (preg_match_all('/url\(\s*["\']?(https?:\/\/[^)"\'\s]+\.woff2[^)"\'\s]*)/i', $css, $wpc_pf620)) {
-                $wpc_fpb689 = wpc_font_preload_postpaint_tag(array_slice(array_unique($wpc_pf620[1]), 0, 4));
+            if (preg_match_all('/@font-face\s*\{[^{}]*\}/is', $css, $wpc_fb32)) {
+                $wpc_pl22 = [];
+                $wpc_seen32 = [];
+                foreach ($wpc_fb32[0] as $wpc_blk32) {
+                    if (!preg_match('/url\(\s*["\']?(https?:\/\/[^)"\'\s]+\.woff2[^)"\'\s]*)/i', $wpc_blk32, $wpc_um32)) { continue; }
+                    $wpc_u32 = $wpc_um32[1];
+                    if (isset($wpc_seen32[$wpc_u32]) || preg_match('/icon|awesome|fa-(?:solid|regular|brands|light|duotone)|fa[- 0-9]|material|dashicon|glyphicon|icomoon|ionicon|line.?awesome|themify|elegant|feather|simple.?line|eicons|happy-icons/i', $wpc_u32)) { continue; }
+                    $wpc_seen32[$wpc_u32] = 1;
+                    $wpc_fam32 = preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $wpc_blk32, $wpc_fm32) ? trim($wpc_fm32[1]) : '';
+                    $wpc_pl22[] = [$wpc_u32, 'font/woff2', $wpc_fam32];
+                }
+                $wpc_fpb689 = wpc_font_preload_postpaint_tag(array_slice($wpc_pl22, 0, 4));
                 if ($wpc_fpb689 !== '') {
                     echo "\n" . $wpc_fpb689;
                 }
@@ -2950,7 +3034,7 @@ if (!function_exists('wpc_crit_sanity_stall621')) {
         $wpc_mf621 = rtrim((string) $dir, '/') . '/sanity_bad.txt';
         $wpc_sf621 = rtrim((string) $dir, '/') . '/sanity_stall.txt';
         $wpc_h621  = md5((string) $critBytes);
-        $wpc_old621 = @is_file($wpc_mf621) ? trim((string) @file_get_contents($wpc_mf621)) : '';
+        $wpc_old621 = @is_file($wpc_mf621) ? trim((string) strtok((string) @file_get_contents($wpc_mf621), "\n")) : '';
         if ($wpc_old621 !== $wpc_h621) {
             @unlink($wpc_sf621);
             return 0;
@@ -3955,6 +4039,126 @@ if (!function_exists('wpc_ucss_divi5_guard')) {
         });
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if (!function_exists('wpc_cdn_cname_reachable117')) {
+    function wpc_cdn_cname_reachable117($host)
+    {
+        try {
+            $host = strtolower(trim((string) preg_replace('#^https?://#', '', (string) $host)));
+            $host = trim((string) strtok($host, '/'));
+            if ($host === '' || !apply_filters('wpc_cdn_cname_probe', true)
+                || (!function_exists('dns_get_record') && !function_exists('gethostbyname'))
+                || !function_exists('get_transient')) {
+                return true;
+            }
+            $k = 'wpc_cname117_' . substr(md5($host), 0, 16);
+            $v = get_transient($k);
+            if ($v === 'ok') { return true; }
+            if ($v === 'down') { return false; }
+            $ok = false;
+            if (function_exists('dns_get_record')) {
+                $recs = @dns_get_record($host, DNS_A + DNS_AAAA + DNS_CNAME);
+                $ok = is_array($recs) && count($recs) > 0;
+            }
+            if (!$ok && function_exists('gethostbyname')) {
+                $ip = @gethostbyname($host);
+                $ok = is_string($ip) && $ip !== '' && $ip !== $host;
+            }
+            set_transient($k, $ok ? 'ok' : 'down', $ok ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS);
+            if (!$ok) {
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('cdn-cname-unreachable', '', '', ['host' => $host]);
+                }
+                
+                
+                if (function_exists('get_option') && get_option('wpc_cname117_purged') !== $host) {
+                    update_option('wpc_cname117_purged', $host, false);
+                    if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeAllCache')) {
+                        wps_ic_cache::purgeAllCache();
+                    }
+                }
+            }
+            return $ok;
+        } catch (\Throwable $e) {
+            return true;
+        }
+    }
+}
+
+if (!function_exists('wpc_visitor_kind111')) {
+    function wpc_visitor_kind111()
+    {
+        try {
+            $ua = isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : '';
+            if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])
+                || (function_exists('wp_doing_cron') && wp_doing_cron())
+                || (defined('WP_CLI') && WP_CLI)) {
+                return 'bot';
+            }
+            if ($ua === '' || preg_match('/bot|crawl|spider|slurp|facebookexternalhit|headless|curl\/|python-|wget|go-http|java\/|httpclient|libwww|semrush|ahrefs|mj12|bingpreview|wp-compress/i', $ua)) {
+                return 'bot';
+            }
+            if (empty($_COOKIE) && empty($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+                return 'bot';
+            }
+            return 'human';
+        } catch (\Throwable $e) {
+            return 'bot';
+        }
+    }
+}
+if (!function_exists('wpc_views_24h_key111')) {
+    function wpc_views_24h_key111($url_key)
+    {
+        return 'wpc_v24_' . substr(md5((string) $url_key), 0, 20);
+    }
+}
+if (!function_exists('wpc_views_24h_bump111')) {
+    function wpc_views_24h_bump111($url_key)
+    {
+        try {
+            if ((string) $url_key === '' || !function_exists('get_transient')) {
+                return;
+            }
+            if (function_exists('wpc_visitor_kind111') && wpc_visitor_kind111() !== 'human') {
+                return;
+            }
+            $k = wpc_views_24h_key111($url_key);
+            $n = (int) get_transient($k);
+            
+            
+            set_transient($k, $n + 1, $n > 0 ? 0 : DAY_IN_SECONDS);
+        } catch (\Throwable $e) {
+        }
+    }
+}
+if (!function_exists('wpc_views_24h111')) {
+    function wpc_views_24h111($url_key)
+    {
+        try {
+            if ((string) $url_key === '' || !function_exists('get_transient')) {
+                return 0;
+            }
+            return (int) get_transient(wpc_views_24h_key111($url_key));
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+}
+
 if (!function_exists('wpc_doctrine_reconcile66')) {
     function wpc_ucss_invalidate313()
     {

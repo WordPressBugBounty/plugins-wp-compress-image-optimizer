@@ -4,7 +4,7 @@
  * File: addons/v2/v2-trigger-scanner.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

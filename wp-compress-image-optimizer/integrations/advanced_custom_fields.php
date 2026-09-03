@@ -4,7 +4,7 @@
  * File: integrations/advanced_custom_fields.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 if (!defined('ABSPATH')) {

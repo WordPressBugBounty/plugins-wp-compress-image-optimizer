@@ -4,7 +4,7 @@
  * File: addons/v2/v2-html-cache-purge.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 

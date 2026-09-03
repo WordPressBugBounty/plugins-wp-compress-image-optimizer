@@ -4,7 +4,7 @@
  * File: integrations/wp_optimize.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 if (!defined('ABSPATH')) {

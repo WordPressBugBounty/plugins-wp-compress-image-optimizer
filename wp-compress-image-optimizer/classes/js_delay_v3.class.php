@@ -4,7 +4,7 @@
  * File: classes/js_delay_v3.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -470,14 +470,42 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
     
     
     
+    
+    
+    
+    public static function wpc_delay_manifest_file112()
+    {
+        try {
+            if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
+                return '';
+            }
+            $base = rtrim(WPS_IC_CRITICAL, '/') . '/';
+            $k = (string) (new wps_ic_url_key())->setup('');
+            if ($k !== '' && @is_readable($base . $k . '/delay.json')) {
+                return $base . $k . '/delay.json';
+            }
+            if (method_exists('wps_ic_url_key', 'cleanRequestKey') && apply_filters('wpc_delay_manifest_clean_key', true)) {
+                $ck = (string) wps_ic_url_key::cleanRequestKey();
+                if ($ck !== '' && $ck !== $k && @is_readable($base . $ck . '/delay.json')) {
+                    if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_dmf112_' . md5($k))) {
+                        set_transient('wpc_dmf112_' . md5($k), 1, 3600);
+                        wpc_cache_first_log('delay-manifest-cleankey', $k, '', ['clean' => $ck]);
+                    }
+                    return $base . $ck . '/delay.json';
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return '';
+    }
+
     public static function wpc_measured_delay_newer_than($since)
     {
         try {
             if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
                 return false;
             }
-            $k = (new wps_ic_url_key())->setup('');
-            $f = $k ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $k . '/delay.json' : '';
+            $f = self::wpc_delay_manifest_file112();
             if ($f === '' || !@is_readable($f) || (int) @filemtime($f) <= (int) $since) {
                 return false;
             }
@@ -530,8 +558,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 || !class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) {
                 return $wpc_al364;
             }
-            $wpc_mk364 = (new wps_ic_url_key())->setup('');
-            $wpc_mf364 = $wpc_mk364 ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_mk364 . '/delay.json' : '';
+            $wpc_mf364 = self::wpc_delay_manifest_file112();
             if ($wpc_mf364 === '' || !@is_readable($wpc_mf364)) {
                 return $wpc_al364;
             }
@@ -1186,6 +1213,19 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                 'bricks.min.js',
             ])));
         }
+        
+        
+        
+        
+        
+        
+        
+        if (in_array('bricks.min.js', (array) $this->excludes, true)
+            && apply_filters('wpc_bricks_libs_keep', true)) {
+            $this->excludes = array_values(array_unique(array_merge((array) $this->excludes, [
+                '/themes/bricks/assets/js/libs/',
+            ])));
+        }
 
         
         
@@ -1368,7 +1408,7 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         if ($wpc_manifest_on && class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
             try {
                 $wpc_mk = (new wps_ic_url_key())->setup('');
-                $wpc_mf = $wpc_mk ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_mk . '/delay.json' : '';
+                $wpc_mf = self::wpc_delay_manifest_file112();
                 if ($wpc_mf && @is_readable($wpc_mf)) {
                     $wpc_m = json_decode((string) @file_get_contents($wpc_mf), true);
                     if (is_array($wpc_m)) {
@@ -1923,9 +1963,15 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         
         
         
+        
+        
+        
+        
+        
+        
         if (isset($wpc_excluded_ids['elementor-frontend-js'])
             && apply_filters('wpc_delay_elementor_family_lane', true)) {
-            foreach (['elementor-pro-frontend-js', 'pro-elements-handlers-js'] as $wpc_pid747) {
+            foreach (['elementor-pro-frontend-js', 'pro-elements-handlers-js', 'imagesloaded-js', 'masonry-js'] as $wpc_pid747) {
                 if (!isset($wpc_seen_src_ids747[$wpc_pid747]) || isset($wpc_excluded_ids[$wpc_pid747])) {
                     continue;
                 }
@@ -1990,6 +2036,46 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
             }
         }
 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        if (apply_filters('wpc_keep_prefix_family', true)) {
+            $wpc_pfDeny114 = ['jquery', 'jquery-core', 'jquery-migrate', 'jquery-ui', 'wp', 'wp-util', 'wp-i18n', 'wp-hooks',
+                'underscore', 'backbone', 'lodash', 'react', 'react-dom', 'elementor', 'elementor-pro', 'wc', 'woocommerce',
+                'google', 'gtm', 'gtag', 'swiper', 'bootstrap', 'font', 'fonts'];
+            $wpc_pfN114 = 0; $wpc_pfLog114 = [];
+            foreach (array_keys((array) $wpc_excluded_ids) as $wpc_kid114) {
+                $wpc_kh114 = preg_replace('/-js$/', '', (string) $wpc_kid114);
+                if ($wpc_kh114 === '' || strlen($wpc_kh114) < 4 || in_array($wpc_kh114, $wpc_pfDeny114, true)) {
+                    continue;
+                }
+                foreach (array_keys((array) $wpc_seen_src_ids747) as $wpc_sid114) {
+                    $wpc_sh114 = preg_replace('/-js$/', '', (string) $wpc_sid114);
+                    if (isset($wpc_excluded_ids[$wpc_sid114]) || strpos($wpc_sh114, $wpc_kh114 . '-') !== 0) {
+                        continue;
+                    }
+                    if ($wpc_pfN114++ >= 20) { break 2; }
+                    $this->companion_ids[$wpc_sid114]      = true;
+                    $this->wpc_family_keep747[$wpc_sid114] = true;
+                    $wpc_excluded_ids[$wpc_sid114]         = true;
+                    foreach (['-js-before', '-js-after', '-js-extra'] as $wpc_suf114) {
+                        $this->companion_ids[$wpc_sh114 . $wpc_suf114] = true;
+                    }
+                    if (count($wpc_pfLog114) < 6) { $wpc_pfLog114[] = $wpc_kh114 . '>' . $wpc_sh114; }
+                }
+            }
+            if ($wpc_pfN114 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('keep-prefix-family', '', '', ['n' => $wpc_pfN114, 'pairs' => implode(',', $wpc_pfLog114)]);
+            }
+        }
+
         $this->parse_time_src_ids = $wpc_excluded_ids;
 
         $this->script_registry = array();
@@ -2033,6 +2119,11 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
         }
         $wpc_cfg = [
             'timeout' => (int) apply_filters('wpc_delay_v3_timeout', $wpc_to),
+            
+            
+            
+            
+            'ef364' => apply_filters('wpc_delay_v3_ef364', true) ? 1 : 0,
             
             
             
@@ -2191,6 +2282,27 @@ class wps_ic_js_delay_v3 extends wps_ic_js_delay_v2
                                 }
                             }
                             @copy($wpc_srcf107, $wpc_dir107 . $wpc_name107);
+                            
+                            
+                            
+                            
+                            
+                            
+                            
+                            $wpc_rh109 = 0;
+                            foreach ((array) @glob($wpc_dir107 . 'delay-v3-loader-*.min.js') as $wpc_rf109) {
+                                if (basename($wpc_rf109) === $wpc_name107) {
+                                    continue;
+                                }
+                                if ((int) @filesize($wpc_rf109) !== (int) @filesize($wpc_srcf107)) {
+                                    if (@copy($wpc_srcf107, $wpc_rf109)) {
+                                        $wpc_rh109++;
+                                    }
+                                }
+                            }
+                            if ($wpc_rh109 && function_exists('wpc_cache_first_log')) {
+                                wpc_cache_first_log('loader-retroheal', '', '', ['n' => $wpc_rh109]);
+                            }
                             if (!@file_exists($wpc_dir107 . '.htaccess')) {
                                 @file_put_contents($wpc_dir107 . '.htaccess',
                                     "<IfModule mod_headers.c>\n<FilesMatch \"\\.(js|css)$\">\nHeader set Cache-Control \"public, max-age=31536000, immutable\"\n</FilesMatch>\n</IfModule>\n<IfModule mod_expires.c>\nExpiresActive On\nExpiresByType application/javascript \"access plus 1 year\"\n</IfModule>\n");

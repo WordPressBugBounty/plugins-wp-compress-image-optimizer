@@ -4,7 +4,7 @@
  * File: addons/cdn/rewriteLogic.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.01
+ * @version 7.22.38
  */
 
 
@@ -325,6 +325,7 @@ class wps_rewriteLogic
 
         $cfVerified = (!function_exists('wpc_cf_cname_verified_ok') || wpc_cf_cname_verified_ok());
         $custom_cname = (!empty($cf['settings']['cdn']) && !empty($cfCname) && $cfVerified) ? $cfCname : get_option('ic_custom_cname');
+        if (!empty($custom_cname) && function_exists('wpc_cdn_cname_reachable117') && !wpc_cdn_cname_reachable117($custom_cname)) { $custom_cname = ''; }
         if (empty($custom_cname) || !$custom_cname) {
             self::$zoneName = get_option('ic_cdn_zone_name');
         } else {
@@ -683,7 +684,684 @@ class wps_rewriteLogic
                 $payload = $rest;
             }
         }
+        
+        
+        
+        if (trim($payload) === '') {
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_crit_empty22')) {
+                set_transient('wpc_crit_empty22', 1, 600);
+                wpc_cache_first_log('crit-tag-empty', '', '', ['attrs' => substr((string) $attrs, 0, 80)]);
+            }
+            return $carrier;
+        }
         return $carrier . '<style type="text/css" ' . $attrs . '>' . $payload . '</style>';
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_unbacked_fams23($html, $output = '', $extra = [])
+    {
+        try {
+            if (!apply_filters('wpc_unbacked_family_gate', true)) {
+                return [];
+            }
+            $hay = (string) $html . (string) $output;
+            
+            
+            
+            
+            
+            
+            
+            $cands = isset($GLOBALS['wpc_fc_tp_fams22']) && is_array($GLOBALS['wpc_fc_tp_fams22']) ? $GLOBALS['wpc_fc_tp_fams22'] : [];
+            foreach ((array) $extra as $e) {
+                $e = strtolower(trim((string) $e, " \t\"'"));
+                if ($e !== '') {
+                    $cands[$e] = 1;
+                }
+            }
+            if (preg_match_all('/@font-face\s*\{[^{}]*font-family\s*:\s*["\']?([^"\';}]+?)\s+Fallback["\']?\s*;/i', $hay, $fbm)) {
+                foreach ($fbm[1] as $f) {
+                    $cands[strtolower(trim($f))] = 1;
+                }
+            }
+            if (preg_match_all('/<style\b[^>]*\bid=(["\'])wpc-font-subsets\1[^>]*>(.*?)<\/style>/is', $hay, $sbm)) {
+                foreach ($sbm[2] as $sb) {
+                    if (preg_match_all('/@font-face\s*\{[^{}]*font-family\s*:\s*["\']?([^"\';}]+)/i', $sb, $sf)) {
+                        foreach ($sf[1] as $f) {
+                            $cands[strtolower(trim($f, " \t\"'"))] = 1;
+                        }
+                    }
+                }
+            }
+            if (!$cands) {
+                return [];
+            }
+            $links = '';
+            $svc = false;
+            if (preg_match_all('/<link\b[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $hay, $lm)) {
+                foreach ($lm[1] as $u) {
+                    $u = html_entity_decode($u);
+                    $h = strtolower((string) parse_url($u, PHP_URL_HOST));
+                    if ($h === 'fonts.googleapis.com' || $h === 'fonts.bunny.net') {
+                        $links .= ' ' . strtolower($u);
+                    } elseif ($h !== '' && preg_match('/(^|\.)(typekit\.net|typekit\.com|fonts\.net|typography\.com|cdnfonts\.com|fontawesome\.com|fonts\.adobe\.com)$/', $h)) {
+                        $svc = true;
+                    }
+                }
+            }
+            if ($svc) {
+                return [];
+            }
+            $decl = preg_replace('/<style\b[^>]*\bid=(["\'])(?:wpc-font-subsets|wpc-font-fallbacks)\1[^>]*>.*?<\/style>/is', '', $hay);
+            if (!is_string($decl)) {
+                $decl = $hay;
+            }
+            $linked = self::wpc_linked_face_fams25($html);
+            $out = [];
+            foreach (array_keys($cands) as $fam) {
+                $fam = strtolower(trim((string) $fam));
+                if ($fam === '' || isset($linked[$fam])) {
+                    continue;
+                }
+                $plus = str_replace(' ', '+', $fam);
+                if ($links !== '' && (strpos($links, 'family=' . $plus) !== false || strpos($links, '|' . $plus) !== false
+                    || strpos($links, 'family=' . rawurlencode($fam)) !== false || strpos($links, 'family=' . $fam) !== false
+                    || strpos($links, '%7c' . $plus) !== false)) {
+                    continue;
+                }
+                $q = preg_quote($fam, '/');
+                if (preg_match_all('/@font-face\s*\{[^{}]*font-family\s*:\s*["\']?' . $q . '["\']?\s*;[^{}]*src\s*:[^{}]*url\(\s*["\']?([^"\')\s]+)/i', $decl, $dm)) {
+                    $ok = false;
+                    foreach ($dm[1] as $u) {
+                        if (stripos($u, 'data:') === 0 || !function_exists('wpc_font_carrier_host_ok22') || wpc_font_carrier_host_ok22($u)) {
+                            $ok = true;
+                            break;
+                        }
+                    }
+                    if ($ok) {
+                        continue;
+                    }
+                }
+                $out[$fam] = 1;
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    
+    
+    
+    private static $wpc_lf25 = null;
+    public static function wpc_linked_face_fams25($html)
+    {
+        if (self::$wpc_lf25 !== null) {
+            return self::$wpc_lf25;
+        }
+        $fams = [];
+        try {
+            if (!defined('ABSPATH') || !is_string($html)
+                || !preg_match_all('/<link\b[^>]*href=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1[^>]*>/i', $html, $lm)) {
+                return self::$wpc_lf25 = $fams;
+            }
+            $n = 0;
+            foreach ($lm[2] as $href) {
+                if ($n++ >= 64) {
+                    break;
+                }
+                $pu = parse_url(html_entity_decode($href));
+                $h = isset($pu['host']) ? strtolower((string) $pu['host']) : '';
+                if ($h !== '' && function_exists('wpc_font_carrier_host_ok22') && !wpc_font_carrier_host_ok22('https://' . $h . '/x.css')) {
+                    continue;
+                }
+                $path = isset($pu['path']) ? (string) $pu['path'] : '';
+                if (!preg_match('#^/(?:wp-content|wp-includes)/#', $path) || strpos($path, '..') !== false) {
+                    continue;
+                }
+                $fp = rtrim(ABSPATH, '/') . $path;
+                $sz = @is_readable($fp) ? (int) @filesize($fp) : 0;
+                if ($sz <= 0 || $sz > 1048576) {
+                    continue;
+                }
+                $key = 'wpc_lff25_' . md5($fp . '|' . $sz . '|' . (int) @filemtime($fp));
+                $c = function_exists('get_transient') ? get_transient($key) : false;
+                if (!is_array($c)) {
+                    $c = [];
+                    $css = (string) @file_get_contents($fp);
+                    if (stripos($css, '@font-face') !== false && preg_match_all('/@font-face\s*\{[^{}]*\}/is', $css, $fb)) {
+                        foreach ($fb[0] as $blk) {
+                            if (preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $blk, $f) && preg_match('/src\s*:[^{}]*url\(/i', $blk)) {
+                                $c[strtolower(trim($f[1]))] = 1;
+                            }
+                        }
+                    }
+                    if (function_exists('set_transient')) {
+                        set_transient($key, $c, 86400);
+                    }
+                }
+                foreach ($c as $k => $v) {
+                    $fams[$k] = 1;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return self::$wpc_lf25 = $fams;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_bgl255_arm_tag34()
+    {
+        return '<script id="wpc-bgl255-arm" data-nodefer="1">(function(){var d=document.documentElement,f=0,L=["pointerdown","keydown","touchstart","wheel","scroll","mousemove"],a=function(){if(f)return;f=1;try{d.classList.add("wpc-bgl255")}catch(x){}L.forEach(function(e){try{window.removeEventListener(e,a,!0)}catch(x){}})};'
+            . 'window.addEventListener("click",function(e){try{if(window.wpcHamState365)return;var t=e.target&&e.target.closest?e.target.closest(".elementor-menu-toggle"):null;if(!t)return;if(d.hasAttribute("data-wpc-tap34")){d.removeAttribute("data-wpc-tap34");return}var i=Array.prototype.indexOf.call(document.querySelectorAll(".elementor-menu-toggle"),t);d.setAttribute("data-wpc-tap34",Math.round(performance.now())+":"+(i<0?0:i))}catch(x){}},{capture:!0,passive:!0});'
+            . 'if((window.pageYOffset||d.scrollTop||0)>0){a();return}L.forEach(function(e){window.addEventListener(e,a,{passive:!0,capture:!0})});window.addEventListener("pageshow",function(e){e&&e.persisted&&a()},{once:!0})})();</script>';
+    }
+
+    public static function wpc_devmode_extract33($css)
+    {
+        $out = '';
+        $css = (string) $css;
+        if ($css === '' || (stripos($css, 'device-mode') === false && stripos($css, ':after') === false && stripos($css, '::after') === false)) {
+            return '';
+        }
+        $sel = '(?:#elementor-device-mode|body)\s*::?after\s*\{[^{}]*\bcontent\s*:\s*["\'][a-z_]+["\'][^{}]*\}';
+        $rest = preg_replace_callback('/@media[^{}]*\{\s*' . $sel . '\s*\}/i', function ($m) use (&$out) {
+            $out .= $m[0];
+            return '';
+        }, $css);
+        if (!is_string($rest)) {
+            $rest = $css;
+        }
+        if (preg_match_all('/' . $sel . '/i', $rest, $bm)) {
+            $out = implode('', $bm[0]) . $out;
+        }
+        return strlen($out) > 4096 ? '' : $out;
+    }
+
+    public static function wpc_devmode_sheet33($href)
+    {
+        try {
+            if (!defined('ABSPATH')) {
+                return '';
+            }
+            $pu = parse_url(html_entity_decode((string) $href));
+            $h = isset($pu['host']) ? strtolower((string) $pu['host']) : '';
+            if ($h !== '' && function_exists('wpc_font_carrier_host_ok22') && !wpc_font_carrier_host_ok22('https://' . $h . '/x.css')) {
+                return '';
+            }
+            $path = isset($pu['path']) ? (string) $pu['path'] : '';
+            if (!preg_match('#^/(?:wp-content|wp-includes)/#', $path) || strpos($path, '..') !== false) {
+                return '';
+            }
+            $fp = rtrim(ABSPATH, '/') . $path;
+            $sz = @is_readable($fp) ? (int) @filesize($fp) : 0;
+            if ($sz <= 0 || $sz > 2097152) {
+                return '';
+            }
+            $key = 'wpc_dm33_' . md5($fp . '|' . $sz . '|' . (int) @filemtime($fp));
+            $c = function_exists('get_transient') ? get_transient($key) : false;
+            if (!is_string($c)) {
+                $c = self::wpc_devmode_extract33((string) @file_get_contents($fp));
+                if (function_exists('set_transient')) {
+                    set_transient($key, $c, 86400);
+                }
+            }
+            return $c;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_sheet_root_vars35($css)
+    {
+        $out = [];
+        $css = (string) $css;
+        if ($css === '' || strpos($css, '--') === false) {
+            return $out;
+        }
+        
+        $media = [];
+        $len = strlen($css);
+        if (preg_match_all('/@media\s*([^{]+)\{/i', $css, $mm, PREG_OFFSET_CAPTURE)) {
+            foreach ($mm[0] as $k => $hit) {
+                $start = $hit[1] + strlen($hit[0]);
+                $depth = 1;
+                $pos = $start;
+                while ($pos < $len && $depth > 0) {
+                    $c = $css[$pos];
+                    if ($c === '{') { $depth++; } elseif ($c === '}') { $depth--; }
+                    $pos++;
+                }
+                $media[] = [$start, $pos, trim($mm[1][$k][0])];
+            }
+        }
+        if (!preg_match_all('/(?:(?<=[{};])|^)\s*((?::root|html|body)(?:\s*,\s*(?::root|html|body))*)\s*\{([^{}]*)\}/i', $css, $rm, PREG_OFFSET_CAPTURE)) {
+            return $out;
+        }
+        foreach ($rm[2] as $k => $body) {
+            if (strpos($body[0], '--') === false) {
+                continue;
+            }
+            $at = $body[1];
+            $q = '';
+            $span = PHP_INT_MAX;
+            foreach ($media as $m) {
+                if ($at > $m[0] && $at < $m[1] && ($m[1] - $m[0]) < $span) { $span = $m[1] - $m[0]; $q = $m[2]; }
+            }
+            $sel = preg_replace('/\s+/', '', $rm[1][$k][0]);
+            if (preg_match_all('/(--[A-Za-z0-9_-]+)\s*:\s*([^;{}]+)/', $body[0], $dm)) {
+                foreach ($dm[1] as $i => $name) {
+                    if (count($out) >= 600) { break 2; }
+                    $val = trim($dm[2][$i]);
+                    if ($val === '' || stripos($val, 'url(') !== false || strlen($val) > 400) {
+                        continue;
+                    }
+                    $out[$name][] = [$q, $sel, $val];
+                }
+            }
+        }
+        return $out;
+    }
+
+    public static function wpc_sheet_vars_cached35($href)
+    {
+        try {
+            if (!defined('ABSPATH')) {
+                return [];
+            }
+            $pu = parse_url(html_entity_decode((string) $href));
+            $h = isset($pu['host']) ? strtolower((string) $pu['host']) : '';
+            if ($h !== '' && function_exists('wpc_font_carrier_host_ok22') && !wpc_font_carrier_host_ok22('https://' . $h . '/x.css')) {
+                return [];
+            }
+            $path = isset($pu['path']) ? (string) $pu['path'] : '';
+            if (!preg_match('#^/(?:wp-content|wp-includes)/#', $path) || strpos($path, '..') !== false) {
+                return [];
+            }
+            $fp = rtrim(ABSPATH, '/') . $path;
+            $sz = @is_readable($fp) ? (int) @filesize($fp) : 0;
+            if ($sz <= 0 || $sz > 2097152) {
+                return [];
+            }
+            $key = 'wpc_cv35_' . md5($fp . '|' . $sz . '|' . (int) @filemtime($fp));
+            $c = function_exists('get_transient') ? get_transient($key) : false;
+            if (!is_array($c)) {
+                $c = self::wpc_sheet_root_vars35((string) @file_get_contents($fp));
+                if (function_exists('set_transient')) {
+                    set_transient($key, $c, 86400);
+                }
+            }
+            return $c;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function wpc_crit_vars_belt35($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || !apply_filters('wpc_crit_vars', true)
+                || !preg_match('/<style\b[^>]*id=(["\'])wpc-critical-css\1[^>]*>(.*?)<\/style>/is', $html, $cm)
+                || trim($cm[2]) === '' || strpos($cm[2], 'var(--') === false) {
+                return $html;
+            }
+            
+            $inline = '';
+            if (preg_match_all('/<style\b[^>]*id=(["\'])wpc-[^"\']*\1[^>]*>(.*?)<\/style>/is', $html, $sm)) {
+                $inline = implode("\n", $sm[2]);
+            }
+            $used = [];
+            if (preg_match_all('/var\(\s*(--[A-Za-z0-9_-]+)/', $cm[2], $um)) {
+                $used = array_values(array_unique($um[1]));
+            }
+            $defined = [];
+            if (preg_match_all('/(--[A-Za-z0-9_-]+)\s*:/', $inline, $dm)) {
+                $defined = array_flip($dm[1]);
+            }
+            $missing = [];
+            foreach ($used as $name) {
+                if (!isset($defined[$name])) {
+                    $missing[$name] = 1;
+                }
+            }
+            if (empty($missing) || !preg_match_all('/<link\b[^>]*>/i', $html, $lm)) {
+                return $html;
+            }
+            $deferred = [];
+            foreach ($lm[0] as $tag) {
+                if (preg_match('/\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1/i', $tag, $hm)) {
+                    if (!preg_match('/\brel=(["\'])stylesheet\1/i', $tag) || preg_match('/\bmedia=(["\'])print\1/i', $tag)) {
+                        $deferred[] = $hm[2];
+                    }
+                } elseif (preg_match('/\bdata-wpc-rest=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1/i', $tag, $rm)) {
+                    $deferred[] = $rm[2];
+                }
+            }
+            if (empty($deferred)) {
+                return $html;
+            }
+            $rules = '';
+            $found = 0;
+            $n = 0;
+            foreach ($deferred as $href) {
+                if ($n++ >= 64 || empty($missing)) {
+                    break;
+                }
+                $vars = self::wpc_sheet_vars_cached35($href);
+                foreach ($missing as $name => $one) {
+                    if (empty($vars[$name])) {
+                        continue;
+                    }
+                    foreach ($vars[$name] as $d) {
+                        $decl = $d[1] . '{' . $name . ':' . $d[2] . '}';
+                        $rules .= $d[0] !== '' ? '@media ' . $d[0] . '{' . $decl . '}' : $decl;
+                    }
+                    unset($missing[$name]);
+                    $found++;
+                }
+            }
+            if ($rules === '' || strlen($rules) > 8192) {
+                return $html;
+            }
+            $tag = '<style id="wpc-crit-vars">' . $rules . '</style>';
+            $out = preg_replace('/(<style\b[^>]*id=(["\'])wpc-critical-css\2[^>]*>.*?<\/style>)/is', '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $tag), $html, 1);
+            if (!is_string($out) || $out === $html) {
+                return $html;
+            }
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_cv35_log')) {
+                set_transient('wpc_cv35_log', 1, 600);
+                wpc_cache_first_log('crit-vars-injected', '', '', ['vars' => $found, 'bytes' => strlen($rules), 'still_missing' => count($missing)]);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_devmode_belt33($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || !apply_filters('wpc_crit_devmode', true)
+                || !preg_match('/<style\b[^>]*id=(["\'])wpc-critical-css\1[^>]*>\s*(?!<\/style)\S/i', $html)
+                || preg_match('/(?:#elementor-device-mode|body)\s*::?after\s*\{[^{}]*\bcontent\s*:/i', $html)
+                || !preg_match_all('/<link\b[^>]*>/i', $html, $lm)) {
+                return $html;
+            }
+            $blocking = [];
+            $deferred = [];
+            foreach ($lm[0] as $tag) {
+                if (!preg_match('/\bhref=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1/i', $tag, $hm)) {
+                    if (preg_match('/\bdata-wpc-rest=(["\'])([^"\']+\.css(?:\?[^"\']*)?)\1/i', $tag, $rm)) {
+                        $deferred[] = $rm[2];
+                    }
+                    continue;
+                }
+                $isBlocking = preg_match('/\brel=(["\'])stylesheet\1/i', $tag)
+                    && !preg_match('/\bmedia=(["\'])print\1/i', $tag);
+                if ($isBlocking) {
+                    $blocking[] = $hm[2];
+                } else {
+                    $deferred[] = $hm[2];
+                }
+            }
+            if (empty($deferred)) {
+                return $html;
+            }
+            $n = 0;
+            foreach ($blocking as $href) {
+                if ($n++ >= 64) {
+                    break;
+                }
+                if (self::wpc_devmode_sheet33($href) !== '') {
+                    return $html;
+                }
+            }
+            $rules = '';
+            foreach ($deferred as $href) {
+                if ($n++ >= 96) {
+                    break;
+                }
+                $rules = self::wpc_devmode_sheet33($href);
+                if ($rules !== '') {
+                    break;
+                }
+            }
+            if ($rules === '') {
+                return $html;
+            }
+            $tag = '<style id="wpc-crit-devmode">' . $rules . '</style>';
+            $out = preg_replace('/(<style\b[^>]*id=(["\'])wpc-critical-css\2[^>]*>.*?<\/style>)/is', '$1' . str_replace(['\\', '$'], ['\\\\', '\\$'], $tag), $html, 1);
+            if (!is_string($out) || $out === $html) {
+                return $html;
+            }
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_dm33_log')) {
+                set_transient('wpc_dm33_log', 1, 600);
+                wpc_cache_first_log('crit-devmode-injected', '', '', ['bytes' => strlen($rules)]);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    
+    
+    
+    
+    
+    public static function wpc_unbacked_sweep23($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || stripos($html, '@font-face') === false) {
+                return $html;
+            }
+            
+            
+            
+            $blocks = '/(<style\b[^>]*\bid=(["\'])(?:wpc-font-carrier|wpc-crit-faces|wpc-font-subsets|wpc-font-fallbacks|wpc-late-faces|wpc-icon-faces|wpc-fonts-css-faces)\2[^>]*>)(.*?)(<\/style>)/is';
+            $gf = (bool) preg_match('/<link\b[^>]*href=["\'][^"\']*(?:fonts\.googleapis\.com|fonts\.bunny\.net)\/css[^"\']*["\']/i', $html);
+            if (!$gf && function_exists('wpc_font_carrier_filter22')) {
+                $r1 = preg_replace_callback($blocks, function ($m) {
+                    return $m[1] . wpc_font_carrier_filter22($m[3]) . $m[4];
+                }, $html);
+                if (is_string($r1)) {
+                    $html = $r1;
+                }
+            }
+            $fams = self::wpc_unbacked_fams23($html, '');
+            if (!$fams) {
+                return $html;
+            }
+            $out = preg_replace_callback($blocks, function ($m) use ($fams) {
+                return $m[1] . self::wpc_strip_family_faces23($m[3], $fams) . $m[4];
+            }, $html);
+            return is_string($out) ? $out : $html;
+        } catch (\Throwable $e) {
+            return $html;
+        }
+    }
+
+    public static function wpc_strip_family_faces23($css, $fams)
+    {
+        if (!is_string($css) || $css === '' || !is_array($fams) || !$fams || stripos($css, '@font-face') === false) {
+            return $css;
+        }
+        $n = 0;
+        $out = preg_replace_callback('/@font-face\s*\{[^{}]*\}/is', function ($m) use ($fams, &$n) {
+            if (!preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $m[0], $f)) {
+                return $m[0];
+            }
+            $fam = strtolower(trim($f[1]));
+            if (substr($fam, -9) === ' fallback') {
+                $fam = substr($fam, 0, -9);
+            }
+            if (isset($fams[$fam])) {
+                $n++;
+                return '';
+            }
+            return $m[0];
+        }, $css);
+        if (!is_string($out)) {
+            return $css;
+        }
+        if ($n > 0 && function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_unbacked23')) {
+            set_transient('wpc_unbacked23', 1, 600);
+            wpc_cache_first_log('font-family-unbacked', '', '', ['fams' => implode(',', array_keys($fams)), 'faces' => $n]);
+        }
+        return $out;
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_cmb_selectors26($css)
+    {
+        $out = [];
+        if (!is_string($css) || $css === '') {
+            return $out;
+        }
+        $css = preg_replace('#/\*.*?\*/#s', '', $css);
+        $css = preg_replace('/@font-face\s*\{[^{}]*\}/is', '', $css);
+        if (!is_string($css)) {
+            return $out;
+        }
+        if (preg_match_all('/(?:^|[{}])\s*([^{}@;]{2,300}?)\s*\{/s', $css, $m)) {
+            foreach ($m[1] as $s) {
+                $s = strtolower(preg_replace('/\s+/', ' ', trim($s)));
+                if ($s !== '' && $s[0] !== '@') {
+                    $out[$s] = 1;
+                }
+            }
+        }
+        return $out;
+    }
+
+    public static function wpc_cmb_coverage26($cmb, $cmbFile, $exists)
+    {
+        try {
+            if (!apply_filters('wpc_cmb_coverage_gate', true) || !is_array($exists)
+                || empty($exists['desktop']) || empty($exists['mobile'])) {
+                return '';
+            }
+            $d = (string) $exists['desktop'];
+            $mo = (string) $exists['mobile'];
+            $key = 'wpc_cmbcov26_' . md5($cmbFile . '|' . (int) @filesize($cmbFile) . '|' . (int) @filemtime($cmbFile)
+                . '|' . (int) @filesize($d) . '|' . (int) @filemtime($d) . '|' . (int) @filesize($mo) . '|' . (int) @filemtime($mo));
+            $cached = function_exists('get_transient') ? get_transient($key) : false;
+            if (is_string($cached)) {
+                return $cached === 'ok' ? '' : $cached;
+            }
+            $sc = self::wpc_cmb_selectors26($cmb);
+            $sd = self::wpc_cmb_selectors26((string) @file_get_contents($d));
+            $sm = self::wpc_cmb_selectors26((string) @file_get_contents($mo));
+            $why = '';
+            if ($sc && $sd) {
+                $missD = array_diff_key($sd, $sc);
+                $missM = $sm ? array_diff_key($sm, $sc) : [];
+                $shared = array_intersect_key($missD, $sm);
+                if (count($shared) > 0) {
+                    $why = 'shared' . count($shared);
+                } elseif (count($missD) > 0.1 * count($sd) || ($sm && count($missM) > 0.1 * count($sm))) {
+                    $why = 'd' . count($missD) . 'm' . count($missM);
+                }
+            }
+            if (function_exists('set_transient')) {
+                set_transient($key, $why === '' ? 'ok' : $why, 6 * 3600);
+            }
+            return $why;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    public static function wpc_no_crit_no_defer22($html)
+    {
+        try {
+            if (!is_string($html) || $html === '' || !apply_filters('wpc_no_crit_no_defer', true)) {
+                return $html;
+            }
+            if (preg_match('/<style\b[^>]*id=(["\'])wpc-critical-css\1[^>]*>\s*(?!<\/style)\S/i', $html)) {
+                return $html;
+            }
+            if (stripos($html, 'wpc-late-stylesheet') === false && stripos($html, 'wpc-mobile-stylesheet') === false
+                && stripos($html, 'data-wpc-rest=') === false) {
+                return $html;
+            }
+            $n = 0;
+            $out = preg_replace_callback('/<link\b[^>]*>/i', function ($m) use (&$n) {
+                $t = $m[0];
+                if (preg_match('/\b(rel|type)=(["\'])wpc-(?:late|mobile)-stylesheet\2/i', $t)) {
+                    if (preg_match('/\brel=(["\'])stylesheet\1/i', $t)) {
+                        $t = preg_replace('/\s*\btype=(["\'])wpc-(?:late|mobile)-stylesheet\1/i', '', $t, 1);
+                    } else {
+                        $t = preg_replace('/\b(?:rel|type)=(["\'])wpc-(?:late|mobile)-stylesheet\1/i', 'rel=$1stylesheet$1', $t, 1);
+                    }
+                    $n++;
+                }
+                if (stripos($t, 'data-wpc-rest=') !== false && !preg_match('/\bhref=/i', $t)
+                    && preg_match('/\bdata-wpc-rest=(["\'])([^"\']+)\1/i', $t, $r)) {
+                    $md = preg_match('/\bdata-wpc-ucss-rest=(["\'])([^"\']*)\1/i', $t, $mm) ? $mm[2] : 'all';
+                    $t = preg_replace('/\bmedia=(["\'])[^"\']*\1/i', 'media="' . ($md === '' ? 'all' : $md) . '"', $t, 1);
+                    $t = preg_replace('/^<link\b/i', '<link href="' . $r[2] . '"', $t, 1);
+                    $n++;
+                }
+                return $t;
+            }, $html);
+            if (!is_string($out)) {
+                return $html;
+            }
+            if ($n > 0 && function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('no-crit-no-defer', '', (string) ($_SERVER['REQUEST_URI'] ?? ''), ['restored' => $n]);
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return $html;
+        }
     }
 
     
@@ -712,7 +1390,7 @@ class wps_rewriteLogic
     public static function wpc_ucss_boot_js()
     {
         $ms = self::wpc_ucss_conceal_ms();
-        return '<script id="wpc-ucss-boot">/*wpc-arm-sentinel*/(function(){var g=function(){try{document.documentElement.classList.add("wpc-css-live")}catch(x){}};function a(){var r=document.querySelectorAll(\'link[data-wpc-rest]:not([href])\'),armed=0;for(var j=0;j<r.length;j++){(function(e){var ru=e.getAttribute("data-wpc-rest"),rm=e.getAttribute("data-wpc-ucss-rest")||"all",rg=true;try{rg=!window.matchMedia||window.matchMedia(rm).matches}catch(x){rg=true}if(!rg||!ru)return;armed++;e.media="print";e.onload=function(){this.onload=null;this.media=rm;g()};e.onerror=g;e.setAttribute("href",ru)})(r[j])}if(!armed){g()}}function q(){(window.requestIdleCallback||function(f){setTimeout(f,1200)})(a,{timeout:2500})}setTimeout(g,' . (int) $ms . ');if(document.readyState==="complete"){q()}else{window.addEventListener("load",q)}})();</script>';
+        return '<script id="wpc-ucss-boot">/*wpc-arm-sentinel*/(function(){var g=function(){try{document.documentElement.classList.add("wpc-css-live")}catch(x){}},g2=function(){try{if(document.querySelector(\'link[rel^="wpc-"]\'))return;g()}catch(x){g()}};function a(){var r=document.querySelectorAll(\'link[data-wpc-rest]:not([href])\'),armed=0;for(var j=0;j<r.length;j++){(function(e){var ru=e.getAttribute("data-wpc-rest"),rm=e.getAttribute("data-wpc-ucss-rest")||"all",rg=true;try{rg=!window.matchMedia||window.matchMedia(rm).matches}catch(x){rg=true}if(!rg||!ru)return;armed++;e.media="print";e.onload=function(){this.onload=null;this.media=rm;g2()};e.onerror=g;e.setAttribute("href",ru)})(r[j])}if(!armed){g2()}}function q(){(window.requestIdleCallback||function(f){setTimeout(f,1200)})(a,{timeout:2500})}setTimeout(g,' . (int) $ms . ');if(document.readyState==="complete"){q()}else{window.addEventListener("load",q)}})();</script>';
     }
 
     public static function wpc_combined_crit_on($settings_override = null)
@@ -4474,7 +5152,10 @@ SCRIPT;
 
 
                             $wpc_v2_69 = (strncmp($wpc_sub_c, '/*wpc-subsets-v2*/', 18) === 0) ? ' data-wpc-v2="1"' : '';
-                            $output .= "\r\n" . '<style type="text/css" id="wpc-font-subsets"' . $wpc_v2_69 . '>' . $wpc_sub_c . '</style>';
+                            $wpc_sub_c = (string) self::wpc_strip_family_faces23($wpc_sub_c, self::wpc_unbacked_fams23($html, $output));
+                            if (stripos($wpc_sub_c, '@font-face') !== false) {
+                                $output .= "\r\n" . '<style type="text/css" id="wpc-font-subsets"' . $wpc_v2_69 . '>' . $wpc_sub_c . '</style>';
+                            }
                             $wpc_sub_emitted94 = true;
                         }
                     }
@@ -4932,7 +5613,7 @@ SCRIPT;
                                     $wpc_restu57 = $wpc_ubase57 . rawurlencode(basename($wpc_restp57)) . '?uv=' . (int) @filemtime($wpc_restp57);
                                     $output .= "\r\n" . '<link rel="stylesheet" id="wpc-used-css-rest' . $idSfx . '" data-wpc-rest="' . esc_url($wpc_restu57) . '" data-wpc-ucss-rest="' . $mediaTgt . '" media="print">';
                                     if (strpos($output, 'wpc-bgl255-arm') === false) {
-                                        $output .= '<script id="wpc-bgl255-arm" data-nodefer="1">(function(){var d=document.documentElement,f=0,L=["pointerdown","keydown","touchstart","wheel","scroll","mousemove"],a=function(){if(f)return;f=1;try{d.classList.add("wpc-bgl255")}catch(x){}L.forEach(function(e){try{window.removeEventListener(e,a,!0)}catch(x){}})};if((window.pageYOffset||d.scrollTop||0)>0){a();return}L.forEach(function(e){window.addEventListener(e,a,{passive:!0,capture:!0})});window.addEventListener("pageshow",function(e){e&&e.persisted&&a()},{once:!0})})();</script>';
+                                        $output .= self::wpc_bgl255_arm_tag34();
                                     }
                                     return;
                                 }
@@ -4948,7 +5629,7 @@ SCRIPT;
                                 
                                 
                                 if (strpos($output, 'wpc-bgl255-arm') === false) {
-                                    $output .= '<script id="wpc-bgl255-arm" data-nodefer="1">(function(){var d=document.documentElement,f=0,L=["pointerdown","keydown","touchstart","wheel","scroll","mousemove"],a=function(){if(f)return;f=1;try{d.classList.add("wpc-bgl255")}catch(x){}L.forEach(function(e){try{window.removeEventListener(e,a,!0)}catch(x){}})};if((window.pageYOffset||d.scrollTop||0)>0){a();return}L.forEach(function(e){window.addEventListener(e,a,{passive:!0,capture:!0})});window.addEventListener("pageshow",function(e){e&&e.persisted&&a()},{once:!0})})();</script>';
+                                    $output .= self::wpc_bgl255_arm_tag34();
                                 }
                             };
                             $wpc_upu245 = $wpc_tk50 !== '' ? wpc_used_css_path($wpc_tk50) : '';
@@ -5341,6 +6022,8 @@ SCRIPT;
                                 $wpc_cmr154 = 'gstatic';
                             } elseif (stripos($wpc_cmb154, '</style') !== false) {
                                 $wpc_cmr154 = 'breakout';
+                            } elseif (($wpc_cov26 = self::wpc_cmb_coverage26($wpc_cmb154, $wpc_cmf154, $criticalCSSExists)) !== '') {
+                                $wpc_cmr154 = 'coverage-' . $wpc_cov26;
                             }
                             if ($wpc_cmr154 !== '') {
                                 $wpc_cmb154 = '';
@@ -5611,6 +6294,10 @@ SCRIPT;
             if (!$wpc_need561) {
                 return '';
             }
+            $wpc_c561 = (string) self::wpc_strip_family_faces23($wpc_c561, self::wpc_unbacked_fams23($html, $output));
+            if (stripos($wpc_c561, '@font-face') === false) {
+                return '';
+            }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('subsets-critless-inline', $wpc_k561, '', ['b' => strlen($wpc_c561)]);
             }
@@ -5668,6 +6355,14 @@ SCRIPT;
         if (!preg_match_all($fontPattern, $fontFaceCss, $matches, PREG_SET_ORDER)) {
             return '';
         }
+        
+        $wpc_famByUrl32 = [];
+        foreach ($fontFaceBlocks[0] as $wpc_blk32) {
+            if (!preg_match('/font-family\s*:\s*["\']?([^"\';}]+)/i', $wpc_blk32, $wpc_fm32)) { continue; }
+            if (preg_match_all($fontPattern, $wpc_blk32, $wpc_bu32, PREG_SET_ORDER)) {
+                foreach ($wpc_bu32 as $wpc_one32) { $wpc_famByUrl32[$wpc_one32[2]] = trim($wpc_fm32[1]); }
+            }
+        }
 
         
         usort($matches, function ($a, $b) {
@@ -5708,7 +6403,7 @@ SCRIPT;
             $type = $typeMap[$ext] ?? 'font/woff2';
 
 
-            $wpc_fpb_list689[] = [$fontUrl, $type];
+            $wpc_fpb_list689[] = isset($wpc_famByUrl32[$fontUrl]) ? [$fontUrl, $type, $wpc_famByUrl32[$fontUrl]] : [$fontUrl, $type];
             $loadedFonts[] = $baseUrl;
         }
         self::$wpc_font_preloads_emitted = $loadedFonts;
@@ -7172,6 +7867,9 @@ SCRIPT;
                 }
             }
         } catch (\Throwable $e) {
+        }
+        if ($faces !== '') {
+            $faces = (string) self::wpc_strip_family_faces23($faces, self::wpc_unbacked_fams23($wpc_page58, ''));
         }
         return $faces !== '' ? '<style id="wpc-font-fallbacks">' . $faces . '</style>' : '';
     }
@@ -8796,10 +9494,10 @@ SCRIPT;
             foreach ($wpc_cm225[0] as $wpc_ti225 => $wpc_t225) {
                 $wpc_tags230[] = [$wpc_t225, strtolower((string) $wpc_cm225[1][$wpc_ti225])];
             }
-            if (preg_match_all('/<link\b[^>]*rel=["\']preload["\'][^>]*>/i', $html, $wpc_pl230)) {
+            if (preg_match_all('/<link\b[^>]*rel=["\'](?:preload|prefetch)["\'][^>]*>/i', $html, $wpc_pl230)) {
                 foreach ($wpc_pl230[0] as $wpc_pt230) {
                     if (preg_match('/as=["\']style["\']/i', $wpc_pt230)
-                        && preg_match('/fetchpriority=["\']low["\']/i', $wpc_pt230)
+                        && (preg_match('/fetchpriority=["\']low["\']/i', $wpc_pt230) || preg_match('/rel=["\']prefetch["\']/i', $wpc_pt230))
                         && stripos($wpc_pt230, 'onload=') === false) {
                         $wpc_tags230[] = [$wpc_pt230, 'late'];
                     }
@@ -8838,12 +9536,74 @@ SCRIPT;
                     'mt' => (int) @filemtime($wpc_fp225), 'u' => (string) $wpc_h225[1]];
             }
             foreach ($wpc_parts225 as $wpc_lane225 => $wpc_lparts225) {
-                $html = self::wpc_combine_lane225($html, $wpc_lane225, $wpc_lparts225, $wpc_min225);
+                foreach (self::wpc_combine_runs21($html, $wpc_lparts225) as $wpc_run21) {
+                    $html = self::wpc_combine_lane225($html, $wpc_lane225, $wpc_run21, $wpc_min225);
+                }
             }
             return $html;
         } catch (\Throwable $e) {
             return $html;
         }
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    private static function wpc_combine_runs21($html, $parts)
+    {
+        $pos = [];
+        foreach ($parts as $i => $p) {
+            $o = strpos($html, $p['tag']);
+            if ($o !== false) {
+                $pos[$i] = $o;
+            }
+        }
+        if (count($pos) < 2) {
+            return [$parts];
+        }
+        asort($pos);
+        $own = [];
+        foreach ($parts as $p) {
+            $own[$p['tag']] = 1;
+        }
+        $cuts = [];
+        if (preg_match_all('/<link\b[^>]*(?:rel|type)=["\'][^"\']*stylesheet[^"\']*["\'][^>]*>|<style\b[^>]*>/i', $html, $im, PREG_OFFSET_CAPTURE)) {
+            foreach ($im[0] as $m) {
+                if (isset($own[$m[0]])) {
+                    continue;
+                }
+                if (stripos($m[0], '<style') === 0 && preg_match('/\bid=["\']wpc-/i', $m[0])) {
+                    continue;
+                }
+                $cuts[] = (int) $m[1];
+            }
+        }
+        sort($cuts);
+        $runs = [];
+        $cur  = [];
+        $prev = -1;
+        foreach ($pos as $i => $o) {
+            if ($prev >= 0) {
+                foreach ($cuts as $c) {
+                    if ($c > $prev && $c < $o) {
+                        $runs[] = $cur;
+                        $cur = [];
+                        break;
+                    }
+                }
+            }
+            $cur[] = $parts[$i];
+            $prev  = $o;
+        }
+        if ($cur) {
+            $runs[] = $cur;
+        }
+        return $runs;
     }
 
     private static function wpc_combine_lane225($html, $wpc_lane225, $wpc_parts225, $wpc_min225)
@@ -9875,7 +10635,7 @@ SCRIPT;
                         $wpc_pl898[$href[2]] = 1;
                         $wpc_plco898 = preg_match('/\bcrossorigin(?:\s*=\s*(["\'])[^"\']*\1)?/i', $fullTag, $wpc_plcm898) ? ' ' . $wpc_plcm898[0] : '';
                         $wpc_plmd898 = preg_match('/\bmedia\s*=\s*(["\'])([^"\']+)\1/i', $fullTag, $wpc_plmm898) ? ' media="' . esc_attr($wpc_plmm898[2]) . '"' : '';
-                        $fullTag .= '<link rel="preload" as="style" fetchpriority="low" href="' . esc_attr($href[2]) . '"' . $wpc_plco898 . $wpc_plmd898 . '>';
+                        $fullTag .= '<link rel="prefetch" as="style" href="' . esc_attr($href[2]) . '"' . $wpc_plco898 . $wpc_plmd898 . '>';
                     }
                 }
             }
