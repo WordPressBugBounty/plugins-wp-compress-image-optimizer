@@ -4,7 +4,7 @@
  * File: classes/comms.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -1251,48 +1251,57 @@ class wps_ic_comms extends wps_ic
         $options = get_option(WPS_IC_OPTIONS);
 
         if (empty($options) || empty($options['api_key'])) {
-            return;
+            wp_send_json_error(['reason' => 'no_api_key']);
+        }
+
+        $pushed = null;
+        foreach (['cdn_enabled', 'local_enabled', 'suspended'] as $wpc_pk7) {
+            if (isset($_POST[$wpc_pk7])) {
+                if ($pushed === null) {
+                    $pushed = new stdClass();
+                }
+                $pushed->$wpc_pk7 = (int) $_POST[$wpc_pk7];
+            }
         }
 
         $url = 'https://apiv3.wpcompress.com/api/site/credits';
+        $wpc_t07 = microtime(true);
         $call = wp_remote_get($url, ['timeout' => 30, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT, 'headers' => ['apikey' => $options['api_key'],]]);
+        $wpc_ms7 = (int) round((microtime(true) - $wpc_t07) * 1000);
 
+        $fail = null;
+        $data = null;
         if (is_wp_error($call)) {
-            return;
+            $fail = ['reason' => 'api_unreachable', 'error' => $call->get_error_message(), 'http' => 0, 'ms' => $wpc_ms7];
+        } else {
+            $body = wp_remote_retrieve_body($call);
+            $response_code = (int) wp_remote_retrieve_response_code($call);
+            if ($response_code !== 200) {
+                $fail = ['reason' => 'api_http_' . $response_code, 'error' => substr((string) $body, 0, 200), 'http' => $response_code, 'ms' => $wpc_ms7];
+            } else {
+                $data = json_decode($body);
+                if (json_last_error() !== JSON_ERROR_NONE || !is_object($data)) {
+                    $fail = ['reason' => 'api_bad_json', 'error' => substr((string) $body, 0, 200), 'http' => 200, 'ms' => $wpc_ms7];
+                    $data = null;
+                }
+            }
         }
 
-        $body = wp_remote_retrieve_body($call);
-        $response_code = wp_remote_retrieve_response_code($call);
-
-        if ($response_code !== 200) {
-            return;
+        $source = 'settings-check';
+        if ($data === null && $pushed !== null) {
+            $data = $pushed;
+            $source = 'settings-check-pushed';
+        }
+        if ($data === null) {
+            update_option('wpc_credits_check_err', ['t' => time(), 'err' => (string) $fail['error'], 'http' => (int) $fail['http']], false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('credits-check-failed', 'settings-check', '', ['err' => substr((string) $fail['error'], 0, 160), 'http' => (int) $fail['http'], 'ms' => $wpc_ms7]);
+            }
+            wp_send_json_error($fail);
         }
 
-        $data = json_decode($body);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return;
-        }
-
-        $allow_local = true;
-        $allow_live = true;
-
-        if (!empty($data->suspended) && $data->suspended == 1) {
-            $allow_local = false;
-            $allow_live = false;
-        }
-
-        
-        
-        if (isset($data->cdn_enabled) && !$data->cdn_enabled) {
-            $allow_live = false;
-        }
-        if (isset($data->local_enabled) && !$data->local_enabled) {
-            $allow_local = false;
-        }
-
-        $updated_local = ((bool) $allow_local !== (bool) get_option('wps_ic_allow_local')) ? update_option('wps_ic_allow_local', $allow_local) : false;
-        $updated_live = ((bool) $allow_live !== (bool) get_option('wps_ic_allow_live')) ? update_option('wps_ic_allow_live', $allow_live) : false;
+        list($allow_local, $allow_live) = wpc_allow_flags_from_api($data);
+        list($updated_local, $updated_live) = wpc_allow_flags_apply($allow_local, $allow_live, $source);
 
         if ($updated_local || $updated_live) {
             if (class_exists('wps_ic_cache_integrations')) {
@@ -1301,7 +1310,7 @@ class wps_ic_comms extends wps_ic
                 $cache::purgeAll(false, true, false, false, true);
             }
         }
-        wp_send_json_success([$updated_local, $updated_live]);
+        wp_send_json_success(['updated_local' => $updated_local, 'updated_live' => $updated_live, 'allow_local' => $allow_local, 'allow_live' => $allow_live, 'source' => $source, 'api' => $fail, 'ms' => $wpc_ms7]);
     }
 
 

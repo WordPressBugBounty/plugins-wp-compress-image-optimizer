@@ -4,7 +4,7 @@
  * File: addons/v2/v2-client.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -670,7 +670,7 @@ class WPS_LocalV2
             $tmp  = $dest . '.wpc_tmp_' . wp_generate_password(8, false);
 
 
-            if (@file_put_contents($tmp, $raw) === false) {
+            if (wpc_fs_put($tmp, $raw) === false) {
                 $err = error_get_last();
                 error_log(sprintf(
                     '[WPC V2Client] phase_a_write_failed imageID=%d size_label=%s fmt=%s bytes=%d dest_tail=%s msg=%s',

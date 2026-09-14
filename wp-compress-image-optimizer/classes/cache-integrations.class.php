@@ -4,7 +4,7 @@
  * File: classes/cache-integrations.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -108,6 +108,20 @@ class wps_ic_cache_integrations
 
         if (!$url_key) {
             self::removeDirectory($cache_dir);
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            if (defined('WPS_IC_CRITICAL')) {
+                self::removeDirectory(rtrim(WPS_IC_CRITICAL, '/') . '/combined');
+            }
         } else {
             self::removeDirectory($cache_dir . $url_key);
         }
@@ -165,7 +179,7 @@ class wps_ic_cache_integrations
         }
     }
 
-    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false, $preserve_assets = false)
+    public static function purgeAll($url_key = false, $varnish = false, $critSave = false, $purgeJS = true, $forcePurge = false, $preserve_assets = false, $mode43 = null)
     {
         
         if ($url_key === false) {
@@ -220,7 +234,7 @@ class wps_ic_cache_integrations
         update_option(WPS_IC_OPTIONS, $options);
 
         
-        self::purgeCacheFiles($url_key, $preserve_assets);
+        self::purgeCacheFiles($url_key, $preserve_assets, $mode43);
 
         
         wpc_foreign_purge610($url_key, 'integrations');
@@ -391,17 +405,37 @@ class wps_ic_cache_integrations
         }
     }
 
-    public static function purgeCacheFiles($url_key = false, $preserve_assets = false)
+    public static function purgeCacheFiles($url_key = false, $preserve_assets = false, $mode43 = null)
     {
         $cache_dir = WPS_IC_CACHE;
 
         if (!$url_key) {
+            $wpc_soft43 = function_exists('wpc_purge_soft43') && wpc_purge_soft43($mode43);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('purge-local-all', '', '', [
+                    'src' => (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'wpc_purge_src')) ? 'purgeCacheFiles<' . wps_ic_cache::wpc_purge_src() : 'purgeCacheFiles',
+                    'mode' => $wpc_soft43 ? 'stale' : 'hard',
+                ]);
+            }
+            if ($wpc_soft43) {
+                wpc_stale43_mark();
+                if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'wpc_stale39_walk_detach')) {
+                    wps_cacheHtml::wpc_stale39_walk_detach();
+                }
+                return true;
+            }
+            if (function_exists('wpc_purge_all_coalesce10') && wpc_purge_all_coalesce10()) {
+                return true;
+            }
             if ($preserve_assets) {
 
 
-                self::removeDirectoryExcept($cache_dir, ['css', 'js']);
+                self::removeDirectoryExcept($cache_dir, ['css', 'js', 'wpc-cflog.jsonl', 'dcv.txt']);
             } else {
-                self::removeDirectory($cache_dir);
+                self::removeDirectoryExcept($cache_dir, ['wpc-cflog.jsonl', 'dcv.txt']);
+            }
+            if (function_exists('wpc_stale43_hard_done')) {
+                wpc_stale43_hard_done();
             }
         } else {
             self::removeFiles($cache_dir . $url_key);
@@ -606,7 +640,7 @@ class wps_ic_cache_integrations
         if (empty($url_key) || !is_string($url_key)) {
             return $layers;
         }
-        if (isset(self::$purgedUrls[$url_key])) {
+        if (empty($opts['force']) && isset(self::$purgedUrls[$url_key])) {
             return self::$purgedUrls[$url_key];
         }
 

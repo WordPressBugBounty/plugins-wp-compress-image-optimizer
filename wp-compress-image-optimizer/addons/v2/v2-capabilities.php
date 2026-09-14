@@ -4,7 +4,7 @@
  * File: addons/v2/v2-capabilities.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -227,7 +227,10 @@ if (!function_exists('wpc_get_optimization_mode')) {
         $mode = is_array($settings) && !empty($settings['wpc_optimization_mode'])
             ? (string) $settings['wpc_optimization_mode']
             : (string) get_option('wpc_optimization_mode', 'legacy');
-        $valid = ['manual', 'legacy', 'lazy_full', 'lazy_smart', 'lazy_cdn'];
+        if ($mode === 'lazy_full' || $mode === 'lazy_smart') {
+            $mode = 'lazy_cdn';
+        }
+        $valid = ['manual', 'legacy', 'lazy_cdn'];
         if (!in_array($mode, $valid, true)) {
             $mode = 'legacy';
         }
@@ -304,7 +307,7 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         }
         $st['n']  = (int) $st['n'] + 1;
         $st['ts'] = time();
-        @file_put_contents($p, wp_json_encode($st), LOCK_EX);
+        wpc_fs_put($p, wp_json_encode($st), LOCK_EX);
         error_log('[WPC StoreVerify] marker_verify_failed consecutive=' . $st['n']);
     }
 
@@ -316,10 +319,76 @@ if (!function_exists('wpc_v2_store_broken_path197')) {
         if (!is_array($j)) return false;
         $n  = isset($j['n']) ? (int) $j['n'] : 0;
         $ts = isset($j['ts']) ? (int) $j['ts'] : 0;
-        return ($n >= 3 && (time() - $ts) < 12 * HOUR_IN_SECONDS);
+        if (!($n >= 3 && (time() - $ts) < 12 * HOUR_IN_SECONDS)) {
+            return false;
+        }
+        
+        
+        
+        
+        if (get_transient('wpc_store_probe51_at')) {
+            return true;
+        }
+        set_transient('wpc_store_probe51_at', 1, 10 * MINUTE_IN_SECONDS);
+        if (wpc_v2_store_probe51()) {
+            wpc_v2_store_broken_note197(false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('media-store-recovered', '', '', ['n' => $n, 'age' => time() - $ts]);
+            }
+            return false;
+        }
+        return true;
+    }
+    function wpc_v2_store_probe51()
+    {
+        global $wpdb;
+        try {
+            $nonce = 'p51-' . (function_exists('wp_generate_password') ? wp_generate_password(12, false) : md5(uniqid('', true)));
+            $id = isset($wpdb) ? (int) $wpdb->get_var("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' ORDER BY ID DESC LIMIT 1") : 0;
+            if ($id > 0) {
+                update_post_meta($id, '_wpc_store_probe51', $nonce);
+                wp_cache_delete($id, 'post_meta');
+                $rb = (string) get_post_meta($id, '_wpc_store_probe51', true);
+                delete_post_meta($id, '_wpc_store_probe51');
+                return $rb === $nonce;
+            }
+            update_option('wpc_store_probe51', $nonce, false);
+            wp_cache_delete('wpc_store_probe51', 'options');
+            $rbo = (string) get_option('wpc_store_probe51', '');
+            delete_option('wpc_store_probe51');
+            return $rbo === $nonce;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
 
+if (!function_exists('wpc_park_reset52')) {
+    function wpc_park_reset52()
+    {
+        if (!function_exists('delete_metadata') || !defined('WPC_PLUGIN_VERSION')) {
+            return 0;
+        }
+        if ((string) get_option('wpc_park_reset52_v', '') === (string) WPC_PLUGIN_VERSION) {
+            return 0;
+        }
+        update_option('wpc_park_reset52_v', WPC_PLUGIN_VERSION, false);
+        $n = 0;
+        global $wpdb;
+        if (isset($wpdb)) {
+            $n = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'ic_v2_attempts'");
+        }
+        delete_metadata('post', 0, 'ic_v2_attempts', '', true);
+        $p = function_exists('wpc_v2_parked_path197') ? wpc_v2_parked_path197() : '';
+        if ($p !== '' && @is_file($p)) {
+            @unlink($p);
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('media-park-reset', '', '', ['attempts_cleared' => $n]);
+        }
+        return $n;
+    }
+}
 if (!function_exists('wpc_v2_parked_path197')) {
     function wpc_v2_parked_path197()
     {
@@ -356,7 +425,7 @@ if (!function_exists('wpc_v2_parked_path197')) {
             if (@is_file($p)) @unlink($p);
             return;
         }
-        @file_put_contents($p, wp_json_encode($list), LOCK_EX);
+        wpc_fs_put($p, wp_json_encode($list), LOCK_EX);
     }
 }
 
@@ -440,17 +509,21 @@ if (!function_exists('wpc_v2_attempts_admit197')) {
 if (!function_exists('wpc_v2_landing_admin_notice197')) {
     function wpc_v2_landing_admin_notice197()
     {
-        if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) return;
+        if (!function_exists('wpc_cache_first_log')) return;
+        $hold = function_exists('wpc_admin_held69') && function_exists('wpc_admin_hold69');
         if (function_exists('wpc_v2_store_broken_active197') && wpc_v2_store_broken_active197()) {
-            echo '<div class="notice notice-error"><p><strong>WP Compress:</strong> database writes are not persisting on this host (optimization markers vanish after saving). Image optimization is paused to prevent an encode loop — please contact your host about database/object-cache write failures.</p></div>';
+            if (!$hold || !wpc_admin_held69('wpc_media_store_paused80')) {
+                if ($hold) wpc_admin_hold69('wpc_media_store_paused80', DAY_IN_SECONDS);
+                wpc_cache_first_log('media-store-paused', '', '', ['v' => 'markers_not_persisting']);
+            }
         }
         $parked = function_exists('wpc_v2_parked_list197') ? wpc_v2_parked_list197() : [];
-        if (!empty($parked)) {
-            $show = array_slice($parked, 0, 5);
-            echo '<div class="notice notice-warning"><p><strong>WP Compress:</strong> ' . count($parked) . ' image(s) failed to finish optimizing after 4 attempts and are parked (IDs: ' . esc_html(implode(', ', $show)) . (count($parked) > 5 ? ', …' : '') . '). Re-optimize them from the Media Library once the underlying issue is resolved.</p></div>';
+        if (!empty($parked) && (!$hold || !wpc_admin_held69('wpc_media_parked80'))) {
+            if ($hold) wpc_admin_hold69('wpc_media_parked80', DAY_IN_SECONDS);
+            wpc_cache_first_log('media-parked', '', '', ['n' => count($parked), 'ids' => implode(',', array_slice($parked, 0, 5))]);
         }
     }
-    add_action('admin_notices', 'wpc_v2_landing_admin_notice197');
+    add_action('admin_init', 'wpc_v2_landing_admin_notice197', 20);
 }
 
 if (!function_exists('wpc_lazy_trigger_v2')) {
@@ -854,9 +927,9 @@ function wpc_v2_invalidate_splash_count($meta_id, $object_id, $meta_key)
 
     $now_ms = (int) (microtime(true) * 1000);
 
-    $last_bust_ms = (int) get_option('wpc_v2_last_splash_bust_at', 0);
-    if (($now_ms - $last_bust_ms) >= 2000) {
-        delete_transient('wpc_bulk_library_counts');
+    $wpc_snap38 = get_option('wpc_bulk_library_counts_d');
+    if (class_exists('wps_ic_local') && (!is_array($wpc_snap38) || empty($wpc_snap38['dead37']))) {
+        wps_ic_local::wpc_counts_invalidate37();
         update_option('wpc_v2_last_splash_bust_at', $now_ms, false);
     }
 

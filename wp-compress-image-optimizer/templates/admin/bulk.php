@@ -80,9 +80,6 @@ if (!$live_cdn) {
 
 
                 $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_active() : get_option('wps_ic_bulk_process');
-                if (empty($bulkProcess)) {
-                    delete_transient('wpc_bulk_library_counts');
-                }
                 $libraryStatus = wps_ic_local::countLibraryImages();
                 $uncompressedImages = count($libraryStatus['uncompressed']);
                 $compressedImages = count($libraryStatus['compressed']);

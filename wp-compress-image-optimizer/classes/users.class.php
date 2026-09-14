@@ -4,7 +4,7 @@
  * File: classes/users.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 

@@ -4,7 +4,7 @@
  * File: classes/combine_css.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -1133,7 +1133,7 @@ class wps_ic_combine_css
         try {
             $wpc_lv642 = rtrim($this->combined_dir, '/') . '/.wpc-live';
             if (!@is_file($wpc_lv642) || (int) @filemtime($wpc_lv642) < time() - 86400) {
-                @file_put_contents($wpc_lv642, (string) time());
+                wpc_fs_put($wpc_lv642, (string) time());
             }
         } catch (\Throwable $e) {
         }
@@ -1401,8 +1401,8 @@ class wps_ic_combine_css
             
             
             $wpc_tmp276 = $wpc_path646 . '.tmp-' . getmypid();
-            if (@file_put_contents($wpc_tmp276, $this->current_file) !== false && @rename($wpc_tmp276, $wpc_path646)) {
-                file_put_contents($wpc_path646 . '.md5', $wpc_md5646);
+            if (wpc_fs_put($wpc_tmp276, $this->current_file) !== false && @rename($wpc_tmp276, $wpc_path646)) {
+                wpc_fs_put($wpc_path646 . '.md5', $wpc_md5646);
             } else {
                 @unlink($wpc_tmp276);
             }

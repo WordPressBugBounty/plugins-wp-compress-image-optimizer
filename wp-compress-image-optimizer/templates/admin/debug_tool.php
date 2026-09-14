@@ -333,28 +333,7 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
                     echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&optimizejs_remove=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
                 }
                 ?>
-                <?php esc_html_e('If you are having any sort of issues with optimize.js this will give you the debug version.', WPS_IC_TEXTDOMAIN); ?>
-            </p>
-        </td>
-    </tr>
-    <tr>
-        <td><?php esc_html_e('Enable OptimizeJS Debug', WPS_IC_TEXTDOMAIN); ?></td>
-        <td colspan="3">
-            <p>
-                <?php
-                if (!empty($_GET['optimizejs_debug'])) {
-                    update_option('wps_optimizejs_debug', sanitize_text_field($_GET['optimizejs_debug']));
-                }
-
-                $optimizejs_debug = get_option('wps_optimizejs_debug');
-
-                if (empty($optimizejs_debug) || $optimizejs_debug == 'false') {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&optimizejs_debug=true', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Enable', WPS_IC_TEXTDOMAIN) . '</a>';
-                } else {
-                    echo '<a href="' . wp_nonce_url(wpc_dbg_base651($wps_ic::$slug) . '&view=debug_tool&optimizejs_debug=false', 'wpc_debug_action') . '" class="button-primary" style="margin-right:20px;">' . esc_html__('Disable', WPS_IC_TEXTDOMAIN) . '</a>';
-                }
-                ?>
-                <?php esc_html_e('If you are having any sort of issues with optimize.js this will give you the debug version.', WPS_IC_TEXTDOMAIN); ?>
+                <?php esc_html_e('Stops the local image runtime (optimizer.*.js: lazy / adaptive) from being enqueued.', WPS_IC_TEXTDOMAIN); ?>
             </p>
         </td>
     </tr>

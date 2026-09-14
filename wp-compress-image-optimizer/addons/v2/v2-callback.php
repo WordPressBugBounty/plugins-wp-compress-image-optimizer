@@ -4,7 +4,7 @@
  * File: addons/v2/v2-callback.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -1807,8 +1807,8 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
                 wpc_v2_journal_fire_loopback_fast();
             }
             register_shutdown_function(function () {
-                if (function_exists('fastcgi_finish_request')) {
-                    fastcgi_finish_request();
+                if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                    wpc_finish_request39();
                 }
                 if (function_exists('wpc_v2_journal_drain_run')) {
 
@@ -1884,15 +1884,15 @@ function wpc_v2_handle_bg_swap_batch(WP_REST_Request $request)
     if ($should_recompute) {
         $imageID_for_shutdown = $imageID;
         add_action('shutdown', function () use ($imageID_for_shutdown) {
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
             wpc_v2_recompute_savings($imageID_for_shutdown);
         }, 0);
-    } else if (function_exists('fastcgi_finish_request')) {
+    } else if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
 
 
-        add_action('shutdown', function () { fastcgi_finish_request(); }, 0);
+        add_action('shutdown', function () { wpc_finish_request39(); }, 0);
     }
 
     $t_handler_end = microtime(true);
@@ -2223,8 +2223,8 @@ function wpc_v2_handle_bg_swap_announce(WP_REST_Request $request)
     set_transient('wpc_v2_announced_' . $imageID, $announced, 5 * MINUTE_IN_SECONDS);
 
 
-    if (function_exists('fastcgi_finish_request')) {
-        add_action('shutdown', function () { fastcgi_finish_request(); }, 0);
+    if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+        add_action('shutdown', function () { wpc_finish_request39(); }, 0);
     }
 
     $t_handler_end = microtime(true);

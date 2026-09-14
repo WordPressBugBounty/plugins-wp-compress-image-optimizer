@@ -4,7 +4,7 @@
  * File: classes/compress.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -593,7 +593,7 @@ class wps_ic_compress
 
         $log = '[' . date('d-m-Y H:i:s') . '] - ' . $action . ' - ' . $message . "\r\n";
         $log .= file_get_contents($log_file);
-        file_put_contents($log_file, $log);
+        wpc_fs_put($log_file, $log);
     }
 
     

@@ -4,7 +4,7 @@
  * File: addons/v2/v2-pull-manifest.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -17,6 +17,9 @@ if (!defined('ABSPATH')) {
 if (!function_exists('wpc_v2_pull_enabled')) {
     function wpc_v2_pull_enabled()
     {
+        if (function_exists('wpc_policy23_land') && wpc_policy23_land() === 'off') {
+            return (bool) apply_filters('wpc_v2_pull_enabled', false);
+        }
         $opt = get_site_option('wpc_v2_pull_enabled', null);
         if ($opt === null) {
             return (bool) apply_filters('wpc_v2_pull_enabled', true);
@@ -653,8 +656,8 @@ if (!function_exists('wpc_v2_pull_drain_fire')) {
 if (!function_exists('wpc_v2_deferred_pull_drain_fire')) {
     function wpc_v2_deferred_pull_drain_fire()
     {
-        if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            wpc_finish_request39();
         } elseif (function_exists('litespeed_finish_request')) {
             @litespeed_finish_request();
         }
@@ -727,7 +730,7 @@ if (!function_exists('wpc_v2_pull_state_file')) {
             $until = time() + (int) min(900 * pow(2, $n - 3), 7200);
             error_log(sprintf('[WPC PullDrain] no-progress x%d — backing off until %s', $n, gmdate('H:i:s', $until)));
         }
-        @file_put_contents($f, json_encode(['noprog' => $n, 'until' => $until]));
+        wpc_fs_put($f, json_encode(['noprog' => $n, 'until' => $until]));
     }
 }
 
@@ -785,7 +788,7 @@ if (!function_exists('wpc_v2_pull_failcount')) {
             uasort($m, function ($a, $b) { return (int) (isset($b[1]) ? $b[1] : 0) <=> (int) (isset($a[1]) ? $a[1] : 0); });
             $m = array_slice($m, 0, 64, true);
         }
-        @file_put_contents($f, json_encode($m));
+        wpc_fs_put($f, json_encode($m));
         return (isset($m[$k]) && is_array($m[$k])) ? (int) $m[$k][0] : 0;
     }
 }
@@ -821,10 +824,10 @@ if (!function_exists('wpc_v2_pull_drain_loop_handler')) {
         ], false);
 
         
-        if (function_exists('fastcgi_finish_request')) {
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
             http_response_code(200);
             echo 'queued';
-            fastcgi_finish_request();
+            wpc_finish_request39();
         }
         
         @ignore_user_abort(true);
@@ -1180,7 +1183,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                     'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                     'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                     'sha256'    => $sha,
-                ];
+                ] + (!empty($GLOBALS['wpc_kept_original31'][$sha]) ? ['reason' => 'kept_original'] : []);
                 continue;
             }
             
@@ -1193,7 +1196,7 @@ if (!function_exists('wpc_v2_pull_manifest_tick')) {
                 'sizeLabel' => isset($v['sizeLabel']) ? (string) $v['sizeLabel'] : '',
                 'format'    => isset($v['format'])    ? (string) $v['format']    : '',
                 'sha256'    => $sha,
-            ];
+            ] + (!empty($GLOBALS['wpc_kept_original31'][$sha]) ? ['reason' => 'kept_original'] : []);
         }
         $wpc_failed197 = isset($queue['failed_entries197']) && is_array($queue['failed_entries197'])
             ? $queue['failed_entries197'] : [];
@@ -1288,8 +1291,7 @@ if (!function_exists('wpc_v2_pull_reconcile_tick')) {
         if (get_transient('wpc_v2_pull_reconcile_throttle')) {
             return;
         }
-        
-        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+        if (function_exists('wpc_pressure_bounded28') ? wpc_pressure_bounded28('drain') : (function_exists('wpc_under_pressure') && wpc_under_pressure())) {
             return;
         }
 

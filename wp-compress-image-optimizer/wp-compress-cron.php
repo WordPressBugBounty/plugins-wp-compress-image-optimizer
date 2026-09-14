@@ -4,7 +4,7 @@
  * File: wp-compress-cron.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -61,10 +61,11 @@ class wps_ic_cron
             $wpc_rp_opts = get_option(WPS_IC_OPTIONS);
             $wpc_rp_api = (is_array($wpc_rp_opts) && !empty($wpc_rp_opts['api_key'])) ? (string) $wpc_rp_opts['api_key'] : '';
             $wpc_rp_authed = ($wpc_rp_api !== '' && $wpc_rp_key !== '' && hash_equals($wpc_rp_api, $wpc_rp_key));
-            $wpc_rp_last = (int) get_option('wpc_runpurge_at');
             
             
-            if ($wpc_rp_authed || ((time() - $wpc_rp_last) >= 300 && update_option('wpc_runpurge_at', time(), false))) {
+            
+            if ($wpc_rp_authed) {
+                update_option('wpc_runpurge_at', time(), false);
                 add_action('plugins_loaded', [$this, 'purgeCache']);
             }
         }
@@ -181,8 +182,8 @@ class wps_ic_cron
         }
         $self = $this;
         add_action('shutdown', function () use ($self) {
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
             if (function_exists('ignore_user_abort')) {
                 @ignore_user_abort(true);
@@ -226,7 +227,7 @@ class wps_ic_cron
         }
 
 
-        $this->cache::removeHtmlCacheFiles('all'); 
+        $this->cache::removeHtmlCacheFiles('all', '', '', 'soft'); 
         
         $warmup_class = new wps_ic_preload_warmup();
         $warmup_class->cacheLocally('home');

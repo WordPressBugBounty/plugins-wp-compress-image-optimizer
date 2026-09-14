@@ -4,7 +4,7 @@
  * File: addons/v2/v2-config-sync.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -111,7 +111,8 @@ if (!function_exists('wpc_v2_delivery_config')) {
         }
 
 
-        $opt_mode = function_exists('get_option') ? (string) get_option('wpc_optimization_mode', '') : '';
+        $opt_mode = function_exists('wpc_get_optimization_mode') ? (string) wpc_get_optimization_mode()
+            : (function_exists('get_option') ? (string) get_option('wpc_optimization_mode', '') : '');
         $writes_variants = in_array($opt_mode, ['lazy_cdn', 'local'], true);
 
         return [
@@ -257,6 +258,11 @@ if (!function_exists('wpc_v2_report_lifecycle_event')) {
         $body_payload = ['apikey' => $apikey, 'event' => $event];
         if (defined('WPC_PLUGIN_VERSION')) {
             $body_payload['plugin_version'] = (string) WPC_PLUGIN_VERSION;
+            $body_payload['policy_version'] = function_exists('wpc_policy23_version') ? (int) wpc_policy23_version() : 0;
+            $body_payload['policy_version_seen'] = $body_payload['policy_version'];
+            if (function_exists('wpc_policy23_serve') && function_exists('wpc_policy23_land')) {
+                $body_payload['policy_effective'] = ['serve' => (string) wpc_policy23_serve(), 'land' => (string) wpc_policy23_land()];
+            }
         }
         $body_raw = wp_json_encode($body_payload);
         if ($body_raw === false) return;
@@ -293,6 +299,33 @@ if (defined('WPC_CC_PLUGIN_FILE')) {
 }
 
 
+if (!function_exists('wpc_v2_sync_note20')) {
+    function wpc_v2_sync_note20($r, $t0)
+    {
+        if (!function_exists('wpc_cache_first_log') || !is_array($r)) {
+            return $r;
+        }
+        $lane = (defined('DOING_CRON') && DOING_CRON) ? 'cron'
+            : ((defined('REST_REQUEST') && REST_REQUEST) ? 'rest'
+            : ((function_exists('wp_doing_ajax') && wp_doing_ajax()) ? 'ajax' : 'page'));
+        $wpc_last29 = [
+            'ok' => !empty($r['ok']) ? 1 : 0, 'reason' => isset($r['reason']) ? (string) $r['reason'] : '', 'http' => isset($r['http_code']) ? (int) $r['http_code'] : 0,
+            'at' => time(), 'lane' => $lane, 'signed' => empty($GLOBALS['wpc_signed_wake14']) ? 0 : 1,
+        ];
+        if (function_exists('update_option')) {
+            update_option('wpc_v2_sync_last20', $wpc_last29, false);
+        }
+        wpc_cache_first_log(!empty($r['ok']) ? 'config-sync-ok' : 'config-sync-fail', '', '', [
+            'reason' => isset($r['reason']) ? (string) $r['reason'] : '',
+            'http'   => isset($r['http_code']) ? (int) $r['http_code'] : 0,
+            'ms'     => (int) round((microtime(true) - $t0) * 1000),
+            'lane'   => $lane,
+            'signed' => empty($GLOBALS['wpc_signed_wake14']) ? 0 : 1,
+            'policy' => function_exists('wpc_policy23_version') ? (int) wpc_policy23_version() : -1,
+        ]);
+        return $r;
+    }
+}
 if (!function_exists('wpc_v2_config_sync_zones')) {
     function wpc_v2_config_sync_zones(array $zones)
     {
@@ -319,12 +352,17 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 
                 
                 
-                $wpc_defer517 = empty($_REQUEST['wps_ic_nonce']);
+                $wpc_defer517 = empty($_REQUEST['wps_ic_nonce']) && empty($GLOBALS['wpc_signed_wake14']);
             }
-            if (!$wpc_defer517 && function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+            $wpc_why14 = (function_exists('wp_doing_ajax') && wp_doing_ajax()) ? 'foreign-ajax' : 'pageview';
+            if (!$wpc_defer517 && empty($GLOBALS['wpc_signed_wake14']) && function_exists('wpc_under_pressure') && wpc_under_pressure()) {
                 $wpc_defer517 = true;
+                $wpc_why14 = 'pressure';
             }
             if ($wpc_defer517) {
+                if (function_exists('update_option')) {
+                    update_option('wpc_v2_config_sync_pending', 1, false);
+                }
                 if (function_exists('wpc_v2_schedule_config_sync')) {
                     wpc_v2_schedule_config_sync();
                 } elseif (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
@@ -333,7 +371,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 }
                 if (function_exists('wpc_cache_first_log')) {
                     wpc_cache_first_log('config-sync-deferred', '', '', [
-                        'why' => (function_exists('wp_doing_ajax') && wp_doing_ajax()) ? 'foreign-ajax' : 'pressure',
+                        'why' => $wpc_why14,
                     ]);
                 }
                 return ['ok' => false, 'http_code' => 0, 'reason' => 'deferred_off_request_path'];
@@ -408,6 +446,11 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
         if (defined('WPC_PLUGIN_VERSION')) {
             $body_payload['plugin_version'] = (string) WPC_PLUGIN_VERSION;
+            $body_payload['policy_version'] = function_exists('wpc_policy23_version') ? (int) wpc_policy23_version() : 0;
+            $body_payload['policy_version_seen'] = $body_payload['policy_version'];
+            if (function_exists('wpc_policy23_serve') && function_exists('wpc_policy23_land')) {
+                $body_payload['policy_effective'] = ['serve' => (string) wpc_policy23_serve(), 'land' => (string) wpc_policy23_land()];
+            }
         }
         $body_payload['php_version'] = PHP_VERSION;
         if (function_exists('get_bloginfo')) {
@@ -446,8 +489,9 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
         
         
+        $wpc_t020 = microtime(true);
         if (function_exists('wpc_mc_up') && !wpc_mc_up()) {
-            return ['ok' => false, 'http_code' => 0, 'reason' => 'mc_breaker_open'];
+            return wpc_v2_sync_note20(['ok' => false, 'http_code' => 0, 'reason' => 'mc_breaker_open'], $wpc_t020);
         }
         $url = rtrim($orch_url, '/') . '/v2/config?sync=1';
         $resp = wp_remote_post($url, [
@@ -468,7 +512,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             if (function_exists('wpc_mc_trip') && preg_match('/timed? ?out|cURL error (?:28|7|6)|could not resolve/i', (string) $resp->get_error_message())) {
                 wpc_mc_trip($resp->get_error_message());
             }
-            return ['ok' => false, 'http_code' => 0, 'reason' => 'http_error'];
+            return wpc_v2_sync_note20(['ok' => false, 'http_code' => 0, 'reason' => 'http_error:' . substr((string) $resp->get_error_message(), 0, 60)], $wpc_t020);
         }
         $code = (int) wp_remote_retrieve_response_code($resp);
 
@@ -486,7 +530,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
                 '[WPC ConfigSync] http_%d resp=%s',
                 $code, substr((string) wp_remote_retrieve_body($resp), 0, 200)
             ));
-            return ['ok' => false, 'http_code' => $code, 'reason' => 'http_non_2xx'];
+            return wpc_v2_sync_note20(['ok' => false, 'http_code' => $code, 'reason' => 'http_non_2xx'], $wpc_t020);
         }
 
 
@@ -534,7 +578,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
 
                 update_option('wpc_v2_config_sync_pending', 1, false);
             }
-            return ['ok' => false, 'http_code' => $code, 'reason' => ($db_deferred ? 'deferred:' : 'failed:') . implode(',', $reasons)];
+            return wpc_v2_sync_note20(['ok' => false, 'http_code' => $code, 'reason' => ($db_deferred ? 'deferred:' : 'failed:') . implode(',', $reasons)], $wpc_t020);
         }
 
 
@@ -730,6 +774,9 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             }
         }
 
+        if (function_exists('wpc_policy23_ingest')) {
+            wpc_policy23_ingest($rbody);
+        }
         
         if (!empty($cdn_disabled_by_zone)) {
             error_log('[WPC cdn_disabled] /v2/config echoed ' . count($cdn_disabled_by_zone)
@@ -773,7 +820,7 @@ if (!function_exists('wpc_v2_config_sync_zones')) {
             update_option('wpc_v2_provisioned_fingerprint', wpc_v2_env_fingerprint(), false);
         }
 
-        return ['ok' => true, 'http_code' => $code];
+        return wpc_v2_sync_note20(['ok' => true, 'http_code' => $code], $wpc_t020);
     }
 }
 
@@ -911,7 +958,9 @@ if (!function_exists('wpc_v2_provision_now_handler')) {
         }
         if (function_exists('delete_transient')) delete_transient('wpc_v2_provision_token');
         if (function_exists('wpc_v2_run_deferred_config_sync')) {
+            $GLOBALS['wpc_signed_wake14'] = true;
             wpc_v2_run_deferred_config_sync();
+            unset($GLOBALS['wpc_signed_wake14']);
         }
         if (function_exists('status_header')) status_header(200);
         exit;
@@ -1360,6 +1409,12 @@ if (!function_exists('wpc_v2_zone_cdn_suppressed')) {
 
     function wpc_v2_zone_cdn_suppressed()
     {
+        if (isset($_GET['cdn']) && (string) $_GET['cdn'] === '0' && isset($_GET['wpcnc'])) {
+            return true;
+        }
+        if (function_exists('wpc_policy23_serve') && wpc_policy23_serve() === 'origin') {
+            return true;
+        }
 
 
         static $account_cdn_off = null;
@@ -1602,25 +1657,21 @@ if (!function_exists('wpc_v2_cdn_selfcheck_admin_notice')) {
 
     function wpc_v2_cdn_selfcheck_admin_notice()
     {
-        if (!function_exists('current_user_can') || !current_user_can('manage_options')) return;
-        if (!function_exists('wpc_v2_zone_auto_disabled') || !wpc_v2_zone_auto_disabled()) return;
-        if (!function_exists('wpc_v2_cdn_suppression_reason')) return;
+        if (!function_exists('wpc_state81')) return;
+        if (!function_exists('wpc_v2_zone_auto_disabled') || !wpc_v2_zone_auto_disabled() || !function_exists('wpc_v2_cdn_suppression_reason')) { wpc_state_clear81('cdn_bypass'); return; }
         $r = wpc_v2_cdn_suppression_reason();
-        if (!is_array($r) || ($r['reason'] ?? '') !== 'cdn_unhealthy_selfcheck') return;
+        if (!is_array($r) || ($r['reason'] ?? '') !== 'cdn_unhealthy_selfcheck') { wpc_state_clear81('cdn_bypass'); return; }
         $class = isset($r['class']) ? (string) $r['class'] : '';
         $map = [
-            'cdn_5xx'         => 'the CDN returned server errors (5xx)',
-            'cdn_timeout'     => 'the CDN was unreachable (timeouts)',
-            'cdn_wrong_bytes' => 'the CDN returned non-image content (a firewall/challenge page)',
+            'cdn_5xx'         => 'the CDN returned server errors',
+            'cdn_timeout'     => 'the CDN was unreachable',
+            'cdn_wrong_bytes' => 'the CDN returned non-image content (a firewall or challenge page)',
             'cdn_down'        => 'the CDN failed its health check',
         ];
         $why = isset($map[$class]) ? $map[$class] : 'the CDN failed its health check';
-        echo '<div class="notice notice-warning"><p><strong>WP Compress:</strong> CDN delivery is temporarily bypassed for this site because ' . esc_html($why) . '. '
-           . 'Your pages are serving images from your own server — <strong>working, just not CDN-accelerated</strong>. '
-           . 'This restores automatically the moment the CDN passes its health check again (usually minutes). '
-           . 'If this persists, ask your host to allow outbound requests to the CDN hostname, and check any firewall/security plugin isn\'t challenging image requests.</p></div>';
+        wpc_state81('cdn_bypass', 'info', sprintf(__('CDN delivery is paused because %s. Images are served from this server meanwhile, and CDN delivery resumes on its own once the health check passes.', 'wp-compress-image-optimizer'), $why));
     }
-    add_action('admin_notices', 'wpc_v2_cdn_selfcheck_admin_notice');
+    add_action('admin_init', 'wpc_v2_cdn_selfcheck_admin_notice', 30);
 }
 
 if (!function_exists('wpc_cf_verify_challenged_notice2114')) {
@@ -1631,21 +1682,18 @@ if (!function_exists('wpc_cf_verify_challenged_notice2114')) {
 
     function wpc_cf_verify_challenged_notice2114()
     {
-        if (!function_exists('current_user_can') || !current_user_can('manage_options')) return;
+        if (!function_exists('wpc_state81')) return;
         $cfc = defined('WPS_IC_CF_CNAME') ? trim((string) get_option(WPS_IC_CF_CNAME, '')) : '';
-        if ($cfc === '') return;
         $v = get_option('wpc_cf_cname_verified');
-        if ($v === '1' || $v === 1) return;
         $w = get_option('wpc_cf_verify_challenged2114');
-        if (!is_array($w) || empty($w['t']) || (time() - (int) $w['t']) > 48 * 3600) return;
+        if ($cfc === '' || $v === '1' || $v === 1 || !is_array($w) || empty($w['t']) || (time() - (int) $w['t']) > 48 * 3600) { wpc_state_clear81('cf_challenge'); return; }
         $tokened = !empty($w['tokened']);
-        echo '<div class="notice notice-warning"><p><strong>WP Compress:</strong> Cloudflare is challenging our verification of <code>' . esc_html($cfc) . '</code>'
-           . ($tokened
-               ? ', even with the Optimizer Bypass token attached. On a free Cloudflare plan this usually means <strong>Bot Fight Mode</strong> is on (Security &rarr; Bots) &mdash; it honors no exception rules. Disable it, or the site keeps running in origin-fallback mode (pages correct, delivery unoptimized).'
-               : '. Press <strong>Refresh Connection</strong> so the Optimizer Bypass rule is written/repositioned, then verification passes on its own. Until then the site runs in origin-fallback mode (pages correct, delivery unoptimized).')
-           . '</p></div>';
+        $text = $tokened
+            ? sprintf(__('Cloudflare is challenging verification of %s even with the bypass token attached. On a free Cloudflare plan this usually means Bot Fight Mode is on (Security > Bots); it honors no exception rules. Turn it off, or the site stays in origin-fallback mode (pages correct, delivery unoptimized).', 'wp-compress-image-optimizer'), $cfc)
+            : sprintf(__('Cloudflare is challenging verification of %s. Press Refresh Connection so the bypass rule is written, then verification passes on its own. Until then the site runs in origin-fallback mode (pages correct, delivery unoptimized).', 'wp-compress-image-optimizer'), $cfc);
+        wpc_state81('cf_challenge', 'warning', $text);
     }
-    add_action('admin_notices', 'wpc_cf_verify_challenged_notice2114');
+    add_action('admin_init', 'wpc_cf_verify_challenged_notice2114', 30);
 }
 
 if (!function_exists('wpc_v2_cdn_suppression_reason')) {
@@ -2450,7 +2498,9 @@ add_action('admin_init', function () {
     if (function_exists('delete_transient')) {
         delete_transient('wpc_v2_zone_resolve_backoff');
     }
-    if (!wp_next_scheduled('wpc_v2_deferred_config_sync')) {
+    if (function_exists('wpc_v2_schedule_config_sync')) {
+        wpc_v2_schedule_config_sync();
+    } elseif (!wp_next_scheduled('wpc_v2_deferred_config_sync')) {
         wp_schedule_single_event(time() + 30, 'wpc_v2_deferred_config_sync');
     }
     
@@ -2500,8 +2550,8 @@ if (!function_exists('wpc_v2_postupdate_purge_shutdown')) {
     function wpc_v2_postupdate_purge_shutdown()
     {
         $fin = false;
-        if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            wpc_finish_request39();
             $fin = true;
         } elseif (function_exists('litespeed_finish_request')) {
             @litespeed_finish_request();
@@ -2697,7 +2747,7 @@ add_action('admin_init', function () {
 
     $force = (bool) get_option('wpc_v2_force_provision', false);
 
-    $ttl  = defined('DAY_IN_SECONDS') ? 180 * DAY_IN_SECONDS : 15552000;
+    $ttl  = defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400;
     $last = (int) get_option('wpc_v2_config_synced_at', 0);
 
 
@@ -2781,7 +2831,7 @@ add_action('admin_init', function () {
     }
     if (function_exists('set_transient')) set_transient('wpc_v2_admin_reverify_bk', 1, 60);
     add_action('shutdown', function () {
-        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) { wpc_finish_request39(); }
         if (class_exists('WPC_Delivery_Resolver')) { WPC_Delivery_Resolver::resolve(true); }
     });
 }, 24);
@@ -2843,8 +2893,7 @@ add_action('admin_init', function () {
     if (!function_exists('wpc_v2_provision_env_changed') || !wpc_v2_provision_env_changed()) return;
     if (!wpc_v2_provheal_due()) return;
     add_action('shutdown', function () {
-        if (function_exists('fastcgi_finish_request'))       { @fastcgi_finish_request(); }
-        elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { wpc_finish_request39(); }
         wpc_v2_provheal_run('admin');
     }, 99);
 }, 25);

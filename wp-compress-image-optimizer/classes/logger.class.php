@@ -4,7 +4,7 @@
  * File: classes/logger.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 class wps_ic_logger
@@ -108,7 +108,7 @@ class wps_ic_logger
 		$logEntry .= PHP_EOL;
 
 		
-		file_put_contents($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
+		wpc_fs_put($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
 	}
 
 	public function log($message, $error = false)
@@ -122,6 +122,6 @@ class wps_ic_logger
 		}
 
 		
-		file_put_contents($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
+		wpc_fs_put($this->logFile, $logEntry, FILE_APPEND | LOCK_EX);
 	}
 }

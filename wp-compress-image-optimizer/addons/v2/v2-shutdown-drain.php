@@ -4,7 +4,7 @@
  * File: addons/v2/v2-shutdown-drain.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -52,8 +52,8 @@ if (!function_exists('wpc_v2_shutdown_drain_fire')) {
     {
 
 
-        if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            wpc_finish_request39();
         } elseif (function_exists('litespeed_finish_request')) {
             @litespeed_finish_request();
         }

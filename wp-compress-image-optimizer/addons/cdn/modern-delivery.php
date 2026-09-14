@@ -4,7 +4,7 @@
  * File: addons/cdn/modern-delivery.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -26,6 +26,12 @@ class WPC_Modern_Delivery
     
 
 
+
+    public static function policy_origin17()
+    {
+        return function_exists('wpc_policy23_serve') && wpc_policy23_serve() === 'origin'
+            && function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn';
+    }
 
     public static function is_active()
     {
@@ -50,7 +56,8 @@ class WPC_Modern_Delivery
         }
 
         $settings = get_option(WPS_IC_SETTINGS);
-        if (empty($settings['modern_image_delivery']) || $settings['modern_image_delivery'] != '1') {
+        $wpc_origin17 = self::policy_origin17();
+        if (!$wpc_origin17 && (empty($settings['modern_image_delivery']) || $settings['modern_image_delivery'] != '1')) {
             return false;
         }
 
@@ -60,7 +67,7 @@ class WPC_Modern_Delivery
         }
 
 
-        if (empty($settings['live-cdn']) || (string) $settings['live-cdn'] !== '1') {
+        if (!$wpc_origin17 && (empty($settings['live-cdn']) || (string) $settings['live-cdn'] !== '1')) {
             return false;
         }
 
@@ -797,8 +804,9 @@ class WPC_Modern_Delivery
                     
                     $cdn_format = $lazy_cdn_aggressive ? $source_format : 'webp';
                     $url = self::build_ondemand_url($target_width, $origin_file_url, $cdn_format, $attachment_id);
-
-                    $entries[$target_width] = ['url' => $url, 'bytes' => 0];
+                    if ($url !== '') {
+                        $entries[$target_width] = ['url' => $url, 'bytes' => 0];
+                    }
                 }
             }
         }
@@ -891,6 +899,9 @@ class WPC_Modern_Delivery
 
 
         $origin_url = self::force_https_if_needed($origin_url);
+        if (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()) {
+            return '';
+        }
         $custom_cname = trim((string) get_option('ic_custom_cname'));
         $cdn_zone = $custom_cname ?: trim((string) get_option('ic_cdn_zone_name'));
         if (empty($cdn_zone)) {
@@ -1057,6 +1068,12 @@ class WPC_Modern_Delivery
         if (class_exists('wps_rewriteLogic') && method_exists('wps_rewriteLogic', 'wpc_census_slot_sizes')) {
             $wpc_msz131 = wps_rewriteLogic::wpc_census_slot_sizes((string) $meta['file'], ' width="' . (int) $sizes_hint . '"');
             if ($wpc_msz131 !== '') { $sizes = $wpc_msz131; }
+            if ($wpc_msz131 === '' && preg_match('/^\(max-width: (\d+)px\) 100vw, \1px$/', (string) $sizes, $wpc_sm30)) {
+                $wpc_cw30 = (int) apply_filters('wpc_theme_content_width', !empty($GLOBALS['content_width']) ? (int) $GLOBALS['content_width'] : 1200);
+                if ($wpc_cw30 > 0 && (int) $wpc_sm30[1] > $wpc_cw30) {
+                    $sizes = '(max-width: ' . $wpc_cw30 . 'px) 100vw, ' . $wpc_cw30 . 'px';
+                }
+            }
         }
 
 
@@ -1572,7 +1589,7 @@ class WPC_Modern_Delivery
         if (empty(self::$pending_size_backfill)) return;
         
         
-        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) { wpc_finish_request39(); }
         if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) { self::$pending_size_backfill = []; return; }
         global $wpdb;

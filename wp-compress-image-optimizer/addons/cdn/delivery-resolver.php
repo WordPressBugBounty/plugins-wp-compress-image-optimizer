@@ -4,7 +4,7 @@
  * File: addons/cdn/delivery-resolver.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -500,7 +500,8 @@ class WPC_Delivery_Resolver
             'edge_available'    => self::is_edge_available(),
             'edge_origin_opt_in'=> (!empty($settings[self::EDGE_ORIGIN_OPTION]) && (string) $settings[self::EDGE_ORIGIN_OPTION] === '1'),
             'orch_native_accept_vary' => self::orch_nav_signal(),
-            'cdn_disabled'      => (function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled()),
+            'cdn_disabled'      => (function_exists('wpc_v2_zone_cdn_disabled') && wpc_v2_zone_cdn_disabled())
+                || (function_exists('wpc_v2_zone_cdn_suppressed') && wpc_v2_zone_cdn_suppressed()),
             'auto_disabled'     => (function_exists('wpc_v2_zone_auto_disabled') && wpc_v2_zone_auto_disabled()),
             'is_apache'         => self::is_apache(),
             'htaccess_writable' => self::htaccess_writable(),

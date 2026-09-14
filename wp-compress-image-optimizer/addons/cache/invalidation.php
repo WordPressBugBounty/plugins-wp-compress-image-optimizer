@@ -4,7 +4,7 @@
  * File: addons/cache/invalidation.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -52,7 +52,7 @@ if (!function_exists('wpc_inv2_dir')) {
 		$d = dirname($file);
 		if (!is_dir($d)) { @mkdir($d, 0777, true); }
 		$tmp = $file . '.tmp' . getmypid();
-		if (@file_put_contents($tmp, $content) === false) { @unlink($tmp); return false; }
+		if (wpc_fs_put($tmp, $content) === false) { @unlink($tmp); return false; }
 		return @rename($tmp, $file);
 	}
 

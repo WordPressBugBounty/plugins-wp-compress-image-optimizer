@@ -4,7 +4,7 @@
  * File: classes/enqueues.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -372,25 +372,10 @@ JS;
         echo 'var n489D_vars={"triggerDomEvent":"' . $triggerDom . '", "delayOn":"' . $delayOn . '", "triggerElementor":"' . $triggerElementor . '", "linkPreload":"' . $linkPreload . '", "excludeLink":' . json_encode($excludeLink) . '};';
         echo '</script>';
 
-        $optimizeRemove = get_option('wps_optimizejs_remove');
-        $debugOptimize = get_option('wps_optimizejs_debug');
-
-        $pullzone = 'optimizerwpc';
-        if (!empty(self::$settings['eu-routing']) && self::$settings['eu-routing'] == '1') {
-            $pullzone = 'eu-static';
-        }
-
-
-        $wpc_v3_engine = (!isset(self::$settings['delay-js-v3']) || self::$settings['delay-js-v3'] != '0')
-            && (isset(self::$settings['delay-js-v2']) && self::$settings['delay-js-v2'] == '1'
-                || (class_exists('wps_ic_js_delay_v3') && wps_ic_js_delay_v3::wpc_delay_master_on(self::$settings)));
-        if (empty($optimizeRemove) && !$wpc_v3_engine) {
-            if (empty($debugOptimize) || $debugOptimize == 'false') {
-                echo '<script type="text/javascript" src="https://' . $pullzone . '.b-cdn.net/optimize.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
-            } else {
-                echo '<script type="text/javascript" src="https://' . $pullzone . '.b-cdn.net/optimize.dev.js?ic_ver=' . WPS_IC_HASH . '" defer></script>';
-            }
-        }
+        
+        
+        
+        
 
         if (!empty(self::$settings['lazy']) && self::$settings['lazy'] == '1') {
             echo '<style type="text/css">';

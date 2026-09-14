@@ -4,7 +4,7 @@
  * File: addons/vitals/vitals.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) {
@@ -50,10 +50,10 @@ if (!function_exists('wpc_vitals_enabled')) {
         }
         if (!@file_exists($dir . '.htaccess')) {
 
-            @file_put_contents($dir . '.htaccess', "Require all denied\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n");
+            wpc_fs_put($dir . '.htaccess', "Require all denied\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n");
         }
         if (!@file_exists($dir . 'index.html')) {
-            @file_put_contents($dir . 'index.html', '');
+            wpc_fs_put($dir . 'index.html', '');
         }
         $salt = get_option('wpc_vitals_salt');
         if (!is_string($salt) || strlen($salt) < 24) {
@@ -66,7 +66,7 @@ if (!function_exists('wpc_vitals_enabled')) {
         $cur  = @file_get_contents($dir . 'config.json');
         $new  = wp_json_encode($disk);
         if ($cur !== $new) {
-            @file_put_contents($dir . 'config.json', $new);
+            wpc_fs_put($dir . 'config.json', $new);
         }
         return $cfg;
     }
@@ -175,7 +175,7 @@ if (!function_exists('wpc_vitals_channel_probe')) {
             && get_option('wpc_vitals_ch_last') !== $wpc_v918) {
             update_option('wpc_vitals_ch_last', $wpc_v918, false);
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+                try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
             }
         }
     }
@@ -230,7 +230,7 @@ if (!function_exists('wpc_vitals_ajax_ingest')) {
             if (function_exists('get_option') && get_option('wpc_vitals_ch_last') !== 'ajax') {
                 update_option('wpc_vitals_ch_last', 'ajax', false);
                 if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                    try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+                    try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
                 }
             }
         }

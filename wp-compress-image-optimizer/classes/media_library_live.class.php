@@ -4,7 +4,7 @@
  * File: classes/media_library_live.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -838,7 +838,12 @@ class wps_ic_media_library_live extends wps_ic
 
 
         $ic_status_for_regen = get_post_meta($imageID, 'ic_status', true);
-        $regen_still_pending = !empty(get_post_meta($imageID, '_wpc_pending_thumb_regen', true));
+        $wpc_regen_plan12 = get_post_meta($imageID, '_wpc_pending_thumb_regen', true);
+        $regen_still_pending = !empty($wpc_regen_plan12);
+        $wpc_regen_age12 = (is_array($wpc_regen_plan12) && !empty($wpc_regen_plan12['scheduled_at'])) ? max(0, time() - (int) $wpc_regen_plan12['scheduled_at']) : 0;
+        if ($regen_still_pending && $wpc_regen_age12 >= 600) {
+            $regen_still_pending = false;
+        }
         $post_restore_regen_pending = ($ic_status_for_regen === 'restored' && $regen_still_pending);
 
 
@@ -1027,7 +1032,16 @@ class wps_ic_media_library_live extends wps_ic
                 $is_lazy_mode = function_exists('wpc_lazy_mode_active') && wpc_lazy_mode_active();
                 if ($post_restore_regen_pending) {
                     $regen_tip = esc_attr__('Finishing restore — regenerating sub-size thumbnails. Compress will be available in a few seconds.', 'wp-compress-image-optimizer');
-                    $output .= '<span class="wpc-ml-action wpc-ml-action--primary wpc-ml-action--disabled" title="' . $regen_tip . '" aria-disabled="true">' . self::svg_bolt() . ' ' . esc_html__('Regenerating Thumbnails…', 'wp-compress-image-optimizer') . '</span>';
+                    if ($wpc_regen_age12 >= 120) {
+                        if (function_exists('wpc_regen_nudge23')) {
+                            wpc_regen_nudge23($imageID);
+                        }
+                        $regen_tip = esc_attr(sprintf(__('Thumbnail regeneration has been pending for %d minutes. Retry runs it now.', 'wp-compress-image-optimizer'), (int) floor($wpc_regen_age12 / 60)));
+                        $output .= '<span class="wpc-ml-action wpc-ml-action--primary wpc-ml-action--disabled" title="' . $regen_tip . '" aria-disabled="true">' . self::svg_bolt() . ' ' . esc_html__('Regenerating Thumbnails…', 'wp-compress-image-optimizer') . '</span>';
+                        $output .= ' <a class="wpc-ml-action wps-ic-regen-retry-live" data-attachment_id="' . $imageID . '" title="' . $regen_tip . '">' . esc_html__('Retry', 'wp-compress-image-optimizer') . '</a>';
+                    } else {
+                        $output .= '<span class="wpc-ml-action wpc-ml-action--primary wpc-ml-action--disabled" title="' . $regen_tip . '" aria-disabled="true">' . self::svg_bolt() . ' ' . esc_html__('Regenerating Thumbnails…', 'wp-compress-image-optimizer') . '</span>';
+                    }
                 } elseif ($is_lazy_mode) {
                     $lazy_tip = esc_attr__('Optimized automatically on first view, we\'ll generate and serve modern, right-sized variants the moment a visitor loads this image. No manual compression needed.', 'wp-compress-image-optimizer');
                     $output .= '<span class="wpc-ml-action wpc-ml-action--lazy" data-wpc-tip="' . $lazy_tip . '" aria-label="' . $lazy_tip . '">' . self::svg_bolt() . ' ' . esc_html__('Smart Delivery', 'wp-compress-image-optimizer') . '</span>';

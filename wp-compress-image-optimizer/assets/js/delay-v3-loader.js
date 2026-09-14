@@ -2,6 +2,47 @@
     "use strict";
     
     
+    
+    
+    
+    
+    
+    
+    
+    
+    if (window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.cssOnly === 1) {
+        try {
+            if (+window.wpcDelayV3Cfg.rootGuard !== 0) {
+                var wpcRootGuardEl = document.createElement("style");
+                wpcRootGuardEl.id = "wpc-root-guard";
+                wpcRootGuardEl.textContent = 'html[style*="display: none"],html[style*="display:none"]{display:block!important}';
+                (document.head || document.documentElement).appendChild(wpcRootGuardEl);
+            }
+        } catch (e) {}
+        
+        
+        
+        
+        window.wpcOwnV312 = window.wpcOwnV312 || {};
+        window.wpcOwn312 = window.wpcOwn312 || function(c) {
+            window.wpcOwnV312[c] = 1;
+            try { document.documentElement.classList.add(c); } catch (e) {}
+        };
+        try {
+            if (!window.wpcOwnO312) {
+                window.wpcOwnO312 = 1;
+                new MutationObserver(function() {
+                    var de = document.documentElement;
+                    for (var c in window.wpcOwnV312) {
+                        if (!de.classList.contains(c)) { de.classList.add(c); }
+                    }
+                }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+            }
+        } catch (e) {}
+        return;
+    }
+    
+    
     !function() {
         try {
             var mk = function(v) {
@@ -58,18 +99,64 @@
                 } catch (z) {}
                 return false;
             };
+            var fd = (typeof HTMLIFrameElement !== "undefined") ? Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, "src") : null;
+            var hvL = function() {
+                var c = window.wpcDelayV3Cfg || {}, l = Array.isArray(c.heavyEmbeds) ? c.heavyEmbeds.slice() : [];
+                l.push("youtube.com/iframe_api", "youtube.com/player_api", "player.vimeo.com/api/player.js", "fast.wistia.com/assets/external/", "fast.wistia.net/assets/external/");
+                return l;
+            };
+            var hv = function(v) {
+                try {
+                    if (window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.embedGate === 0) return false;
+                    if (window.__wpcEngaged || window.__wpcEmbRel40) return false;
+                    var s = String(v || "");
+                    if (!s || s.indexOf("about:") === 0 || s.indexOf("data:") === 0 || s.indexOf("javascript:") === 0) return false;
+                    var l = hvL();
+                    for (var i = 0; i < l.length; i++) if (s.indexOf(l[i]) !== -1) return true;
+                } catch (z) {}
+                return false;
+            };
+            window.__wpcEmbQ40 = window.__wpcEmbQ40 || [];
+            window.wpcEmbFlush40 = function() {
+                window.__wpcEmbRel40 = 1;
+                var q = window.__wpcEmbQ40 || [];
+                window.__wpcEmbQ40 = [];
+                for (var j = 0; j < q.length; j++) {
+                    try { q[j][0].call(q[j][1], q[j][2]); } catch (z3) {}
+                }
+                try { window.wpcBgAll41 && window.wpcBgAll41(); } catch (z4) {}
+            };
+            var eg = function(el, v, setter) {
+                if (!hv(v)) return false;
+                window.__wpcEmbQ40.push([setter, el, v]);
+                try { el.setAttribute("data-wpc-emb40", "1"); } catch (z) {}
+                return true;
+            };
             document.createElement = function(tag) {
                 var el = ce.apply(document, arguments);
-                if (sd && String(tag).toLowerCase() === "script") try {
+                var tl = String(tag).toLowerCase();
+                if (sd && tl === "script") try {
                     Object.defineProperty(el, "src", {
                         configurable: true,
                         get: function() { return sd.get.call(el); },
-                        set: function(v) { if (!mk(v) && !pk(el, v)) sd.set.call(el, v); }
+                        set: function(v) { if (!mk(v) && !pk(el, v) && !eg(el, v, function(x) { sd.set.call(this, x); })) sd.set.call(el, v); }
                     });
                     var sa = el.setAttribute;
                     el.setAttribute = function(n, v) {
-                        if (String(n).toLowerCase() === "src" && (mk(v) || pk(el, v))) return;
+                        if (String(n).toLowerCase() === "src" && (mk(v) || pk(el, v) || eg(el, v, function(x) { sa.call(this, "src", x); }))) return;
                         return sa.apply(el, arguments);
+                    };
+                } catch (e) {}
+                if (fd && tl === "iframe") try {
+                    Object.defineProperty(el, "src", {
+                        configurable: true,
+                        get: function() { return fd.get.call(el); },
+                        set: function(v) { if (!eg(el, v, function(x) { fd.set.call(this, x); })) fd.set.call(el, v); }
+                    });
+                    var fa = el.setAttribute;
+                    el.setAttribute = function(n, v) {
+                        if (String(n).toLowerCase() === "src" && eg(el, v, function(x) { fa.call(this, "src", x); })) return;
+                        return fa.apply(el, arguments);
                     };
                 } catch (e) {}
                 return el;
@@ -166,12 +253,17 @@
             var o = wpcOriginOf(s.src);
             if (!o || s.getAttribute("data-wpc-fb")) return p();
             wpcZoneFail();
-            var n = s.cloneNode(false);
+            
+            
+            
+            var n = document.createElement("script"), at = s.attributes, al = at ? at.length : 0, fbFired = 0, fb = function() { if (!fbFired) { fbFired = 1; p(); } };
+            for (var ai = 0; ai < al; ai++) { if (at[ai].name !== "src") { try { n.setAttribute(at[ai].name, at[ai].value); } catch (z) {} } }
             
             
             n.async = s.async, n.defer = s.defer,
             n.src = o, n.setAttribute("data-wpc-fb", "1"),
-            y.call(n, "load", p, { once: !0 }), y.call(n, "error", p, { once: !0 }),
+            y.call(n, "load", fb, { once: !0 }), y.call(n, "error", fb, { once: !0 }),
+            setTimeout(fb, 30000),
             s.parentNode ? s.parentNode.replaceChild(n, s) : (document.head || document.documentElement).appendChild(n);
         };
     }
@@ -207,6 +299,39 @@
         }
     });
     var g = window.jQuery, m = [], v = !1;
+    
+    
+    
+    
+    
+    
+    
+    function wpcReadyAtDcl62() {
+        return !(window.wpcDelayV3Cfg && window.wpcDelayV3Cfg.rd62 !== undefined && +window.wpcDelayV3Cfg.rd62 === 0);
+    }
+    function wpcReadyFlush62() {
+        if (!g || v) return;
+        v = !0;
+        var q = m.splice(0, m.length);
+        q.forEach((function(t) {
+            try {
+                t(g);
+            } catch (t) {
+                e("jQuery ready cb error:", t);
+            }
+        }));
+        if (g.Deferred && g.ready && g.ready.promise) try {
+            var a = g.ready.promise();
+            a && "function" == typeof a.resolveWith && a.resolveWith(document, [ g ]);
+        } catch (t) {
+            e("jQuery ready promise resolve error:", t);
+        }
+        try {
+            g(document).trigger("ready");
+        } catch (t) {
+            e("jQuery trigger error:", t);
+        }
+    }
     if (window.WPC_STRICT_ORDER = !!window.WPC_STRICT_ORDER, function() {
         try {
             var e = document.write.bind(document);
@@ -529,6 +654,7 @@
                     e("DOMContentLoaded listener error:", t);
                 }
             })));
+            wpcReadyAtDcl62() && wpcReadyFlush62();
             setTimeout((function() {
                 l = "complete";
                 var r = new Event("readystatechange");
@@ -588,31 +714,13 @@
                             }
                         }));
                         var n = new Event("visibilitychange");
-                        if (h.call(document, n), p.visibilitychange.forEach((function(t) {
+                        h.call(document, n), p.visibilitychange.forEach((function(t) {
                             try {
                                 t.listener.call(t.target, n);
                             } catch (t) {
                                 e("visibilitychange listener error:", t);
                             }
-                        })), g && m.length && !v) {
-                            if (v = !0, m.forEach((function(t) {
-                                try {
-                                    t(g);
-                                } catch (t) {
-                                    e("jQuery ready cb error:", t);
-                                }
-                            })), g.Deferred && g.ready && g.ready.promise) try {
-                                var a = g.ready.promise();
-                                a && "function" == typeof a.resolveWith && a.resolveWith(document, [ g ]);
-                            } catch (t) {
-                                e("jQuery ready promise resolve error:", t);
-                            }
-                            try {
-                                g(document).trigger("ready");
-                            } catch (t) {
-                                e("jQuery trigger error:", t);
-                            }
-                        }
+                        })), wpcReadyFlush62();
                         try {
                             if ((Array.isArray(wpcScriptRegistry) ? wpcScriptRegistry : []).some((function(e) {
                                 return e.src && -1 !== t(e.src, !!e.encoded).indexOf("wp-compress-image-optimizer");
@@ -1264,7 +1372,7 @@
             return;
         }
         c ? e("Loading already started, ignoring duplicate call") : (O && (clearTimeout(O),
-        O = null), c = !0, window.__wpcRel186 = 1, window.wpcParkFlush186 && window.wpcParkFlush186(),
+        O = null), c = !0, window.__wpcRel186 = 1, window.wpcParkFlush186 && window.wpcParkFlush186(), window.wpcEmbFlush40 && window.wpcEmbFlush40(),
         e("Triggered resource loading"), wpcEfSnap33(), wpcEfArm364(), wpcTrapReady30(), wpcDclNow35(), wpcReadyNow27(), async function() {
             if (i) e("Already loading resources, ignoring duplicate call"); else {
                 i = !0;
@@ -1564,6 +1672,7 @@
 
 (function() {
     "use strict";
+    if (window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.cssOnly === 1) return; 
     var done = false, pending = null;
     
     
@@ -2128,6 +2237,10 @@
 
 (function() {
     "use strict";
+    
+    
+    
+    
     try {
         window.addEventListener("wpc-scripts-loaded", (function() {
             try {
@@ -2850,6 +2963,10 @@ if (!window.__wpcEngaged) {
             setTimeout(function() { wpcEpBelt299(false); }, 1200);
         });
     } catch (e) {}
+    
+    
+    
+    if (window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.cssOnly === 1) { try { wpcOwn312("wpc-js-live"); } catch (e) {} }
     setTimeout(function() { if (!wpcG235) { wpcEpBelt299(true); } }, 4000);
     var wpcG235 = false, wpcGQ235 = [];
     function wpcOnGesture235(f) {
@@ -2862,6 +2979,16 @@ if (!window.__wpcEngaged) {
             if (wpcG235) { return; }
             wpcG235 = true;
             wpcOwn312("wpc-bgl255");
+            
+            
+            
+            
+            
+            
+            if (window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.cssOnly === 1) {
+                window.__wpcEngaged = 1;
+                try { localStorage.setItem("fresh", String(Date.now())); } catch (e) {}
+            }
             gl235.forEach(function(ev) { try { window.removeEventListener(ev, fire235, true); } catch (e) {} });
             wpcGQ235.splice(0).forEach(function(f) { try { f(); } catch (e) {} });
             setTimeout(function() { wpcImgBelt238(true); }, 400);
@@ -2949,6 +3076,7 @@ if (!window.__wpcEngaged) {
         return !wpcG235 && (wpcUcssSeen235 || !wpcNoUcssBelt294)
             && !(window.wpcDelayV3Cfg && +window.wpcDelayV3Cfg.restoreGesture === 0);
     }
+    window.wpcRestoreGesture235 = wpcRestoreGesture235;
     function swapStyles() {
         if (wpcRestoreGesture235()) {
             wpcOnGesture235(swapStyles);
@@ -3395,6 +3523,29 @@ if (!window.__wpcEngaged) {
             animIO.observe(el);
         }));
     }
+    var wpcBgIO41 = null;
+    function wpcBgSet41(el) {
+        var u = el.getAttribute("data-wpc-bg");
+        if (!u) return;
+        el.removeAttribute("data-wpc-bg");
+        try { el.style.backgroundImage = 'url("' + u.replace(/"/g, "%22") + '")'; } catch (e) {}
+    }
+    function wpcPainted44(e) {
+        try { return e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"; } catch (x) { return true; }
+    }
+    function wpcBgRestore41(all) {
+        var els = [].slice.call(document.querySelectorAll("[data-wpc-bg]"));
+        if (!els.length) return;
+        if (all || !window.IntersectionObserver) { els.forEach(wpcBgSet41); return; }
+        if (!wpcBgIO41) {
+            wpcBgIO41 = new IntersectionObserver(function(entries) {
+                entries.forEach(function(en) { if (en.isIntersecting && wpcPainted44(en.target)) { wpcBgIO41.unobserve(en.target); wpcBgSet41(en.target); } });
+            }, { rootMargin: "0px" });
+        }
+        els.forEach(function(el) { wpcBgIO41.observe(el); });
+    }
+    window.wpcBgTick41 = function() { wpcBgRestore41(false); };
+    window.wpcBgAll41 = function() { wpcBgRestore41(true); };
     var wpcPainted133 = false;
     function tick() {
         try {
@@ -3403,6 +3554,7 @@ if (!window.__wpcEngaged) {
                 swapStyles();
             }
             frames(false);
+            wpcBgRestore41(false);
             framesIO();
         } catch (e) {}
     }
@@ -4044,6 +4196,12 @@ if (!window.__wpcEngaged) {
     function engaged(soft) {
         window.__wpcEngaged = 1;
         try {
+            window.wpcEmbFlush40 && window.wpcEmbFlush40();
+        } catch (e) {}
+        try {
+            window.wpcBgAll41 && window.wpcBgAll41();
+        } catch (e) {}
+        try {
             window.wpcWarmDelayed && window.wpcWarmDelayed();
         } catch (e) {}
         try {
@@ -4472,7 +4630,10 @@ addEventListener("wpc-scripts-loaded", (function() {
         var go626 = function() {
             if (fired626) { return; }
             fired626 = true;
-            try { rest(false); } catch (e) {}
+            try {
+                if (window.wpcRestoreGesture235 && window.wpcRestoreGesture235()) { return; }
+                rest(false);
+            } catch (e) {}
         };
         
         

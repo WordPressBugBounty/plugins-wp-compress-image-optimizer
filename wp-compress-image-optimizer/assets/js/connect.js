@@ -188,6 +188,7 @@ jQuery(document).ready(function ($) {
                 var unableToCommunicate = $('.wps-ic-unable-to-communicate', swal_container);
                 var apikeyInUse = $('.wps-ic-apikey-in-use', swal_container);
                 var already_connected = $('.wps-ic-site-already-connected', swal_container);
+                var wpcStates = $('.wps-ic-site-already-connected, .wps-ic-invalid-apikey, .wps-ic-apikey-in-use, .wps-ic-unable-to-communicate', swal_container);
                 var success_message_text = $('.wps-ic-success-message-container-text', swal_container);
                 var success_message_choice_text = $('.wps-ic-success-message-choice-container-text', swal_container);
                 var success_message_buttons = $('.wps-ic-success-message-choice-container-text a', swal_container);
@@ -206,6 +207,7 @@ jQuery(document).ready(function ($) {
                     var apikey = $('input[name="apikey"]', form_container).val();
 
 
+                    wpcStates.hide();
                     $(init, swal_container).hide();
                     $(form_container).hide();
                     $(loader).hide();
@@ -233,6 +235,7 @@ jQuery(document).ready(function ($) {
                             $(loader).hide();
                             $(loaderLite).hide();
                             $(form_container).hide();
+                            wpcStates.hide();
                             $(unableToCommunicate).show();
                         }
                     }).fail(function () {
@@ -240,6 +243,7 @@ jQuery(document).ready(function ($) {
                         $(loader).hide();
                         $(loaderLite).hide();
                         $(form_container).hide();
+                        wpcStates.hide();
                         $(unableToCommunicate).show();
                     });
 
@@ -258,8 +262,7 @@ jQuery(document).ready(function ($) {
                         return false;
                     }
 
-                    $(already_connected).hide();
-                    $(error_message_text).hide();
+                    wpcStates.hide();
                     $(success_message_text).hide();
                     $(error_message_container).hide();
                     $(init, swal_container).hide();
@@ -304,9 +307,11 @@ jQuery(document).ready(function ($) {
                             $(form_container).hide();
                             $(tests).hide();
 
+                            wpcStates.hide();
                             if (wpcMsg == 'site-already-connected') {
                                 $(already_connected).show();
                             } else if (wpcMsg == 'api-issue' || wpcMsg == '') {
+                                wpcStates.hide();
                                 $(unableToCommunicate).show();
                             } else if (wpcMsg == 'apikey-in-use') {
                                 $(apikeyInUse).show();
@@ -323,6 +328,7 @@ jQuery(document).ready(function ($) {
                         $(loaderLite).hide();
                         $(form_container).hide();
                         $(tests).hide();
+                        wpcStates.hide();
                         $(unableToCommunicate).show();
                     });
 

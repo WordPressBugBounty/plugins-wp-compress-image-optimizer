@@ -4,7 +4,7 @@
  * File: addons/v2/v2-html-cache-purge.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -210,8 +210,8 @@ if (!function_exists('wpc_v2_purge_html_for_attachment_deferred')) {
         $captured_src = (string) $source;
 
         add_action('shutdown', function () use ($captured_id, $captured_src) {
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
             wpc_v2_purge_html_for_attachment($captured_id, $captured_src);
         }, 5);
@@ -266,7 +266,7 @@ add_action('delete_option', function ($option_name) {
     delete_option('wpc_v2_html_purge_pending_bulk');
     if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
         try {
-            wps_ic_cache::removeHtmlCacheFiles('all');
+            wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft');
             error_log('[WPC HtmlPurge] end-of-bulk global purge fired');
         } catch (\Throwable $e) {
             error_log('[WPC HtmlPurge] end-of-bulk failed: ' . $e->getMessage());

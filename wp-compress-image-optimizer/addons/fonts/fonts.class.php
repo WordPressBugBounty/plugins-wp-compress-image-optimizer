@@ -4,7 +4,7 @@
  * File: addons/fonts/fonts.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -218,7 +218,7 @@ class wps_ic_fonts
                 . " | latin_inline_faces=" . count($wpc_flat)
                 . " | mapped=" . (is_array($wpc_fmap) ? count($wpc_fmap) : 0)
                 . " | throttle=" . (get_transient('wpc_font_inline_lock') ? 'LOCKED' : 'clear')
-                . " | fpm=" . (function_exists('fastcgi_finish_request') ? 'yes' : 'NO(cron-only)')
+                . " | fpm=" . ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) ? 'yes' : 'NO(cron-only)')
                 . " -->";
         }
 
@@ -473,7 +473,7 @@ class wps_ic_fonts
                             }
                             $stem = preg_replace('/\.css$/', '', basename($path));
                             $name = $stem . '-' . substr(md5($swapped), 0, 10) . '.css';
-                            if (@file_put_contents($dd . '/' . $name, $swapped) !== false) {
+                            if (wpc_fs_put($dd . '/' . $name, $swapped) !== false) {
                                 $sib = (array) @glob($dd . '/' . $stem . '-*.css');
                                 if (count($sib) > 3) {
                                     usort($sib, static function ($a, $b) {
@@ -684,16 +684,16 @@ class wps_ic_fonts
 
 
         $wpc_inline_html = $html;
-        $wpc_can_flush = function_exists('fastcgi_finish_request') && function_exists('register_shutdown_function');
+        $wpc_can_flush = (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) && function_exists('register_shutdown_function');
         if ($wpc_can_flush) {
             register_shutdown_function(function () use ($wpc_inline_html) {
-                @fastcgi_finish_request();
+                wpc_finish_request39();
                 if (function_exists('ignore_user_abort')) { @ignore_user_abort(true); }
                 if (function_exists('set_time_limit')) { @set_time_limit(120); }
                 try {
                     $n = (int) $this->localizeInlineFonts($wpc_inline_html);
                     if ($n > 0 && class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                        try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+                        try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
                     }
                     if ($n > 0) {
 
@@ -1089,7 +1089,7 @@ class wps_ic_fonts
         }
 
         
-        file_put_contents($stylesheetPath . $stylesheetFilename, $stylesheetCSS, LOCK_EX);
+        wpc_fs_put($stylesheetPath . $stylesheetFilename, $stylesheetCSS, LOCK_EX);
 
 
         if (defined('WPS_IC_FONTS_DIR') && function_exists('wpc_fonts_htaccess_ensure')) {
@@ -1144,7 +1144,7 @@ class wps_ic_fonts
                 return preg_replace('/@font-face\s*\{/i', '@font-face{font-display:' . $wpc_fd919 . ';', $m[0], 1);
             }, $css);
             if (is_string($baked) && $baked !== $css) {
-                if (@file_put_contents($path, $baked) !== false) { $wpc_baked115++; }
+                if (wpc_fs_put($path, $baked) !== false) { $wpc_baked115++; }
             }
         }
 
@@ -1171,7 +1171,7 @@ class wps_ic_fonts
                 return preg_replace('/@font-face\s*\{/i', '@font-face{font-display:' . $wpc_fd919 . ';', $m[0], 1);
             }, $wpc_c109);
             if (is_string($wpc_b109) && $wpc_b109 !== $wpc_c109) {
-                if (@file_put_contents($wpc_fcss109, $wpc_b109) !== false) { $wpc_baked115++; }
+                if (wpc_fs_put($wpc_fcss109, $wpc_b109) !== false) { $wpc_baked115++; }
             }
         }
         return $wpc_baked115;
@@ -1470,7 +1470,7 @@ class wps_ic_fonts
     {
         $contents = file_get_contents($stylesheetPath);
         $contents = str_replace($findUrl, $replaceUrl, $contents);
-        file_put_contents($stylesheetPath, $contents, LOCK_EX);
+        wpc_fs_put($stylesheetPath, $contents, LOCK_EX);
     }
 
     public function downloadFound($array)

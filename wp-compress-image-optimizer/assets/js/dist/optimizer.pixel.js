@@ -275,7 +275,7 @@ function runLazy() {
                     wpcBgObserver.unobserve(lazyBGImage);
                 }
             });
-        }, {rootMargin: "800px"});
+        }, {rootMargin: "500px"});
 
 
         wpcLazyObserver = wpcLazyObserver || new IntersectionObserver(function (entries, observer) {
@@ -430,7 +430,7 @@ function runLazy() {
                     wpcLazyObserver.unobserve(lazyImage);
                 }
             });
-        }, {rootMargin:"800px"});
+        }, {rootMargin:"500px"});
 
         LazyBackgrounds.forEach(function (lazyImage) {
             lazyImage.setAttribute("data-wpc-lz", "1");

@@ -4,7 +4,7 @@
  * File: addons/v2/v2-natural-url-buffer.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) exit;

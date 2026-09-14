@@ -102,8 +102,10 @@ if (!empty($_GET['generate_crit'])) {
                 $urlKey = $urlKey->setup($page);
                 $criticalCSS = new wps_criticalCss();
 
-                $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['desktop'], 'desktop');
-                $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['mobile'], 'mobile');
+                if (method_exists($criticalCSS, 'saveCriticalCssText')) {
+                    $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['desktop'], 'desktop');
+                    $response = $criticalCSS->saveCriticalCssText($urlKey, $bodyDecoded['mobile'], 'mobile');
+                }
 
             }
         }
@@ -301,17 +303,16 @@ $bulkProcess = function_exists('wpc_bulk_process_active') ? wpc_bulk_process_act
 $allowLocal = get_option('wps_ic_allow_local');
 $allowLive = get_option('wps_ic_allow_live', false);
 
-if (!$allowLive) {
+$wpc_live_saved7 = (is_array($settings) && !empty($settings['live-cdn']) && $settings['live-cdn'] == '1') ? '1' : '0';
+if (!$allowLive && is_array($settings)) {
     $settings['live-cdn'] = '0';
 
-    foreach ($settings['serve'] as $key => $value) {
+    foreach ((array) ($settings['serve'] ?? []) as $key => $value) {
         $settings['serve'][$key] = '0';
     }
     $settings['css'] = '0';
     $settings['js'] = '0';
     $settings['fonts'] = '0';
-
-    update_option(WPS_IC_SETTINGS, $settings);
 }
 
 $productsDefined = false;
@@ -589,7 +590,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
 
             <?php
             wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce');
-            if (!empty($settings['live-cdn']) && $settings['live-cdn'] == '1') { ?>
+            if ($wpc_live_saved7 === '1') { ?>
                 <input name="options[live-cdn]" type="hidden" value="1"/>
                 <?php
             } else { ?>
@@ -767,6 +768,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                     </div>
                 </div>
                 <!-- Header End -->
+                <?php if (function_exists('wpc_states81_render')) { wpc_states81_render(); } ?>
                 <!-- Body Start -->
                 <div class="wpc-settings-body">
                     <div class="wpc-settings-tabs">
@@ -1292,7 +1294,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                 </div>
 
                                                 <div class="wpc-perf-grid">
-
+                                                    <?php $wpc_sd29 = function_exists('wpc_get_optimization_mode') && wpc_get_optimization_mode() === 'lazy_cdn'; ?>
+                                                    <?php if (!$wpc_sd29) : ?>
                                                     <?php echo $gui::checkboxDescription_v4(
                                                         __('Generate WebP', WPS_IC_TEXTDOMAIN),
                                                         __('WebP versions for modern browsers, typically 30-50% smaller than JPEG with no visible difference.', WPS_IC_TEXTDOMAIN),
@@ -1304,7 +1307,9 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                         __('Only created when smaller than WebP. Saves an extra 10-20% for supported browsers.', WPS_IC_TEXTDOMAIN),
                                                         false, '0', 'picture_avif', false, 'right'
                                                     ); ?>
+                                                    <?php endif; ?>
 
+                                                    <?php if (!$wpc_sd29) : ?>
                                                     <div class="wpc-box-for-checkbox">
                                                         <div class="wpc-box-content">
                                                             <div class="wpc-checkbox-title-holder">
@@ -1365,7 +1370,9 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <?php endif; ?>
 
+                                                    <?php if (!$wpc_sd29) : ?>
                                                     <div class="wpc-box-for-checkbox">
                                                         <div class="wpc-box-content">
                                                             <div class="wpc-checkbox-title-holder">
@@ -1398,6 +1405,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <?php endif; ?>
 
                                                     <div class="wpc-box-for-checkbox">
                                                         <div class="wpc-box-content">
@@ -1432,22 +1440,6 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             'tip'   => __('Compresses all variants when an image is uploaded. Best when most uploaded images get used on the site.', WPS_IC_TEXTDOMAIN),
                                                         ],
 
-
-                                                        'lazy_full' => [
-                                                            'label' => __('Lazy on First View', WPS_IC_TEXTDOMAIN),
-                                                            'chip'  => 'Saves Storage',
-                                                            'chipClass' => 'wpc-chip--info',
-                                                            'tip'   => __('Skip encoding at upload. First front-end view of an image triggers a full compress in the background. Never-viewed images cost nothing.', WPS_IC_TEXTDOMAIN),
-                                                            'hidden' => true,
-                                                        ],
-                                                        'lazy_smart' => [
-                                                            'label' => __('Smart Lazy', WPS_IC_TEXTDOMAIN),
-                                                            'chip'  => 'Beta',
-                                                            'chipClass' => 'wpc-chip--danger',
-                                                            'tip'   => __('Per-variant on-demand. Only the exact widths/formats real visitors request get encoded. Smallest storage footprint.', WPS_IC_TEXTDOMAIN),
-                                                            'hidden' => true,
-                                                        ],
-
                                                         'lazy_cdn' => [
                                                             'label' => __('Smart Delivery', WPS_IC_TEXTDOMAIN),
                                                             'chip'  => 'Beta',
@@ -1456,6 +1448,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                         ],
                                                     ];
                                                     ?>
+                                                    <?php do_action('wpc_policy23_ui'); ?>
                                                     <div class="wpc-box-for-checkbox">
                                                         <div class="wpc-box-content">
                                                             <div class="wpc-checkbox-title-holder">
@@ -1503,6 +1496,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                         'avif'     => ['label' => __('AVIF', WPS_IC_TEXTDOMAIN), 'chip' => 'Advanced', 'chipClass' => 'wpc-chip--danger', 'tip' => __('Force a single negotiated AVIF URL. Advanced — your edge must Accept-negotiate AVIF. Picture-element AVIF is unaffected.', WPS_IC_TEXTDOMAIN)],
                                                     ];
                                                     ?>
+                                                    <?php if (!$wpc_sd29) : ?>
                                                     <div class="wpc-box-for-checkbox">
                                                         <div class="wpc-box-content">
                                                             <div class="wpc-checkbox-title-holder">
@@ -1532,6 +1526,7 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <?php endif; ?>
 
                                                     <?php
 
@@ -2588,7 +2583,8 @@ if ($hasApiKey && !$warmupFailing && (empty($initialPageSpeedScore))) {
                                             echo $gui::checkboxTabTitle(__('Other Integrations', WPS_IC_TEXTDOMAIN), __('Third-party plugin compatibility settings.', WPS_IC_TEXTDOMAIN), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M144-32l0 128 160 0 0-128 48 0 0 128 96 0 0 48-32 0 0 80c0 97.9-73.3 178.7-168 190.5l0 97.5-48 0 0-97.5C105.3 402.7 32 321.9 32 224l0-80-32 0 0-48 96 0 0-128 48 0zM80 144l0 80c0 79.5 64.5 144 144 144s144-64.5 144-144l0-80-288 0z"/></svg>', '', ''); ?>
                                             <div class="wpc-perf-grid wpc-perf-grid-single">
                                                 <?php
-                                                echo $gui::checkboxDescription_v4(__('Disable Elementor Triggers', WPS_IC_TEXTDOMAIN), __('Can fix double animations, but may break menus and other Elementor elements.', WPS_IC_TEXTDOMAIN), false, false, 'disable-elementor-triggers', false, 'right', false, false, '', true); ?>
+                                                echo $gui::checkboxDescription_v4(__('Disable Elementor Triggers', WPS_IC_TEXTDOMAIN), __('Can fix double animations, but may break menus and other Elementor elements.', WPS_IC_TEXTDOMAIN), false, false, 'disable-elementor-triggers', false, 'right', false, false, '', true);
+                                                echo $gui::checkboxDescription_v4(__('Delay Consent Banner Until Interaction', WPS_IC_TEXTDOMAIN), __('Unticked = automatic: on with Complianz, which blocks trackers server-side, so nothing can run before consent whether the banner loads at once or on the first scroll, tap or click. Tick to force it on for any consent plugin; define WPC_CONSENT_AUTO_OFF to keep the banner eager.', WPS_IC_TEXTDOMAIN), false, false, 'force-delay-consent', false, 'right', false, false, '', true); ?>
                                             </div>
                                         </div>
                                     <?php } ?>

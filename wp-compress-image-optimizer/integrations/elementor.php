@@ -4,7 +4,7 @@
  * File: integrations/elementor.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) {
@@ -119,10 +119,6 @@ class wps_ic_elementor
 
             $html = $this->delayBackgrounds($html);
 
-        }
-
-        if (str_contains($html, 'elementor/optimize.js') === false) {
-            $html = str_replace('optimize.js', 'elementor/optimize.js', $html);
         }
 
         return $html;

@@ -4,7 +4,7 @@
  * File: addons/v2/v2-customer-purge.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) {
@@ -90,6 +90,8 @@ if (!function_exists('wpc_customer_purge')) {
             'blocking'      => $blocking,
             'duration_ms'   => (int) round((microtime(true) - $t0) * 1000),
             'layers'        => array_merge(['cloudflare' => $cf_result], $orch_layers),
+            'orch_ok'       => $orch_ok,
+            'orch_http'     => isset($orch_result['http']) ? (int) $orch_result['http'] : 0,
         ];
 
         error_log(sprintf(

@@ -4,7 +4,7 @@
  * File: addons/legacy/compress.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -110,8 +110,12 @@ if (!function_exists('wpc_is_valid_image_bytes')) {
         
         
         
-        if (stripos($bytes, '<?php') !== false || stripos($bytes, '<?=') !== false
-            || stripos($bytes, '<script') !== false || stripos($bytes, '<%') !== false) {
+        
+        
+        
+        
+        
+        if (stripos($bytes, '<?php') !== false || stripos($bytes, '<script') !== false) {
             error_log($build_log('embedded-executable-marker'));
             return false;
         }
@@ -691,24 +695,15 @@ if (!function_exists('wpc_detect_image_coexistence')) {
 if (!function_exists('wpc_modern_delivery_coexistence_notice')) {
     function wpc_modern_delivery_coexistence_notice()
     {
-        if (!current_user_can('manage_options')) return;
-        if (get_user_meta(get_current_user_id(), '_wpc_dismissed_coexistence_notice', true)) return;
-
+        if (!function_exists('wpc_state81')) return;
         $settings = get_option(WPS_IC_SETTINGS, []);
-        if (empty($settings['modern_image_delivery']) || $settings['modern_image_delivery'] != '1') return;
-
+        if (empty($settings['modern_image_delivery']) || $settings['modern_image_delivery'] != '1') { wpc_state_clear81('coexist'); return; }
         $conflicts = wpc_detect_image_coexistence();
-        if (empty($conflicts)) return;
-
-        $names = array_map(function ($c) { return esc_html($c['name']); }, $conflicts);
-
-        echo '<div class="notice notice-warning is-dismissible" data-wpc-notice="coexistence">';
-        echo '<p><strong>WP Compress Modern Image Delivery:</strong> detected other image optimization active — ';
-        echo implode(', ', $names);
-        echo '. For best results, disable conflicting optimizers to avoid double-processing and URL rewrite collisions.</p>';
-        echo '</div>';
+        if (empty($conflicts)) { wpc_state_clear81('coexist'); return; }
+        $names = array_map(function ($c) { return (string) $c['name']; }, $conflicts);
+        wpc_state81('coexist', 'info', sprintf(__('Another image optimizer is active (%s). Disable one of them to avoid double-processing and URL conflicts.', 'wp-compress-image-optimizer'), implode(', ', $names)));
     }
-    add_action('admin_notices', 'wpc_modern_delivery_coexistence_notice');
+    add_action('admin_init', 'wpc_modern_delivery_coexistence_notice', 30);
 }
 
 
@@ -919,7 +914,7 @@ if (!function_exists('wpc_generate_ladder_widths')) {
             }
 
 
-            if (!empty($bytes) && wpc_is_valid_image_bytes($bytes, $fmt, $attachmentId, $source_attr, ['size_label' => $variant['sizeLabel'] ?? '', 'url' => $url_for_log]) && @file_put_contents($dest, $bytes)) {
+            if (!empty($bytes) && wpc_is_valid_image_bytes($bytes, $fmt, $attachmentId, $source_attr, ['size_label' => $variant['sizeLabel'] ?? '', 'url' => $url_for_log]) && wpc_fs_put($dest, $bytes)) {
                 @chmod($dest, 0644);
                 $downloaded++;
                 if ($w > 0) $widths_delivered[$w] = true;
@@ -992,9 +987,9 @@ if (!function_exists('wpc_ladder_shutdown_hook')) {
     {
         if (!get_option('wpc_ladder_gen_queue_has_items')) return;
         if (is_admin()) return;
-        if (!function_exists('fastcgi_finish_request')) return; 
+        if (!(function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) return; 
         if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return;
-        @fastcgi_finish_request();
+        wpc_finish_request39();
         @set_time_limit(150);
 
         wpc_handle_async_ladder_gen(1, 'shutdown');
@@ -1251,17 +1246,16 @@ if (!function_exists('wpc_fire_download_worker')) {
 }
 
 
-if (!function_exists('wpc_admin_drain_pending_downloads')) {
-    function wpc_admin_drain_pending_downloads()
+if (!function_exists('wpc_admin_drain_run48')) {
+    function wpc_admin_drain_run48()
     {
-        if (!is_admin() || wp_doing_ajax() || (defined('DOING_CRON') && DOING_CRON)) return;
-
         
-        $wpc_didle99 = (int) get_option('wpc_admin_drain_idle_at');
-        if ($wpc_didle99 && (time() - $wpc_didle99) < 60) return;
-
-        
-        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return;
+        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+            if (function_exists('wpc_regen_sweep12')) {
+                wpc_regen_sweep12();
+            }
+            return;
+        }
 
         global $wpdb;
 
@@ -1333,7 +1327,73 @@ if (!function_exists('wpc_admin_drain_pending_downloads')) {
             update_option('wpc_admin_drain_idle_at', time(), false);
         }
     }
+}
+
+if (!function_exists('wpc_admin_drain_fire48')) {
+    function wpc_admin_drain_fire48()
+    {
+        if (function_exists('wpc_site_has_basic_auth') && wpc_site_has_basic_auth()) return false;
+        if (get_option('wpc_loopback_status', '') === 'fail') return false;
+        if (!class_exists('wps_ic_ajax') || !method_exists('wps_ic_ajax', 'wpc_loopback_open_socket') || !function_exists('wpc_loopback_token_mint')) return false;
+        $dp = wp_parse_url(admin_url('admin-ajax.php'));
+        if (empty($dp['host'])) return false;
+        $dhttps = (!empty($dp['scheme']) && $dp['scheme'] === 'https');
+        $dport  = !empty($dp['port']) ? (int) $dp['port'] : ($dhttps ? 443 : 80);
+        $dhost  = (string) $dp['host'];
+        $dpath  = (!empty($dp['path']) ? $dp['path'] : '/') . '?action=wpc_admin_drain_loopback&t=' . rawurlencode(wpc_loopback_token_mint('drain'));
+        $dreq   = "POST {$dpath} HTTP/1.1\r\nHost: {$dhost}\r\nContent-Length: 0\r\nConnection: close\r\nUser-Agent: WPCAdminDrain/1.0\r\n\r\n";
+        $dfp = wps_ic_ajax::wpc_loopback_open_socket($dhost, $dport, $dhttps, 0.2);
+        if (!$dfp) return false;
+        @stream_set_timeout($dfp, 0, 100000); @fwrite($dfp, $dreq); @fclose($dfp);
+        return true;
+    }
+}
+
+if (!function_exists('wpc_admin_drain_pending_downloads')) {
+    function wpc_admin_drain_pending_downloads()
+    {
+        if (!is_admin() || wp_doing_ajax() || (defined('DOING_CRON') && DOING_CRON)) return;
+
+        
+        $wpc_didle99 = (int) get_option('wpc_admin_drain_idle_at');
+        if ($wpc_didle99 && (time() - $wpc_didle99) < 60) return;
+
+        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) return;
+
+        
+        
+        
+        if (get_transient('wpc_admin_drain_fired48')) return;
+        set_transient('wpc_admin_drain_fired48', time(), 60);
+        if (wpc_admin_drain_fire48()) return;
+
+        
+        add_action('shutdown', 'wpc_admin_drain_after_release48', 9999);
+    }
     add_action('admin_init', 'wpc_admin_drain_pending_downloads', 99);
+}
+
+if (!function_exists('wpc_admin_drain_after_release48')) {
+    function wpc_admin_drain_after_release48()
+    {
+        if (function_exists('wpc_finish_request39')) { wpc_finish_request39(); }
+        @set_time_limit(120);
+        wpc_admin_drain_run48();
+    }
+}
+
+if (!function_exists('wpc_admin_drain_loopback_ajax')) {
+    function wpc_admin_drain_loopback_ajax()
+    {
+        if (!function_exists('wpc_loopback_token_ok') || !wpc_loopback_token_ok('drain')) {
+            wp_die('', '', ['response' => 403]);
+        }
+        @set_time_limit(120);
+        wpc_admin_drain_run48();
+        wp_die('', '', ['response' => 200]);
+    }
+    add_action('wp_ajax_wpc_admin_drain_loopback', 'wpc_admin_drain_loopback_ajax');
+    add_action('wp_ajax_nopriv_wpc_admin_drain_loopback', 'wpc_admin_drain_loopback_ajax');
 }
 
 
@@ -1799,6 +1859,102 @@ if (!function_exists('wpc_handle_bg_swap_callback')) {
 }
 
 
+if (!function_exists('wpc_rewrites_jpeg_inplace12')) {
+    function wpc_rewrites_jpeg_inplace12()
+    {
+        $mode = function_exists('wpc_get_optimization_mode') ? (string) wpc_get_optimization_mode() : 'legacy';
+        return (bool) apply_filters('wpc_rewrites_jpeg_inplace', $mode !== 'lazy_cdn');
+    }
+}
+
+if (!function_exists('wpc_regen_sweep12')) {
+    function wpc_regen_sweep12()
+    {
+        global $wpdb;
+        if (!isset($wpdb)) {
+            return 0;
+        }
+        $rows = $wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wpc_pending_thumb_regen' ORDER BY meta_id ASC LIMIT 20");
+        $fired = 0;
+        $pending = 0;
+        foreach ((array) $rows as $row) {
+            $pending++;
+            if ($fired > 0) {
+                continue;
+            }
+            $plan = maybe_unserialize($row->meta_value);
+            $at = is_array($plan) && !empty($plan['scheduled_at']) ? (int) $plan['scheduled_at'] : 0;
+            if ($at > 0 && (time() - $at) < 120) {
+                continue;
+            }
+            if (function_exists('wpc_fire_regen_thumbs_worker')) {
+                wpc_fire_regen_thumbs_worker((int) $row->post_id);
+                $fired++;
+            }
+        }
+        if ($pending > 0 && function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_regen_sweep12')) {
+            wp_schedule_single_event(time() + 60, 'wpc_regen_sweep12');
+        }
+        if ($fired > 0 && function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('regen-sweep', '', '', ['pending' => $pending, 'fired' => $fired]);
+        }
+        return $fired;
+    }
+    add_action('wpc_regen_sweep12', 'wpc_regen_sweep12');
+    function wpc_regen_nudge23($imageID)
+    {
+        $imageID = (int) $imageID;
+        if ($imageID <= 0 || !function_exists('add_action') || !function_exists('wpc_regen_thumbs_hook')) {
+            return false;
+        }
+        static $armed23 = [];
+        if (isset($armed23[$imageID])) {
+            return true;
+        }
+        $plan = get_post_meta($imageID, '_wpc_pending_thumb_regen', true);
+        $at = is_array($plan) && !empty($plan['scheduled_at']) ? (int) $plan['scheduled_at'] : 0;
+        if (!is_array($plan) || $at <= 0 || (time() - $at) < 120 || get_transient('wpc_regen_thumbs_lock_' . $imageID)) {
+            return false;
+        }
+        $armed23[$imageID] = 1;
+        add_action('shutdown', function () use ($imageID) {
+            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
+                wpc_finish_request39();
+            }
+            @ignore_user_abort(true);
+            @set_time_limit(120);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('regen-nudge', (string) $imageID, '', ['age' => time() - (int) get_post_meta($imageID, '_wpc_pending_thumb_regen', true)['scheduled_at']]);
+            }
+            wpc_regen_thumbs_hook($imageID);
+        }, 99);
+        return true;
+    }
+    function wpc_regen_sweep12_arm()
+    {
+        if (function_exists('wp_schedule_single_event') && function_exists('wp_next_scheduled')
+            && !wp_next_scheduled('wpc_regen_sweep12')) {
+            wp_schedule_single_event(time() + 60, 'wpc_regen_sweep12');
+        }
+    }
+    function wpc_regen_retry12_ajax()
+    {
+        if (!current_user_can('upload_files') || !check_ajax_referer('wps_ic_nonce_action', 'nonce', false)) {
+            wp_send_json_error(['msg' => 'forbidden'], 403);
+        }
+        $id = (int) ($_POST['imageID'] ?? 0);
+        if ($id <= 0 || !get_post_meta($id, '_wpc_pending_thumb_regen', true)) {
+            wp_send_json_success(['pending' => false]);
+        }
+        delete_transient('wpc_regen_thumbs_lock_' . $id);
+        delete_transient('wpc_regen_active_count');
+        wpc_regen_thumbs_hook($id);
+        wp_send_json_success(['pending' => (bool) get_post_meta($id, '_wpc_pending_thumb_regen', true)]);
+    }
+    add_action('wp_ajax_wpc_regen_retry12', 'wpc_regen_retry12_ajax');
+}
+
 if (!function_exists('wpc_regen_thumbs_hook')) {
     function wpc_regen_thumbs_hook($imageID)
     {
@@ -2041,7 +2197,7 @@ if (!function_exists('wpc_lazy_optimize_parent')) {
             if (!wpc_is_valid_image_bytes($bytes, $vfmt, $imageID, 'lazy_parent')) continue;
             $dest = $base_dir . '/' . $fname;
             $tmp = $dest . '.wpc_tmp_' . wp_generate_password(8, false);
-            if (file_put_contents($tmp, $bytes) !== false && @rename($tmp, $dest)) {
+            if (wpc_fs_put($tmp, $bytes) !== false && @rename($tmp, $dest)) {
                 @chmod($dest, 0644);
                 $written++;
             } else {
@@ -2070,7 +2226,7 @@ if (!function_exists('wpc_lazy_fill_variant')) {
         
         $tmp_dir = function_exists('get_temp_dir') ? rtrim(get_temp_dir(), '/') : sys_get_temp_dir();
         $tmp_path = $tmp_dir . '/wpc_lazy_' . $imageID . '_' . wp_generate_password(8, false) . '_' . $variantFilename;
-        if (file_put_contents($tmp_path, $variantBytes) === false) return false;
+        if (wpc_fs_put($tmp_path, $variantBytes) === false) return false;
 
         $params = wps_local_compress::buildOptimizeParams($imageID);
         $params['crops']             = '{}';
@@ -2124,7 +2280,7 @@ if (!function_exists('wpc_lazy_fill_variant')) {
             if (!wpc_is_valid_image_bytes($bytes, $vfmt, $imageID, 'lazy_variant')) continue;
             $dest = $base_dir . '/' . $fname;
             $tmp = $dest . '.wpc_tmp_' . wp_generate_password(8, false);
-            if (file_put_contents($tmp, $bytes) !== false && @rename($tmp, $dest)) {
+            if (wpc_fs_put($tmp, $bytes) !== false && @rename($tmp, $dest)) {
                 @chmod($dest, 0644);
                 $written++;
                 $persist_entries[] = [
@@ -3953,6 +4109,9 @@ class wps_local_compress
 
     public function backup_all_sizes($imageID) {
         $backupMode = self::$settings['backup'] ?? 'full';
+        if (function_exists('wpc_rewrites_jpeg_inplace12') && !wpc_rewrites_jpeg_inplace12()) {
+            return true;
+        }
 
         
         if ($backupMode === 'off') {
@@ -4351,10 +4510,10 @@ class wps_local_compress
                     
                     $wpc_rg2_mime = (string) get_post_mime_type($imageID);
                     if ($wpc_rg2_mime !== 'image/webp') {
-                        foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
+                        foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { if (function_exists('wpc_twin_bytes29')) { wpc_twin_bytes29(-(int) @filesize($webp)); } @unlink($webp); }
                     }
                     if ($wpc_rg2_mime !== 'image/avif') {
-                        foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { @unlink($avif); }
+                        foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { if (function_exists('wpc_twin_bytes29')) { wpc_twin_bytes29(-(int) @filesize($avif)); } @unlink($avif); }
                     }
                 }
             }
@@ -4714,7 +4873,7 @@ class wps_local_compress
                                     }
 
                                     
-                                    file_put_contents($optimizedFilePath, $image_data);
+                                    wpc_fs_put($optimizedFilePath, $image_data);
 
                                     echo "Downloaded and replaced: " . $optimizedBasename;
                                     $done = true;
@@ -5664,7 +5823,7 @@ class wps_local_compress
             $pre = file_exists($path) ? @filesize($path) : 0;
             if (empty($data)) return ['ok' => false, 'pre' => $pre, 'post' => $pre, 'expected' => 0];
             $tmp = $path . '.wpc_tmp_' . wp_generate_password(8, false);
-            if (@file_put_contents($tmp, $data) === false) {
+            if (wpc_fs_put($tmp, $data) === false) {
                 @unlink($tmp);
                 return ['ok' => false, 'pre' => $pre, 'post' => $pre, 'expected' => $expected];
             }
@@ -6025,7 +6184,7 @@ class wps_local_compress
 
         $write_atomic = function ($path, $data) {
             $tmp = $path . '.wpc_tmp_' . wp_generate_password(8, false);
-            if (file_put_contents($tmp, $data) === false) { @unlink($tmp); return false; }
+            if (wpc_fs_put($tmp, $data) === false) { @unlink($tmp); return false; }
             if (!@rename($tmp, $path)) { @unlink($tmp); return false; }
             @chmod($path, 0644);
             return true;
@@ -6257,7 +6416,7 @@ class wps_local_compress
                 $body = wp_remote_retrieve_body($call);
                 
                 if (!empty($body) && wpc_is_valid_image_bytes($body, 'webp', isset($imageID) ? $imageID : 0, 'legacy_webp_convert')) {
-                    file_put_contents($webp_file_location, $body);
+                    wpc_fs_put($webp_file_location, $body);
                     clearstatcache();
 
                     $stats[$size . '-webp']['compressed']['size'] = filesize($webp_file_location);
@@ -6434,6 +6593,9 @@ class wps_local_compress
         if (get_post_meta($imageID, '_wpc_pending_thumb_regen', true)) {
             $bulk = get_option('wps_ic_bulk_process');
             $is_bulk_restore = is_array($bulk) && (($bulk['status'] ?? '') === 'restoring');
+            if (function_exists('wpc_regen_sweep12_arm')) {
+                wpc_regen_sweep12_arm();
+            }
             if (!$is_bulk_restore) {
                 if (function_exists('wpc_fire_regen_thumbs_worker')) wpc_fire_regen_thumbs_worker($imageID);
                 if (!wp_next_scheduled('wpc_regen_thumbs', [$imageID])) {
@@ -6816,10 +6978,10 @@ class wps_local_compress
             
             $wpc_rg_mime = (string) get_post_mime_type($imageID);
             if ($wpc_rg_mime !== 'image/webp') {
-                foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { @unlink($webp); }
+                foreach (glob($dir . '/' . $baseName . '*.webp') as $webp) { if (function_exists('wpc_twin_bytes29')) { wpc_twin_bytes29(-(int) @filesize($webp)); } @unlink($webp); }
             }
             if ($wpc_rg_mime !== 'image/avif') {
-                foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { @unlink($avif); }
+                foreach (glob($dir . '/' . $baseName . '*.avif') as $avif) { if (function_exists('wpc_twin_bytes29')) { wpc_twin_bytes29(-(int) @filesize($avif)); } @unlink($avif); }
             }
         }
 
@@ -7475,7 +7637,7 @@ class wps_local_compress
                 elseif (strpos($retina_file_location, '.webp') !== false) $retina_fmt = 'webp';
                 elseif (strpos($retina_file_location, '.png') !== false) $retina_fmt = 'png';
                 if (!empty($body) && wpc_is_valid_image_bytes($body, $retina_fmt, isset($imageID) ? $imageID : 0, 'legacy_retina')) {
-                    file_put_contents($retina_file_location, $body);
+                    wpc_fs_put($retina_file_location, $body);
                     clearstatcache();
 
                     $stats[$size . '-2x']['compressed']['size'] = filesize($retina_file_location);

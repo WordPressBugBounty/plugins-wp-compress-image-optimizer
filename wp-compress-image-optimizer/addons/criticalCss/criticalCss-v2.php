@@ -4,7 +4,7 @@
  * File: addons/criticalCss/criticalCss-v2.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -13,6 +13,47 @@ if (!class_exists('wps_ic_url_key')) {
 }
 
 
+if (!function_exists('wpc_cmbkey51_record')) {
+    function wpc_cmbkey51_record($dir, $urlKey)
+    {
+        try {
+            $keys = [];
+            $wpc_srcs52 = [isset($GLOBALS['wpc_cmbkey51']) && is_array($GLOBALS['wpc_cmbkey51']) ? $GLOBALS['wpc_cmbkey51'] : []];
+            if ($urlKey !== '' && function_exists('get_transient')) {
+                $t = get_transient('wpc_cmbkey51_' . md5($urlKey));
+                if (is_array($t)) {
+                    $wpc_srcs52[] = $t;
+                }
+            }
+            foreach ($wpc_srcs52 as $wpc_set52) {
+                foreach ($wpc_set52 as $lane => $key) {
+                    $lane = strtolower((string) preg_replace('/[^a-z0-9]/i', '', (string) $lane));
+                    if ($lane === '') {
+                        continue;
+                    }
+                    foreach ((is_array($key) ? $key : [$key]) as $wpc_k52) {
+                        if (is_string($wpc_k52) && $wpc_k52 !== '' && (!isset($keys[$lane]) || !in_array($wpc_k52, $keys[$lane], true))) {
+                            $keys[$lane][] = $wpc_k52;
+                        }
+                    }
+                }
+            }
+            $n = 0;
+            foreach ($keys as $lane => $list) {
+                if (wpc_crit_meta_write(rtrim($dir, '/') . '/cmbkey-' . $lane . '.txt', implode("\n", array_slice($list, -16))) !== false) {
+                    $n++;
+                }
+            }
+            if ($n === 0) {
+                @unlink(rtrim($dir, '/') . '/cmbkey-in.txt');
+            }
+            return $n;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+}
+
 if (!function_exists('wpc_crit_meta_write')) {
     
     
@@ -20,7 +61,7 @@ if (!function_exists('wpc_crit_meta_write')) {
     function wpc_crit_meta_write($path, $value)
     {
         try {
-            return @file_put_contents($path, (string) $value) !== false;
+            return wpc_fs_put($path, (string) $value) !== false;
         } catch (\Throwable $e) {
             return false;
         }
@@ -29,6 +70,7 @@ if (!function_exists('wpc_crit_meta_write')) {
 
 class wps_criticalCss
 {
+    public $wpc_pristine_used56 = false;
 
     static public $API_URL = WPS_IC_CRITICAL_API_URL;
     static public $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
@@ -275,7 +317,7 @@ class wps_criticalCss
                 
                 $wpc_stall622 = function_exists('wpc_crit_sanity_stall_tick622')
                     ? wpc_crit_sanity_stall_tick622(dirname($desktopFilePath)) : 0;
-                if (function_exists('wpc_cache_first_log')) {
+                if (function_exists('wpc_cache_first_log') && ($wpc_stall622 < 3 || (function_exists('get_transient') && !get_transient('wpc_csm36_' . md5((string) $this->urlKey)) && set_transient('wpc_csm36_' . md5((string) $this->urlKey), 1, 60)))) {
                     wpc_cache_first_log('crit-sanity-mark', (string) $this->urlKey, '', [
                         'stall' => $wpc_stall622,
                     ]);
@@ -289,6 +331,7 @@ class wps_criticalCss
                 if ($wpc_stall622 < 2 || !apply_filters('wpc_crit_serve_after_stall', true)) {
                     return false;
                 }
+                $GLOBALS['wpc_crit_blind46'] = true;
             }
 
             
@@ -802,6 +845,9 @@ $return['mobile_path'] = $mobileFilePath;
             $args['visitor']   = wpc_visitor_kind111();
             $args['views_24h'] = function_exists('wpc_views_24h111')
                 ? wpc_views_24h111(isset($url_key) ? (string) $url_key : (string) $this->urlKey) : 0;
+            if (function_exists('wpc_site_counts_due46') && wpc_site_counts_due46()) {
+                $args = array_merge($args, wpc_site_counts46());
+            }
         }
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('gen-dispatch', (string) $url_key, (string) $url, [
@@ -911,7 +957,52 @@ $return['mobile_path'] = $mobileFilePath;
     }
 
 
-    private function fetchCriticalCombineHtml($url) {
+    public static function wpc_cached_pristine56($url, $loopback = false, $dir = null)
+    {
+        try {
+            if ($loopback || !apply_filters('wpc_push_cached_pristine', true) || !function_exists('gzdecode')) {
+                return '';
+            }
+            if ($dir === null) {
+                if (!defined('WPS_IC_CACHE') || !class_exists('wps_ic_url_key')) {
+                    return '';
+                }
+                $wpc_k56 = ltrim((string) (new wps_ic_url_key())->setup(strtok((string) $url, '?')), '/');
+                if ($wpc_k56 === '' || strpos($wpc_k56, '..') !== false) {
+                    return '';
+                }
+                $dir = rtrim(WPS_IC_CACHE, '/') . '/' . $wpc_k56 . '/';
+            }
+            $wpc_f56 = rtrim((string) $dir, '/') . '/pristine.html_gzip';
+            if (!@is_file($wpc_f56)) {
+                return '';
+            }
+            $wpc_pm56 = (int) @filemtime($wpc_f56);
+            $wpc_im56 = (int) @filemtime(rtrim((string) $dir, '/') . '/index.html_gzip');
+            $wpc_max56 = (int) apply_filters('wpc_push_cached_pristine_max_age', 6 * 3600);
+            if ($wpc_pm56 <= 0 || $wpc_im56 <= 0 || (time() - $wpc_pm56) > $wpc_max56 || $wpc_pm56 < $wpc_im56 - 5) {
+                return '';
+            }
+            $wpc_h56 = (string) @gzdecode((string) @file_get_contents($wpc_f56));
+            if ($wpc_h56 === '' || stripos($wpc_h56, '<body') === false || stripos($wpc_h56, '</html>') === false) {
+                return '';
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('push-html-cached', '', (string) $url, ['age' => time() - $wpc_pm56, 'bytes' => strlen($wpc_h56)]);
+            }
+            return $wpc_h56;
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    private function fetchCriticalCombineHtml($url, $force = false) {
+        $wpc_cp56 = self::wpc_cached_pristine56($url, $force);
+        if ($wpc_cp56 !== '') {
+            $this->wpc_pristine_used56 = true;
+            return $wpc_cp56;
+        }
+        $this->wpc_pristine_used56 = false;
         
         
         
@@ -1234,7 +1325,7 @@ $return['mobile_path'] = $mobileFilePath;
 
             $log = file_get_contents($log_file);
             $log .= '[' . $time . '] - ' . $message . "\r\n";
-            file_put_contents($log_file, $log);
+            wpc_fs_put($log_file, $log);
         }
     }
 
@@ -1314,7 +1405,7 @@ $return['mobile_path'] = $mobileFilePath;
                     if (function_exists('wpc_lcp_write_preserve781')) {
                         wpc_lcp_write_preserve781($critical_path, $wpc_lcp_body);
                     } else {
-                        file_put_contents($critical_path . 'lcp.json', $wpc_lcp_body);
+                        wpc_fs_put($critical_path . 'lcp.json', $wpc_lcp_body);
                     }
                     $jobStatus['lcp-hint-saved'] = true;
 
@@ -1555,6 +1646,9 @@ $return['mobile_path'] = $mobileFilePath;
             $args['visitor']   = wpc_visitor_kind111();
             $args['views_24h'] = function_exists('wpc_views_24h111')
                 ? wpc_views_24h111(isset($url_key) ? (string) $url_key : (string) $this->urlKey) : 0;
+            if (function_exists('wpc_site_counts_due46') && wpc_site_counts_due46()) {
+                $args = array_merge($args, wpc_site_counts46());
+            }
         }
 
 
@@ -1645,11 +1739,11 @@ $return['mobile_path'] = $mobileFilePath;
         
         
         
-        if (!is_wp_error($call) && empty($args['html']) && apply_filters('wpc_gen_corpus_retry', true)) {
+        if (!is_wp_error($call) && (empty($args['html']) || !empty($this->wpc_pristine_used56)) && apply_filters('wpc_gen_corpus_retry', true)) {
             $wpc_nc169 = json_decode((string) $body, true);
             if (is_array($wpc_nc169) && !empty($wpc_nc169['needs_corpus'])) {
                 $wpc_cu169 = !empty($args['url']) ? (string) $args['url'] : urldecode((string) $this->serverRequest);
-                $wpc_h169 = $this->fetchCriticalCombineHtml(strtok($wpc_cu169, '?'));
+                $wpc_h169 = $this->fetchCriticalCombineHtml(strtok($wpc_cu169, '?'), !empty($this->wpc_pristine_used56));
                 $wpc_ccap169r = (int) apply_filters('wpc_push_corpus_cap', 8388608);
                 if ($wpc_h169 && strlen($wpc_h169) <= $wpc_ccap169r) {
                     $args['html'] = $wpc_h169;
@@ -2320,6 +2414,8 @@ $return['mobile_path'] = $mobileFilePath;
                 
                 $wpc_dts179 = (int) @file_get_contents($critical_path . 'dispatch_ts.txt');
                 wpc_crit_meta_write($critical_path . 'land_ts.txt', (string) time());
+                wpc_cmbkey51_record($critical_path, (string) $urlKey);
+                @unlink($critical_path . 'dom_ids54.txt');
                 
                 
                 
@@ -2433,7 +2529,7 @@ $return['mobile_path'] = $mobileFilePath;
                     if (!empty($json['crit_combined']) && is_string($json['crit_combined'])
                         && strlen($json['crit_combined']) > 1024 && stripos($json['crit_combined'], '@media') !== false
                         && stripos($json['crit_combined'], '<script') === false && stripos($json['crit_combined'], '</style') === false) {
-                        @file_put_contents($critical_path . 'critical_combined.css', (string) $json['crit_combined'], LOCK_EX);
+                        wpc_fs_put($critical_path . 'critical_combined.css', (string) $json['crit_combined'], LOCK_EX);
                     }
 
 
@@ -2458,7 +2554,7 @@ $return['mobile_path'] = $mobileFilePath;
                             
                             if (!function_exists('wpc_used_css_scoped_purge')
                                 || !wpc_used_css_scoped_purge((string) $json['tpl_key'])) {
-                                try { wps_ic_cache::removeHtmlCacheFiles('all'); } catch (\Throwable $e) {}
+                                try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
                             }
                         }
                     } elseif (function_exists('wpc_used_css_fetch')

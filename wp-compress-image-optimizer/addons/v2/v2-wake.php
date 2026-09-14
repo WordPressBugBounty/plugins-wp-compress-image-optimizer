@@ -4,7 +4,7 @@
  * File: addons/v2/v2-wake.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -177,6 +177,9 @@ if (!function_exists('wpc_v2_wake_handler')) {
             $dispatched = (bool) wpc_v2_pull_drain_fire($wake_items);
         }
         wpc_v2_wake_note('ok', ['dispatched' => $dispatched, 'items' => is_array($wake_items) ? count($wake_items) : 0]);
+        if (function_exists('wpc_policy23_schedule_resync')) {
+            wpc_policy23_schedule_resync(5);
+        }
 
 
         
@@ -186,13 +189,20 @@ if (!function_exists('wpc_v2_wake_handler')) {
         if (function_exists('wpc_v2_pull_drain_loop_handler')) {
             $wpc_wake_items_for_inline = $wake_items;
             add_action('shutdown', function () use ($wpc_wake_items_for_inline) {
-                if (function_exists('fastcgi_finish_request')) {
-                    @fastcgi_finish_request();
+                if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                    wpc_finish_request39();
                 } elseif (function_exists('litespeed_finish_request')) {
                     @litespeed_finish_request();
                 }
 
 
+                if (function_exists('wpc_policy23_resync') && !get_transient('wpc_policy23_resync_inline')) {
+                    set_transient('wpc_policy23_resync_inline', 1, 60);
+                    @ignore_user_abort(true);
+                    $GLOBALS['wpc_signed_wake14'] = true;
+                    wpc_policy23_resync();
+                    unset($GLOBALS['wpc_signed_wake14']);
+                }
                 if (get_transient('wpc_v2_inline_drain_pending')) {
                     return;
                 }

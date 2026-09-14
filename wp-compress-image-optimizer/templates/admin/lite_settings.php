@@ -212,6 +212,7 @@ if (!empty($option['api_key']) && !$warmupFailing && (empty($initialPageSpeedSco
     <div class="wpc-advanced-settings-container wpc-lite-settings-container wps_ic_settings_page<?php if ($isLiteMode) echo ' wpc-is-lite'; ?>">
         <?php
         $wps_ic->integrations->render_plugin_notices();
+        if (function_exists('wpc_states81_render')) { wpc_states81_render(); }
         ?>
 
 

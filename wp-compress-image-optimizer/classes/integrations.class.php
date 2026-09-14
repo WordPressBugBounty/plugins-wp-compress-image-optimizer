@@ -4,7 +4,7 @@
  * File: classes/integrations.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 include_once(ABSPATH . 'wp-admin/includes/plugin.php');
@@ -57,7 +57,7 @@ class wps_ic_integrations extends wps_ic
 
         foreach ($this->plugin_checks as $plugin_check) {
             if (get_class($plugin_check) === 'wps_ic_' . $plugin) {
-                if (method_exists($plugin_check, 'fix')) {
+                if (method_exists($plugin_check, 'fix_setting')) {
                     return $plugin_check->fix_setting($setting);
                 }
             }

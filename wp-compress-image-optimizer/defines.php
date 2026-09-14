@@ -4,9 +4,10 @@
  * File: defines.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
+include_once __DIR__ . '/addons/cache/wpc-fs.php';
 define('WPS_IC_TEXTDOMAIN', 'wp-compress-image-optimizer');
 
 if (!function_exists('wpc_crit_meta_write')) {
@@ -21,14 +22,14 @@ if (!function_exists('wpc_crit_meta_write')) {
     {
         try {
             $wpc_mt = $path . '.tmp.' . getmypid() . '.' . substr(md5(uniqid('', true)), 0, 6);
-            if (@file_put_contents($wpc_mt, (string) $value) === false) {
+            if (wpc_fs_put($wpc_mt, (string) $value) === false) {
                 
                 
                 $wpc_md = dirname((string) $path);
                 if (!is_dir($wpc_md)) {
                     @mkdir($wpc_md, 0777, true);
                 }
-                if (@file_put_contents($wpc_mt, (string) $value) === false) {
+                if (wpc_fs_put($wpc_mt, (string) $value) === false) {
                     if (function_exists('wpc_cache_first_log')) {
                         wpc_cache_first_log('meta-write-fail', basename($wpc_md), '', ['f' => basename((string) $path)]);
                     }
@@ -62,7 +63,65 @@ if (!function_exists('wpc_crit_meta_files')) {
             'stale.txt', 'tpl.txt', 'used_tpl.txt', 'lcp_url.txt', 'lcp_src.txt',
             'delay_url.txt', 'fonts_url.txt', 'used_css_url.txt', 'used_css_mobile_url.txt',
             'used_css_desktop_url.txt', 'used_css_sheets_url.txt', 'crit_combined_url.txt',
-            'crit_combined_src.txt', 'font-preload.txt'];
+            'crit_combined_src.txt', 'font-preload.txt', 'cmbkey-in.txt', 'dom_ids54.txt'];
+    }
+}
+if (!function_exists('wpc_dom_ids54')) {
+    function wpc_dom_ids54($html)
+    {
+        if (!is_string($html) || $html === '' || !preg_match_all('/data-id="([a-f0-9]{6,8})"/', $html, $wpc_m54)) {
+            return [];
+        }
+        return array_values(array_unique($wpc_m54[1]));
+    }
+}
+if (!function_exists('wpc_dom_ids_union54')) {
+    function wpc_dom_ids_union54($dir, $ids, $mobile)
+    {
+        $wpc_f54 = rtrim((string) $dir, '/') . '/dom_ids54.txt';
+        $wpc_flags54 = '';
+        $wpc_have54 = [];
+        if (@is_file($wpc_f54)) {
+            $wpc_lines54 = preg_split('/\s+/', trim((string) @file_get_contents($wpc_f54)), -1, PREG_SPLIT_NO_EMPTY);
+            if (!empty($wpc_lines54) && substr((string) $wpc_lines54[0], 0, 6) === 'flags:') {
+                $wpc_flags54 = substr((string) array_shift($wpc_lines54), 6);
+            }
+            $wpc_have54 = $wpc_lines54;
+        }
+        $wpc_dev54 = $mobile ? 'm' : 'd';
+        $wpc_nflags54 = strpos($wpc_flags54, $wpc_dev54) === false ? $wpc_flags54 . $wpc_dev54 : $wpc_flags54;
+        $wpc_set54 = array_fill_keys($wpc_have54, 1);
+        $wpc_add54 = 0;
+        foreach ((array) $ids as $wpc_i54) {
+            if (!isset($wpc_set54[$wpc_i54])) {
+                $wpc_set54[$wpc_i54] = 1;
+                $wpc_add54++;
+            }
+        }
+        if (($wpc_add54 > 0 || $wpc_nflags54 !== $wpc_flags54) && count($wpc_set54) <= 3000 && function_exists('wpc_fs_put')) {
+            wpc_fs_put($wpc_f54, 'flags:' . $wpc_nflags54 . "\n" . implode("\n", array_keys($wpc_set54)));
+        }
+        return ['ids' => $wpc_set54, 'both' => strpos($wpc_nflags54, 'm') !== false && strpos($wpc_nflags54, 'd') !== false];
+    }
+}
+if (!function_exists('wpc_artifact_foreign54')) {
+    function wpc_artifact_foreign54($css, $union)
+    {
+        if (!is_string($css) || strlen($css) < 1024 || !is_array($union) || empty($union)
+            || !preg_match_all('/\.elementor-element-([a-f0-9]{6,8})\b/', $css, $wpc_m54)) {
+            return [];
+        }
+        $wpc_cids54 = array_values(array_unique($wpc_m54[1]));
+        $wpc_abs54 = [];
+        foreach ($wpc_cids54 as $wpc_c54) {
+            if (!isset($union[$wpc_c54])) {
+                $wpc_abs54[] = $wpc_c54;
+            }
+        }
+        if (count($wpc_abs54) >= 3 && count($wpc_abs54) * 10 >= count($wpc_cids54)) {
+            return $wpc_abs54;
+        }
+        return [];
     }
 }
 
@@ -107,7 +166,7 @@ define('WPS_IC_ACCOUNT_STATUS_MEMORY', 60*60);
 
 define('WPS_IC_FONTS_SCAN', 'https://google-fonts.zapwp.net/scan');
 define('WPS_IC_FONTS_DIR', WP_CONTENT_DIR . '/cache/wp-cio-fonts/');
-define('WPS_IC_FONTS_URL', WP_CONTENT_URL . '/cache/wp-cio-fonts/');
+define('WPS_IC_FONTS_URL', function_exists('content_url') ? content_url('cache/wp-cio-fonts/') : WP_CONTENT_URL . '/cache/wp-cio-fonts/');
 define('WPS_IC_FONTS_MAP', 'wps_ic_fonts_map');
 
 
@@ -520,7 +579,8 @@ function wpc_render_slot_acquire()
     if (!function_exists('wpc_worker_lock')) {
         return true; 
     }
-    $n = (int) (function_exists('apply_filters') ? apply_filters('wpc_render_slots', 4) : 4);
+    $wpc_cores29 = function_exists('wpc_box_cores') ? max(1, (int) wpc_box_cores()) : 4;
+    $n = (int) (function_exists('apply_filters') ? apply_filters('wpc_render_slots', min(4, $wpc_cores29)) : min(4, $wpc_cores29));
     if ($n <= 0) {
         return true;
     }
@@ -847,6 +907,36 @@ if (!function_exists('wpc_atf_glyphs_read')) {
 }
 
 
+if (!function_exists('wpc_default_cdn_excludes')) {
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    function wpc_default_cdn_excludes()
+    {
+        return ['wp-admin', 'redditstatic', 'ai-uncode', 'gtm', 'instagram.com', 'fbcdn.net', 'twitter', 'google', 'coinbase', 'cookie', 'schema', 'recaptcha', 'data:image', 'stats.jpg'];
+    }
+}
+
+
 
 
 
@@ -1045,9 +1135,9 @@ if (!function_exists('wpc_settings_ledger_record')) {
                 
                 
                 if (@filesize($wpc_f) > (int) apply_filters('wpc_settings_ledger_max', 262144)) {
-                    @file_put_contents($wpc_f, '');
+                    wpc_fs_put($wpc_f, '');
                 }
-                @file_put_contents($wpc_f, @json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
+                wpc_fs_put($wpc_f, @json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
             }
             if ($wpc_d['gone'] && function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('settings-wholesale-replace', (string) $wpc_row['at'], '', [
@@ -1153,7 +1243,7 @@ if (!function_exists('wpc_purge_record')) {
                 if (@filesize($wpc_f) > 2097152) {
                     @rename($wpc_f, $wpc_f . '.1');
                 }
-                @file_put_contents($wpc_f, wp_json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
+                wpc_fs_put($wpc_f, wp_json_encode($wpc_row) . "\n", FILE_APPEND | LOCK_EX);
                 return;
             }
             if (!function_exists('get_option')) {
@@ -1414,7 +1504,7 @@ if (!function_exists('wpc_fonts_htaccess_body')) {
         if (@file_get_contents($wpc_file) === $wpc_body) {
             return false;
         }
-        return (bool) @file_put_contents($wpc_file, $wpc_body);
+        return (bool) wpc_fs_put($wpc_file, $wpc_body);
     }
 }
 
@@ -1583,7 +1673,7 @@ if (!function_exists('wpc_font_carrier_record602')) {
                 if ($out === '') { return false; }
             }
             $tmp = $file . '.tmp' . getmypid();
-            if (@file_put_contents($tmp, $out, LOCK_EX) === false) { return false; }
+            if (wpc_fs_put($tmp, $out, LOCK_EX) === false) { return false; }
             if (!@rename($tmp, $file)) { @unlink($tmp); return false; }
             if (function_exists('wpc_cache_first_log')) {
                 wpc_cache_first_log('font-carrier-recorded', '', '', ['added' => $added, 'bytes' => strlen($out)]);
@@ -2912,12 +3002,26 @@ if (!function_exists('wpc_artifact_covers_loop16')) {
         return false;
     }
 }
+
+
+
+
+
+
+
+if (!function_exists('wpc_lcp_bg_preloaded')) {
+    function wpc_lcp_bg_preloaded($html)
+    {
+        return is_string($html)
+            && (strpos($html, 'wpc-lcp-bg-preload') !== false || strpos($html, 'wpc-lcp-hero-preload') !== false);
+    }
+}
 if (!function_exists('wpc_crit_sanity_mark617')) {
     function wpc_crit_sanity_mark617($dir, $critBytes, $ids = [])
     {
         
         
-        @file_put_contents(rtrim((string) $dir, '/') . '/sanity_bad.txt',
+        wpc_fs_put(rtrim((string) $dir, '/') . '/sanity_bad.txt',
             md5((string) $critBytes) . "\n"
             . 'ids=' . implode(',', array_map('strval', (array) $ids)) . ';ts=' . time());
     }
@@ -2940,7 +3044,7 @@ if (!function_exists('wpc_ucss_sanity_mark617')) {
     function wpc_ucss_sanity_mark617($dir, $path)
     {
         
-        @file_put_contents(rtrim((string) $dir, '/') . '/ucss_sanity_bad.txt',
+        wpc_fs_put(rtrim((string) $dir, '/') . '/ucss_sanity_bad.txt',
             (int) @filesize($path) . ':' . (int) @filemtime($path) . ':' . basename((string) $path));
     }
 }
@@ -3041,7 +3145,7 @@ if (!function_exists('wpc_crit_sanity_stall621')) {
         }
         $wpc_st621 = @is_file($wpc_sf621) ? explode(':', trim((string) @file_get_contents($wpc_sf621))) : [0, 0];
         $wpc_n621  = (int) ($wpc_st621[0] ?? 0) + 1;
-        @file_put_contents($wpc_sf621, $wpc_n621 . ':' . (int) ($wpc_st621[1] ?? 0 ?: time()));
+        wpc_fs_put($wpc_sf621, $wpc_n621 . ':' . (int) ($wpc_st621[1] ?? 0 ?: time()));
         return $wpc_n621;
     }
 }
@@ -3055,7 +3159,7 @@ if (!function_exists('wpc_crit_sanity_kick_ok621')) {
         $wpc_st621 = @is_file($wpc_sf621) ? explode(':', trim((string) @file_get_contents($wpc_sf621))) : [0, 0];
         $wpc_ts621 = (int) ($wpc_st621[1] ?? 0);
         if ($wpc_ts621 > 0 && (time() - $wpc_ts621) > 21600) {
-            @file_put_contents($wpc_sf621, '0:' . time());
+            wpc_fs_put($wpc_sf621, '0:' . time());
             return true;
         }
         return false;
@@ -3077,9 +3181,13 @@ if (!function_exists('wpc_crit_sanity_stall_tick622')) {
     function wpc_crit_sanity_stall_tick622($dir)
     {
         $wpc_sf622 = rtrim((string) $dir, '/') . '/sanity_stall.txt';
+        if (isset($GLOBALS['wpc_stall_once55'][$wpc_sf622])) {
+            return (int) $GLOBALS['wpc_stall_once55'][$wpc_sf622];
+        }
         $wpc_st622 = @is_file($wpc_sf622) ? explode(':', trim((string) @file_get_contents($wpc_sf622))) : [0, 0];
         $wpc_n622  = min(999, (int) ($wpc_st622[0] ?? 0) + 1);
-        @file_put_contents($wpc_sf622, $wpc_n622 . ':' . (int) (($wpc_st622[1] ?? 0) ?: time()));
+        wpc_fs_put($wpc_sf622, $wpc_n622 . ':' . (int) (($wpc_st622[1] ?? 0) ?: time()));
+        $GLOBALS['wpc_stall_once55'][$wpc_sf622] = $wpc_n622;
         return $wpc_n622;
     }
 }
@@ -3532,6 +3640,325 @@ if (!function_exists('wpc_perf_debug_allowed741')) {
 
 
 
+if (!function_exists('wpc_finish_request39')) {
+    function wpc_finish_request39()
+    {
+        if (function_exists('fastcgi_finish_request')) {
+            $GLOBALS['wpc_released39'] = true;
+            @fastcgi_finish_request();
+            return true;
+        }
+        if (function_exists('litespeed_finish_request')) {
+            $GLOBALS['wpc_released39'] = true;
+            try {
+                while (ob_get_level() > 0) {
+                    if (@ob_end_flush() === false) {
+                        break;
+                    }
+                }
+                @flush();
+            } catch (\Throwable $e) {
+            }
+            @litespeed_finish_request();
+            return true;
+        }
+        return false;
+    }
+}
+if (!function_exists('wpc_render_guard39_lane')) {
+    function wpc_render_guard39_lane($sapi = null)
+    {
+        if (($sapi === null ? PHP_SAPI : (string) $sapi) === 'cli' || (defined('WP_CLI') && WP_CLI)) {
+            return '';
+        }
+        if ((defined('DOING_CRON') && DOING_CRON) || (defined('DOING_AJAX') && DOING_AJAX)
+            || (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) || (defined('REST_REQUEST') && REST_REQUEST)
+            || (defined('WP_INSTALLING') && WP_INSTALLING)) {
+            return '';
+        }
+        if (function_exists('is_admin') && is_admin()) {
+            return '';
+        }
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            return '';
+        }
+        $m = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
+        if ($m !== 'GET' && $m !== 'HEAD') {
+            return '';
+        }
+        $u = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+        if ($u !== '' && preg_match('#/(?:wp-json|wp-admin|wp-login\.php|wp-cron\.php|xmlrpc\.php|admin-ajax\.php)(?:/|\?|$)#', $u)) {
+            return '';
+        }
+        return 'visitor';
+    }
+}
+if (!function_exists('wpc_render_guard39_active')) {
+    function wpc_render_guard39_active()
+    {
+        return !empty($GLOBALS['wpc_rg39']) && empty($GLOBALS['wpc_released39']);
+    }
+}
+if (!function_exists('wpc_net_defer39')) {
+    function wpc_net_defer39($id, $fn)
+    {
+        if (!isset($GLOBALS['wpc_net_q39']) || !is_array($GLOBALS['wpc_net_q39'])) {
+            $GLOBALS['wpc_net_q39'] = [];
+        }
+        $id = (string) $id;
+        if (count($GLOBALS['wpc_net_q39']) >= 16 && !isset($GLOBALS['wpc_net_q39'][$id])) {
+            return false;
+        }
+        $GLOBALS['wpc_net_q39'][$id] = $fn;
+        return true;
+    }
+}
+if (!function_exists('wpc_net_deferred39')) {
+    function wpc_net_deferred39($resp, $id, $fn)
+    {
+        if (!is_object($resp) || !is_a($resp, 'WP_Error') || $resp->get_error_code() !== 'wpc_render_guard39') {
+            return false;
+        }
+        wpc_net_defer39($id, $fn);
+        return true;
+    }
+}
+if (!function_exists('wpc_render_guard39_own_frame')) {
+    function wpc_render_guard39_own_frame($trace)
+    {
+        static $dirs = null, $foreign = null;
+        if ($dirs === null) {
+            $norm = function ($p) { $p = rtrim((string) $p, '/'); $r = @realpath($p); $o = [$p . '/']; if (is_string($r) && $r !== '' && $r !== $p) { $o[] = rtrim($r, '/') . '/'; } return $o; };
+            $dirs = $norm(__DIR__);
+            if (defined('WPS_IC_DIR') && (string) WPS_IC_DIR !== '') {
+                $dirs = array_values(array_unique(array_merge($dirs, $norm(WPS_IC_DIR))));
+            }
+            $foreign = [];
+            foreach (['WP_PLUGIN_DIR', 'WPMU_PLUGIN_DIR'] as $c) {
+                if (defined($c) && (string) constant($c) !== '') {
+                    $foreign = array_merge($foreign, $norm(constant($c)));
+                }
+            }
+            if (defined('WP_CONTENT_DIR') && (string) WP_CONTENT_DIR !== '') {
+                $foreign = array_merge($foreign, $norm(rtrim((string) WP_CONTENT_DIR, '/') . '/themes'));
+            }
+        }
+        $n = is_array($trace) ? count($trace) : 0;
+        for ($i = 0; $i < $n; $i++) {
+            if (empty($trace[$i]['file'])) {
+                continue;
+            }
+            $f = (string) $trace[$i]['file'];
+            foreach ($dirs as $d) {
+                if (strpos($f, $d) !== 0) {
+                    continue;
+                }
+                $fn = isset($trace[$i + 1]['function']) ? (string) $trace[$i + 1]['function'] : '';
+                if (($fn === '' || $fn === '{closure}') && isset($trace[$i + 2]['function'])) {
+                    $fn = (string) $trace[$i + 2]['function'];
+                }
+                return basename($f) . ':' . (int) (isset($trace[$i]['line']) ? $trace[$i]['line'] : 0) . ' ' . $fn;
+            }
+            foreach ($foreign as $d) {
+                if (strpos($f, $d) === 0) {
+                    return '';
+                }
+            }
+        }
+        return '';
+    }
+}
+if (!function_exists('wpc_render_guard39_filter')) {
+    function wpc_render_guard39_filter($pre, $args, $url)
+    {
+        if ($pre !== false || !wpc_render_guard39_active()) {
+            return $pre;
+        }
+        $a = is_array($args) ? $args : [];
+        if (isset($a['blocking']) && $a['blocking'] === false && isset($a['timeout']) && (float) $a['timeout'] <= 0.1) {
+            return $pre;
+        }
+        $own = wpc_render_guard39_own_frame(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 18));
+        if ($own === '') {
+            return $pre;
+        }
+        $g = is_array($GLOBALS['wpc_rg39']) ? $GLOBALS['wpc_rg39'] : ['mode' => 'block', 'n' => 0, 'seen' => []];
+        $g['n'] = (isset($g['n']) ? (int) $g['n'] : 0) + 1;
+        $host = (string) parse_url((string) $url, PHP_URL_HOST);
+        $sig = $own . '|' . $host;
+        if (empty($g['seen'][$sig])) {
+            $g['seen'][$sig] = 1;
+            $tk = 'wpc_rg39_' . md5($sig);
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient($tk)) {
+                set_transient($tk, 1, 600);
+                wpc_cache_first_log($g['mode'] === 'block' ? 'render-net-blocked' : 'render-net-seen', $own, $host,
+                    ['blocking' => isset($a['blocking']) ? (int) (bool) $a['blocking'] : 1, 'timeout' => isset($a['timeout']) ? (float) $a['timeout'] : 0]);
+            }
+        }
+        $GLOBALS['wpc_rg39'] = $g;
+        if (isset($GLOBALS['wpc_sr_http']) && is_array($GLOBALS['wpc_sr_http'])) {
+            $GLOBALS['wpc_sr_http']['blocked'] = (isset($GLOBALS['wpc_sr_http']['blocked']) ? (int) $GLOBALS['wpc_sr_http']['blocked'] : 0) + 1;
+        }
+        if ($g['mode'] !== 'block') {
+            return $pre;
+        }
+        return new WP_Error('wpc_render_guard39', 'WP Compress: outbound call deferred past the response');
+    }
+}
+if (!function_exists('wpc_render_guard39_arm')) {
+    function wpc_render_guard39_arm($sapi = null)
+    {
+        try {
+            if (!empty($GLOBALS['wpc_rg39'])) {
+                return;
+            }
+            if (defined('WPC_RENDER_NET_GUARD_OFF') && WPC_RENDER_NET_GUARD_OFF) {
+                return;
+            }
+            if (function_exists('apply_filters') && !apply_filters('wpc_render_net_guard', true)) {
+                return;
+            }
+            if (wpc_render_guard39_lane(is_string($sapi) ? $sapi : null) !== 'visitor') {
+                return;
+            }
+            $mode = (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) ? 'block' : 'observe';
+            if (function_exists('apply_filters')) {
+                $mode = (string) apply_filters('wpc_render_net_guard_mode', $mode);
+            }
+            $GLOBALS['wpc_rg39'] = ['mode' => $mode === 'observe' ? 'observe' : 'block', 'n' => 0, 'seen' => []];
+            add_filter('pre_http_request', 'wpc_render_guard39_filter', -2147483647, 3);
+            add_action('shutdown', 'wpc_render_guard39_release', 2);
+        } catch (\Throwable $e) {
+        }
+    }
+}
+if (!function_exists('wpc_net_ceiling57_filter')) {
+    
+    
+    
+    
+    
+    
+    function wpc_net_ceiling57_filter($pre, $args, $url)
+    {
+        if ($pre !== false) {
+            return $pre;
+        }
+        if (defined('WPC_NET_CEILING_OFF') && WPC_NET_CEILING_OFF) {
+            return $pre;
+        }
+        $a = is_array($args) ? $args : [];
+        if (isset($a['blocking']) && $a['blocking'] === false && isset($a['timeout']) && (float) $a['timeout'] <= 0.1) {
+            return $pre;
+        }
+        $own = function_exists('wpc_render_guard39_own_frame') ? wpc_render_guard39_own_frame(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 18)) : '';
+        if ($own === '') {
+            return $pre;
+        }
+        $u = (string) $url;
+        $path = (string) parse_url($u, PHP_URL_HOST) . (string) parse_url($u, PHP_URL_PATH);
+        $c = (isset($GLOBALS['wpc_nc57']) && is_array($GLOBALS['wpc_nc57'])) ? $GLOBALS['wpc_nc57'] : ['n' => 0, 'p' => [], 'hit' => 0];
+        $c['n'] = (int) $c['n'] + 1;
+        $c['p'][$path] = (isset($c['p'][$path]) ? (int) $c['p'][$path] : 0) + 1;
+        $same  = (int) apply_filters('wpc_net_ceiling_same_path', 120);
+        $total = (int) apply_filters('wpc_net_ceiling_total', 1000);
+        $wpc_host29 = (string) parse_url($u, PHP_URL_HOST);
+        $wpc_hcap29 = (int) apply_filters('wpc_net_hourly_host_cap', 3000, $wpc_host29);
+        if ($wpc_hcap29 > 0 && $wpc_host29 !== '' && function_exists('get_transient')) {
+            $wpc_hk29 = 'wpc_neth29_' . md5($wpc_host29 . '|' . floor(time() / 3600));
+            $wpc_hn29 = (int) get_transient($wpc_hk29) + 1;
+            set_transient($wpc_hk29, $wpc_hn29, 3600);
+            if ($wpc_hn29 > $wpc_hcap29) {
+                if (function_exists('wpc_cache_first_log') && !get_transient('wpc_neth29_log_' . md5($wpc_host29))) {
+                    set_transient('wpc_neth29_log_' . md5($wpc_host29), 1, 600);
+                    wpc_cache_first_log('net-hourly-cap', $wpc_host29, '', ['n' => $wpc_hn29, 'cap' => $wpc_hcap29]);
+                }
+                return new WP_Error('wpc_net_hourly_cap', 'WP Compress: hourly outbound cap for ' . $wpc_host29);
+            }
+        }
+        $over = ($same > 0 && $c['p'][$path] > $same) ? 'same-path' : (($total > 0 && $c['n'] > $total) ? 'total' : '');
+        if ($over === '') {
+            $GLOBALS['wpc_nc57'] = $c;
+            return $pre;
+        }
+        if (empty($c['hit'])) {
+            $c['hit'] = 1;
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('net-ceiling-hit', $own, $path, ['why' => $over, 'same' => (int) $c['p'][$path], 'total' => (int) $c['n']]);
+            }
+            error_log('[WPC NetCeiling] ' . $over . ' frame=' . $own . ' path=' . $path . ' same=' . (int) $c['p'][$path] . ' total=' . (int) $c['n']);
+        }
+        $GLOBALS['wpc_nc57'] = $c;
+        return new WP_Error('wpc_net_ceiling57', 'WP Compress: per-request outbound ceiling reached (' . $over . ')');
+    }
+    function wpc_net_ceiling57_arm()
+    {
+        if (!function_exists('add_filter') || (defined('WPC_NET_CEILING_OFF') && WPC_NET_CEILING_OFF)) {
+            return;
+        }
+        if (function_exists('apply_filters') && !apply_filters('wpc_net_ceiling', true)) {
+            return;
+        }
+        add_filter('pre_http_request', 'wpc_net_ceiling57_filter', -2147483646, 3);
+    }
+    if (function_exists('add_action')) {
+        add_action('init', 'wpc_net_ceiling57_arm', -2147483646);
+    }
+}
+if (!function_exists('wpc_render_guard39_release')) {
+    function wpc_render_guard39_release()
+    {
+        if (empty($GLOBALS['wpc_rg39'])) {
+            return;
+        }
+        $g = $GLOBALS['wpc_rg39'];
+        $q = (isset($GLOBALS['wpc_net_q39']) && is_array($GLOBALS['wpc_net_q39'])) ? $GLOBALS['wpc_net_q39'] : [];
+        $GLOBALS['wpc_net_q39'] = [];
+        if (!$q) {
+            $GLOBALS['wpc_rg39'] = false;
+            return;
+        }
+        $rel = wpc_finish_request39();
+        $GLOBALS['wpc_rg39'] = false;
+        if (!$rel) {
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rg39_undrained')) {
+                set_transient('wpc_rg39_undrained', 1, 600);
+                wpc_cache_first_log('render-net-undrained', '', '', ['n' => count($q), 'ids' => implode(',', array_slice(array_keys($q), 0, 6))]);
+            }
+            return;
+        }
+        if (function_exists('ignore_user_abort')) {
+            @ignore_user_abort(true);
+        }
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(60);
+        }
+        $n = 0;
+        foreach ($q as $id => $fn) {
+            if (++$n > 8) {
+                break;
+            }
+            try {
+                if (is_callable($fn)) {
+                    call_user_func($fn);
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+        if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rg39_drained')) {
+            set_transient('wpc_rg39_drained', 1, 600);
+            wpc_cache_first_log('render-net-drained', '', '', ['n' => $n, 'blocked' => isset($g['n']) ? (int) $g['n'] : 0, 'ids' => implode(',', array_slice(array_keys($q), 0, 6))]);
+        }
+    }
+}
+if (function_exists('add_action')) {
+    add_action('init', 'wpc_render_guard39_arm', -2147483647);
+}
+
+
+
+
+
 
 if (!function_exists('wpc_uploads_harden649')) {
     function wpc_uploads_harden649()
@@ -3561,7 +3988,7 @@ if (!function_exists('wpc_uploads_harden649')) {
                 '</Files>',
             ];
             if (!@file_exists($file)) {
-                @file_put_contents($file, "# BEGIN WP Compress Security\n" . implode("\n", $lines) . "\n# END WP Compress Security\n");
+                wpc_fs_put($file, "# BEGIN WP Compress Security\n" . implode("\n", $lines) . "\n# END WP Compress Security\n");
             } else {
                 if (!function_exists('insert_with_markers') && defined('ABSPATH') && @is_readable(ABSPATH . 'wp-admin/includes/misc.php')) {
                     require_once ABSPATH . 'wp-admin/includes/misc.php';
@@ -3595,12 +4022,12 @@ if (!function_exists('wpc_device_hidden_image_set')) {
             if (!is_string($html) || $html === '' || strlen($html) > 3000000) {
                 return $set;
             }
-            $cls = $is_mobile ? 'elementor-hidden-(?:mobile|phone)' : 'elementor-hidden-desktop';
-            $rx  = '/<(div|section|main|article|aside|header|footer|figure|ul|li)\b[^>]*class="[^"]*\b' . $cls . '\b[^"]*"[^>]*>/i';
+            $cls = ($is_mobile ? 'elementor-hidden-(?:mobile|phone)' : 'elementor-hidden-desktop') . '|mega-sub-menu|sub-menu|elementor-nav-menu--dropdown|dropdown-menu';
+            $rx  = '/<(div|section|main|article|aside|header|footer|figure|ul|li|nav)\b[^>]*class="[^"]*\b(?:' . $cls . ')\b[^"]*"[^>]*>/i';
             if (function_exists('apply_filters')) {
                 $rx = (string) apply_filters('wpc_device_hidden_container_regex', $rx, $is_mobile);
             }
-            if (!preg_match_all($rx, $html, $m, PREG_OFFSET_CAPTURE) || count($m[0]) > 60) {
+            if (!preg_match_all($rx, $html, $m, PREG_OFFSET_CAPTURE) || count($m[0]) > 120) {
                 return $set;
             }
             $ranges = [];
@@ -4133,7 +4560,11 @@ if (!function_exists('wpc_views_24h_bump111')) {
             if ((string) $url_key === '' || !function_exists('get_transient')) {
                 return;
             }
-            if (function_exists('wpc_visitor_kind111') && wpc_visitor_kind111() !== 'human') {
+            $wpc_hu46 = !(function_exists('wpc_visitor_kind111') && wpc_visitor_kind111() !== 'human');
+            if (function_exists('wpc_site_views_bump46')) {
+                wpc_site_views_bump46($wpc_hu46);
+            }
+            if (!$wpc_hu46) {
                 return;
             }
             $k = wpc_views_24h_key111($url_key);
@@ -4143,6 +4574,66 @@ if (!function_exists('wpc_views_24h_bump111')) {
             set_transient($k, $n + 1, $n > 0 ? 0 : DAY_IN_SECONDS);
         } catch (\Throwable $e) {
         }
+    }
+}
+if (!function_exists('wpc_site_views_bump46')) {
+    function wpc_site_views_bump46($human)
+    {
+        try {
+            if (!function_exists('get_transient')) {
+                return;
+            }
+            $d = gmdate('Ymd');
+            foreach ($human ? ['wpc_site_v46_' . $d, 'wpc_site_h46_' . $d] : ['wpc_site_v46_' . $d] as $k) {
+                $n = (int) get_transient($k);
+                set_transient($k, $n + 1, $n > 0 ? 0 : 2 * DAY_IN_SECONDS);
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    function wpc_site_counts46()
+    {
+        $t = gmdate('Ymd');
+        $y = gmdate('Ymd', time() - DAY_IN_SECONDS);
+        return [
+            'site_views_24h'  => (int) get_transient('wpc_site_v46_' . $t) + (int) get_transient('wpc_site_v46_' . $y),
+            'site_humans_24h' => (int) get_transient('wpc_site_h46_' . $t) + (int) get_transient('wpc_site_h46_' . $y),
+        ];
+    }
+
+    function wpc_site_counts_due46()
+    {
+        $d = gmdate('Ymd');
+        if ((string) get_option('wpc_site_counts_sent46', '') === $d) {
+            return false;
+        }
+        update_option('wpc_site_counts_sent46', $d, false);
+        return true;
+    }
+
+    function wpc_rum_sample_land46($data)
+    {
+        if (!is_array($data) || !isset($data['rum_sample']) || !function_exists('update_option')) {
+            return false;
+        }
+        $n = (int) $data['rum_sample'];
+        if ($n < 1 || $n > 100000) {
+            return false;
+        }
+        if ((int) get_option('wpc_rum_sample46', 0) !== $n) {
+            update_option('wpc_rum_sample46', $n, false);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('rum-sample-landed', '', '', ['n' => $n]);
+            }
+        }
+        return true;
+    }
+
+    function wpc_rum_sample46()
+    {
+        $n = function_exists('get_option') ? (int) get_option('wpc_rum_sample46', 0) : 0;
+        return $n >= 1 ? $n : 50;
     }
 }
 if (!function_exists('wpc_views_24h111')) {
@@ -4212,7 +4703,7 @@ if (!function_exists('wpc_doctrine_reconcile66')) {
                         if ($wpc_tb231 === '') { continue; }
                         $wpc_tn231 = wpc_css_host_twin_heal231($wpc_tb231);
                         if (is_string($wpc_tn231) && $wpc_tn231 !== $wpc_tb231
-                            && @file_put_contents($wpc_tp231 . '.tmp', $wpc_tn231, LOCK_EX) !== false
+                            && wpc_fs_put($wpc_tp231 . '.tmp', $wpc_tn231, LOCK_EX) !== false
                             && @rename($wpc_tp231 . '.tmp', $wpc_tp231)) {
                         $wpc_th231++;
                         }
@@ -4225,6 +4716,12 @@ if (!function_exists('wpc_doctrine_reconcile66')) {
         if (function_exists('wpc_delay_v3_excl_seed55')) {
             wpc_delay_v3_excl_seed55();
             $wpc_did66[] = 'excl-seed';
+        }
+        if (function_exists('wpc_park_reset52')) {
+            $wpc_pr52 = (int) wpc_park_reset52();
+            if ($wpc_pr52 > 0) {
+                $wpc_did66[] = 'park-reset:' . $wpc_pr52;
+            }
         }
         if (function_exists('wpc_delay_aggr_rearm')) {
             wpc_delay_aggr_rearm();
@@ -4352,6 +4849,13 @@ if (!function_exists('wpc_doctrine_reconcile66')) {
         if (get_option('wpc_doctrine_ver') === WPC_PLUGIN_VERSION) {
             return;
         }
+        $wpc_claim57 = 'wpc_dclaim66_' . preg_replace('/[^0-9a-z]/i', '_', (string) WPC_PLUGIN_VERSION);
+        if (function_exists('add_option') && !add_option($wpc_claim57, (string) time(), '', 'no')) {
+            if ((time() - (int) get_option($wpc_claim57, 0)) < 600) {
+                return;
+            }
+        }
+        $wpc_prev57 = (string) get_option('wpc_doctrine_ver');
         wpc_doctrine_reconcile66(false);
         
         
@@ -4369,6 +4873,9 @@ if (!function_exists('wpc_doctrine_reconcile66')) {
             }
         }
         update_option('wpc_doctrine_ver', WPC_PLUGIN_VERSION, false);
+        if ($wpc_prev57 !== '' && $wpc_prev57 !== WPC_PLUGIN_VERSION && function_exists('delete_option')) {
+            delete_option('wpc_dclaim66_' . preg_replace('/[^0-9a-z]/i', '_', $wpc_prev57));
+        }
     }
     if (function_exists('add_action')) {
         add_action('init', 'wpc_doctrine_stamp66', 6);
@@ -4811,6 +5318,78 @@ if (!function_exists('wpc_ff_debug_head86')) {
 
 
 
+if (!function_exists('wpc_purge_soft43')) {
+    function wpc_purge_soft43($explicit = null)
+    {
+        try {
+            if ($explicit === 'hard') {
+                return false;
+            }
+            if (defined('WPC_PURGE_SERVE_STALE') && !WPC_PURGE_SERVE_STALE) {
+                return false;
+            }
+            if (function_exists('apply_filters') && !apply_filters('wpc_purge_serve_stale', true)) {
+                return false;
+            }
+            if (!defined('WPC_PLUGIN_VERSION') || !function_exists('get_option')
+                || (string) get_option('wpc_stale43_ver', '') !== (string) WPC_PLUGIN_VERSION) {
+                return false;
+            }
+            return defined('WPS_IC_CACHE') && @is_dir(WPS_IC_CACHE);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    function wpc_stale43_mark()
+    {
+        if (!defined('WPS_IC_CACHE')) {
+            return false;
+        }
+        return wpc_fs_put(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt', (string) time()) !== false;
+    }
+
+    function wpc_purge_all_coalesce10()
+    {
+        if (!function_exists('get_option') || !function_exists('update_option')) {
+            return false;
+        }
+        if (defined('WPC_PURGE_COALESCE_OFF') && WPC_PURGE_COALESCE_OFF) {
+            return false;
+        }
+        if (!empty($_REQUEST['wps_ic_nonce'])) {
+            update_option('wpc_purge_all_at10', time(), false);
+            return false;
+        }
+        $win = (int) apply_filters('wpc_purge_all_coalesce_window', 90);
+        $last = (int) get_option('wpc_purge_all_at10', 0);
+        $now = time();
+        if ($win > 0 && $last > 0 && ($now - $last) < $win) {
+            wpc_stale43_mark();
+            if (class_exists('wps_cacheHtml') && method_exists('wps_cacheHtml', 'wpc_stale39_walk_detach')) {
+                wps_cacheHtml::wpc_stale39_walk_detach();
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('purge-local-all-coalesced', '', '', ['ago' => $now - $last, 'win' => $win]);
+            }
+            return true;
+        }
+        update_option('wpc_purge_all_at10', $now, false);
+        return false;
+    }
+
+    function wpc_stale43_hard_done()
+    {
+        if (defined('WPS_IC_CACHE')) {
+            @unlink(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt');
+        }
+        if (defined('WPC_PLUGIN_VERSION') && function_exists('update_option')
+            && (string) get_option('wpc_stale43_ver', '') !== (string) WPC_PLUGIN_VERSION) {
+            update_option('wpc_stale43_ver', (string) WPC_PLUGIN_VERSION, false);
+        }
+    }
+}
+
 if (!function_exists('wpc_delivery_config_sig146')) {
     function wpc_delivery_config_sig146()
     {
@@ -4839,7 +5418,7 @@ if (!function_exists('wpc_dcv_flip146')) {
                 if (!@is_dir(WPS_IC_CACHE)) {
                     @mkdir(rtrim(WPS_IC_CACHE, '/'), 0755, true);
                 }
-                @file_put_contents(rtrim(WPS_IC_CACHE, '/') . '/dcv.txt', $wpc_sig146);
+                wpc_fs_put(rtrim(WPS_IC_CACHE, '/') . '/dcv.txt', $wpc_sig146);
             }
             if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'purgeEdgeHtmlUrls') && function_exists('home_url')) {
                 wps_ic_cache::purgeEdgeHtmlUrls([home_url('/'), home_url()]);

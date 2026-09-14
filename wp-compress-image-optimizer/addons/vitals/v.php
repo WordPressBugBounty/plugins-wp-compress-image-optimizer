@@ -4,11 +4,10 @@
  * File: addons/vitals/v.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
-
-
+include_once __DIR__ . '/../cache/wpc-fs.php';
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
     exit;
@@ -99,7 +98,7 @@ if (isset($q['k']) && $q['k'] === 'p') {
     $day  = $statsDir . gmdate('Ymd') . '.bin';
     $size = @filesize($day);
     if ($size === false || $size < 8388608) {
-        @file_put_contents($day, $ping, FILE_APPEND);
+        wpc_fs_put($day, $ping, FILE_APPEND);
     }
     http_response_code(204);
     exit;
@@ -122,7 +121,7 @@ $rec = pack(
 $day  = $statsDir . gmdate('Ymd') . '.bin';
 $size = @filesize($day);
 if ($size === false || $size < 8388608) { 
-    @file_put_contents($day, $rec, FILE_APPEND); 
+    wpc_fs_put($day, $rec, FILE_APPEND); 
 }
 http_response_code(204);
 exit;

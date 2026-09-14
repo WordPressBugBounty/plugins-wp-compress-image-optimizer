@@ -8,6 +8,13 @@ if (ngf298gh738qwbdh0s87v_vars.js_debug == 'true') {
     jsDebug = true;
 }
 
+function wpcOwnsSrc47(e) {
+    var s = e.getAttribute("src") || "";
+    return s === "" || s.indexOf("data:image/svg+xml") === 0 || s.indexOf("placeholder.svg") !== -1;
+}
+function wpcPainted44(e) {
+    try { return e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden"; } catch (x) { return true; }
+}
 function checkMobile() {
     if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 580) {
         wpcIsMobile = true;
@@ -171,9 +178,9 @@ function lazyLoad() {
                 return;
             }
 
-            if ((lazyImage.getBoundingClientRect().top <= window.innerHeight + 1000
+            if ((lazyImage.getBoundingClientRect().top <= window.innerHeight + 500
                     && lazyImage.getBoundingClientRect().bottom >= 0)
-                && getComputedStyle(lazyImage).display !== "none") {
+                && wpcPainted44(lazyImage)) {
 
                 imageExtension = '';
                 imageFilename = '';
@@ -204,17 +211,19 @@ function lazyLoad() {
                 
                 masonry = lazyImage.closest(".masonry");
 
-                if (typeof lazyImage.dataset.src !== 'undefined' && typeof lazyImage.dataset.src !== undefined) {
-                    lazyImage.src = lazyImage.dataset.src;
-                }
-
-                
                 var parentPicture = lazyImage.closest('picture');
                 if (parentPicture) {
                     parentPicture.querySelectorAll('source[data-srcset]').forEach(function(s) {
                         s.srcset = s.dataset.srcset;
                         s.removeAttribute('data-srcset');
                     });
+                }
+
+                if (typeof lazyImage.dataset.srcset !== 'undefined' && wpcOwnsSrc47(lazyImage)) {
+                    lazyImage.srcset = lazyImage.dataset.srcset;
+                }
+                if (typeof lazyImage.dataset.src !== 'undefined' && typeof lazyImage.dataset.src !== undefined && wpcOwnsSrc47(lazyImage)) {
+                    lazyImage.src = lazyImage.dataset.src;
                 }
 
                 var imageSrc = lazyImage.src;

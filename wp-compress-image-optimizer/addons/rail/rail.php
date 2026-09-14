@@ -4,7 +4,7 @@
  * File: addons/rail/rail.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) {
@@ -136,6 +136,7 @@ if (!function_exists('wpc_rail_on')) {
                 wpc_cache_first_log('rail-dead', '', '', ['hook' => $job['hook'], 'attempts' => $attempts]);
             }
             $wpdb->delete($t, ['id' => (int) $job['id']]);
+            update_option('wpc_rail_parked28', (int) get_option('wpc_rail_parked28', 0) + 1, false);
             return;
         }
         
@@ -151,12 +152,42 @@ if (!function_exists('wpc_rail_on')) {
 
 
 
+    function wpc_rail_warm_hook28($hook)
+    {
+        foreach (['wpc_url_warm', 'wpc_lcp_repull', 'wpc_land_', 'wpc_combine_fonts', 'wpc_crit_', 'wpc_presc', 'wpc_autopurge'] as $p) {
+            if (strpos((string) $hook, $p) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+    function wpc_rail_has_correctness28()
+    {
+        global $wpdb;
+        $t = wpc_rail_table();
+        $hooks = $wpdb->get_col("SELECT DISTINCT hook FROM {$t} WHERE claimed_at = 0 AND available_at <= " . (int) time() . " LIMIT 50");
+        foreach ((array) $hooks as $h) {
+            if (!wpc_rail_warm_hook28($h)) {
+                return true;
+            }
+        }
+        return false;
+    }
     function wpc_rail_consume()
     {
         if (!wpc_rail_on()) {
             return 0;
         }
-        if (function_exists('wpc_under_pressure') && wpc_under_pressure()) {
+        $wpc_hot28 = function_exists('wpc_under_pressure') && wpc_under_pressure();
+        if ($wpc_hot28 && !wpc_rail_has_correctness28()) {
+            if (function_exists('wpc_cache_first_log') && function_exists('get_transient') && !get_transient('wpc_rail_pressure14')) {
+                set_transient('wpc_rail_pressure14', 1, 300);
+                wpc_cache_first_log('rail-pressure-skip', '', '', [
+                    'load1' => function_exists('sys_getloadavg') ? round((float) @sys_getloadavg()[0], 2) : -1,
+                    'cores' => function_exists('wpc_box_cores') ? (int) wpc_box_cores() : -1,
+                    'depth' => function_exists('wpc_rail_depth') ? (int) wpc_rail_depth() : -1,
+                ]);
+            }
             return 0;
         }
         
@@ -214,22 +245,7 @@ if (!function_exists('wpc_rail_on')) {
     function wpc_rail_detect_engine()
     {
         $engine = 'loopback';
-        if (function_exists('exec')) {
-            $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
-            if (!in_array('exec', $disabled, true)) {
-                $out = [];
-                @exec('command -v wp 2>/dev/null', $out);
-                $wp_bin = !empty($out[0]) ? trim($out[0]) : '';
-                if ($wp_bin !== '') {
-                    $probe = [];
-                    @exec(escapeshellarg($wp_bin) . ' --version 2>/dev/null', $probe);
-                    if (!empty($probe[0]) && stripos($probe[0], 'WP-CLI') !== false) {
-                        $engine = 'cli';
-                        update_option('wpc_rail_wp_bin', $wp_bin, false);
-                    }
-                }
-            }
-        }
+        delete_option('wpc_rail_wp_bin');
         update_option('wpc_rail_engine', $engine, false);
         if (function_exists('wpc_cache_first_log')) {
             wpc_cache_first_log('rail-engine', '', '', ['engine' => $engine]);
@@ -245,17 +261,6 @@ if (!function_exists('wpc_rail_on')) {
             return;
         }
         $nudged = true;
-        $engine = (string) get_option('wpc_rail_engine', 'loopback');
-        if ($engine === 'cli') {
-            $wp_bin = (string) get_option('wpc_rail_wp_bin');
-            if ($wp_bin !== '' && function_exists('exec')) {
-                
-                @exec(escapeshellarg($wp_bin) . ' --path=' . escapeshellarg(ABSPATH)
-                    . ' eval ' . escapeshellarg('function_exists("wpc_rail_consume") && wpc_rail_consume();')
-                    . ' > /dev/null 2>&1 &');
-                return;
-            }
-        }
         
         
         if (class_exists('wps_ic_ajax') && method_exists('wps_ic_ajax', 'wpc_loopback_open_socket')) {
@@ -298,8 +303,8 @@ if (!function_exists('wpc_rail_on')) {
         if (!headers_sent()) {
             http_response_code(200);
         }
-        if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            wpc_finish_request39();
         }
         wpc_rail_consume();
         wp_die('', '', ['response' => 200]);

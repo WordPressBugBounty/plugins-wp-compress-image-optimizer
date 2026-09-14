@@ -4,7 +4,7 @@
  * File: classes/combine_js.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -93,7 +93,7 @@ class wps_ic_combine_js
     {
         if ($this->current_file != '') {
             $wpc_name644 = 'wps_' . $this->current_section . '_' . $this->file_count . '.js';
-            file_put_contents($this->combined_dir . $wpc_name644, $this->current_file);
+            wpc_fs_put($this->combined_dir . $wpc_name644, $this->current_file);
             $this->wpc_written644[] = $wpc_name644;
         }
         $this->file_count++;

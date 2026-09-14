@@ -4,7 +4,7 @@
  * File: addons/v2/v2-bootstrap.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -35,6 +35,7 @@ require_once WPC_V2_DIR . '/v2-trigger-scanner.php';
 require_once WPC_V2_DIR . '/v2-rung-intercept.php';
 require_once WPC_V2_DIR . '/v2-fast-404.php';
 require_once WPC_V2_DIR . '/v2-sized-trigger.php';
+require_once WPC_V2_DIR . '/v2-policy.php';
 
 
 
@@ -74,16 +75,12 @@ if (!function_exists('wpc_v2_selfcheck654')) {
     }
     add_action('init', 'wpc_v2_selfcheck654', 1);
 
-    add_action('admin_notices', function () {
+    add_action('admin_init', function () {
+        if (!function_exists('wpc_state81')) { return; }
         $g = get_option('wpc_v2_gutted654');
-        if (empty($g) || !is_array($g) || !function_exists('current_user_can') || !current_user_can('manage_options')) {
-            return;
-        }
-        echo '<div class="notice notice-error"><p><strong>WP Compress:</strong> a security scanner on this server has emptied '
-            . 'plugin file(s): <code>' . esc_html(implode(', ', (array) $g['files'])) . '</code>. '
-            . 'Image optimization callbacks cannot be received, so no optimized images can land. '
-            . 'Ask your host to allow-list these files (they are signed, authenticated plugin code), then reinstall WP Compress.</p></div>';
-    });
+        if (empty($g) || !is_array($g)) { wpc_state_clear81('files_emptied'); return; }
+        wpc_state81('files_emptied', 'error', sprintf(__('A security scanner on this server emptied %s. Optimized images cannot be received until the file is restored: reinstall the plugin, and allow-list these files in the scanner.', 'wp-compress-image-optimizer'), implode(', ', (array) $g['files'])));
+    }, 30);
 }
 
 

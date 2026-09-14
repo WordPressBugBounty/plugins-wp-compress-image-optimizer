@@ -4,7 +4,7 @@
  * File: classes/local.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -426,7 +426,13 @@ class wps_ic_local
         
         $wpc_blc = get_option('wpc_bulk_library_counts_d');
         $wpc_has_snap = is_array($wpc_blc) && isset($wpc_blc['uncompressed'], $wpc_blc['compressed']);
-        if (!$fresh && $wpc_has_snap) {
+        $wpc_dead37 = $wpc_has_snap && !empty($wpc_blc['dead37']);
+        if (!$fresh && $wpc_dead37) {
+            $wpc_blc['t'] = time();
+            unset($wpc_blc['dead37']);
+            update_option('wpc_bulk_library_counts_d', $wpc_blc, false);
+        }
+        if (!$fresh && $wpc_has_snap && !$wpc_dead37) {
             if ((time() - (int) ($wpc_blc['t'] ?? 0)) >= 300) {
                 self::scheduleCountsRefresh();
             }
@@ -497,11 +503,32 @@ class wps_ic_local
             'uncompressed' => $uncompressed,
             'compressed'   => $compressed,
         ], false);
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('library-counts', '', '', [
+                'compressed'   => $compressed,
+                'uncompressed' => $uncompressed,
+                'why'          => $fresh ? 'invalidated' : ($wpc_dead37 ? 'dead' : 'first'),
+                'uri'          => isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 80) : '',
+            ]);
+        }
 
         return [
             'compressed'   => $compressed > 0 ? array_fill(0, $compressed, 1) : [],
             'uncompressed' => $uncompressed > 0 ? array_fill(0, $uncompressed, 1) : [],
         ];
+    }
+
+    public static function wpc_counts_invalidate37($recount = false)
+    {
+        delete_transient('wpc_bulk_library_counts');
+        $wpc_s37 = get_option('wpc_bulk_library_counts_d');
+        if (is_array($wpc_s37)) {
+            $wpc_s37['dead37'] = 1;
+            update_option('wpc_bulk_library_counts_d', $wpc_s37, false);
+        }
+        if ($recount) {
+            self::countLibraryImages(true);
+        }
     }
 
     
@@ -513,9 +540,16 @@ class wps_ic_local
         $armed = true;
         add_action('shutdown', function () {
             $fin = false;
-            if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $fin = true; }
-            elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); $fin = true; }
-            if (!$fin) { return; }   
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) { wpc_finish_request39(); $fin = true; }
+            if (!$fin) {
+                $wpc_nd37 = get_option('wpc_bulk_library_counts_d');
+                if (is_array($wpc_nd37) && (time() - (int) ($wpc_nd37['t'] ?? 0)) >= 3600) {
+                    $wpc_nd37['t'] = time();
+                    update_option('wpc_bulk_library_counts_d', $wpc_nd37, false);
+                    self::countLibraryImages(true);
+                }
+                return;
+            }
             if (function_exists('ignore_user_abort')) { ignore_user_abort(true); }
             @set_time_limit(120);
             

@@ -4,7 +4,7 @@
  * File: classes/cache.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -336,7 +336,7 @@ class wps_ic_cache
         return $src;
     }
 
-    public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '')
+    public static function removeHtmlCacheFiles($post_id = 'all', $post = '', $update = '', $mode43 = null)
     {
         if (!is_int($post_id) && $post_id !== 'all' && $post_id !== 'home') {
             $post_id = 'all';
@@ -351,11 +351,17 @@ class wps_ic_cache
             wpc_cache_first_log('purge-local-all', '', '', [
                 'src' => self::wpc_purge_src(),
                 'uri' => isset($_SERVER['REQUEST_URI']) ? substr((string) $_SERVER['REQUEST_URI'], 0, 60) : '',
+                'mode' => (function_exists('wpc_purge_soft43') && wpc_purge_soft43($mode43)) ? 'stale' : 'hard',
             ]);
+        }
+        if ($post_id === 'all' && !(function_exists('wpc_purge_soft43') && wpc_purge_soft43($mode43))
+            && function_exists('wpc_purge_all_coalesce10') && wpc_purge_all_coalesce10()) {
+            self::mark_cache_cleared();
+            return;
         }
 
         $cacheHtml = new wps_cacheHtml();
-        $cacheHtml->removeCacheFiles($post_id);
+        $cacheHtml->removeCacheFiles($post_id, $mode43);
 
         $cache_integrations = new wps_ic_cache_integrations();
 
@@ -468,8 +474,8 @@ class wps_ic_cache
     public static function fireHomepageWarm()
     {
         try {
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
 
 
@@ -798,8 +804,8 @@ class wps_ic_cache
             return $send();
         }
         register_shutdown_function(function () use ($send) {
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
             $send();
         });
@@ -968,8 +974,8 @@ class wps_ic_cache
                 return;
             }
             $wpc_state_ref = 'sent';
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+                wpc_finish_request39();
             }
             $send();
         });
@@ -1533,8 +1539,8 @@ class wps_ic_cache
             return;
         }
         $GLOBALS['wpc_savepurge920'] = [];
-        if (function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
+            wpc_finish_request39();
         }
         if (function_exists('ignore_user_abort')) {
             @ignore_user_abort(true);

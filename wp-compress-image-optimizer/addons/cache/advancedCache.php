@@ -4,10 +4,10 @@
  * File: addons/cache/advancedCache.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
-
+include_once __DIR__ . '/wpc-fs.php';
 define('WPS_IC_CACHE', WP_CONTENT_DIR . '/cache/wp-cio/');
 
 
@@ -54,6 +54,182 @@ if (!function_exists('wpc_dcv_stale146')) {
             return $wpc_dm146 > 0 && $wpc_fm146 > 0 && $wpc_fm146 < $wpc_dm146;
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+}
+
+if (!function_exists('wpc_stale43_plan')) {
+    function wpc_stale43_plan($dir, $prefix = '')
+    {
+        try {
+            $dir = rtrim((string) $dir, '/') . '/';
+            if (!@is_file($dir . $prefix . 'index.html') && !@is_file($dir . $prefix . 'index.html_gzip')) {
+                $wpc_sm39 = 0;
+                foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
+                    $wpc_m39 = (int) @filemtime($dir . $prefix . $wpc_f39);
+                    if ($wpc_m39 > $wpc_sm39) {
+                        $wpc_sm39 = $wpc_m39;
+                    }
+                }
+                if ($wpc_sm39 > 0) {
+                    $wpc_max39 = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
+                    if ($wpc_max39 > 0 && (time() - $wpc_sm39) > $wpc_max39) {
+                        return 'miss';
+                    }
+                    $wpc_st39 = $dir . $prefix . 'wpc-rewarm43.txt';
+                    $wpc_n39 = (@is_file($wpc_st39) && (int) @filemtime($wpc_st39) >= $wpc_sm39) ? (int) @file_get_contents($wpc_st39) : 0;
+                    if ($wpc_n39 >= 4) {
+                        return 'miss';
+                    }
+                    return 'stale';
+                }
+            }
+            if (!defined('WPS_IC_CACHE')) {
+                return 'fresh';
+            }
+            $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+            if (!@is_file($wpc_mk43)) {
+                return 'fresh';
+            }
+            $wpc_ep43 = (int) @file_get_contents($wpc_mk43);
+            if ($wpc_ep43 <= 0) {
+                return 'fresh';
+            }
+            $dir = rtrim((string) $dir, '/') . '/';
+            $wpc_nw43 = 0;
+            foreach (['index.html_gzip', 'index.html'] as $wpc_f43) {
+                $wpc_m43 = (int) @filemtime($dir . $prefix . $wpc_f43);
+                if ($wpc_m43 > $wpc_nw43) {
+                    $wpc_nw43 = $wpc_m43;
+                }
+            }
+            if ($wpc_nw43 === 0 || $wpc_nw43 >= $wpc_ep43) {
+                return 'fresh';
+            }
+            $wpc_max43 = defined('WPC_STALE_SERVE_MAX') ? (int) WPC_STALE_SERVE_MAX : 86400;
+            if ($wpc_max43 > 0 && (time() - $wpc_ep43) > $wpc_max43) {
+                return 'miss';
+            }
+            $wpc_st43 = $dir . $prefix . 'wpc-rewarm43.txt';
+            $wpc_n43 = (@is_file($wpc_st43) && (int) @filemtime($wpc_st43) >= $wpc_ep43) ? (int) @file_get_contents($wpc_st43) : 0;
+            if ($wpc_n43 >= 4) {
+                return 'miss';
+            }
+            return 'stale';
+        } catch (\Throwable $e) {
+            return 'fresh';
+        }
+    }
+
+    function wpc_stale43_miss($dir, $prefix = '')
+    {
+        $dir = rtrim((string) $dir, '/') . '/';
+        foreach (['index.html_br', 'index.html_gzip', 'index.html', 'index.html_md5', 'stale.html_br', 'stale.html_gzip', 'stale.html', 'wpc-rewarm43.txt'] as $wpc_f43) {
+            @unlink($dir . $prefix . $wpc_f43);
+        }
+    }
+
+    function wpc_stale43_serve($dir, $prefix = '')
+    {
+        try {
+            header('Cache-Control: no-cache, max-age=0, must-revalidate');
+            header('Expires: ' . gmdate('D, d M Y H:i:s', time() - 60) . ' GMT');
+            header('X-WPC-Cache: stale-rewarm');
+            $dir = rtrim((string) $dir, '/') . '/';
+            $wpc_st43 = $dir . $prefix . 'wpc-rewarm43.txt';
+            $wpc_ep43 = (int) @file_get_contents(rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt');
+            foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
+                $wpc_m39 = (int) @filemtime($dir . $prefix . $wpc_f39);
+                if ($wpc_m39 > $wpc_ep43) {
+                    $wpc_ep43 = $wpc_m39;
+                }
+            }
+            $wpc_n43 = 0;
+            if (@is_file($wpc_st43) && (int) @filemtime($wpc_st43) >= $wpc_ep43) {
+                if (time() - (int) @filemtime($wpc_st43) < 120) {
+                    return false;
+                }
+                $wpc_n43 = (int) @file_get_contents($wpc_st43);
+            }
+            wpc_fs_put($wpc_st43, (string) ($wpc_n43 + 1));
+            $wpc_host43 = isset($_SERVER['HTTP_HOST']) ? (string) $_SERVER['HTTP_HOST'] : '';
+            $wpc_path43 = (string) (parse_url(isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/', PHP_URL_PATH) ?: '/');
+            if ($wpc_host43 === '' || preg_match('/[^A-Za-z0-9.\-:\[\]]/', $wpc_host43) || preg_match('/[\s"\']/', $wpc_path43)) {
+                return false;
+            }
+            $wpc_https43 = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
+                || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+            $wpc_ua43 = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : 'Mozilla/5.0'), 0, 300);
+            $wpc_ac43 = substr((string) preg_replace('/[\r\n]+/', ' ', isset($_SERVER['HTTP_ACCEPT']) ? (string) $_SERVER['HTTP_ACCEPT'] : 'text/html'), 0, 200);
+            register_shutdown_function('wpc_stale43_fire', $wpc_host43, $wpc_https43, $wpc_path43, $wpc_ua43, $wpc_ac43);
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    function wpc_stale43_fire($host, $https, $path, $ua, $accept)
+    {
+        try {
+            $wpc_fin44 = false;
+            if (function_exists('wpc_finish_request39')) { $wpc_fin44 = (bool) wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $wpc_fin44 = true; } else {
+                while (ob_get_level() > 0) {
+                    @ob_end_flush();
+                }
+                @flush();
+                if (function_exists('litespeed_finish_request')) {
+                    @litespeed_finish_request();
+                    $wpc_fin44 = true;
+                }
+            }
+            $wpc_ho43 = (string) preg_replace('/:\d+$/', '', (string) $host);
+            $wpc_port43 = $https ? 443 : 80;
+            if (preg_match('/:(\d+)$/', (string) $host, $wpc_pm43)) {
+                $wpc_port43 = (int) $wpc_pm43[1];
+            }
+            $wpc_ctx43 = $https ? stream_context_create(['ssl' => [
+                'peer_name' => $wpc_ho43, 'SNI_enabled' => true,
+                'verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true,
+            ]]) : stream_context_create();
+            $wpc_req43 = "GET {$path} HTTP/1.1\r\nHost: {$host}\r\nUser-Agent: {$ua}\r\nAccept: {$accept}\r\nX-WPC-Cache-Warm: 1\r\nConnection: close\r\n\r\n";
+            $wpc_tries47 = [];
+            foreach (['127.0.0.1', 'localhost', $wpc_ho43] as $wpc_c43) {
+                $wpc_en43 = 0;
+                $wpc_es43 = '';
+                $wpc_fp43 = @stream_socket_client(($https ? 'tls://' : 'tcp://') . $wpc_c43 . ':' . $wpc_port43, $wpc_en43, $wpc_es43, $wpc_fin44 ? 1.0 : 0.3, STREAM_CLIENT_CONNECT, $wpc_ctx43);
+                if ($wpc_fp43) {
+                    @stream_set_timeout($wpc_fp43, 0, 200000);
+                    @fwrite($wpc_fp43, $wpc_req43);
+                    $wpc_st47 = '';
+                    if ($wpc_fin44) {
+                        @stream_set_timeout($wpc_fp43, 3, 0);
+                        $wpc_st47 = trim((string) @fgets($wpc_fp43));
+                    }
+                    @fclose($wpc_fp43);
+                    wpc_stale47_note($path, ['rung' => $wpc_c43, 'fin' => $wpc_fin44 ? 1 : 0, 'status' => substr($wpc_st47, 0, 40), 'tries' => implode(',', $wpc_tries47)]);
+                    return true;
+                }
+                $wpc_tries47[] = $wpc_c43 . '(' . (int) $wpc_en43 . ')';
+            }
+            wpc_stale47_note($path, ['rung' => '', 'fin' => $wpc_fin44 ? 1 : 0, 'status' => '', 'tries' => implode(',', $wpc_tries47)]);
+        } catch (\Throwable $e) {
+        }
+        return false;
+    }
+
+    function wpc_stale47_note($path, $layers)
+    {
+        try {
+            if (!defined('WPS_IC_CACHE')) {
+                return;
+            }
+            $wpc_lf47 = rtrim(WPS_IC_CACHE, '/') . '/wpc-cflog.jsonl';
+            $wpc_ln47 = json_encode(['t' => time(), 'event' => 'stale-fire', 'key' => substr((string) $path, 0, 120), 'url' => '', 'layers' => $layers]);
+            if (is_string($wpc_ln47) && @is_dir(dirname($wpc_lf47))) {
+                @file_put_contents($wpc_lf47, $wpc_ln47 . "\n", FILE_APPEND | LOCK_EX);
+            }
+        } catch (\Throwable $e) {
         }
     }
 }
@@ -354,6 +530,21 @@ class wps_advancedCache
             $prefix = $prefix . '_';
         }
 
+        if (!empty($_SERVER['HTTP_X_WPC_CACHE_WARM'])) {
+            if (function_exists('ignore_user_abort')) {
+                @ignore_user_abort(true);
+            }
+            return false;
+        }
+        if (function_exists('wpc_stale43_plan') && wpc_stale43_plan($this->cachePath, $prefix) === 'miss') {
+            wpc_stale43_miss($this->cachePath, $prefix);
+            return false;
+        }
+        foreach (['stale.html_gzip', 'stale.html'] as $wpc_f39) {
+            if (@file_exists($this->cachePath . $prefix . $wpc_f39) && (int) @filesize($this->cachePath . $prefix . $wpc_f39) > 0) {
+                return true;
+            }
+        }
 
         if (function_exists('gzencode')) {
             if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && filesize($this->cachePath . $prefix . 'index.html' . '_gzip') > 0) {
@@ -463,7 +654,11 @@ class wps_advancedCache
         if (!@rename($tmp, $final)) {
             @unlink($tmp);
         } else {
-            @file_put_contents($this->cachePath . $prefix . 'index.html_md5', md5($buffer));
+            wpc_fs_put($this->cachePath . $prefix . 'index.html_md5', md5($buffer));
+            @unlink($this->cachePath . $prefix . 'wpc-rewarm43.txt');
+            foreach (['stale.html_br', 'stale.html_gzip', 'stale.html'] as $wpc_f39) {
+                @unlink($this->cachePath . $prefix . $wpc_f39);
+            }
         }
 
         return $buffer;
@@ -557,6 +752,12 @@ Connection: Close
             }
         }
 
+        $wpc_plan43 = function_exists('wpc_stale43_plan') ? wpc_stale43_plan($this->cachePath, $prefix) : 'fresh';
+        $wpc_base39 = 'index.html';
+        if ($wpc_plan43 === 'stale' && !@file_exists($this->cachePath . $prefix . 'index.html') && !@file_exists($this->cachePath . $prefix . 'index.html_gzip')) {
+            $wpc_base39 = 'stale.html';
+        }
+
         
         
         
@@ -574,7 +775,7 @@ Connection: Close
         $wpc_cfpass662 = isset($_SERVER['HTTP_CF_RAY'])
             && (!function_exists('apply_filters') || apply_filters('wpc_br_cf_passthrough', true));
         if (strpos($wpc_ae662, 'br') !== false || $wpc_cfpass662) {
-            $wpc_br647 = $this->cachePath . $prefix . 'index.html_br';
+            $wpc_br647 = $this->cachePath . $prefix . $wpc_base39 . '_br';
             if (@file_exists($wpc_br647) && @is_readable($wpc_br647) && (int) @filesize($wpc_br647) > 512) {
                 
                 
@@ -590,7 +791,7 @@ Connection: Close
                 $wpc_brm658 = (int) @filemtime($wpc_br647);
                 $wpc_hm658 = 0;
                 $wpc_hany658 = false;
-                foreach (['index.html_gzip', 'index.html_md5', 'index.html'] as $wpc_hf658) {
+                foreach ([$wpc_base39 . '_gzip', 'index.html_md5', $wpc_base39] as $wpc_hf658) {
                     $wpc_hfp658 = $this->cachePath . $prefix . $wpc_hf658;
                     if (@file_exists($wpc_hfp658)) {
                         $wpc_hany658 = true;
@@ -602,6 +803,9 @@ Connection: Close
                 }
                 if ($wpc_hany658 && $wpc_brm658 >= $wpc_hm658) {
                     $this->setupCacheHeaders($wpc_br647, 'br');
+                    if ($wpc_plan43 === 'stale') {
+                        wpc_stale43_serve($this->cachePath, $prefix);
+                    }
                     header('Content-Encoding: br');
                     readfile($wpc_br647);
                     exit;
@@ -611,17 +815,24 @@ Connection: Close
         }
 
         if (function_exists('readgzfile')) {
-            if (file_exists($this->cachePath . $prefix . 'index.html' . '_gzip') && is_readable($this->cachePath . $prefix . 'index.html' . '_gzip')) {
-                $this->setupCacheHeaders($this->cachePath . $prefix . 'index.html' . '_gzip', 'gzip');
+            $wpc_gz39 = $this->cachePath . $prefix . $wpc_base39 . '_gzip';
+            if (file_exists($wpc_gz39) && is_readable($wpc_gz39)) {
+                $this->setupCacheHeaders($this->cachePath . $prefix . $wpc_base39 . '_gzip', 'gzip');
+                if ($wpc_plan43 === 'stale') {
+                    wpc_stale43_serve($this->cachePath, $prefix);
+                }
                 
-                readgzfile($this->cachePath . $prefix . 'index.html' . '_gzip');
+                readgzfile($this->cachePath . $prefix . $wpc_base39 . '_gzip');
                 exit;
             }
         }
 
-        if (file_exists($this->cachePath . $prefix . 'index.html') && is_readable($this->cachePath . $prefix . 'index.html')) {
-            $this->setupCacheHeaders($this->cachePath . $prefix . 'index.html', 'html');
-            readfile($this->cachePath . $prefix . 'index.html');
+        if (file_exists($this->cachePath . $prefix . $wpc_base39) && is_readable($this->cachePath . $prefix . $wpc_base39)) {
+            $this->setupCacheHeaders($this->cachePath . $prefix . $wpc_base39, 'html');
+            if ($wpc_plan43 === 'stale') {
+                wpc_stale43_serve($this->cachePath, $prefix);
+            }
+            readfile($this->cachePath . $prefix . $wpc_base39);
             exit;
         }
     }
@@ -884,7 +1095,7 @@ Connection: Close
         }
 
         $urlKey = $this->url_key_class->setup($url);
-        @file_put_contents(WPS_IC_COMBINE . $urlKey . '/.wpc-stale', (string) time());
+        wpc_fs_put(WPS_IC_COMBINE . $urlKey . '/.wpc-stale', (string) time());
     }
 
     public function removeCriticalFiles($post_id)

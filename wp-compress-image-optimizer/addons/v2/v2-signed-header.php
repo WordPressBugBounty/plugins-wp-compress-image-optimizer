@@ -4,7 +4,7 @@
  * File: addons/v2/v2-signed-header.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -105,8 +105,15 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
             return true;
         }
 
+        
+        
+        if (!$force && get_transient('wpc_v2_signed_header_bk50')) {
+            return false;
+        }
+
         $fetched = wpc_v2_fetch_signed_header();
         if (!$fetched) {
+            set_transient('wpc_v2_signed_header_bk50', 1, 15 * MINUTE_IN_SECONDS);
             return false;
         }
 
@@ -114,9 +121,11 @@ if (!function_exists('wpc_v2_apply_signed_header')) {
         $res = $api->ensureWpcConfigInjection($cf['zone'], $fetched['value']);
         if (is_wp_error($res)) {
             error_log('[WPC CFInject] ensureWpcConfigInjection failed: ' . $res->get_error_message());
+            set_transient('wpc_v2_signed_header_bk50', 1, 15 * MINUTE_IN_SECONDS);
             return false;
         }
 
+        delete_transient('wpc_v2_signed_header_bk50');
         update_option('wpc_v2_signed_header_value', $fetched['value'], false);
         update_option('wpc_v2_signed_header_expires', time() + (int) $fetched['ttl'], false);
         return true;

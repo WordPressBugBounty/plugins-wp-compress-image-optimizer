@@ -4,7 +4,7 @@
  * File: addons/v2/v2-journal.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -39,8 +39,8 @@ function wpc_v2_journal_dir() {
             return $cached;
         }
         
-        @file_put_contents($dir . '/.htaccess', "Deny from all\n");
-        @file_put_contents($dir . '/index.html', '');
+        wpc_fs_put($dir . '/.htaccess', "Deny from all\n");
+        wpc_fs_put($dir . '/index.html', '');
     }
     if (!is_writable($dir)) {
         $cached = '';
@@ -90,7 +90,7 @@ function wpc_v2_journal_write_batch($imageID, $jobId, array $entries, $flush_rea
     $path = $dir . '/' . $ms . '-' . (int) $imageID . '-' . $rand . '.jsonl';
     $tmp  = $path . '.tmp';
 
-    if (@file_put_contents($tmp, $body, LOCK_EX) === false) {
+    if (wpc_fs_put($tmp, $body, LOCK_EX) === false) {
         $err = error_get_last();
         error_log(sprintf(
             '[WPC JournalWrite] FAIL reason=tmp_write_failed imageID=%d entries=%d bytes=%d dest_tail=%s msg=%s',

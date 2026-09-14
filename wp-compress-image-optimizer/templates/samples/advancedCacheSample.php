@@ -205,7 +205,6 @@ if (!$cache->byPass() && $cache->cacheExists($prefix)) {
 
   if (!$isCacheExpired && $isCacheValid) {
     $cache->getCache($prefix);
-    die();
   }
 }
 

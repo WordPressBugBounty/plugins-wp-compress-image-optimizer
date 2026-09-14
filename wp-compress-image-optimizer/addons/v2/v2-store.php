@@ -4,7 +4,7 @@
  * File: addons/v2/v2-store.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -100,7 +100,7 @@ if (!function_exists('wpc_v2_store_bytes655')) {
             ? wp_generate_password(8, false)
             : substr(md5(uniqid('', true)), 0, 8));
 
-        if (@file_put_contents($tmp, $bytes) === false) {
+        if (wpc_fs_put($tmp, $bytes) === false) {
             $e = error_get_last();
             return ['ok' => false, 'error' => 'write_failed', 'msg' => isset($e['message']) ? (string) $e['message'] : ''];
         }

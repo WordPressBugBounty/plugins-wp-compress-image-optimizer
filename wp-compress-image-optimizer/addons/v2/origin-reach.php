@@ -4,7 +4,7 @@
  * File: addons/v2/origin-reach.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!defined('ABSPATH')) {
@@ -44,7 +44,7 @@ if (!function_exists('wpc_origin_reach_state68')) {
 if (!function_exists('wpc_origin_reach_act68')) {
     function wpc_origin_reach_act68()
     {
-        if (!apply_filters('wpc_origin_reach_act', true)) {
+        if (!apply_filters('wpc_origin_reach_act_on', true)) {
             return 'off';
         }
         $state = wpc_origin_reach_state68();
@@ -128,7 +128,7 @@ if (!function_exists('wpc_origin_reach_verify68')) {
             ? strtolower(preg_replace('/[^a-zA-Z0-9]/', '', wp_generate_password(32, false)))
             : md5(microtime(true) . mt_rand());
         $file = $up['basedir'] . '/wpc-verify-' . $nonce . '.txt';
-        if (@file_put_contents($file, $nonce) === false) {
+        if (wpc_fs_put($file, $nonce) === false) {
             return 'unknown';
         }
         $r = wp_remote_get(WPS_IC_KEYSURL . '?action=test_origin_fetch&apikey=' . urlencode($apikey)
@@ -263,21 +263,18 @@ add_action('admin_init', function () {
     }
 }, 5);
 
-add_action('admin_notices', function () {
-    if (!current_user_can('manage_options') && !current_user_can('manage_wpc_settings')) {
+add_action('admin_init', function () {
+    if (!function_exists('wpc_state81')) {
         return;
     }
-    $dismiss = function ($which) {
-        return esc_url(wp_nonce_url(add_query_arg('wpc_lane_notice_dismiss', $which), 'wpc_lane_notice', '_wpcnonce'));
-    };
     if (get_option('wpc_lane_notice') === '1') {
-        echo '<div class="notice notice-info"><p>'
-            . esc_html__('Your host blocks our optimization servers, so WP Compress switched this site to Smart Delivery (serves optimized files from your server). Nothing to do — or allowlist our fetchers and switch back in Settings.', WPS_IC_TEXTDOMAIN)
-            . ' <a href="' . $dismiss('switch') . '">' . esc_html__('Dismiss', WPS_IC_TEXTDOMAIN) . '</a></p></div>';
+        wpc_state81('lane_switch', 'info', __('This server blocks our optimization servers, so the site was switched to Smart Delivery: optimized files are served from this server. Nothing to do. To switch back, allow-list our fetchers and choose CDN delivery in Settings.', WPS_IC_TEXTDOMAIN));
+    } else {
+        wpc_state_clear81('lane_switch');
     }
     if (get_option('wpc_lane_recover_notice') === '1') {
-        echo '<div class="notice notice-success"><p>'
-            . esc_html__('Origin reachable again — you can switch back to CDN delivery in Settings.', WPS_IC_TEXTDOMAIN)
-            . ' <a href="' . $dismiss('recover') . '">' . esc_html__('Dismiss', WPS_IC_TEXTDOMAIN) . '</a></p></div>';
+        wpc_state81('lane_recover', 'success', __('Our optimization servers can reach this site again. You can switch back to CDN delivery in Settings.', WPS_IC_TEXTDOMAIN));
+    } else {
+        wpc_state_clear81('lane_recover');
     }
-});
+}, 30);

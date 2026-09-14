@@ -4,7 +4,7 @@
  * File: addons/cf-sdk/cf-sdk.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 if (!function_exists('wpc_cf_permission_rows')) {
@@ -72,6 +72,13 @@ if (!function_exists('wpc_cf_permission_rows')) {
                 'feature' => __('the Cloudflare analytics panel', $t),
                 'why'    => __('Powers the Cloudflare traffic panel in your dashboard.', $t),
                 'impact' => __('The Cloudflare traffic panel stays empty. Nothing else is affected.', $t),
+            ],
+            [
+                'key' => 'Zone WAF Edit', 'action' => __('Edit Zone WAF', $t),
+                'path' => 'Zone → Zone WAF', 'recipe' => 'Zone → Zone WAF → Edit', 'tier' => 'feature',
+                'feature' => __('the security-bypass rule', $t),
+                'why'    => __('Writes the WAF custom rule that tells Cloudflare never to challenge our optimizer or the asset host. Firewall Services is the legacy API and does not cover it.', $t),
+                'impact' => __('Cloudflare may challenge our optimizer on some plans; the rule is skipped and logged. Everything else works.', $t),
             ],
         ];
     }
@@ -291,7 +298,7 @@ class WPC_CloudflareAPI
             foreach ($codes as $c) {
                 if (in_array($c, $permCodes, true)) {
                     return ['ok' => false, 'mode' => 'permission',
-                        'detail' => 'Cloudflare rejected it — your API token is missing a required permission (needs Firewall Services: Edit, Cache Rules: Edit, and Cache Purge). CF said: ' . $msg];
+                        'detail' => 'Cloudflare rejected it — your API token is missing a permission for this call (rule writes need Zone → Zone WAF → Edit; cache rules need Cache Rules → Edit; purges need Cache Purge). CF said: ' . $msg];
                 }
             }
             foreach ($codes as $c) {
@@ -789,7 +796,7 @@ class WPC_CloudflareAPI
             }
         }
         if (is_wp_error($result)) {
-            error_log('[WPC] addCdnHostExemptRule CF API error: ' . $result->get_error_message());
+            self::wpc_rule_log71('addCdnHostExemptRule', $result);
             return $result;
         }
         return $result;
@@ -939,7 +946,7 @@ class WPC_CloudflareAPI
         }
 
         if (is_wp_error($result)) {
-            error_log('[WPC] addCdnBypassRule CF API error: ' . $result->get_error_message());
+            self::wpc_rule_log71('addCdnBypassRule', $result);
             return $result; 
         }
 
@@ -2611,6 +2618,26 @@ GQL;
 
 
 
+
+    public static function wpc_rule_log71($lane, $err)
+    {
+        $msg = is_wp_error($err) ? (string) $err->get_error_message() : (string) $err;
+        $cls = self::classifyResult($err);
+        $perm = is_array($cls) && ($cls['mode'] ?? '') === 'permission';
+        $line = '[WPC] ' . $lane . ': ' . ($perm
+            ? 'the Cloudflare token lacks Zone → Zone WAF → Edit, so the optional security-bypass rule is skipped (add the permission in Cloudflare and reconnect). CF said: '
+            : 'CF API error: ') . $msg;
+        if (function_exists('wpc_admin_held69') && function_exists('wpc_admin_hold69')) {
+            if (wpc_admin_held69('wpc_cf_rule_log71_' . $lane)) {
+                return;
+            }
+            wpc_admin_hold69('wpc_cf_rule_log71_' . $lane, DAY_IN_SECONDS);
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('cf-rule-' . ($perm ? 'unauthorized' : 'error'), '', '', ['lane' => $lane, 'msg' => substr($msg, 0, 120)]);
+        }
+        error_log($line);
+    }
 
     public function checkPrivileges($zoneId = null)
     {

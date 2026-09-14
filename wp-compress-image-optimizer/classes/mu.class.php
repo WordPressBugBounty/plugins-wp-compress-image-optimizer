@@ -4,7 +4,7 @@
  * File: classes/mu.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -598,6 +598,9 @@ class wps_ic_mu extends wps_ic
 
     public function mu_get_site_settings()
     {
+        if (!current_user_can('manage_wpc_settings') || !wp_verify_nonce($_POST['wps_ic_nonce'] ?? '', 'wps_ic_nonce_action')) {
+            wp_send_json_error('Forbidden.');
+        }
         global $wpc_siteID;
         $output = '';
 

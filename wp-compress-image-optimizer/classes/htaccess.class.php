@@ -4,7 +4,7 @@
  * File: classes/htaccess.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -86,7 +86,7 @@ class wps_ic_htaccess extends wps_ic
 
                 
                 if (!empty($newHtaccessContent) && $newHtaccessContent !== $this->htaccessContent) {
-                    file_put_contents($this->htaccessPath, $newHtaccessContent);
+                    wpc_fs_put($this->htaccessPath, $newHtaccessContent);
                 }
             }
         }
@@ -135,7 +135,22 @@ class wps_ic_htaccess extends wps_ic
 
     public function notice($what)
     {
-        add_action('admin_notices', [$this, 'notice_' . str_replace('-', '_', $what)]);
+        if (!function_exists('wpc_state81')) {
+            return;
+        }
+        $what = (string) $what;
+        $map = [
+            'not-readable-config'     => 'The wp-config.php file could not be read',
+            'not-readable-htaccess'   => 'The .htaccess file could not be read',
+            'not-readable-adv-cache'  => 'The advanced-cache.php file could not be read',
+            'not-readable'            => 'Some plugin files could not be read',
+            'not-writeable-config'    => 'The wp-config.php file could not be written',
+            'not-writeable-adv-cache' => 'The advanced-cache.php file could not be written',
+            'not-writeable-htaccess'  => 'The .htaccess file could not be written',
+            'browser-cache-failed'    => 'The browser-cache rules were rolled back because the server rejected them',
+        ];
+        $why = isset($map[$what]) ? $map[$what] : 'A file could not be accessed';
+        wpc_state81('fs_' . sanitize_key($what), 'warning', sprintf(__('%s. The related caching feature is paused until file permissions allow it.', 'wp-compress-image-optimizer'), $why));
     }
 
     public function isReadble($path)
@@ -299,8 +314,8 @@ class wps_ic_htaccess extends wps_ic
                 return true;
             }
 
-            @file_put_contents($path . '.wpc-bcbak', $content);
-            if (@file_put_contents($path, $desired) === false) {
+            wpc_fs_put($path . '.wpc-bcbak', $content);
+            if (wpc_fs_put($path, $desired) === false) {
                 return false;
             }
 
@@ -322,7 +337,7 @@ class wps_ic_htaccess extends wps_ic
                 if ($wpc_last >= 200 && $wpc_last < 500) { $wpc_any_ok = true; } 
             }
             if ($wpc_bad || !$wpc_any_ok) {
-                @file_put_contents($path, $content);
+                wpc_fs_put($path, $content);
                 $s = get_option(WPS_IC_SETTINGS);
                 if (is_array($s)) { $s['browser-cache-headers'] = '0'; update_option(WPS_IC_SETTINGS, $s); }
                 if (function_exists('wpc_cache_first_log')) {
@@ -354,7 +369,7 @@ class wps_ic_htaccess extends wps_ic
             if (strpos($content, self::WPC_BC_START) === false) {
                 return true;
             }
-            @file_put_contents($path, rtrim($this->wpcStripBcBlock($content)) . PHP_EOL);
+            wpc_fs_put($path, rtrim($this->wpcStripBcBlock($content)) . PHP_EOL);
             return true;
         } catch (\Throwable $e) {
             return false;
@@ -781,8 +796,8 @@ HTACCESS;
             return false;
         }
         $html = '<!doctype html><html><body>' . $marker . '</body></html>';
-        @file_put_contents($dir . 'index.html_gzip', gzencode($html, 8));
-        @file_put_contents($dir . 'index.html', $html);
+        wpc_fs_put($dir . 'index.html_gzip', gzencode($html, 8));
+        wpc_fs_put($dir . 'index.html', $html);
 
         $resp = wp_remote_get(home_url('/' . $nonce), [
             'timeout'    => 10,
@@ -972,7 +987,7 @@ HTACCESS;
 
         
         if (isset($newContents) && $newContents !== $configContents) {
-            file_put_contents($this->configPath, $newContents);
+            wpc_fs_put($this->configPath, $newContents);
         }
     }
 
@@ -1007,7 +1022,7 @@ HTACCESS;
         
         $htaccess = $backup_dir . '/.htaccess';
         if (!file_exists($htaccess)) {
-            file_put_contents($htaccess, "Require all denied\n");
+            wpc_fs_put($htaccess, "Require all denied\n");
             @chmod($htaccess, 0644);
         }
 
@@ -1186,7 +1201,7 @@ HTACCESS;
             $newContents = preg_replace("/$cacheExPattern/s", $cacheExReplacement, $newContents);
 
             if ($newContents !== $currentAdvancedCache) {
-                file_put_contents($this->advancedCachePath, $newContents);
+                wpc_fs_put($this->advancedCachePath, $newContents);
             }
         }
     }
@@ -1410,61 +1425,6 @@ HTACCESS;
         }
     }
 
-    public function notice_not_readable_config()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to read your config files, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_readable_htaccess()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to read your htaccess file, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_readable_adv_cache()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to read your advanced cache files, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_readable()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to read some of your files, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_writeable_config()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to write to your config file, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_writeable_adv_cache()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to write to your advanced cache file, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
-
-    public function notice_not_writeable_htaccess()
-    {
-        $class = 'notice notice-error';
-        $message = '<strong>Error!</strong> Seems like we are unable to write to your htaccess file, please contact support.';
-
-        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), $message);
-    }
 
 
 }

@@ -4,7 +4,7 @@
  * File: addons/v2/v2-fast-404.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -176,7 +176,7 @@ if (!function_exists('wpc_v2_fast404_sync')) {
             @mkdir($dir, 0755, true);
         }
         if (is_dir($dir) && is_writable($dir)) {
-            @file_put_contents($file, $body, LOCK_EX);
+            wpc_fs_put($file, $body, LOCK_EX);
             if (function_exists('opcache_invalidate')) { @opcache_invalidate($file, true); }
         }
     }

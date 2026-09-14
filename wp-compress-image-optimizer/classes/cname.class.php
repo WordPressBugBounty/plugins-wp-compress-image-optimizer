@@ -4,7 +4,7 @@
  * File: classes/cname.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -323,7 +323,7 @@ class wps_ic_cname
 			? strtolower(preg_replace('/[^a-zA-Z0-9]/', '', wp_generate_password(32, false)))
 			: md5(microtime(true) . rand());
 		$wpc_file2111 = $wpc_up2111['basedir'] . '/wpc-verify-' . $wpc_nonce2111 . '.txt';
-		if (@file_put_contents($wpc_file2111, $wpc_nonce2111) === false) {
+		if (wpc_fs_put($wpc_file2111, $wpc_nonce2111) === false) {
 			return $wpc_none2111;
 		}
 		$r = wp_remote_get(WPS_IC_KEYSURL . '?action=test_origin_fetch&apikey=' . urlencode((string) $apikey)

@@ -1069,6 +1069,32 @@ jQuery(document).ready(function ($) {
         });
     });
 
+    $('body').on('click', '.wps-ic-regen-retry-live', function (e) {
+        e.preventDefault();
+        var link = $(this);
+        if (link.hasClass('wpc-action-pending')) return;
+        link.addClass('wpc-action-pending').text('Regenerating…');
+        var attachment_id = link.data('attachment_id');
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            timeout: 180000,
+            data: { action: 'wpc_regen_retry12', imageID: attachment_id, nonce: wpc_ajaxVar.nonce },
+            complete: function (xhr) {
+                var r = {};
+                try { r = JSON.parse(xhr.responseText || '{}'); } catch (err) {}
+                link.removeClass('wpc-action-pending');
+                if (r && r.success && r.data && r.data.pending === false) {
+                    var card = $('.wps-ic-media-actions-' + attachment_id);
+                    if (card.length && typeof window.wpcRefreshMediaCard === 'function') { window.wpcRefreshMediaCard(attachment_id); }
+                    else { window.location.reload(); }
+                } else {
+                    link.text('Still pending — retry');
+                }
+            }
+        });
+    });
+
     $('body').on('click', '.wps-ic-exclude-live,.wps-ic-include-live', function (e) {
         e.preventDefault();
         var button = $(this);

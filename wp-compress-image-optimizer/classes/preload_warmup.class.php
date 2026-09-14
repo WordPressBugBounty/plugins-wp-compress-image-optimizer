@@ -4,7 +4,7 @@
  * File: classes/preload_warmup.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -687,7 +687,7 @@ class wps_ic_preload_warmup
             }
 
             $criticalCSS = new wps_criticalCss($url);
-            $criticalCSS->saveCriticalWarmup($id, $url, $desktopCritUrl, 'desktop');
+            if (method_exists($criticalCSS, 'saveCriticalWarmup')) { $criticalCSS->saveCriticalWarmup($id, $url, $desktopCritUrl, 'desktop'); }
 
             echo json_encode(['done']);
             die();
@@ -736,7 +736,7 @@ class wps_ic_preload_warmup
             }
 
             $criticalCSS = new wps_criticalCss($url);
-            $criticalCSS->saveCriticalWarmup($id, $url, $desktopCritUrl, 'mobile');
+            if (method_exists($criticalCSS, 'saveCriticalWarmup')) { $criticalCSS->saveCriticalWarmup($id, $url, $desktopCritUrl, 'mobile'); }
 
             echo json_encode(['done']);
             die();

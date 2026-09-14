@@ -4,7 +4,7 @@
  * File: traits/url_key.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -153,7 +153,7 @@ class wps_ic_url_key
 
     public static function trackingParams()
     {
-        return ['disable_cache', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id', 'wpc_key'];
+        return ['disable_cache', 'wpcnc', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_expid', 'utm_term', 'utm_content', 'mtm_source', 'mtm_medium', 'mtm_campaign', 'mtm_keyword', 'mtm_cid', 'mtm_content', 'pk_source', 'pk_medium', 'pk_campaign', 'pk_keyword', 'pk_cid', 'pk_content', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fbclid', 'campaignid', 'adgroupid', 'adid', 'gclid', 'age-verified', 'ao_noptimize', 'usqp', 'cn-reloaded', '_ga', 'sscid', 'gclsrc', '_gl', 'mc_cid', 'mc_eid', '_bta_tid', '_bta_c', 'trk_contact', 'trk_msg', 'trk_module', 'trk_sid', 'gdfms', 'gdftrk', 'gdffi', '_ke', 'redirect_log_mongo_id', 'redirect_mongo_id', 'sb_referer_host', 'mkwid', 'pcrid', 'ef_id', 's_kwcid', 'msclkid', 'dm_i', 'epik', 'pp', 'gbraid', 'wbraid', 'utm_id', 'wpc_key'];
     }
 
     
@@ -173,7 +173,7 @@ class wps_ic_url_key
 
     public static function controlParams()
     {
-        return ['disable_cache', 'ao_noptimize', 'age-verified', 'cn-reloaded', 'usqp',
+        return ['disable_cache', 'wpcnc', 'ao_noptimize', 'age-verified', 'cn-reloaded', 'usqp',
             'disablewpc', 'wpc_visitor_mode', 'remote_generate_critical', 'dbgcache',
             'forcecritical', 'removecritical', 'forcerecombine', 'crit', 'cdn', 'nocache',
             'wpc_no_buffer', 'wpc_smoke', 'wpcdoc', 'wpc_perf_debug', 'wpc_img_debug',
@@ -710,7 +710,7 @@ class wps_ic_url_key
 			}
 		}
 		$tmp = $file . '.' . uniqid('tmp', true);
-		if (@file_put_contents($tmp, $clean) === false) {
+		if (wpc_fs_put($tmp, $clean) === false) {
 			return false;
 		}
 		if (!@rename($tmp, $file)) {

@@ -4,7 +4,7 @@
  * File: classes/ajax.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -35,6 +35,14 @@ class wps_ic_ajax extends wps_ic
     public static $version;
     public static $Requests;
     public static $apikey;
+
+    public static function wpc_requests70()
+    {
+        if (!self::$Requests instanceof wps_ic_requests) {
+            self::$Requests = new wps_ic_requests();
+        }
+        return self::$Requests;
+    }
 
     public function __construct()
     {
@@ -151,7 +159,6 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_critical_get_assets');
                 $this->add_ajax('wps_ic_critical_run');
                 $this->add_ajax('wps_ic_get_setting');
-                $this->add_ajax('wps_ic_saveSetting');
                 $this->add_ajax('wps_ic_save_excludes_settings');
 
                 
@@ -225,7 +232,6 @@ class wps_ic_ajax extends wps_ic
                 $this->add_ajax('wps_ic_exclude_live');
                 $this->add_ajax('wps_ic_purge_local_variants');
                 $this->add_ajax('wps_ic_image_stats');
-                $this->add_ajax('wps_ic_get_default_settings');
 
                 $this->add_ajax('wps_ic_ajax_v2_checkbox');
                 $this->add_ajax('wps_ic_ajax_v2_checkbox_batch');
@@ -1661,7 +1667,7 @@ class wps_ic_ajax extends wps_ic
     {
         $options = get_option(WPS_IC_OPTIONS);
 
-        $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'domain' => site_url(), 'apikey' => $options['api_key']]);
+        $call = self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'cdn_purge', 'domain' => site_url(), 'apikey' => $options['api_key']]);
 
         if (!empty($call)) {
             if ($call->success == 'true') {
@@ -2013,7 +2019,7 @@ class wps_ic_ajax extends wps_ic
 
         $options = get_option(WPS_IC_OPTIONS);
 
-        self::$Requests->GET(WPS_IC_KEYSURL, ['apikey' => $options['api_key'], 'action' => 'pullStats']);
+        self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['apikey' => $options['api_key'], 'action' => 'pullStats']);
         wp_send_json_success();
     }
 
@@ -2843,7 +2849,7 @@ class wps_ic_ajax extends wps_ic
 
         $url = WPS_IC_PRELOADER_API_URL;
 
-        self::$Requests->POST($url, ['single_url' => $wpc_ref508, 'apikey' => $options['api_key']]);
+        self::wpc_requests70()->POST($url, ['single_url' => $wpc_ref508, 'apikey' => $options['api_key']]);
 
         
         
@@ -3681,13 +3687,13 @@ class wps_ic_ajax extends wps_ic
         
         
         $wpc_detached111 = false;
-        if (function_exists('fastcgi_finish_request') && !apply_filters('wpc_purge_crit_sync', false)) {
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) && !apply_filters('wpc_purge_crit_sync', false)) {
             @ignore_user_abort(true);
             @set_time_limit(120);
             status_header(200);
             header('Content-Type: application/json; charset=utf-8');
             echo wp_json_encode(['success' => true, 'data' => ['mode' => $wpc_hard73 ? 'hard-deleted:detached' : 'stale-marked:detached']]);
-            @fastcgi_finish_request();
+            wpc_finish_request39();
             $wpc_detached111 = true;
         }
 
@@ -3899,7 +3905,7 @@ class wps_ic_ajax extends wps_ic
         }
 
 
-        self::$Requests->GET(
+        self::wpc_requests70()->GET(
             WPS_IC_KEYSURL,
             ['action' => 'cdn_purge', 'apikey' => $options['api_key']],
             ['timeout' => 1, 'blocking' => false, 'sslverify' => false, 'user-agent' => WPS_IC_API_USERAGENT]
@@ -4032,7 +4038,7 @@ class wps_ic_ajax extends wps_ic
 
             foreach ($sites as $key => $site) {
 
-                $call = self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'connect', 'apikey' => $apikey, 'site' => urlencode($site->domain . $site->path), 'affiliate_code' => $affiliate_code]);
+                $call = self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'connect', 'apikey' => $apikey, 'site' => urlencode($site->domain . $site->path), 'affiliate_code' => $affiliate_code]);
 
                 if (!empty($call)) {
 
@@ -4203,7 +4209,7 @@ class wps_ic_ajax extends wps_ic
         $apikey = $options->get_option('api_key');
 
         
-        self::$Requests->GET(WPS_IC_KEYSURL, ['action' => 'disconnect', 'apikey' => $apikey, 'site' => urlencode($site)]);
+        self::wpc_requests70()->GET(WPS_IC_KEYSURL, ['action' => 'disconnect', 'apikey' => $apikey, 'site' => urlencode($site)]);
 
         $options->set_option('api_key', '');
         $options->set_option('response_key', '');
@@ -4215,6 +4221,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_media_library_heartbeat()
     {
+        self::wpc_media_action_gate66();
         global $wps_ic, $wpdb;
         $html = [];
 
@@ -4472,6 +4479,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_bulkRestoreHeartbeat()
     {
+        self::wpc_bulk_gate67();
         $isDone = get_transient('wps_ic_bulk_done');
         $parsedImages = get_option('wps_ic_parsed_images');
         $bulkStatus = get_option('wps_ic_BulkStatus');
@@ -4492,8 +4500,9 @@ class wps_ic_ajax extends wps_ic
             $wd_queue = get_transient('wps_ic_restore_queue');
             $wd_tick  = (int) get_option('wpc_bulk_restore_last_tick', 0);
             $wd_fired = (int) get_option('wpc_bulk_restore_wd_fired', 0);
-            if (!empty($wd_queue['queue']) && $wd_tick && (time() - $wd_tick) > 75 && (time() - $wd_fired) > 60) {
+            if (!empty($wd_queue['queue']) && $wd_tick && (time() - $wd_tick) > 12 && (time() - $wd_fired) > 10) {
                 update_option('wpc_bulk_restore_wd_fired', time(), false);
+                $this->wpc_restore_slice_detach36();
                 error_log('[WPC Bulk Restore] WATCHDOG: no progress for ' . (time() - $wd_tick) . 's with '
                     . count($wd_queue['queue']) . ' queued — re-firing drain loopback');
                 if (method_exists($this, 'wpc_bulk_v2_restore_fire_loopback')) {
@@ -4833,6 +4842,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_bulkCompressHeartbeat()
     {
+        self::wpc_bulk_gate67();
 
 
         $bulkRunning = get_option('wps_ic_bulk_process');
@@ -5385,7 +5395,7 @@ class wps_ic_ajax extends wps_ic
 
                 delete_option('wps_ic_bulk_process');
                 delete_transient('wps_ic_bulk_running');
-                delete_transient('wpc_bulk_library_counts');
+                wps_ic_local::wpc_counts_invalidate37();
                 foreach ($session_ids as $cid) {
                     $cid = (int) $cid;
                     if ($cid <= 0) continue;
@@ -5665,7 +5675,7 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_running');
         delete_transient('wpc_bulk_completed_cache');
-        delete_transient('wpc_bulk_library_counts');
+        wps_ic_local::wpc_counts_invalidate37();
 
         
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('wps_ic_compress_') . '%'));
@@ -5714,6 +5724,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_getBulkStats()
     {
+        self::wpc_bulk_gate67();
         $bulkStatus = get_option('wps_ic_BulkStatus');
         $parsedImages = get_option('wps_ic_parsed_images');
 
@@ -5905,6 +5916,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_isBulkRunning()
     {
+        self::wpc_bulk_gate67();
         $bulkRunning = get_option('wps_ic_bulk_process');
         if (!$bulkRunning || empty($bulkRunning['status'])) {
             wp_send_json_error('not-running');
@@ -6006,6 +6018,7 @@ class wps_ic_ajax extends wps_ic
 
             
             self::wpc_bulk_v2_restore_fire_loopback();
+            $this->wpc_restore_slice_detach36();
 
             error_log(sprintf('[WPC RestoreStart] returning bulk-restored — total handler wall %dms (queued %d images)',
                 (int) round((microtime(true) - $rs_t0) * 1000), $total));
@@ -6115,6 +6128,7 @@ class wps_ic_ajax extends wps_ic
             delete_post_meta($imageID, 'ic_compressed_thumbs');
             delete_post_meta($imageID, 'ic_backup_images');
             update_post_meta($imageID, 'ic_status', 'restored');
+            do_action('wpc_image_restored', (int) $imageID);
 
             return true;
         }
@@ -6212,7 +6226,7 @@ class wps_ic_ajax extends wps_ic
             set_transient('wpc_bulk_session_ids', array_values(array_map('intval', $image_ids)), 2 * HOUR_IN_SECONDS);
             delete_transient('wpc_bulk_stop_signal');
             delete_transient('wpc_bulk_completed_cache');
-            delete_transient('wpc_bulk_library_counts');
+            wps_ic_local::wpc_counts_invalidate37();
 
 
             delete_transient('wpc_bulk_completion_cleanup_done');
@@ -6233,7 +6247,7 @@ class wps_ic_ajax extends wps_ic
             set_transient('wpc_bulk_session_ids', [], 2 * HOUR_IN_SECONDS);
             delete_transient('wpc_bulk_stop_signal');
             delete_transient('wpc_bulk_completed_cache');
-            delete_transient('wpc_bulk_library_counts');
+            wps_ic_local::wpc_counts_invalidate37();
             
             
             delete_transient('wpc_bulk_completion_cleanup_done');
@@ -6306,7 +6320,9 @@ class wps_ic_ajax extends wps_ic
         $compress = new wps_local_compress();
         $backupOk = $compress->backup_all_sizes($imageID);
         if (!$backupOk) {
-            error_log('[WPC Bulk] SKIPPED image=' . $imageID . ' — backup failed');
+            $wpc_br78 = self::wpc_bulk_backup_fail_reason78($imageID);
+            set_transient('wpc_v2_compress_failed_' . $imageID, $wpc_br78, 900);
+            error_log('[WPC Bulk] SKIPPED image=' . $imageID . ' — backup failed: ' . $wpc_br78);
         } else {
 
 
@@ -6376,6 +6392,7 @@ class wps_ic_ajax extends wps_ic
     {
         $host = (string) $host;
         if ($host === '') { return false; }
+        if (function_exists('wpc_render_guard39_active') && wpc_render_guard39_active()) { return false; }
         $port           = (int) $port;
         $is_https       = (bool) $is_https;
         $connect_budget = max(0.05, (float) $connect_budget);
@@ -6475,7 +6492,7 @@ class wps_ic_ajax extends wps_ic
         $expected = hash_hmac('sha256', 'wpc_bulk_compress_drain.' . $ts, $apikey); 
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
         
-        if (function_exists('fastcgi_finish_request'))       { http_response_code(200); echo 'queued'; @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @ignore_user_abort(true);
         @set_time_limit(60); 
@@ -6555,7 +6572,7 @@ class wps_ic_ajax extends wps_ic
                     self::wpc_bulk_ledger_close202();
                     delete_option('wps_ic_bulk_process');
                     delete_transient('wps_ic_bulk_running');
-                    delete_transient('wpc_bulk_library_counts');
+                    wps_ic_local::wpc_counts_invalidate37(true);
                     delete_option('wpc_bulk_inflight199');
                     delete_option('wpc_bulk_counted201');
                     set_transient('wps_ic_bulk_done', true, 60);
@@ -6728,7 +6745,7 @@ class wps_ic_ajax extends wps_ic
                 $wpc_bst75 = json_decode((string) @file_get_contents($wpc_bsf75), true);
                 $wpc_brep75 = (is_array($wpc_bst75) && isset($wpc_bst75['sig']) && $wpc_bst75['sig'] === $wpc_bsig75)
                     ? (int) $wpc_bst75['reps'] + 1 : 1;
-                @file_put_contents($wpc_bsf75, json_encode(['sig' => $wpc_bsig75, 'reps' => $wpc_brep75]));
+                wpc_fs_put($wpc_bsf75, json_encode(['sig' => $wpc_bsig75, 'reps' => $wpc_brep75]));
                 if ($wpc_brep75 >= 3) {
                     $wpc_bchain75_ok = false;
                     error_log(sprintf('[WPC Bulk] no-progress x%d (queue head/len unchanged) — self-chain halted; admin poll resumes on demand', $wpc_brep75));
@@ -7044,7 +7061,7 @@ class wps_ic_ajax extends wps_ic
                     if (function_exists('wpc_used_css_strip_faces245')) { $hb232 = wpc_used_css_strip_faces245($hb232); }
                     if (function_exists('wpc_used_css_bg_park255')) { $hb232 = wpc_used_css_bg_park255($hb232); }
                     if (is_string($hb232) && $hb232 !== $cb232
-                        && @file_put_contents($fp232 . '.tmp', $hb232, LOCK_EX) !== false
+                        && wpc_fs_put($fp232 . '.tmp', $hb232, LOCK_EX) !== false
                         && @rename($fp232 . '.tmp', $fp232)) {
                         $tf232++;
                         $th232 += substr_count($cb232, '://') - substr_count($hb232, '://');
@@ -7096,6 +7113,9 @@ class wps_ic_ajax extends wps_ic
                     $lc217 = !is_wp_error($lr217) ? (int) wp_remote_retrieve_response_code($lr217) : 0;
                     $ld217 = $lc217 === 200 ? json_decode((string) wp_remote_retrieve_body($lr217), true) : null;
                     if (is_array($ld217)) {
+                        if (function_exists('wpc_rum_sample_land46')) {
+                            wpc_rum_sample_land46($ld217);
+                        }
                         $a217 = isset($ld217['artifacts']) && is_array($ld217['artifacts']) ? $ld217['artifacts'] : [];
                         $lanes['used_css']['latest_probe'] = [
                             'ready'          => (int) !empty($ld217['ready']),
@@ -7241,6 +7261,15 @@ class wps_ic_ajax extends wps_ic
             } else {
                 $lanes['cache_freshness'] = ['verdict' => 'WARN', 'detail' => 'no loader in cached copy'];
             }
+            if (function_exists('wpc_stale43_plan') && defined('WPS_IC_CACHE') && !empty($urlKey)) {
+                $wpc_sp43 = [];
+                foreach (['', 'mobile_'] as $wpc_v43) {
+                    $wpc_sp43[] = ($wpc_v43 === '' ? 'desktop' : 'mobile') . ':' . wpc_stale43_plan(WPS_IC_CACHE . $urlKey . '/', $wpc_v43);
+                }
+                $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+                $lanes['cache_freshness']['detail'] .= ' | stale43: ' . implode(' ', $wpc_sp43)
+                    . ' mark=' . (@is_file($wpc_mk43) ? (time() - (int) @file_get_contents($wpc_mk43)) . 's-ago' : 'none');
+            }
             if (strpos($html, 'KGZ1bmN0aW9uKCl7dmFyIG5kPWZhbHNl') !== false) {
                 $lanes['frozen_backstop'] = ['verdict' => 'FAIL',
                     'detail' => 'delay registry carries a FROZEN font backstop (pre-nodefer mint) — replays old font code every view',
@@ -7325,6 +7354,8 @@ class wps_ic_ajax extends wps_ic
                         : 'ABSENT');
                 }
                 $wpc_cw287[] = 'key=' . $urlKey;
+                $wpc_mk43 = rtrim(WPS_IC_CACHE, '/') . '/wpc-stale43.txt';
+                $wpc_cw287[] = 'stale43_mark=' . (@is_file($wpc_mk43) ? (time() - (int) @file_get_contents($wpc_mk43)) . 's-ago' : 'none');
             }
             if ($wpc_ac287 !== '' && @is_file($wpc_ac287)
                 && preg_match('/Version:\s*([0-9.]+)/', (string) @file_get_contents($wpc_ac287), $wpc_avm288)) {
@@ -7461,7 +7492,7 @@ class wps_ic_ajax extends wps_ic
         if ($new > 0) {
             update_option('wpc_bulk_counted201', $counted, false);
             update_option('wps_ic_BulkStatus', $bs);
-            delete_transient('wpc_bulk_library_counts');
+            wps_ic_local::wpc_counts_invalidate37();
         }
     }
 
@@ -7603,7 +7634,7 @@ class wps_ic_ajax extends wps_ic
 
 
         $fp = self::wpc_loopback_open_socket($host, $port, $is_https, 0.2);
-        if (!$fp) { delete_transient('wpc_bulk_restore_draining'); error_log('[WPC BulkRestoreDrain] loopback_connect_failed host=' . $host . ' port=' . $port); return false; }
+        if (!$fp) { delete_transient('wpc_bulk_restore_draining'); if (function_exists('wpc_cache_first_log')) { wpc_cache_first_log('restore-loopback-failed', '', $host, []); } error_log('[WPC BulkRestoreDrain] loopback_connect_failed host=' . $host . ' port=' . $port); return false; }
         @stream_set_timeout($fp, 0, 100000); @fwrite($fp, $req); @fclose($fp);
         delete_transient('wpc_bulk_restore_redrain_pending');
         return true;
@@ -7635,12 +7666,34 @@ class wps_ic_ajax extends wps_ic
         $expected = hash_hmac('sha256', 'wpc_bulk_restore_drain.' . $ts, $apikey); 
         if (!hash_equals($expected, $sig)) { http_response_code(401); exit('sig'); }
         
-        if (function_exists('fastcgi_finish_request'))       { http_response_code(200); echo 'queued'; @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @ignore_user_abort(true);
         @set_time_limit(60); 
         $this->run_restore_drain_slice();
         exit;
+    }
+
+    public function wpc_restore_slice_detach36()
+    {
+        static $armed36 = false;
+        if ($armed36 || !function_exists('add_action')) {
+            return false;
+        }
+        $armed36 = true;
+        $self = $this;
+        add_action('shutdown', function () use ($self) {
+            if (function_exists('wpc_finish_request39') && empty($GLOBALS['wpc_released39'])) {
+                wpc_finish_request39();
+            }
+            @ignore_user_abort(true);
+            @set_time_limit(60);
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('restore-slice-detach', '', '', []);
+            }
+            $self->run_restore_drain_slice();
+        }, 96);
+        return true;
     }
 
     private function run_restore_drain_slice()
@@ -7688,7 +7741,7 @@ class wps_ic_ajax extends wps_ic
                     
                     delete_option('wps_ic_bulk_process');
                     delete_transient('wps_ic_bulk_running');
-                    delete_transient('wpc_bulk_library_counts');
+                    wps_ic_local::wpc_counts_invalidate37(true);
                     delete_transient('wps_ic_restore_queue');
                     set_transient('wps_ic_bulk_done', true, 60);
 
@@ -7781,7 +7834,7 @@ class wps_ic_ajax extends wps_ic
         delete_transient('wps_ic_bulk_running');
         delete_transient('wpc_bulk_session_ids');
         delete_transient('wps_ic_bulk_done');
-        delete_transient('wpc_bulk_library_counts');
+        wps_ic_local::wpc_counts_invalidate37();
         
         
         foreach ($session_snapshot as $id) {
@@ -7816,7 +7869,7 @@ class wps_ic_ajax extends wps_ic
         delete_option('wpc_bulk_restore_done_ms');
         delete_transient('wps_ic_bulk_done');
         delete_transient('wps_ic_restore_queue');
-        delete_transient('wpc_bulk_library_counts');
+        wps_ic_local::wpc_counts_invalidate37();
         foreach ($restore_ids as $id) {
             $id = (int) $id;
             if ($id <= 0) continue;
@@ -8040,6 +8093,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_RestoreFinished()
     {
+        self::wpc_bulk_gate67();
         global $wps_ic;
 
         $count = absint($_POST['count'] ?? 0) . ' of ' . absint($_POST['count'] ?? 0);
@@ -8139,6 +8193,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_media_library_bulk_heartbeat()
     {
+        self::wpc_bulk_gate67();
         global $wpdb, $wps_ic;
         $like_compress = $wpdb->esc_like('_transient_wps_ic_compress_') . '%';
         $like_restore  = $wpdb->esc_like('_transient_wps_ic_restore_') . '%';
@@ -8175,8 +8230,25 @@ class wps_ic_ajax extends wps_ic
     
 
 
+    public static function wpc_bulk_gate67()
+    {
+        if (!function_exists('current_user_can') || (!current_user_can('manage_wpc_settings') && !current_user_can('manage_options'))) {
+            wp_send_json_error(['msg' => 'forbidden'], 403);
+        }
+    }
+
+    public static function wpc_media_action_gate66()
+    {
+        $wpc_id66 = isset($_POST['attachment_id']) ? absint($_POST['attachment_id']) : 0;
+        if (!function_exists('current_user_can') || !current_user_can('upload_files')
+            || ($wpc_id66 > 0 && !current_user_can('edit_post', $wpc_id66))) {
+            wp_send_json_error(['msg' => 'forbidden'], 403);
+        }
+    }
+
     public function wps_ic_restore_live()
     {
+        self::wpc_media_action_gate66();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -8296,6 +8368,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_variant_count()
     {
+        self::wpc_media_action_gate66();
         $imageID = absint($_POST['attachment_id'] ?? 0);
         if ($imageID <= 0) {
             wp_send_json_error(['msg' => 'invalid-id']);
@@ -8554,7 +8627,7 @@ class wps_ic_ajax extends wps_ic
                     header('Content-Length: ' . strlen($out));
                 }
                 echo $out;
-                if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+                if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) wpc_finish_request39();
                 ignore_user_abort(true);
                 @set_time_limit(60);
 
@@ -8603,6 +8676,15 @@ class wps_ic_ajax extends wps_ic
                         $imageID, $bg_attempt, implode(', ', $still_missing)
                     ));
                     
+                    $wpc_now56 = microtime(true);
+                    if (isset($wpc_lt56) && ($wpc_now56 - $wpc_lt56) < 1.0) {
+                        usleep((int) ((1.0 - ($wpc_now56 - $wpc_lt56)) * 1000000));
+                    }
+                    $wpc_lt56 = microtime(true);
+                    if (function_exists('get_transient') && (int) get_transient('wpc_v2_pull_cooloff') > 0) {
+                        error_log(sprintf('[WPC BulkCleanup] imageID=%d cooloff_active — standing down at attempt=%d', $imageID, $bg_attempt));
+                        break;
+                    }
                 }
                 if (time() >= $bg_deadline) {
                     error_log(sprintf(
@@ -8923,6 +9005,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_card()
     {
+        self::wpc_media_action_gate66();
         $imageID = absint($_POST['attachment_id'] ?? 0);
         if ($imageID <= 0) {
             wp_send_json_error(['msg' => 'invalid-id']);
@@ -8944,6 +9027,9 @@ class wps_ic_ajax extends wps_ic
         );
 
         if (!empty($wpc_fail315)) { $pending = false; }
+        if ($pending && function_exists('wpc_regen_nudge23')) {
+            wpc_regen_nudge23($imageID);
+        }
         wp_send_json_success([
             'html'      => $html,
             'pending'   => $pending,
@@ -8956,6 +9042,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_compress_live()
     {
+        self::wpc_media_action_gate66();
         if (function_exists('webp_uploads_create_sources_property')) {
             wp_send_json_error(['msg' => 'performance-lab-compatibility']);
         }
@@ -9491,6 +9578,12 @@ class wps_ic_ajax extends wps_ic
             $env_formats = ['jpeg'];
             if ($ceil_fmt === 'webp' || $ceil_fmt === 'avif' || !empty($s_fmt['generate_webp'])) $env_formats[] = 'webp';
             if ($ceil_fmt === 'avif' || !empty($s_fmt['picture_avif'])) $env_formats[] = 'avif';
+        }
+        if (function_exists('wpc_rewrites_jpeg_inplace12') && !wpc_rewrites_jpeg_inplace12()) {
+            $env_formats = array_values(array_diff($env_formats, ['jpeg']));
+            if (empty($env_formats)) {
+                $env_formats = ['avif'];
+            }
         }
         $wpc_fmts350 = is_array($option_overrides['formats'] ?? null) ? $option_overrides['formats'] : $env_formats;
         $expected_now = 0;
@@ -10863,6 +10956,7 @@ class wps_ic_ajax extends wps_ic
 
     public function wps_ic_get_cache_cookies()
     {
+        self::wpc_bulk_gate67();
         if ($this->isAgencyPortal()) {
             global $api;
             $apikey          = sanitize_text_field($_POST['apikey'] ?? '');
@@ -11746,6 +11840,11 @@ class wps_ic_ajax extends wps_ic
         if (!is_array($connect_chain) || empty($connect_chain)) $connect_chain = ['127.0.0.1', 'localhost', $host];
         
         $connect_chain = array_values(array_unique(array_filter(array_map('strval', $connect_chain))));
+        if (count($connect_chain) > 1 && function_exists('wpc_admin_held69') && wpc_admin_held69('wpc_lb_refused78')) {
+            $connect_chain = array_values(array_filter($connect_chain, static function ($h) {
+                return !($h === '127.0.0.1' || $h === '::1' || strtolower($h) === 'localhost');
+            }));
+        }
 
 
         $can_detach   = (function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'));
@@ -11774,7 +11873,7 @@ class wps_ic_ajax extends wps_ic
             $is_loopback_literal = ($chost === '127.0.0.1' || $chost === '::1' || strtolower($chost) === 'localhost');
 
 
-            $send_token = $is_loopback_literal;
+            $send_token = $is_loopback_literal || $confirm_want;
             $body = http_build_query(array_filter([
                 'action'   => $action,
                 'image_id' => $imageID,
@@ -11797,6 +11896,9 @@ class wps_ic_ajax extends wps_ic
             if (!$sock) {
                 error_log('[WPC AsyncDispatch] loopback connect_miss action=' . $action . ' imageID=' . $imageID
                     . ' try=' . $chost . ' port=' . $port . ' errno=' . $errno . ' err=' . $errstr);
+                if ($is_loopback_literal && (int) $errno === 111 && function_exists('wpc_admin_hold69')) {
+                    wpc_admin_hold69('wpc_lb_refused78', HOUR_IN_SECONDS);
+                }
                 continue;
             }
 
@@ -11881,6 +11983,22 @@ class wps_ic_ajax extends wps_ic
     }
 
 
+    public static function wpc_bulk_backup_fail_reason78($imageID)
+    {
+        $imageID = (int) $imageID;
+        $orig = function_exists('wp_get_original_image_path') ? (string) wp_get_original_image_path($imageID) : '';
+        $att  = function_exists('get_attached_file') ? (string) get_attached_file($imageID) : '';
+        if (($orig === '' || !file_exists($orig)) && ($att === '' || !file_exists($att))) {
+            return 'source file missing on disk (' . basename($att !== '' ? $att : $orig) . ') - restore or re-upload the file';
+        }
+        $up   = function_exists('wp_get_upload_dir') ? wp_get_upload_dir() : [];
+        $base = isset($up['basedir']) ? (string) $up['basedir'] : '';
+        if ($base !== '' && function_exists('wp_is_writable') && !wp_is_writable($base)) {
+            return 'backup folder not writable (' . $base . ')';
+        }
+        return 'backup copy failed - check disk space and folder permissions';
+    }
+
     public static function claim_async_token_for_sync($action, $imageID)
     {
         $imageID = (int) $imageID;
@@ -11914,7 +12032,7 @@ class wps_ic_ajax extends wps_ic
 
 
         @ignore_user_abort(true);
-        if (function_exists('fastcgi_finish_request'))       { http_response_code(200); echo 'queued'; @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @set_time_limit(120);
 
@@ -12010,7 +12128,7 @@ class wps_ic_ajax extends wps_ic
 
 
         @ignore_user_abort(true);
-        if (function_exists('fastcgi_finish_request'))       { http_response_code(200); echo 'queued'; @fastcgi_finish_request(); }
+        if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')))       { http_response_code(200); echo 'queued'; wpc_finish_request39(); }
         elseif (function_exists('litespeed_finish_request')) { http_response_code(200); echo 'queued'; @litespeed_finish_request(); }
         @set_time_limit(120);
 
@@ -12172,6 +12290,17 @@ class wps_ic_ajax extends wps_ic
             ));
             
             
+            
+            
+            $wpc_now56 = microtime(true);
+            if (isset($wpc_lt56) && ($wpc_now56 - $wpc_lt56) < 1.0) {
+                usleep((int) ((1.0 - ($wpc_now56 - $wpc_lt56)) * 1000000));
+            }
+            $wpc_lt56 = microtime(true);
+            if (function_exists('get_transient') && (int) get_transient('wpc_v2_pull_cooloff') > 0) {
+                error_log(sprintf('[WPC BGRetry] imageID=%d cooloff_active — standing down at attempt=%d', $imageID, $attempt));
+                break;
+            }
         }
 
 

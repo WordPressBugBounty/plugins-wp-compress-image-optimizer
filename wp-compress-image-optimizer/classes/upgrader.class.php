@@ -4,7 +4,7 @@
  * File: classes/upgrader.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -71,9 +71,9 @@ class wps_ic_upgrader extends wps_ic
             
             
             
-            if (function_exists('fastcgi_finish_request')) {
+            if ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request'))) {
                 register_shutdown_function(function () {
-                    @fastcgi_finish_request();
+                    wpc_finish_request39();
                     @set_time_limit(180);
                     try {
                         $this->run_upgrade_work334();

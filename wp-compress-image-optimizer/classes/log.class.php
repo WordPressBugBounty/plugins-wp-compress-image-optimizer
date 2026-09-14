@@ -4,7 +4,7 @@
  * File: classes/log.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
 
@@ -44,7 +44,7 @@ class wps_ic_log {
 			}
 		}
 
-		file_put_contents($log_file, $log);
+		wpc_fs_put($log_file, $log);
 
 	}
 

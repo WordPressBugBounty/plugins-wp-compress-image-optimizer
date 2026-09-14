@@ -4,11 +4,10 @@
  * File: api/v2/_shared.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
-
-
+include_once __DIR__ . '/../../addons/cache/wpc-fs.php';
 if (!defined('WPC_V2_DIRECT_ENTRY')) {
     http_response_code(403);
     header('Content-Type: application/json');
@@ -196,9 +195,7 @@ function wpc_v2_direct_respond($status, array $payload) {
     echo json_encode($payload);
 
 
-    if (function_exists('fastcgi_finish_request')) {
-        fastcgi_finish_request();
-    }
+    if (function_exists('wpc_finish_request39')) { wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
     exit;
 }
 
@@ -236,12 +233,12 @@ function wpc_v2_journal_ensure_dir() {
     
     $htaccess = $dir . '/.htaccess';
     if (!is_file($htaccess)) {
-        @file_put_contents($htaccess, "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
+        wpc_fs_put($htaccess, "Order Deny,Allow\nDeny from all\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n");
     }
 
     $index = $dir . '/index.html';
     if (!is_file($index)) {
-        @file_put_contents($index, '');
+        wpc_fs_put($index, '');
     }
     if (!is_writable($dir)) {
         return false;
@@ -275,7 +272,7 @@ function wpc_v2_journal_write($imageID, $jobId, array $entries) {
     $line = wp_json_encode($payload);
     if ($line === false) return false;
 
-    if (@file_put_contents($tmp, $line, LOCK_EX) === false) {
+    if (wpc_fs_put($tmp, $line, LOCK_EX) === false) {
         return false;
     }
     if (!@rename($tmp, $final)) {
@@ -373,7 +370,7 @@ function wpc_v2_direct_persist_bytes($imageID, $filename, $raw) {
     }
 
     $tmp = $dest . '.wpc_v2_tmp_' . substr(md5(microtime(true) . mt_rand()), 0, 8);
-    if (@file_put_contents($tmp, $raw, LOCK_EX) === false) {
+    if (wpc_fs_put($tmp, $raw, LOCK_EX) === false) {
         return ['ok' => false, 'error' => 'write_failed', 'path' => null, 'bytes_size' => 0, 'idempotent' => false];
     }
     if (!@rename($tmp, $dest)) {

@@ -4,11 +4,10 @@
  * File: addons/v2/v2-direct-entry.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.22.38
+ * @version 7.24.00
  */
 
-
-
+include_once __DIR__ . '/../cache/wpc-fs.php';
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -213,7 +212,7 @@ function wpc_v2_journal_note_progress($drained, $remaining) {
         $until = time() + (int) min(900 * pow(2, $n - 3), 7200); 
         error_log(sprintf('[wpc_v2_journal_drain] no-progress x%d — backing off until %s (files=%d)', $n, gmdate('H:i:s', $until), $remaining));
     }
-    @file_put_contents($f, json_encode(['noprog' => $n, 'until' => $until]));
+    wpc_fs_put($f, json_encode(['noprog' => $n, 'until' => $until]));
 }
 
 
@@ -565,7 +564,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
                     $tmp = $dest . '.wpc_v2_tmp_' . wp_generate_password(8, false);
                     
                     
-                    if (@file_put_contents($tmp, $raw) === false) {
+                    if (wpc_fs_put($tmp, $raw) === false) {
                         $err = error_get_last();
                         error_log(sprintf(
                             '[wpc_v2_journal_merge] write_failed imageID=%d sz=%s fmt=%s bytes=%d dest_tail=%s msg=%s',
@@ -823,9 +822,7 @@ function wpc_v2_journal_merge_for_image($imageID, $jobId, array $entries, array 
     if ($any_drain_complete_signal && function_exists('wpc_v2_recompute_savings')) {
         $imageID_for_shutdown = (int) $imageID;
         add_action('shutdown', function () use ($imageID_for_shutdown) {
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
-            }
+            if (function_exists('wpc_finish_request39')) { wpc_finish_request39(); } elseif (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); }
             if (function_exists('wpc_v2_recompute_savings')) {
                 wpc_v2_recompute_savings($imageID_for_shutdown);
             }
