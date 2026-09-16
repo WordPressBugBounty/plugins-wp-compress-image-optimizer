@@ -4,7 +4,7 @@
  * File: addons/criticalCss/criticalCss-v2.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 
@@ -71,6 +71,7 @@ if (!function_exists('wpc_crit_meta_write')) {
 class wps_criticalCss
 {
     public $wpc_pristine_used56 = false;
+    public $wpc_tpl_hdr61 = '';
 
     static public $API_URL = WPS_IC_CRITICAL_API_URL;
     static public $API_ASSETS_URL = WPS_IC_CRITICAL_API_ASSETS_URL;
@@ -703,6 +704,12 @@ $return['mobile_path'] = $mobileFilePath;
             }
             return true;
         }
+        if (empty($_GET['forceCritical']) && function_exists('wpc_gen_hold61_active') && ($wpc_hold61 = wpc_gen_hold61_active((string) $url_key)) > 0) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('gen-hold-deferred', (string) $url_key, (string) $url, ['path' => 'initCritical', 'left' => $wpc_hold61]);
+            }
+            return true;
+        }
 
         $transient_name = 'wpc_critical_key_' . $url_key; 
         $critTransient = get_transient($transient_name);
@@ -886,6 +893,7 @@ $return['mobile_path'] = $mobileFilePath;
             if ($wpc_pushAdmin || !$wpc_npLive111) {
                 $html = $this->fetchCriticalCombineHtml($url);
                 if ($html) {
+                    $this->wpc_tpl_from_corpus61($args, (string) $url_key);
                     $args['html'] = $html;
                     if (apply_filters('wpc_push_css_corpus', true)) {
                         $wpc_css763 = $this->fetchCriticalCombineCss($html);
@@ -957,6 +965,27 @@ $return['mobile_path'] = $mobileFilePath;
     }
 
 
+    private function wpc_tpl_from_corpus61(&$args, $urlKey)
+    {
+        if (!is_array($args) || !empty($args['tpl_key'])) {
+            return false;
+        }
+        $wpc_tk61 = (string) $this->wpc_tpl_hdr61;
+        if ($wpc_tk61 === '' || !function_exists('wpc_used_css_key_valid') || !wpc_used_css_key_valid($wpc_tk61)) {
+            return false;
+        }
+        $args['tpl_key'] = $wpc_tk61;
+        if ((string) $urlKey !== '' && defined('WPS_IC_CRITICAL') && function_exists('wpc_crit_meta_write')) {
+            $wpc_td61 = rtrim(WPS_IC_CRITICAL, '/') . '/' . $urlKey . '/';
+            if (is_dir($wpc_td61) || @mkdir($wpc_td61, 0777, true)) {
+                wpc_crit_meta_write($wpc_td61 . 'tpl.txt', $wpc_tk61);
+            }
+        }
+        if (function_exists('wpc_cache_first_log')) {
+            wpc_cache_first_log('tpl-key-from-corpus', (string) $urlKey, '', ['tpl' => substr($wpc_tk61, 0, 20)]);
+        }
+        return true;
+    }
     public static function wpc_cached_pristine56($url, $loopback = false, $dir = null)
     {
         try {
@@ -997,6 +1026,7 @@ $return['mobile_path'] = $mobileFilePath;
     }
 
     private function fetchCriticalCombineHtml($url, $force = false) {
+        $this->wpc_tpl_hdr61 = '';
         $wpc_cp56 = self::wpc_cached_pristine56($url, $force);
         if ($wpc_cp56 !== '') {
             $this->wpc_pristine_used56 = true;
@@ -1083,6 +1113,7 @@ $return['mobile_path'] = $mobileFilePath;
         }
 
         $html = wp_remote_retrieve_body($response);
+        $this->wpc_tpl_hdr61 = trim((string) wp_remote_retrieve_header($response, 'x-wpc-tpl'));
         if (empty($html)) {
             return null;
         }
@@ -1557,6 +1588,12 @@ $return['mobile_path'] = $mobileFilePath;
             }
             return;
         }
+        if (!$wpc_human98 && function_exists('wpc_gen_hold61_active') && ($wpc_hold61 = wpc_gen_hold61_active((string) $this->urlKey)) > 0) {
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('gen-hold-deferred', (string) $this->urlKey, '', ['path' => 'kick', 'left' => $wpc_hold61]);
+            }
+            return;
+        }
 
 
         $wpc_crit_here123b = false;
@@ -1699,6 +1736,7 @@ $return['mobile_path'] = $mobileFilePath;
                 }
             }
         }
+        $this->wpc_tpl_from_corpus61($args, (string) $this->urlKey);
         if (empty($args['fonts']) && function_exists('wpc_font_localizer_faces')) {
             $wpc_ff794 = wpc_font_localizer_faces();
             if (!empty($wpc_ff794)) { $args['fonts'] = $wpc_ff794; }
@@ -1747,6 +1785,7 @@ $return['mobile_path'] = $mobileFilePath;
                 $wpc_ccap169r = (int) apply_filters('wpc_push_corpus_cap', 8388608);
                 if ($wpc_h169 && strlen($wpc_h169) <= $wpc_ccap169r) {
                     $args['html'] = $wpc_h169;
+                    $this->wpc_tpl_from_corpus61($args, (string) $this->urlKey);
                     if (apply_filters('wpc_push_css_corpus', true)) {
                         $wpc_c169 = $this->fetchCriticalCombineCss($wpc_h169);
                         if ($wpc_c169 !== '' && strlen($wpc_h169) + strlen($wpc_c169) <= $wpc_ccap169r) { $args['css'] = $wpc_c169; }
@@ -1766,6 +1805,9 @@ $return['mobile_path'] = $mobileFilePath;
                     ]);
                 }
             }
+        }
+        if (function_exists('wpc_gen_served_hold61')) {
+            wpc_gen_served_hold61((string) $this->urlKey, $call, (string) $body);
         }
         if (function_exists('wpc_gen_landless_note')) {
             wpc_gen_landless_note((string) $this->urlKey);

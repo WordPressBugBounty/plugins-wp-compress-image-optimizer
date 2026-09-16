@@ -4,7 +4,7 @@
  * File: addons/vitals/v.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 include_once __DIR__ . '/../cache/wpc-fs.php';

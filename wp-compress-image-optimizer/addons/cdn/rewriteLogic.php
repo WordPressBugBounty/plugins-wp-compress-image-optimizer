@@ -4,7 +4,7 @@
  * File: addons/cdn/rewriteLogic.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 
@@ -1393,7 +1393,7 @@ class wps_rewriteLogic
     public static function wpc_ucss_boot_js()
     {
         $ms = self::wpc_ucss_conceal_ms();
-        return '<script id="wpc-ucss-boot">/*wpc-arm-sentinel*/(function(){var g=function(){try{document.documentElement.classList.add("wpc-css-live")}catch(x){}},g2=function(){try{if(document.querySelector(\'link[rel^="wpc-"]\'))return;g()}catch(x){g()}};function a(){var r=document.querySelectorAll(\'link[data-wpc-rest]:not([href])\'),armed=0;for(var j=0;j<r.length;j++){(function(e){var ru=e.getAttribute("data-wpc-rest"),rm=e.getAttribute("data-wpc-ucss-rest")||"all",rg=true;try{rg=!window.matchMedia||window.matchMedia(rm).matches}catch(x){rg=true}if(!rg||!ru)return;armed++;e.media="print";e.onload=function(){this.onload=null;this.media=rm;g2()};e.onerror=g;e.setAttribute("href",ru)})(r[j])}if(!armed){g2()}}function q(){if(window.wpcDelayV3Cfg&&window.wpcScriptRegistry&&!(window.wpcDelayV3Cfg&&0==+window.wpcDelayV3Cfg.restoreGesture)){window.wpcRestPending42=1;return}(window.requestIdleCallback||function(f){setTimeout(f,1200)})(a,{timeout:2500})}setTimeout(g,' . (int) $ms . ');if(document.readyState==="complete"){q()}else{window.addEventListener("load",q)}})();</script>';
+        return '<script id="wpc-ucss-boot">/*wpc-arm-sentinel*/(function(){var g=function(){try{document.documentElement.classList.add("wpc-css-live")}catch(x){}},g2=function(){try{if(document.querySelector(\'link[rel^="wpc-"]\'))return;g()}catch(x){g()}};function a(){var r=document.querySelectorAll(\'link[data-wpc-rest]:not([href])\'),armed=0;for(var j=0;j<r.length;j++){(function(e){var ru=e.getAttribute("data-wpc-rest"),rm=e.getAttribute("data-wpc-ucss-rest")||"all",rg=true;try{rg=!window.matchMedia||window.matchMedia(rm).matches}catch(x){rg=true}if(!rg||!ru)return;armed++;e.media="print";e.onload=function(){this.onload=null;this.media=rm;g2()};e.addEventListener("error",g);e.setAttribute("href",ru)})(r[j])}if(!armed){g2()}}function q(){(window.requestIdleCallback||function(f){setTimeout(f,1200)})(a,{timeout:2500})}setTimeout(g,' . (int) $ms . ');if(document.readyState==="complete"){q()}else{window.addEventListener("load",q)}})();</script>';
     }
 
     public static function wpc_combined_crit_on($settings_override = null)
@@ -4512,9 +4512,10 @@ SCRIPT;
         if (apply_filters('wpc_bg_video_guard', true) && stripos($html, 'elementor-background-video') !== false) {
             $criticalCss .= "\r\n" . '<style id="wpc-bg-video-guard">.elementor-background-video-container{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none}.elementor-background-video-hosted,.elementor-background-video-embed{position:absolute;max-width:none}</style>';
         }
-        if (apply_filters('wpc_below_fold_cv', true) && stripos($html, 'elementor-top-section') !== false) {
-            $criticalCss .= "\r\n" . '<style id="wpc-cv-guard">.elementor > section.elementor-top-section:nth-of-type(n+4),.elementor > main.elementor-top-section ~ section.elementor-top-section:nth-of-type(n+4),[data-wpc-cv]{content-visibility:auto;contain-intrinsic-size:auto 600px}@media print{[data-wpc-cv],.elementor .elementor-top-section{content-visibility:visible}}</style>';
-        }
+        
+        
+        
+        
         if (apply_filters('wpc_elementor_anim_start_state', true) && stripos($html, 'elementor-invisible') !== false) {
             $criticalCss .= "\r\n" . '<style id="wpc-elementor-anim-start">.elementor-invisible{visibility:hidden}</style>';
         }

@@ -4,7 +4,7 @@
  * File: addons/vitals/vitals.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 if (!defined('ABSPATH')) {
@@ -170,12 +170,16 @@ if (!function_exists('wpc_vitals_channel_probe')) {
         $code = (!is_wp_error($r) && function_exists('wp_remote_retrieve_response_code'))
             ? (int) wp_remote_retrieve_response_code($r) : 0;
         $wpc_v918 = ($code === 204 || $code === 410) ? 'direct' : 'ajax';
+        if ($wpc_v918 === 'direct' && function_exists('get_option')
+            && (time() - (int) get_option('wpc_vitals_fb_at03', 0)) < 7 * 86400) {
+            $wpc_v918 = 'ajax';
+        }
         set_transient('wpc_vitals_ch916', $wpc_v918, 12 * 3600);
         if (function_exists('get_option') && function_exists('update_option')
             && get_option('wpc_vitals_ch_last') !== $wpc_v918) {
             update_option('wpc_vitals_ch_last', $wpc_v918, false);
-            if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('vitals-channel', '', '', ['to' => $wpc_v918, 'by' => 'probe', 'code' => $code]);
             }
         }
     }
@@ -227,10 +231,13 @@ if (!function_exists('wpc_vitals_ajax_ingest')) {
         if ((strpos($wpc_raw926, 'fb=1') !== false || (isset($_POST['fb']) && $_POST['fb'] === '1'))
             && function_exists('get_transient') && get_transient('wpc_vitals_ch916') !== 'ajax') {
             set_transient('wpc_vitals_ch916', 'ajax', 12 * 3600);
+            if (function_exists('update_option')) {
+                update_option('wpc_vitals_fb_at03', time(), false);
+            }
             if (function_exists('get_option') && get_option('wpc_vitals_ch_last') !== 'ajax') {
                 update_option('wpc_vitals_ch_last', 'ajax', false);
-                if (class_exists('wps_ic_cache') && method_exists('wps_ic_cache', 'removeHtmlCacheFiles')) {
-                    try { wps_ic_cache::removeHtmlCacheFiles('all', '', '', 'soft'); } catch (\Throwable $e) {}
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('vitals-channel', '', '', ['to' => 'ajax', 'by' => 'browser']);
                 }
             }
         }

@@ -4,7 +4,7 @@
  * File: defines.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 include_once __DIR__ . '/addons/cache/wpc-fs.php';
@@ -3189,6 +3189,58 @@ if (!function_exists('wpc_crit_sanity_stall_tick622')) {
         wpc_fs_put($wpc_sf622, $wpc_n622 . ':' . (int) (($wpc_st622[1] ?? 0) ?: time()));
         $GLOBALS['wpc_stall_once55'][$wpc_sf622] = $wpc_n622;
         return $wpc_n622;
+    }
+}
+if (!function_exists('wpc_gen_served_hold61')) {
+    function wpc_gen_served_hold61($urlKey, $call, $body)
+    {
+        try {
+            if ((string) $urlKey === '' || (function_exists('is_wp_error') && is_wp_error($call))) {
+                return 0;
+            }
+            $wpc_j61 = json_decode((string) $body, true);
+            if (!is_array($wpc_j61)) {
+                return 0;
+            }
+            $wpc_s61 = strtolower(trim((string) (isset($wpc_j61['served']) ? $wpc_j61['served'] : (isset($wpc_j61['status']) ? $wpc_j61['status'] : ''))));
+            if ($wpc_s61 !== 'debounced' && $wpc_s61 !== 'unchanged') {
+                return 0;
+            }
+            $wpc_ra61 = isset($wpc_j61['retry_after']) ? (int) $wpc_j61['retry_after'] : 0;
+            if ($wpc_ra61 <= 0 && function_exists('wp_remote_retrieve_header')) {
+                $wpc_ra61 = (int) wp_remote_retrieve_header($call, 'retry-after');
+            }
+            if ($wpc_ra61 <= 0) {
+                return 0;
+            }
+            $wpc_ra61 = min(172800, max(60, $wpc_ra61));
+            if (function_exists('set_transient')) {
+                set_transient('wpc_gen_hold61_' . md5((string) $urlKey), time() + $wpc_ra61, $wpc_ra61);
+            }
+            if ($wpc_s61 === 'debounced' && function_exists('wpc_pl_sched') && function_exists('wp_next_scheduled')
+                && !wp_next_scheduled('wpc_crit_collect', [(string) $urlKey, 9])) {
+                wpc_pl_sched(time() + $wpc_ra61, 'wpc_crit_collect', [(string) $urlKey, 9]);
+                if (function_exists('wpc_spawn_cron')) {
+                    wpc_spawn_cron();
+                }
+            }
+            if (function_exists('wpc_cache_first_log')) {
+                wpc_cache_first_log('dispatch-served-hold', (string) $urlKey, '', ['served' => $wpc_s61, 'ra' => $wpc_ra61]);
+            }
+            return $wpc_ra61;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+}
+if (!function_exists('wpc_gen_hold61_active')) {
+    function wpc_gen_hold61_active($urlKey)
+    {
+        if ((string) $urlKey === '' || !function_exists('get_transient')) {
+            return 0;
+        }
+        $wpc_u61 = (int) get_transient('wpc_gen_hold61_' . md5((string) $urlKey));
+        return $wpc_u61 > time() ? $wpc_u61 - time() : 0;
     }
 }
 if (!function_exists('wpc_sanity_escalate622')) {

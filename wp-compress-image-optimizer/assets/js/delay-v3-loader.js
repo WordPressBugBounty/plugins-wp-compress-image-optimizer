@@ -3653,11 +3653,7 @@ if (!window.__wpcEngaged) {
                     var w = [];
                     while (cvIdx < cvEls.length && w.length < 2) {
                         var el = cvEls[cvIdx++];
-                        try {
-                            if (getComputedStyle(el).contentVisibility === "auto") {
-                                w.push(el);
-                            }
-                        } catch (e) {}
+                        w.push(el);
                     }
                     for (var wi = 0; wi < w.length; wi++) {
                         try {
@@ -4630,10 +4626,7 @@ addEventListener("wpc-scripts-loaded", (function() {
         var go626 = function() {
             if (fired626) { return; }
             fired626 = true;
-            try {
-                if (window.wpcRestoreGesture235 && window.wpcRestoreGesture235()) { return; }
-                rest(false);
-            } catch (e) {}
+            try { rest(false); } catch (e) {}
         };
         
         
@@ -4783,6 +4776,11 @@ addEventListener("wpc-scripts-loaded", (function() {
         return s.replace(/\.[a-z0-9]+$/i, "").replace(/-\d+x\d+$/, "").toLowerCase();
     };
     try {
+        window.addEventListener("scroll", (function() {
+            scrolledAtLcp = 1;
+        }), { passive: true, once: true, capture: true });
+    } catch (e) {}
+    try {
         var po = new PerformanceObserver((function(list) {
             var es = list.getEntries();
             for (var i = 0; i < es.length; i++) {
@@ -4796,9 +4794,6 @@ addEventListener("wpc-scripts-loaded", (function() {
                 
                 
                 try {
-                    if ((typeof window.pageYOffset === "number" ? window.pageYOffset : (document.documentElement || {}).scrollTop || 0) > 0) {
-                        scrolledAtLcp = 1;
-                    }
                     
                     
                     

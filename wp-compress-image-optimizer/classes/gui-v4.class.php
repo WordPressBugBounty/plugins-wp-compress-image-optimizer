@@ -4,7 +4,7 @@
  * File: classes/gui-v4.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 

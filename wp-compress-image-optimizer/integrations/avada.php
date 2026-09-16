@@ -4,7 +4,7 @@
  * File: integrations/avada.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 if (!defined('ABSPATH')) {

@@ -4,7 +4,7 @@
  * File: addons/cache/warm.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 if (!defined('ABSPATH')) {
@@ -8015,6 +8015,7 @@ if (!function_exists('wpc_font_seen_handler')) {
                 || !preg_match('#^https://fonts\.(googleapis\.com|bunny\.net)/css2?\?[A-Za-z0-9&=:;,+%@._\-]+$#', $u)) {
                 wp_die('', '', 204);
             }
+            if (function_exists('wpc_font_sheet_localized04') && wpc_font_sheet_localized04($u)) { wp_die('', '', 204); }
             $q = get_option('wpc_font_seen_queue');
             if (!is_array($q)) { $q = []; }
             if (!in_array($u, $q, true) && count($q) < 10) {
@@ -8033,6 +8034,32 @@ if (!function_exists('wpc_font_seen_handler')) {
 }
 
 
+if (!function_exists('wpc_font_dir_sig04')) {
+    function wpc_font_dir_sig04()
+    {
+        if (!defined('WPS_IC_FONTS_DIR') || !is_dir(WPS_IC_FONTS_DIR)) {
+            return 'none';
+        }
+        $wpc_l04 = [];
+        foreach ((array) @glob(rtrim(WPS_IC_FONTS_DIR, '/') . '/*/*') as $wpc_f04) {
+            if (@is_file($wpc_f04)) {
+                $wpc_l04[] = basename(dirname($wpc_f04)) . '/' . basename($wpc_f04) . ':' . (int) @filesize($wpc_f04);
+            }
+        }
+        sort($wpc_l04);
+        return md5(implode("\n", $wpc_l04));
+    }
+}
+if (!function_exists('wpc_font_sheet_localized04')) {
+    function wpc_font_sheet_localized04($url)
+    {
+        if (!defined('WPS_IC_FONTS_DIR') || !is_string($url) || $url === '') {
+            return false;
+        }
+        $wpc_d04 = rtrim(WPS_IC_FONTS_DIR, '/') . '/' . md5($url) . '/';
+        return is_dir($wpc_d04) && count((array) @glob($wpc_d04 . '*.css')) > 0;
+    }
+}
 if (!function_exists('wpc_font_rescan_handler')) {
     function wpc_font_rescan_handler()
     {
@@ -8067,10 +8094,13 @@ if (!function_exists('wpc_font_rescan_handler')) {
                 delete_option('wpc_font_seen_queue');
             }
             if (!empty($found['googleFontsStylesheets'])) {
+                $wpc_sig04 = function_exists('wpc_font_dir_sig04') ? wpc_font_dir_sig04() : '';
                 $fonts->readGoogleStylesheet($found);
-                
-                
-                if (class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeAll')) {
+                $wpc_changed04 = !function_exists('wpc_font_dir_sig04') || wpc_font_dir_sig04() !== $wpc_sig04;
+                if (function_exists('wpc_cache_first_log')) {
+                    wpc_cache_first_log('font-rescan', '', '', ['sheets' => count($found['googleFontsStylesheets']), 'changed' => $wpc_changed04 ? 1 : 0]);
+                }
+                if ($wpc_changed04 && class_exists('wps_ic_cache_integrations') && method_exists('wps_ic_cache_integrations', 'purgeAll')) {
                     wps_ic_cache_integrations::purgeAll(false, false, true, false, false, false, 'soft');
                 }
             }

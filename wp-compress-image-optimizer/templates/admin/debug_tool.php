@@ -823,23 +823,23 @@ $preloadsMobile = get_option('wps_ic_preloadsMobile');
         </td>
     </tr>
     <tr>
-        <td><?php esc_html_e('Elementor Skip Sections', WPS_IC_TEXTDOMAIN); ?></td>
+        <td><?php esc_html_e('Elementor Eager Sections', WPS_IC_TEXTDOMAIN); ?></td>
         <td colspan="3">
             <form method="post" action="">
 			    <?php wp_nonce_field('wpc_settings_save', 'wpc_settings_save_nonce'); ?>
-                <p><?php esc_html_e('Configure how many Elementor sections to skip before applying lazy loading/optimization.', WPS_IC_TEXTDOMAIN); ?></p>
+                <p><?php esc_html_e('Below-fold sections kept eager per device. Elementor top sections past this count are containment-skipped until they come near the viewport.', WPS_IC_TEXTDOMAIN); ?></p>
 
 			    <?php $skipSections = get_option('wps_ic_elementor_skip_sections', []); ?>
 
-                <label for="elementor_skip_desktop"><?php esc_html_e('Desktop Skip Count:', WPS_IC_TEXTDOMAIN); ?></label>
+                <label for="elementor_skip_desktop"><?php esc_html_e('Desktop Eager Sections:', WPS_IC_TEXTDOMAIN); ?></label>
                 <input type="number" id="elementor_skip_desktop" name="elementor_skip_desktop"
-                       value="<?php echo isset($skipSections['desktop']) ? $skipSections['desktop'] : 5; ?>"
+                       value="<?php echo isset($skipSections['desktop']) ? $skipSections['desktop'] : 3; ?>"
                        min="0" max="20" style="width: 80px;">
 
 
-                <label for="elementor_skip_mobile"><?php esc_html_e('Mobile Skip Count:', WPS_IC_TEXTDOMAIN); ?></label>
+                <label for="elementor_skip_mobile"><?php esc_html_e('Mobile Eager Sections:', WPS_IC_TEXTDOMAIN); ?></label>
                 <input type="number" id="elementor_skip_mobile" name="elementor_skip_mobile"
-                       value="<?php echo isset($skipSections['mobile']) ? $skipSections['mobile'] : 5; ?>"
+                       value="<?php echo isset($skipSections['mobile']) ? $skipSections['mobile'] : 3; ?>"
                        min="0" max="20" style="width: 80px;">
 
                 <input type="submit" name="elementor_skip_sections" value="<?php esc_attr_e('Save Skip Settings', WPS_IC_TEXTDOMAIN); ?>" class="button-primary" style="float:right;">

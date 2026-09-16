@@ -4,7 +4,7 @@
  * File: classes/combine_css.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 
@@ -1392,6 +1392,7 @@ class wps_ic_combine_css
             return;
         }
         $wpc_path646 = $this->combined_dir . $wpc_name646;
+        $this->current_file = (string) preg_replace('#/\*wp_block_styles_on_demand_placeholder:[0-9a-f]+\*/#i', '', $this->current_file);
         $wpc_md5646 = md5($this->current_file);
         if (!@is_file($wpc_path646) || (string) @file_get_contents($wpc_path646 . '.md5') !== $wpc_md5646) {
             

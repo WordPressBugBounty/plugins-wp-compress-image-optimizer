@@ -4,7 +4,7 @@
  * File: classes/remote_restore.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 

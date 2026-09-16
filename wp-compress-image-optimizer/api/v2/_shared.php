@@ -4,7 +4,7 @@
  * File: api/v2/_shared.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 include_once __DIR__ . '/../../addons/cache/wpc-fs.php';

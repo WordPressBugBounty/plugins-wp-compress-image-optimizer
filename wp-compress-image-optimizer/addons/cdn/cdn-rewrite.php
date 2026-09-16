@@ -4,7 +4,7 @@
  * File: addons/cdn/cdn-rewrite.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 
@@ -4773,32 +4773,159 @@ class wps_cdn_rewrite
     
     
     
+    public static function wpc_below_fold_cv_is_mobile()
+    {
+        if (function_exists('wpc_ua_is_mobile')) {
+            return wpc_ua_is_mobile();
+        }
+        if (!empty($_GET['simulate_mobile'])) {
+            return true;
+        }
+        if (!isset($_SERVER['HTTP_USER_AGENT'])) {
+            return false;
+        }
+        $agent = strtolower((string) $_SERVER['HTTP_USER_AGENT']);
+        foreach (array('android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile') as $needle) {
+            if (strpos($agent, $needle) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    
+    
+    public static function wpc_below_fold_cv_artifact_dir()
+    {
+        if (!class_exists('wps_ic_url_key') || !defined('WPS_IC_CRITICAL')) { return ''; }
+        try {
+            $urlKey = new wps_ic_url_key();
+            $key = $urlKey->setup('');
+        } catch (\Throwable $e) {
+            return '';
+        }
+        return $key ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $key . '/' : '';
+    }
+
+    
+    
+    
+    
+    
+    
+    public static function wpc_atf_exempt_section_ids($dir)
+    {
+        $ids = array();
+        if (is_string($dir) && $dir !== '') {
+            $dir = rtrim($dir, '/') . '/';
+            foreach (array('lcp.json', 'delay.json') as $file) {
+                $data = @json_decode((string) @file_get_contents($dir . $file), true);
+                if (!is_array($data)) { continue; }
+                $sels = array();
+                if (isset($data['lcp_element']) && is_array($data['lcp_element'])) {
+                    foreach (array('mobile', 'desktop') as $device) {
+                        if (!empty($data['lcp_element'][$device]['sel'])) {
+                            $sels[] = (string) $data['lcp_element'][$device]['sel'];
+                        }
+                    }
+                }
+                foreach (array('atf_bg', 'atf_images') as $key) {
+                    if (!isset($data[$key]) || !is_array($data[$key])) { continue; }
+                    foreach (array('mobile', 'desktop') as $device) {
+                        
+                        $list = isset($data[$key][$device]) ? $data[$key][$device] : $data[$key];
+                        foreach ((array) $list as $entry) {
+                            if (is_array($entry) && !empty($entry['sel'])) { $sels[] = (string) $entry['sel']; }
+                        }
+                    }
+                }
+                foreach ($sels as $sel) {
+                    if (preg_match_all('/#([A-Za-z][\w-]*)/', $sel, $m1)) { $ids = array_merge($ids, $m1[1]); }
+                    if (preg_match_all('/elementor-element-([a-z0-9]+)/i', $sel, $m2)) { $ids = array_merge($ids, $m2[1]); }
+                }
+            }
+        }
+        if (function_exists('apply_filters')) {
+            $ids = apply_filters('wpc_section_delay_atf_exempt', $ids);
+        }
+        return array_slice(array_values(array_unique(array_filter((array) $ids))), 0, 12);
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public static function wpc_below_fold_cv_guard($html)
+    {
+        if (stripos($html, 'wpc-cv-guard') !== false) { return $html; }
+        $at = stripos($html, '</head>');
+        if ($at === false) { return $html; }
+        return substr($html, 0, $at)
+            . '<style id="wpc-cv-guard">[data-wpc-cv]{content-visibility:auto;contain-intrinsic-width:none;contain-intrinsic-height:auto 600px}@media print{[data-wpc-cv]{content-visibility:visible}}</style>'
+            . substr($html, $at);
+    }
+
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     public static function wpc_below_fold_cv_tag($html)
     {
         if (!is_string($html) || $html === '') return $html;
         if (function_exists('apply_filters') && !apply_filters('wpc_below_fold_cv', true)) return $html;
-        if (stripos($html, 'elementor-top-section') === false) return $html;
+        $carriesTag = stripos($html, 'data-wpc-cv') !== false;
+        if (stripos($html, 'elementor-top-section') === false) {
+            return $carriesTag ? self::wpc_below_fold_cv_guard($html) : $html;
+        }
         $atf = 0;
         if (preg_match_all('/<img\b[^>]*>/i', $html, $im, PREG_OFFSET_CAPTURE)) {
             foreach ($im[0] as $t) {
                 if (stripos($t[0], 'loading="lazy"') === false && stripos($t[0], "loading='lazy'") === false) { $atf = $t[1]; break; }
             }
         }
-        if (!preg_match_all('/<(?:section|main|footer)\b[^>]*class=(["\'])[^"\']*\belementor-top-section\b[^"\']*\1[^>]*>/i', $html, $mm, PREG_OFFSET_CAPTURE)) return $html;
-        $keep = function_exists('apply_filters') ? (int) apply_filters('wpc_below_fold_cv_keep', 3) : 3;
+        if (!preg_match_all('/<(?:section|main|footer)\b[^>]*class=(["\'])[^"\']*\belementor-top-section\b[^"\']*\1[^>]*>/i', $html, $mm, PREG_OFFSET_CAPTURE)) {
+            return $carriesTag ? self::wpc_below_fold_cv_guard($html) : $html;
+        }
+        $keep = 3;
+        if (function_exists('get_option')) {
+            $skipSections = get_option('wps_ic_elementor_skip_sections');
+            if (is_array($skipSections)) {
+                $device = self::wpc_below_fold_cv_is_mobile() ? 'mobile' : 'desktop';
+                if (isset($skipSections[$device]) && (int) $skipSections[$device] > 0) {
+                    $keep = (int) $skipSections[$device];
+                }
+            }
+        }
+        if (function_exists('apply_filters')) { $keep = (int) apply_filters('wpc_below_fold_cv_keep', $keep); }
+        $exempt = self::wpc_atf_exempt_section_ids(self::wpc_below_fold_cv_artifact_dir());
         $idx = 0; $add = array();
         foreach ($mm[0] as $t) {
             $idx++;
             if ($idx <= $keep || $t[1] <= $atf) continue;
             if (stripos($t[0], 'data-wpc-cv') !== false) continue;
+            $skip = false;
+            foreach ($exempt as $id) {
+                if (preg_match('/\b(?:data-id|id)=(["\'])' . preg_quote($id, '/') . '\1/i', $t[0])) { $skip = true; break; }
+            }
+            if ($skip) continue;
             $add[] = array($t[1], strlen($t[0]), preg_replace('/^<(\w+)/', '<$1 data-wpc-cv="1"', $t[0], 1));
         }
         for ($i = count($add) - 1; $i >= 0; $i--) {
             $html = substr($html, 0, $add[$i][0]) . $add[$i][2] . substr($html, $add[$i][0] + $add[$i][1]);
         }
-        return $html;
+        if (empty($add) && !$carriesTag) { return $html; }
+        return self::wpc_below_fold_cv_guard($html);
     }
 
     
@@ -7170,6 +7297,12 @@ WPCRUMJS;
 
         if ((!empty($_GET['criticalCombine']) && $_GET['criticalCombine'] == 'true') || !empty(wpcGetHeader('criticalCombine'))) {
             $this->criticalCombine = true;
+            if (!headers_sent() && function_exists('wpc_compute_tpl_key')) {
+                $wpc_tk61 = (string) wpc_compute_tpl_key();
+                if ($wpc_tk61 !== '') {
+                    header('X-WPC-Tpl: ' . $wpc_tk61);
+                }
+            }
         }
         
         if (isset($_GET['brizy-edit-iframe']) || isset($_GET['brizy-edit']) || isset($_GET['preview'])) {

@@ -4,7 +4,7 @@
  * File: wp-compress-core.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 global $ic_running;
@@ -1467,7 +1467,7 @@ class wps_ic
 
         
         self::$slug = 'wpcompress';
-        self::$version = '7.24.00';
+        self::$version = '7.24.04';
 
         $development = get_option('wps_ic_development');
         if (!empty($development) && $development == 'true') {

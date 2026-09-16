@@ -4,7 +4,7 @@
  * File: classes/modes.class.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 class wps_ic_modes extends wps_ic {

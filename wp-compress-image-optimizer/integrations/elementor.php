@@ -4,7 +4,7 @@
  * File: integrations/elementor.php
  *
  * @package wp-compress-image-optimizer
- * @version 7.24.00
+ * @version 7.24.04
  */
 
 if (!defined('ABSPATH')) {
@@ -111,119 +111,11 @@ class wps_ic_elementor
         
         
         
-        
-        
         if (!(function_exists('is_user_logged_in') && is_user_logged_in())) {
-
-            $html = $this->hideSections($html);
 
             $html = $this->delayBackgrounds($html);
 
         }
-
-        return $html;
-    }
-
-    public function hideSections($html)
-    {
-	    
-	    $skipSections = get_option('wps_ic_elementor_skip_sections');
-	    $defaultSkip = 5;
-
-	    if (empty($skipSections)) {
-		    $skip = $defaultSkip;
-	    } else {
-		    
-		    $deviceType = $this->isMobile() ? 'mobile' : 'desktop';
-		    $skip = isset($skipSections[$deviceType]) ? $skipSections[$deviceType] : $defaultSkip;
-	    }
-
-        $count = 0;
-        $html = preg_replace_callback(
-            '/(<section[^>]*class="[^"]*?)elementor-top-section([^"]*")/i',
-            function ($matches) use (&$count, $skip) {
-                $count++;
-                if ($count > $skip) {
-                    return $matches[1] . 'elementor-top-section wpc-delay-elementor' . $matches[2];
-                } else {
-                    return $matches[0];
-                }
-            },
-            $html
-        );
-
-
-        try {
-            $wpc_ex53 = [];
-            if (class_exists('wps_ic_url_key') && defined('WPS_IC_CRITICAL')) {
-                $wpc_k53 = (new wps_ic_url_key())->setup('');
-                $wpc_d53 = $wpc_k53 ? rtrim(WPS_IC_CRITICAL, '/') . '/' . $wpc_k53 . '/' : '';
-                foreach (['lcp.json', 'delay.json'] as $wpc_f53) {
-                    $wpc_j53 = $wpc_d53 ? @json_decode((string) @file_get_contents($wpc_d53 . $wpc_f53), true) : null;
-                    if (!is_array($wpc_j53)) { continue; }
-                    $wpc_sels = [];
-                    if (isset($wpc_j53['lcp_element']) && is_array($wpc_j53['lcp_element'])) {
-                        foreach (['mobile', 'desktop'] as $wpc_dv) {
-                            if (!empty($wpc_j53['lcp_element'][$wpc_dv]['sel'])) { $wpc_sels[] = (string) $wpc_j53['lcp_element'][$wpc_dv]['sel']; }
-                        }
-                    }
-                    foreach (['atf_bg', 'atf_images'] as $wpc_ak) {
-                        $wpc_av = isset($wpc_j53[$wpc_ak]) ? $wpc_j53[$wpc_ak] : null;
-                        if (is_array($wpc_av)) {
-                            foreach (['mobile', 'desktop'] as $wpc_dv) {
-                                foreach ((array) ($wpc_av[$wpc_dv] ?? $wpc_av) as $wpc_e53) {
-                                    if (is_array($wpc_e53) && !empty($wpc_e53['sel'])) { $wpc_sels[] = (string) $wpc_e53['sel']; }
-                                }
-                            }
-                        }
-                    }
-                    foreach ($wpc_sels as $wpc_sl) {
-                        if (preg_match_all('/#([A-Za-z][\w-]*)/', $wpc_sl, $wpc_m1)) { $wpc_ex53 = array_merge($wpc_ex53, $wpc_m1[1]); }
-                        if (preg_match_all('/elementor-element-([a-z0-9]+)/i', $wpc_sl, $wpc_m2)) { $wpc_ex53 = array_merge($wpc_ex53, $wpc_m2[1]); }
-                    }
-                }
-            }
-            $wpc_ex53 = array_slice(array_unique(array_filter(apply_filters('wpc_section_delay_atf_exempt', $wpc_ex53))), 0, 12);
-            foreach ($wpc_ex53 as $wpc_id53) {
-                $wpc_q53 = preg_quote($wpc_id53, '/');
-
-                $html = preg_replace(
-                    '/(<[a-z]+\b[^>]*(?:data-id|id)="' . $wpc_q53 . '"[^>]*class="[^"]*?)\s*wpc-delay-elementor/i',
-                    '$1', $html);
-                $html = preg_replace(
-                    '/(<[a-z]+\b[^>]*class="[^"]*?)\s*wpc-delay-elementor([^"]*"[^>]*(?:data-id|id)="' . $wpc_q53 . '")/i',
-                    '$1$2', $html);
-            }
-        } catch (\Throwable $e) {
-
-        }
-
-        
-        
-        
-        
-        
-        
-        $html = str_replace('</head>', '<style>.wpc-delay-elementor{content-visibility:auto;contain-intrinsic-size:auto 900px;}</style></head>', $html);
-
-        
-        
-        
-        
-        
-        
-        $html = preg_replace(
-            '/(<footer(?=[\s>\/])[^>]*class="[^"]*)"/i',
-            '$1 wpc-delay-elementor"',
-            $html
-        );
-
-        
-        $html = preg_replace(
-            '/(<footer(?=[\s>\/]))(?![^>]*class="[^"]*")/i',
-            '$1 class="wpc-delay-elementor"',
-            $html
-        );
 
         return $html;
     }
@@ -233,16 +125,23 @@ class wps_ic_elementor
         
         
         
+        
+        
+        
+        
+        
+        
+        
         $skip = (int) apply_filters('wpc_delay_overlay_skip', 1);
         $n = 0;
         $out = preg_replace_callback(
-            '/class="([^"]*?)elementor-background-overlay([^"]*?)"/i',
+            '/<([a-z][a-z0-9-]*)\b[^>]*class="[^"]*\belementor-background-overlay\b[^"]*"[^>]*>/i',
             function ($m) use (&$n, $skip) {
                 $n++;
-                if ($n <= $skip) {
+                if ($n <= $skip || stripos($m[0], 'data-wpc-cv') !== false) {
                     return $m[0];
                 }
-                return 'class="wpc-delay-elementor ' . $m[1] . 'elementor-background-overlay' . $m[2] . '"';
+                return '<' . $m[1] . ' data-wpc-cv="1"' . substr($m[0], strlen($m[1]) + 1);
             },
             $html
         );
@@ -261,31 +160,6 @@ class wps_ic_elementor
         }
         return $html;
     }
-
-	public function isMobile()
-	{
-		if (!empty($_GET['simulate_mobile'])) {
-			return true;
-		}
-
-		if (isset($_SERVER['HTTP_USER_AGENT'])) {
-			$userAgent = strtolower($_SERVER['HTTP_USER_AGENT']);
-
-			
-			$mobileKeywords = [
-				'android', 'iphone', 'ipad', 'windows phone', 'blackberry', 'tablet', 'mobile'
-			];
-
-			
-			foreach ($mobileKeywords as $keyword) {
-				if (strpos($userAgent, $keyword) !== false) {
-					return true; 
-				}
-			}
-		}
-
-		return false;
-	}
 
     
 
